@@ -816,7 +816,14 @@ def f3569(c: Cast) -> None:
 
     def extra(ev: SecondWind) -> None:
         if getattr(ev, "actor", None) == me and c.unlit(on=me):
-            c.heal(c.surge_value(on=me) // 2, on=me)
+            # `of=`, not `on=`: `Cast.surge_value(of=None)` asks WHOSE
+            # maximum, and `on=` is not a parameter of it at all -- so
+            # this raised `TypeError` every time the trait fired. Found
+            # by `scripts/types.py` naming it as an out-of-scope
+            # diagnostic on a file that changed for another reason
+            # (`#1155`), which is exactly what that report is for: the
+            # whole-scope run never reads `content/`.
+            c.heal(c.surge_value(of=me) // 2, on=me)
 
     c.watch(SecondWind, extra, until=When.ENCOUNTER, on=me, label=c.ref)
 
@@ -1022,8 +1029,7 @@ def f3582(c: Cast) -> None:
 
 
 @power("f3583", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("cf:fighter-knight-f9s0",))
+       reach=PERSONAL, target=SELF)
 def f3583(c: Cast) -> None:
     """One 7th-level class feature of either of two other builds, chosen
     from the six options the two of them print between them.
@@ -1081,7 +1087,35 @@ def f3583(c: Cast) -> None:
     be satisfied by arriving. Its replacement named a *behaviour*, which
     `todo.py` cannot detect either -- so it outlived the gap by silence
     rather than by being wrong on the day. A marker naming behaviour is a
-    marker nothing can retire."""
+    marker nothing can retire.
+
+    **Written: all six options are declared, unmarked and `action=NONE`.**
+    `#642`'s chassis wave landed both families, which is what the symbol
+    was waiting for -- it named `cf:fighter-knight-f9s0` precisely so the
+    day either family arrived would turn `todo.py` red, and it did. The
+    body is `f3585`'s shape with a six-item `among=` and no cost: this
+    card takes nothing away, where `f3585` trades a feature for the one it
+    borrows.
+
+    **`uses=0`, for `f3585`'s reason and measured on these six.** The
+    default of 1 is the multiclass sentence -- a borrowed at-will capped
+    at one use a fight -- enforced by forbidding the row after one
+    `PowerUsed`. All six of these are standing traits that
+    `turns.arm_traits` spends on arming, so the default would forbid the
+    benefit at the moment it arrived.
+    """
+    c.borrow_row(
+        among=(
+            "cf:fighter-knight-f9s0",
+            "cf:fighter-knight-f9s1",
+            "cf:fighter-knight-f9s2",
+            "cf:fighter-slayer-f21s0",
+            "cf:fighter-slayer-f21s1",
+            "cf:fighter-slayer-f21s2",
+        ),
+        uses=0,
+        until=When.ENCOUNTER,
+    )
 
 
 @power("f3584", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1178,6 +1212,62 @@ def _chose_a_school(c: Cast, family: str) -> None:
 
     def stored(ev: RowStored) -> None:
         if ev.actor == me and ev.holder == "f3585" and ev.row:
+            lay(ev.row)
+
+    c.watch(RowStored, stored, until=When.ENCOUNTER, on=me, label=c.ref,
+            once=True)
+
+
+#: The nine domains `f3589` may borrow, as a prefix plus index, for the same
+#: reason `_MAGE_SCHOOL` is read that way: the three families are parallel by
+#: construction, so the domain taken as `cf:cleric-warpriest-f1sN` has its
+#: later benefits at `-f5sN` and `-f8sN`. Checked against the registry rather
+#: than assumed -- all nine of each of the three families are declared.
+_WARPRIEST_DOMAIN = "cf:cleric-warpriest-f1s"
+
+
+def _chose_a_domain(c: Cast, family: str) -> None:
+    """Grant the `family` benefit for the domain `f3589` borrowed.
+
+    `_chose_a_school` above, one chain over, and deliberately the same
+    shape: `f3589` calls `c.borrow_row(among=(the nine domains))`, which
+    **stores** what it took, and `c.stored_row(of="f3589")` is the reader.
+    Both of these rows' notes had already located the fix and named what
+    was left -- *"the body stays unwritten until the nine exist; it is
+    four lines once they do, by prefix and index exactly as
+    `_chose_a_school` does it"* -- and the nine now exist, so this is
+    those four lines.
+
+    **Arming order is why this is a function rather than a line in two
+    bodies.** All three rows of the chain arm as traits, `turns.arm_traits`
+    walks them in its own order, and on some of those orders `f3589` has
+    not borrowed yet when these two arm. Reading the store at arming time
+    is right for only half the orders and nothing says which this build
+    got, so the read happens now if the pick is recorded and on
+    `RowStored` otherwise -- `c.borrow_row` announces it at the end of its
+    own arming, which covers the other half.
+
+    A character with no recorded pick lays nothing, which is the honest
+    direction: it never took `f3589`, so there is no domain and no
+    benefit. As with `_chose_a_school`, that falls out of `lay` never
+    being called rather than out of the `startswith` guard, which is
+    defensive against a store holding something `f3589` never writes.
+    """
+    me = c.me
+
+    def lay(pick: str) -> None:
+        if not pick.startswith(_WARPRIEST_DOMAIN):
+            return
+        c.grant_row(f"{family}{pick[len(_WARPRIEST_DOMAIN):]}", on=me,
+                    until=When.ENCOUNTER)
+
+    held = c.stored_row(of="f3589")
+    if held:
+        lay(held)
+        return
+
+    def stored(ev: RowStored) -> None:
+        if ev.actor == me and ev.holder == "f3589" and ev.row:
             lay(ev.row)
 
     c.watch(RowStored, stored, until=When.ENCOUNTER, on=me, label=c.ref,
@@ -1373,8 +1463,7 @@ def f3589(c: Cast) -> None:
 
 
 @power("f3590", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("cf:cleric-warpriest-f5s0",))
+       reach=PERSONAL, target=SELF)
 def f3590(c: Cast) -> None:
     """The second step of the `f3589` chain: the `cf:cleric-warpriest-f5`
     feature of the domain `f3589` chose.
@@ -1399,25 +1488,26 @@ def f3590(c: Cast) -> None:
     cleric, and for a reason that is the board's rather than this chain's --
     see `f3589`'s note.
 
-    **What is left is that there is nothing to grant.** `class_feature` in
-    `game.db` holds all nine `cf:cleric-warpriest-f5s0` through `-s8` and
-    none of them is declared, so the grant would hand over a ref no row
+    **And the nine now exist, so this is written.** The hold was that
+    `class_feature` held all nine `cf:cleric-warpriest-f5s0` through `-s8`
+    and none was declared, so the grant would have handed over a ref no row
     stands behind -- `c.grant_row` does not consult the registry, so it
-    would append a dead ref to `Powers.known` and report success. The body
-    stays unwritten until the nine exist; it is four lines once they do, by
-    prefix and index exactly as `_chose_a_school` does it.
+    would have appended a dead ref to `Powers.known` and reported success.
+    `#642`'s chassis wave declared all nine, and the body is the four lines
+    this note predicted: `_chose_a_domain`, by prefix and index exactly as
+    `_chose_a_school` does it.
 
-    **The symbol names the first option and not the family heading**, which
-    is the correction `f3589` above is the worked example of.
+    **The symbol named the first option and not the family heading**, which
+    is the correction `f3589` above is the worked example of, and it is why
+    `todo.py` went red the day the options landed rather than staying quiet.
     `cf:cleric-warpriest-f5` is in `class_feature` and carries only the
-    group's introductory sentence, so nothing will declare it and a marker
-    naming it would stay red on the day the nine options landed -- which is
-    exactly what happened to `f3589`."""
+    group's introductory sentence, so nothing will ever declare it and a
+    marker naming it could not have gone green."""
+    _chose_a_domain(c, "cf:cleric-warpriest-f5s")
 
 
 @power("f3591", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("cf:cleric-warpriest-f8s0",))
+       reach=PERSONAL, target=SELF)
 def f3591(c: Cast) -> None:
     """The third step of the `f3589` chain, and `f3590`'s remaining gap one
     tier up: the nine `cf:cleric-warpriest-f8s<N>` are in the database and
@@ -1425,8 +1515,14 @@ def f3591(c: Cast) -> None:
 
     The choice half is answered here too -- the domain is still the one
     `f3589` chose, and `c.stored_row(of="f3589")` reads it back. See
-    `f3590`'s note for both halves and for why the symbol names `-f8s0`
-    rather than the `-f8` heading."""
+    `f3590`'s note for both halves and for why the symbol named `-f8s0`
+    rather than the `-f8` heading.
+
+    **Written now that the nine `-f8sN` are declared**, by the same helper
+    and for the same reason: one chain, one arming-order problem, one
+    answer. The only difference between this row and `f3590` is which
+    family it grants out of."""
+    _chose_a_domain(c, "cf:cleric-warpriest-f8s")
 
 
 @power("f3592", level=1, cls="", usage=ENCOUNTER, action=NONE,

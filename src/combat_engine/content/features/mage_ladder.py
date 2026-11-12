@@ -338,8 +338,16 @@ def wizard_wand_precision(c: Cast) -> None:
     `cf:wizard-arcanist-f0s5` puts it, rather than here where it would be
     asked a second time.
     """
+    # **No `kind=`, because the card prints no bonus type.** `kind=` is
+    # the word the page prints before "bonus" and nothing else, and this
+    # card's words are *"a bonus to a single attack roll equal to your
+    # Dexterity modifier"*. `kind="power"` was read off the card's TYPE
+    # line -- `cf:wizard-arcanist-f0c3 Power`, which says it is a Power,
+    # not that its bonus is power-typed. `scripts/bonuses.py` named it.
+    # Nothing is lost by the correction: `once=True` already stops a
+    # second copy stacking, which is the job the word would have done.
     c.bonus("attack", c.dex_mod, on=c.me, until=When.ENCOUNTER,
-            kind="power", once=True)
+            once=True)
 
 
 def _orb_mastery(ref: str, card: str, wand: bool) -> object:

@@ -230,6 +230,13 @@ def p13588(c: Cast) -> None:
     **The blind's clock is the card's and not this row's.** The hold and
     the daze are `SAVE_ENDS`; the hunter's blind is *"until the end of
     your next turn"*, which is `When.EONT`.
+
+    **And it is laid inside `c.credit`**, which is the other half of that
+    `#550` arrangement and the half this row shipped without:
+    `drivers.every_held_gate_is_credited` caught it. A clause written into
+    somebody else's body is attributed to the body unless a credit block
+    says otherwise, so without it the effect's `by` reads `p13588` and the
+    feature audits SILENT while working perfectly.
     """
     if c.strike():
         c.damage(c.w(), c.dex_mod)
@@ -238,7 +245,12 @@ def p13588(c: Cast) -> None:
             riders.append("blind")
         chose = c.choose(riders, "the rider on the hit")
         if chose == "blind":
-            c.blinded(until=When.EONT)
+            # The blind is the feature's clause, not this row's, so it is
+            # laid inside the feature's credit -- without the block the
+            # effect's `by` says `p13588` and `cf:ranger-hunter-f11`
+            # reports SILENT while working perfectly.
+            with c.credit("cf:ranger-hunter-f11"):
+                c.blinded(until=When.EONT)
         elif chose == "daze":
             c.dazed(until=When.SAVE_ENDS)
         else:

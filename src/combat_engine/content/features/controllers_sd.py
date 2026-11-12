@@ -392,7 +392,7 @@ def protector_grasping_claws(c: Cast) -> None:
     todo=("chargen.power_choice()",),
 )
 def protector_attunement(c: Cast) -> None:
-    """"You gain three Primal Attunement powers of your choice."
+    """"You gain three `cf:druid-protector-f2` powers of your choice."
 
     A draw and not a combat clause: three rows out of a named printed
     category, chosen at creation. `chargen.power_choice()` is the symbol

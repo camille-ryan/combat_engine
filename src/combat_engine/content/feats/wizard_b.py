@@ -508,12 +508,38 @@ def f2292(c: Cast) -> None:
 
 
 @power("f2030", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:wizard-arcanist-f0c3",))
+       reach=PERSONAL, target=SELF,
+       todo=("events.Boosted(from=c.bonus)",))
 def f2030(c: Cast) -> None:
-    """A free `f2023b` on a miss with one arcanist option. Re-aimed:
-    `c.use_power` would fire f2023b in one line, so the verb is no
-    longer the hold. The option still has a ref and no row, so nothing
-    marks which misses it modified and the trigger cannot be written."""
+    """A free `f2023b` on a miss with an attack the wand mastery modified.
+
+    Printed: *"If you miss with an attack roll modified by your
+    `cf:wizard-arcanist-f0c3` class feature, you can use `f2023b`, if
+    available, as a free action against the target you missed."*
+
+    **Re-pointed, because the symbol it named has arrived and the row is
+    still not writable.** It waited on `cf:wizard-arcanist-f0c3` having a
+    row at all -- *"the option still has a ref and no row, so nothing
+    marks which misses it modified"* -- and `#642`'s wave declared it, so
+    `todo.py` went red asking for this row to be finished. It cannot be,
+    and the reason is one layer in from where the old marker pointed.
+
+    **What is missing is an announcement, not a row.** *"An attack roll
+    modified by"* is the same clause `events.Boosted` was filed for --
+    `by` names the row that paid, `roll_kind` tells an attack from a save,
+    and `feats/artificer_b.py`'s `f3029` is the worked example of reading
+    it. But `Boosted` is emitted by `Cast._boosted`, which only
+    `c.boost_roll` reaches: a roll **added to after it was made**.
+    `cf:wizard-arcanist-f0c3` is not that shape. It lays a standing
+    `c.bonus("attack", c.dex_mod, once=True)`, read by the roll that
+    consumes it, and nothing says which roll that was.
+
+    So the gap is that a `once=` modifier is spent silently. `c.bonus`'s
+    own `once=` branch ends the effect when it is read, so the spend
+    moment exists and is the place an announcement would go; until it
+    does, "the attack this feature modified" names no event and the
+    trigger cannot be written. One row waits on this today.
+    """
 
 
 @power("f2034", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -1294,10 +1294,28 @@ def _check_area_aiming(check: Checks, state: dict | None) -> None:
         check.skip("an area power offers somewhere to aim",
                    "nobody with a kit is acting on this board")
         return
+    # **An aimless area belongs to `_check_aimless_area`, not here.** This
+    # filtered on `range_text` alone, so it swallowed the 263 burst and
+    # blast rows that aim at nobody -- and failed them for offering nowhere
+    # to aim, which is the correct answer for a row there is nothing to
+    # click on. It went red the moment the draw changed and put two such
+    # rows in a dealt wizard's roster: `p2351` lays a zone and `p2351b`
+    # answers whoever walked into it, both `target=NO_TARGET`, so
+    # `Power.is_attack` is False for both and `render._clickable` returns
+    # `[]` by its own documented contract while `_shows` carries the 25 and
+    # 9 squares they cover.
+    #
+    # Keyed on exactly the distinction the wire makes, and the same one
+    # `_check_aimless_area` selects on thirty lines below, so the two
+    # checks partition the roster instead of overlapping. A row with
+    # neither `squares` nor `shows` still fails here, which is the genuine
+    # bug this check exists for.
     areas = [
         p
         for p in state["roster"]
-        if "burst" in p["range_text"].lower() or "blast" in p["range_text"].lower()
+        if ("burst" in p["range_text"].lower()
+            or "blast" in p["range_text"].lower())
+        and not (not p.get("squares") and p.get("shows"))
     ]
     if not areas:
         check.skip("an area power offers somewhere to aim",

@@ -600,73 +600,121 @@ def sentinel_second_wind(c: Cast) -> None:
     c.grant_row(which[_season(c)], on=c.me, until=When.ENCOUNTER)
 
 
-def _second_wind_gift(ref: str, what: str) -> Any:
-    """One of `-f12`'s three second-wind benefits.
+def _chosen_ally(c: Cast, me: int) -> int | None:
+    """*"Choose one ally within 10 squares of you."*
 
-    All three watch `SecondWind` and all three choose one ally within 10.
-    The chooser is shared; what differs is what the ally gets.
+    The half all three of `-f12`'s gifts genuinely share. The **benefit**
+    is not shared, and that is why the three rows below are hand-written
+    rather than minted by one helper: `scripts/bonuses.py` reads each
+    ref's own source for its `kind=`, so a single decorated body served
+    all three refs the one `kind="power"` call in it -- and reported `s0`
+    and `s1` as laying a power-typed bonus when `s0` lays concealment and
+    `s1` lays resistance. Three bodies, one chooser, and the static read
+    is right for each.
+
+    `c.within(radius, of=, side=)` RETURNS the list -- it is not a
+    predicate, which the name invites. Reading it as `c.within(ally, 10)`
+    type-checks and answers about the wrong thing entirely.
     """
-
-    @power(
-        ref,
-        level=0,
-        cls="druid",
-        usage=ENCOUNTER,
-        action=ActionType.NONE,
-        reach=PERSONAL,
-        target=NO_TARGET,
-        keywords=[Keyword.PRIMAL],
-        dropped=("c.end_ongoing()",) if ref.endswith("s0") else (),
-    )
-    def row(c: Cast) -> None:
-        me = c.me
-
-        def gift(ev: SecondWind) -> None:
-            if getattr(ev, "actor", None) != me:
-                return
-            # `c.within(radius, side=)` RETURNS the list -- it is not a
-            # predicate, which the name invites. Reading it as
-            # `c.within(ally, 10)` type-checks and answers about the
-            # wrong thing entirely.
-            near = [a for a in c.within(10, of=me, side="ally") if a != me]
-            if not near:
-                return
-            friend = c.choose(near, f"{c.ref}: which ally")
-            if friend is None:
-                return
-            if ref.endswith("s0"):
-                # Only the concealment: `c.ongoing` LAYS ongoing damage
-                # and takes no `clear=`, and nothing in the tree ends one
-                # -- `c.end_effect(carrying=)` narrows by `Condition` and
-                # ongoing damage is not one. The row says so.
-                c.conceal(on=friend, until=When.EONT)
-            elif ref.endswith("s1"):
-                c.resist(10, until=When.EONT, on=friend)
-            else:
-                c.bonus("damage", 5, on=friend, until=When.EONT,
-                        kind="power")
-
-        c.watch(SecondWind, gift, until=When.ENCOUNTER, on=me, label=c.ref)
-
-    row.__name__ = "sentinel_wind_" + ref.rsplit("s", 1)[-1]
-    row.__doc__ = (
-        f"One season's second-wind gift: {what}.\n\n"
-        "`c.within(a, 10)` is the printed range and `c.choose` the printed "
-        "*choose one ally* -- a headless run takes the first, which is the "
-        "convention everywhere else a row offers a list.\n\n"
-        "`kind=\"power\"` on the damage one because the card prints the "
-        "word, so two sentinels' gifts do not stack."
-    )
-    return row
+    near = [a for a in c.within(10, of=me, side="ally") if a != me]
+    if not near:
+        return None
+    return c.choose(near, f"{c.ref}: which ally")
 
 
-sentinel_wind_0 = _second_wind_gift(
+@power(
     "cf:druid-sentinel-f12s0",
-    "an ongoing damage effect ends and the ally gains partial concealment")
-sentinel_wind_1 = _second_wind_gift(
-    "cf:druid-sentinel-f12s1", "the ally resists 10 to all damage")
-sentinel_wind_2 = _second_wind_gift(
-    "cf:druid-sentinel-f12s2", "the ally gains +5 to damage rolls")
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+    dropped=("c.end_ongoing()",),
+)
+def sentinel_wind_0(c: Cast) -> None:
+    """One season's second-wind gift: an ongoing damage effect ends and the
+    ally gains partial concealment.
+
+    Only the concealment is laid: `c.ongoing` LAYS ongoing damage and
+    takes no `clear=`, and nothing in the tree ends one --
+    `c.end_effect(carrying=)` narrows by `Condition` and ongoing damage is
+    not one. The marker names that half.
+
+    No `kind=` because the card names no bonus at all -- concealment is
+    not a +N of any type.
+    """
+    me = c.me
+
+    def gift(ev: SecondWind) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        friend = _chosen_ally(c, me)
+        if friend is not None:
+            c.conceal(on=friend, until=When.EONT)
+
+    c.watch(SecondWind, gift, until=When.ENCOUNTER, on=me, label=c.ref)
+
+
+@power(
+    "cf:druid-sentinel-f12s1",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+)
+def sentinel_wind_1(c: Cast) -> None:
+    """One season's second-wind gift: *"the chosen ally gains resist 10 to
+    all damage until the end of your next turn."*
+
+    `c.resist` with no damage type, which is *all damage*. No `kind=`
+    because resistance is not a bonus and the card gives it no type.
+    """
+    me = c.me
+
+    def gift(ev: SecondWind) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        friend = _chosen_ally(c, me)
+        if friend is not None:
+            c.resist(10, until=When.EONT, on=friend)
+
+    c.watch(SecondWind, gift, until=When.ENCOUNTER, on=me, label=c.ref)
+
+
+@power(
+    "cf:druid-sentinel-f12s2",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+)
+def sentinel_wind_2(c: Cast) -> None:
+    """One season's second-wind gift: *"the chosen ally gains a +5 power
+    bonus to damage rolls until the end of your next turn."*
+
+    `kind="power"` because this card is the one of the three that prints
+    the word, so two sentinels' gifts do not stack. Checked against the
+    page rather than copied from its siblings -- the other two print no
+    bonus type because they lay no bonus.
+    """
+    me = c.me
+
+    def gift(ev: SecondWind) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        friend = _chosen_ally(c, me)
+        if friend is not None:
+            c.bonus("damage", 5, on=friend, until=When.EONT, kind="power")
+
+    c.watch(SecondWind, gift, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # -- the two extra uses -----------------------------------------------------

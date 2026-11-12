@@ -31,8 +31,8 @@ outright, and it is the same conclusion: do not guess. `#1264`.
 
 ## The best content is `-f8`, and it is written
 
-*"You gain a Pact Lore feature associated with your pact"* -- three
-concrete standing benefits rather than a power grant, so all three play.
+*"You gain a `cf:warlock-binder-f8` feature associated with your pact"* --
+three concrete standing benefits rather than a power grant, so all three play.
 They are the only rows on this chassis whose worth does not depend on the
 mapping: whichever one a binder is dealt, it is a correct printed
 benefit.
@@ -267,7 +267,7 @@ def binder_second_summon(c: Cast) -> None:
                 on=c.me, until=When.ENCOUNTER)
 
 
-# -- the Pact Lore, which is the one fork whose options all play ------------
+# -- `-f8`'s options, the one fork whose options all play -------------------
 
 
 _LORE = ("cf:warlock-binder-f8s0", "cf:warlock-binder-f8s1",
@@ -285,7 +285,8 @@ _LORE = ("cf:warlock-binder-f8s0", "cf:warlock-binder-f8s1",
     keywords=[Keyword.ARCANE],
 )
 def binder_lore_wards(c: Cast) -> None:
-    """One Pact Lore: *"you gain a +1 bonus to AC and Will."*
+    """One `cf:warlock-binder-f8` option: *"you gain a +1 bonus to AC and
+    Will."*
 
     Two calls, because AC and Will are separate keys and one `c.bonus`
     pays only one of them -- the mistake `cf:barbarian-f0` records at the
@@ -310,7 +311,7 @@ def binder_lore_wards(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
 )
 def binder_lore_dark(c: Cast) -> None:
-    """Another Pact Lore: darkvision, and necrotic resistance that stacks
+    """Another `-f8` option: darkvision, and necrotic resistance that stacks
     with itself rather than beside itself.
 
     *"You gain darkvision and resist 5 necrotic. If you already have
@@ -346,7 +347,7 @@ def binder_lore_dark(c: Cast) -> None:
     narrative=("skill:arcana",),
 )
 def binder_lore_mind(c: Cast) -> None:
-    """The third Pact Lore: *"you gain resist 5 psychic and a +2 bonus to
+    """The third `-f8` option: *"you gain resist 5 psychic and a +2 bonus to
     Arcana checks and Religion checks."*
 
     The resistance plays. The two skill bonuses are `narrative=`: an
@@ -431,7 +432,7 @@ binder_pact_1 = _pact_parent("cf:warlock-binder-f1", "an encounter attack power"
 binder_pact_2 = _pact_parent(
     "cf:warlock-binder-f2", "an at-will attack power and a utility power")
 binder_pact_7 = _pact_parent("cf:warlock-binder-f7", "an encounter attack power")
-binder_pact_8 = _pact_parent("cf:warlock-binder-f8", "a Pact Lore feature")
+binder_pact_8 = _pact_parent("cf:warlock-binder-f8", "a `cf:warlock-binder-f8` feature")
 binder_pact_11 = _pact_parent(
     "cf:warlock-binder-f11", "an encounter attack power")
 for _n in (14, 17, 20, 22):
@@ -482,7 +483,11 @@ _OPTION_REFS: dict[str, tuple[str, ...]] = {
 }
 
 for _ref, _got in _OPTION_REFS.items():
-    _lvl = max(get(g).level for g in _got if get(g) is not None)
+    # One `get` per ref rather than two: the comprehension called it in
+    # the guard and again in the value, so nothing narrowed `Power |
+    # None` and `scripts/types.py` named it.
+    _rows = [r for r in (get(g) for g in _got) if r is not None]
+    _lvl = max(r.level for r in _rows)
     globals()["binder_grant_" + _ref.rsplit("-f", 1)[-1].replace("s", "_")] = (
         _grant(_ref, _got,
                "**In the draw**: a level-1 warlock power at a level-1 "

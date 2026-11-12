@@ -13608,10 +13608,23 @@ def two_variant_racial_traits(out: Result) -> None:
     # from hit points would also be measuring the weapon, the roll and the
     # target's resistances, and a zero there would not say which.
     world, me, _ = _board("rt:r67-t0", seed=1)
+    # **The trait's OWN modifiers, not the holder's total.** `mods.total`
+    # sums everything on the creature, and the board arms every row a
+    # dealt character holds -- so once the chassis wave landed, the
+    # negative below read `+2` on a non-arcane swing from somebody else's
+    # row and said this trait's keyword gate was leaking. The modifiers
+    # standing before `use` are set aside by identity and `total` is asked
+    # about what the trait added, which keeps the real `when=` predicate
+    # logic instead of re-implementing it.
+    standing = world.get(me, Mods)
+    before = list(standing.items) if standing else []
     use(world, me, "rt:r67-t0", spend=False)
     mods = world.get(me, Mods)
-    out.that(mods is not None and bool(mods.items),
-             "the trait lays a damage modifier at all")
+    fresh = [m for m in (mods.items if mods else ())
+             if not any(m is seen for seen in before)]
+    out.that(mods is not None and bool(fresh),
+             "the trait lays a damage modifier at all",
+             f"{len(fresh)} laid, {len(before)} already standing")
 
     arcane = next(
         (r for r, p in REGISTRY.items()
@@ -13620,8 +13633,16 @@ def two_variant_racial_traits(out: Result) -> None:
         (r for r, p in REGISTRY.items()
          if p.is_attack and Keyword.ARCANE not in p.keywords
          and Keyword.WEAPON in p.keywords), "")
-    on_arcane = mods.total("damage", {"power": arcane}) if mods else 0
-    on_plain = mods.total("damage", {"power": plain}) if mods else 0
+    if mods is None:
+        on_arcane = on_plain = 0
+    else:
+        kept = mods.items
+        try:
+            mods.items = fresh
+            on_arcane = mods.total("damage", {"power": arcane})
+            on_plain = mods.total("damage", {"power": plain})
+        finally:
+            mods.items = kept
     out.that(on_arcane >= 1,
              f"and it applies to an arcane attack ({arcane}: +{on_arcane})")
     out.that(on_plain == 0,
@@ -16843,8 +16864,26 @@ def milestones_carry_across_a_day(out: Result) -> None:
 
     # -- through f3536: the count again, on three keys ---------------------
     def f3536_mods(milestones: int) -> dict:
+        """What **f3536's own body** laid, by key.
+
+        The filter was `m.label == "f3536" or m.what in (...)`, and the
+        `or` made the label half inert: every `save`/`skill`/
+        `ability_check` modifier on the holder counted, whoever laid it.
+        The board arms every row a dealt character holds, so once the
+        warlock's chassis grew the zero-milestone reading came back
+        `{'save': 1}` -- the star pact's boon paying its printed 1 -- and
+        the assertion said f3536 was laying a modifier it had not laid.
+        The same aggregate-for-attribution fault as
+        `an_item_adds_to_what_a_pact_pays`, and the same fix.
+
+        Subtracted by identity rather than tightened to `and`, because
+        whether `c.bonus` labels its `Mod` with the calling ref is not
+        this rule's business to depend on.
+        """
         world, me, _ = _posed("f3536", 1)
         world.milestones = milestones
+        held = world.get(me, Mods)
+        before = list(held.items) if held else []
         use = Cast(world=world, me=me, ref="f3536")
         use.target = me
         REGISTRY["f3536"].body(use)
@@ -16852,8 +16891,7 @@ def milestones_carry_across_a_day(out: Result) -> None:
         if mods is None:
             return {}
         return {m.what: m.amount() for m in mods.items
-                if m.label == "f3536" or m.what in
-                ("save", "skill", "ability_check")}
+                if not any(m is seen for seen in before)}
 
     out.that(f3536_mods(0) == {},
              "f3536 lays nothing at all with no milestone reached, rather"
@@ -24066,13 +24104,33 @@ def an_item_adds_to_what_a_pact_pays(out: Result) -> None:
              f"{REGISTRY[item_ref].unfinished}")
 
     def paid(*, with_item: bool) -> list[int]:
+        """What the **boon's own body** laid, not every check mod in sight.
+
+        This read every `save`/`skill`/`ability_check` modifier on the
+        holder, which is the board's total rather than this row's: the
+        board arms every row a dealt character holds, and once the warlock
+        gained a third chassis it carried rows paying their own check
+        bonuses. The reading went `[1, 1, 1] -> [1, 1, 1, 1, 2]` with
+        nothing about the boon or the rod having changed, which is
+        `memory`'s *"assert on labels, never a count"* arriving through an
+        aggregate.
+
+        So the modifiers present **before** the boon's body runs are
+        subtracted, by identity, and what is left is what the boon paid.
+        That is attribution rather than a total, so it cannot drift again
+        when a fourth chassis lands.
+        """
         world, me, _ = _posed(item_ref, 8)
         if with_item:
             REGISTRY[item_ref].body(Cast(world=world, me=me, ref=item_ref))
+        held = world.get(me, Mods)
+        before = list(held.items) if held else []
         boon = Cast(world=world, me=me, ref=boon_ref)
         REGISTRY[boon_ref].body(boon)
         mods = world.get(me, Mods)
-        return sorted(m.value for m in (mods.items if mods else ())
+        fresh = [m for m in (mods.items if mods else ())
+                 if not any(m is seen for seen in before)]
+        return sorted(m.value for m in fresh
                       if m.what in ("save", "skill", "ability_check"))
 
     plain = paid(with_item=False)
@@ -36949,7 +37007,14 @@ def counting_as_bloodied(out: Result) -> None:
     must not take any.
     """
     import combat_engine.content  # noqa: F401
-    from audit import board as _posed
+    # **`_board`, not `audit.board`.** `#1037` pins the draw flag off
+    # for the length of a board build and puts it back, and `_board`
+    # is the only thing that does it -- a rule importing `audit.board`
+    # directly builds under whatever draw `main` handed it, so what it
+    # gets depends on what ran before. This rule passed alone and
+    # failed in company for exactly that reason. Aliased rather than
+    # rewriting every call site.
+    _posed = _board
     from combat_engine.content.powers.battlemind import bloodied as _gate
     from combat_engine.content.powers.cleric.level_10_b import _not_bloodied
     from combat_engine.engine import When
@@ -40450,7 +40515,6 @@ def insubstantial_to_one_attacker(out: Result) -> None:
       hurt by everybody.
     """
     import combat_engine.content  # noqa: F401
-    from audit import board as _posed
     from combat_engine.engine import When
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health
@@ -40474,7 +40538,16 @@ def insubstantial_to_one_attacker(out: Result) -> None:
         `p2482` was silently suppressed by `i2426x1`. `Defences.half_always`
         counts the ungated sources for exactly that reason.
         """
-        world, me, _ = _posed("mba", 1)
+        # **`_board`, not `audit.board` directly.** `#1037` pins the
+        # draw flag off for the length of a board build and puts it
+        # back, and `_board` is the only thing that does it -- so a
+        # rule reaching past it builds its board under whatever draw
+        # `main` handed the rule, and what it gets then depends on
+        # what ran before. Measured: this rule passed 15 of 15 alone
+        # and failed 4 after ANY board-playing rule, the baseline
+        # reading 1 where a 10 should take 10, with three later
+        # assertions comparing against that baseline.
+        world, me, _ = _board("mba", 1)
         foes = sorted(e for e in enemies(world, me) if world.get(e, Health))
         return world, me, foes
 
@@ -40734,7 +40807,14 @@ def what_happened_since_your_turn_ended(out: Result) -> None:
     nothing else here would notice.
     """
     import combat_engine.content  # noqa: F401
-    from audit import board as _posed
+    # **`_board`, not `audit.board`.** `#1037` pins the draw flag off
+    # for the length of a board build and puts it back, and `_board`
+    # is the only thing that does it -- a rule importing `audit.board`
+    # directly builds under whatever draw `main` handed it, so what it
+    # gets depends on what ran before. This rule passed alone and
+    # failed in company for exactly that reason. Aliased rather than
+    # rewriting every call site.
+    _posed = _board
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health
     from combat_engine.engine.dsl import REGISTRY
@@ -45274,14 +45354,21 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
              f"{len(mine)} new, {len(blade) - len(mine)} pre-existing, "
              f"{len(blade)} total")
 
-    # -- f4 carries three symbols, which is the most in the tree ----------
-    three = REGISTRY["cf:warlock-hexblade-f4"].unfinished
-    out.that(len(three) == 3,
-             "`-f4` waits on THREE symbols -- the level, the per-encounter "
-             "ceiling and the pact weapon whose attack power it would add "
-             "a use of. Marking fewer would report it ready while two "
-             "things were still missing",
-             f"{sorted(three)}")
+    # -- f4 carried three symbols and one of them has landed --------------
+    # It read `len(...) == 3` -- the level, the per-encounter ceiling and
+    # the pact weapon -- and `c.more_uses` was built for the ceiling, so
+    # the row correctly dropped to two and the assertion was asserting the
+    # gap rather than the row. Named rather than counted for that reason: a
+    # bare `== 2` would pass just as happily if the level were the thing
+    # that went, and the level is `#1261`, which nothing has closed.
+    waits = REGISTRY["cf:warlock-hexblade-f4"].unfinished
+    out.that(sorted(waits) == ["chargen.feature_level()",
+                               "chargen.pact_blade()"],
+             "`-f4` waits on exactly the level (`#1261`) and the pact "
+             "weapon -- the per-encounter ceiling it also carried is gone, "
+             "because `c.more_uses` landed. Both named, so the assertion "
+             "cannot stay green by losing the wrong one of the two",
+             f"{sorted(waits)}")
 
     # -- the twenty-eight the import cannot supply ------------------------
     world, me, _ = _posed("cf:warlock-hexblade-f0", 1)
@@ -45306,6 +45393,130 @@ _F1_POWER = {
     "cf:warlock-hexblade-f1s3": "p13679",
     "cf:warlock-hexblade-f1s4": "p13721",
 }
+
+
+def a_feat_hands_over_a_chassis_feature_it_did_not_take(out: Result) -> None:
+    """Three feats the chassis wave unblocked, and the one it could not.
+
+    All four named a `cf:` ref as their marker -- the convention `f3589`'s
+    note argues for, where the symbol is the family's **first option** and
+    never the `-f<N>` heading -- so the day `#642` declared those options
+    `todo.py` went red asking for each row to be finished. That is the
+    mechanism working, and this rule is what the three finished ones owe.
+
+    * `f3590`, `f3591` -- read back the domain `f3589` borrowed and grant
+      that domain's later benefit, by prefix and index.
+    * `f3583` -- borrow one 7th-level feature out of the six two other
+      builds print between them.
+    * `f2030` -- **not** finished, and re-pointed rather than written. Its
+      clause is *"an attack roll modified by"* a feature whose benefit is
+      a standing `c.bonus(once=True)`, and nothing announces the roll that
+      consumed it.
+
+    **Driven through `chargen.loadout` and not `audit.board`**, which is
+    the whole reason this is here rather than left to the auditor. The
+    board arms every row of every chassis the class has (`#1263`), and
+    since `class_feature` has no level column (`#1261`) that is the entire
+    ladder -- so a board's fighter already holds all six of `f3583`'s
+    options and `c.borrow_row` filters `among=` on what is already held.
+    The pool comes out empty, the row does nothing, and `audit.py` reports
+    `f3583` SILENT for the board's reach rather than the row's. A dealt
+    character holds none of the six.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Grid, Rng, When, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    DOMAIN = "cf:cleric-warpriest-f1s"
+    SIX = tuple(f"cf:fighter-knight-f9s{n}" for n in range(3)) + tuple(
+        f"cf:fighter-slayer-f21s{n}" for n in range(3))
+
+    def dealt(cls: str, seed: int, extra: list[str]):  # noqa: ANN202
+        """A character the dealer really makes, holding `extra` as well."""
+        known = chargen.loadout(cls, 1, rng=Random(seed))
+        world = World(Grid(12, 12), Rng(seed), Bus())
+        me = world.spawn()
+        world.add(me, Powers(known=list(known) + extra))
+        return world, me
+
+    # -- the markers, which are what todo.py read ------------------------
+    out.that(all(not REGISTRY[r].unfinished for r in
+                 ("f3583", "f3590", "f3591")),
+             "f3583, f3590 and f3591 carry no marker at all now -- the three"
+             " the wave unblocked, and the assertion that reds if one is"
+             " re-marked without this rule being revisited",
+             f"{ {r: REGISTRY[r].unfinished for r in ('f3583','f3590','f3591')} }")
+    out.that(REGISTRY["f2030"].unfinished == ("events.Boosted(from=c.bonus)",),
+             "and f2030 names the announcement it waits on rather than the"
+             " ref that has arrived -- re-pointing a marker whose symbol"
+             " landed is the other half of what todo.py asks for, and a"
+             " row left naming the arrived ref would go red for ever",
+             f"{REGISTRY['f2030'].unfinished}")
+
+    # -- f3590 / f3591: the index is READ, not assumed -------------------
+    # **Four different domains, because every seed deals domain 0.** On a
+    # dealt cleric `f3589` borrows `-f1s0` on all four seeds tried, so an
+    # assertion resting on the draw could not tell a row that reads the
+    # index from one that always grants `s0`. The domain is forced through
+    # `c.borrow_row` -- the same call `f3589` makes -- and the grant has to
+    # follow it.
+    followed = {}
+    for want in (0, 3, 5, 8):
+        world, me = dealt("cleric", 1, ["f3590", "f3591"])
+        known = world.need(me, Powers).known
+        Cast(world=world, me=me, ref="f3589").borrow_row(
+            among=(f"{DOMAIN}{want}",), uses=0, until=When.ENCOUNTER)
+        for ref in ("f3590", "f3591"):
+            REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        followed[want] = (
+            sorted(k for k in known
+                   if k.startswith("cf:cleric-warpriest-f5s")),
+            sorted(k for k in known
+                   if k.startswith("cf:cleric-warpriest-f8s")),
+        )
+    out.that(all(got == ([f"cf:cleric-warpriest-f5s{n}"],
+                         [f"cf:cleric-warpriest-f8s{n}"])
+                 for n, got in followed.items()),
+             "f3590 and f3591 grant the -f5 and -f8 benefit of the domain"
+             " f3589 actually borrowed, over four different domains -- one"
+             " domain would pass for a row hard-coding s0, which is the"
+             " shape of every prefix-and-index bug in this family",
+             f"{followed}")
+
+    # -- f3583: it borrows, and the negative is the held pool ------------
+    borrowed = {}
+    for cls in ("fighter", "cleric", "rogue"):
+        world, me = dealt(cls, 1, ["f3583"])
+        known = world.need(me, Powers).known
+        had = [r for r in known if r in SIX]
+        REGISTRY["f3583"].body(Cast(world=world, me=me, ref="f3583"))
+        borrowed[cls] = (had, [r for r in known if r in SIX])
+    out.that(all(not had and len(got) == 1 for had, got in borrowed.values()),
+             "f3583 hands a dealt character exactly ONE of the six, from a"
+             " pool it held none of -- three classes, because the feat is"
+             " cls='' and any of them may take it",
+             f"{borrowed}")
+
+    # **The negative, and it is the one that explains the SILENT verdict.**
+    # `c.borrow_row` filters `among=` on what the character already holds,
+    # so a character holding all six borrows nothing. That is correct, and
+    # it is exactly the state `audit.board` puts a fighter in.
+    world, me = dealt("rogue", 1, ["f3583", *SIX])
+    known = world.need(me, Powers).known
+    was = len([r for r in known if r in SIX])
+    REGISTRY["f3583"].body(Cast(world=world, me=me, ref="f3583"))
+    out.that(was == len(SIX) and len([r for r in known if r in SIX]) == len(SIX),
+             "and nothing at all to one already holding all six -- which is"
+             " why audit reports f3583 SILENT on a board that arms every"
+             " chassis row (#1263), a verdict about the board and not the"
+             " row",
+             f"held {was} of {len(SIX)} before, "
+             f"{len([r for r in known if r in SIX])} after")
 
 
 def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
@@ -46087,13 +46298,26 @@ def a_non_combat_scene_does_not_spend_the_party_s_powers(out: Result) -> None:
     # reach the sheet. Marked on the board after `lay` has taken its
     # snapshot, which is what tells the two apart.
     from combat_engine.engine.components import Powers as _Pw
+    from combat_engine.engine.dsl import get as _get
+    from combat_engine.engine.types import ActionType as _At
 
     kept_party = Party.of(level=2, seed=7)
     kept_table = tbl.lay(kept_party, seed=6)
     mine = kept_table.eids[0]
+    # **A row that COSTS AN ACTION**, which is what `strike` keeps. The
+    # subject was the first row not in `opened_with`, and the chassis wave
+    # put class features at the head of a character's list -- so it chose
+    # `cf:fighter-knight-f10`, an `action=NONE` trait, which `strike`
+    # correctly discards. The control then read "a real spend did not
+    # reach the sheet" when what it had posed was not a spend at all.
+    #
+    # Both halves of the harvest's own test, so the subject is a row the
+    # party could really have chosen during the scene.
     spent_now = next(
         (r for r in kept_party.sheets[0].powers
-         if r not in kept_table.opened_with.get(mine, frozenset())),
+         if r not in kept_table.opened_with.get(mine, frozenset())
+         and (row := _get(r)) is not None
+         and getattr(row, "action", None) is not _At.NONE),
         "",
     )
     kept_table.world.need(mine, _Pw).used[spent_now] = 1
@@ -68873,7 +69097,21 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
 
     # -- and the flag survives into the next fight, against a control ----
     def ticks(stable: bool) -> tuple[bool, int]:
-        band = Party.of(["fighter", "cleric", "rogue", "wizard"], 2)
+        """Does the sheet's flag survive into the next fight's board?
+
+        **A party with no healer**, which is what the control needs. The
+        four-character band this used includes a cleric, and the cleric
+        rescues the dying character across the 14 turns below -- measured
+        in `stabilise`'s own `ticked`, `-7` for five turns and then
+        `8/35`, at every distance tried. So the control read 0 further
+        failures and said the carried-over character was *not*
+        accumulating, which was the party helping rather than the flag
+        failing.
+
+        The sheet is still what carries the state, which is the thing
+        under test; only the company has changed.
+        """
+        band = Party.of(["fighter", "rogue"], 2)
         band.sheets[0].hp = -10
         band.sheets[0].stable = stable
         got = field_encounter(seed=5, level=2, party=band)
@@ -69068,7 +69306,6 @@ def a_dying_ally_can_be_stabilised_with_a_heal_check(out: Result) -> None:
         from each other.
         """
         band = Party.of(["fighter", "cleric", "rogue", "wizard"], 2)
-        band.sheets[0].hp = hp
         got = field_encounter(seed=seed, level=2, party=band)
         world = got.world
         pcs = [e for e in world.entities
@@ -69087,6 +69324,25 @@ def a_dying_ally_can_be_stabilised_with_a_heal_check(out: Result) -> None:
         # deliberately poses elsewhere. Asserting it here says so rather
         # than letting the probe read `None` as an entity.
         assert mate is not None, "no living ally took a turn"
+        # **The downed state is imposed AFTER the advance, not written onto
+        # the sheet before it.** `band.sheets[0].hp = hp` fielded the
+        # character dying and the loop above then advanced through the
+        # party's *own* turns -- during which the AI cleric healed them.
+        # Measured once the draw moved: the fighter arrived at `-10/35` and
+        # was at `8/35` by the time `mate` had a turn, so `C.DYING` was
+        # False and the check was correctly not offered. Three assertions
+        # here and one in `rally` were reading the party's competence as a
+        # bug.
+        #
+        # Driven through `deal_damage` rather than assigned to `Health`,
+        # because DYING is applied by the damage path -- a hand-written
+        # negative total is a number with no condition behind it, and the
+        # two clock assertions below ask about the condition.
+        if hp is not None:
+            health = world.need(low, Hp)
+            if health.hp > hp:
+                deal_damage(world, low, low, health.hp - hp,
+                            from_attack=False)
         mx, my = world.need(mate, Pos).square
         place(world, low, (mx + apart, my))
         return world, low, mate, enc
@@ -69162,35 +69418,81 @@ def a_dying_ally_can_be_stabilised_with_a_heal_check(out: Result) -> None:
     def ticked(seed: int, *, stabilise: bool) -> int:
         """Failures accrued **after** the condition is set, not in total.
 
-        `board` advances to a living ally's turn before handing the world
-        back, so the dying character can already have had a turn end and
-        rolled a failure by then. The first version of this measured the
-        total and read 1 against the control's 3 -- the probe's own setup
-        showing through the number it was supposed to be measuring. The
-        delta is the thing the rule is about.
+        The delta and not the total, because `board` advances to a living
+        ally's turn before handing the world back, so the dying character
+        can already have rolled a failure by then. The first version
+        measured the total and read 1 against the control's 3 -- the
+        probe's own setup showing through the number it was measuring.
+
+        **And on a party with no healer, which is what "left alone"
+        means.** This used `board`'s four-character party, whose cleric
+        *rescues* the dying character: measured turn by turn on seed 5,
+        `-7` for five turns and then `8/35`. Distance does not help -- 1,
+        8, 15 and 20 squares all end with the character healed, because
+        the party comes to them -- so once the draw moved, every seed in
+        1..24 gave a control of 0 and the comparison below was between two
+        zeroes.
+
+        A fighter and a rogue, neither of which can heal, poses the
+        printed sentence instead: `+3` loose against `+0` held on seed 5.
         """
-        world, low, _mate, enc = board(seed)
+        band = Party.of(["fighter", "rogue"], 2)
+        got = field_encounter(seed=seed, level=2, party=band)
+        world = got.world
+        pcs = [e for e in world.entities
+               if (i := world.get(e, Ident)) and str(i.ref).startswith("c:")]
+        low = pcs[0]
+        enc = Encounter(world)
+        enc.start()
+        health = world.need(low, Hp)
+        deal_damage(world, low, low, health.hp + 10, from_attack=False)
         if stabilise:
             world.effects.apply(low, low, W.ENCOUNTER, label="stabilised",
                                 conditions=(C.STABLE,))
-        was = world.need(low, Hp).failures
+        was = health.failures
         for _ in range(14):
             enc.advance()
-        return world.need(low, Hp).failures - was
+        return health.failures - was
 
-    loose, held = ticked(5, stabilise=False), ticked(5, stabilise=True)
-    out.that(
-        loose > 0,
-        "the control climbs: a dying character left alone accumulates "
-        "death-save failures, so the arm below is measuring something",
-        f"{loose} further failures over 14 turns",
-    )
-    out.that(
-        held == 0,
-        "and a stabilised one accumulates none -- which is the whole of "
-        "what `STABLE` does",
-        f"{held} further failures against the control's {loose}",
-    )
+    # **Which seed leaves the character alone has moved, so it is found
+    # rather than written down.** Seed 5 was picked because its control
+    # genuinely ticked; once the draw moved, seed 5's party *heals* the
+    # dying fighter -- measured turn by turn, `-7` for five turns and then
+    # `8/35` -- so the window in which a death save could be rolled closed
+    # before one failed, and the control read 0. Pinning a seed pins the
+    # party's behaviour, which is the thing a content wave moves.
+    #
+    # Swept for a live control instead, which is the idiom the check
+    # assertions above already use. The pair is still read on ONE seed, so
+    # the comparison stays like for like, and a sweep that finds none says
+    # SKIP rather than passing on a control that measures nothing.
+    live = next((s for s in range(1, 25) if ticked(s, stabilise=False) > 0),
+                None)
+    # Two `out.skip`s rather than a `return`, because the clause below this
+    # one is a different printed sentence and dropping it on the way past
+    # would be the vanishing check `scripts/CLAUDE.md` makes the totals
+    # reconcile to catch.
+    if live is None:
+        why = ("no seed in 1..24 leaves the dying character alone long "
+               "enough for a death save to fail, so the control cannot be "
+               "posed -- a skip, not a pass")
+        out.skip(why)
+        out.skip(f"and the STABLE arm it is measured against: {why}")
+    else:
+        loose = ticked(live, stabilise=False)
+        held = ticked(live, stabilise=True)
+        out.that(
+            loose > 0,
+            "the control climbs: a dying character left alone accumulates "
+            "death-save failures, so the arm below is measuring something",
+            f"{loose} further failures over 14 turns on seed {live}",
+        )
+        out.that(
+            held == 0,
+            "and a stabilised one accumulates none -- which is the whole of "
+            "what `STABLE` does",
+            f"{held} further failures against the control's {loose}",
+        )
 
     # -- and being hit again restarts it ----------------------------------
     world, low, _mate, _enc = board(5)
@@ -77480,6 +77782,12 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "chassis_feature_feats": (
+        a_feat_hands_over_a_chassis_feature_it_did_not_take,
+        "the three feats #642's wave unblocked hand over the chassis"
+        " feature the chain chose, and the fourth says what it still"
+        " waits on (#642, #1261)",
     ),
     "wave_facilities": (
         three_facilities_the_chassis_wave_asked_for,

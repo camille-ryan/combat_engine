@@ -314,7 +314,7 @@ def skald_charisma(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("chargen.dailies_per_day()",),
+    todo=("chargen.dailies_per_day()",),
 )
 def skald_dailies(c: Cast) -> None:
     """*"You gain two 1st-level bard daily attack powers of your choice, but
@@ -339,6 +339,10 @@ def skald_dailies(c: Cast) -> None:
     daily without the cap makes the skald strictly stronger than print,
     which is the wrong direction to ship half a card in. Both halves land
     together or neither.
+
+    **`todo=` and not `dropped=`**, which is what "neither" means in a
+    marker: the body is empty, so the row does not play, and `dropped=`
+    claims it plays with one clause missing. `lint.py` names exactly this.
     """
 
 
@@ -397,10 +401,10 @@ def skald_untrained(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
-    dropped=("turns.short_rest(surges=)",),
+    todo=("turns.short_rest(surges=)",),
 )
-def skald_song_of_rest(c: Cast) -> None:
-    """The skald's Song of Rest, which is `cf:bard-f5`'s card again.
+def skald_rest_healing(c: Cast) -> None:
+    """The skald's half of `cf:bard-f5`, which is that card printed again.
 
     *"When an affected character spends healing surges at the end of the
     rest, that character regains additional hit points equal to your

@@ -4102,12 +4102,31 @@ def _decisions_are_honoured() -> list[str]:
 
 #: How many of a class's own at-will attacks `_provoke` will borrow.
 #:
-#: Four, because a Requirement can refuse one -- the first by ref for a
-#: fighter is `p1000`, "needs a shield", which the board's fighter does not
-#: hold -- and because this pass is reached only by a row that has already
-#: shown nothing on every other arrangement. The cost is bounded by that,
-#: not by this number.
-_CLASS_SWINGS = 4
+#: More than one, because a Requirement can refuse one -- the first by ref
+#: for a fighter is `p1000`, "needs a shield", which the board's fighter does
+#: not hold -- and because this pass is reached only by a row that has
+#: already shown nothing on every other arrangement. The cost is bounded by
+#: that, not by this number.
+#:
+#: **Eight, and it was four.** `f2470`'s trigger is *"a critical hit with a
+#: `c3` attack power"*, so the pass has to land a **critical** with a
+#: borrowed class power, and which borrowed power crits depends on the die
+#: stream. `#642`'s chassis wave moved that stream -- a dealt fighter went
+#: from holding dozens of rows to holding 92, and arming them draws
+#: differently -- and `f2470` stopped being posable at all. It is a pinned
+#: verdict, so `--verdicts` went red naming a row that had not changed.
+#:
+#: Measured over the boundary rather than nudged: 4, 5, 6 and 7 all leave
+#: `f2470` unposable and 8 poses it, with 17 (every candidate) no better
+#: than 8. It is also **faster** -- 28.6s against 32.9s -- because the row
+#: fires sooner and the search stops, so this buys the verdict back at
+#: negative cost.
+#:
+#: Not a loosening: no verdict was weakened, the pass was given more poses
+#: of the same kind, which is this file's standing answer to a row that has
+#: shown nothing. What it does not fix is the fragility itself -- the pass
+#: still depends on which borrowed power happens to crit. #1266.
+_CLASS_SWINGS = 8
 
 
 def _a_class_at_will(row: object) -> bool:
