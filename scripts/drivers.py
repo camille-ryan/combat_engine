@@ -42855,6 +42855,112 @@ def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     )
 
 
+def a_build_time_option_is_drawn_and_both_halves_are_dealt(out: Result) -> None:
+    """`BUILD_OPTIONS` is **drawn** now, not fixed at `options[0]`. `#1085`.
+
+    `_build_options` recorded the first printed option unconditionally, and
+    its docstring defended that: *"it takes the first printed option every
+    time, which is the reading the rows already had, so the character is
+    unchanged."* Right while nothing could act on the answer, and it is
+    what made `cf:artificer-f2` unwritable -- its card prints an
+    **exclusion**, and an exclusion written against an option nobody may
+    vary fires for every dealt artificer. Both that row's note and
+    `BUILD_OPTIONS`' own recorded the measurement: `p10187` and `f3023`
+    went UNUSED, and neither is in `audited.json`'s `never_refs`.
+
+    So the gap was a chooser that never chose, which is `#1085` retitled.
+    """
+    from random import Random
+
+    from combat_engine import chargen
+
+    # -- every entry's every option comes out of the draw ---------------
+    missed = {}
+    for ref, options in chargen.BUILD_OPTIONS.items():
+        if len(options) < 2:
+            continue
+        seen = {chargen.deal_build_option(Random(f"{s}:{ref}"), ref)
+                for s in range(400)}
+        gap = sorted(set(options) - seen)
+        if gap:
+            missed[ref] = gap
+    out.that(not missed,
+             "every printed option of every entry comes out of the dealer "
+             "-- an option that cannot be drawn is a row's other card dead, "
+             "which is what this table's own note measured",
+             f"unreachable: {missed}")
+
+    # -- while the resolver stays fixed, as `build_of` does -------------
+    fixed = {ref: {chargen.deal_build_option(None, ref) for _ in range(20)}
+             for ref in chargen.BUILD_OPTIONS}
+    out.that(all(len(v) == 1 for v in fixed.values())
+             and all(next(iter(fixed[r])) == chargen.BUILD_OPTIONS[r][0]
+                     for r in fixed),
+             "while `rng=None` answers the FIRST printed option every time "
+             "-- `audit.board` needs one fixed answer per ref or the sweep "
+             "wobbles, which is `build_of`'s and `chassis_of`'s argument",
+             f"{ {k: sorted(v) for k, v in fixed.items()} }")
+
+    # -- and the artificer's exclusion is mutual, which is the payoff ---
+    #
+    # *"you can choose to take `p10187` **in place of** `p7635` [...] if
+    # you choose [it] you cannot create [`p7635`] at all."* So a character
+    # holds one of the pair, and **which** one it loses depends on the
+    # draw -- the assertion a fixed `options[0]` could not pose at all.
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+
+    def forbidden(choice: str) -> set[str]:
+        """Which of the pair a build that chose `choice` may not create.
+
+        The option is written into `Build.choices` the way `chargen`
+        writes it -- `option:<ref>:<value>`, which is what
+        `Cast.chosen_option` reads -- rather than by dealing a whole
+        artificer, so the pair below differs in **one string** and nothing
+        else. Read back off `Powers.forbidden`, which is the store
+        `c.forbid(ref=)` adds to.
+        """
+        from combat_engine.engine.components import Build as _B
+        from combat_engine.engine.components import Powers as _P
+
+        world, me, _ = _posed("cf:artificer-f2", 1)
+        b = world.get(me, _B)
+        if b is not None:
+            b.choices = {c for c in b.choices
+                         if not c.startswith("option:cf:artificer-f2:")}
+            b.choices.add(f"option:cf:artificer-f2:{choice}")
+        # **Cleared first, because `audit.board` GRANTS the row under
+        # test** -- so arming the board already ran this body once, with
+        # whatever option the board happened to carry, and running it again
+        # leaves both halves of the pair forbidden. The first version of
+        # this probe read `default forbids ['p10187', 'p7635']` for exactly
+        # that reason. The same trap `the-audit-board-grants-the-row`
+        # describes and the same one `hide:cover+3` hit, reading 6 grades
+        # where it wanted 3.
+        known = world.get(me, _P)
+        if known is not None:
+            known.forbidden.clear()
+        REGISTRY["cf:artificer-f2"].body(
+            Cast(world=world, me=me, ref="cf:artificer-f2"))
+        return set(known.forbidden) & {"p7635", "p10187"} if known else set()
+
+    took_swap = forbidden("p10187")
+    took_default = forbidden("p7635")
+    out.that(took_swap == {"p7635"} and took_default == {"p10187"},
+             "a character that took the swap cannot create the card it "
+             "replaced, and one that did not cannot create the swap -- the "
+             "exclusion is MUTUAL, and which card is lost depends on the "
+             "draw, which a fixed first option could not pose",
+             f"swap forbids {sorted(took_swap)}, "
+             f"default forbids {sorted(took_default)}")
+    out.that(not REGISTRY["cf:artificer-f2"].unfinished,
+             "and the row carries no marker: its own note said "
+             "`chargen.deal_build_option()` was what it needed first",
+             f"{REGISTRY['cf:artificer-f2'].unfinished}")
+
+
 def a_build_option_naming_rows_matches_the_rows(out: Result) -> None:
     """`BUILD_OPTIONS` copies a list `content/` owns, so gate the copy. `#1112`.
 
@@ -74374,6 +74480,12 @@ DRIVERS = {
     "group_check": (
         a_group_check_scores_the_party_once_against_a_threshold,
         "a group check scores the party once against a threshold (#984)",
+    ),
+    "build_option_draw": (
+        a_build_time_option_is_drawn_and_both_halves_are_dealt,
+        "a build-time option is drawn rather than fixed at the first, so"
+        " both halves of the artificer's pair are dealt and its exclusion"
+        " can be written (#1085)",
     ),
     "build_options_mirror": (
         a_build_option_naming_rows_matches_the_rows,

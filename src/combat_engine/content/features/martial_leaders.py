@@ -433,7 +433,6 @@ def artificer_transfer(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE_HEAL,
-    todo=("chargen.deal_build_option()",),
 )
 def artificer_infusions(c: Cast) -> None:
     """The budget the class's three infusion cards draw on, and the swap
@@ -502,9 +501,35 @@ def artificer_infusions(c: Cast) -> None:
     is what either of them needs first, and `#314` is where choosing well
     lives.
 
-    Both cards are therefore still dealt, which is one card more than print
-    and is the state this row inherited rather than one it introduces.
+    **Written now, because `chargen.deal_build_option` landed.** The
+    paragraph above says what it was waiting for in as many words --
+    *"`chargen.deal_build_option()` is what either of them needs first"* --
+    and the sentence after it, pointing at `#314` for *choosing well*, was
+    one issue too far: choosing well is not needed here, choosing at all
+    is. `BUILD_OPTIONS["cf:artificer-f2"]` is `("p7635", "p10187")` and
+    the draw answers both over seeds, so neither card is dead.
+
+    The exclusion is **mutual**, which is the card read whole: *"you can
+    choose to take `p10187` **in place of** `p7635`"* makes `p7635` the one
+    a character has unless it swaps, and *"if you choose the [other] you
+    cannot create [`p7635`] at all"* takes the first away when it does. So
+    each build forbids the card it did not take, and a character holds one
+    of the pair rather than both -- which is the "one card more than print"
+    the old note recorded as inherited.
+
+    `until=ENCOUNTER` because a build-time choice is not a condition that
+    wears off; `forbid`'s own default is `SAVE_ENDS`, which is right for
+    *"loses the ability to use"* and wrong for this.
     """
+    chosen = c.chosen_option("cf:artificer-f2")
+    # No answer means no build recorded one -- a pinned character or a
+    # board that spawned without `_build_options` -- and the printed
+    # default is the first of the pair, so nothing is forbidden rather
+    # than guessing that the swap was taken.
+    if chosen == "p10187":
+        c.forbid("p7635", on=c.me, until=When.ENCOUNTER)
+    elif chosen == "p7635":
+        c.forbid("p10187", on=c.me, until=When.ENCOUNTER)
 
 
 # -- bard -------------------------------------------------------------------

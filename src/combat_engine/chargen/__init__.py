@@ -3748,27 +3748,30 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # `_build_options` below takes the first by design -- see its docstring.
     # `#314` is where choosing well lives.
     "f2694": ("p7448", "p11207", "p13123", "p16131", "p16132"),
-    # **`cf:artificer-f2` is deliberately not here, and the reason is about
-    # this table rather than about that row.** Its card prints a pair --
-    # one of its three infusions taken *in place of* another, with the
-    # other then uncreatable -- so the entry would read
-    # `("p7635", "p10187")`, printed default first, and `c.chosen_option`
-    # reads it back correctly. Both halves were driven and both work.
+    # **`cf:artificer-f2` is here now, and what unblocked it was the
+    # chooser rather than the scorer.** The note this replaces said the
+    # entry could not be added because *"`_build_options` records the
+    # first option unconditionally and by design, so an exclusion written
+    # in either direction fires for every dealt artificer and the other
+    # card of the pair is unreachable by anybody"* -- measured, with
+    # `audit.py` moving `p10187` and `f3023` to UNUSED.
     #
-    # What does not work is anything acting on it. `_build_options` records
-    # the **first** option unconditionally and by design, so an exclusion
-    # written in either direction fires for *every* dealt artificer and the
-    # other card of the pair is unreachable by anybody: measured,
-    # `audit.py` moves `p10187` **and** `f3023` -- the feat whose whole
-    # subject is that card -- from "fires and does something" to UNUSED,
-    # and neither is in `audited.json`'s `never_refs`. An entry nothing may
-    # act on is a record nothing reads, which is this tree's commonest bug,
-    # so the row keeps its marker instead. `#314` is where choosing well
-    # lives and is what unblocks it.
+    # Every word of that was true and the conclusion -- *"`#314` is where
+    # choosing well lives and is what unblocks it"* -- pointed one issue
+    # too far. **Choosing well is not needed; choosing at all is.**
+    # `deal_build_option` below draws, so each half of the pair is the
+    # dealt answer for some artificer and neither card is unreachable.
+    # `#1085`, which is retitled to exactly that gap.
+    #
+    # Printed default first, which is what `rng=None` answers and what
+    # `audit.board` therefore fields: the card reads *"you can choose to
+    # take `p10187` **in place of** `p7635`"*, so `p7635` is the one a
+    # character has unless it swaps.
+    "cf:artificer-f2": ("p7635", "p10187"),
 }
 
 
-def _build_options(taken: list[str]) -> set[str]:
+def _build_options(taken: list[str], rng: Random | None = None) -> set[str]:
     """`option:<ref>:<value>` for every row the build took that asks one.
 
     **`taken`, not `feats`, because a feat is not the only kind of row that
@@ -3780,20 +3783,54 @@ def _build_options(taken: list[str]) -> set[str]:
     `Powers.known` holds `cf:` rows and item powers alike, so the caller
     passes the hand as well and the dict decides what is asked.
 
-    **No random stream, and that is on purpose.** Every other dealer here
-    takes one of its own so that dealing a character cannot move the dice
-    the fight is about to roll. This one needs none: it takes the first
-    printed option every time, which is the reading the rows already had,
-    so the character is unchanged and `replay` is the proof of it.
+    **`rng` draws; without one the first printed option is taken.** The
+    old note said a stream was *"on purpose"* because taking the first
+    *"is the reading the rows already had, so the character is unchanged
+    and `replay` is the proof of it"*. That was the right default while
+    nothing could act on the answer, and it is what made
+    `cf:artificer-f2` unwritable: its card prints an **exclusion** --
+    *"if you choose it you cannot create [the other] at all"* -- and an
+    exclusion written against an option recorded unconditionally fires for
+    **every** dealt artificer, which `audit.py` measured by moving both
+    `p10187` and `f3023`, the feat whose whole subject is the other card.
 
-    Choosing *well* -- scoring the options the way `choices.feat_options`
-    scores feats -- is a separate question and a separate change, because
-    it would move every character holding one of these rows.
+    So the fault was never the exclusion; it was a chooser that never
+    chose. `#1085`, retitled to exactly that.
+
+    Uniform, for `deal_build`'s stated reason: these are ways of playing a
+    row rather than better or worse ones, and nothing scores them.
+    Scoring is still a separate change and still moves every character
+    holding one of these rows.
+
+    **The caller passes its own keyed stream**, like every other dealer
+    here, so drawing an option cannot move the dice the fight is about to
+    roll. Omitting it keeps the old answer, which is what the two callers
+    that have no seed do.
     """
     return {
-        f"option:{ref}:{BUILD_OPTIONS[ref][0]}"
+        f"option:{ref}:{deal_build_option(rng, ref)}"
         for ref in taken if ref in BUILD_OPTIONS
     }
+
+
+def deal_build_option(rng: Random | None, ref: str) -> str:
+    """Which of a row's printed build-time options this character took.
+
+    The draw `#1085` is about. `BUILD_OPTIONS[ref]` is the printed pair or
+    list, `Cast.chosen_option` is the reader, and this is the half that was
+    missing: the value was recorded as `options[0]` unconditionally, so a
+    row could read the answer and every character gave the same one.
+
+    `rng` of `None` answers the first, which is what the resolver wants and
+    what every caller without a seed had before. Same split as
+    `build_of`/`deal_build` and `chassis_of`/`deal_chassis`, and for the
+    same reason: `audit.board` needs one fixed answer per ref or the sweep
+    wobbles.
+    """
+    options = BUILD_OPTIONS[ref]
+    if rng is None or len(options) <= 1:
+        return options[0]
+    return rng.choice(list(options))
 
 
 def feats_for(
@@ -5649,7 +5686,15 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 # item power may ask a build-time question too, and
                 # reading only `feats` meant three of `#1112`'s ten
                 # claimants could never be answered.
-                *_build_options([*feats, *powers]),
+                # **Its own keyed stream**, so a drawn option cannot move
+                # the dice the fight is about to roll -- the rule every
+                # dealer above follows. Without it `_build_options` takes
+                # the first printed option, which is what it did before
+                # anything could act on the answer. #1085.
+                *_build_options(
+                    [*feats, *powers],
+                    Random(f"{world.rng.seed}:{who.cls}:build-option"),
+                ),
                 # The pool draw above, under the same `option:` key, so
                 # one reader (`Cast.chosen_option`) answers both. #1114.
                 *swapped_in,
