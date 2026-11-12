@@ -58,6 +58,7 @@ from combat_engine.engine import Build as BuildState
 from combat_engine.engine.equipment import equip
 from combat_engine.engine.movement import place
 from combat_engine.engine.types import Usage
+from combat_engine.levels import level_of
 
 #: The printed armour table lives **below** chargen now, in
 #: `combat_engine/armour.py`. Five other readers wanted it and one was the
@@ -1540,6 +1541,28 @@ ORIGINAL = "original"
 _FEATURE_SUB_OPTION = re.compile(r"-f\d+s\d+$")
 
 
+def feature_level(ref: str) -> int:
+    """The printed level a class feature is gained at.
+
+    The symbol 32 rows carried as `chargen.feature_level()`, and the thing
+    `#1261` is about: `class_feature` has no level column, so nothing in
+    `game.db` can answer this. `combat_engine.levels` is the printed map --
+    169 of its 395 rungs come from the compendium's own name (which begins
+    `Level N `), the rest from the class pages' progression tables and
+    `Level N:` headings, with the provenance on every line.
+
+    Lives here rather than in `levels.py` because a *row* asks it, and a
+    row reaches `chargen`; `levels.py` stays a table with one resolver and
+    no knowledge of who is asking. A sub-option resolves to its parent, so
+    `cf:X-f9s2` and `cf:X-f9` cannot disagree.
+
+    Answers **1** for anything the map has not got -- see `level_of`. So a
+    row asking about a plain-class feature gets the honest "as early as it
+    can be" rather than a zero that reads as "never".
+    """
+    return level_of(ref)
+
+
 def ladder_row(p, level: int = 1) -> bool:  # noqa: ANN001
     """Is this class-feature row part of the chassis ladder a character of
     `level` is dealt?
@@ -1591,8 +1614,20 @@ def ladder_row(p, level: int = 1) -> bool:  # noqa: ANN001
             lambda m: m.group(0).split("s")[0], p.ref)
         if parent in BUILD_OPTIONS:
             return False
+    # **The PRINTED level, which `Power.level` does not carry.**
+    # `class_feature` has no level column (`#1261`), so every class feature
+    # imports at level 0 and this branch used to be a bare `return True` --
+    # which dealt a 1st-level character its chassis's whole ladder.
+    # Measured: a dealt fighter held **26** knight rungs, 27th-level
+    # features included, and `audit.board`'s caster carried 92 known rows.
+    #
+    # `combat_engine.levels` is the printed map, read off the page and
+    # carrying its provenance per entry. It answers 1 for anything it has
+    # never seen, so a plain-class feature and a rung declared after it was
+    # written behave exactly as they did before -- this narrows what is
+    # dealt and can never withhold a row the map does not know about.
     if p.level == 0:
-        return True
+        return feature_level(p.ref) <= level
     if p.level > level or p.is_attack:
         return False
     # **A PARENT feature above level 0 is dealt without naming a leg**, and

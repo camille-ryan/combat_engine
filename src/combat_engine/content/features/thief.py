@@ -227,16 +227,23 @@ def thief_dexterity(c: Cast) -> None:
     prints no type word, and gated on the weapon the swing is **using**
     rather than the main hand -- a rogue carries a blade and a shooter.
 
-    **The +2 is the first rung of a ladder three other rows climb**, and
-    those three are not written: `-f10`, `-f13` and `-f19` raise it to +3,
-    +4 and +5 at levels the imported spec does not carry. See the module
-    docstring and `#1261`. So what is here is the printed 1st-level value,
-    which is right for the only level a character can currently be dealt
-    these rows at.
+    **The +2 is the first rung of a ladder three other rows climb, and
+    those three are written here**: `-f10`, `-f13` and `-f19` each print
+    *"increases to"*, so they are pointers carrying `implemented_in=` and
+    this body reads which are held. Rising order and plain `if`, so the
+    highest held replaces rather than adds -- a 19th-level thief holds all
+    three and the page says +5, not +3+4+5.
     """
     me = c.me
     c.rolls_with("mba", Ability.DEX, on=me, until=When.ENCOUNTER)
-    c.bonus("damage", 2, on=me, until=When.ENCOUNTER, kind="untyped",
+    bonus = 2
+    if c.feat("cf:rogue-thief-f10"):
+        bonus = 3
+    if c.feat("cf:rogue-thief-f13"):
+        bonus = 4
+    if c.feat("cf:rogue-thief-f19"):
+        bonus = 5
+    c.bonus("damage", bonus, on=me, until=When.ENCOUNTER, kind="untyped",
             when=_with_a_sneak_weapon(c))
 
 
@@ -449,7 +456,7 @@ def _damage_rung(ref: str, value: int) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
+        implemented_in=("cf:rogue-thief-f3",),
     )
     def row(c: Cast) -> None:
         pass
@@ -457,13 +464,15 @@ def _damage_rung(ref: str, value: int) -> Any:
     row.__name__ = "thief_damage_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         f"`cf:rogue-thief-f3`'s damage bonus rises to +{value}.\n\n"
-        "Not written, and that is the module docstring's line rather than a "
-        "shortage of verbs: `c.bonus` could lay it tomorrow. Every class "
-        "feature in this tree arms at the start of every fight, because "
-        f"`class_feature` carries no level -- so a +{value} laid here is a "
-        "1st-level thief with it. The rung supersedes a lower one, which is "
-        "what makes writing it wrong where `-f11` and `-f21` are merely "
-        "early. `#1261`."
+        "**Written into `cf:rogue-thief-f3`**, which is where a clause "
+        "raising another row's number has to go -- no modifier can reach "
+        "into that row's own `c.bonus` call. So this is a pointer and "
+        "carries `implemented_in=`.\n\n"
+        "What made it unwritable was the level, not a verb: every class "
+        "feature armed at the start of every fight because "
+        f"`class_feature` carries none, so a +{value} reached a 1st-level "
+        "thief. `combat_engine.levels` carries the printed levels now and "
+        "`chargen.ladder_row` reads them. `#1261`."
     )
     return row
 
@@ -488,10 +497,9 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
-        pass
+        c.more_uses("p12710", 1, on=c.me)
 
     row.__name__ = "thief_extra_use_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (

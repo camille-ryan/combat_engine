@@ -333,17 +333,27 @@ def executioner_finish(c: Cast) -> None:
     fall to the next blow anyway and this is once per hit rather than once
     per encounter.
 
-    **The first rung of a ladder two rows climb**, and those two are not
-    written: `-f15` and `-f21` raise the ceiling to 20 and 30 at levels the
-    import does not carry, and a rung that supersedes a lower number is not
-    written here. `#1261`, and `features/thief.py` has the line.
+    **The ladder two rows climb is written here**: `-f15` and `-f21`
+    print *"20 hit points or fewer"* and *"30"*, so they are pointers
+    carrying `implemented_in=` and this body reads them. Rising order and
+    plain `if`, so the highest held ceiling replaces rather than adds --
+    and `combat_engine.levels` is what keeps a 1st-level executioner from
+    holding the 30 (`#1261`).
+
+    The ceiling is read **inside the watch**, not once at arming: `c.feat`
+    is cheap and a row granted mid-fight would otherwise be missed.
     """
     me = c.me
 
     def finish(ev: Hit) -> None:
         if ev.attacker != me or ev.target == me:
             return
-        if not _finishable(c, ev.target, 10):
+        ceiling = 10
+        if c.feat("cf:assassin-executioner-f15"):
+            ceiling = 20
+        if c.feat("cf:assassin-executioner-f21"):
+            ceiling = 30
+        if not _finishable(c, ev.target, ceiling):
             return
         if c.may("finish it off"):
             c.kill(on=ev.target)
@@ -484,7 +494,7 @@ def _finish_rung(ref: str, ceiling: int) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.SHADOW],
-        todo=("chargen.feature_level()",),
+        implemented_in=("cf:assassin-executioner-f7",),
     )
     def row(c: Cast) -> None:
         pass
@@ -493,12 +503,15 @@ def _finish_rung(ref: str, ceiling: int) -> Any:
     row.__doc__ = (
         f"`cf:assassin-executioner-f7`'s ceiling rises to {ceiling} hit "
         "points.\n\n"
-        "Not written: every class feature arms at the start of every fight "
-        "because `class_feature` carries no level, so a ceiling of "
-        f"{ceiling} laid here is a 1st-level executioner finishing off "
-        "anything below it. The rung supersedes a lower one, which is what "
-        "makes writing it wrong. `#1261`, and `features/thief.py` has the "
-        "line."
+        "**Written into `cf:assassin-executioner-f7`**, whose `Hit` watch "
+        "reads the ceiling: no modifier can reach into another row's "
+        "watch, so this is a pointer and carries `implemented_in=`.\n\n"
+        "What made it unwritable was the level, not a verb: every class "
+        "feature armed at the start of every fight because "
+        f"`class_feature` carries none, so a ceiling of {ceiling} reached "
+        "a 1st-level executioner finishing off anything below it. "
+        "`combat_engine.levels` carries the printed levels now and "
+        "`chargen.ladder_row` reads them. `#1261`."
     )
     return row
 

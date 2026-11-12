@@ -117,14 +117,45 @@ def slayer_power_strike(c: Cast) -> None:
     bonus names no weapon group, where the thief's four arms do, so this
     gate is strictly "is a weapon swinging".
 
-    **The first rung of a ladder three rows climb**, and those three are
-    not written: `-f5`, `-f9` and `-f16` raise this to `2 +`, `5 +` and
-    `8 + Dex` at levels the import does not carry. So what is here is the
-    printed 1st-level value. `#1261`, and the module docstring has the
-    line.
+    **The ladder three rows climb is written here**, which is the `#550`
+    arrangement a class feature's turn: `-f5`, `-f9` and `-f16` each print
+    *"the bonus ... increases to N + your Dexterity modifier"*, and no
+    modifier can reach into another row's `c.bonus` call. So they are
+    pointers carrying `implemented_in=` and this body reads which of them
+    the character holds.
+
+    **The highest held rung wins, and that is what "increases to" means.**
+    A 15th-level slayer holds `-f5` and `-f9` both -- they are separate
+    printed features and `chargen` deals every rung at or below the
+    character's level -- so adding them would pay `2 + 5 + Dex` where the
+    page says `5 + Dex`. `max` is the whole of the superseding rule.
+
+    **Read off `Powers.known` rather than through `c.change_amount`**,
+    deliberately. That verb is the general facility for raising a number
+    another row hands out, and it loses a race here: all four of these arm
+    as traits, `turns.arm_traits` walks them in its own order, and
+    `c.bonus` fixes its amount when it is laid -- so a rung arming after
+    this row would change a number that had already been paid. `c.feat`
+    asks what the character *holds*, which `chargen` settled before any
+    arming, so there is no order to get wrong.
     """
-    c.bonus("damage", c.dex_mod, on=c.me, until=When.ENCOUNTER,
-            kind="untyped", when=_a_weapon_attack(c))
+    # **Each rung named in this body's own source**, which is what
+    # `lint.py` requires of an `implemented_in=` pointer (`#553`) and is
+    # the right shape anyway: three hand-written lines, one per printed
+    # rung, rather than a table a reader has to go and find.
+    #
+    # Plain `if` and not `elif`, in rising order, so the **highest held**
+    # rung wins -- a 25th-level slayer holds all three and the page says
+    # `8 + Dex`, not `2 + 5 + 8 + Dex`.
+    step = 0
+    if c.feat("cf:fighter-slayer-f5"):
+        step = 2
+    if c.feat("cf:fighter-slayer-f9"):
+        step = 5
+    if c.feat("cf:fighter-slayer-f16"):
+        step = 8
+    c.bonus("damage", step + c.dex_mod, on=c.me,
+            until=When.ENCOUNTER, kind="untyped", when=_a_weapon_attack(c))
 
 
 @power(
@@ -470,7 +501,7 @@ def _damage_rung(ref: str, value: int) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
+        implemented_in=("cf:fighter-slayer-f0",),
     )
     def row(c: Cast) -> None:
         pass
@@ -479,12 +510,16 @@ def _damage_rung(ref: str, value: int) -> Any:
     row.__doc__ = (
         f"`cf:fighter-slayer-f0`'s damage bonus rises to {value} + "
         "Dexterity.\n\n"
-        "Not written, and the module docstring has the line rather than "
-        "this being a shortage of verbs: every class feature arms at the "
-        "start of every fight because `class_feature` carries no level, so "
-        f"a `{value} + Dex` laid here is a 1st-level slayer with it. The "
-        "rung supersedes a lower one, which is what makes writing it wrong "
-        "where `-f7` is merely early. `#1261`."
+        "**Written into `-f0`**, which is where a clause raising another "
+        "row's number has to go: no modifier can reach into that row's "
+        "`c.bonus` call, so the three `c.feat` reads are in that body. So "
+        "this is a pointer and carries `implemented_in=`, exactly as a "
+        "feat naming one power does.\n\n"
+        "What made it unwritable was the level, not a verb: every class "
+        "feature armed at the start of every fight because "
+        "`class_feature` carries none, so this constant reached a "
+        "1st-level slayer. `combat_engine.levels` carries the printed "
+        "levels now and `chargen.ladder_row` reads them. `#1261`."
     )
     return row
 
@@ -506,10 +541,9 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
-        pass
+        c.more_uses("p12668", 1, on=c.me)
 
     row.__name__ = "slayer_extra_use_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (

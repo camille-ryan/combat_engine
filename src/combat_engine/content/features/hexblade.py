@@ -406,7 +406,7 @@ for _ref, _got in _F6_POWERS.items():
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("chargen.feature_level()", "chargen.pact_blade()"),
+    todo=("chargen.pact_blade()",),
 )
 def hexblade_another_use(c: Cast) -> None:
     """"You gain one more use per encounter of the `cf:warlock-hexblade-f3`

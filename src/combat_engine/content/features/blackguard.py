@@ -515,10 +515,9 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.DIVINE],
-        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
-        pass
+        c.more_uses("p13815", 1, on=c.me)
 
     row.__name__ = "blackguard_extra_use_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (

@@ -733,16 +733,21 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.PRIMAL],
-        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
-        pass
+        c.more_uses("p13506", 1, on=c.me)
 
     row.__name__ = "sentinel_extra_use_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         "Another use of `p13506` per encounter, still only once a turn.\n\n"
-        "The same two gaps six other chassis in this wave name, and the "
-        "same two symbols."
+        "**Both halves landed.** `c.more_uses` raises an existing row's "
+        "per-encounter allowance, read at the one site in `dsl.usable` "
+        "that compares spent against allowed; and `combat_engine.levels` "
+        "carries the printed level, so `chargen.ladder_row` deals this "
+        "rung when the page says rather than at 1. `#1261`.\n\n"
+        "The *\"only once per turn\"* half needs nothing: the raised row "
+        "is a triggered no-action row, and `once_per_round` is tested "
+        "separately from the allowance so this does not touch it."
     )
     return row
 

@@ -25367,7 +25367,13 @@ def at_most_one_applies(out: Result) -> None:
 #:
 #: **picks a number** -- `2 if held else 5`, on a call the row makes either
 #: way. There is no separate effect to attribute and crediting the whole
-#: call would hand the row's own output away. Twelve of the 21.
+#: call would hand the row's own output away. **Twenty of the 29**, and
+#: eight of those are `#1261`'s chassis ladders: a rung printing *"the
+#: bonus increases to N"* cannot own the bonus, because the base row lays
+#: it at every level and most of its size is the base row's. Each of those
+#: eight rungs carries `implemented_in=`, so `audit.py` buckets it as
+#: written-into-another-row rather than reporting it silent -- which is
+#: the thing a credit block would otherwise be needed for.
 #:
 #: **picks a damage type** -- the `dtype=` of a bonus the row lays
 #: regardless. Same argument.
@@ -25389,6 +25395,28 @@ def at_most_one_applies(out: Result) -> None:
 #: only entries here that are a gap rather than a reading**, and they are
 #: `#1178`: when movement grows a credit channel they come off this list.
 UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
+    # **The eight chassis ladders.** Each base row lays one bonus (or
+    # reads one ceiling) at every level and its rungs print *"increases
+    # to N"*, so the gate picks the size of a call the row makes either
+    # way -- the first shape above. Crediting the rung would hand it the
+    # whole bonus, most of which is the base row's. The rungs carry
+    # `implemented_in=` pointing back here, which is what keeps them out
+    # of the silent list. `#1261`.
+    "cf:assassin-executioner-f7": ("cf:assassin-executioner-f15",
+                                   "cf:assassin-executioner-f21"),
+    "cf:fighter-knight-f7": ("cf:fighter-knight-f12",),
+    "cf:fighter-knight-f8": ("cf:fighter-knight-f14",
+                             "cf:fighter-knight-f20"),
+    "cf:fighter-slayer-f0": ("cf:fighter-slayer-f5",
+                             "cf:fighter-slayer-f9",
+                             "cf:fighter-slayer-f16"),
+    "cf:ranger-hunter-f6": ("cf:ranger-hunter-f12",
+                            "cf:ranger-hunter-f15"),
+    "cf:ranger-scout-f9": ("cf:ranger-scout-f10",
+                           "cf:ranger-scout-f14"),
+    "cf:rogue-thief-f3": ("cf:rogue-thief-f10",
+                          "cf:rogue-thief-f13",
+                          "cf:rogue-thief-f19"),
     # A disjunction over two class features, guarding this row's own
     # printed damage. Neither gated card prints it.
     "f1101": ("cf:ranger-f2", "cf:warlock-f2"),
@@ -32884,8 +32912,23 @@ def was_an_attack_behind_it(out: Result) -> None:
     world2, me2, _ = audit_board("p15844", 1)
     foe2 = enemies(world2, me2)[0]
     applied: list[bool] = []
-    world2.bus.on(DamageApplied,
-                  lambda ev: applied.append(bool(getattr(ev, "by_attack", False))))
+    # **Only this swing's own blow, keyed on `detail`.** The listener saw
+    # every `DamageApplied` on the board, and once the chassis wave grew
+    # the dealt character the damage line set two more off from the same
+    # source at the same target:
+    #
+    #     detail='f3682'    amt 5   by_attack False   a feat's rider
+    #     detail='p15844'   amt 8   by_attack False   the row under test's
+    #     detail='p1000'    amt 8   by_attack True    this swing
+    #
+    # Both Falses are real and correctly not-from-an-attack, so the fault
+    # was reading `applied[0]` and calling it this blow. `detail` is the
+    # ref that paid, which is how the assertions above this one already
+    # pick their blow out.
+    world2.bus.on(
+        DamageApplied,
+        lambda ev: applied.append(bool(getattr(ev, "by_attack", False)))
+        if getattr(ev, "detail", None) == "p1000" else None)
     world2.rng.loaded = 19
     swing = Cast(world=world2, me=me2, ref="p1000")
     swing.target = foe2
@@ -32893,6 +32936,13 @@ def was_an_attack_behind_it(out: Result) -> None:
     if not swing.strike(on=foe2):
         out.skip("a landed attack, for the applied-event half")
     else:
+        # **Cleared between the strike and the damage line.** The listener
+        # is armed before `strike`, and `strike` can set other things off
+        # -- once the chassis wave grew the dealt character, two
+        # `DamageApplied` events arrived ahead of this swing's and the
+        # reading went `[False, False, True]`. Both of those were real and
+        # correctly False; `applied[0]` was simply no longer this blow.
+        applied.clear()
         swing.damage("1d6", on=foe2)
         out.that(applied and applied[0] is True,
                  "`DamageApplied` carries it as well as `DamageRolled` --"
@@ -43587,11 +43637,20 @@ def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
              f"{chargen.declared_chassis('rogue')}")
 
     # -- the two chassis do not share their own rows ---------------------
+    # **Dealt at 30.** This read `level=1` and wanted all 26 thief rows,
+    # which arrived only because every class feature imported at level 0
+    # and `ladder_row` dealt the lot. `combat_engine.levels` carries the
+    # printed levels now, so a 1st-level thief holds 4 of the 26 -- the
+    # correct answer, and the one asserted separately below.
     build = chargen.build_of("rogue", "brawny")
-    dealt = {ch: {r for r in chargen.loadout("rogue", level=1, build=build,
-                                             who_chassis=ch)
-                  if r.startswith("cf:")}
-             for ch in ("scoundrel", "thief")}
+
+    def dealt_at(lvl: int) -> dict:
+        return {ch: {r for r in chargen.loadout("rogue", level=lvl,
+                                                build=build, who_chassis=ch)
+                     if r.startswith("cf:")}
+                for ch in ("scoundrel", "thief")}
+
+    dealt = dealt_at(30)
     crossed = dealt["thief"] & {r for r in dealt["scoundrel"]
                                 if "scoundrel" in r}
     out.that(not crossed,
@@ -43600,8 +43659,24 @@ def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
              "`cf:rogue-scoundrel-f0`",
              f"{sorted(crossed)}")
     out.that(len([r for r in dealt["thief"] if "thief" in r]) == 26,
-             "while all 26 of its own are there",
+             "while all 26 of its own are there, to a character high "
+             "enough to have them",
              f"{len([r for r in dealt['thief'] if 'thief' in r])}")
+    # **And a 1st-level thief holds only the rungs printed at 1st**, which
+    # is `#1261`'s other half and could not be asserted until there was a
+    # level to read. Counted against the map rather than against a
+    # literal, so the two cannot drift apart.
+    from combat_engine import levels as _levels
+
+    early = sorted(r for r in dealt_at(1)["thief"]
+                   if "thief" in r and _levels.level_of(r) > 1)
+    want = sum(1 for r in rows if _levels.level_of(r) == 1)
+    got = len([r for r in dealt_at(1)["thief"] if "thief" in r])
+    out.that(not early and got == want,
+             "and a 1st-level thief holds exactly the rungs the page "
+             "prints at 1st -- none of the 22 printed higher, which is "
+             "what `combat_engine.levels` bought",
+             f"{got} of {want} expected, early: {early or 'none'}")
 
     # -- but they DO share the latch, which is the printed table ---------
     #
@@ -43762,16 +43837,36 @@ def the_slayers_three_masteries_each_answer_their_own_weapon(
              "fighter's six legs are the weaponmaster's and a slayer takes "
              "none of them, so the fork keys on a weapon group instead",
              f"{fork}")
+    # **Dealt at 7, which is the level the parent is printed at.** This
+    # read `level=1` and found the parent there, because every class
+    # feature imported at level 0. `f3583`'s own card settles the level --
+    # *"Choose one of the 7th level Weapon Specialization options of the
+    # knight or the slayer"* -- and `combat_engine.levels` carries it, so
+    # a 1st-level slayer correctly has no parent to choose with.
+    from combat_engine import levels as _levels
+
     leg = chargen.deal_build(Random("f"), "fighter", "slayer")
-    hand = {r for r in chargen.loadout("fighter", level=1, build=leg,
-                                       who_chassis="slayer")
-            if r.startswith("cf:")}
+
+    def hand_at(lvl: int) -> set[str]:
+        return {r for r in chargen.loadout("fighter", level=lvl, build=leg,
+                                           who_chassis="slayer")
+                if r.startswith("cf:")}
+
+    hand = hand_at(7)
     out.that(not (hand & set(fork)) and "cf:fighter-slayer-f21" in hand,
              "a dealt slayer gets the parent and NEITHER option -- the "
              "parent chooses, so dealing the siblings would hand over all "
              "three, which is `#851` inside one chassis",
              f"{sorted(hand & set(fork))}, parent "
              f"{'cf:fighter-slayer-f21' in hand}")
+    out.that(_levels.level_of("cf:fighter-slayer-f21") == 7
+             and "cf:fighter-slayer-f21" not in hand_at(6),
+             "and not one level earlier -- `f3583` prints *7th level* for "
+             "this very family, which is the only source for it and is "
+             "what `combat_engine.levels` records",
+             f"level {_levels.level_of('cf:fighter-slayer-f21')}, "
+             f"in a 6th-level hand: "
+             f"{'cf:fighter-slayer-f21' in hand_at(6)}")
 
     # -- the three riders, each with its weapon and one that is wrong ----
     AXE = replace(chargen.LONGSWORD, group="axe",
@@ -45298,15 +45393,27 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
              "answer to share",
              f"{ {k.rsplit('-', 1)[-1]: len(v) for k, v in forks.items()} }")
 
-    was_scored = chargen.SCORED_CHOICES
-    chargen.SCORED_CHOICES = False
-    try:
-        leg = chargen.deal_build(Random("hx"), "warlock", "hexblade")
-        hand = {r for r in chargen.loadout(
-            "warlock", level=1, build=leg, rng=Random("hx:hand"),
-            who_chassis="hexblade") if r.startswith("cf:")}
-    finally:
-        chargen.SCORED_CHOICES = was_scored
+    # **Dealt at 30, not at 1.** This asked for all three parents in a
+    # *1st-level* hexblade's hand, and they arrived -- because every class
+    # feature imported at level 0 and `ladder_row` dealt the lot. Two of
+    # the three are printed above 1st (`combat_engine.levels`: `-f7` at 9,
+    # `-f8` at 17), so the old reading was the `#1261` bug holding an
+    # assertion up. A character high enough to hold all three is what the
+    # claim is actually about, and the per-level half is asserted below.
+    from combat_engine import levels as _levels
+
+    def hand_at(lvl: int) -> set[str]:
+        was_scored = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = False
+        try:
+            leg = chargen.deal_build(Random("hx"), "warlock", "hexblade")
+            return {r for r in chargen.loadout(
+                "warlock", level=lvl, build=leg, rng=Random("hx:hand"),
+                who_chassis="hexblade") if r.startswith("cf:")}
+        finally:
+            chargen.SCORED_CHOICES = was_scored
+
+    hand = hand_at(30)
     every_option = {r for opts in forks.values() for r in opts}
     out.that(not (hand & every_option),
              "a dealt hexblade is handed NONE of the fork options -- each "
@@ -45314,9 +45421,20 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
              "character every pact at once, which is `#851`",
              f"{sorted(hand & every_option)}")
     out.that(all(p in hand for p in forks),
-             "while all three parents ARE dealt, without which nothing "
-             "grants a pact power at all",
+             "while all three parents ARE dealt to a character high enough "
+             "to have them, without which nothing grants a pact power at "
+             "all",
              f"{sorted(p for p in forks if p in hand)}")
+    # **And NOT before their printed level**, which is the half that could
+    # not be asserted at all until there was a level to read. A parent
+    # printed at 9 in a 1st-level hand is `#1261` exactly.
+    early = sorted(p for p in hand_at(1)
+                   if p in forks and _levels.level_of(p) > 1)
+    out.that(not early,
+             "and none of them before the level the page prints -- a "
+             "1st-level hexblade gets the parents printed at 1st and no "
+             "others, which is what `combat_engine.levels` bought",
+             f"{early or 'none early'}")
 
     def dealt_one(parent: str) -> int:
         drawn = {chargen.deal_build_option(Random(f"{s}:{parent}"), parent)
@@ -45378,12 +45496,13 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
     # bare `== 2` would pass just as happily if the level were the thing
     # that went, and the level is `#1261`, which nothing has closed.
     waits = REGISTRY["cf:warlock-hexblade-f4"].unfinished
-    out.that(sorted(waits) == ["chargen.feature_level()",
-                               "chargen.pact_blade()"],
-             "`-f4` waits on exactly the level (`#1261`) and the pact "
-             "weapon -- the per-encounter ceiling it also carried is gone, "
-             "because `c.more_uses` landed. Both named, so the assertion "
-             "cannot stay green by losing the wrong one of the two",
+    out.that(sorted(waits) == ["chargen.pact_blade()"],
+             "`-f4` waits on the pact weapon and nothing else. It carried "
+             "three symbols: the per-encounter ceiling went when "
+             "`c.more_uses` landed and the level went when "
+             "`combat_engine.levels` did, so this is the last of the "
+             "three. Named rather than counted, because a bare `== 1` "
+             "would pass just as happily if the wrong one had gone",
              f"{sorted(waits)}")
 
     # -- the twenty-eight the import cannot supply ------------------------
@@ -45409,6 +45528,106 @@ _F1_POWER = {
     "cf:warlock-hexblade-f1s3": "p13679",
     "cf:warlock-hexblade-f1s4": "p13721",
 }
+
+
+def a_chassis_rung_is_dealt_at_the_level_the_page_prints(out: Result) -> None:
+    """`combat_engine.levels`, and the dealing fault it closes.
+
+    `class_feature` has no level column (`#1261`), so every class feature
+    imports at level 0 and `chargen.ladder_row`'s `p.level == 0` branch was
+    a bare `return True` -- a 1st-level character was dealt its chassis's
+    whole printed ladder. Measured before: a dealt fighter held **26**
+    `cf:fighter-knight-f*` rungs, 27th-level features included.
+
+    **The map is the subject, not the arithmetic.** Four printed sources
+    agree it, and the provenance is on every line of `levels.py`, so what
+    is worth gating is that the numbers are *shaped* like levels, that
+    `level_of` resolves a family to one answer, and that `ladder_row`
+    actually reads it. The alternative -- asserting a particular rung's
+    number here -- would be restating the table in a second place for a
+    reader to have to reconcile.
+    """
+    import re
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen, levels
+    from combat_engine.engine.dsl import REGISTRY
+
+    # -- the table's shape -----------------------------------------------
+    bad = {r: n for r, n in levels.FEATURE_LEVEL.items()
+           if not isinstance(n, int) or not 1 <= n <= 30}
+    out.that(not bad,
+             "every entry is a level between 1 and 30 -- a 0 would read as "
+             "'never dealt' at every level and a 31 as 'dealt to nobody', "
+             "and both would be silent",
+             f"{len(levels.FEATURE_LEVEL)} entries, out of range: {bad}")
+    PARENT = re.compile(r"^cf:[a-z']+-[a-z']+-f\d+$")
+    shape = [r for r in levels.FEATURE_LEVEL if not PARENT.match(r)]
+    out.that(not shape,
+             "and every key is a PARENT rung -- a sub-option entry could "
+             "disagree with its parent, and `level_of` resolves the family "
+             "to one answer rather than holding 295 more rows that could",
+             f"{shape[:4] or 'none'}")
+
+    # -- it covers what it claims to -------------------------------------
+    declared = {r for r in REGISTRY if PARENT.match(r)}
+    missing = sorted(declared - set(levels.FEATURE_LEVEL))
+    out.that(not missing,
+             "and every declared chassis parent has an entry, so no rung "
+             "falls through to the default by accident -- the default is "
+             "for a row written after this file, and a gap here would hide "
+             "in it",
+             f"{len(declared)} declared, missing: {missing[:4] or 'none'}")
+
+    # -- level_of: the family, and the default ---------------------------
+    out.that(levels.level_of("cf:fighter-knight-f9") == 7
+             and levels.level_of("cf:fighter-knight-f9s2") == 7,
+             "`level_of` gives a sub-option its parent's level, so a "
+             "family cannot disagree with itself",
+             f"parent {levels.level_of('cf:fighter-knight-f9')}, "
+             f"option {levels.level_of('cf:fighter-knight-f9s2')}")
+    out.that(levels.level_of("cf:ardent-f0") == 1
+             and levels.level_of("cf:not-a-chassis-f99") == 1,
+             "and 1 for anything it has never seen -- a plain-class "
+             "feature and a rung declared later both behave as the tree "
+             "did before this file, so this narrows what is dealt and can "
+             "never withhold a row the map does not know about",
+             f"{levels.level_of('cf:ardent-f0')}, "
+             f"{levels.level_of('cf:not-a-chassis-f99')}")
+
+    # -- the six soft answers are named ----------------------------------
+    out.that(all(levels.level_of(r) == 1 for r in levels.UNVERIFIED)
+             and len(levels.UNVERIFIED) == 6,
+             "the six rungs whose printed level is not in `resources/` are "
+             "NAMED and all sit at 1 -- which is what the tree did for "
+             "every rung before this file, so the unverified ones are no "
+             "worse off and a reader can see which answers are soft",
+             f"{sorted(levels.UNVERIFIED)}")
+
+    # -- and ladder_row actually reads it --------------------------------
+    # **The behaviour, which is the point of the table.** Asserted on a
+    # chassis whose ladder spans the whole range, and on the shape of the
+    # curve rather than on one number: a rung count that rises with level
+    # and reaches the full set only at 30 is what the page describes, and
+    # no single level can say that.
+    def rungs_at(lvl: int) -> int:
+        return len([r for r in chargen.loadout("fighter", lvl,
+                                               who_chassis="knight")
+                    if r.startswith("cf:fighter-knight-")])
+
+    curve = [(lvl, rungs_at(lvl)) for lvl in (1, 7, 15, 30)]
+    counts = [n for _l, n in curve]
+    whole = len([r for r in levels.FEATURE_LEVEL
+                 if r.startswith("cf:fighter-knight-")])
+    out.that(counts == sorted(counts) and counts[0] < counts[-1],
+             "a dealt knight's rung count RISES with level rather than "
+             "being the whole ladder at 1st -- which is the fault `#1261` "
+             "is about, and the one a count at a single level cannot see",
+             f"{curve}")
+    out.that(counts[0] < whole // 2,
+             "and a 1st-level knight holds well under half of them, where "
+             "it used to hold all 26",
+             f"{counts[0]} of {whole} at 1st")
 
 
 def a_feat_hands_over_a_chassis_feature_it_did_not_take(out: Result) -> None:
@@ -45564,8 +45783,20 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
     from combat_engine.engine.skills import check as _check
 
     # -- c.more_uses: the allowance moves, and only by what was asked ----
+    # **The board's own raises are cleared first.** `audit.board` arms every
+    # row the dealt character holds, and once the extra-use rungs were
+    # written (`cf:fighter-slayer-f3`, `-f8`, the knight's two, the scout's
+    # two) several of them call `c.more_uses` on this very power -- so the
+    # "expended" baseline arrived already raised and the total read **6
+    # against a printed 1**. Both assertions below were measuring the board.
+    #
+    # Cleared rather than worked around, because what is under test is one
+    # call's effect: this is the `Powers.extra_uses` equivalent of clearing
+    # `rolls_twice` before the `c.roll_twice` control twenty lines down,
+    # and for the same reason.
     world, me, _ = _posed("cf:fighter-slayer-f1", 1)
     known = world.get(me, Powers)
+    known.extra_uses.clear()
     strike = get("p12668")
     known.used["p12668"] = 1
     before = usable(world, me, strike)
@@ -77798,6 +78029,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "feature_levels": (
+        a_chassis_rung_is_dealt_at_the_level_the_page_prints,
+        "a chassis rung is dealt at the level the page prints, not at 1st"
+        " (#1261)",
     ),
     "chassis_feature_feats": (
         a_feat_hands_over_a_chassis_feature_it_did_not_take,

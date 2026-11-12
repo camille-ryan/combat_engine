@@ -249,10 +249,21 @@ def knight_readiness(c: Cast) -> None:
     `cf:rogue-thief-f11` records the measurement and `#1262` is why the
     sweep calls such a row SILENT: `adjust_initiative` emits nothing.
 
-    `-f12` raises this to +4 and is not written: a rung that supersedes a
-    lower number is `#1261`'s.
+    **`-f12` raises it to +4 and is written here**, which is where a
+    clause raising another row's number goes: that rung is a pointer
+    carrying `implemented_in=` and this body reads whether it is held.
+    Plain `if`, so the higher printed number replaces rather than adds --
+    a 9th-level knight gets +4, not +6.
+
+    Read off `Powers.known` with `c.feat` rather than through
+    `c.change_amount`: both rows arm as traits in `arm_traits`' own order,
+    and `c.initiative` pays its number when it is called, so a rung
+    arming afterwards would raise a figure already spent.
     """
-    c.initiative(2, on=c.me)
+    bonus = 2
+    if c.feat("cf:fighter-knight-f12"):
+        bonus = 4
+    c.initiative(bonus, on=c.me)
 
 
 @power(
@@ -268,11 +279,18 @@ def knight_readiness(c: Cast) -> None:
 def knight_damage(c: Cast) -> None:
     """"You gain a +1 bonus to the damage rolls of weapon attacks."
 
-    `cf:fighter-slayer-f0`'s gate with a flat number instead of Dexterity.
-    The first rung of a ladder `-f14` and `-f20` climb to +2 and +3, and
-    those two are not written. `#1261`.
+    `cf:fighter-slayer-f0`'s gate with a flat number instead of Dexterity,
+    and the same ladder arrangement: `-f14` and `-f20` print *"increases
+    to +2"* and *"+3"*, so they are pointers and this body reads them.
+    Rising order and plain `if`, so the highest held wins -- a 25th-level
+    knight holds both and the page says +3.
     """
-    c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, kind="untyped",
+    bonus = 1
+    if c.feat("cf:fighter-knight-f14"):
+        bonus = 2
+    if c.feat("cf:fighter-knight-f20"):
+        bonus = 3
+    c.bonus("damage", bonus, on=c.me, until=When.ENCOUNTER, kind="untyped",
             when=_a_weapon_attack(c))
 
 
@@ -538,11 +556,12 @@ def knight_indomitable(c: Cast) -> None:
 # -- the five rungs that supersede a lower number ----------------------------
 
 
-def _rung(ref: str, what: str) -> Any:
+def _rung(ref: str, what: str, into: str) -> Any:
     """One rung refused for want of a level.
 
-    Five here and they share one symbol, because it is one gap five times:
-    a level column with a reader pays all five at once.
+    Three here, each written into the row whose number it raises. They
+    shared one symbol because it was one gap three times, and a level map
+    with a reader paid all three at once.
     """
 
     @power(
@@ -554,7 +573,7 @@ def _rung(ref: str, what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
+        implemented_in=(into,),
     )
     def row(c: Cast) -> None:
         pass
@@ -562,21 +581,28 @@ def _rung(ref: str, what: str) -> Any:
     row.__name__ = "knight_rung_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         f"{what}\n\n"
-        "Not written: every class feature arms at the start of every fight "
-        "because `class_feature` carries no level, so a rung laid here is a "
-        "1st-level knight with it. This rung **supersedes** a lower number, "
-        "which is what makes writing it wrong where `-f7` and `-f8` are "
-        "merely early. `#1261`, and `features/thief.py` has the line."
+        f"**Written into `{into}`**, which is where a clause raising "
+        "another row's number has to go -- no modifier can reach into "
+        "that row's own call. So this is a pointer and carries "
+        "`implemented_in=`, exactly as a feat naming one power does.\n\n"
+        "What made it unwritable was the level, not a verb: every class "
+        "feature armed at the start of every fight because "
+        "`class_feature` carries none, so this number reached a 1st-level "
+        "knight. `combat_engine.levels` carries the printed levels now "
+        "and `chargen.ladder_row` reads them. `#1261`."
     )
     return row
 
 
 knight_rung_12 = _rung("cf:fighter-knight-f12",
-                       "`-f7`'s initiative bonus rises to +4.")
+                       "`-f7`'s initiative bonus rises to +4.",
+                       "cf:fighter-knight-f7")
 knight_rung_14 = _rung("cf:fighter-knight-f14",
-                       "`-f8`'s damage bonus rises to +2.")
+                       "`-f8`'s damage bonus rises to +2.",
+                       "cf:fighter-knight-f8")
 knight_rung_20 = _rung("cf:fighter-knight-f20",
-                       "`-f8`'s damage bonus rises to +3.")
+                       "`-f8`'s damage bonus rises to +3.",
+                       "cf:fighter-knight-f8")
 
 
 def _extra_use(ref: str) -> Any:
@@ -591,10 +617,9 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
-        pass
+        c.more_uses("p12668", 1, on=c.me)
 
     row.__name__ = "knight_extra_use_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (

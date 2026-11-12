@@ -162,11 +162,17 @@ def hunter_accuracy(c: Cast) -> None:
 def hunter_damage(c: Cast) -> None:
     """"You gain a +1 bonus to the damage rolls of weapon attacks."
 
-    The first rung of a ladder `-f12` and `-f15` climb to +2 and +3, and
-    those two are not written -- a rung that supersedes a lower number is
-    `#1261`'s. `features/thief.py` has the line.
+    **The ladder `-f12` and `-f15` climb is written here**: both print
+    *"increases to"*, so they are pointers carrying `implemented_in=` and
+    this body reads them. Rising order and plain `if`, so the highest held
+    replaces rather than adds.
     """
-    c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, kind="untyped",
+    bonus = 1
+    if c.feat("cf:ranger-hunter-f12"):
+        bonus = 2
+    if c.feat("cf:ranger-hunter-f15"):
+        bonus = 3
+    c.bonus("damage", bonus, on=c.me, until=When.ENCOUNTER, kind="untyped",
             when=_a_weapon_attack(c))
 
 
@@ -411,7 +417,7 @@ def hunter_mastery_crossbow(c: Cast) -> None:
 # -- the four ladder rungs and the two extra uses ---------------------------
 
 
-def _rung(ref: str, what: str) -> Any:
+def _rung(ref: str, what: str, into: str) -> Any:
     """One rung refused for want of a level."""
 
     @power(
@@ -423,7 +429,7 @@ def _rung(ref: str, what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
+        implemented_in=(into,),
     )
     def row(c: Cast) -> None:
         pass
@@ -431,18 +437,27 @@ def _rung(ref: str, what: str) -> Any:
     row.__name__ = "hunter_rung_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         f"{what}\n\n"
-        "Not written: every class feature arms at the start of every fight "
-        "because `class_feature` carries no level, so a rung laid here is a "
-        "1st-level hunter with it. This rung **supersedes** a lower number. "
+        f"**Written into `{into}`**, which is where a clause raising "
+        "another row's number has to go -- no modifier can reach into "
+        "that row's own `c.bonus` call. So this is a pointer and "
+        "carries `implemented_in=`, exactly as a feat naming one power "
+        "does.\n\n"
+        "What made it unwritable was the level, not a verb: every "
+        "class feature armed at the start of every fight because "
+        "`class_feature` carries none, so this number reached a "
+        "1st-level character. `combat_engine.levels` carries the "
+        "printed levels now and `chargen.ladder_row` reads them. "
         "`#1261`."
     )
     return row
 
 
 hunter_rung_12 = _rung("cf:ranger-hunter-f12",
-                       "`-f6`'s damage bonus rises to +2.")
+                       "`-f6`'s damage bonus rises to +2.",
+                       "cf:ranger-hunter-f6")
 hunter_rung_15 = _rung("cf:ranger-hunter-f15",
-                       "`-f6`'s damage bonus rises to +3.")
+                       "`-f6`'s damage bonus rises to +3.",
+                       "cf:ranger-hunter-f6")
 
 
 def _extra_use(ref: str) -> Any:
@@ -458,10 +473,9 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
-        pass
+        c.more_uses("p13588", 1, on=c.me)
 
     row.__name__ = "hunter_extra_use_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (

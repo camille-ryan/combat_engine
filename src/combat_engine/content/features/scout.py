@@ -251,11 +251,17 @@ def scout_improved_twin(c: Cast) -> None:
     is the ref, so one comparison is the whole clause. That is what makes
     this different from `-f3s1`'s +2, which is about what is in a hand.
 
-    The first rung of a ladder `-f10` and `-f14` climb to +4 and +6, and
-    those two are not written -- a rung that supersedes a lower number is
-    `#1261`'s. `features/thief.py` has the line.
+    **The ladder `-f10` and `-f14` climb is written here**: both print
+    *"increases to"*, so they are pointers carrying `implemented_in=` and
+    this body reads them. Rising order and plain `if`, so the highest held
+    replaces rather than adds.
     """
-    c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, kind="untyped",
+    bonus = 2
+    if c.feat("cf:ranger-scout-f10"):
+        bonus = 4
+    if c.feat("cf:ranger-scout-f14"):
+        bonus = 6
+    c.bonus("damage", bonus, on=c.me, until=When.ENCOUNTER, kind="untyped",
             when=lambda ctx: ctx.get("power") == TWIN)
 
 
@@ -339,17 +345,15 @@ def scout_nimble(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    dropped=("chargen.feature_level()",),
 )
 def scout_mastery(c: Cast) -> None:
     """Two clauses: another use of `p12668`, and a second off-hand fork.
 
-    The fork half **plays** -- this is a parent and it grants one of two
-    declared options -- so the row is `dropped=` and not `todo=`.
-
-    What is dropped is the first sentence, *"you gain one more use of power
-    strike per encounter"*: the same two gaps `cf:fighter-slayer-f3` and
-    `cf:rogue-thief-f6` name, and the same two symbols.
+    **Both now written, so no marker.** The fork half always played --
+    this is a parent granting one of two declared options -- and the
+    first sentence, *"you gain one more use of power strike per
+    encounter"*, waited on the two gaps `cf:fighter-slayer-f3` named.
+    `c.more_uses` is one and `combat_engine.levels` is the other.
 
     **This fork does not read `-f3`'s answer**, which is the opposite call
     from the blackguard's four vice parents and worth the line. Both forks
@@ -358,6 +362,7 @@ def scout_mastery(c: Cast) -> None:
     benefits differ, so a scout carrying an axe should get the axe benefit
     from both rather than whichever one it picked at 1st level.
     """
+    c.more_uses("p12668", 1, on=c.me)
     chose = (c.chosen_option("cf:ranger-scout-f21")
              or "cf:ranger-scout-f21s0")
     c.grant_row(chose, on=c.me, until=When.ENCOUNTER)
@@ -461,7 +466,7 @@ def scout_group_stealth(c: Cast) -> None:
 # -- the four ladder rungs --------------------------------------------------
 
 
-def _rung(ref: str, what: str) -> Any:
+def _rung(ref: str, what: str, into: str) -> Any:
     """One rung refused for want of a level. Four here, one symbol."""
 
     @power(
@@ -473,7 +478,7 @@ def _rung(ref: str, what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
+        implemented_in=(into,),
     )
     def row(c: Cast) -> None:
         pass
@@ -481,18 +486,27 @@ def _rung(ref: str, what: str) -> Any:
     row.__name__ = "scout_rung_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         f"{what}\n\n"
-        "Not written: every class feature arms at the start of every fight "
-        "because `class_feature` carries no level, so a rung laid here is a "
-        "1st-level scout with it. This rung **supersedes** a lower number. "
-        "`#1261`, and `features/thief.py` has the line."
+        f"**Written into `{into}`**, which is where a clause raising "
+        "another row's number has to go -- no modifier can reach into "
+        "that row's own `c.bonus` call. So this is a pointer and "
+        "carries `implemented_in=`, exactly as a feat naming one power "
+        "does.\n\n"
+        "What made it unwritable was the level, not a verb: every "
+        "class feature armed at the start of every fight because "
+        "`class_feature` carries none, so this number reached a "
+        "1st-level character. `combat_engine.levels` carries the "
+        "printed levels now and `chargen.ladder_row` reads them. "
+        "`#1261`."
     )
     return row
 
 
 scout_rung_10 = _rung("cf:ranger-scout-f10",
-                      "`-f9`'s damage bonus rises to +4.")
+                      "`-f9`'s damage bonus rises to +4.",
+                      "cf:ranger-scout-f9")
 scout_rung_14 = _rung("cf:ranger-scout-f14",
-                      "`-f9`'s damage bonus rises to +6.")
+                      "`-f9`'s damage bonus rises to +6.",
+                      "cf:ranger-scout-f9")
 
 
 def _extra_use(ref: str) -> Any:
@@ -507,17 +521,20 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
-        pass
+        c.more_uses("p12668", 1, on=c.me)
 
     row.__name__ = "scout_extra_use_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         "Another use of `p12668` per encounter, still only once a turn.\n\n"
-        "The same two gaps `cf:fighter-slayer-f3` names and the same two "
-        "symbols. `-f21` prints this sentence too and carries it as "
-        "`dropped=`, because that row has a fork that plays."
+        "**Both halves landed.** `c.more_uses` raises an existing row's "
+        "per-encounter allowance, and `combat_engine.levels` carries the "
+        "printed level so `chargen.ladder_row` deals this rung when the "
+        "page says. `#1261`.\n\n"
+        "`p12668` and not `p13619`: the scout's own strike is the twin, "
+        "and the sentence raises the FIGHTER's power strike, which `-f2` "
+        "is the row that grants."
     )
     return row
 
