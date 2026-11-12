@@ -30797,6 +30797,71 @@ def a_weapon_is_refused_for_the_wrong_size_of_wielder(out: Result) -> None:
              f"two-handed {two_handed!r}, one-handed {one_handed!r}")
 
 
+def every_build_leg_can_be_dealt(out: Result) -> None:
+    """A leg is drawn, not defaulted -- so all 99 are reachable.
+
+    `chargen.build_of(cls, "")` answers `options[0]`, which is right for a
+    **resolver** -- `audit.board` and `_build_for` both want a fixed leg
+    for a fixed ref -- and wrong for a **dealer**. Every dealer asked the
+    resolver. Measured before `DEAL_BUILDS`, over 26 classes x 8 seeds:
+
+        classes with more than one leg              26
+        of those, where only ONE leg was ever dealt 26
+        legs never dealt                            73
+        declared rows gated on a leg                50
+        of those, unreachable                       42   (84%)
+
+    Six of the warlock's seven pacts were unreachable and every dealt
+    warlock was infernal. **40 of those 42 rows are written** -- only the
+    two fighter ones still carry a marker -- so this opened content that
+    existed rather than adding any.
+
+    **The resolver is asserted to stay a resolver.** If `build_of(cls, "")`
+    ever started drawing, `audit.board` would field a different leg per
+    call and the whole sweep would wobble; the two have to disagree.
+    """
+    from random import Random
+
+    from combat_engine import chargen
+
+    legs = {c: [b.name for b in v] for c, v in chargen.BUILDS.items()}
+    multi = {c: v for c, v in legs.items() if len(v) > 1}
+    out.that(len(multi) >= 20,
+             "most classes have a fork, so there is something to deal",
+             f"{len(multi)} of {len(legs)} classes")
+
+    missed = {}
+    for cls, names in sorted(multi.items()):
+        seen = {chargen.deal_build(Random(f"{s}:{cls}:build"), cls).name
+                for s in range(400)}
+        gap = sorted(set(names) - seen)
+        if gap:
+            missed[cls] = gap
+    out.that(not missed,
+             "and EVERY leg of every one of them comes out of the dealer. "
+             "This was 73 legs unreachable before the draw existed",
+             f"{sum(len(v) for v in missed.values())} unreachable: "
+             f"{list(missed.items())[:3]}")
+
+    # -- the resolver must NOT draw -------------------------------------
+    cls = next(iter(sorted(multi)))
+    fixed = {chargen.build_of(cls, "").name for _ in range(20)}
+    out.that(len(fixed) == 1 and fixed == {legs[cls][0]},
+             "while `build_of(cls, \"\")` still answers the FIRST leg every "
+             "time -- the resolver stays a resolver, or `audit.board` would "
+             "field a different leg per call and the sweep would wobble",
+             f"{cls}: {fixed}")
+
+    # -- a class with one leg, or none, is unchanged --------------------
+    single = [c for c, v in legs.items() if len(v) == 1]
+    if single:
+        one = single[0]
+        out.that(chargen.deal_build(Random("x"), one).name == legs[one][0],
+                 "a class with a single leg deals exactly what the resolver "
+                 "would, so this is safe to call for any class",
+                 f"{one}: {legs[one]}")
+
+
 def an_elemental_affinity_is_offered_when_the_power_is_used(out: Result) -> None:
     """`cf:warlock-f1s1`'s printed **may**, decided at the moment of use.
 
@@ -73778,6 +73843,10 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "deal_legs": (
+        every_build_leg_can_be_dealt,
+        "every build leg can be dealt, all 99 of them (#1244)",
     ),
     "illuminate": (
         one_carried_light_level_at_a_time,

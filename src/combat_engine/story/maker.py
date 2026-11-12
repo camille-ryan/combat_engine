@@ -133,7 +133,12 @@ def interview(
 
     # -- build -------------------------------------------------------------
     legs = list(chargen.BUILDS.get(cls, ()))
-    build = chargen.build_of(cls, "")
+    # Drawn rather than defaulted, for `chargen.DEAL_BUILDS`'s reason --
+    # the interactive path below replaces it when somebody answers.
+    build = (
+        chargen.deal_build(Random(f"{seed}:{cls}:build"), cls)
+        if chargen.DEAL_BUILDS else chargen.build_of(cls, "")
+    )
     if len(legs) > 1:
         options = [
             Option(ref=leg.name, why=f"{leg.primary.value}/{leg.secondary.value}")

@@ -2235,6 +2235,54 @@ DEAL_DEITY = True
 #: those assignments is a type error. #721.
 SCORED_CHOICES: bool = True
 
+#: Deal the **build leg** instead of always taking the first one listed.
+#:
+#: `build_of(cls, "")` returns `options[0]`, and every dealer asked for that
+#: -- so a dealt character took the first leg of its class, always. Measured
+#: before this flag existed, over 26 classes x 8 seeds:
+#:
+#:     classes with more than one leg              26
+#:     of those, where only ONE leg was ever dealt 26
+#:     legs never dealt                            73
+#:     declared rows gated on a leg                50
+#:     of those, unreachable                       42   (84%)
+#:
+#: Six of the warlock's seven pacts were unreachable; every dealt warlock was
+#: infernal. **40 of those 42 rows are written** -- only two still carry a
+#: marker -- so this is not new content, it is content that existed and could
+#: not be reached. `#1244` holds the measurement and `#235` the modelling.
+#:
+#: **Uniform, not scored.** No scorer for legs exists -- `SCORED_CHOICES`
+#: above is about the choices made *within* a build, and `choices._build_of`
+#: is a one-line call to the default. `deal_race`'s own argument applies
+#: here unchanged: *"a player picks for flavour at least as often as for the
+#: numbers, and a draw that always took the best pair would make every
+#: fighter the same two races."*
+#:
+#: A flag for the reason `DEAL_RACES` is one -- it changes what a dealt
+#: character **is** -- but **not** with the same blast radius, and I wrote
+#: the opposite here before measuring it. `replay verify` is 8 of 8
+#: identical across this change.
+#:
+#: The reason is worth knowing, because it also says what this flag does
+#: *not* reach. Two party paths exist:
+#:
+#:     story.Party.of              deals the leg        <- this flag
+#:     story.field_encounter's     Character(key, level, ...) with no
+#:     no-party fallback           `build=`, so the resolver's first leg
+#:
+#: The fallback is what `fight.build` uses, and `replay` and `winrate`
+#: both go through that -- so the fixtures are pinned to the first leg and
+#: stay pinned, which is what a fixture is for. `fight.py`'s own CLI uses
+#: `Party.of`, so playing a fight does vary the leg.
+#:
+#: **The cost of that split is that `winrate` measures one leg per class.**
+#: Balance is read off `fight.build`, so the 73 legs this flag opened are
+#: not in that number. Changing the fallback would move all eight fixtures
+#: and belongs in its own commit, with `--redraw`, for the reason
+#: `SCORED_CHOICES` gives.
+DEAL_BUILDS: bool = True
+
 #: Whether the draw also consults `ratings.py` -- the community guides' colour
 #: ratings for 5,240 options. Separate from `SCORED_CHOICES` so the two can be
 #: measured apart: `scripts/winrate.py --draw scored` against `--draw rated` is
@@ -2326,6 +2374,31 @@ def deal_race(rng: Random, cls: str = "", build: Build | None = None,
                if getattr(o, "ref", "") != other_than]
     drawn = sample(offered, rng)
     return drawn.ref if drawn is not None else rng.choice(pool)
+
+
+def deal_build(rng: Random, cls: str = "") -> Build:
+    """One leg of a class's fork, drawn rather than defaulted.
+
+    `build_of(cls, "")` answers `options[0]`, which is the right answer for
+    a **resolver** -- `audit.board` and `_build_for` both want a fixed leg
+    for a fixed ref -- and the wrong one for a **dealer**. Every dealer
+    asked the resolver, so every dealt character took the first leg and 73
+    legs were never dealt at all. See `DEAL_BUILDS`.
+
+    Uniform over the class's own list, for `deal_race`'s stated reason: a
+    leg is a way of playing the class rather than a better or worse set of
+    numbers, and nothing scores one. A class with one leg, or none, answers
+    exactly what the resolver would -- so this is safe to call for any
+    class and only changes the ones that had a choice nobody was making.
+
+    Its own `Random`, keyed like every other deal in `Party.of`
+    (`f"{seed}:{key}:build"`), so drawing a leg moves neither the hand nor
+    the feats nor the fight's dice.
+    """
+    options = BUILDS.get(class_word(cls)) or ()
+    if len(options) <= 1:
+        return build_of(cls, "")
+    return rng.choice(list(options))
 
 
 @dataclass

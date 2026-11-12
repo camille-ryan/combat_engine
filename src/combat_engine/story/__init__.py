@@ -475,11 +475,13 @@ class Party:
         from random import Random
 
         from combat_engine.chargen import (
+            DEAL_BUILDS,
             DEAL_RACES,
             Character,
             _trained_skills,
             build_of,
             deal_background,
+            deal_build,
             deal_consumables,
             deal_race,
             dealt_hand,
@@ -491,7 +493,14 @@ class Party:
         sheets: list[Sheet] = []
         for name in (names or PARTY):
             key = name.strip().lower()
-            build = build_of(key, "")
+            # **Drawn, not defaulted.** `build_of(key, "")` is the
+            # resolver's answer -- the first leg the class lists -- and
+            # asking a resolver to deal is what left 73 legs never dealt.
+            # Its own keyed stream, like the race and the gear below.
+            build = (
+                deal_build(Random(f"{seed}:{key}:build"), key)
+                if DEAL_BUILDS else build_of(key, "")
+            )
             race = (
                 deal_race(Random(f"{seed}:{key}:race"), key, build)
                 if DEAL_RACES else ""
