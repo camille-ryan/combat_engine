@@ -49844,6 +49844,56 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
              "arming a sha'ir wizard puts its familiar on the board",
              f"familiar before the fight {before}, after arming {after}")
 
+    # -- and every dealable chassis is actually dealt --------------------
+    #
+    # **This rule asserted a character gets only ONE chassis and never that
+    # it can get any of them.** `chassis_of(cls, "")` answers the first in
+    # sorted order, so every dealt cleric was a templar and every dealt
+    # wizard an arcanist: **36 declared rows** sat on a chassis nobody was
+    # ever dealt -- 9 `warpriest`, 24 `mage`, 3 `sha-ir`. `#1244`.
+    from collections import defaultdict as _dd
+    from random import Random as _R
+
+    from combat_engine.story import Party as _Party
+
+    dealable = {c: chargen.declared_chassis(c)
+                for c in sorted(chargen.CLASSES)}
+    forked = {c: v for c, v in dealable.items() if len(v) > 1}
+    out.that(sorted(forked) == ["cleric", "wizard"],
+             "two classes have a dealable chassis choice, which is the "
+             "population the arm below is about -- the mage is NOT among "
+             "them and `declared_chassis` says why",
+             f"{forked}")
+
+    missed = {}
+    for cls, options in forked.items():
+        seen = {chargen.deal_chassis(_R(f"{s}:{cls}"), cls) for s in range(300)}
+        gap = sorted(set(options) - seen)
+        if gap:
+            missed[cls] = gap
+    out.that(not missed,
+             "and every one of them comes out of the dealer. Reds if the "
+             "dealer goes back to asking the resolver",
+             f"unreachable: {missed}")
+
+    fixed = {chargen.chassis_of("cleric") for _ in range(20)}
+    out.that(fixed == {"templar"},
+             "while `chassis_of` still answers the first every time -- the "
+             "resolver stays a resolver, as `build_of` does",
+             f"{fixed}")
+
+    # through the real dealer, not just the function
+    got = _dd(set)
+    for seed in range(1, 25):
+        for sheet in _Party.of(level=1, seed=seed).sheets:
+            got[sheet.cls].add(sheet.chassis)
+    out.that(got.get("cleric") == {"templar", "warpriest"}
+             and got.get("wizard") == {"arcanist", "sha-ir"},
+             "and a dealt PARTY carries both, so the draw reaches a real "
+             "character and `Sheet.chassis` round-trips it",
+             f"cleric {sorted(got.get('cleric', ()))}, "
+             f"wizard {sorted(got.get('wizard', ()))}")
+
 
 def a_feint_is_an_action_and_one_feat_rides_it(out: Result) -> None:
     """"Make a Bluff check to gain combat advantage against an enemy by feinting."

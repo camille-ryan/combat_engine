@@ -108,6 +108,20 @@ class Sheet:
     cls: str
     level: int = 1
     build: str = ""
+    #: Which written chassis this character is -- `warpriest`, `sha-ir` --
+    #: or `""` for the class-wide ladder.
+    #:
+    #: Recorded rather than re-derived because it is **dealt** now: every
+    #: cleric was a templar and every wizard an arcanist while the dealer
+    #: asked `chassis_of(cls, "")`, which answers the first in sorted
+    #: order. 36 declared rows sat on a chassis nobody was ever dealt.
+    #: `chargen.deal_chassis` is the draw and `#1191` is where the owed
+    #: work was listed, this field among it.
+    #:
+    #: Old saves have no such key and `save._sheet` filters to the fields
+    #: it knows, so they load with `""` -- the ladder, which is what they
+    #: were playing.
+    chassis: str = ""
     race: str = ""
     feats: list[str] = field(default_factory=list)
 
@@ -406,6 +420,7 @@ class Sheet:
 
         return chargen.Character(
             self.cls, self.level, build=self.build, race=self.race,
+            chassis=self.chassis,
             powers=list(self.powers), feats=list(self.feats),
             skills=tuple(self.skills),
             # **Handed back, or `spawn` deals a fresh one.** This is the
@@ -480,8 +495,10 @@ class Party:
             Character,
             _trained_skills,
             build_of,
+            chassis_of,
             deal_background,
             deal_build,
+            deal_chassis,
             deal_consumables,
             deal_race,
             dealt_hand,
@@ -500,6 +517,13 @@ class Party:
             build = (
                 deal_build(Random(f"{seed}:{key}:build"), key)
                 if DEAL_BUILDS else build_of(key, "")
+            )
+            # **And which chassis, on the same argument.** `chassis_of(key,
+            # "")` is the resolver's first-in-sorted-order, so every
+            # cleric was a templar and every wizard an arcanist.
+            chassis = (
+                deal_chassis(Random(f"{seed}:{key}:chassis"), key)
+                if DEAL_BUILDS else chassis_of(key)
             )
             race = (
                 deal_race(Random(f"{seed}:{key}:race"), key, build)
@@ -571,7 +595,8 @@ class Party:
             for ref in deal_consumables(level, Random(f"{seed}:{key}:consumables")):
                 potions[ref] = potions.get(ref, 0) + 1
             sheets.append(Sheet(
-                cls=key, level=level, build=build.name, race=race,
+                cls=key, level=level, build=build.name, chassis=chassis,
+                race=race,
                 powers=kept, feats=taken, kit=kit, skills=trained,
                 background=history, consumables=potions,
             ))

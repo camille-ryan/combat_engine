@@ -2376,6 +2376,74 @@ def deal_race(rng: Random, cls: str = "", build: Build | None = None,
     return drawn.ref if drawn is not None else rng.choice(pool)
 
 
+@cache
+def declared_chassis(cls: str) -> tuple[str, ...]:
+    """Every chassis of this class a character can actually be dealt.
+
+    A **declared level-0 row** is the test, which is `_declared_chassis`'s
+    and is kept deliberately. It excludes the chassis nobody has written --
+    the hazard `chassis_of` records at length, where choosing `knight` gave
+    a fighter no class features at all -- and it excludes one that *is*
+    written and still cannot be dealt.
+
+    **That one is `cf:wizard-mage`, and widening the test to "any declared
+    row" was my first answer and was wrong.** The mage has **24** written
+    rows and not one at level 0: its school choice is an `Apprentice`
+    feature at level 1, with `Expert` at 5 and `Master` at 10. So:
+
+    * dealt as it stands, a mage arrives with **0** class features, because
+      `loadout` deals the level-0 ones;
+    * dealt under a `p.level <= level` filter, a level-1 mage arrives with
+      **all six Apprentice schools at once** -- measured -- which is `#851`'s
+      "one character being two sub-classes" fault one level down, and worse
+      than none.
+
+    The missing piece is a chooser among a feature's sub-options, which is
+    `#1085` (*"chargen deals sub-option s0 and never chooses"*). The mage
+    becomes dealable when that lands, and this function will pick it up with
+    no change here -- its rows are already written.
+
+    So: 6 classes have a written chassis and **two** have a dealable
+    choice -- cleric (templar, warpriest) and wizard (arcanist, sha-ir).
+    """
+    import combat_engine.content
+    from combat_engine.engine.dsl import REGISTRY
+
+    belongs = _chassis_map()
+    found = {
+        belongs.get(ref, "")
+        for ref, power in REGISTRY.items()
+        if ref.startswith("cf:") and power.cls == class_word(cls)
+        and power.level == 0
+    }
+    return tuple(sorted(c for c in found if c))
+
+
+def deal_chassis(rng: Random, cls: str = "") -> str:
+    """Which written chassis this character is, drawn rather than defaulted.
+
+    `chassis_of(cls, "")` answers `_declared_chassis()[cls]` -- the first
+    in sorted order -- so every dealt cleric was a templar and every dealt
+    wizard an arcanist. Measured: **36 declared rows** sat on a chassis
+    that was never dealt, 9 on `warpriest`, 24 on `mage` and 3 on
+    `sha-ir`.
+
+    Uniform over `declared_chassis`, for `deal_build`'s reason: a chassis
+    is a way of being the class rather than a better or worse one, and
+    nothing scores one. A class with one written chassis, or none, answers
+    what the resolver would -- so this is safe for any class and only moves
+    the two that had a choice nobody was making.
+
+    **`chassis_of` is left alone**, exactly as `build_of` was: it is the
+    resolver `audit.board` and `loadout` need to answer the same way every
+    time for a given ref. See `DEAL_BUILDS`.
+    """
+    options = declared_chassis(cls)
+    if len(options) <= 1:
+        return chassis_of(cls)
+    return rng.choice(list(options))
+
+
 def deal_build(rng: Random, cls: str = "") -> Build:
     """One leg of a class's fork, drawn rather than defaulted.
 
