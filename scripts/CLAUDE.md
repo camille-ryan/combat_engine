@@ -324,6 +324,45 @@ strength of one draw.
   -- and does **not** take the caller's shell, which an earlier `killpg` version
   of the same fix did.
 
+## Two instruments have a named audience, and one of them is a rule
+
+* **`winrate.py` is for AI policy work and nothing else.** Camille,
+  2026-11-11:
+
+  > *"winrate NEVER needs to be calculated except for AI policy work."*
+
+  It costs ~45 minutes to measure the weakest signal available -- its own
+  docstring measures that 30 and 40 seeds detect nothing, and that a real
+  effect wants 80 to 175 seeds per cell. Reaching for it on a content,
+  chargen, engine or ETL change spends the budget on noise.
+
+  **And on a chargen change it measures nothing**, independently of the
+  cost: `winrate` and `replay` both reach `field_encounter`'s no-party
+  branch, which builds each character with no `build=` and no `chassis=`,
+  so every class is dealt `options[0]` -- the resolver's first leg -- and
+  no drawn chassis. Measured on seed 7, the no-party path fields the first
+  leg of all four classes where `Party.of` draws four different ones and a
+  different wizard chassis.
+
+  **So `replay` is sensitive to what a row DOES and blind to what the
+  dealer DEALS**, and the session that measured this is the worked
+  example. It reported **8 of 8 identical on all four commits that moved
+  the draw** -- the chassis dealer, `ORIGINAL`, the printed-level filter
+  and the race weighting, the last of which moved **63 of 96** legs -- and
+  diverged only on the one commit that changed a row's behaviour, where it
+  caught a single inserted event per fixture and earned its re-record.
+  A green `replay` over a chargen change is therefore not weak evidence;
+  it is none.
+
+* **`scorecard.py` is the policy gate, and the only instrument that sees a
+  draw change.** ~1 minute over 12 seeds, counted per side so a symmetric
+  gain shows up instead of cancelling, and it goes through `Party.of`.
+
+For a balance question generally, prefer **round count** -- `#217`'s 7-8
+target -- and **hit rate**, which rest on thousands of events per run
+rather than one outcome per fight, so they read at sample sizes where a
+win rate is still noise.
+
 ## What each is for
 
 | | |
@@ -353,6 +392,8 @@ strength of one draw.
 | `fight.py` | play a whole fight and print the log |
 | `show.py` | one row, printed text beside emitted events |
 | `build.py` | rebuild `data/game.db` |
+| `scorecard.py` | how well the AI is playing, counted per side against a committed baseline. ~1 min over 12 seeds, and the **policy gate**. The one instrument that goes through `Party.of`, so the only one that sees a chargen draw change |
+| `winrate.py` | how often the party wins. **AI policy work only** -- Camille's rule, see the section above. ~45 min for the weakest signal there is, and blind to the draw |
 | `bonuses.py`, `legs.py`, `mm3.py`, `issues.py`, `progress.py`, `waves.py`, `transcript.py` | narrower checks and ledgers |
 
 ## Triage is a ranker, not a gate

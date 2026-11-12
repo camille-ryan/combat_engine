@@ -5,6 +5,28 @@
     uv run scripts/winrate.py --seeds 60 --level 1
     uv run scripts/winrate.py --draw chassis       and --draw scored
 
+**Do not run this unless you are doing AI policy work.** Camille's rule,
+2026-11-11, verbatim:
+
+> *"winrate NEVER needs to be calculated except for AI policy work."*
+
+Read that together with the paragraph below and not instead of it: even
+*within* policy work `scripts/scorecard.py` is the gate, because both
+sides run the same policy and a symmetric gain cancels here. So this is
+for the occasional policy question `scorecard` cannot answer, and for
+nothing else. A content, chargen, engine or ETL change does not want it.
+
+**And on a chargen change it measures nothing at all**, which is a second
+and independent reason. `run_one` below calls `fight.build`, which reaches
+`story.field_encounter(party=None)` -- a branch that constructs
+`chargen.Character(key, level, powers=..., feats=...)` with **no `build=`
+and no `chassis=`**, so every class comes out on `options[0]`, the
+resolver's first leg, with no drawn chassis. `scripts/replay.py` is blind
+for the same reason. Measured on seed 7: this path fields the first leg of
+all four classes where `story.Party.of` draws four different ones and a
+different wizard chassis. `scorecard.py` uses `Party.of` and is the one
+instrument that sees a draw change at all. #1248, #1249.
+
 **This did not exist, and #75's numbers were produced by hand.** That issue was
 closed unfixed, because the thing it measures cannot be read:
 
