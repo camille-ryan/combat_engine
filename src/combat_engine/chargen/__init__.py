@@ -2873,6 +2873,16 @@ LEG_CHASSIS: dict[str, dict[str, str]] = {
     # two aspects, and a leg left out of this table falls open to every
     # chassis, which is the one way "belongs to both" can be said here.
     "druid": {"f1s2": ORIGINAL, "f1s3": ORIGINAL},
+    # The weaponmaster's fork is all six, and four of them carry `on_leg`
+    # headers on `cf:fighter-weaponmaster-f3sN` so inference finds those.
+    # These two do not, and without them the **slayer** -- whose own fork
+    # is `BUILD_OPTIONS` and not a leg -- came out with a pool of exactly
+    # these two: the four attributed away and two fallen open, which is
+    # the worst of both answers. Named, the slayer's pool empties and
+    # `legs_for` hands back the whole pool, which is the sha'ir case and
+    # the right one: a chassis with no fork of its own has no leg to be
+    # wrong about.
+    "fighter": {"great-weapon": "weaponmaster", "guardian": "weaponmaster"},
 }
 
 
@@ -3930,6 +3940,12 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     "cf:barbarian-berserker-f4": ("cf:barbarian-berserker-f4s0",
                                   "cf:barbarian-berserker-f4s1",
                                   "cf:barbarian-berserker-f4s2"),
+    # **The slayer's weapon mastery.** Three riders on `p12668`, each keyed
+    # to a weapon group rather than to a build -- and the fighter's six
+    # legs are the weaponmaster's fork, which a slayer does not take. #642.
+    "cf:fighter-slayer-f21": ("cf:fighter-slayer-f21s0",
+                              "cf:fighter-slayer-f21s1",
+                              "cf:fighter-slayer-f21s2"),
 }
 
 

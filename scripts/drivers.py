@@ -43607,6 +43607,156 @@ def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
              f"{refused}")
 
 
+def the_slayers_three_masteries_each_answer_their_own_weapon(
+        out: Result) -> None:
+    """`#642`'s wave, the fighter. 26 rows, 12 of which play, and the fork
+    worth a rule is `cf:fighter-slayer-f21`: three riders on `p12668`, each
+    keyed to a different weapon group.
+
+    **Fired through `p12668` rather than merely armed.** Auditing one of
+    these rows lays its watch and never runs it, which is how
+    `cf:rogue-thief-f16`'s `c.shift(on=)` -- a `TypeError` -- survived 26
+    clean refs and surfaced only when the *triggering* row was audited.
+    So each arm emits a real `PowerResolved` for `p12668` with a `Hit` as
+    its trigger, which is the shape the row reads the victim off.
+
+    **And each arm is credited rather than counted**, which this rule had
+    to learn: `audit.board` arms the whole chassis, so a staff in hand
+    fires `-f21s1`'s watch whatever row is under test. The first draft read
+    the event *list* and reported `-f21s0` dealing damage with a staff --
+    three `DamageApplied`, every one of them detailed
+    `cf:fighter-slayer-f21s1`. A negative control that cannot tell which
+    row acted is not a control.
+    """
+    from dataclasses import replace
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+    from combat_engine.engine.events import Hit, PowerResolved
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:fighter-slayer-"))
+    out.that(len(rows) == 26,
+             "all 26 of the printed slayer rows are declared",
+             f"{len(rows)}")
+    out.that("slayer" in chargen.declared_chassis("fighter"),
+             "and the chassis is dealable beside the weaponmaster",
+             f"{chargen.declared_chassis('fighter')}")
+
+    # -- the fork is a BUILD_OPTIONS choice and the options are withheld --
+    fork = chargen.BUILD_OPTIONS.get("cf:fighter-slayer-f21", ())
+    out.that(len(fork) == 3,
+             "the mastery is a three-way `BUILD_OPTIONS` fork -- the "
+             "fighter's six legs are the weaponmaster's and a slayer takes "
+             "none of them, so the fork keys on a weapon group instead",
+             f"{fork}")
+    leg = chargen.deal_build(Random("f"), "fighter", "slayer")
+    hand = {r for r in chargen.loadout("fighter", level=1, build=leg,
+                                       who_chassis="slayer")
+            if r.startswith("cf:")}
+    out.that(not (hand & set(fork)) and "cf:fighter-slayer-f21" in hand,
+             "a dealt slayer gets the parent and NEITHER option -- the "
+             "parent chooses, so dealing the siblings would hand over all "
+             "three, which is `#851` inside one chassis",
+             f"{sorted(hand & set(fork))}, parent "
+             f"{'cf:fighter-slayer-f21' in hand}")
+
+    # -- the three riders, each with its weapon and one that is wrong ----
+    AXE = replace(chargen.LONGSWORD, group="axe",
+                  properties=frozenset({"two-handed"}))
+    STAFF = replace(chargen.LONGSWORD, group="staff",
+                    properties=frozenset({"two-handed"}))
+    BLADE = replace(chargen.LONGSWORD, group="heavy blade",
+                    properties=frozenset({"two-handed"}))
+
+    def credited(ref: str, weapon: object) -> list[str]:
+        """Which events this row's own doing, firing `p12668` for real.
+
+        **Four fields, because the three effects credit differently** and
+        reading fewer reported a working row as doing nothing. A condition
+        carries `label`, damage carries `detail`, and the slide's
+        `ForcedMove` carries neither -- it names the row in `power`. With
+        only the first three, `-f21s2` credited an empty list while the
+        probe plainly showed three `ForcedMove`s.
+
+        `gear.stowed` is cleared for `drivers.thief_chassis`'s reason: a
+        weapon dropped into `gear.weapons` otherwise stays on the belt and
+        `gear.main` answers `None`, so the group test is never reached.
+        """
+        world, me, _ = _posed("cf:fighter-slayer-f1", 1)
+        gear = world.get(me, Gear)
+        gear.weapons = [weapon]
+        gear.stowed = []
+        c = Cast(world=world, me=me, ref=ref)
+        REGISTRY[ref].body(c)
+        victim = next(f for f in c.enemies() if c.adjacent(f))
+        mark = len(world.bus.log)
+        world.bus.emit(PowerResolved(
+            actor=me, power="p12668", targets=[victim], rolls=[],
+            trigger=Hit(attacker=me, target=victim, power="mba",
+                        critical=False)))
+        mine = []
+        for ev in world.bus.log[mark:]:
+            fields = (getattr(ev, "detail", "") or "",
+                      getattr(ev, "label", "") or "",
+                      getattr(ev, "power", "") or "",
+                      str(getattr(ev, "by", "") or ""))
+            if any(ref in f for f in fields):
+                mine.append(type(ev).__name__)
+        return mine
+
+    right = {fork[0]: AXE, fork[1]: STAFF, fork[2]: BLADE}
+    wrong = {fork[0]: STAFF, fork[1]: AXE, fork[2]: STAFF}
+    paid = {ref: credited(ref, weapon) for ref, weapon in right.items()}
+    idle = {ref: credited(ref, weapon) for ref, weapon in wrong.items()}
+    out.that(all(paid.values()),
+             "each mastery does something when `p12668` resolves with its "
+             "own weapon group in hand -- fired, not merely armed",
+             f"{ {k.rsplit('-', 1)[-1]: v for k, v in paid.items()} }")
+    out.that(not any(idle.values()),
+             "and NOTHING when the weapon is one of the other two's. "
+             "Credited per row rather than counted, because the board arms "
+             "all three and a staff fires `-f21s1` whoever is under test",
+             f"{ {k.rsplit('-', 1)[-1]: v for k, v in idle.items()} }")
+
+    # -- f15: the armour penalty given back, read off the same table -----
+    from combat_engine.armour import ARMOUR_SPEED
+
+    speeds = {}
+    for armour in ("plate", "leather"):
+        world, me, _ = _posed("cf:fighter-slayer-f1", 1)
+        gear = world.get(me, Gear)
+        gear.armour = armour
+        n0 = len(list(world.effects.of(me)))
+        REGISTRY["cf:fighter-slayer-f15"].body(
+            Cast(world=world, me=me, ref="cf:fighter-slayer-f15"))
+        speeds[armour] = [e.label for e in list(world.effects.of(me))[n0:]]
+    out.that(speeds["plate"] and not speeds["leather"],
+             "`-f15` gives back exactly the square `chargen.spawn` took "
+             "for heavy armour, and lays nothing in leather. The number is "
+             "read from `ARMOUR_SPEED`, which is the table the penalty "
+             "came from, so the two cannot disagree",
+             f"{speeds}, ARMOUR_SPEED plate {ARMOUR_SPEED.get('plate')}")
+
+    # -- the six the import cannot supply --------------------------------
+    world, me, _ = _posed("cf:fighter-slayer-f1", 1)
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r in rows
+                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+    out.that(refused == ["cf:fighter-slayer-f10", "cf:fighter-slayer-f13",
+                         "cf:fighter-slayer-f18", "cf:fighter-slayer-f19",
+                         "cf:fighter-slayer-f20", "cf:fighter-slayer-f22"],
+             "six rows are `defect=` and it is exactly those six -- one "
+             "naming itself as the power it grants, one naming a power by "
+             "its printed name with no ref the importer resolved, four "
+             "printing 'one of the following' and no list",
+             f"{refused}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -75470,6 +75620,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "slayer_mastery": (
+        the_slayers_three_masteries_each_answer_their_own_weapon,
+        "the slayer's three masteries each answer their own weapon group"
+        " and none of the others (#642)",
     ),
     "thief_chassis": (
         the_thief_shares_the_scoundrels_latch_and_none_of_its_rows,
