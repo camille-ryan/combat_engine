@@ -22663,8 +22663,10 @@ def once_spent(out: Result) -> None:
     """
 
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
     from combat_engine.engine.durations import When
     from combat_engine.engine.events import DamageRolled, Window
+    from combat_engine.engine.query import enemies
     from combat_engine.engine.types import DamageType
 
     def blow(world: World, who: int, amount: int = 10) -> DamageRolled:
@@ -22704,7 +22706,21 @@ def once_spent(out: Result) -> None:
     # fix spent the hold on a rejected event it would be the original fault
     # restored, and the assertion above would still pass -- which is why
     # this one is here and not folded into it.
-    world, me, foe = _board(seed=1)
+    # **`_board` returns `(World, int, set[str])`** -- the third value is
+    # what the encounter emitted while starting, not a creature. Unpacking
+    # it as `foe` fired the "rejected" blow at a **set**, so the handler's
+    # `if` said no because the target was nonsense rather than because it
+    # was somebody else: the guard arm passed for the wrong reason and
+    # could not have failed.
+    #
+    # Harmless until a trigger read `ev.target`. `#642` armed `p12677` on
+    # a dealt fighter -- `cf:fighter-knight-f11` grants it -- and its
+    # predicate calls `query.team(world, ev.target)`, which reached
+    # `self._stores.get(ctype, {}).get(eid)` with a set and raised
+    # `TypeError: unhashable type: 'set'`. That took the whole rule out of
+    # the suite, which is how it was found.
+    world, me, _ = _board(seed=1)
+    foe = next(e for e in sorted(enemies(world, me)) if world.get(e, Health))
     c = Cast(world=world, me=me, ref="drivers:once")
     c.watch(DamageRolled, shaver(me), until=When.ENCOUNTER, on=me,
             once=True, window=Window.BEFORE, label="drivers:once")
