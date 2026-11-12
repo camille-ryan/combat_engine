@@ -50350,10 +50350,22 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
                     "wizard", level=lvl,
                     build=chargen.build_of("wizard", leg),
                     who_chassis="mage") if r.startswith("cf:")]
-    off = {k: v for k, v in schools.items() if len(v) != 1}
+    # **One SCHOOL, not one row, and counting rows was wrong.** At level 10
+    # a mage correctly holds three rows -- Apprentice, Expert and Master --
+    # and they must all be the *same school*. The first version of this
+    # asserted `len(v) == 1` and went red the moment the later tiers were
+    # gated, which is the assertion being wrong rather than the gates.
+    import re as _re
+
+    def _school(ref: str) -> str:
+        m = _re.search(r"-f\ds(\d)$", ref)
+        return m.group(1) if m else "?"
+
+    off = {k: v for k, v in schools.items()
+           if not v or len({_school(r) for r in v}) != 1}
     out.that(not off,
-             "and a mage on any of its six legs gets EXACTLY ONE school, "
-             "at level 1 and at 10 alike -- all six at once is `#851`'s "
+             "and a mage on any of its six legs holds exactly ONE school, "
+             "however many tiers of it -- six schools at once is `#851`'s "
              "fault one level down and worse than dealing none",
              f"{off or 'all 12 hold'}")
 
@@ -50382,13 +50394,61 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
              "character an attack short with nothing failing",
              f"{sorted(p.ref for p in attacks)}")
     later = [p for r, p in _REG.items()
-             if r.startswith("cf:wizard-mage-f") and p.level > 1]
+             if r.startswith("cf:wizard-mage-f") and p.level > 1
+             and not chargen.leg_named_by(p)]
     out.that(later and not any(chargen.ladder_row(p, 10) for p in later),
-             "and an ungated sub-option above level 0 is NOT dealt, so the "
-             "mage's later DEPENDENT choices stay undealt rather than "
+             "and an UNGATED sub-option above level 0 is NOT dealt, so the "
+             "mage's genuinely dependent choices stay undealt rather than "
              "arriving all at once. `#1247` holds that half",
-             f"{len(later)} rows at levels 4-10, "
+             f"{len(later)} ungated rows at levels 4-8, "
              f"{sum(1 for p in later if chargen.ladder_row(p, 10))} dealt")
+
+    # -- the mage's whole printed ladder, one school all the way up -------
+    #
+    # `cf:wizard-mage-f4` is *"choose one of the schools for which you have
+    # the Apprentice Mage benefit"* and `-f6` is the same of the Expert
+    # ones. A mage has Apprentice in exactly **one** school -- its leg --
+    # because the second, `-f3`, is a choice no leg expresses and is not
+    # dealt. So both later choices are **forced** to the leg's school, and
+    # gating them on it is the printed rule rather than a convenience.
+    #
+    # **That premise is recorded because it expires.** The day `#1247`'s
+    # second-school choice lands, a level-5 mage has two Apprentice schools
+    # and the Expert choice stops being forced -- so these gates become
+    # wrong rather than merely incomplete. The assertion below pins the
+    # premise too, so it reddens then instead of quietly over-granting.
+    ladder = {}
+    for leg, idx in (("pyromancy", 5), ("enchantment", 0), ("illusion", 2)):
+        got = {}
+        for lvl in (1, 5, 10):
+            got[lvl] = [r for r in chargen.loadout(
+                "wizard", level=lvl,
+                build=chargen.build_of("wizard", leg),
+                who_chassis="mage") if r.startswith("cf:")]
+        ladder[leg] = got
+        want = {1: [f"cf:wizard-mage-f0s{idx}"],
+                5: [f"cf:wizard-mage-f0s{idx}", f"cf:wizard-mage-f4s{idx}"],
+                10: [f"cf:wizard-mage-f0s{idx}", f"cf:wizard-mage-f4s{idx}",
+                     f"cf:wizard-mage-f6s{idx}"]}
+        out.that(got == want,
+                 f"a {leg} mage climbs its own school and only its own -- "
+                 "Apprentice at 1, Expert at 5, Master at 10, the same "
+                 "index each time. A mis-indexed gate gives a mage another "
+                 "school's Master benefit, which reads green on any single "
+                 "level",
+                 f"{got}")
+
+    second = [p for r, p in _REG.items()
+              if r.startswith(("cf:wizard-mage-f3s", "cf:wizard-mage-f5s"))]
+    out.that(len(second) == 6
+             and not any(chargen.ladder_row(p, 10) for p in second),
+             "while the SECOND school's six rows stay undealt: `-f3` is "
+             "*a school different from the one you chose*, which no leg "
+             "can say, and `-f5` is the Expert benefit for it. Reds if "
+             "either gains a leg without the choice being built -- a mage "
+             "would then hold two schools at once, which is `#851`",
+             f"{len(second)} rows, "
+             f"{sum(1 for p in second if chargen.ladder_row(p, 10))} dealt")
 
 
 

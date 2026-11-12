@@ -754,7 +754,8 @@ def shair_cantrips(c: Cast) -> None:
 # --------------------------------------------------------------------------
 
 
-def _expert(ref: str, first: str, second: str, level: int):  # noqa: ANN202
+def _expert(ref: str, first: str, second: str, level: int,  # noqa: ANN202
+            leg: str = ""):
     """Two skills, +2 each -- the whole of one middle-tier benefit.
 
     The one helper the global rule allows, for a run of rows that genuinely
@@ -773,10 +774,20 @@ def _expert(ref: str, first: str, second: str, level: int):  # noqa: ANN202
     The same tier is printed twice, at two levels, for the first and second
     school a character took -- `f4sN` at 5 and `f5sN` at 8 -- so the level
     cannot be a property of the shape at all.
+
+    **And `leg` is why that last paragraph decides which rows get one.**
+    The `f4sN` run is the Expert benefit for the school the mage took at
+    1st level, which is the build leg, so each of those six names it. The
+    `f5sN` run is the benefit for the **second** school -- `cf:wizard-mage-f3`'s
+    choice, which no leg expresses -- so those three pass nothing and stay
+    undealt. Same shape, same factory, different answer, which is the
+    whole reason this is a parameter. #1247.
     """
 
     @power(
         ref,
+        requires=on_leg(leg) if leg else None,
+        requires_text=f"needs the {leg} school" if leg else "",
         level=level,
         cls="wizard",
         usage=ENCOUNTER,
@@ -805,12 +816,12 @@ def _expert(ref: str, first: str, second: str, level: int):  # noqa: ANN202
     return row
 
 
-mage_expert_s0 = _expert("cf:wizard-mage-f4s0", "bluff", "diplomacy", 5)
-mage_expert_s1 = _expert("cf:wizard-mage-f4s1", "endurance", "intimidate", 5)
-mage_expert_s2 = _expert("cf:wizard-mage-f4s2", "bluff", "stealth", 5)
-mage_expert_s3 = _expert("cf:wizard-mage-f4s3", "athletics", "endurance", 5)
-mage_expert_s4 = _expert("cf:wizard-mage-f4s4", "intimidate", "stealth", 5)
-mage_expert_s5 = _expert("cf:wizard-mage-f4s5", "bluff", "intimidate", 5)
+mage_expert_s0 = _expert("cf:wizard-mage-f4s0", "bluff", "diplomacy", 5, "enchantment")
+mage_expert_s1 = _expert("cf:wizard-mage-f4s1", "endurance", "intimidate", 5, "evocation")
+mage_expert_s2 = _expert("cf:wizard-mage-f4s2", "bluff", "stealth", 5, "illusion")
+mage_expert_s3 = _expert("cf:wizard-mage-f4s3", "athletics", "endurance", 5, "necromancy")
+mage_expert_s4 = _expert("cf:wizard-mage-f4s4", "intimidate", "stealth", 5, "nethermancy")
+mage_expert_s5 = _expert("cf:wizard-mage-f4s5", "bluff", "intimidate", 5, "pyromancy")
 
 # **The same tier again, for the second school, at level 8.** Three refs and
 # not six: the compendium carries `f5s0`, `f5s1` and `f5s2` and no more,
@@ -1232,6 +1243,8 @@ mage_apprentice_f3s1 = _apprentice_reroll("cf:wizard-mage-f3s1", 4)
     "cf:wizard-mage-f6s0",
     level=10,
     cls="wizard",
+    requires=on_leg("enchantment"),
+    requires_text="needs the enchantment school",
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=PERSONAL,
@@ -1272,6 +1285,8 @@ def mage_master_s0(c: Cast) -> None:
     "cf:wizard-mage-f6s1",
     level=10,
     cls="wizard",
+    requires=on_leg("evocation"),
+    requires_text="needs the evocation school",
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=PERSONAL,
@@ -1302,6 +1317,8 @@ def mage_master_s1(c: Cast) -> None:
     "cf:wizard-mage-f6s2",
     level=10,
     cls="wizard",
+    requires=on_leg("illusion"),
+    requires_text="needs the illusion school",
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=PERSONAL,
@@ -1341,6 +1358,8 @@ def mage_master_s2(c: Cast) -> None:
     "cf:wizard-mage-f6s3",
     level=10,
     cls="wizard",
+    requires=on_leg("necromancy"),
+    requires_text="needs the necromancy school",
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=PERSONAL,
@@ -1361,6 +1380,8 @@ def mage_master_s3(c: Cast) -> None:
     "cf:wizard-mage-f6s4",
     level=10,
     cls="wizard",
+    requires=on_leg("nethermancy"),
+    requires_text="needs the nethermancy school",
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=PERSONAL,
@@ -1406,6 +1427,8 @@ def mage_master_s4(c: Cast) -> None:
     "cf:wizard-mage-f6s5",
     level=10,
     cls="wizard",
+    requires=on_leg("pyromancy"),
+    requires_text="needs the pyromancy school",
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=PERSONAL,
