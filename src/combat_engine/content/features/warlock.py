@@ -65,12 +65,14 @@ from combat_engine.engine import (
     Dropped,
     Hit,
     Keyword,
+    PowerUsed,
     Ranged,
     SavingThrow,
     SkillCheck,
     Trigger,
     When,
     cursed_by_me,
+    get,
     power,
 )
 
@@ -79,6 +81,18 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
 #: The row that lays the curse, and the label its extra damage is filed
 #: under. A curse from anywhere else has to use the same one.
 CURSE = "cf:warlock-f4"
+
+#: The four types an elemental affinity replaces. *"Your elemental
+#: affinity's damage type replaces each instance of force, necrotic,
+#: poison, and psychic damage that the power deals."* -- `cf:warlock-f1s1`.
+#: Named here because the card names four and a row written against one
+#: would recolour everything the character casts.
+_AFFINITY_REPLACES = (
+    DamageType.FORCE,
+    DamageType.NECROTIC,
+    DamageType.POISON,
+    DamageType.PSYCHIC,
+)
 
 #: The sorcerer-king boon's charge. A `c.spend_charge` key, **not** the
 #: leg's own encounter use, and the distinction is #529: a trait is
@@ -176,7 +190,6 @@ def warlock_f1s0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL],
-    dropped=("c.deals(may=)",),
     requires=on_leg("elemental"),
     requires_text="needs the pact that prints it",
 )
@@ -202,13 +215,33 @@ def warlock_f1s1(c: Cast) -> None:
     describes.
 
     **Both of those are parameters now** (#711): `through=Keyword.ARCANE`
-    and `from_` taking the set. What is left is the printed **may**. The
-    affinity replaces each instance *at the character's option*, and a
-    standing retype has no moment to ask -- it is a label read inside
-    `Cast._typed`, not a body that runs per blow. The nearest writable
-    shape is a choice made once as the turn starts, laid `until=When.EOT`
-    off a `TurnStart` watch, which is a narrowing of the card rather than
-    the card; that is worth doing and is not this symbol.
+    and `from_` taking the set. The printed **may** is written too, and
+    the moment to ask was there all along. Camille, asked directly,
+    2026-11-11:
+
+      > *"Make the decision when using the power."*
+
+    So the offer is a `PowerUsed` watch. `dsl.use` announces that event
+    **before the body runs** -- its own comment says so, *"`PowerUsed` was
+    announced before the body ran"* -- so a retype laid in the handler is
+    in place by the time any damage is rolled. `ref=ev.power` scopes it to
+    the power being used, which is what makes this the card rather than a
+    narrowing: my own note here proposed a choice made once per turn off
+    `TurnStart`, and that would have recoloured a second, unasked-about
+    power in the same turn.
+
+    `ref=` rather than `once=True`: the card says the affinity *"replaces
+    each instance"* the power deals, and `once=` is spent by the first
+    blow -- which is wrong for anything hitting two creatures.
+
+    **The question is asked a little more often than it can matter.** The
+    gate is "an arcane attack power", not "an arcane attack power that
+    deals one of the four", because only **14** of the 995 arcane attack
+    rows declare one of those types in a header -- the other 964 set it in
+    their bodies, and 242 do. `from_` makes the retype a no-op where the
+    damage turns out to be something else, so the cost is a question, not
+    a wrong number. A warlock uses its own handful of attacks, so in a
+    fight that is a few offers rather than 995.
 
     "On your own turn" is **not** part of the gap: that same `TurnStart`
     watch scopes it, the way `f3225` brackets a hold around one power.
@@ -225,6 +258,29 @@ def warlock_f1s1(c: Cast) -> None:
         return
     c.grant_row("p16256")
     c.grant_row("p16254")
+
+    affinity = c.element()
+    if affinity is None:
+        return
+    me = c.me
+
+    def offer(ev: PowerUsed) -> None:
+        """"When you use an arcane attack power ... you can change the
+        damage type to match that of your current elemental affinity."""
+        if ev.actor != me:
+            return
+        row = get(ev.power)
+        if row is None or not row.is_attack:
+            return
+        if Keyword.ARCANE not in (row.keywords or ()):
+            return
+        if c.choose([affinity], f"{c.ref}: recolour it {affinity.value}",
+                    optional=True) is None:
+            return
+        c.deals(affinity, from_=_AFFINITY_REPLACES, ref=ev.power,
+                on=me, until=When.EOT)
+
+    c.watch(PowerUsed, offer, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

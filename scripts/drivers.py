@@ -30797,6 +30797,89 @@ def a_weapon_is_refused_for_the_wrong_size_of_wielder(out: Result) -> None:
              f"two-handed {two_handed!r}, one-handed {one_handed!r}")
 
 
+def an_elemental_affinity_is_offered_when_the_power_is_used(out: Result) -> None:
+    """`cf:warlock-f1s1`'s printed **may**, decided at the moment of use.
+
+    > *"On your turn, when you use an arcane attack power that deals force,
+    > necrotic, poison, or psychic damage, you can change the damage type
+    > to match that of your current elemental affinity."*
+
+    Camille, asked where the decision belongs, 2026-11-11:
+
+      > *"Make the decision when using the power."*
+
+    So it is a `PowerUsed` watch. `dsl.use` announces that event **before
+    the body runs**, so a retype laid in the handler is in place by the
+    time damage is rolled, and `ref=ev.power` scopes it to the power being
+    used. My own note on the row had proposed a once-per-turn choice off
+    `TurnStart`, which would have recoloured a second, unasked-about power
+    in the same turn.
+
+    **The row is reachable only by hand, and that is a separate fault.**
+    No dealt warlock is ever on the elemental leg: all 12 draws measured
+    give `infernal`, and 73 legs across 26 classes are never dealt at all
+    -- `#1244`. So this rule builds the character the dealer cannot, which
+    is the only way to exercise the clause.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Grid, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.rng import Rng
+
+    #: A warlock at-will, arcane, that sets psychic in its body -- which is
+    #: where 242 of the 995 arcane attack rows set one of the four, against
+    #: 14 that declare it in a header.
+    VEHICLE = "p1456"
+    PACT = "cf:warlock-f1s1"
+
+    def fire(*, armed: bool, take: bool) -> list[str]:
+        world = World(Grid(24, 16), Rng(4), Bus())
+        me = chargen.spawn(world, chargen.Character(
+            cls="warlock", level=1, build="", feats=[], powers=[]), (5, 5))
+        foe = chargen.spawn(world, chargen.Character(
+            cls="fighter", level=1, build="", feats=[], powers=[]), (6, 5))
+        build = world.need(me, Build)
+        build.choices = (
+            *(x for x in build.choices if x != "infernal"),
+            "elemental", "element:fire",
+        )
+        known = world.need(me, Powers)
+        if VEHICLE not in known.known:
+            known.known.append(VEHICLE)
+        # first option accepts, last declines -- `c.choose(optional=True)`
+        # puts the decline last
+        world.decider = lambda a, k, o, p: (o[0] if take else o[-1])
+        if armed:
+            REGISTRY[PACT].body(Cast(world=world, me=me, ref=PACT))
+        seen: list[str] = []
+        world.bus.on(DamageRolled, lambda ev: seen.append(ev.dtype.value))
+        world.rng.loaded = 20
+        use(world, me, VEHICLE, targets=[foe], spend=False)
+        return seen
+
+    plain = fire(armed=False, take=True)
+    taken = fire(armed=True, take=True)
+    declined = fire(armed=True, take=False)
+
+    out.that(plain == ["psychic"],
+             "without the pact the power deals its own printed type, which "
+             "is the control -- a vehicle that was already fire would make "
+             "every arm below pass",
+             f"{plain}")
+    out.that(taken == ["fire"],
+             "with the pact armed and the offer taken, the damage comes "
+             "out as the affinity instead. Reds if the retype stops being "
+             "laid, or is laid too late to reach the damage",
+             f"{taken}")
+    out.that(declined == ["psychic"],
+             "and declining leaves it psychic, so the printed `can` is a "
+             "real choice rather than a step taken for the player",
+             f"{declined}")
+
+
 def a_spirit_power_needs_the_spirit_present(out: Result) -> None:
     """`cf:shaman-f0`'s printed requirement, as a prereq on every power.
 
@@ -73691,6 +73774,10 @@ DRIVERS = {
     "spirit_present": (
         a_spirit_power_needs_the_spirit_present,
         "a spirit power needs the spirit present (cf:shaman-f0)",
+    ),
+    "affinity_offer": (
+        an_elemental_affinity_is_offered_when_the_power_is_used,
+        "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
     ),
     "illuminate": (
         one_carried_light_level_at_a_time,
