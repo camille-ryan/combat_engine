@@ -1455,6 +1455,55 @@ class UseRestored(Event):
 
 
 @dataclass
+class RollsTwice(Event):
+    """A creature may now roll two d20s on named skill checks.
+
+    `c.roll_twice` writes `Powers.rolls_twice` and `skills.check` reads
+    it, and neither is an event -- so a row whose entire effect is this
+    one line would be **silent by construction**, which is `UseRestored`'s
+    argument (`#899`) and `#1262`'s under `c.initiative`.
+
+    `skills` carries only the ones newly set, so a second feature granting
+    the same skill announces nothing: the creature's position did not
+    move, and a row that changed nothing should not read as having fired.
+
+    `by` is the ref that granted it. #642.
+    """
+
+    who: int
+    skills: tuple[str, ...]
+    by: str
+
+
+@dataclass
+class UsesRaised(Event):
+    """A creature's per-encounter allowance for one row went up.
+
+    `c.more_uses` writes `Powers.extra_uses` and `dsl.usable` reads it, and
+    neither of those is an event -- so a row whose entire effect is this
+    one line would be **silent by construction**, which is exactly what
+    `UseRestored` was added for (`#899`) and what `#1262` records under
+    `c.initiative`. Seventeen class-feature rows across six Essentials
+    chassis print nothing but this sentence.
+
+    `who` is the creature whose allowance moved, `power` the row it is for,
+    `extra` how many were added and `now` the total it may be used -- both
+    numbers, because a reader asking "did this feature land" wants the
+    delta and a reader asking "how many does it have" wants the sum, and
+    deriving either from the other needs `Power.uses`, which the event
+    does not carry.
+
+    `by` is the ref that raised it, which need not be the row raised. #642.
+    """
+
+    who: int
+    power: str
+    extra: int
+    now: int
+    by: str
+
+
+@dataclass
 class UseSpent(Event):
     """A use of a power was spent **without the power running**.
 

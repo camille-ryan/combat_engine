@@ -574,8 +574,15 @@ executioner_poison_23 = _poison_rung(
 # -- the three utility picks -------------------------------------------------
 
 
-def _utility_pick(ref: str, what: str) -> Any:
-    """One of the three rows reading "you gain a c466 utility power"."""
+def _utility_pick(ref: str, what: str, *, gained: bool = False) -> Any:
+    """One of the three rows reading "you gain a c466 utility power".
+
+    `gained=True` is the one whose own text states the level -- *"a
+    2nd-level"* -- so it carries a `chargen.EXTRA_GAINS` entry and no
+    marker. The other two say *"of your level or lower"* and name none,
+    and `class_feature` carries none (`#1261`), so an entry would be a
+    guess about when the gain happens.
+    """
 
     @power(
         ref,
@@ -586,7 +593,8 @@ def _utility_pick(ref: str, what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.SHADOW],
-        todo=("chargen.power_choice()",),
+        todo=() if gained else ("chargen.power_choice()",),
+        out_of_combat=gained,
     )
     def row(c: Cast) -> None:
         pass
@@ -594,16 +602,23 @@ def _utility_pick(ref: str, what: str) -> Any:
     row.__name__ = "executioner_utility_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         f"{what}\n\n"
-        "A draw from a named printed family, which is "
-        "`chargen.power_choice()`'s gap and the one four feats and two "
-        "other chassis in this wave already wait on. No level symbol: an "
-        "extra choice is not wrong early the way a superseding number is."
+        + ("**Finished.** The card states the level the gain happens at, "
+           "so `chargen.EXTRA_GAINS` carries it and `loadout` deals the "
+           "extra power to a character holding this row and nobody else "
+           "(`#1112`). `out_of_combat=True`: the whole row is a draw."
+           if gained else
+           "A draw from a named printed family -- and specifically the "
+           "**level** half of `chargen.power_choice()`: this card says "
+           "*of your level or lower* and names no level for the gain, "
+           "which `#1261` is about. The row beside it that does name one "
+           "is finished.")
     )
     return row
 
 
 executioner_utility_6 = _utility_pick(
-    "cf:assassin-executioner-f6", "A 2nd-level `c466` utility power.")
+    "cf:assassin-executioner-f6", "A 2nd-level `c466` utility power.",
+    gained=True)
 executioner_utility_10 = _utility_pick(
     "cf:assassin-executioner-f10",
     "A `c466` utility power of your level or lower.")

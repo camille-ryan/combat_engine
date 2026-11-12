@@ -119,12 +119,16 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - How hard this creature is to see, as an attack penalty.
 - `query.concealment_waived(world: 'World', attacker: 'int', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`
   - How much **concealment** this pairing does not count. #771.
+- `query.counts_as_nearest(eid: 'int') -> 'str'`
+  - The effect label that makes `eid` count among somebody's nearest.
 - `query.cover_between(world: 'World', attacker: 'int', target: 'int', *, ranged: 'bool' = False, ctx: 'dict | None' = None) -> 'Cover'`
   - The worst cover the target has, measured from the attacker's best square.
 - `query.cover_granters(world: 'World', attacker: 'int', target: 'int') -> 'list[int]'`
   - Which of `target`'s allies are the ones sheltering it from `attacker`.
 - `query.cover_waived(world: 'World', attacker: 'int', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`
   - How much cover and concealment this pairing simply does not count.
+- `query.displaced_this_action(world: 'World', eid: 'int') -> 'int'`
+  - How far this creature has ENDED UP from where its move action began.
 - `query.has_sense(world: 'World', eid: 'int', sense: 'str') -> 'bool'`
   - Does this creature have that named sense at all?
 - `query.hidden_from(world: 'World', eid: 'int') -> 'set[int]'`
@@ -133,6 +137,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - The concealment the target gets from standing somewhere badly lit.
 - `query.light_level(world: 'World', square: 'Square', dark_zones: 'list[Any] | None' = None) -> 'Light'`
   - How well lit this square is.
+- `query.nearest_enemy(world: 'World', of: 'int') -> 'list[int]'`
+  - Which enemies count as nearest to that creature.
 - `query.revealed(world: 'World', who: 'int') -> 'bool'`
   - Has this creature been stripped of the benefit of invisibility? #774.
 - `query.sees_in(world: 'World', eid: 'int', level: 'Light', distance: 'int' = 0) -> 'bool'`

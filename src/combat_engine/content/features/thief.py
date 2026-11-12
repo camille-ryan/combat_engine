@@ -488,7 +488,7 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()", "Powers.per_encounter(extra=)"),
+        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
         pass
@@ -574,18 +574,22 @@ def thief_slippery(c: Cast) -> None:
     immobilizes, restrains, or slows you, you can roll twice and use either
     result."
 
-    Two readers and therefore two symbols. The tree has no "roll twice,
-    keep either" for a **check** and none for a **save**: `c.reroll_ones`
-    and `c.reroll_faces` are both about damage dice, and
-    `vocab.py --find reroll` finds nothing else. A row waiting on one
-    symbol would report ready with half of it built, and the halves land in
-    different files.
+    Two readers and therefore two symbols, and **`c.roll_twice` satisfies
+    neither** -- which is worth saying now that the verb exists.
 
-    The escape-action narrowing is the finer half and is worth naming now
-    so whoever builds it does not widen it: the card pays on Acrobatics and
-    Athletics **as part of the escape action**, not on every check with
-    those skills, so the facility needs to know which action a check is
-    part of.
+    `c.roll_twice` grants a second d20 on a **named skill**, and this card
+    pays on Acrobatics and Athletics *as part of the escape action* only.
+    Granting the skills outright would be wider than the card: a thief
+    would roll twice on every climb. So the check half still needs the
+    facility to know which **action** a check belongs to, and the symbol
+    stays.
+
+    The save half is a different roll entirely, in a different file, so it
+    keeps its own symbol. A row waiting on one of the two would report
+    ready with half of it built.
+
+    `cf:rogue-thief-f20` beside it is the caller `c.roll_twice` was built
+    for: same sentence, no action test.
     """
 
 
@@ -598,19 +602,23 @@ def thief_slippery(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("c.roll_twice(check=)",),
 )
 def thief_stealthy(c: Cast) -> None:
     """"Whenever you make a Stealth check or a Thievery check, you can roll
     twice and use either result."
 
-    The check half of `-f18`'s gap and the same symbol, because it is the
-    same facility: this one needs no action test, so it is the simpler
-    caller and would be satisfied the moment that verb exists.
+    `c.roll_twice` is the whole of it, and this row is why that verb
+    exists: it was the simpler of the two callers -- no action test -- so
+    it is the one that defined the shape. `Powers.rolls_twice` is the
+    store and `skills.check` the single reader.
+
+    Measured rather than assumed: over 400 checks the mean natural goes
+    from 10.58 to 14.10, against 13.825 for the best of two d20s.
 
     Not `narrative=`: Stealth is a combat check -- `c._stealth_hide` is the
     hide that rolls it -- so this row has a fight to be wrong in.
     """
+    c.roll_twice("stealth", "thievery", on=c.me)
 
 
 # -- the six rows the compendium cannot supply -------------------------------

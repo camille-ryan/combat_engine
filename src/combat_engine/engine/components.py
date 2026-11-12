@@ -1387,6 +1387,51 @@ class Powers:
     extra_squares: dict[
         str, list[tuple[int, Callable[[dict[str, Any]], bool] | None]]
     ] = field(default_factory=dict)
+    #: Extra uses of a named row, per encounter, **for this creature only**,
+    #: by ref.
+    #:
+    #: "You gain one more use of `p12668` per encounter, but you can still
+    #: use it only once per turn" -- seventeen class-feature rows across six
+    #: Essentials chassis print that sentence, and a row's allowance is
+    #: otherwise **header data**: `Power.uses`, fixed at import, shared by
+    #: everybody who holds the row. A feature cannot raise it without
+    #: raising it for everybody.
+    #:
+    #: Read in `dsl.usable`, which is the one place `Power.uses` is
+    #: compared against `Powers.times` -- so there is no second site to
+    #: keep in step, unlike `granted_keywords` with its 22 readers. The
+    #: values **add**: two features each granting a use give two, which is
+    #: what the cards say.
+    #:
+    #: The printed "only once per turn" needs nothing from this: it is
+    #: `Power.once_per_round`, a separate header field tested a few lines
+    #: above the allowance, so raising the per-encounter count cannot
+    #: accidentally allow two in a turn. #642.
+    extra_uses: dict[str, int] = field(default_factory=dict)
+    #: Skills this creature rolls **twice** on, keeping either result, by
+    #: lower-case skill name.
+    #:
+    #: "Whenever you make a Stealth check or a Thievery check, you can roll
+    #: twice and use either result" -- four class-feature rows across three
+    #: Essentials chassis print it, and the tree had no reader: `c.reroll_ones`
+    #: and `c.reroll_faces` are both about **damage** dice, and
+    #: `vocab.py --find reroll` finds nothing else.
+    #:
+    #: Read in `skills.check`, which is the one place a check's d20 is
+    #: rolled -- one reader, which is the same safety argument
+    #: `extra_uses` above makes and the opposite of `granted_keywords`
+    #: with its 22 sites.
+    #:
+    #: **A set and not a count.** "Roll twice" does not compose: two
+    #: features each granting it to Stealth still roll twice, where two
+    #: features each granting an extra use give two uses. That is why this
+    #: is shaped differently from the field above it.
+    #:
+    #: The printed "use either result" is taken as the better one. A
+    #: headless run has to pick and the offer is pure benefit, so there is
+    #: nothing to weigh -- the same reading `c.may` gets for an offer with
+    #: no cost. #642.
+    rolls_twice: set[str] = field(default_factory=set)
     #: Keywords a named row carries **for this creature only**, by ref.
     #:
     #: "Your `p1448` power is considered an arcane attack power", "your

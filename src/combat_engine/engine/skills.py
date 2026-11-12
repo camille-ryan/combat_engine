@@ -343,6 +343,20 @@ def check(
     # ones that move a DC do it through `Mods`.
     skill = declared.skill.lower()
     natural = world.rng.d20().total
+    # **"Roll twice and use either result", read at the one site a check's
+    # d20 is rolled.** `Powers.rolls_twice` is written by
+    # `Cast.roll_twice`; four class-feature rows print this and the tree
+    # had no reader for it -- `c.reroll_ones` and `c.reroll_faces` are both
+    # about damage dice.
+    #
+    # The better of the two, because a headless run has to pick and the
+    # offer carries no cost. Announced through `natural` rather than as a
+    # second event: `SkillCheck` below carries the number that counted, so
+    # a reader asking what was rolled gets the answer that was used.
+    from .components import Powers as _Powers
+    _known = world.get(eid, _Powers)
+    if _known is not None and skill in _known.rolls_twice:
+        natural = max(natural, world.rng.d20().total)
     announced = SkillCheck(
         actor=eid,
         skill=skill,

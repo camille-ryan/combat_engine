@@ -333,6 +333,14 @@ CATEGORIES: dict[str, dict] = {
                 "reroll_attack", "reroll_check", "reroll_damage",
                 "reroll_faces",
                 "reroll_initiative", "reroll_ones", "reroll_save",
+                # `c.roll_twice` beside the three `reroll_*` and NOT with
+                # them, which is the near miss worth naming: those reroll
+                # a die already thrown, this throws a second one and keeps
+                # the better. A reader looking for "roll twice and use
+                # either result" finds `reroll_ones` first and it is about
+                # damage dice; four class-feature rows filed a gap for
+                # this verb while two of those three sat here. #642.
+                "roll_twice",
             ]),
             ("resistance and vulnerability", [
                 "ignore_resistance", "resist", "resist_in", "resistances",
@@ -350,6 +358,14 @@ CATEGORIES: dict[str, dict] = {
                 "damage_disadvantage",
                 "gains_advantage", "grants_advantage", "had_advantage",
                 "hide", "ignore_cover", "ignores_long_range", "invisible",
+                # `c.hides_with_cover` beside `c.hide` because it is that
+                # verb with the printed cover requirement attached, and
+                # `c.counts_as_nearest` here because what it changes is
+                # who an attacker may pick -- a targeting fact, like
+                # cover and concealment either side of it, rather than a
+                # move or a condition. Both landed with `#1253`'s wave and
+                # neither was placed, which is what this gate is for.
+                "hides_with_cover", "counts_as_nearest",
                 "no_advantage", "no_cover", "no_invisibility",
                 "no_invisibility_in", "unhide",
             ]),
@@ -508,6 +524,14 @@ CATEGORIES: dict[str, dict] = {
                 # counter needs the pair together.
                 "restore_per_day",
                 "restore_use", "spend_charge", "spend_per_day",
+                # `c.more_uses` here and not beside the `restore_*` pair,
+                # which is the distinction worth keeping: those hand back a
+                # use already spent, this raises the **ceiling** for the
+                # rest of the encounter. `restore_use` on a row with one
+                # use gives one more now; `more_uses` gives one more
+                # always. Seventeen class-feature rows print the second
+                # and carried a marker for it. #642.
+                "more_uses",
             ]),
             # `c.once_per_board` is here beside `payment_window` because it
             # answers the same kind of question -- how often may this pay --
@@ -845,6 +869,13 @@ READERS: dict[str, list[str]] = {
     "seeing and being seen": [
         "blinded", "can_hear", "concealment_of", "cover_between",
         "cover_granters",
+        # `query.nearest_enemy` here beside `cover_between` because it is
+        # the same kind of question -- what an attacker may pick -- and
+        # `query.displaced_this_action` beside it because the one card
+        # that asks about nearest asks it of a creature that has just
+        # moved. Both landed with `#1253`'s wave and neither was placed.
+        "nearest_enemy", "counts_as_nearest",
+        "displaced_this_action",
         "concealment_waived", "cover_waived", "has_sense", "hidden_from",
         "light_concealment",
         "light_level", "revealed", "sees_in", "sees_invisible",

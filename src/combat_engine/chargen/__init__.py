@@ -3142,6 +3142,23 @@ ATTACK_GAINS: dict[Usage, tuple[int, ...]] = {
 #: the difference an empty set. #1112.
 EXTRA_GAINS: dict[str, tuple[tuple[Usage, int, int], ...]] = {
     "cf:sorcerer-elementalist-f1": ((Usage.AT_WILL, 9, 1),),
+    # **Three more, and only three, because only three of the 39 rows on
+    # `chargen.power_choice()` state their own level.** The rest read "a
+    # new power of your level or lower" or name a family with no level at
+    # all, and `class_feature` carries none -- `#1261`. An entry invented
+    # for those would be a guess about when the gain happens.
+    #
+    # `usage=None` rather than a `Usage`, which `UTILITY_GAINS` above
+    # already uses and which is what keeps these three free of a second
+    # guess: the cards say *utility* and *attack* rather than naming a
+    # slot, and at these levels the pool answers for itself -- level 2
+    # holds the class's utilities and level 1 holds no utility at all.
+    #
+    # Keyed by the feature's ref and read against the hand, so the gain
+    # lands on a character that has the row and nobody else. #642, #1112.
+    "cf:warlock-binder-f0": ((None, 1, 1),),
+    "cf:warlock-binder-f6": ((None, 2, 2),),
+    "cf:assassin-executioner-f6": ((None, 2, 2),),
 }
 
 #: Utility powers are gained on their own levels and are not attack powers, so

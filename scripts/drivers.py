@@ -45308,6 +45308,163 @@ _F1_POWER = {
 }
 
 
+def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
+    """The three gaps `#642`'s wave filed most often, built -- and the one
+    it filed most often of all, which could not be.
+
+        Powers.per_encounter(extra=)  17 rows -> `c.more_uses`
+        c.roll_twice(check=)           4 rows -> `c.roll_twice`
+        chargen.power_choice()        34 rows -> 3 of them, and only 3
+
+    **Each is read at exactly one site**, which is the whole safety
+    argument for all three: `dsl.usable` is the one place `Power.uses` is
+    compared against what has been spent, and `skills.check` the one place
+    a check's d20 is rolled. The contrast is `granted_keywords`, which had
+    22 readers and where a grant honoured at 21 of them was a modifier
+    nothing reported.
+
+    **And each announces itself**, which is `UseRestored`'s argument
+    (`#899`) and `#1262`'s under `c.initiative`: a row whose entire effect
+    is one of these calls would otherwise be silent by construction, and
+    seventeen of them are exactly that shape.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+    from combat_engine.engine.skills import check as _check
+
+    # -- c.more_uses: the allowance moves, and only by what was asked ----
+    world, me, _ = _posed("cf:fighter-slayer-f1", 1)
+    known = world.get(me, Powers)
+    strike = get("p12668")
+    known.used["p12668"] = 1
+    before = usable(world, me, strike)
+    c = Cast(world=world, me=me, ref="probe")
+    mark = len(world.bus.log)
+    now = c.more_uses("p12668")
+    after = usable(world, me, strike)
+    known.used["p12668"] = 2
+    spent = usable(world, me, strike)
+    out.that(not before[0] and after[0] and not spent[0],
+             "`c.more_uses` turns an expended row usable again and the "
+             "extra use is spendable exactly once -- all three states, "
+             "because a raise that never ran out would be an at-will and "
+             "one that did nothing reads the same as the first state",
+             f"at 1 use {before}, after the raise {after}, at 2 {spent}")
+    out.that(now == strike.uses + 1,
+             "and it answers the TOTAL the row may now be used, not the "
+             "delta -- a caller wanting the delta already has it",
+             f"{now} against a printed {strike.uses}")
+    said = [type(e).__name__ for e in world.bus.log[mark:]]
+    out.that("UsesRaised" in said,
+             "and it announces `UsesRaised`. Asserted because seventeen "
+             "rows print nothing but this call: without an event every one "
+             "of them is silent by construction, which is `#899`'s lesson "
+             "and `#1262`'s open case",
+             f"{said}")
+
+    # -- the printed "only once per turn" is NOT loosened by it ----------
+    out.that(strike.once_per_round is False
+             or usable(world, me, strike)[1] != "already used this round",
+             "and the per-turn limit is a different header field, tested "
+             "before the allowance -- so raising the count can never give "
+             "two uses in one turn. Every one of the seventeen cards "
+             "prints both halves and only one was missing",
+             f"once_per_round={strike.once_per_round}")
+
+    # -- c.roll_twice: the distribution moves, and the skill is named ----
+    def mean_natural(grant: str) -> float:
+        """400 Stealth naturals, with `grant` the only thing standing.
+
+        **`rolls_twice` is cleared first, and without that none of the
+        three arms means anything.** `audit.board` arms the whole chassis,
+        and `cf:rogue-thief-f20` now *calls* `c.roll_twice("stealth",
+        "thievery")` -- so the board's thief already rolls twice before
+        the probe does anything, and the first draft of this read 13.93
+        for all three arms including the ungranted control.
+        """
+        w, who, _ = _posed("cf:rogue-thief-f0", 2)
+        w.get(who, Powers).rolls_twice.clear()
+        if grant:
+            Cast(world=w, me=who, ref="probe").roll_twice(grant)
+        rolls = [_check(w, who, "stealth", 0).natural for _ in range(400)]
+        return sum(rolls) / len(rolls)
+
+    plain, twice, elsewhere = (mean_natural(""), mean_natural("stealth"),
+                               mean_natural("thievery"))
+    out.that(twice - plain > 2.0 and abs(elsewhere - plain) < 1.5,
+             "`c.roll_twice` lifts the mean natural on the skill it names "
+             "and leaves the others alone -- 400 rolls each, against "
+             "13.825 for the best of two d20s and 10.5 for one. The third "
+             "arm is the clause: granting it on one skill must not widen "
+             "to every check",
+             f"one d20 {plain:.2f}, two {twice:.2f}, "
+             f"a different skill granted {elsewhere:.2f}")
+    world, me, _ = _posed("cf:rogue-thief-f0", 1)
+    world.get(me, Powers).rolls_twice.clear()
+    c = Cast(world=world, me=me, ref="probe")
+    first, again = c.roll_twice("stealth"), c.roll_twice("stealth")
+    out.that(first == 1 and again == 0,
+             "and granting the same skill twice is a no-op that announces "
+             "nothing -- a set, not a count, because *roll twice* does not "
+             "compose where an extra use does",
+             f"first {first}, again {again}")
+
+    # -- the three rows that now play, and the ones that still do not ----
+    done = sorted(r for r in ("cf:rogue-thief-f20", "cf:ranger-scout-f13",
+                              "cf:ranger-hunter-f14")
+                  if not REGISTRY[r].unfinished)
+    out.that(len(done) == 3,
+             "the three rows whose whole clause is a named-skill reroll are "
+             "finished",
+             f"{done}")
+    out.that(sorted(REGISTRY["cf:rogue-thief-f18"].unfinished)
+             == ["c.roll_twice(check=)", "c.roll_twice(save=)"],
+             "and `cf:rogue-thief-f18` keeps BOTH symbols, which is the "
+             "distinction worth gating: it pays on Acrobatics and Athletics "
+             "*as part of the escape action*, so granting the skills "
+             "outright would roll twice on every climb -- wider than the "
+             "card. Its save half is a different roll again",
+             f"{sorted(REGISTRY['cf:rogue-thief-f18'].unfinished)}")
+
+    # -- EXTRA_GAINS: three entries, and why not thirty-four -------------
+    mine = {k: v for k, v in chargen.EXTRA_GAINS.items()
+            if k in ("cf:warlock-binder-f0", "cf:warlock-binder-f6",
+                     "cf:assassin-executioner-f6")}
+    out.that(len(mine) == 3 and all(u is None for v in mine.values()
+                                    for (u, _, _) in v),
+             "three rows carry a `chargen.EXTRA_GAINS` entry and every one "
+             "has `usage=None` -- the cards say *utility* and *attack* "
+             "rather than naming a slot, and at these levels the pool "
+             "answers for itself. A `Usage` here would be a second guess "
+             "on top of the first",
+             f"{mine}")
+    still = sorted(r for r, p in REGISTRY.items()
+                   if "chargen.power_choice()" in (p.unfinished or ()))
+    rows_ = [r for r in still if r.startswith("cf:")]
+    feats = [r for r in still if not r.startswith("cf:")]
+    out.that(len(rows_) == 31 and len(feats) == 4,
+             "and 31 CHASSIS ROWS plus 4 feats still carry the symbol, "
+             "because only those three state the level the gain happens "
+             "at. The rest say *of your level or lower* or name a family "
+             "with no level, and `class_feature` carries none -- so an "
+             "entry would be a guess about WHEN, which is `#1261`. Both "
+             "counts named: the figure for this wave is 31 and the figure "
+             "for the symbol is 35, and quoting one as the other is how a "
+             "reader concludes the feats were done too",
+             f"{len(rows_)} rows, {len(feats)} feats: {feats}")
+
+    out.that(not [r for r, p in REGISTRY.items()
+                  if "Powers.per_encounter(extra=)" in (p.unfinished or ())],
+             "`Powers.per_encounter(extra=)` is retired -- no row waits on "
+             "it. Asserted as an emptiness, so a new row reaching for the "
+             "old symbol instead of the verb reds here",
+             "none")
+
+
 def every_printed_chassis_has_its_rows_declared(out: Result) -> None:
     """`#642`'s whole wave, measured against the compendium -- and the
     measurement had to be corrected twice before it meant anything.
@@ -77323,6 +77480,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "wave_facilities": (
+        three_facilities_the_chassis_wave_asked_for,
+        "the three facilities #642's wave asked for most, each read at one"
+        " site and each announcing itself (#642, #899)",
     ),
     "chassis_complete": (
         every_printed_chassis_has_its_rows_declared,

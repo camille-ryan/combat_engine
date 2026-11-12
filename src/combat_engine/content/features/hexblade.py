@@ -406,18 +406,18 @@ for _ref, _got in _F6_POWERS.items():
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("chargen.feature_level()", "Powers.per_encounter(extra=)",
-          "chargen.pact_blade()"),
+    todo=("chargen.feature_level()", "chargen.pact_blade()"),
 )
 def hexblade_another_use(c: Cast) -> None:
     """"You gain one more use per encounter of the `cf:warlock-hexblade-f3`
     attack power that you gained at 1st level."
 
-    **Three symbols, which is one more than any other row in this wave**,
-    and each names a different missing thing: the level (`#1261`), the
-    per-encounter ceiling, and the pact weapon whose attack power this
-    would add a use of. A row cannot be written while any of the three is
-    absent, and marking fewer would report it ready early.
+    **Two symbols, and it was three.** `Powers.per_encounter(extra=)` is
+    built now -- `c.more_uses` writes `Powers.extra_uses` and `dsl.usable`
+    reads it -- so what is left is the level (`#1261`) and the pact weapon
+    whose attack power this would add a use of (`chargen.pact_blade()`).
+    A row cannot be written while either is absent, and marking fewer
+    would report it ready early.
     """
 
 

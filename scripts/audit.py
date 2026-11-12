@@ -1423,6 +1423,10 @@ DID_SOMETHING = {
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
+    # `UsesRaised` and `RollsTwice` on `UseRestored`'s own argument: a row
+    # whose entire effect is raising an allowance, or granting a second
+    # d20 on a check, is silent without one. #642.
+    "UsesRaised", "RollsTwice",
     "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
     "ItemConsumed", "ItemDestroyed", "ItemRestored",
     "CompanionDestroyed", "RowStored",

@@ -5118,6 +5118,105 @@ class Cast:
             until=until, kind=self.ref,
         )
 
+    def roll_twice(self, *skills: str, on: int | None = None) -> int:
+        """"Whenever you make a Stealth check, you can roll twice and use
+        either result." Returns how many skills were set.
+
+        Four class-feature rows across three Essentials chassis print this
+        and the tree had no reader: `c.reroll_ones` and `c.reroll_faces`
+        are both about **damage** dice, and `vocab.py --find reroll` finds
+        nothing else. They carried `c.roll_twice(check=)` as a marker.
+
+        Written onto `Powers.rolls_twice` and read in `skills.check`,
+        which is the **one** place a check's d20 is rolled -- one reader,
+        the same safety argument `c.more_uses` makes.
+
+        **A set, so it does not compose.** Two features each granting it
+        on Stealth still roll twice; contrast `c.more_uses`, where two
+        features give two uses. That is a property of the printed
+        sentences rather than of the storage.
+
+        *"Use either result"* is taken as the better one: a headless run
+        has to pick and the offer carries no cost, which is the reading
+        `c.may` gets for an offer with nothing to weigh.
+
+        **The save half of this is NOT here.** `cf:rogue-thief-f18` also
+        prints *"or make a saving throw against an effect that
+        immobilizes, restrains, or slows you"*, and a save is rolled
+        somewhere else entirely -- so that row keeps
+        `c.roll_twice(save=)`. Naming the two halves separately is what
+        stops the row reporting ready on half a facility.
+
+        Defaults to the caster. #642.
+        """
+        from .components import Powers as _Powers
+
+        who = on if on is not None else self.me
+        powers = self.world.get(who, _Powers)
+        if powers is None:
+            return 0
+        wanted = {s.strip().lower() for s in skills if s.strip()}
+        fresh = wanted - powers.rolls_twice
+        powers.rolls_twice |= wanted
+        if fresh:
+            from .events import RollsTwice
+
+            self.world.bus.emit(RollsTwice(
+                who=who, skills=tuple(sorted(fresh)), by=self.ref))
+        return len(fresh)
+
+    def more_uses(self, ref: str, extra: int = 1, *,
+                  on: int | None = None) -> int:
+        """"You gain one more use of `p12668` per encounter." Returns the
+        total it may now be used.
+
+        **A row's allowance is header data and a feature cannot edit it.**
+        `Power.uses` is fixed at import and shared by everybody who holds
+        the row, so seventeen class-feature rows across six Essentials
+        chassis had no way to say this sentence -- they carried
+        `Powers.per_encounter(extra=)` as a marker instead.
+
+        Written onto `Powers.extra_uses`, which `dsl.usable` reads at the
+        **one** site that compares `Power.uses` against what has been
+        spent. One reader is the whole safety argument here, and the
+        contrast is `granted_keywords`: that one had 22 readers and a
+        grant honoured at 21 of them was a modifier nothing reported.
+
+        **The printed "but you can still use it only once per turn" needs
+        nothing.** That is `Power.once_per_round`, a different header field
+        tested a few lines earlier in `usable`, so a raised allowance can
+        never become two uses in one turn. Every one of the seventeen
+        cards prints both halves and only this half was missing.
+
+        The values **add**, like `extra_squares` and unlike `dice` where
+        the first match wins: two features each granting a use give two,
+        which is what the cards say.
+
+        Announced as `UsesRaised` for `UseRestored`'s reason (`#899`): a row
+        whose entire effect is this one line is silent by construction
+        without an event, which is `#1262` under another verb.
+
+        Defaults to the caster -- every printed one is about its own
+        owner. #642.
+        """
+        from .components import Powers as _Powers
+
+        who = on if on is not None else self.me
+        powers = self.world.get(who, _Powers)
+        if powers is None or extra <= 0:
+            return 0
+        from .dsl import get as _get
+
+        powers.extra_uses[ref] = powers.extra_uses.get(ref, 0) + extra
+        declared = _get(ref)
+        printed = declared.uses if declared is not None else 1
+        now = printed + powers.extra_uses[ref]
+        from .events import UsesRaised
+
+        self.world.bus.emit(UsesRaised(
+            who=who, power=ref, extra=extra, now=now, by=self.ref))
+        return now
+
     def restore_use(self, ref: str, *, on: int | None = None) -> bool:
         """"You regain the use of your second wind."
 

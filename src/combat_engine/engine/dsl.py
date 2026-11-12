@@ -3811,9 +3811,22 @@ def usable(
                 return False, "already used this round"
             if p.usage is not Usage.AT_WILL:
                 used = powers.times(p.ref)
-                if used >= p.uses:
+                # **`Powers.extra_uses` is read here and nowhere else**,
+                # which is the whole reason the field is safe: this is the
+                # single site that compares `Power.uses` against what has
+                # been spent, so a feature raising the allowance cannot be
+                # honoured at one reader and ignored at another -- the
+                # failure `granted_keywords` records across 22 sites.
+                #
+                # "You can still use it only once per turn" is the
+                # `once_per_round` test a few lines above and is untouched
+                # by this, so a raised allowance never becomes two in a
+                # turn. #642.
+                allowed = p.uses + powers.extra_uses.get(p.ref, 0)
+                if used >= allowed:
                     return False, (
-                        "expended" if p.uses == 1 else f"used {used} of {p.uses}"
+                        "expended" if allowed == 1
+                        else f"used {used} of {allowed}"
                     )
                 if p.group and _group_spent(world, actor, p):
                     return False, f"one {p.group} power per encounter"

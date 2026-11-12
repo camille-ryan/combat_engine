@@ -49,6 +49,8 @@ Things a creature spends, and the budget it spends them from.
   - How much of a per-encounter charge is left, for this creature.
 - `c.milestone(self) -> 'int'`
   - How many milestones the party has reached today. `c.milestone()`.
+- `c.more_uses(self, ref: 'str', extra: 'int' = 1, *, on: 'int | None' = None) -> 'int'`
+  - "You gain one more use of `p12668` per encounter." Returns the
 - `c.per_day_left(self, ref: 'str', limit: 'int') -> 'int'`
   - How many of a daily allowance are left today, for this creature.
 - `c.regain_power(self, ref: 'str' = '', *, daily: 'bool' = False, on: 'int | None' = None) -> 'str'`

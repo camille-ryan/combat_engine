@@ -458,7 +458,7 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()", "Powers.per_encounter(extra=)"),
+        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
         pass
@@ -528,18 +528,20 @@ hunter_pick_13 = _pick("cf:ranger-hunter-f13",
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("c.roll_twice(check=)",),
 )
 def hunter_keen_eye(c: Cast) -> None:
     """"Whenever you make a Perception check, you can roll twice and use
     either result."
 
-    `cf:ranger-scout-f13`'s and `cf:rogue-thief-f20`'s gap, and the same
-    symbol: the tree has no "roll twice, keep either" for a check.
+    `cf:ranger-scout-f13`'s sentence word for word, so it is the same
+    call -- `c.roll_twice`, which `cf:rogue-thief-f20` defined. Written
+    out again rather than shared for `cf:rogue-thief-f1`'s reason: a
+    hunter is dealt no scout row.
 
     Not `narrative=`: a Perception check decides what a hunter notices
     before a fight and whether it is surprised, which is combat meaning.
     """
+    c.roll_twice("perception", on=c.me)
 
 
 @power(

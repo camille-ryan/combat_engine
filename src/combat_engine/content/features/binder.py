@@ -495,8 +495,26 @@ for _ref, _got in _OPTION_REFS.items():
 # -- the six draws and the three swaps --------------------------------------
 
 
-def _pick(ref: str, what: str, *, swap: bool = False) -> Any:
-    """One of the nine "a `c7` power of your choice" rows."""
+def _pick(ref: str, what: str, *, swap: bool = False,
+          gained: bool = False) -> Any:
+    """One of the nine "a `c7` power of your choice" rows.
+
+    `gained=True` is the two whose own text states the level the gain
+    happens at -- *"a 1st-level"*, *"a 2nd-level"* -- so they carry a
+    `chargen.EXTRA_GAINS` entry and no marker. The other seven say *"of
+    your level or lower"* and name no level, and `class_feature` carries
+    none (`#1261`), so an entry for them would be a guess about **when**
+    the gain happens rather than about what it draws from.
+
+    That is the whole difference between a row on this chassis that is
+    finished and one that is not, and it is a property of the printed
+    sentence rather than of the mechanism.
+    """
+    marks: tuple[str, ...] = ()
+    if swap:
+        marks = ("chargen.power_swap(daily)",)
+    elif not gained:
+        marks = ("chargen.power_choice()",)
 
     @power(
         ref,
@@ -507,8 +525,8 @@ def _pick(ref: str, what: str, *, swap: bool = False) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.ARCANE],
-        todo=("chargen.power_swap(daily)",) if swap
-        else ("chargen.power_choice()",),
+        todo=marks,
+        out_of_combat=gained,
     )
     def row(c: Cast) -> None:
         pass
@@ -521,14 +539,25 @@ def _pick(ref: str, what: str, *, swap: bool = False) -> Any:
            "daily rather than adding one, and a draw that added without "
            "replacing leaves a binder a daily up on print."
            if swap else
-           "`chargen.power_choice()`'s gap -- a draw from a named printed "
-           "family, which four feats and six chassis in this wave wait on.")
+           "**Finished.** The card states the level the gain happens at, "
+           "so `chargen.EXTRA_GAINS` carries it: `loadout` deals the "
+           "extra power to a character holding this row and to nobody "
+           "else, which is `#1112`'s mechanism. `out_of_combat=True` "
+           "because the whole row is a draw -- a fight has no use for it "
+           "and the sweep credits it as silent on a board as claimed."
+           if gained else
+           "`chargen.power_choice()`'s gap -- and specifically the "
+           "**level** half of it: this card says *of your level or lower* "
+           "and names no level for the gain itself, which `#1261` is "
+           "about. The two rows beside it that do name one are finished.")
     )
     return row
 
 
-binder_pick_0 = _pick("cf:warlock-binder-f0", "A 1st-level `c7` attack power.")
-binder_pick_6 = _pick("cf:warlock-binder-f6", "A 2nd-level `c7` utility power.")
+binder_pick_0 = _pick("cf:warlock-binder-f0",
+                      "A 1st-level `c7` attack power.", gained=True)
+binder_pick_6 = _pick("cf:warlock-binder-f6",
+                      "A 2nd-level `c7` utility power.", gained=True)
 binder_pick_9 = _pick("cf:warlock-binder-f9", "A `c7` attack power.")
 binder_pick_10 = _pick("cf:warlock-binder-f10", "A `c7` utility power.")
 binder_pick_13 = _pick("cf:warlock-binder-f13", "Another `c7` utility power.")

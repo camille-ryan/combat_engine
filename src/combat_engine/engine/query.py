@@ -706,6 +706,19 @@ def moved_this_action(world: World, eid: int) -> int:
 #: `nearest:also:<id>`. `Mods.total` summing is harmless here, since any
 #: positive total means "counts".
 def counts_as_nearest(eid: int) -> str:
+    """The effect label that makes `eid` count among somebody's nearest.
+
+    A **label builder**, not a reader -- which is why it sits beside
+    `nearest_enemy` rather than among the questions: one builds the string
+    `c.counts_as_nearest` lays and the other is what reads it back. Kept
+    as a function rather than an f-string at both ends for the reason
+    every other reserved label in this module is: two spellings of one key
+    is a modifier nothing consults.
+
+    It had no docstring at all, which `scripts/symbols.py` refuses -- a
+    reader cannot be documented into `docs/symbols/reading.md` without
+    one, and an undocumented reader is one somebody files a gap for.
+    """
     return f"nearest:also:{eid}"
 
 

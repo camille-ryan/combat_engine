@@ -58,6 +58,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Reroll each damage die that shows a 1 until it shows a different
 - `c.reroll_save(self, *, bonus: 'int' = 0, keep: 'str' = 'new', ev: 'Any' = None) -> 'bool'`
   - Roll the **triggering** saving throw again. Returns the new result.
+- `c.roll_twice(self, *skills: 'str', on: 'int | None' = None) -> 'int'`
+  - "Whenever you make a Stealth check, you can roll twice and use
 
 ## resistance and vulnerability
 
@@ -82,6 +84,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You gain concealment." -2 to attacks against you, -5 if total.
 - `c.conceal_in(self, zone: 'int', *, side: 'str' = 'team', total: 'bool' = False) -> 'None'`
   - "You and your allies have concealment while within the zone."
+- `c.counts_as_nearest(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Let a creature count `who` among its nearest enemies.
 - `c.cover(self, *, when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, superior: 'bool' = False) -> 'Effect | None'`
   - "You gain partial cover." The self-side sibling of `cover_in`.
 - `c.cover_in(self, zone: 'int', *, side: 'str' = 'team', when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'None'`
@@ -96,6 +100,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Did *that* attack have combat advantage? Reads the event.
 - `c.hide(self, *, from_: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, check: 'bool' = False, skill: 'str' = 'stealth') -> 'Effect | None'`
   - Go unseen, and stay that way until something gives you away.
+- `c.hides_with_cover(self, *, after_moving: 'int' = 0, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Hide with any cover, if you moved far enough from where you were.
 - `c.ignore_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, once: 'bool' = False, concealment_only: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "You ignore cover and concealment when attacking."
 - `c.ignores_long_range(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`

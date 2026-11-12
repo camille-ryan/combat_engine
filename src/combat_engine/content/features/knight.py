@@ -591,7 +591,7 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()", "Powers.per_encounter(extra=)"),
+        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
         pass

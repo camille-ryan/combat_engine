@@ -339,7 +339,7 @@ def scout_nimble(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    dropped=("chargen.feature_level()", "Powers.per_encounter(extra=)"),
+    dropped=("chargen.feature_level()",),
 )
 def scout_mastery(c: Cast) -> None:
     """Two clauses: another use of `p12668`, and a second off-hand fork.
@@ -507,7 +507,7 @@ def _extra_use(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.feature_level()", "Powers.per_encounter(extra=)"),
+        todo=("chargen.feature_level()",),
     )
     def row(c: Cast) -> None:
         pass
@@ -669,20 +669,21 @@ scout_ability_4 = _narrative(
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("c.roll_twice(check=)",),
 )
 def scout_keen_eye(c: Cast) -> None:
     """"Whenever you make a Perception check, you can roll twice and use
     either result."
 
-    `cf:rogue-thief-f20`'s gap and the same symbol, because it is the same
-    facility: the tree has no "roll twice, keep either" for a check --
-    `c.reroll_ones` and `c.reroll_faces` are both about damage dice.
+    `c.roll_twice` is the whole of it -- the verb
+    `cf:rogue-thief-f20` defined, since both cards print the same sentence
+    and neither narrows by action. `Powers.rolls_twice` is the store and
+    `skills.check` the single reader.
 
     Not `narrative=`: a Perception check decides what a scout notices
     before a fight starts and whether it is surprised, which is combat
-    meaning. What it lacks is a writer.
+    meaning -- and now it has a writer.
     """
+    c.roll_twice("perception", on=c.me)
 
 
 # -- the six rows the import cannot supply -----------------------------------
