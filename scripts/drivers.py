@@ -45309,27 +45309,43 @@ _F1_POWER = {
 
 
 def every_printed_chassis_has_its_rows_declared(out: Result) -> None:
-    """`#642`'s whole wave, measured against the compendium rather than
-    against a list.
+    """`#642`'s whole wave, measured against the compendium -- and the
+    measurement had to be corrected twice before it meant anything.
 
-    The question this answers is the one a count of chassis cannot: **for
-    each printed chassis, is every row of it declared?** A chassis with
-    one row written and forty missing passes "is it written" and fails
-    this.
+    The question is: **for each printed chassis, is every row that owes an
+    implementation declared?** A chassis with one row written and forty
+    missing passes "is it written" and fails this.
 
-    Derived from `class_feature` and `dsl.REGISTRY`, never from a list
-    here -- which is the lesson five assertions in this wave learned the
-    hard way. `drivers.chassis` carried two literal chassis lists and both
-    had to be replaced with derived forms; `drivers.blackguard_vice`'s
-    grant map and `drivers.protector_circle`'s leg pools both decayed when
-    the wave grew; `drivers.chassis`'s warlock setup leaned on
-    `chassis_of` and turned into a hexblade the day one was declared.
+    **Two kinds of ref do not owe one, and counting them over-reported the
+    gap by a factor of four.** The first draft of this rule counted every
+    `class_feature` ref and said 156 rows missing across 8 chassis. Both
+    numbers were wrong:
 
-    So this rule names **no chassis at all**. What it asserts is a floor
-    and a direction: every printed chassis has at least one row, and the
-    set with rows missing only ever shrinks -- which is checked by naming
-    the eight that are incomplete today and the count of rows they owe, so
-    a ninth appearing reds and a row landing in one of the eight reds too.
+    * **78 refs carry `duplicate_of`** pointing at the power they are a
+      second printing of -- `cf:barbarian-f1c0` -> `p4809`. A second card
+      belongs to the row it was printed inside, which is
+      `content/CLAUDE.md`'s rule for `p...b` and the same convention here.
+    * **94 refs match `-fNcM`**, the second-card shape, and only 8 are
+      declared. Twenty of those sit on a chassis; the rest are on base
+      classes and never entered this count, which is why the exclusion
+      figure here is 20 and not 94 -- a distinction the first draft of
+      this rule got wrong in the other direction.
+
+    Excluding both: **693 rows owe an implementation, not 713**, and the
+    gap was 34 rather than 156.
+
+    **And four of the 34 are deliberately skipped**, which no derivation
+    can see. `arcanist.py`'s rule: *where a parent implements a branch
+    outright the sub-option ref is skipped, because declaring both deals
+    the same card twice.* `cf:fighter-weaponmaster-f3`'s body pays the
+    one-handed and two-handed attack bonuses on the `guardian` and
+    `great-weapon` legs -- which are exactly `-f3s3` and `-f3s5` -- and
+    `cf:rogue-scoundrel-f1`'s does the same for its two tactics. Those
+    four are named here as a closed set, so a fifth appearing reds.
+
+    So this rule names no chassis and no row count that is not measured,
+    and the four exceptions are named rather than absorbed into a
+    threshold.
     """
     import re
 
@@ -45337,55 +45353,93 @@ def every_printed_chassis_has_its_rows_declared(out: Result) -> None:
     from combat_engine import db
     from combat_engine.engine.dsl import REGISTRY
 
+    #: The four refs a parent implements in its own body. A closed set, so
+    #: a fifth skipped row has to be argued for here rather than hidden in
+    #: a count.
+    IMPLEMENTED_BY_PARENT = {
+        "cf:fighter-weaponmaster-f3s3", "cf:fighter-weaponmaster-f3s5",
+        "cf:rogue-scoundrel-f1s0", "cf:rogue-scoundrel-f1s1",
+    }
+
+    rows = db.game().execute(
+        "select ref, duplicate_of from class_feature").fetchall()
+
+    def owes(ref: str, dup: str | None) -> bool:
+        """Does this ref owe a row of its own?
+
+        No if it is a second printing of something else -- either because
+        `duplicate_of` says so, or because its shape is the second-card
+        one and nothing else distinguishes it.
+        """
+        return not dup and not re.search(r"-f\d+c\d+$", ref)
+
     printed: dict[tuple[str, str], list[str]] = {}
-    for (ref,) in db.game().execute("select ref from class_feature"):
+    second_cards = 0
+    for ref, dup in rows:
         hit = re.match(r"cf:([a-z'-]+?)-([a-z'-]+)-f\d", ref)
-        if hit:
-            printed.setdefault((hit.group(1), hit.group(2)), []).append(ref)
+        if not hit:
+            continue
+        if not owes(ref, dup):
+            second_cards += 1
+            continue
+        printed.setdefault((hit.group(1), hit.group(2)), []).append(ref)
 
     out.that(len(printed) == 25,
              "the compendium prints 25 chassis across the 26 classes, "
              "which is the number `#642` is about -- derived from "
              "`class_feature`, never from a list in this file",
              f"{len(printed)}")
+    out.that(second_cards == 20,
+             "and TWENTY of its chassis refs are second cards, which owe "
+             "no row of their own. Twenty and not the 94 second-card refs "
+             "in the table: most of those sit on a base class -- "
+             "`cf:barbarian-f1c0` -- and never matched the chassis shape "
+             "this rule counts, so they were never in the figure to be "
+             "excluded from. Asserted at the measured number, because the "
+             "first draft of this line said 90 on the strength of the "
+             "table-wide count and reddened",
+             f"{second_cards} excluded")
 
     nothing = sorted(k for k, v in printed.items()
                      if not any(r in REGISTRY for r in v))
     out.that(not nothing,
-             "and EVERY one of them has rows written. This was 5 of 25 "
+             "every printed chassis has rows written. This was 5 of 25 "
              "when the wave began -- the measurement that started it",
              f"{nothing or 'none missing entirely'}")
 
-    owed = {k: [r for r in v if r not in REGISTRY] for k, v in printed.items()}
-    owed = {k: v for k, v in owed.items() if v}
-    out.that(len(owed) <= 8,
-             "eight chassis still have rows the compendium prints and this "
-             "tree does not declare, and the set may only shrink. A ninth "
-             "appearing reds here -- which is what stops a new chassis "
-             "being counted as written on the strength of one row",
-             f"{len(owed)} incomplete: "
-             f"{ {f'{c}/{ch}': len(v) for (c, ch), v in sorted(owed.items())} }")
+    owed: dict[tuple[str, str], list[str]] = {}
+    for key, refs in printed.items():
+        gap = [r for r in refs
+               if r not in REGISTRY and r not in IMPLEMENTED_BY_PARENT]
+        if gap:
+            owed[key] = sorted(gap)
+    out.that(not owed,
+             "and EVERY row that owes an implementation is declared. The "
+             "four exceptions are named in `IMPLEMENTED_BY_PARENT` above "
+             "and are rows a parent pays in its own body, which is "
+             "`arcanist.py`'s rule -- a fifth appearing reds here rather "
+             "than passing under a threshold",
+             f"{ {f'{c}/{ch}': v for (c, ch), v in sorted(owed.items())} }"
+             " still owed")
+
+    skipped = sorted(r for refs in printed.values() for r in refs
+                     if r not in REGISTRY)
+    out.that(skipped == sorted(IMPLEMENTED_BY_PARENT),
+             "and the undeclared set is exactly those four -- asserted as "
+             "an equality, so a row quietly disappearing from a complete "
+             "chassis reds and a fifth skip has to be added here with its "
+             "argument",
+             f"{skipped}")
 
     total = sum(len(v) for v in printed.values())
     declared = sum(1 for v in printed.values() for r in v if r in REGISTRY)
-    out.that(declared >= 557,
-             "and 557 of the 713 printed chassis rows are declared, a "
-             "floor rather than an equality -- a floor so that writing "
-             "more does not red it, and asserted at all because the eight "
-             "above are where the remaining work is",
+    out.that(total == 693 and declared == 689,
+             "693 chassis rows owe an implementation and 689 are declared, "
+             "which are the two numbers this rule exists to keep honest. "
+             "An equality rather than a floor on both: the first is a "
+             "property of the compendium and the second moves only when "
+             "somebody writes or deletes a row",
              f"{declared} of {total}")
-
-    # -- the thirteen this wave added are COMPLETE ------------------------
-    #
-    # Named as a set difference rather than a list: whatever is complete
-    # today must stay complete, and the arithmetic says which without this
-    # rule having to carry thirteen names that would decay.
-    complete = sorted(f"{c}/{ch}" for (c, ch) in printed if (c, ch) not in owed)
-    out.that(len(complete) == 17,
-             "seventeen chassis are complete -- every printed row of them "
-             "declared. Asserted as a count off the same derivation, so a "
-             "row quietly disappearing from one of them reds",
-             f"{len(complete)}: {complete}")
 
 
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
@@ -53405,7 +53459,14 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
     # *different* leg quietly gets two schools. That is exactly how my
     # first version of this assertion passed its own plant, and how
     # `spirit_present` passed one earlier.
-    at1 = {leg: schools[(leg, 1)][0] for leg in SCHOOLS if schools[(leg, 1)]}
+    # **Filtered to the school rows, which is what this is about.** The
+    # hand now holds the three school PARENTS as well -- `-f0`, `-f4` and
+    # `-f6` were declared when `#642` finished the mage's ladder -- and
+    # they sort first, so `[0]` answered `cf:wizard-mage-f0` for every leg
+    # and the map read six identical values. The `_school` filter above
+    # already exists for exactly this and was not reused here.
+    at1 = {leg: next(r for r in schools[(leg, 1)] if _school(r))
+           for leg in SCHOOLS if any(_school(r) for r in schools[(leg, 1)])}
     want = {leg: f"cf:wizard-mage-f0s{i}" for i, leg in enumerate(SCHOOLS)}
     out.that(at1 == want and len(set(at1.values())) == 6,
              "and each leg gets a DIFFERENT one, in the order the refs are "
@@ -53471,12 +53532,15 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
                 build=chargen.build_of("wizard", leg),
                 who_chassis="mage") if r.startswith("cf:")]
         ladder[leg] = got
-        # The two **parents** ride along from levels 4 and 8 -- they are
-        # the second school's chooser and are not this school's tiers --
-        # so the ladder is read with them filtered out.
-        got = {k: [r for r in v
-                   if r not in ("cf:wizard-mage-f3", "cf:wizard-mage-f5")]
-               for k, v in got.items()}
+        # **Filtered to the SCHOOL rows** -- the ones carrying an `sN`
+        # index -- rather than by naming the refs that ride along. The
+        # named list was `("cf:wizard-mage-f3", "cf:wizard-mage-f5")`, the
+        # second school's chooser and its Expert tier, and it went stale
+        # the moment `#642` declared the rest of the mage's ladder: 24 more
+        # rows joined the hand at every level and the equality below
+        # failed on all six legs. Filtering by what the assertion is
+        # *about* cannot decay that way.
+        got = {k: [r for r in v if _school(r)] for k, v in got.items()}
         ladder[leg] = got
         want = {1: [f"cf:wizard-mage-f0s{idx}"],
                 5: [f"cf:wizard-mage-f0s{idx}", f"cf:wizard-mage-f4s{idx}"],

@@ -4030,6 +4030,14 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     **{f"cf:warlock-binder-f{n}": tuple(
         f"cf:warlock-binder-f{n}s{i}" for i in range(9))
        for n in (12, 21)},
+    # **The warpriest's domain, and ONE entry for ten readers.** `-f0`,
+    # `-f3`, `-f5`, `-f6`, `-f8`, `-f9`, `-f10`, `-f11` and `-f12` all read
+    # this ref's answer BY INDEX -- measured: nine forks run 0-8 and two
+    # run 0-7, so option index is domain index. Unlike the warlock's pacts
+    # (`#1264`) the mapping is derivable, which is why there is one entry
+    # here and eleven there. #642.
+    "cf:cleric-warpriest-f1": tuple(
+        f"cf:cleric-warpriest-f1s{i}" for i in range(9)),
 }
 
 
