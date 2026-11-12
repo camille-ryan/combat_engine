@@ -474,6 +474,20 @@ class Target:
     #: that worked. Weapons in hand, weapons on the belt, and a shield are
     #: the things a card of this shape does something to.
     carrying: bool = False
+    #: *"the nearest enemy to you that you can see"* -- a target line that
+    #: names a position rather than a property. `cf:ranger-f1c0`'s quarry
+    #: prints it and `cf:ranger-f1` was taking any creature, its note
+    #: reading *"a choice the ranger makes and the interface offers, so the
+    #: target comes in as `c.target` like any other"*. That is true of who
+    #: *chooses*; it left the restriction unenforced, so the policy and the
+    #: page could both name a far enemy.
+    #:
+    #: Read through `query.nearest_enemy`, which is where the ties and the
+    #: one card that **widens** what counts both live -- `cf:shaman-f0s3`
+    #: lets an ally count anything beside its spirit. So declaring this
+    #: makes that clause mean something, which is why the two landed
+    #: together. #1251.
+    nearest: bool = False
     #: The target must be a creature of **this block**, by ref -- "up to
     #: four of its own kind", "each ally of its own kind".
     #:
@@ -864,6 +878,11 @@ _SIDES = frozenset({
 })
 
 ONE_CREATURE = Target("enemy", 1)
+#: *"the nearest enemy to you that you can see"*, which is one printed
+#: target line and not a property of the creature. `cf:ranger-f1`'s quarry
+#: is the row; `query.nearest_enemy` decides, so the shaman's clause that
+#: widens what counts is felt here without this knowing about it. #1251.
+NEAREST_ENEMY = Target("enemy", 1, nearest=True)
 #: A power aimed at anybody at all. `ONE_CREATURE` is the *enemy* pool, so a
 #: beneficial row pointed at it is unusable on the only creatures it is ever
 #: meant for.
@@ -3933,6 +3952,15 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
 
         kit = world.get(target, Gear)
         if kit is None or not (kit.weapons or kit.stowed or kit.shield):
+            return False
+    if aim.nearest:
+        from .query import nearest_enemy
+
+        # Asked of the **actor**, not of the target: the printed line is
+        # "the nearest enemy to *you*". And membership rather than
+        # equality, because enemies tie and because one card widens the
+        # set -- see `query.nearest_enemy`.
+        if target not in nearest_enemy(world, actor):
             return False
     if aim.loose:
         from .components import Scenery

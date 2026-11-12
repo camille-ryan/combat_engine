@@ -256,16 +256,41 @@ def shaman_f0s2(c: Cast) -> None:
         )
 
 
-@power("cf:shaman-f0s3", **TRAIT, dropped=("c.nearest_enemy()",))
+@power("cf:shaman-f0s3", **TRAIT)
 def shaman_f0s3(c: Cast) -> None:
     """"Cover from other enemies" is narrower than anything the engine can
     say -- what grants the cover is not in the context the gate is handed --
     so this is `partial=True`, which cancels ordinary cover and leaves
     superior cover standing. Cover from a creature is the ordinary kind.
 
-    The second sentence is dropped: nothing asks or answers which enemy is
-    an ally's nearest, so "treat any enemy adjacent to your spirit companion
-    as their nearest enemy" has nothing to change.
+    **The second sentence is written now, and the old note was right about
+    the engine and wrong about why it could not be fixed.** It said
+    *"nothing asks or answers which enemy is an ally's nearest, so [the
+    clause] has nothing to change"*. Nothing asked -- and six printed
+    cards did, each answering it for itself, which is the shape
+    `a-marker-may-name-the-writer-when-the-reader-is-the-bug` describes:
+    the read was hand-rolled in six places and the marker named the
+    writer.
+
+    `query.nearest_enemy` is the one answer now, and
+    `dsl.Target.nearest` is a reader of it -- declared by
+    `cf:ranger-f1`, whose quarry prints *"the nearest enemy to you that
+    you can see"* and was taking any creature. So the permission has
+    something to permit, which is the half a modifier needs and the half
+    this component most often lacks. #1251.
+
+    **`on=` is each ALLY and `who` is the enemy**, which is the way round
+    the card says it: *"**your allies** can treat any enemy adjacent to
+    your spirit companion as **their** nearest enemy."* Laid the other way
+    it would widen the shaman's own reach and give the allies it is for
+    nothing.
+
+    Standing rather than gated, unlike the cover half above: `c.no_cover`
+    takes a `when=` because cover is asked per attack, and this is asked
+    when a target pool is built -- so the permission is applied to the
+    enemies beside the spirit at arming time and ends with the encounter.
+    An enemy that walks in afterwards is not covered, which is the same
+    limitation `beside_spirit` has and is recorded rather than hidden.
     """
     _spirit_choice(c, "watcher", ("p9732", "p9734"))
     if not c.build("watcher"):
@@ -277,6 +302,9 @@ def shaman_f0s3(c: Cast) -> None:
             partial=True,
             when=lambda ctx, f=foe: beside_spirit(c, f),
         )
+        if beside_spirit(c, foe):
+            for friend in c.allies():
+                c.counts_as_nearest(foe, on=friend, until=When.ENCOUNTER)
 
 
 @power("cf:shaman-f0s4", **TRAIT)

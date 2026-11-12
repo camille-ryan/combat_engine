@@ -31176,6 +31176,188 @@ def an_elemental_affinity_is_offered_when_the_power_is_used(out: Result) -> None
              f"{declined}")
 
 
+def the_nearest_enemy_is_one_answer_and_a_card_widens_it(out: Result) -> None:
+    """*"You can designate the nearest enemy to you that you can see as
+    your quarry"* -- `cf:ranger-f1c0`, and *"your allies can treat any
+    enemy adjacent to your spirit companion as their nearest enemy"* --
+    `cf:shaman-f0s3`.
+
+    **Two cards, one reader, and neither worked without the other.** The
+    ranger's quarry took `ONE_CREATURE`, so the printed restriction was
+    unenforced and the policy could name a far enemy; the shaman's clause
+    was `dropped=("c.nearest_enemy()",)` because a permission with nothing
+    to permit is a modifier nobody consults. `query.nearest_enemy` is the
+    one answer and `dsl.Target.nearest` is the reader. #1251.
+
+    **Six printed cards asked this question before and each answered it
+    for itself** -- `p5367`, `p5374`, `p8237`, `p11843`, `p11844`,
+    `p11845`, all declared and unmarked. The reader is promoted from
+    `content/powers/druid/summons.nearest`, which had the measurement
+    right and sat where only one family could reach it.
+
+    Posed on positions rather than through a dealt shaman, because the
+    clause is about geometry: the assertions below move one creature and
+    read what the answer becomes.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import NEAREST_ENEMY, ONE_CREATURE, REGISTRY
+    from combat_engine.engine.query import enemies, nearest_enemy, squares
+
+    # -- the floor: the reader answers at all, and with a LIST -----------
+    world, me, _ = _posed("cf:ranger-f1", 1)
+    foes = sorted(enemies(world, me))
+    near = nearest_enemy(world, me)
+    out.that(len(foes) > 1 and near and set(near) <= set(foes),
+             "the reader names at least one enemy out of several, and only "
+             "enemies -- the floor, without which every line below passes "
+             "for the wrong reason",
+             f"{len(foes)} enemies, nearest {near}")
+    out.that(isinstance(near, list),
+             "and it answers a LIST, not one creature: two enemies tie at "
+             "the same distance and one card adds more, so a caller asks "
+             "membership rather than equality",
+             f"{type(near).__name__}")
+
+    # -- the ranger's target line is restricted, and was not -------------
+    out.that(REGISTRY["cf:ranger-f1"].target.nearest,
+             "`cf:ranger-f1` declares the printed restriction. It took "
+             "`ONE_CREATURE`, so a far enemy could be quarried -- the row's "
+             "own note called the choice the interface's business, which "
+             "left nothing holding it",
+             f"nearest={REGISTRY['cf:ranger-f1'].target.nearest}")
+    out.that(not ONE_CREATURE.nearest,
+             "while the plain target line is untouched, so the 2,000-odd "
+             "rows that use it are not silently restricted",
+             f"ONE_CREATURE.nearest={ONE_CREATURE.nearest}")
+
+    # -- and the restriction BITES: a far enemy is not a legal target ----
+    from combat_engine.engine.dsl import _stands_right
+
+    far = max(foes, key=lambda e: min(
+        abs(a[0] - b[0]) + abs(a[1] - b[1])
+        for a in squares(world, me) for b in squares(world, e)))
+    out.that(far not in near,
+             "the board has an enemy that is NOT nearest, which is what "
+             "makes the pair below a test rather than a coincidence",
+             f"far={far}, nearest={near}")
+    allowed_near = _stands_right(world, me, NEAREST_ENEMY, near[0])
+    allowed_far = _stands_right(world, me, NEAREST_ENEMY, far)
+    out.that(allowed_near and not allowed_far,
+             "and the nearest enemy is a legal target for that line while "
+             "the far one is not -- asked through `_stands_right`, which is "
+             "the predicate `candidates()` and `use` SHARE, so what is "
+             "offered and what connects cannot disagree",
+             f"nearest {allowed_near}, far {allowed_far}")
+
+    # -- the shaman's clause widens it, which is the whole point ---------
+    Cast(world=world, me=me, ref="drivers:nearest").counts_as_nearest(
+        far, on=me)
+    widened = nearest_enemy(world, me)
+    out.that(far in widened and set(near) <= set(widened),
+             "a creature given the shaman's permission counts the named "
+             "enemy among its nearest, **and keeps the real one** -- the "
+             "card says *can treat as*, which adds rather than replaces",
+             f"{near} -> {widened}")
+    out.that(_stands_right(world, me, NEAREST_ENEMY, far),
+             "so that far enemy becomes a legal target for the restricted "
+             "line. This is the assertion that makes the permission more "
+             "than a modifier nobody reads",
+             f"{_stands_right(world, me, NEAREST_ENEMY, far)}")
+
+    # -- and the row lays it for ALLIES, not for itself ------------------
+    #
+    # The card is "**your allies** can treat ... as **their** nearest".
+    # Laid the other way it would widen the shaman's own reach and give
+    # the allies it is for nothing -- and a probe reading only the caster
+    # would pass either way, which is why this reads a friend.
+    # **Posed by hand, on the `watcher` leg, because `audit.board` cannot
+    # know this row's.** `cf:shaman-f0s3` gates in its **body** --
+    # `if not c.build("watcher"): return` -- and `board` reads the leg off
+    # a row's `requires=` header, so on a posed board the row returns
+    # immediately and lays nothing. A probe there passes whatever the row
+    # does, which is the first thing this block got wrong.
+    #
+    # **And the geometry has to be chosen too.** On the posed board the
+    # enemy beside the spirit was *already* among the allies' nearest, so
+    # even a correctly-laid permission added nothing. The board below puts
+    # the beneficiary far from that enemy and near a different one, which
+    # is the only arrangement where the clause can be seen working.
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.query import allies as _allies
+
+    def posed_watcher():  # noqa: ANN202
+        """A watcher shaman with its spirit out, an ally far from both, and
+        an enemy beside each.
+
+        **The spirit has to be on the board**, which `audit.board` cannot
+        do either: `beside_spirit` asks `c.companion()`, so with no spirit
+        the clause's own gate is False for every enemy and the row lays
+        nothing however it is written. `c.call_companion` is the verb the
+        shaman's own powers use.
+        """
+        world = World(Grid(24, 16), Rng(4), Bus())
+        sham = chargen.spawn(world, chargen.Character(
+            cls="shaman", level=1, build="watcher", feats=[], powers=[]),
+            (4, 4))
+        friend = chargen.spawn(world, chargen.Character(
+            cls="fighter", level=1, build="", feats=[], powers=[]),
+            (12, 4))
+        near_friend = chargen.spawn(world, chargen.Character(
+            cls="rogue", level=1, build="", feats=[], powers=[], team="enemy"),
+            (13, 4))
+        far_from_friend = chargen.spawn(world, chargen.Character(
+            cls="rogue", level=1, build="", feats=[], powers=[], team="enemy"),
+            (6, 4))
+        # **And one enemy adjacent to the SHAMAN but not to the spirit**,
+        # so the shaman's own nearest is that one. Without it the shaman is
+        # already nearest to the enemy beside its spirit, and the "the
+        # shaman's set does NOT grow" half of the assertion below is
+        # trivially true -- it would be guarding nothing, which the
+        # `on=c.me` plant showed.
+        chargen.spawn(world, chargen.Character(
+            cls="rogue", level=1, build="", feats=[], powers=[], team="enemy"),
+            (4, 3))
+        # beside the shaman, and so beside `far_from_friend` at (6,4)
+        Cast(world=world, me=sham, ref="drivers:spirit").call_companion(
+            at=(5, 4))
+        return world, sham, friend, near_friend, far_from_friend
+
+    w2, sham, friend, near_foe, far_foe = posed_watcher()
+    before = set(nearest_enemy(w2, friend))
+    before_sham = set(nearest_enemy(w2, sham))
+    out.that(near_foe in before and far_foe not in before,
+             "the ally's nearest enemy is the one beside IT and not the one "
+             "beside the shaman -- the arrangement that makes the clause "
+             "visible, and without it a correctly-laid permission adds "
+             "nothing and the plant cannot fail",
+             f"ally's nearest {sorted(before)}, "
+             f"near {near_foe} / far {far_foe}")
+
+    cast = Cast(world=w2, me=sham, ref="cf:shaman-f0s3")
+    REGISTRY["cf:shaman-f0s3"].body(cast)
+    grew = set(nearest_enemy(w2, friend)) - before
+    sham_grew = set(nearest_enemy(w2, sham)) - before_sham
+
+    out.that(not REGISTRY["cf:shaman-f0s3"].unfinished,
+             "the row carries no marker: both printed sentences play",
+             f"{REGISTRY['cf:shaman-f0s3'].unfinished}")
+    out.that(bool(grew) and not sham_grew,
+             "and an ALLY's nearest set grows while the SHAMAN's does not "
+             "-- the card is *your allies ... their nearest enemy*, and "
+             "laid the other way round it would widen the shaman's own "
+             "reach and give the allies it is for nothing. Measured as the "
+             "growth per holder, because every creature already has a "
+             "nearest enemy and reading one passes either way",
+             f"ally gained {sorted(grew)}, shaman gained {sorted(sham_grew)}")
+    out.that(bool(_allies(w2, sham)),
+             "posed with a real ally rather than the caster alone, which is "
+             "who the card is for",
+             f"{sorted(_allies(w2, sham))}")
+
+
 def a_spirit_power_needs_the_spirit_present(out: Result) -> None:
     """`cf:shaman-f0`'s printed requirement, as a prereq on every power.
 
@@ -74560,6 +74742,12 @@ DRIVERS = {
     "curse_instead": (
         a_curse_already_placed_pays_its_damage_instead,
         "a curse already placed pays its damage instead (cf:warlock-f1c11)",
+    ),
+    "nearest_enemy": (
+        the_nearest_enemy_is_one_answer_and_a_card_widens_it,
+        "the nearest enemy is one answer and a card widens it: the ranger's"
+        " quarry is restricted as printed and the shaman's allies may count"
+        " anything beside its spirit (#1251)",
     ),
     "spirit_present": (
         a_spirit_power_needs_the_spirit_present,

@@ -694,6 +694,65 @@ def moved_this_action(world: World, eid: int) -> int:
     return mv.went if mv is not None else 0
 
 
+#: Enemies a creature may count as its nearest, whatever the distance.
+#:
+#: `cf:shaman-f0s3`: *"your allies can treat any enemy adjacent to your
+#: spirit companion as their nearest enemy."* A **permission**, so it is
+#: stored as the ids it adds rather than as a replacement -- the real
+#: nearest stays nearest, and these join it.
+#:
+#: On `Mods` like any other modifier so that it ends with its effect, and
+#: keyed per enemy id because the clause names a set and not a number:
+#: `nearest:also:<id>`. `Mods.total` summing is harmless here, since any
+#: positive total means "counts".
+def counts_as_nearest(eid: int) -> str:
+    return f"nearest:also:{eid}"
+
+
+def nearest_enemy(world: World, of: int) -> list[int]:
+    """Which enemies count as nearest to that creature.
+
+    A **list**, because two enemies can tie at the same distance and
+    because one card adds more -- so a caller asking "am I its nearest"
+    tests membership rather than equality.
+
+    **Promoted from `content/powers/druid/summons.nearest`**, which had the
+    measurement right and sat where only one family could reach it: six
+    printed cards ask this question and each answered it for itself, which
+    is the shape `a-marker-may-name-the-writer-when-the-reader-is-the-bug`
+    describes. Its reasoning is kept verbatim -- measured from the creature
+    rather than from its summoner, because *"the nearest bloodied creature
+    **it** can charge"* is the only measurement the printed clauses make.
+
+    **Not `Cast._nearest_first`**, which orders *squares* by how near a
+    creature they leave you. Different question, already working.
+
+    `counts_as_nearest` above is read here, so a row that widens what
+    counts does not have to be consulted by every caller separately.
+    """
+    from .components import Mods
+    from .grid import distance
+
+    foes = [e for e in enemies(world, of) if alive(world, e)]
+    if not foes:
+        return []
+    away = {}
+    for foe in foes:
+        mine, theirs = squares(world, of), squares(world, foe)
+        if not mine or not theirs:
+            continue
+        away[foe] = min(distance(a, b) for a in mine for b in theirs)
+    if not away:
+        return []
+    least = min(away.values())
+    out = {e for e, d in away.items() if d == least}
+    mods = world.get(of, Mods)
+    if mods is not None:
+        out |= {e for e in away
+                if mods.total(counts_as_nearest(e), {}) > 0}
+    return sorted(out)
+
+
 def displaced_this_action(world: World, eid: int) -> int:
     """How far this creature has ENDED UP from where its move action began.
 

@@ -2243,6 +2243,40 @@ class Cast:
             known.charges[STEALTH_RESULT] = int(last.total)
         return self.invisible(to=from_, until=until)
 
+    def counts_as_nearest(
+        self,
+        who: int,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Let a creature count `who` among its nearest enemies.
+
+        *"Your allies can treat any enemy adjacent to your spirit
+        companion as their nearest enemy"* -- `cf:shaman-f0s3`. A
+        **permission**: the real nearest stays nearest and this joins it,
+        which is why `query.nearest_enemy` returns a list and its callers
+        test membership.
+
+        `on` is who gains the permission -- an ally here, not the caster --
+        and `who` is the enemy it may count. Both are needed because the
+        clause names two different creatures, and getting them the wrong
+        way round would let the shaman count its own spirit's neighbours
+        while the allies it is for gained nothing.
+
+        **It needs a reader to mean anything, and it has one:**
+        `dsl.Target.nearest` is declared by `cf:ranger-f1`'s quarry, whose
+        printed line is *"the nearest enemy to you that you can see"*. The
+        two landed together for that reason -- a permission nothing
+        consults is this component's commonest bug.
+        """
+        from .query import counts_as_nearest as _key
+
+        return self.bonus(
+            _key(who), 1,
+            on=on if on is not None else self.me, until=until,
+        )
+
     def hides_with_cover(
         self,
         *,

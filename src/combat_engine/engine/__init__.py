@@ -40,6 +40,7 @@ from .dsl import (
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
+    NEAREST_ENEMY,
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,

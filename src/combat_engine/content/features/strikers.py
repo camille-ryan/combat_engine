@@ -28,6 +28,7 @@ from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
     MINOR,
+    NEAREST_ENEMY,
     NO_TARGET,
     ONE_CREATURE,
     PERSONAL,
@@ -662,16 +663,31 @@ def ranger_style(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_CREATURE,
+    target=NEAREST_ENEMY,
     keywords=[Keyword.MARTIAL],
     once_per_round=True,
 )
 def ranger_quarry(c: Cast) -> None:
     """Name the nearest enemy as your quarry; hitting it pays once a round.
 
-    The printed text says the nearest enemy you can see, which is a choice
-    the ranger makes and the interface offers, so the target comes in as
-    `c.target` like any other.
+    **The restriction is declared now, and the paragraph it replaces was
+    half right.** It said the printed "nearest enemy you can see" is *"a
+    choice the ranger makes and the interface offers, so the target comes
+    in as `c.target` like any other"*. True of who *chooses*; what it left
+    out is that nothing then held the choice to the nearest -- the target
+    was `ONE_CREATURE`, so the policy and the page could both name a far
+    enemy and the row played wider than print.
+
+    `NEAREST_ENEMY` is the same target line with `nearest=True`, read by
+    `_stands_right` -- the one predicate `candidates()` and `use` share, so
+    what is offered and what connects cannot disagree about it.
+
+    **And this is what makes `cf:shaman-f0s3` mean anything.** That card
+    lets an ally *"treat any enemy adjacent to your spirit companion as
+    their nearest enemy"* -- a permission that needs something to permit.
+    `query.nearest_enemy` holds both halves, so a quarried ranger standing
+    beside a shaman's spirit gains the printed reach without this row
+    knowing the shaman exists. #1251.
 
     **Once per turn** is what the class page allows, and the header says
     once per *round*, which is the nearest thing `usable` counts. The two
