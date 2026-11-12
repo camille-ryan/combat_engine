@@ -30830,18 +30830,68 @@ def every_build_leg_can_be_dealt(out: Result) -> None:
              "most classes have a fork, so there is something to deal",
              f"{len(multi)} of {len(legs)} classes")
 
+    # **Across every chassis, not just the default one, and asserting
+    # otherwise is what this rule did until the chassis narrowed the leg
+    # pool.** `deal_build(rng, cls)` with no chassis falls back to
+    # `chassis_of`, so for the sorcerer it draws only the elementalist's
+    # four specialties and the base sorcerer's four printed sources came
+    # out unreachable -- which is `legs_for` working, not a regression.
+    # A character is dealt a chassis first, so the honest question is
+    # whether a leg is reachable on **some** chassis.
     missed = {}
     for cls, names in sorted(multi.items()):
-        seen = {chargen.deal_build(Random(f"{s}:{cls}:build"), cls).name
-                for s in range(400)}
+        seen = set()
+        for ch in chargen.declared_chassis(cls) or ("",):
+            seen |= {chargen.deal_build(Random(f"{s}:{cls}:build"), cls, ch).name
+                     for s in range(400)}
         gap = sorted(set(names) - seen)
         if gap:
             missed[cls] = gap
     out.that(not missed,
-             "and EVERY leg of every one of them comes out of the dealer. "
-             "This was 73 legs unreachable before the draw existed",
+             "and EVERY leg of every one of them comes out of the dealer, "
+             "on some chassis. This was 73 legs unreachable before the "
+             "draw existed",
              f"{sum(len(v) for v in missed.values())} unreachable: "
              f"{list(missed.items())[:3]}")
+
+    # -- and a chassis may not be dealt a leg that is not its own ------
+    #
+    # Camille, 2026-11-11: *"Elementalist Sorcerer Chassis: this should be
+    # separate from teh base sorcerer. Air, water, earth, fire"*. Measured
+    # before `legs_for`: either sorcerer chassis could draw any of the 8
+    # legs, so a base sorcerer on `fire` had no source and an elementalist
+    # on `cosmic` had no specialty -- a character missing the one feature
+    # its fork exists to choose.
+    pools = {ch: sorted(b.name for b in chargen.legs_for("sorcerer", ch))
+             for ch in chargen.declared_chassis("sorcerer")}
+    out.that(pools == {"elementalist": ["air", "earth", "fire", "water"],
+                       chargen.ORIGINAL: ["cosmic", "dragon", "storm",
+                                          "wild"]},
+             "so the sorcerer's two chassis draw from disjoint pools, "
+             "which are the two lists Camille gave",
+             f"{pools}")
+    crossed = {}
+    for cls in sorted(multi):
+        for ch in chargen.declared_chassis(cls) or ("",):
+            mine = {b.name for b in chargen.legs_for(cls, ch)}
+            drawn = {chargen.deal_build(Random(f"{s}:{cls}:build"),
+                                        cls, ch).name for s in range(200)}
+            if drawn - mine:
+                crossed[(cls, ch)] = sorted(drawn - mine)
+    out.that(not crossed,
+             "and no chassis is ever dealt a leg outside its own pool. "
+             "Reds if `deal_build` goes back to ignoring the chassis",
+             f"{crossed}")
+    # The pool may never be empty: that is a class that cannot be built,
+    # and is the one way a narrowing selector can do real harm.
+    empty = [(c, ch) for c in chargen.BUILDS
+             for ch in (chargen.declared_chassis(c) or ("",))
+             if not chargen.legs_for(c, ch)]
+    out.that(not empty,
+             "while no (class, chassis) is left with no leg at all -- a "
+             "narrowing that empties a pool is a character nobody can be "
+             "dealt",
+             f"{empty}")
 
     # -- the resolver must NOT draw -------------------------------------
     cls = next(iter(sorted(multi)))
@@ -49859,11 +49909,53 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
     dealable = {c: chargen.declared_chassis(c)
                 for c in sorted(chargen.CLASSES)}
     forked = {c: v for c, v in dealable.items() if len(v) > 1}
-    out.that(sorted(forked) == ["cleric", "wizard"],
-             "two classes have a dealable chassis choice, which is the "
+    out.that(sorted(forked) == ["cleric", "sorcerer", "wizard"],
+             "three classes have a dealable chassis choice, which is the "
              "population the arm below is about -- the mage is NOT among "
              "them and `declared_chassis` says why",
              f"{forked}")
+
+    # -- the original is a NAME, which is Camille's ruling on `#1191` -----
+    #
+    #   > *"make the original a named option."*
+    #
+    # The bug: blank meant both "class-wide" and "no named chassis", so
+    # once a class had one name there was no spelling for the plain one.
+    out.that(chargen.ORIGINAL in chargen.declared_chassis("sorcerer"),
+             "the sorcerer's original ladder is a named, dealable chassis "
+             "-- it was superseded by `elementalist` and every dealt "
+             "sorcerer was one",
+             f"{chargen.declared_chassis('sorcerer')}")
+    # **Every leg, not one, and asserting one is a plant that cannot
+    # fail.** My first version read only the `cosmic` leg -- where the
+    # row is dealt whether or not it is gated -- so stripping the gate
+    # left the assertion green while a base sorcerer held two sources.
+    # The same trap `spirit_present` hit: a plant aimed at the one case
+    # the assertion is blind to.
+    souls = {}
+    for leg in ("cosmic", "storm", "wild", "dragon"):
+        souls[leg] = [r for r in chargen.loadout(
+            "sorcerer", level=1, build=chargen.build_of("sorcerer", leg),
+            who_chassis=chargen.ORIGINAL) if r.startswith("cf:")]
+    out.that(souls == {"cosmic": ["cf:sorcerer-f0", "cf:sorcerer-f0s0"],
+                       "storm": ["cf:sorcerer-f0", "cf:sorcerer-f0s2"],
+                       # `cf:sorcerer-f0` is one row implementing both of
+                       # these, branching in its body -- see LEG_CHASSIS.
+                       "wild": ["cf:sorcerer-f0"],
+                       "dragon": ["cf:sorcerer-f0"]},
+             "and dealt, each of its four legs gets its own ladder and "
+             "AT MOST ONE of the four printed sources -- two sub-options "
+             "at once is `#851`'s fault inside one chassis",
+             f"{souls}")
+    # The rogue is the negative control and it is the reason the test is
+    # printed coverage rather than "has a blank level-0 row": its two
+    # blank rows are hand-coined extras, not a chassis, and offering an
+    # `original` would deal a rogue 2 features where a scoundrel gets 9.
+    out.that(chargen.ORIGINAL not in chargen.declared_chassis("rogue"),
+             "while the rogue is NOT offered one -- its blank rows are "
+             "hand-coined extras no named chassis supersedes, so they are "
+             "class-wide rather than an alternative ladder",
+             f"{chargen.declared_chassis('rogue')}")
 
     missed = {}
     for cls, options in forked.items():

@@ -131,12 +131,37 @@ def interview(
         cls = question.options[answer(question)].ref
     cls = cls.strip().lower()
 
+    # -- chassis -----------------------------------------------------------
+    # **This interview never asked, so a hand-made cleric was always a
+    # templar and a hand-made wizard always an arcanist.** It asked class,
+    # build, race, hand, feats and gear and skipped the one dimension
+    # `#1191` and `#1244` are about. Asked before the build because the
+    # leg pool depends on it.
+    chassis_options = chargen.declared_chassis(cls)
+    chassis = (
+        chargen.deal_chassis(Random(f"{seed}:{cls}:chassis"), cls)
+        if chargen.DEAL_BUILDS else chargen.chassis_of(cls)
+    )
+    if len(chassis_options) > 1:
+        options = [Option(ref=name) for name in chassis_options]
+        question = Question(
+            key="chassis",
+            prompt=f"Which {cls}?",
+            options=options,
+            default=_index_of(options, chassis),
+        )
+        chassis = options[answer(question)].ref
+
     # -- build -------------------------------------------------------------
-    legs = list(chargen.BUILDS.get(cls, ()))
+    # **The legs this chassis can take, not the class's whole pool.**
+    # `BUILDS` is keyed by class, so the menu offered a base sorcerer the
+    # elementalist's four specialties -- a leg whose feature it can never
+    # be dealt. `legs_for` is the same narrowing the dealer uses.
+    legs = list(chargen.legs_for(cls, chassis))
     # Drawn rather than defaulted, for `chargen.DEAL_BUILDS`'s reason --
     # the interactive path below replaces it when somebody answers.
     build = (
-        chargen.deal_build(Random(f"{seed}:{cls}:build"), cls)
+        chargen.deal_build(Random(f"{seed}:{cls}:build"), cls, chassis)
         if chargen.DEAL_BUILDS else chargen.build_of(cls, "")
     )
     if len(legs) > 1:
@@ -174,7 +199,8 @@ def interview(
     # `race=` for the reason `Party.of` passes it: the hand now depends on
     # the pre-feat trained set, and `drivers.chargen_defaults` asserts this
     # dealer and that one produce the identical `Sheet`. #1162.
-    dealt_hand = chargen.dealt_hand(seed, cls, level, build, race=race)
+    dealt_hand = chargen.dealt_hand(seed, cls, level, build,
+                                    who_chassis=chassis, race=race)
     hand: list[str] = []
     for slot, printed in enumerate(dealt_hand):
         # Candidates for this slot are the powers the dealer could have put
@@ -263,7 +289,7 @@ def interview(
     ):
         potions[ref] = potions.get(ref, 0) + 1
     return Sheet(
-        cls=cls, level=level, build=build.name, race=race,
+        cls=cls, level=level, build=build.name, race=race, chassis=chassis,
         powers=kept, feats=taken, kit=kit, skills=trained,
         background=history, consumables=potions,
     )

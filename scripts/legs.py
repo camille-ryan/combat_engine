@@ -249,7 +249,7 @@ def _class_of(path: pathlib.Path) -> str:
 #: `audit.silent_refs` and `leaks.DEFERRED` use: the other 27 legs are four
 #: known shapes (see `PRINTED_LEG`'s own note) and a mapping that *shrinks* is
 #: a leg that stopped being joinable, which is how a renamed leg looks. #235.
-MAPPED = 70
+MAPPED = 71
 
 
 def against_the_book(only: str = "") -> tuple[list[str], int]:
@@ -374,6 +374,24 @@ def chassis_census() -> tuple[list[str], dict[str, int]]:
         # Absent from the table, or blank: class-wide, not a chassis.
         if chassis.get(ref):
             named[power.cls].add(chassis[ref])
+
+    # **And the original ladder counts as one, which is `#1191`'s ruling
+    # and is why this read 2 while the dealer offered 3.** Camille, asked
+    # whether the original should be a name or a fallback, 2026-11-10:
+    #
+    #   > *"make the original a named option."*
+    #
+    # So a class whose blank ladder a named chassis supersedes has two
+    # chassis, not one -- the sorcerer, which this census reported as
+    # single-chassis while `chargen.deal_chassis` was dealing both.
+    # Asked of `chargen.declared_chassis`, which is the dealer's own
+    # answer, rather than re-deriving the test here: a census that
+    # disagrees with the dealer is the drift this file warns about.
+    from combat_engine.chargen import CLASSES, ORIGINAL, declared_chassis
+
+    for cls in CLASSES:
+        if ORIGINAL in declared_chassis(cls):
+            named[cls].add(ORIGINAL)
 
     counts = {cls: len(names) for cls, names in named.items() if len(names) > 1}
     out: list[str] = []

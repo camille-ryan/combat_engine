@@ -218,9 +218,28 @@ def phase_of(c: Cast) -> str:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
+    requires=on_leg("cosmic"),
+    requires_text="needs the cosmic source",
 )
 def sorcerer_f0s0(c: Cast) -> None:
     """The source that cycles through three phases.
+
+    **It has a leg now, and the paragraph below arguing against one is
+    kept because its reasoning was sound when written and the thing that
+    changed is outside this row.** That argument was *"a leg with only a
+    third of the feature behind it would deal a sorcerer two of three
+    phases that never arrive"* -- about a row that was unfinished. It is
+    finished; what the leg is for is not completeness but **exclusivity**.
+
+    `#1191` made the original sorcerer a dealable chassis, and this row
+    was ungated, so every base sorcerer held this source **and**
+    `cf:sorcerer-f0s2`'s storm -- two of the four printed sources at
+    once, where the page offers one. That is `#851`'s fault inside a
+    single chassis, and an ungated sub-option is how it gets there.
+
+    `cosmic` is the leg, `b:c128-1` is the printed build it comes from,
+    and its Charisma/Strength pair is read off that row rather than
+    derived.
 
     **Written.** `events.ShortRested` landed, which is the moment the phase
     is chosen at, so the state machine has somewhere to live: the phase is
@@ -356,9 +375,23 @@ def sorcerer_f0s0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
+    requires=on_leg("storm"),
+    requires_text="needs the storm source",
 )
 def sorcerer_f0s2(c: Cast) -> None:
     """The third source: a damage modifier and two resistances at once.
+
+    **Its leg is on the header now, and it was a bare `c.build("storm")`
+    in the body.** Both refuse at use, so nothing played differently --
+    what changed is what the character is *dealt*. `loadout` reads
+    `leg_named_by`, which is the header, so a body-gated level-0 row is
+    handed to every leg and merely declines. That is the arrangement
+    `#1051` measured and rejected: all seven of the warlock's pacts sat
+    in 84 of 84 hands, *"harmless in play [...] and wrong everywhere it
+    is read: the sheet, the page, and the policy's menu."*
+
+    The leg was also spelled `f0s2` -- this row's own ref tail as a build
+    name. `storm` is what the page calls it (`b:c128-3`).
 
     It has a leg now -- `chargen.BUILDS["sorcerer"]` carries one per
     printed source but the first, which is still `cf:sorcerer-soul-rest`
@@ -410,8 +443,6 @@ def sorcerer_f0s2(c: Cast) -> None:
     because `i2693x1` loosens it. See `STORM_FACES` for why the stored
     number is a count of faces and not the floor.
     """
-    if not c.build("f0s2"):
-        return
     if c.dex_mod > 0:
         c.bonus(
             "damage", c.dex_mod, until=When.ENCOUNTER, on=c.me,

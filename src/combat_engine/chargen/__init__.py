@@ -1044,12 +1044,23 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("earth", CHA, CON, element=DamageType.ACID),
         Build("fire", CHA, CON, element=DamageType.FIRE),
         Build("water", CHA, CON, element=DamageType.COLD),
-        # The third of the four printed sources, and the last to get a
-        # leg: two of the four had one and the fourth still has none --
-        # `cf:sorcerer-soul-rest` says why. Dexterity because that is the
-        # modifier its own damage clause spends. Last, so that a sorcerer
-        # that names no build is the one it has always been.
-        Build("f0s2", CHA, DEX),
+        # **All four printed sources now, and the third and fourth are
+        # named rather than spelled as a ref.** This was `Build("f0s2",
+        # CHA, DEX)` plus nothing for the fourth, with a comment saying
+        # Dexterity was chosen "because that is the modifier its own
+        # damage clause spends" -- a derived pair, where the page prints
+        # one. `build_option` carries all four with their abilities, and
+        # the two added here are read off it rather than reasoned to.
+        #
+        # They matter now because `#1191` made the original sorcerer a
+        # dealable chassis. While it was unreachable an ungated soul row
+        # cost nothing; dealt, a base sorcerer held **two** sources at
+        # once -- `cf:sorcerer-f0s0` and `-f0s2` together -- which is
+        # `#851`'s "one character being two sub-classes" inside one
+        # chassis. A leg per source is what stops that, and it is the
+        # same arrangement the elementalist's four already use.
+        Build("storm", CHA, DEX),
+        Build("cosmic", CHA, STR),
     ),
     # A -- Strength either way, and the fork is which second ability the
     # rages lean on. The derivation had already found the right pair off
@@ -1243,8 +1254,9 @@ PRINTED_LEG: dict[str, dict[str, str]] = {
     },
     "sorcerer": {
         "wild": "b:c128-0",
+        "cosmic": "b:c128-1",
         "dragon": "b:c128-2",
-        "f0s2": "b:c128-3",
+        "storm": "b:c128-3",
     },
     "swordmage": {
         "assault": "b:c53-0",
@@ -1460,6 +1472,33 @@ def _slug_chassis(name: str) -> str:
     import re
 
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+#: The name of a class's **original** ladder -- the rows whose
+#: `class_feature.build` is blank, which is the first printing.
+#:
+#: Camille's ruling on `#1191`, asked whether the original should be a name
+#: or a fallback, 2026-11-10, verbatim:
+#:
+#:   > *"make the original a named option."*
+#:
+#: The bug it settles: blank meant two things at once -- *"this row belongs
+#: to every character of the class"* and *"this character took no named
+#: chassis"* -- so once a class had one named chassis there was no way left
+#: to ask for the plain one. Measured on the sorcerer: `elementalist` is its
+#: only declared name, `superseded_for` drops all three of its class-wide
+#: rows, and **every dealt sorcerer was an elementalist**.
+#:
+#: A generic English word rather than a printed one, because the compendium
+#: prints no build name for a first printing: 8 of the 12 multi-chassis
+#: classes leave the column blank, which is `superseded_for`'s own
+#: measurement. The other 4 name theirs and need none of this.
+#:
+#: It is a **name for the blank**, not a third state: `loadout` resolves it
+#: straight back to `""` before either filter reads it, so the rows a
+#: character gets are identical to what the blank gave. What changes is
+#: that it can be *asked for*, and that `Sheet.chassis` can record it.
+ORIGINAL = "original"
 
 
 def chassis_of(cls: str, named: str = "") -> str:
@@ -2403,20 +2442,53 @@ def declared_chassis(cls: str) -> tuple[str, ...]:
     becomes dealable when that lands, and this function will pick it up with
     no change here -- its rows are already written.
 
-    So: 6 classes have a written chassis and **two** have a dealable
-    choice -- cleric (templar, warpriest) and wizard (arcanist, sha-ir).
+    **And `ORIGINAL` is among them when the class has one**, which is
+    `#1191`'s ruling. The test for that is *not* "has a blank level-0 row",
+    and the rogue is why: `cf:rogue-tactic-club` and `cf:rogue-tactic-stealth`
+    are hand-coined rows for features the class page describes and the
+    `class_feature` table does not list, so they are blank for
+    `_chassis_map`'s *absent* reason rather than because they are a chassis.
+    Offering the rogue an `original` would have dealt a character **two**
+    class features where the scoundrel gets nine.
+
+    The test is **`superseded_for`'s printed coverage**: a blank ladder is a
+    chassis exactly when some named chassis of the class covers the `ord`s
+    it occupies, because that coverage is the page saying the two are
+    alternatives. Measured:
+
+        sorcerer   3 blank rows, elementalist covers all 3   -> ORIGINAL
+        rogue      2 blank rows, scoundrel covers 0          -> no
+        warlock   12 blank rows, no named chassis declared   -> ORIGINAL
+
+    The warlock is the third case and the one `#1191` was filed for: with no
+    named chassis declared, the blank ladder is the only ladder, so naming
+    it costs nothing today and the name is already there when `#642`'s
+    Essentials wave lands. Without it, declaring Hexblade makes
+    `superseded_for` drop all **12** of the plain warlock's rows and the
+    plain warlock stops existing -- silently, which is what Camille asked
+    not to happen on `#730`:
+
+        > *"But the other warlocks getting weaker? This shouldn't affect
+        > non hexblade warlocks"*
+
+    So: 6 classes have a written chassis and **three** have a dealable
+    choice -- cleric (templar, warpriest), wizard (arcanist, sha-ir) and
+    sorcerer (elementalist, original).
     """
     import combat_engine.content
     from combat_engine.engine.dsl import REGISTRY
 
     belongs = _chassis_map()
-    found = {
-        belongs.get(ref, "")
-        for ref, power in REGISTRY.items()
-        if ref.startswith("cf:") and power.cls == class_word(cls)
-        and power.level == 0
-    }
-    return tuple(sorted(c for c in found if c))
+    mine = [(ref, belongs.get(ref, ""))
+            for ref, power in REGISTRY.items()
+            if ref.startswith("cf:") and power.cls == class_word(cls)
+            and power.level == 0]
+    named = tuple(sorted({c for _, c in mine if c}))
+    blank = [ref for ref, c in mine if not c]
+    if blank and (not named
+                  or any(set(blank) & superseded_for(cls, c) for c in named)):
+        return tuple(sorted((*named, ORIGINAL)))
+    return named
 
 
 def deal_chassis(rng: Random, cls: str = "") -> str:
@@ -2439,12 +2511,21 @@ def deal_chassis(rng: Random, cls: str = "") -> str:
     time for a given ref. See `DEAL_BUILDS`.
     """
     options = declared_chassis(cls)
-    if len(options) <= 1:
+    if not options:
         return chassis_of(cls)
+    # **One option answers that option, not the resolver.** `chassis_of`
+    # resolves a blank to the first *named* chassis, so for a class whose
+    # only option is `ORIGINAL` -- the warlock, and 12 others -- it would
+    # hand back `""` and `Sheet.chassis` would record nothing. That is the
+    # ambiguity `#1191`'s ruling removes, so the dealer must not reintroduce
+    # it. For a class with one named chassis the two agree, which is 23 of
+    # the 25.
+    if len(options) == 1:
+        return options[0]
     return rng.choice(list(options))
 
 
-def deal_build(rng: Random, cls: str = "") -> Build:
+def deal_build(rng: Random, cls: str = "", chassis: str = "") -> Build:
     """One leg of a class's fork, drawn rather than defaulted.
 
     `build_of(cls, "")` answers `options[0]`, which is the right answer for
@@ -2462,11 +2543,99 @@ def deal_build(rng: Random, cls: str = "") -> Build:
     Its own `Random`, keyed like every other deal in `Party.of`
     (`f"{seed}:{key}:build"`), so drawing a leg moves neither the hand nor
     the feats nor the fight's dice.
+
+    **`chassis` narrows the pool, and without it the two draws contradict
+    each other.** `BUILDS` is keyed by **class**, so a class whose chassis
+    print different forks had one pool for both and the leg draw could not
+    see which chassis the chassis draw had just made. Camille, 2026-11-11,
+    on the sorcerer:
+
+      > *"Elementalist Sorcerer Chassis: this should be separate from teh
+      > base sorcerer. Air, water, earth, fire"*
+
+    Measured after `#1191` made the original sorcerer dealable: of 8 legs,
+    4 are the elementalist's specialties and 4 are the base sorcerer's
+    printed sources, and either chassis could draw any of them. A base
+    sorcerer on `fire` got **no** source and an elementalist on `cosmic`
+    got **no** specialty -- a character missing the one feature its fork
+    exists to choose.
+
+    See `legs_for` for how a leg is attributed and what falls open.
     """
-    options = BUILDS.get(class_word(cls)) or ()
+    options = legs_for(cls, chassis)
     if len(options) <= 1:
         return build_of(cls, "")
     return rng.choice(list(options))
+
+
+@cache
+def legs_for(cls: str, chassis: str = "") -> tuple[Build, ...]:
+    """The legs a character on this chassis can be dealt.
+
+    A leg belongs to a chassis when a declared row **of that chassis**
+    names it in its header, which `leg_named_by` reads off `on_leg`. Where
+    no row attributes a leg it stays in every pool -- **fail open**, for
+    the same reason `impact.selection` does: a leg wrongly excluded is a
+    character that cannot be built, where a leg wrongly included is the
+    behaviour this function was added to improve on.
+
+    Measured over all 26 classes: **100 legs, 42 attributed by a header,
+    58 open.** Only **one** class narrows, and it narrows to exactly the
+    two lists Camille gave:
+
+        sorcerer  elementalist   air, earth, fire, water
+        sorcerer  original       cosmic, dragon, storm, wild
+
+    Every other class returns its whole pool, because `declared_chassis`
+    gives it one option or none and the question does not arise. No pool
+    is empty for any class on any of its chassis -- asserted, because an
+    empty pool is a character that cannot be built and is the one way
+    this can do real harm.
+
+    **Two legs fall open where they should not, and the reason is worth
+    naming because it bounds what this can ever see.** `wild` and `dragon`
+    are the base sorcerer's other two sources and they are dispatched in a
+    **body** -- `powers/sorcerer/souls.py` holds one row, `cf:sorcerer-f0`,
+    that implements both and branches on `c.build("dragon")` /
+    `c.build("wild")` inside itself. One row cannot carry two `on_leg`
+    headers, so there is nothing for this to read. `LEG_CHASSIS` names
+    them, and `drivers.deal_legs` asserts that table covers exactly the
+    legs inference misses on a class with more than one chassis -- so the
+    table cannot quietly grow into a second source of truth.
+    """
+    pool = BUILDS.get(class_word(cls)) or ()
+    if not pool or len(declared_chassis(cls)) <= 1:
+        return tuple(pool)
+    import combat_engine.content
+    from combat_engine.engine.dsl import REGISTRY
+
+    belongs = _chassis_map()
+    owner = dict(LEG_CHASSIS.get(class_word(cls), {}))
+    for ref, power in REGISTRY.items():
+        if not ref.startswith("cf:") or power.cls != class_word(cls):
+            continue
+        leg = leg_named_by(power)
+        if leg:
+            owner.setdefault(leg, belongs.get(ref, "") or ORIGINAL)
+    want = chassis or chassis_of(cls)
+    return tuple(b for b in pool if owner.get(b.name, want) == want)
+
+
+#: Legs whose chassis `legs_for` cannot infer, because the row that
+#: implements them gates in its **body** rather than in an `on_leg` header.
+#: One row serving two legs cannot carry two headers, so this is a real
+#: blind spot rather than a missing gate.
+#:
+#: Keyed `class -> leg -> chassis`, and `ORIGINAL` is spelled out rather
+#: than left blank for `#1191`'s reason.
+LEG_CHASSIS: dict[str, dict[str, str]] = {
+    # `cf:sorcerer-f0` is one row implementing two of the four printed
+    # sources, branching on `c.build("dragon")` / `c.build("wild")` in
+    # `powers/sorcerer/souls.py`. The other two sources -- `cosmic` and
+    # `storm` -- are rows of their own and carry `on_leg` headers, so
+    # inference finds those without help.
+    "sorcerer": {"dragon": ORIGINAL, "wild": ORIGINAL},
+}
 
 
 @dataclass
@@ -2805,6 +2974,19 @@ def loadout(
     # in play, because `Power.requires` refuses them mid-fight, and wrong
     # everywhere it is read: the sheet, the page, and the policy's menu.
     chassis = chassis_of(cls, who_chassis)
+    # **`ORIGINAL` resolves to the blank here**, so neither filter below
+    # has to know about it, and asking for the original is then exactly as
+    # expressive as asking for a named chassis -- `#1191`'s ruling.
+    #
+    # **It does NOT deal what `who_chassis=""` deals, and saying so was my
+    # first version of this comment.** A blank *argument* means "the
+    # default", which `chassis_of` answers with the first named chassis, so
+    # the two differ for all 6 classes that have one -- measured, every
+    # leg, every class. That difference is the whole bug: there was one
+    # spelling for "the usual one" and none for "the plain one". What is
+    # identical is the filter's behaviour on the resolved value.
+    if chassis == ORIGINAL:
+        chassis = ""
     belongs = _chassis_map()
     # **And a named chassis REPLACES the class-wide ladder rather than
     # adding to it**, which `in ("", chassis)` above does not say.

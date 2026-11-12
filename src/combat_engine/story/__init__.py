@@ -510,20 +510,27 @@ class Party:
         sheets: list[Sheet] = []
         for name in (names or PARTY):
             key = name.strip().lower()
+            # **Which chassis first, because the leg draw depends on it.**
+            # `chassis_of(key, "")` is the resolver's first-in-sorted-order,
+            # so every cleric was a templar and every wizard an arcanist.
+            chassis = (
+                deal_chassis(Random(f"{seed}:{key}:chassis"), key)
+                if DEAL_BUILDS else chassis_of(key)
+            )
             # **Drawn, not defaulted.** `build_of(key, "")` is the
             # resolver's answer -- the first leg the class lists -- and
             # asking a resolver to deal is what left 73 legs never dealt.
             # Its own keyed stream, like the race and the gear below.
+            #
+            # **`chassis=` so the two draws cannot contradict each other.**
+            # `BUILDS` is keyed by class, so without it a base sorcerer
+            # could be dealt an elementalist specialty -- a character with
+            # no source at all. The key is unchanged, so this does not move
+            # a hand for any class whose pool does not narrow, which is
+            # 25 of 26.
             build = (
-                deal_build(Random(f"{seed}:{key}:build"), key)
+                deal_build(Random(f"{seed}:{key}:build"), key, chassis)
                 if DEAL_BUILDS else build_of(key, "")
-            )
-            # **And which chassis, on the same argument.** `chassis_of(key,
-            # "")` is the resolver's first-in-sorted-order, so every
-            # cleric was a templar and every wizard an arcanist.
-            chassis = (
-                deal_chassis(Random(f"{seed}:{key}:chassis"), key)
-                if DEAL_BUILDS else chassis_of(key)
             )
             race = (
                 deal_race(Random(f"{seed}:{key}:race"), key, build)
@@ -534,7 +541,16 @@ class Party:
             # the trained set, and the race trains a character as surely as
             # the class does. Same key as the `_trained_skills` call below.
             # #1162.
-            hand = dealt_hand(seed, key, level, build, race=race)
+            # **`who_chassis=` for the reason `race=` is here, and leaving
+            # it out was a live bug for one commit.** `dealt_hand` is
+            # chassis-dependent -- measured, a cleric's hand is 21 refs
+            # with 4 class features on `templar` and 26 with 9 on
+            # `warpriest` -- and `Sheet.character` arms the *dealt*
+            # chassis. So a dealt warpriest's `Sheet.powers` held the
+            # templar's four features while the character it built held
+            # the warpriest's nine. Shipped in `2ece3624` and fixed here.
+            hand = dealt_hand(seed, key, level, build,
+                              who_chassis=chassis, race=race)
             taken = list((feats or {}).get(key, [])) or feats_for(
                 key, level, build,
                 Random(f"{seed}:{key}:{build.name}:feats"), list(hand), race,
@@ -558,6 +574,7 @@ class Party:
                 asdict(magic)
                 for magic in treasure(
                     Character(key, level, build=build.name, race=race,
+                              chassis=chassis,
                               powers=list(kept), feats=list(taken)),
                     Random(f"{seed}:{key}:gear"),
                 )
