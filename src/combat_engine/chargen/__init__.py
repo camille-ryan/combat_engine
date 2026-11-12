@@ -3963,6 +3963,15 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     "cf:fighter-knight-f9": ("cf:fighter-knight-f9s0",
                              "cf:fighter-knight-f9s1",
                              "cf:fighter-knight-f9s2"),
+    # **The blackguard's vice, and exactly ONE entry for it.** Four of its
+    # parents print "associated with your vice" -- `-f3`, `-f5`, `-f11` and
+    # `-f19` -- and four entries here would be four independent draws, so a
+    # blackguard could hold one vice's benefit beside the other's at-will.
+    # The other three parents read this ref's answer instead;
+    # `features/blackguard.py` has the argument and
+    # `drivers.blackguard_vice` asserts they never disagree. #642, #851.
+    "cf:paladin-blackguard-f3": ("cf:paladin-blackguard-f3s0",
+                                 "cf:paladin-blackguard-f3s1"),
 }
 
 

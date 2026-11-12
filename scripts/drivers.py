@@ -44177,6 +44177,163 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
              f"{refused}")
 
 
+def the_blackguards_four_vice_parents_never_disagree(out: Result) -> None:
+    """`#642`'s wave, the paladin. 32 rows -- the largest in the wave -- and
+    the only chassis so far with **one choice read by four parents**.
+
+    `-f3`, `-f5`, `-f11` and `-f19` each print *"associated with your
+    vice"* and each has its own two sub-options. Four
+    `chargen.BUILD_OPTIONS` entries would be four **independent draws**, so
+    a blackguard could hold the first vice's benefit beside the second
+    vice's at-will -- half of each, which is `#851`'s fault arriving
+    through a door the sub-option clause does not cover.
+
+    There is one entry, on `-f3`, and the other three read that ref's
+    answer. **This rule exists because getting it wrong would have been
+    silent**: every row works in isolation and the character is simply
+    incoherent, so what has to be asserted is that the four *agree* and
+    not that each grants something.
+
+    Asserted over both vices and over seeds, because one vice read alone
+    passes a set of parents that all ignore the choice and hand over the
+    first option.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.content.features.blackguard import VICE, VICES
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+
+    rows = sorted(r for r in REGISTRY
+                  if r.startswith("cf:paladin-blackguard-"))
+    out.that(len(rows) == 32,
+             "all 32 of the printed blackguard rows are declared",
+             f"{len(rows)}")
+    out.that("blackguard" in chargen.declared_chassis("paladin"),
+             "and the chassis is dealable beside the plain paladin",
+             f"{chargen.declared_chassis('paladin')}")
+
+    # -- ONE entry in the table, not four --------------------------------
+    vice_entries = [k for k in chargen.BUILD_OPTIONS
+                    if k.startswith("cf:paladin-blackguard-")]
+    out.that(vice_entries == [VICE],
+             "exactly ONE `BUILD_OPTIONS` entry on this chassis, and it is "
+             "`-f3`. Four entries would be four independent draws and the "
+             "character would be half of each vice -- which nothing else "
+             "here would notice",
+             f"{vice_entries}")
+
+    # -- the four parents, on both vices ---------------------------------
+    PARENTS = {
+        "cf:paladin-blackguard-f3": VICES,
+        "cf:paladin-blackguard-f5": ("cf:paladin-blackguard-f5s0",
+                                     "cf:paladin-blackguard-f5s1"),
+        "cf:paladin-blackguard-f11": ("cf:paladin-blackguard-f11s0",
+                                      "cf:paladin-blackguard-f11s1"),
+        "cf:paladin-blackguard-f19": ("cf:paladin-blackguard-f19s0",
+                                      "cf:paladin-blackguard-f19s1"),
+    }
+
+    def granted(chose: str) -> dict[str, str]:
+        """What each of the four parents hands over, with the vice set.
+
+        **The whole family is cleared from `Powers.known` first.**
+        `audit.board` grants the row under test *and its first
+        sub-option*, so an index-0 answer would be a silent no-op --
+        `grant_row` returns `None` for a row already held. The witch and
+        mage rules clear their families for the same reason.
+        """
+        world, me, _ = _posed(VICE, 1)
+        held = world.get(me, Build)
+        held.choices = {x for x in held.choices
+                        if not x.startswith(f"option:{VICE}:")}
+        held.choices.add(f"option:{VICE}:{chose}")
+        known = world.get(me, Powers)
+        every = [r for pair in PARENTS.values() for r in pair]
+        for ref in every:
+            while ref in known.known:
+                known.known.remove(ref)
+        out_ = {}
+        for parent in PARENTS:
+            before = set(known.known)
+            REGISTRY[parent].body(
+                Cast(world=world, me=me, ref=parent))
+            new = sorted((set(known.known) - before) & set(every))
+            out_[parent] = new[0] if len(new) == 1 else str(new)
+        return out_
+
+    for index, chose in enumerate(VICES):
+        handed = granted(chose)
+        wanted = {p: pair[index] for p, pair in PARENTS.items()}
+        out.that(handed == wanted,
+                 f"with vice {index} chosen, all four parents hand over "
+                 f"vice {index}'s option -- the whole map, over both "
+                 "vices, because one read alone passes four parents that "
+                 "ignore the choice and grant the first",
+                 f"{ {k.rsplit('-', 1)[-1]: v.rsplit('-', 1)[-1] for k, v in handed.items()} }")
+
+    # -- and the draw really does move, so the agreement is not vacuous --
+    drawn = {chargen.deal_build_option(Random(f"{s}:v"), VICE)
+             for s in range(60)}
+    out.that(drawn == set(VICES),
+             "both vices come out of the dealer, which has to hold or the "
+             "agreement above is agreement about one value",
+             f"{sorted(drawn)}")
+
+    # -- the five grants, measured per ref -------------------------------
+    leg = chargen.deal_build(Random("b"), "paladin", "blackguard")
+    hand = set(chargen.loadout("paladin", level=1, build=leg,
+                               who_chassis="blackguard"))
+    dealt = {ref: ref in hand for ref in
+             ("p13815", "p13816", "p13817", "p13818", "p13819",
+              "p13837", "p13843")}
+    out.that(dealt == {"p13815": True, "p13816": True, "p13819": True,
+                       "p13817": False, "p13818": False,
+                       "p13837": False, "p13843": False},
+             "three of the granted refs are dealt and four are not -- all "
+             "seven are `cls=\"paladin\"`, so the LEVEL decides, which the "
+             "knight established and this chassis exercises four more "
+             "times",
+             f"{dealt}")
+
+    # -- f3s1: +2 normally, +4 escalated, and not +6 ---------------------
+    world, me, _ = _posed("cf:paladin-blackguard-f3s1", 1)
+    n0 = len(list(world.effects.of(me)))
+    c = Cast(world=world, me=me, ref="cf:paladin-blackguard-f3s1")
+    REGISTRY["cf:paladin-blackguard-f3s1"].body(c)
+    laid = [e for e in list(world.effects.of(me))[n0:]]
+    # **Off the label and not `Effect.value`**, which is 0 on a `c.bonus`
+    # -- the amount lives in the label (`"<ref> damage+4"`), which is what
+    # every other reading of a laid modifier in this file goes by. The
+    # first draft read `[0, 0]` for two correct modifiers.
+    amounts = sorted(int(lbl.rsplit("+", 1)[-1])
+                     for lbl in (e.label or "" for e in laid)
+                     if "damage+" in lbl)
+    out.that(amounts == [2, 4],
+             "`-f3s1` lays TWO complementary modifiers, +2 and +4, and not "
+             "+2 plus a conditional +2. The card says the bonus "
+             "*increases to* +4, which is a replacement -- two stacking "
+             "modifiers would pay +6",
+             f"{amounts}")
+
+    # -- the three `defect=` rows ----------------------------------------
+    world, me, _ = _posed("cf:paladin-blackguard-f1", 1)
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r in rows
+                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+    out.that(refused == ["cf:paladin-blackguard-f19s0",
+                         "cf:paladin-blackguard-f19s1"],
+             "two rows are `defect=` and they are BOTH of `-f19`'s options "
+             "-- so that parent grants a row which refuses itself, which "
+             "is correct: the parent is not broken, its options are, and "
+             "`usable` is what stops either reaching play",
+             f"{refused}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -76040,6 +76197,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "blackguard_vice": (
+        the_blackguards_four_vice_parents_never_disagree,
+        "the blackguard's four vice parents never disagree -- one choice,"
+        " one BUILD_OPTIONS entry, four readers (#642, #851)",
     ),
     "knight_chassis": (
         the_knights_grants_are_measured_per_ref_and_its_watches_fire,
