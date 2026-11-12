@@ -1941,6 +1941,19 @@ class Gear:
     #: rolled them. The rules let you pick the thing back up anyway, so a
     #: spent weapon still in hand is the cheaper wrong answer. #520.
     thrown_left: dict[str, int] = field(default_factory=dict)
+    #: **Does a thrown weapon come back?** `cf:seeker-f1s1` prints *"when
+    #: you make an attack by throwing a weapon with which you have
+    #: proficiency, the weapon returns to your hand after the attack"*.
+    #:
+    #: A flag rather than a move, because this engine never puts a thrown
+    #: weapon on the ground: `ammunition.hurl` decrements a **count** and
+    #: its own note says *"the weapon stays in hand"*. So "returns to your
+    #: hand" is not a journey, it is the throw not being spent -- which is
+    #: why the row's old marker reasoned about a facility that moves a
+    #: weapon between the ground and a hand and could not find one.
+    #:
+    #: Read by `ammunition.hurl`, laid by `Cast.returns_to_hand`.
+    thrown_returns: bool = False
 
     def proficient_with(self, arm: Weapon) -> bool:
         """Does a recorded band or grant cover this weapon?

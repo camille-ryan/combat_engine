@@ -488,7 +488,6 @@ def seeker_spirits_feature(c: Cast) -> None:
     keywords=[Keyword.PRIMAL],
     requires=on_leg("second-str"),
     requires_text="needs the bond that throws",
-    dropped=("c.returns_to_hand()",),
 )
 def seeker_bond_second(c: Cast) -> None:
     """The second bond, which was not in the imported text at all until the
@@ -505,10 +504,21 @@ def seeker_bond_second(c: Cast) -> None:
     no weapon; the main hand is asked live, the way the rogue's heavier
     tactic asks it. Untyped: no type word is printed.
 
-    Dropped: a thrown weapon returning to the hand. Nothing in `Cast` moves
-    a weapon between the ground and a hand -- `c.disarm` and `c.destroy`
-    only take one away -- so the clause has no case rather than a wrong
-    one.
+    **The returning weapon is written, and the old note had the model
+    wrong rather than the gap.** It said *"nothing in `Cast` moves a weapon
+    between the ground and a hand"*, which is true and is not what this
+    clause needs: nothing ever puts a thrown weapon on the ground.
+    `ammunition.hurl` decrements a **count** and its own note says *"the
+    weapon stays in hand"* -- so *"the weapon returns to your hand after
+    the attack"* is the throw not being spent. `c.returns_to_hand` lays
+    that and `hurl` is the one reader.
+
+    *"A weapon with which you have proficiency"* is not asked, and the
+    reason it is safe to skip is not that it is unimportant: chargen deals
+    a character only weapons from its own class list, so every thrown
+    weapon a dealt character holds is one it is proficient with. The test
+    would be true by construction. `#839` is the writer-side hole if that
+    ever stops being so.
     """
     me, world = c.me, c.world
 
@@ -521,6 +531,7 @@ def seeker_bond_second(c: Cast) -> None:
         "attack", 1, until=When.ENCOUNTER, on=me, kind="untyped",
         when=thrown_in_hand,
     )
+    c.returns_to_hand(on=me)
 
     if out_of_heavy_armour(c):
         gain = _ability_for_ac(c, c.str_mod)

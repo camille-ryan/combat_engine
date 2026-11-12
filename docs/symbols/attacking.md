@@ -61,6 +61,8 @@ Making an attack, and what the attack turns out to be.
   - Point the attack you are interrupting at somebody else.
 - `c.retarget_defence(self, defence: 'Defense') -> 'bool'`
   - Move the **triggering** attack onto another defence.
+- `c.returns_to_hand(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - A thrown weapon comes back, so throwing it spends nothing.
 - `c.strike(self, *, on: 'int | None' = None, advantage: 'bool | None' = None, plus: 'int' = 0, from_: 'int | None' = None, ignore_cover: 'bool' = False, keep: 'str' = '', hand: 'str' = 'main') -> 'AttackResult'`
   - Roll the attack the header declared.
 - `c.target: int | None`

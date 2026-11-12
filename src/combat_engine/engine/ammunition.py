@@ -108,6 +108,17 @@ def hurl(world: World, eid: int, power: str, branch: int = 0) -> str:
     arm = gear.thrown
     if arm is None or arm.ref not in gear.thrown_left:
         return ""
+    # **"The weapon returns to your hand after the attack."** Not a
+    # journey: nothing here ever put it on the ground, so the clause is
+    # the throw not being spent. `cf:seeker-f1s1` is the card and
+    # `Cast.returns_to_hand` lays the flag.
+    #
+    # `""` rather than the ref, for the reason this function already gives
+    # about an untracked weapon: *"the honest answer there is that nothing
+    # was spent, not that a throw was free."* A caller asking what this
+    # attack used up is told nothing, which is true.
+    if gear.thrown_returns:
+        return ""
     gear.thrown_left[arm.ref] = max(0, gear.thrown_left[arm.ref] - 1)
     return arm.ref
 

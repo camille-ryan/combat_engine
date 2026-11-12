@@ -81,7 +81,8 @@ CATEGORIES: dict[str, dict] = {
                 "disarm",
                 "flurry_of_blows", "grant_attack", "hit", "hit_becomes",
                 "landed", "oversized",
-                "provoke", "redirect", "retarget_defence", "strike",
+                "provoke", "redirect", "retarget_defence",
+                "returns_to_hand", "strike",
                 "target",
             ]),
             ("aiding somebody else's", [

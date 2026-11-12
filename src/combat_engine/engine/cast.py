@@ -2595,6 +2595,49 @@ class Cast:
             by=self.ref,
         )
 
+    def returns_to_hand(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """A thrown weapon comes back, so throwing it spends nothing.
+
+        `cf:seeker-f1s1`: *"when you make an attack by throwing a weapon
+        with which you have proficiency, the weapon returns to your hand
+        after the attack."*
+
+        **Not a move, and the row that waited on this had the model
+        wrong.** Its marker reasoned that *"nothing in `Cast` moves a
+        weapon between the ground and a hand"* -- but nothing ever puts a
+        thrown weapon on the ground. `ammunition.hurl` decrements a count
+        and its own note says *"the weapon stays in hand"*, so the printed
+        return is the throw not being spent. `Gear.thrown_returns` is the
+        flag and `hurl` is the one reader.
+
+        **Proficiency is not asked, and that is an approximation worth
+        naming.** The card says "a weapon with which you have proficiency"
+        and this engine models weapon proficiency in neither direction --
+        `#839` on the writer, and `chargen.armor_proficiency()` is a
+        symbol for the same hole on the armour side. What makes it safe
+        here is that chargen deals a character only weapons from its own
+        class list, so every thrown weapon a dealt character holds is one
+        it is proficient with: the test would be true by construction
+        rather than skipped.
+        """
+        from .components import Gear
+
+        who = on if on is not None else self.me
+        gear = self.world.get(who, Gear)
+        if gear is None or gear.thrown_returns:
+            return None
+        gear.thrown_returns = True
+        # `on_suspend` for `ignores_difficult`'s reason: `Effects._lift`
+        # runs it for an expiry and a suspension both.
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} returns to hand",
+            on_suspend=[lambda: setattr(gear, "thrown_returns", False)],
+            on_resume=[lambda: setattr(gear, "thrown_returns", True)],
+            by=self.ref,
+        )
+
     def oversized(
         self, categories: int = 1, *, on: int | None = None,
         until: When = When.ENCOUNTER,

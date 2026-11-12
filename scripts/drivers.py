@@ -53449,6 +53449,7 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
     from combat_engine.content import declared
     from combat_engine.engine import Bus, Grid, World
     from combat_engine.engine.ammunition import FIRES, THROWN, hurl, is_a_throw, nock
+    from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Gear
     from combat_engine.engine.dsl import Keyword
     from combat_engine.engine.query import ready_to_throw
@@ -53626,6 +53627,39 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  "is ranged, so `nock` used to walk the held bow and loose "
                  "an arrow to throw a dagger",
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
+
+    # -- and the weapon that comes back spends nothing at all ------------
+    #
+    # `cf:seeker-f1s1`: *"when you make an attack by throwing a weapon with
+    # which you have proficiency, the weapon returns to your hand after the
+    # attack."* Tested here rather than in a rule of its own because the
+    # thing it changes is this function: a count, not a journey. The row's
+    # old marker reasoned about moving a weapon between the ground and a
+    # hand, and nothing ever puts one there -- `hurl`'s own note says the
+    # weapon stays in hand.
+    back, me_k = built(cls, seed)
+    gear_k = back.need(me_k, Gear)
+    arm_k = gear_k.thrown
+    out.that(arm_k is not None and gear_k.thrown_left.get(arm_k.ref) == THROWN,
+             "the returning-weapon arm starts from a full set of spares",
+             f"{gear_k.thrown_left}")
+    if arm_k is not None:
+        Cast(world=back, me=me_k, ref="drivers:seeker").returns_to_hand(on=me_k)
+        kept = [hurl(back, me_k, row) for _ in range(THROWN + 2)]
+        out.that(gear_k.thrown_left[arm_k.ref] == THROWN,
+                 f"and {THROWN + 2} throws spend NONE of them -- more throws "
+                 f"than there are spares, so a count that merely floored at "
+                 f"zero would pass this",
+                 f"left={gear_k.thrown_left[arm_k.ref]} of {THROWN}")
+        out.that(not any(kept),
+                 "while `hurl` reports nothing spent on each of them, which "
+                 "is its own answer for an untracked weapon: 'nothing was "
+                 "spent, not that a throw was free'",
+                 f"{kept}")
+        out.that(ready_to_throw(back, me_k),
+                 "so the throw is never refused, which is the clause the "
+                 "card is actually buying",
+                 f"left={gear_k.thrown_left[arm_k.ref]}")
 
 
 def an_object_can_be_hit_for_the_numbers_the_page_prints(out: Result) -> None:
