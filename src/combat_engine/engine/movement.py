@@ -760,6 +760,12 @@ def walk(
         # action", so a second move action starts counting again. #784.
         mv.went = 0
         mv.went_kind = kind
+        # **And where it started**, for the clause that asks how far the
+        # creature ended up rather than how far it walked. Taken here
+        # rather than from the first step, because a move that is cancelled
+        # or blocked still started somewhere and the two must agree.
+        start = world.get(eid, Position)
+        mv.went_from = start.square if start is not None else None
     for sq in path:
         if not step(world, eid, sq, kind=kind, mode=mode):
             break

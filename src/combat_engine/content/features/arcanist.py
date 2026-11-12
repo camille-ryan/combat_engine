@@ -127,7 +127,6 @@ def cleric_word(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    dropped=("c.hide(cover=)",),
 )
 def rogue_tactic_cunning(c: Cast) -> None:
     """Both printed halves are about when a Stealth check may be made.
@@ -146,21 +145,46 @@ def rogue_tactic_cunning(c: Cast) -> None:
     the same of its own `+5` and `races/powers_a.py` is the second user, so
     this is the established spelling rather than a new one.
 
-    **The second half stays dropped and is a real gap.** *"You can make a
-    Stealth check to become hidden if you have any concealment or any
-    cover, except for cover provided by intervening allies"* needs the
-    threshold `actions._hiding` applies to be lowered for one creature --
-    it has required `Cover.SUPERIOR` since #997 -- plus the ally exclusion.
-    `c.hide` takes no cover argument, and granting the hidden state on a
-    `MoveEnd` would hide the rogue rather than let it try, which is
-    stronger than print.
+    **The second half is written now, and two of the three things the old
+    note said it needed turned out not to be needed.** The clause is *"You
+    can make a Stealth check to become hidden if you have any concealment
+    or any cover, except for cover provided by intervening allies."*
 
-    Worth knowing before that parameter is built: the two rows wanting it
-    pull **opposite** ways. `p14213` wants ally-granted cover to *count*
-    (*"you can use cover granted by your allies"*) and this card wants it
-    *excluded*. One parameter has to carry both.
+    * The threshold **is** the gap, and the old note had it in the wrong
+      place. `actions._hiding` has applied a literal `Cover.SUPERIOR`
+      since #997 and is the only test on *becoming* hidden in the tree;
+      `c.hide` lays the held state or defers to `_stealth_hide` to roll,
+      and neither consults a degree. So this wanted a **per-creature
+      threshold**, not a `cover=` on `c.hide`. `c.hides_with_cover` is it.
+      #1250.
+    * **The ally exclusion needs nothing written.** `_hiding` calls
+      `query.cover_between` with `ranged=False`, and that function counts
+      creature bodies *only for a ranged attack* -- its own docstring says
+      so -- so an ally's body can never give cover to a hide check. The
+      printed exception is satisfied by construction.
+    * **And the two rows do not pull opposite ways.** The old note said
+      `p14213` wants ally-granted cover to *count* while this card wants
+      it excluded, so *"one parameter has to carry both"*. They read
+      different callers: `p14213` is about an **attack's** cover, where
+      `ranged=True` and allies do block. One knob, one job.
+
+    Granting the hidden state outright on a `MoveEnd` would still be
+    stronger than print -- the card buys the *chance* to roll, not the
+    result -- and that half of the old note stands, which is why this
+    lowers a threshold rather than laying `c.hide`.
+
+    **And the clause has a precondition I missed on the first pass.** It
+    reads *"**If you end your movement at least 3 squares away from your
+    starting position**, you can make a Stealth check..."*, so the lowered
+    threshold is conditional and an unconditional version let a rogue that
+    had not moved vanish behind a low wall -- wider than print, which is
+    the direction that matters. `after_moving=3` is it, and the number is
+    displacement rather than squares walked: `query.displaced_this_action`
+    against `moved_this_action`, which the same printed sentence uses for
+    the penalty half above. `f2429` takes a square off the 3.
     """
     c.bonus("stealth:moved", 5, on=c.me, until=When.ENCOUNTER)
+    c.hides_with_cover(after_moving=3, on=c.me, until=When.ENCOUNTER)
 
 
 _CLUBS = ("w3593", "w3596")

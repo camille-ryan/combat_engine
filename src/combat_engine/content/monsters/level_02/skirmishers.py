@@ -122,11 +122,24 @@ def _hides_with_cover(c: Cast) -> None:
     """Hides on anything better than open ground, and keeps doing it.
 
     The printed line lowers what hiding *requires* -- cover or concealment
-    rather than superior cover or total concealment. There is no requirement
-    in the engine to lower and no skill check to roll, so what is left that
-    can be said is the consequence: wherever it could try, it has. Asked
-    again at the top of each of its own turns, because getting back out of
-    sight is the whole of a lurker's turn.
+    rather than superior cover or total concealment. What is said here is
+    the consequence rather than the permission: wherever it could try, it
+    has. Asked again at the top of each of its own turns, because getting
+    back out of sight is the whole of a lurker's turn.
+
+    **The premise this was written on is no longer true, and the behaviour
+    is deliberately left alone.** It said *"there is no requirement in the
+    engine to lower and no skill check to roll"*. Both halves have since
+    arrived: `actions._hiding` reads a per-creature degree through
+    `c.hides_with_cover` (#1250), and `c.hide(check=True)` rolls against
+    what the watchers notice.
+
+    So these 10 rows now play **stronger than print in two ways** that
+    could be written faithfully: the hidden state is granted outright
+    rather than attempted, and it costs no action. Converting them makes
+    ten lurkers measurably weaker and moves fixtures, so it is its own
+    change with its own measurement rather than a side effect of the verb
+    landing. #1254.
     """
     me = c.me
 

@@ -2243,6 +2243,91 @@ class Cast:
             known.charges[STEALTH_RESULT] = int(last.total)
         return self.invisible(to=from_, until=until)
 
+    def hides_with_cover(
+        self,
+        *,
+        after_moving: int = 0,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Hide with any cover, if you moved far enough from where you were.
+
+        **The summary line carries the condition deliberately.**
+        `vocab.py --find` shows an author the first line and nothing else,
+        and "hide with any cover" on its own is how the wider-than-print
+        version below gets written a second time -- by somebody calling
+        this with no `after_moving=`.
+
+        The printed gate is *"superior cover or total concealment"*, which
+        `actions._hiding` applies as the only test on **becoming** hidden.
+        This lowers it for one creature to `Cover.PARTIAL` -- any cover at
+        all -- and nothing lower, because no card prints "with no cover"
+        and a creature in the open may not vanish.
+
+        **Not a `cover=` parameter on `c.hide`**, which is where
+        `cf:rogue-scoundrel-f1s2` pointed and is the wrong layer: `c.hide`
+        lays the held state or defers to `_stealth_hide` to roll, and
+        neither asks about a degree. The menu builder is the gate.
+
+        **The printed "except for cover provided by intervening allies" is
+        already honoured and needs nothing here.** `_hiding` calls
+        `query.cover_between` with `ranged=False`, and that function counts
+        creature bodies *only for a ranged attack* -- its own docstring
+        says so -- so an ally's body can never contribute cover to a hide
+        check. The row's note feared this clause would collide with
+        `p14213`, which wants ally cover to **count**; the two read
+        different callers -- an attack's cover, where allies do block --
+        so one knob does one job. #1250.
+
+        `3` is `Cover.SUPERIOR - Cover.PARTIAL` written out, and the key is
+        subtractive for `"stealth:moved"`'s reason: `Mods.total` sums, so a
+        key naming the required degree would make two sources demand more
+        cover rather than less.
+
+        **`after_moving` is the printed precondition and leaving it out
+        made this wider than the card.** The clause reads in full *"If you
+        end your movement at least 3 squares away from your starting
+        position, you can make a Stealth check to become hidden if you have
+        any concealment or any cover"* -- a conditional, and the first
+        version of this verb lowered the threshold unconditionally, so a
+        rogue that had not moved at all could vanish behind a low wall.
+
+        It is **displacement, not distance walked**: a creature that walks
+        a circle enters four squares and ends where it began.
+        `query.displaced_this_action` is the reader and
+        `query.moved_this_action` is the other question -- the one the
+        Stealth *penalty* asks, in the same printed sentence.
+
+        The number is read live and is loosenable: `f2429` takes a square
+        off it, through `actions.HIDE_DISPLACEMENT`. Floored at 1, because
+        the clause is about ending a **move** and a creature that has not
+        moved has not met it however much is subtracted.
+
+        Defaults to the caster, like `c.cover` and `c.conceal`: every
+        printed line that grants this says "you".
+        """
+        from .actions import HIDE_COVER, HIDE_DISPLACEMENT
+        from .resolve import _mods
+        from .types import Cover
+
+        who = on if on is not None else self.me
+        gate = None
+        if after_moving:
+            def far_enough(_ctx: dict[str, Any], eid: int = who,
+                           printed: int = after_moving) -> bool:
+                from .query import displaced_this_action
+
+                need = max(1, printed
+                           - _mods(self.world, eid, HIDE_DISPLACEMENT, {}))
+                return displaced_this_action(self.world, eid) >= need
+
+            gate = far_enough
+
+        return self.bonus(
+            HIDE_COVER, int(Cover.SUPERIOR) - int(Cover.PARTIAL),
+            on=who, until=until, when=gate,
+        )
+
     def unhide(self) -> None:
         """Give yourself away deliberately.
 

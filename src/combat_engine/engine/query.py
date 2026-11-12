@@ -694,6 +694,45 @@ def moved_this_action(world: World, eid: int) -> int:
     return mv.went if mv is not None else 0
 
 
+def displaced_this_action(world: World, eid: int) -> int:
+    """How far this creature has ENDED UP from where its move action began.
+
+    *"If you end your movement at least 3 squares away from your starting
+    position"* -- `cf:rogue-scoundrel-f1s2`, and `f2429` lowers the 3 to a
+    2. Nothing answered it, and the row's own note had the gap filed one
+    layer up as a `c.hide(cover=)` parameter. #1250.
+
+    **Not `moved_this_action`, which is the other question.** That counts
+    squares *entered*, which is what the Stealth penalty asks -- *"-5 if
+    you moved more than 2 squares during that action"* -- and a creature
+    that walks a circle enters four squares and ends where it began. One
+    number cannot serve both clauses, and the card prints both in the same
+    sentence.
+
+    0 when no move action has begun, so a creature standing still reads 0
+    rather than whatever it did last turn: `Movement.went_from` is cleared
+    with the action economy, beside `went`.
+    """
+    from .grid import distance
+
+    mv = world.get(eid, Movement)
+    if mv is None or mv.went_from is None:
+        return 0
+    pos = world.get(eid, Position)
+    if pos is None:
+        return 0
+    # **The NEAREST of its own squares to the origin**, for a creature
+    # larger than one square: `Position.square` is only its anchor, and
+    # the printed clause is about where the creature is. Nearest rather
+    # than furthest because the clause buys the creature a benefit, so the
+    # conservative reading is the right direction -- a Large creature does
+    # not qualify on the strength of its back half.
+    mine = squares(world, eid)
+    if not mine:
+        return distance(mv.went_from, pos.square)
+    return min(distance(mv.went_from, sq) for sq in mine)
+
+
 def can_wield(world: World, eid: int, weapon: Weapon) -> str:
     """Why this creature cannot use that weapon, or `""` if it can.
 

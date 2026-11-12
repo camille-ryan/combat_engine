@@ -393,6 +393,22 @@ class Movement:
     #: squares is the printed run-up.
     went: int = 0
     went_kind: str = ""
+    #: Where this creature's current move action **started**, for the one
+    #: printed clause that asks about displacement rather than distance.
+    #:
+    #: *"If you end your movement at least 3 squares away from your
+    #: starting position"* -- `cf:rogue-scoundrel-f1s2`. `went` beside this
+    #: counts **squares entered**, which is the other question and the one
+    #: the Stealth penalty asks: a creature that walks a circle enters four
+    #: squares and ends where it began. Neither answers for the other, so
+    #: both are kept.
+    #:
+    #: Same lifecycle as `went`, written at the same two places: set when
+    #: `movement.walk` begins a move action, cleared with the action
+    #: economy at the top of a turn so a creature that does not move is not
+    #: carrying last turn's origin. `query.displaced_this_action` is the
+    #: reader. #1250.
+    went_from: Square | None = None
     #: Who is granting this creature a **running start** it has not run up
     #: for, by ref. Truthy means it has one however little it moved.
     #:

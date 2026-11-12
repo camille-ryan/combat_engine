@@ -37495,6 +37495,167 @@ def becoming_hidden_needs_the_greater_degree(out: Result) -> None:
              " the degree from one that reads any concealment at all",
              f"offered={total}, concealment={total_degree!r}")
 
+    # -- and one card lowers the degree for itself ------------------------
+    #
+    # *"You can make a Stealth check to become hidden if you have any
+    # concealment or any cover"* -- `cf:rogue-scoundrel-f1s2`. The gate
+    # above was a literal `Cover.SUPERIOR`, so the clause had nowhere to
+    # go and sat `dropped=("c.hide(cover=)",)` -- a parameter two layers
+    # up from the only reader. `c.hides_with_cover` lowers it to
+    # `Cover.PARTIAL` for one creature. #1250.
+    #
+    # **Posed on the same partial board the pair above uses**, which is
+    # what makes it a test: the ONLY difference from the `not partial`
+    # assertion is the modifier, so a threshold that ignored the modifier
+    # would refuse both and one that ignored the degree entirely would
+    # offer both.
+    def hides_lowered(*, lower: bool) -> bool:
+        world, me, _ = _posed("f2743", 1)
+        cast = Cast(world=world, me=me, ref="drivers:hide")
+        cast.conceal(on=me, total=False)
+        if lower:
+            cast.hides_with_cover(on=me)
+        return any(a.kind == "hide"
+                   for a in legal(world, world.encounter, me))
+
+    out.that(not hides_lowered(lower=False) and hides_lowered(lower=True),
+             "ordinary concealment becomes enough for a creature carrying"
+             " the rogue's clause, and is still not enough without it --"
+             " one board, one modifier apart",
+             f"without {hides_lowered(lower=False)}, "
+             f"with {hides_lowered(lower=True)}")
+
+    # **The floor stays, so the loosening cannot run away.** No card
+    # prints "hide with no cover at all", and a creature in the open may
+    # not vanish -- `_hiding` floors the requirement at `Cover.PARTIAL`.
+    #
+    # **Asserted through `_hiding`'s own output, and it took two wrong
+    # probes to get there.**
+    #
+    # The first posed "the clause and no cover at all" by laying the
+    # modifier on an untouched board and expecting a refusal. It offered
+    # the hide, because every posed board here already has **partial
+    # cover** from its geometry -- the `not partial` assertion above never
+    # noticed, since `SUPERIOR` was out of reach either way. So that probe
+    # showed the clause *working* while claiming to show a floor.
+    #
+    # The second computed `max(Cover.PARTIAL, SUPERIOR - total)` **in this
+    # rule** and asserted on that -- which re-implements the thing under
+    # test, so removing the floor from `actions.py` left it green. The
+    # plant is what found it.
+    #
+    # What the floor actually changes is **which enemies** the hide is
+    # offered against, not whether it is offered: `_hiding` keeps the ones
+    # whose cover clears the requirement. Measured on this board -- 5
+    # enemies, exactly 1 of them sheltering the rogue at `PARTIAL`:
+    #
+    #     no clause     no offer
+    #     1 copy        offered against the 1 sheltered enemy
+    #     4 copies      still the 1, because the floor holds
+    #     4 copies, no floor   the requirement goes to -7 and ALL 5
+    #                          qualify, including those giving no cover
+    from combat_engine.engine.actions import HIDE_DISPLACEMENT
+    from combat_engine.engine.query import cover_between
+    from combat_engine.engine.query import squares as squares_of
+
+    world, me, _ = _posed("f2743", 1)
+    cast = Cast(world=world, me=me, ref="drivers:hide")
+    for _ in range(4):
+        cast.hides_with_cover(on=me)
+    hides_at = [a for a in legal(world, world.encounter, me)
+                if a.kind == "hide"]
+    foes = sorted(enemies(world, me))
+    sheltered = [f for f in foes
+                 if cover_between(world, f, me) >= Cover.PARTIAL]
+    offered_against = sorted(hides_at[0].targets) if hides_at else []
+    out.that(len(foes) > len(sheltered)
+             and offered_against == sorted(sheltered),
+             "while FOUR copies of the clause still only let the rogue"
+             " hide from the enemies actually giving it cover -- the floor"
+             " is `Cover.PARTIAL`, because the printed loosening reaches"
+             " \"any cover\" and no card reaches past it. Without it the"
+             " requirement goes negative and every enemy on the board"
+             " qualifies, including the ones in plain view",
+             f"{len(foes)} enemies, {len(sheltered)} sheltering, "
+             f"offered against {len(offered_against)}")
+
+    # -- and the clause's printed PRECONDITION, which I missed first time --
+    #
+    # *"**If you end your movement at least 3 squares away from your
+    # starting position**, you can make a Stealth check to become
+    # hidden..."* The first version of the verb lowered the threshold
+    # unconditionally, so a rogue standing still could vanish behind a low
+    # wall -- wider than print, and these three assertions are what would
+    # have caught it. The `hides_lowered` pair above deliberately uses no
+    # precondition, so it tests the threshold alone; this tests the gate.
+    #
+    # **Displacement, not squares walked.** `walk` three squares out and
+    # back and the creature has entered six and moved nowhere.
+    from combat_engine.engine.movement import walk as _walk
+    from combat_engine.engine.query import displaced_this_action
+
+    def hides_after(path: list, *, loosen: int = 0) -> tuple[bool, int]:
+        world, me, _ = _posed("f2743", 1)
+        cast = Cast(world=world, me=me, ref="drivers:hide")
+        cast.conceal(on=me, total=False)
+        cast.hides_with_cover(after_moving=3, on=me)
+        if loosen:
+            cast.bonus(HIDE_DISPLACEMENT, loosen, on=me)
+        if path:
+            # **Northward, because three of the four directions are
+            # blocked on this board** -- the posed hand puts allies and
+            # enemies at (5,8), (7,8) and (6,9), so a walk east, west or
+            # south spends 0 and the creature does not move. My first
+            # version walked east and the assertions read `displaced=0`,
+            # which looked like the new field not working and was the path
+            # being refused.
+            here = next(iter(squares_of(world, me)))
+            _walk(world, me, [(here[0], here[1] - 1 - i) for i in path])
+        offered = any(a.kind == "hide"
+                      for a in legal(world, world.encounter, me))
+        return offered, displaced_this_action(world, me)
+
+    still, still_far = hides_after([])
+    out.that(not still and still_far == 0,
+             "a rogue that has NOT moved does not get the lowered"
+             " threshold -- the clause is conditional and an unconditional"
+             " version let it vanish standing still, which is the"
+             " direction that matters",
+             f"offered={still}, displaced={still_far}")
+
+    went, went_far = hides_after([0, 1, 2])
+    out.that(went and went_far >= 3,
+             "and one that ended three squares from where it started does"
+             " -- the same board and the same modifier, differing only in"
+             " whether the printed precondition was met",
+             f"offered={went}, displaced={went_far}")
+
+    short, short_far = hides_after([0, 1])
+    loose, loose_far = hides_after([0, 1], loosen=1)
+    out.that(not short and loose and short_far == loose_far == 2,
+             "while TWO squares is not enough on its own and is enough"
+             " with `f2429`'s square off -- the 3 is read live rather than"
+             " written into the gate, which is what makes that feat"
+             " writable at all",
+             f"two squares: plain {short}, loosened {loose}, "
+             f"displaced {short_far}")
+
+    # And the ROW lays it, not just the verb. **Read off the board rather
+    # than by running the body**: `audit.board` grants the row under test,
+    # so calling the body as well lays the modifier twice -- which is how
+    # this assertion first reported 6 where it wanted 3.
+    from combat_engine.engine.actions import HIDE_COVER
+    from combat_engine.engine.components import Mods
+
+    world, me, _ = _posed("cf:rogue-scoundrel-f1s2", 1)
+    laid = world.get(me, Mods)
+    got = laid.total(HIDE_COVER, {}) if laid else 0
+    out.that(got == int(Cover.SUPERIOR) - int(Cover.PARTIAL),
+             "and the ROW lays it, not just the verb -- 3 grades, which is"
+             " `Cover.SUPERIOR - Cover.PARTIAL` written out rather than a"
+             " number somebody picked",
+             f"{got} grades")
+
 
 def a_prone_creature_crawls_at_half_speed(out: Result) -> None:
     """*"When you are prone, you can crawl. Movement: move up to half your

@@ -527,6 +527,7 @@ class Encounter:
         if mv is not None:
             mv.went = 0
             mv.went_kind = ""
+            mv.went_from = None
         # "Once per turn you can draw a weapon as a free action" is an
         # allowance like the action budget beside it, so it refills here
         # rather than from a watcher that would have to be installed per

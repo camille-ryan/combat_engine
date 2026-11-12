@@ -1260,29 +1260,37 @@ def f2405(c: Cast) -> None:
 
 
 @power("f2429", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:rogue-scoundrel-f1s2",))
+       reach=PERSONAL, target=SELF)
 def f2429(c: Cast) -> None:
-    """Shortens the distance `cf:rogue-scoundrel-f1s2` asks a move to
-    cover. That row is declared, so the name is not the hold -- the 3 is
-    a literal inside its printed text and that feature is itself
-    unwritten, so there is neither a number to rewrite nor a check to
-    move it on.
+    """One square off the distance `cf:rogue-scoundrel-f1s2` asks a move to
+    cover: *"at least 2 squares away from your starting position instead
+    of 3"*.
 
-    **Re-aimed off `c.change_distance(ref, n)`, which has existed all
-    along under another name.** `c.extend_move(ref, squares)` is "make a
-    named row move you further", keyed by ref, and `c.squares_for` is its
-    read half -- the entries add, so a *negative* entry shortens, which is
-    this card exactly. Its own docstring names what is actually missing:
-    "a row must read it to be changed, with `squares_for`. An
-    `extend_move` on a row whose body still hard-codes its distance is a
-    modifier nothing consults."
+    **The sibling is written now, which is what this was waiting for.**
+    The old note said that row *"has an empty body"* and that marking a
+    symbol here would report the feat ready one step early -- *"the
+    feature has to be written before there is a 3 to take a square off"*.
+    That was the right call and `todo.py` is what said the wait was over:
+    it reds when a wanted symbol arrives, and the symbol here was the
+    sibling's own ref.
 
-    So the hold is the sibling row, not a verb, and the marker names the
-    sibling. `cf:rogue-scoundrel-f1s2` has an empty body and waits on
-    `c.stealth_speed()` and `c.hide(cover=)`; marking either of those here
-    would report this feat ready the day a symbol lands, which is one step
-    early -- the feature has to be *written* before there is a 3 to take a
-    square off."""
+    **`c.extend_move` is not the mechanism, and the old note's other
+    candidate was closer than it looked.** That verb is "make a named row
+    move you *further*", keyed by ref and read through `c.squares_for` --
+    the right shape for a card that lengthens a power's own movement. This
+    card changes a **precondition** on a different row's benefit, not a
+    distance anything is moved, so it goes where that precondition is
+    read: `actions.HIDE_DISPLACEMENT`, which
+    `c.hides_with_cover(after_moving=)` consults live for exactly this.
+
+    Stored as the reduction rather than the requirement, which is that
+    key's own note: `Mods.total` sums, so two sources naming the
+    requirement would ask for *more* distance. One square, because the
+    card prints 3 to 2.
+    """
+    from combat_engine.engine.actions import HIDE_DISPLACEMENT
+
+    c.bonus(HIDE_DISPLACEMENT, 1, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2459", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

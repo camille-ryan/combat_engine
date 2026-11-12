@@ -341,22 +341,73 @@ def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     an updated subsystem, not a stale one. #997.
     """
     from .query import concealment_of, cover_between, enemies, hidden_from
+    from .resolve import _mods
     from .types import Cover
 
     if not encounter.can_spend(actor, ActionType.MINOR):
         return []
     unseeing = hidden_from(world, actor)
+    # **The degree is a creature's own, defaulting to the printed one.**
+    # One card lowers it -- *"You can make a Stealth check to become hidden
+    # if you have any concealment or any cover"* -- and the threshold was a
+    # literal `Cover.SUPERIOR` here, so the clause had nowhere to go. The
+    # row waiting on it named `c.hide(cover=)`, which is two layers up:
+    # `Cast.hide` either lays the held state or defers to `_stealth_hide`
+    # and neither consults a degree. This line is the only gate on
+    # *becoming* hidden in the tree. #1250.
+    #
+    # Subtractive, which is `"stealth:moved"`'s idiom one function over:
+    # `Mods.total` sums, so a key holding the required degree outright
+    # would add two sources together and ask for *more* cover. What is
+    # stored is how much less is needed, and `Cover` is an `IntEnum` whose
+    # values are the attack penalties -- NONE 0, PARTIAL 2, SUPERIOR 5 --
+    # so the arithmetic is in the printed grades rather than invented.
+    #
+    # **Floored at `PARTIAL`, deliberately.** The printed loosening reaches
+    # "any cover", and no card prints "with no cover at all" -- a creature
+    # standing in the open may not vanish. A row that did print that wants
+    # its own clause, not a bigger number here.
+    need = max(Cover.PARTIAL,
+               Cover.SUPERIOR - _mods(world, actor, HIDE_COVER, {}))
     hideable = [
         e
         for e in sorted(enemies(world, actor))
         if alive(world, e)
         and e not in unseeing
-        and (cover_between(world, e, actor) is Cover.SUPERIOR
-             or concealment_of(world, actor) is Cover.SUPERIOR)
+        and (cover_between(world, e, actor) >= need
+             or concealment_of(world, actor) >= need)
     ]
     if not hideable:
         return []
     return [Action(kind="hide", cost=ActionType.MINOR, targets=tuple(hideable))]
+
+#: How many grades of cover a creature needs **less** than the printed
+#: rule, to make a Stealth check and become hidden.
+#:
+#: The printed gate is *"superior cover or total concealment"*; one card
+#: lowers it to *"any concealment or any cover"*, which is `Cover.PARTIAL`
+#: -- 3 grades down, since `Cover` is an `IntEnum` of the printed attack
+#: penalties. `_hiding` is the only reader and the only gate on becoming
+#: hidden. #1250.
+#:
+#: **Not a parameter on `Cast.hide`**, which is where the row waiting on
+#: this pointed: that verb lays the held state or rolls the check, and
+#: neither consults a degree.
+HIDE_COVER = "hide:cover"
+
+#: How many squares **less** than printed a creature must end its move
+#: away from where it started, to use a lowered hide threshold.
+#:
+#: `cf:rogue-scoundrel-f1s2` prints 3 and `f2429` lowers it to 2, so this
+#: is stored as the reduction rather than the requirement: `Mods.total`
+#: sums, and a key naming the requirement would make two sources ask for
+#: *more* distance. The same shape as `HIDE_COVER` above and as
+#: `"stealth:moved"` in `Cast._stealth_hide`.
+#:
+#: **Not `c.amount_for`**, which was the first thing to reach for: that
+#: takes the **largest** of what is stored, which is right for a grant
+#: being raised and backwards for a requirement being lowered.
+HIDE_DISPLACEMENT = "hide:displacement"
 
 #: The feint's once-per-encounter use, held on `Powers.charges`.
 #:
