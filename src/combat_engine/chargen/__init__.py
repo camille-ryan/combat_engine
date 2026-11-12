@@ -3986,6 +3986,13 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # your virtue" and the other three read this ref's answer. #642, #851.
     "cf:paladin-cavalier-f4": ("cf:paladin-cavalier-f4s0",
                                "cf:paladin-cavalier-f4s1"),
+    # **The hunter's two ranged-weapon forks.** Two entries and not one,
+    # for `cf:ranger-scout-f3`'s reason: both gate on what is in the
+    # ranged slot now and the benefits differ. #642.
+    "cf:ranger-hunter-f11": ("cf:ranger-hunter-f11s0",
+                             "cf:ranger-hunter-f11s1"),
+    "cf:ranger-hunter-f18": ("cf:ranger-hunter-f18s0",
+                             "cf:ranger-hunter-f18s1"),
 }
 
 

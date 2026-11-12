@@ -44752,6 +44752,176 @@ def the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally(
              f"p7249 level {get('p7249').level}")
 
 
+def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
+    """`#642`'s wave, the ranger's third chassis and the last martial one.
+
+    **The clause worth a gate is the one that is not on this chassis at
+    all.** `cf:ranger-hunter-f11` reads *"you can blind the target ...
+    **instead of** immobilizing or dazing it"*, and `p13588`'s body
+    already asks `c.choose(["hold", "daze"], ...)`. No modifier can reach
+    into another row's `c.choose`, so the third answer is written **in
+    `p13588`**, gated on holding the feature -- `content/CLAUDE.md`'s
+    `#550` arrangement applied to a class feature rather than a feat, with
+    `c.feat(ref)` as the reader because a class feature is an ordinary row
+    in `Powers.known`.
+
+    So this asserts the offer **appears for a hunter and not for a
+    scout**, which is the only way to tell the gate from a hard-coded
+    third option -- and `#550`'s own worked case, `p704`, is where that
+    pattern is recorded.
+
+    The rest is the two ranged-weapon forks, which are the scout's
+    arrangement again: two `BUILD_OPTIONS` entries rather than one,
+    because both gate on what is in the ranged slot now.
+    """
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+    from combat_engine.engine.events import Hit
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:ranger-hunter-"))
+    out.that(len(rows) == 35,
+             "all 35 of the printed hunter rows are declared",
+             f"{len(rows)}")
+    out.that(set(chargen.declared_chassis("ranger"))
+             == {"hunter", "scout", chargen.ORIGINAL},
+             "and the ranger now has all three of its printed chassis",
+             f"{chargen.declared_chassis('ranger')}")
+
+    # -- the third rider: offered to a hunter, not to anybody else -------
+    def riders(holds_f11: bool) -> list[str]:
+        """What `p13588` offers as its rider, with and without the
+        feature.
+
+        The choice is read by handing `c.choose` a recorder: the board's
+        own answer is whatever the headless policy picks, and what this
+        rule is about is the **list** rather than the pick.
+        """
+        world, me, _ = _posed("p13588", 1)
+        known = world.get(me, Powers)
+        if holds_f11:
+            if "cf:ranger-hunter-f11" not in known.known:
+                known.known.append("cf:ranger-hunter-f11")
+        else:
+            while "cf:ranger-hunter-f11" in known.known:
+                known.known.remove("cf:ranger-hunter-f11")
+        seen: list[str] = []
+        c = Cast(world=world, me=me, ref="p13588")
+        real = c.choose
+
+        def spy(options: Any, why: Any, **kw: Any) -> Any:
+            if "the rider on the hit" in str(why):
+                seen.extend(options)
+            return real(options, why, **kw)
+
+        c.choose = spy  # type: ignore[method-assign]
+        victim = next(f for f in c.enemies() if c.adjacent(f))
+        c.target = victim
+        c.targets = [victim]
+        REGISTRY["p13588"].body(c)
+        return seen
+
+    with_it, without = riders(True), riders(False)
+    out.that("blind" in with_it and "blind" not in without,
+             "`p13588` offers a third rider to a creature holding "
+             "`cf:ranger-hunter-f11` and only two to one that does not. "
+             "**Both arms**, because the positive alone passes a body with "
+             "`blind` hard-coded into the list -- which is what the clause "
+             "must not be, since every other ranger has that row's two",
+             f"with {with_it}, without {without}")
+    out.that(set(without) == {"hold", "daze"},
+             "and the two it always offers are the printed pair, so the "
+             "feature adds rather than replaces",
+             f"{sorted(without)}")
+
+    # -- two forks, two entries ------------------------------------------
+    entries = sorted(k for k in chargen.BUILD_OPTIONS
+                     if k.startswith("cf:ranger-hunter-"))
+    out.that(entries == ["cf:ranger-hunter-f11", "cf:ranger-hunter-f18"],
+             "TWO `BUILD_OPTIONS` entries, as the scout has -- both gate "
+             "on what is in the ranged slot now and the benefits differ",
+             f"{entries}")
+
+    # -- f11's riders, fired through a real Hit --------------------------
+    BOW = replace(chargen.LONGBOW, group="bow")
+    XBOW = replace(chargen.LONGBOW, group="crossbow")
+
+    def credited(ref: str, shooter: object) -> list[str]:
+        world, me, _ = _posed("cf:ranger-hunter-f0", 1)
+        gear = world.get(me, Gear)
+        gear.weapons = [shooter]
+        gear.stowed = []
+        c = Cast(world=world, me=me, ref=ref)
+        REGISTRY[ref].body(c)
+        victim = next(f for f in c.enemies() if c.adjacent(f))
+        mark = len(world.bus.log)
+        world.bus.emit(Hit(attacker=me, target=victim, power="p13588",
+                           critical=False))
+        mine = []
+        for ev in world.bus.log[mark:]:
+            fields = (getattr(ev, "detail", "") or "",
+                      getattr(ev, "label", "") or "",
+                      getattr(ev, "power", "") or "",
+                      str(getattr(ev, "by", "") or ""))
+            if any(ref in f for f in fields):
+                mine.append(type(ev).__name__)
+        return mine
+
+    paid = {"crossbow": credited("cf:ranger-hunter-f11s0", XBOW),
+            "bow": credited("cf:ranger-hunter-f11s1", BOW)}
+    idle = {"crossbow": credited("cf:ranger-hunter-f11s0", BOW),
+            "bow": credited("cf:ranger-hunter-f11s1", XBOW)}
+    out.that(all(paid.values()) and not any(idle.values()),
+             "each of `-f11`'s riders fires on a `p13588` hit with its own "
+             "ranged group and NOT with the other's. Fired through a real "
+             "`Hit` -- these watch the hit itself, where the fighter's two "
+             "chassis watch `PowerResolved` for a no-action strike",
+             f"paid {paid}, idle {idle}")
+
+    # -- f17: the range written onto the hunter's own weapons ------------
+    world, me, _ = _posed("cf:ranger-hunter-f0", 1)
+    gear = world.get(me, Gear)
+    gear.weapons = [replace(chargen.LONGBOW, group="bow")]
+    gear.stowed = []
+    before = gear.ranged.ranged
+    emitted = len(world.bus.log)
+    REGISTRY["cf:ranger-hunter-f17"].body(
+        Cast(world=world, me=me, ref="cf:ranger-hunter-f17"))
+    after = world.get(me, Gear).ranged.ranged
+    out.that(after == (before[0] + 10, before[1] + 10),
+             "`-f17` adds 10 to BOTH the normal and the long range, which "
+             "the card says twice. Written onto the creature's own copy of "
+             "the weapon, which `chargen.spawn` makes per character -- so "
+             "it needs no reader",
+             f"{before} -> {after}")
+    said = [type(e).__name__ for e in world.bus.log[emitted:]]
+    out.that("WeaponChanged" in said,
+             "and it ANNOUNCES the change -- `c.weapon_range` emits "
+             "`WeaponChanged`, so unlike `c.initiative` (`#1262`) or "
+             "`Health.max_surges` this row is visible to the sweep. "
+             "Asserted because the first draft of this rule claimed the "
+             "opposite and the row was silent for a different reason: it "
+             "was selecting its weapons with `mine=`, which matches an "
+             "item block's own weapons and so matched none",
+             f"{said}")
+
+    # -- the seven the import cannot supply ------------------------------
+    world, me, _ = _posed("cf:ranger-hunter-f0", 1)
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r in rows
+                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+    out.that(len(refused) == 7 and "cf:ranger-hunter-f1" in refused,
+             "seven rows are `defect=`, and `-f1` is the sharpest: *you "
+             "gain the following three powers* and then no list at all",
+             f"{refused}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -76615,6 +76785,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "hunter_rider": (
+        the_hunters_third_rider_lives_in_the_power_it_names,
+        "the hunter's third rider lives in the power it names, offered to"
+        " a hunter and to nobody else (#642, #550)",
     ),
     "cavalier_virtue": (
         the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally,

@@ -213,9 +213,33 @@ def p13587(c: Cast) -> None:
     attack=Attack(DEX, vs=AC),
 )
 def p13588(c: Cast) -> None:
+    """The hunter's third answer is written here, not on its own row.
+
+    `cf:ranger-hunter-f11` reads *"you can blind the target until the end
+    of your next turn, **instead of** immobilizing or dazing it"* -- a
+    third answer to the question this body already asks, and no modifier
+    can reach into another row's `c.choose`. So it is offered here, gated
+    on holding that feature, which is `content/CLAUDE.md`'s `#550`
+    arrangement (*"a feat that names one power writes its clause into that
+    power"*) applied to a class feature.
+
+    `c.feat(ref)` is the reader for the same reason it is there: it asks
+    whether a ref is in `Powers.known`, and a class feature is an ordinary
+    row there. The feature row stays declared as the pointer.
+
+    **The blind's clock is the card's and not this row's.** The hold and
+    the daze are `SAVE_ENDS`; the hunter's blind is *"until the end of
+    your next turn"*, which is `When.EONT`.
+    """
     if c.strike():
         c.damage(c.w(), c.dex_mod)
-        if c.choose(["hold", "daze"], "the rider on the hit") == "daze":
+        riders = ["hold", "daze"]
+        if c.feat("cf:ranger-hunter-f11"):
+            riders.append("blind")
+        chose = c.choose(riders, "the rider on the hit")
+        if chose == "blind":
+            c.blinded(until=When.EONT)
+        elif chose == "daze":
             c.dazed(until=When.SAVE_ENDS)
         else:
             c.immobilized(until=When.SAVE_ENDS)
