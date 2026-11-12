@@ -324,7 +324,37 @@ strength of one draw.
   -- and does **not** take the caller's shell, which an earlier `killpg` version
   of the same fix did.
 
-## Two instruments have a named audience, and one of them is a rule
+## The measurement instruments are for AI policy work. For rows, the question is "do they work"
+
+**Both `winrate.py` and `scorecard.py` are AI-policy instruments and
+neither is a gate on row work.** Camille, 2026-11-11, on being shown a
+`scorecard` run for a chargen change:
+
+> *"this is another thing I'm not sure we need to be running until AI
+> policy work. The ONLY things we need to check for implementing all these
+> rows is 'do they work'."*
+
+So for implementing rows -- content, chargen, engine, ETL alike -- the
+question is whether the row works, and three instruments answer it:
+
+| | |
+|---|---|
+| `audit.py <refs>` | the row fires and does something |
+| `drivers.py <rule>` | its printed rule holds, with a plant |
+| `lint.py <file>` | the header and the body are well formed |
+
+Everything else is a different question. **Do not reach for a balance or
+tactical measurement to decide whether a row is finished** -- it cannot
+answer that, and on a chargen change it cannot answer anything (see
+below).
+
+**And `scorecard`'s baseline makes the point for it.** Run against the
+committed one today it reported *"baseline is 1264 commits behind, taken
+at `c7a825e94` -- a number that moved may not be this change's doing"*,
+and it is right: a median that reads 6.0 rounds against a "was" of 7.0
+attributes nothing to the change in hand. Getting an attributable figure
+means two runs of the instrument either side of the change, which is
+fourteen minutes to answer a question row work does not ask.
 
 * **`winrate.py` is for AI policy work and nothing else.** Camille,
   2026-11-11:
@@ -354,14 +384,17 @@ strength of one draw.
   A green `replay` over a chargen change is therefore not weak evidence;
   it is none.
 
-* **`scorecard.py` is the policy gate, and the only instrument that sees a
-  draw change.** ~1 minute over 12 seeds, counted per side so a symmetric
-  gain shows up instead of cancelling, and it goes through `Party.of`.
+* **`scorecard.py` is the gate on a POLICY change and on nothing else.**
+  Counted per side so a symmetric gain shows up instead of cancelling,
+  and it goes through `Party.of` -- which makes it the only instrument
+  that sees a chargen draw change at all, and is why it is tempting to
+  reach for on one. Don't: seeing a change is not attributing it, and its
+  own footer says so when the baseline is old.
 
-For a balance question generally, prefer **round count** -- `#217`'s 7-8
-target -- and **hit rate**, which rest on thousands of events per run
-rather than one outcome per fight, so they read at sample sizes where a
-win rate is still noise.
+When a policy change really does want a balance figure, prefer **round
+count** -- `#217`'s 7-8 target -- and **hit rate**, which rest on
+thousands of events per run rather than one outcome per fight, so they
+read at sample sizes where a win rate is still noise.
 
 ## What each is for
 
@@ -392,8 +425,8 @@ win rate is still noise.
 | `fight.py` | play a whole fight and print the log |
 | `show.py` | one row, printed text beside emitted events |
 | `build.py` | rebuild `data/game.db` |
-| `scorecard.py` | how well the AI is playing, counted per side against a committed baseline. ~1 min over 12 seeds, and the **policy gate**. The one instrument that goes through `Party.of`, so the only one that sees a chargen draw change |
-| `winrate.py` | how often the party wins. **AI policy work only** -- Camille's rule, see the section above. ~45 min for the weakest signal there is, and blind to the draw |
+| `scorecard.py` | how well the AI is playing, counted per side against a committed baseline. **AI policy work only** -- the gate on a policy change and not on row work. It is the one instrument that goes through `Party.of`, which makes it tempting on a chargen change; seeing a change is not attributing it |
+| `winrate.py` | how often the party wins. **AI policy work only** -- Camille's rule, see the section above. ~45 min for the weakest signal there is, and blind to the draw entirely |
 | `bonuses.py`, `legs.py`, `mm3.py`, `issues.py`, `progress.py`, `waves.py`, `transcript.py` | narrower checks and ledgers |
 
 ## Triage is a ranker, not a gate
