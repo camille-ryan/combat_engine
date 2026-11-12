@@ -1,6 +1,6 @@
 {
-  "sha": "94f1141898846ef3533f8884f3d235fe67718440",
-  "refs": 21728,
+  "sha": "b39d23bcdc067039b067a718d6a24a69811ec2ab",
+  "refs": 21729,
   "fired": 20191,
   "silent": 536,
   "never": 841,
@@ -847,13 +847,14 @@
     "p9994",
     "x2_127"
   ],
-  "known_quiet": 160,
+  "known_quiet": 161,
   "known_quiet_refs": [
     "cf:monk-f0s0",
     "cf:monk-f0s1",
     "cf:monk-f0s2",
     "cf:monk-f0s3",
     "cf:monk-f0s4",
+    "cf:swordmage-f0",
     "cf:wizard-arcanist-f0",
     "cf:wizard-arcanist-f0s4",
     "f1091b",
@@ -1553,7 +1554,6 @@
     "cf:artificer-f2",
     "cf:bard-f5",
     "cf:monk-f1",
-    "cf:swordmage-f0",
     "cf:warlord-marshal-f0",
     "f1021",
     "f1027",
