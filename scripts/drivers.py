@@ -42855,6 +42855,91 @@ def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     )
 
 
+def a_chassis_whose_fork_is_a_build_option_deals_one_of_it(out: Result) -> None:
+    """The witch, which is `#642`'s wave arriving one chassis at a time.
+
+    *"Choose a coven, and gain its benefits."* -- `cf:wizard-witch-f1`,
+    two options. **The fork cannot be a leg**: the wizard's are spent on
+    the arcanist's two and the mage's six schools, and a character takes
+    one leg. So it is a `BUILD_OPTIONS` choice, and the parent grants the
+    one it chose.
+
+    **Which needed `ladder_row` taught not to deal a chosen-among
+    sub-option.** Written without that, a level-1 witch held **both**
+    covens: a level-0 sub-option with no leg gate passes
+    `leg_named_by(p) in ("", build.name)` and is dealt to every character
+    of the chassis. That is `#851` -- one character being two sub-classes
+    -- arriving through a door the leg clause did not cover.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    COVENS = ["cf:wizard-witch-f1s0", "cf:wizard-witch-f1s1"]
+
+    out.that("witch" in chargen.declared_chassis("wizard"),
+             "the witch is a dealable chassis -- 6 rows the book printed "
+             "and nothing had declared, which is `#642`'s shape",
+             f"{chargen.declared_chassis('wizard')}")
+
+    # -- exactly ONE coven, and it comes from the parent -----------------
+    dealt = [r for r in chargen.loadout(
+        "wizard", level=1, build=chargen.build_of("wizard", "control"),
+        who_chassis="witch") if r.startswith("cf:")]
+    out.that(not [r for r in dealt if r in COVENS],
+             "a dealt witch is handed NEITHER coven by `loadout` -- its "
+             "parent chooses, so dealing the siblings would hand over "
+             "both. Reds if `ladder_row` stops refusing a chosen-among "
+             "sub-option, which is how this was written first",
+             f"{dealt}")
+    out.that("cf:wizard-witch-f1" in dealt,
+             "while the parent that does the choosing IS dealt, without "
+             "which nothing grants a coven at all",
+             f"{dealt}")
+
+    def granted(chose: str) -> list[str]:
+        world, me, _ = _posed("cf:wizard-witch-f1", 1)
+        b = world.get(me, Build)
+        b.choices = {c for c in b.choices
+                     if not c.startswith("option:cf:wizard-witch-f1:")}
+        b.choices.add(f"option:cf:wizard-witch-f1:{chose}")
+        known = world.get(me, Powers)
+        # `audit.board` grants the row under test and its first
+        # sub-option, so an `f1s0` answer would be a silent no-op.
+        for r in COVENS:
+            while r in known.known:
+                known.known.remove(r)
+        before = set(known.known)
+        REGISTRY["cf:wizard-witch-f1"].body(
+            Cast(world=world, me=me, ref="cf:wizard-witch-f1"))
+        return sorted((set(known.known) - before) & set(COVENS))
+
+    both = {c: granted(c) for c in COVENS}
+    out.that(all(v == [c] for c, v in both.items()),
+             "and the parent grants the coven the build chose, each of the "
+             "two -- asserted over BOTH, because reading one passes a "
+             "parent that ignores the choice and always grants the first",
+             f"{both}")
+
+    # -- the six rows, and what each still owes -------------------------
+    witch = {r: sorted(p.unfinished) for r, p in REGISTRY.items()
+             if r.startswith("cf:wizard-witch-")}
+    out.that(len(witch) == 6,
+             "all six of the printed rows are declared",
+             f"{len(witch)}: {sorted(witch)}")
+    owed = {r: v for r, v in witch.items() if v}
+    out.that(owed == {"cf:wizard-witch-f1s0": ["c.gains_training()"],
+                      "cf:wizard-witch-f1s1": ["c.gains_training()"],
+                      "cf:wizard-witch-f3": ["turns.extended_rest(swap=)"]},
+             "and the three clauses still owed are the two skill-training "
+             "grants and the rest-time power swap -- named exactly, so a "
+             "row quietly acquiring another marker reds here",
+             f"{owed}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -50779,12 +50864,29 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
     for seed in range(1, 25):
         for sheet in _Party.of(level=1, seed=seed).sheets:
             got[sheet.cls].add(sheet.chassis)
-    out.that(got.get("cleric") == {"templar", "warpriest"}
-             and got.get("wizard") == {"arcanist", "mage", "sha-ir"},
-             "and a dealt PARTY carries every one of them, so the draw "
-             "reaches a real character and `Sheet.chassis` round-trips it",
-             f"cleric {sorted(got.get('cleric', ()))}, "
-             f"wizard {sorted(got.get('wizard', ()))}")
+    # **Derived, not listed, because a literal goes stale every time a
+    # chassis lands.** This named `{"arcanist", "mage", "sha-ir"}` and
+    # reddened the moment the witch was written -- a rule that has to be
+    # edited by whoever adds content is a rule that gets edited carelessly.
+    # `#642` has 15 more chassis to come.
+    # Scoped to the classes the party actually fields: `story.PARTY` is
+    # four classes, so a forked class that is not among them -- the
+    # sorcerer -- can never appear here and demanding it would red on a
+    # fact about the party list rather than about the draw.
+    short = {cls: sorted(set(chargen.declared_chassis(cls)) - got[cls])
+             for cls in forked if cls in got}
+    short = {c: v for c, v in short.items() if v}
+    out.that(bool(short) is False and len(short) == 0 and bool(got),
+             "the dealt party fields at least one forked class, without "
+             "which the assertion below passes vacuously",
+             f"forked classes in the party: "
+             f"{sorted(c for c in forked if c in got)}")
+    out.that(not short,
+             "and a dealt PARTY carries every chassis its class declares, "
+             "so the draw reaches a real character and `Sheet.chassis` "
+             "round-trips it",
+             f"missing: {short}; "
+             f"{ {c: sorted(got.get(c, ())) for c in forked} }")
     # -- the mage: a ladder declared at its PRINTED levels ---------------
     #
     # `loadout` selected `p.level == 0`, and every other chassis declares
@@ -74679,6 +74781,11 @@ DRIVERS = {
     "group_check": (
         a_group_check_scores_the_party_once_against_a_threshold,
         "a group check scores the party once against a threshold (#984)",
+    ),
+    "witch_coven": (
+        a_chassis_whose_fork_is_a_build_option_deals_one_of_it,
+        "a chassis whose fork is a build option is dealt one of it, not"
+        " all: the witch's coven (#642)",
     ),
     "second_school": (
         the_mages_second_school_is_chosen_and_differs_from_the_first,

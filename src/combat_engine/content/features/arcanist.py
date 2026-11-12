@@ -1587,3 +1587,197 @@ def mage_master_s5(c: Cast) -> None:
 
     c.watch(PowerUsed, burns, until=When.ENCOUNTER, on=me, once=True,
             label=c.ref)
+
+
+# -- the witch, #642's wave ------------------------------------------------
+#
+# Six rows, the smallest of the 16 chassis the book prints and nothing had
+# declared. The coven is the chassis's own fork and is a `BUILD_OPTIONS`
+# choice rather than a leg, for `cf:wizard-mage-f3`'s reason: the wizard's
+# legs are spent on the arcanist's two and the mage's six schools, and a
+# character takes one leg.
+
+
+@power(
+    "cf:wizard-witch-f0",
+    level=0,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def witch_familiar(c: Cast) -> None:
+    """*"You gain the `p15850` power."* One grant and nothing else.
+
+    `c.grant_row` rather than a body repeating what the power says: the row
+    is declared and unmarked, so handing it over is the whole feature.
+
+    **Correct and inert today, which is `#1259` and not this row.** Every
+    wizard already holds `p15850`: a power a feature grants has no printed
+    level of its own, so it imports at `level = 0`, and `loadout`'s
+    level-0 branch deals every level-0 row of the class -- the chassis
+    filter reads `class_feature.build`, which a row in the `power` table
+    has not got. So `grant_row` returns `None` here, exactly as its own
+    docstring warns: *"Not the tool for a build's own rows [...] the
+    creature already knows it."*
+
+    Measured while writing this: **12 powers** are held by a character
+    whose chassis does not grant them, across the two classes that have
+    more than one written chassis -- and 20 (class, chassis) pairs have at
+    least one level-0 granted power, so it grows with `#642`.
+
+    The grant stays, because it is what the card says and it is what will
+    hand the power over once the import is fixed. Same call as `rt:r10-t0`
+    on `#1241` and `cf:warlock-f1s1` on `#1244`: a clause that is right and
+    currently has nothing to do goes in, with that said here.
+    """
+    c.grant_row("p15850", on=c.me, until=When.ENCOUNTER)
+
+
+@power(
+    "cf:wizard-witch-f1",
+    level=0,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def witch_coven(c: Cast) -> None:
+    """*"Choose a coven, and gain its benefits."*
+
+    A **parent**, so `chargen.ladder_row` deals it and it chooses among its
+    own two options -- the arrangement `cf:wizard-mage-f3` records at
+    length. The choice is `chargen.BUILD_OPTIONS` and not a leg because the
+    wizard's legs are already spent twice over: `control` and `war` are the
+    arcanist's and the six schools are the mage's, and a character takes
+    one leg.
+
+    Both options are declared below, so this grants rather than repeating
+    what they say.
+    """
+    coven = c.chosen_option("cf:wizard-witch-f1") or "cf:wizard-witch-f1s0"
+    c.grant_row(coven, on=c.me, until=When.ENCOUNTER)
+
+
+def _coven(ref: str, grants: str, first: str, second: str):  # noqa: ANN202
+    """One coven: a granted power, training, and a pair of skill bonuses.
+
+    The one helper the global rule allows, for a run of rows that genuinely
+    share a shape -- two here. Each row below still names its own power and
+    its own two skills out loud rather than deriving them.
+
+    **The granted ref is `grants` and not `power`**, which is not a style
+    choice: `power` is the decorator this file applies, so a parameter of
+    that name shadows it and `@power(...)` raises *"'str' object is not
+    callable"* at import. Caught immediately, and worth the line because
+    `power` is the obvious name.
+
+    **The training clause is `dropped=`, naming a verb, and NOT
+    `declined_clause=`.** It was the second of those for one draft, and
+    `dsl.power` refused it at import -- *"a declined clause is a dropped
+    one nobody will finish, so it must also appear in todo= or dropped="*.
+    That gate is right, and the deeper reason not to decline is that
+    declining is a **scope decision with an owner**: the marker's own rule
+    asks for whose call it was, and Camille has not ruled on `#1258`. So
+    the clause is marked as missing, which is true, rather than declined
+    on my own authority.
+
+    What is missing: *"you gain training in the Intimidate skill"* has no
+    writer. `vocab.py --find training` returns `c.check` and
+    `c.substitute_check` and no granter, `chargen` deals training, and
+    nothing adds to it. `#1258` carries the question of whether a row
+    should be able to -- a **feat** granting training is declared inert
+    today (`f166`, empty body, `out_of_combat=True`), which is the
+    inconsistency that issue is about.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="wizard",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.ARCANE],
+        dropped=("c.gains_training()",),
+    )
+    def row(c: Cast) -> None:
+        c.grant_row(grants, on=c.me, until=When.ENCOUNTER)
+        # "At 5th level, you gain a +2 bonus to X checks and Y checks."
+        # Untyped, because the card prints no word in front of "bonus".
+        if c.level >= 5:
+            for skill in (first, second):
+                c.bonus(f"skill:{skill}", 2, on=c.me, until=When.ENCOUNTER)
+
+    row.__name__ = "witch_coven_" + ref.rsplit("s", 1)[-1]
+    row.__doc__ = (
+        f"One coven: the `{grants}` power, and from 5th level +2 to "
+        f"{first} and {second} checks.\n\n"
+        f"    The training half is `dropped=` on `c.gains_training()` --\n"
+        f"    see `_coven`, which carries the reasoning and `#1258`.\n"
+    )
+    return row
+
+
+witch_coven_s0 = _coven("cf:wizard-witch-f1s0", "p14542",
+                        "intimidate", "stealth")
+witch_coven_s1 = _coven("cf:wizard-witch-f1s1", "p14543",
+                        "heal", "diplomacy")
+
+
+@power(
+    "cf:wizard-witch-f2",
+    level=0,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+    out_of_combat=True,
+)
+def witch_cantrips(c: Cast) -> None:
+    """*"You gain three cantrips of your choice."* Deliberately inert.
+
+    `cf:wizard-arcanist-f3` is the same line for four of them and settled
+    the reading: *"every one of them is narrative [...] lighting a lamp and
+    moving a coin have no combat consequence to invent. The cantrips are
+    rows of their own; this feature is only the line saying the wizard has
+    them."* Three rather than four is the only difference.
+    """
+
+
+@power(
+    "cf:wizard-witch-f3",
+    level=0,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+    dropped=("turns.extended_rest(swap=)",),
+)
+def witch_bonus_feat(c: Cast) -> None:
+    """*"You gain the `f738` feat as a bonus feat."* Granted; the rest is
+    clocked on a rest.
+
+    The feat is declared and unmarked, so this hands it over.
+
+    **The swap is dropped and the symbol is the moment, not a verb.**
+    *"At the end of each extended rest, when you confer with your familiar
+    you can replace one of your wizard daily attack powers or wizard
+    utility powers with another power of the same type"* needs an extended
+    rest that offers a choice. `events.ExtendedRested` exists, and what
+    does not is anything *swapping a known power* at it -- `power_swap` is
+    `chargen`'s and runs when the character is built, not between fights.
+
+    The 24th-level clause is epic and the tree stops at 10, which
+    `ATTACK_GAINS` says of itself too, so it is not a gap.
+    """
+    c.grant_row("f738", on=c.me, until=When.ENCOUNTER)

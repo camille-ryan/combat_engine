@@ -1577,6 +1577,20 @@ def ladder_row(p, level: int = 1) -> bool:  # noqa: ANN001
     The caller still applies the leg *match* (`leg_named_by(p) in ("",
     build.name)`), so this only asks whether a leg was named at all.
     """
+    # **A sub-option whose parent CHOOSES among them is not dealt**, at any
+    # level, because the parent grants the one it chose. Without this a
+    # level-0 sub-option with no leg gate is dealt to every character of
+    # the chassis -- measured on the witch, whose two covens both arrived
+    # at level 1, which is `#851` exactly.
+    #
+    # The leg is the other way of choosing and is tested below; this is the
+    # `BUILD_OPTIONS` way, for a fork the legs cannot carry because they
+    # are already spent. #642.
+    if _FEATURE_SUB_OPTION.search(p.ref):
+        parent = _FEATURE_SUB_OPTION.sub(
+            lambda m: m.group(0).split("s")[0], p.ref)
+        if parent in BUILD_OPTIONS:
+            return False
     if p.level == 0:
         return True
     if p.level > level or p.is_attack:
@@ -3844,6 +3858,11 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # `cf:wizard-mage-f3` does.
     "cf:wizard-mage-f3": ("cf:wizard-mage-f3s0", "cf:wizard-mage-f3s1",
                           "cf:wizard-mage-f3s2"),
+    # **The witch's coven**, `cf:wizard-witch-f1`'s own fork. Same reason
+    # it is here and not a leg as the mage's second school: the wizard's
+    # legs are spent on the arcanist's two and the mage's six schools, and
+    # a character takes one leg. #642.
+    "cf:wizard-witch-f1": ("cf:wizard-witch-f1s0", "cf:wizard-witch-f1s1"),
 }
 
 
