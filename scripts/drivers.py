@@ -59628,13 +59628,43 @@ def a_challenge_says_what_each_check_meant(out: Result) -> None:
     told = scene_of(
         [{"skill": "athletics", "win": WIN, "lose": LOSE}, "endurance"],
         [{"skill": "arcana", "win": SIGIL, "lose": "It scrambles."}])
-    made, rolls, said = play(told)
+    # **The seed is searched, not pinned, and pinning it broke this.**
+    # The assertions below need the challenge to have produced **both** an
+    # athletics success and an athletics failure, which is a property of
+    # the dice and not of the mechanism. Seed 6 gave both until
+    # `72ebd1f1` made the dealer draw a build leg rather than always
+    # taking the first: a different leg trains different skills, so the
+    # athletics modifier moved and seed 6 stopped failing. The rule was
+    # red for three commits, because the wide runs after it were piped and
+    # the exit code read back was `grep`'s.
+    #
+    # The search asks only for **presence** of each sentence, never for
+    # the count. That matters: the dedupe assertion below asserts each
+    # appears *exactly once*, and a search that selected on the count
+    # would pick a seed where a dedupe regression is invisible -- which is
+    # the shape that let a plant pass elsewhere this session. Premise
+    # searched, claim asserted.
+    found = None
+    for seed in range(1, 41):
+        cand = play(told, seed=seed)
+        if cand[1] and WIN in cand[2] and LOSE in cand[2]:
+            found = (seed, cand)
+            break
+    out.that(found is not None,
+             "some seed makes this challenge both succeed and fail at the "
+             "same skill, which is what makes the two assertions below "
+             "posable -- a challenge that cannot do both is a finding "
+             "about the challenge and not a seed to re-measure",
+             f"searched 40 seeds, found {found[0] if found else None}")
+    if found is None:
+        return
+    made, rolls, said = found[1]
     out.that(
         rolls and WIN in said and LOSE in said,
         "a played challenge says what its successes and its failures "
         "meant, where before it printed the rolls and a tally and the "
         "fires were never described going out or spreading",
-        f"{len(rolls)} rolls, {len(said)} said: {said}",
+        f"seed {found[0]}: {len(rolls)} rolls, {len(said)} said: {said}",
     )
     out.that(
         said.count(WIN) == 1 and said.count(LOSE) == 1,
@@ -60405,7 +60435,44 @@ def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None
     # It still asserts the outcome, so a future change that flips this seed
     # too goes red here rather than passing on a win -- which is exactly
     # how the background was caught.
-    _, said_lost, steps_lost = play([CHAL, TALK], seed=1)
+    #
+    # **Searched now, not named, because naming it broke a THIRD time.**
+    # The note below records seed 11 -> 3 for `#1156`'s background; the
+    # same thing happened again at `72ebd1f1`, which made the dealer draw
+    # a build leg instead of always taking the first. A different leg is a
+    # different set of trained skills, so seed 1 stopped losing and seed 3
+    # stopped being special -- and this rule was red for three commits
+    # because the wide runs after it were piped and reported `grep`'s exit
+    # code.
+    #
+    # Re-measuring by hand is what has now cost three visits. The premise
+    # is *"some seed loses and some seed wins"*, which is a property of
+    # the challenge rather than of a seed, so it is searched for and the
+    # **search is asserted** -- if no seed loses, or none wins, that is a
+    # real finding about the challenge and it reds here. Both arms are
+    # still exercised every run, which is what naming them was for, and
+    # that is now a fact the rule checks rather than one it assumes.
+    # `drivers.rally` was given the same treatment this session and for
+    # the same reason.
+    lost_at = won_at = None
+    for seed in range(1, 41):
+        _, said_s, steps_s = play([CHAL, TALK], seed=seed)
+        if steps_s[0].outcome == "lost" and lost_at is None:
+            lost_at = (seed, said_s, steps_s)
+        elif steps_s[0].outcome == "won" and won_at is None:
+            won_at = (seed, said_s, steps_s)
+        if lost_at and won_at:
+            break
+    out.that(lost_at is not None and won_at is not None,
+             "some seed loses this challenge and some seed wins it, which "
+             "is what makes both arms below posable -- a challenge nobody "
+             "can lose, or nobody can win, is a finding about the "
+             "challenge and not a seed to re-measure",
+             f"lost at {lost_at[0] if lost_at else None}, "
+             f"won at {won_at[0] if won_at else None}")
+    if not (lost_at and won_at):
+        return
+    said_lost, steps_lost = lost_at[1], lost_at[2]
     chal = steps_lost[0]
     paid_for_chal = any("Challenge" in n for n in said_lost)
     out.that(
@@ -60439,13 +60506,13 @@ def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None
     # firing is the mechanism working -- it is here precisely so a seed
     # that stops winning reddens instead of silently skipping the award
     # check below.
-    _, said_won, steps_won = play([CHAL, TALK], seed=3)
+    said_won, steps_won = won_at[1], won_at[2]
     out.that(
         steps_won[0].outcome == "won",
-        "seed 3 wins the challenge -- the setup for the assertion below,"
-        " asserted so a seed that stops winning reddens here rather than"
-        " quietly skipping it",
-        f"outcome={steps_won[0].outcome}",
+        "the winning seed the search found does win -- kept as an"
+        " assertion rather than a comment, so the search returning"
+        " something wrong reddens here instead of further down",
+        f"seed {won_at[0]}, outcome={steps_won[0].outcome}",
     )
     out.that(
         any("Challenge" in n
@@ -60461,9 +60528,9 @@ def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None
         steps_lost[0].outcome == "lost"
         and not any("Challenge" in n for n in said_lost),
         "and the losing seed pays nothing on its own board -- posed on a"
-        " named seed rather than as the other half of a branch, so both"
+        " searched seed rather than as the other half of a branch, so both"
         " outcomes are exercised every run",
-        f"outcome={steps_lost[0].outcome}",
+        f"seed {lost_at[0]}, outcome={steps_lost[0].outcome}",
     )
 
     # -- god mode pays nothing, because there was no risk -----------------
