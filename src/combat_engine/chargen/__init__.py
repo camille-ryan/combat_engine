@@ -3972,6 +3972,15 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # `drivers.blackguard_vice` asserts they never disagree. #642, #851.
     "cf:paladin-blackguard-f3": ("cf:paladin-blackguard-f3s0",
                                  "cf:paladin-blackguard-f3s1"),
+    # **The scout's two off-hand forks, and they are TWO entries.** Both
+    # choose between a light blade and an axe, and `-f21` is not a reader
+    # of `-f3`'s answer the way the blackguard's vice parents are: what
+    # both really gate on is what is in the off hand right now, and the
+    # two benefits differ, so a scout carrying an axe should get the axe
+    # one from both. `features/scout.py` has the argument. #642.
+    "cf:ranger-scout-f3": ("cf:ranger-scout-f3s0", "cf:ranger-scout-f3s1"),
+    "cf:ranger-scout-f21": ("cf:ranger-scout-f21s0",
+                            "cf:ranger-scout-f21s1"),
 }
 
 

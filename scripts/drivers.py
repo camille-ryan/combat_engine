@@ -44021,7 +44021,13 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
 
     # -- the four grants, each measured ----------------------------------
     leg = chargen.deal_build(Random("k"), "fighter", "knight")
+    # `rng=` passed for `drivers.blackguard_vice`'s reason: `loadout`
+    # falls back to a module-level `Random` and the draw then depends on
+    # what ran before. Every ref asserted below is outside the draw
+    # anyway -- `p12677` is level 8 and `f3148` is a feat -- but a seeded
+    # hand is the difference between knowing that and relying on it.
     hand = set(chargen.loadout("fighter", level=1, build=leg,
+                               rng=Random("knight:hand"),
                                who_chassis="knight"))
     dealt = {ref: ref in hand for ref in
              ("p12660", "p12661", "p12668", "p12677", "f3148")}
@@ -44284,21 +44290,67 @@ def the_blackguards_four_vice_parents_never_disagree(out: Result) -> None:
              "agreement above is agreement about one value",
              f"{sorted(drawn)}")
 
-    # -- the five grants, measured per ref -------------------------------
-    leg = chargen.deal_build(Random("b"), "paladin", "blackguard")
-    hand = set(chargen.loadout("paladin", level=1, build=leg,
-                               who_chassis="blackguard"))
-    dealt = {ref: ref in hand for ref in
-             ("p13815", "p13816", "p13817", "p13818", "p13819",
-              "p13837", "p13843")}
-    out.that(dealt == {"p13815": True, "p13816": True, "p13819": True,
-                       "p13817": False, "p13818": False,
-                       "p13837": False, "p13843": False},
-             "three of the granted refs are dealt and four are not -- all "
-             "seven are `cls=\"paladin\"`, so the LEVEL decides, which the "
-             "knight established and this chassis exercises four more "
-             "times",
-             f"{dealt}")
+    # -- the seven grants, over seeds, in three categories ---------------
+    #
+    # **Over seeds, and this had to be, because one draw is not an
+    # answer.** The first version of this assertion fixed a single seed and
+    # claimed `p13817` and `p13837` are never dealt. They are **level-1
+    # paladin powers at a level-1 character**, so `loadout` *draws* them --
+    # measured at 6 of 12 -- and the assertion passed alone and failed the
+    # moment another rule ran first and moved the rng. Two arms in one
+    # process are confounded by order.
+    # **And `chargen.SCORED_CHOICES` is pinned, which is the rest of it.**
+    # `_board`'s docstring records the hazard at length: `audit.py` sets
+    # that flag `False` as an **import side effect**, so which draw a
+    # `loadout` gets depends on whether any earlier rule imported `audit`.
+    # Seeding `rng=` was not enough -- the counts still moved between
+    # orders, because the flag decides *which sampler runs* and the seed
+    # only decides what it draws. `#1037`.
+    # **And `chargen.SCORED_CHOICES` is pinned, which is the rest of it.**
+    # `_board`'s docstring records the hazard at length: `audit.py` sets
+    # that flag `False` as an **import side effect**, so which draw a
+    # `loadout` gets depends on whether any earlier rule imported `audit`.
+    # Seeding `rng=` was not enough -- the counts still moved between
+    # orders, because the flag decides *which sampler runs* and the seed
+    # only decides what it draws. `#1037`.
+    GRANTED = ("p13815", "p13816", "p13817", "p13818", "p13819",
+               "p13837", "p13843")
+    counted: dict[str, int] = {ref: 0 for ref in GRANTED}
+    TRIES = 12
+    was_scored = chargen.SCORED_CHOICES
+    chargen.SCORED_CHOICES = False
+    try:
+        for seed in range(TRIES):
+            leg = chargen.deal_build(Random(f"{seed}:b"), "paladin",
+                                     "blackguard")
+            hand_ = set(chargen.loadout("paladin", level=1, build=leg,
+                                        rng=Random(f"{seed}:hand"),
+                                        who_chassis="blackguard"))
+            for ref in GRANTED:
+                counted[ref] += ref in hand_
+    finally:
+        chargen.SCORED_CHOICES = was_scored
+    always = sorted(r for r, n in counted.items() if n == TRIES)
+    never = sorted(r for r, n in counted.items() if n == 0)
+    out.that(always == ["p13815", "p13816", "p13819"],
+             "the three level-0 paladin rows are dealt on EVERY seed, "
+             "which is what makes those three grants no-ops",
+             f"{always}")
+    out.that(never == ["p13818"],
+             "and ONE is dealt on none -- `p13818` is level 2, above a "
+             "level-1 character, so it is out of reach of the draw "
+             "entirely and that grant is load-bearing every time",
+             f"{never}")
+    sometimes = sorted(r for r, n in counted.items() if 0 < n < TRIES)
+    out.that(sometimes == ["p13817", "p13837", "p13843"],
+             "and THREE are dealt on some seeds and not others -- level-1 "
+             "paladin powers at a level-1 character are inside the draw, "
+             "so whether the grant matters depends on the hand. That is "
+             "the third category, and a single-seed reading cannot see it: "
+             "the first draft of this put `p13843` in the never list on "
+             "the strength of one hand",
+             f"{sometimes}, counts {counted}")
+
 
     # -- f3s1: +2 normally, +4 escalated, and not +6 ---------------------
     world, me, _ = _posed("cf:paladin-blackguard-f3s1", 1)
@@ -44332,6 +44384,174 @@ def the_blackguards_four_vice_parents_never_disagree(out: Result) -> None:
              "is correct: the parent is not broken, its options are, and "
              "`usable` is what stops either reaching play",
              f"{refused}")
+
+
+def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
+        out: Result) -> None:
+    """`#642`'s wave, the ranger. 33 rows, and the chassis that completes
+    the picture on what makes a grant load-bearing.
+
+    Three rows grant a power and the three answers come from three
+    different reasons:
+
+        -f1   p13619  cls="ranger",  level 0  dealt     -> no-op
+        -f2   p12668  cls="FIGHTER", level 0  NOT dealt -> real
+        -f6   p13600  cls="ranger",  level 5  NOT dealt -> real
+
+    The knight established the **level** is the test where the class is
+    constant. `-f2` is the other half: that ref is the fighter's power
+    strike, which `cf:fighter-slayer-f1` and `cf:fighter-knight-f2` grant
+    as no-ops. So neither the class nor the level decides on its own, and
+    the only honest test is *is this ref in the hand* -- which is why all
+    three are asserted as a map.
+
+    **And two forks that look like one choice are two.** `-f3` picks
+    between a light blade and an axe in the off hand; `-f21` picks between
+    the same two again much later. The blackguard's four vice parents read
+    one `BUILD_OPTIONS` entry precisely so they cannot disagree -- and
+    here the opposite is right, because what both forks gate on is what is
+    in the off hand **now**. Two entries, and the rule asserts both exist
+    and that each option reads `Gear.off`.
+    """
+    from dataclasses import replace
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:ranger-scout-"))
+    out.that(len(rows) == 33,
+             "all 33 of the printed scout rows are declared",
+             f"{len(rows)}")
+    out.that("scout" in chargen.declared_chassis("ranger"),
+             "and the chassis is dealable beside the plain ranger",
+             f"{chargen.declared_chassis('ranger')}")
+
+    # -- the three grants, measured ---------------------------------------
+    leg = chargen.deal_build(Random("s"), "ranger", "scout")
+    hand = set(chargen.loadout("ranger", level=1, build=leg,
+                               rng=Random("scout:hand"),
+                               who_chassis="scout"))
+    dealt = {ref: ref in hand for ref in ("p13619", "p12668", "p13600")}
+    out.that(dealt == {"p13619": True, "p12668": False, "p13600": False},
+             "the ranger's own level-0 row is dealt and the other two are "
+             "not -- one because it is the FIGHTER's and one because it is "
+             "level 5. Asserted as a map, because neither the class nor "
+             "the level is the test on its own",
+             f"{dealt}")
+    out.that(get("p12668").cls == "fighter"
+             and get("p13600").cls == "ranger",
+             "and the two undealt refs differ in which reason applies: "
+             "`p12668` is another class's, `p13600` is this class's and "
+             "above level 0. Reds if either moves, which would make the "
+             "map above right for the wrong reason",
+             f"p12668 {get('p12668').cls}/{get('p12668').level}, "
+             f"p13600 {get('p13600').cls}/{get('p13600').level}")
+
+    # -- two forks, two entries -------------------------------------------
+    entries = sorted(k for k in chargen.BUILD_OPTIONS
+                     if k.startswith("cf:ranger-scout-"))
+    out.that(entries == ["cf:ranger-scout-f21", "cf:ranger-scout-f3"],
+             "TWO `BUILD_OPTIONS` entries on this chassis, not one -- the "
+             "opposite call from the blackguard's four vice parents, "
+             "because both forks gate on what is in the off hand now and "
+             "the two benefits differ",
+             f"{entries}")
+
+    # -- each option reads the off hand, not the main one -----------------
+    BLADE = replace(chargen.DAGGER, group="light blade")
+    AXE = replace(chargen.MACE, group="axe")
+
+    def laid(ref: str, off: object | None) -> list[str]:
+        """What the row lays, with a weapon in the OFF hand.
+
+        `Gear.off` is `melee[1]` -- *"a ranger carrying a blade and a bow
+        has a second weapon and is not fighting with two"* -- so the
+        off-hand weapon is simply the second **melee** one in
+        `gear.weapons`. `two_weapon` is a read-only property derived from
+        the same list and cannot be set; `gear.stowed` is cleared for
+        `drivers.thief_chassis`'s reason.
+        """
+        world, me, _ = _posed("cf:ranger-scout-f1", 1)
+        gear = world.get(me, Gear)
+        gear.weapons = [chargen.LONGSWORD] + ([off] if off is not None else [])
+        gear.stowed = []
+        n0 = len(list(world.effects.of(me)))
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        return [e.label for e in list(world.effects.of(me))[n0:]]
+
+    # The modifiers are per-roll `when=`s, so the effect is laid whatever
+    # is in hand -- the GATE is what must be asked, exactly as
+    # `drivers.thief_chassis` has to for `-f7`.
+    from combat_engine.content.features.scout import _off_hand
+
+    reads = {}
+    for off, name in ((BLADE, "light blade"), (AXE, "axe"), (None, "nothing")):
+        world, me, _ = _posed("cf:ranger-scout-f1", 1)
+        gear = world.get(me, Gear)
+        gear.weapons = [chargen.LONGSWORD] + ([off] if off is not None else [])
+        gear.stowed = []
+        reads[name] = _off_hand(Cast(world=world, me=me, ref="probe"))
+    out.that(reads == {"light blade": "light blade", "axe": "axe",
+                       "nothing": ""},
+             "`_off_hand` reads the OFF hand and tells the three cases "
+             "apart. Asserted first, because the main hand holds a heavy "
+             "blade in all three -- a reader that fell through to "
+             "`Gear.main` would answer the same thing every time and every "
+             "gate below it would pass for the wrong reason",
+             f"{reads}")
+
+    # -- f15: a kind-wide shift extension, not a row-specific one ---------
+    world, me, _ = _posed("cf:ranger-scout-f1", 1)
+    n0 = len(list(world.effects.of(me)))
+    REGISTRY["cf:ranger-scout-f15"].body(
+        Cast(world=world, me=me, ref="cf:ranger-scout-f15"))
+    extended = [e.label for e in list(world.effects.of(me))[n0:]]
+    out.that(any("move:shift" in (lbl or "") for lbl in extended),
+             "`-f15` lengthens every shift by the reserved `move:` key and "
+             "not one named row. `c.extend_move` would need the moving "
+             "row's body to read `c.squares_for` -- *a modifier nothing "
+             "consults* -- where `c.shift` consults the kind-wide key "
+             "unconditionally, which is what *whenever you shift* needs",
+             f"{extended}")
+
+    # -- the markers, named -----------------------------------------------
+    owed: dict[str, list[str]] = {}
+    for ref in rows:
+        if REGISTRY[ref].unfinished:
+            owed.setdefault(sorted(REGISTRY[ref].unfinished)[0], []).append(ref)
+    out.that("chargen.BUILD_OPTIONS(pick=2)" in owed,
+             "`-f17` waits on a fork that deals TWO, which is a gap no "
+             "other row in the tree has: `deal_build_option` draws one ref "
+             "and `c.chosen_option` returns one. Dealing one would give a "
+             "scout half its feature and granting all five is stronger "
+             "than print, so neither half is landed",
+             f"{sorted(owed)}")
+
+    world, me, _ = _posed("cf:ranger-scout-f1", 1)
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r in rows
+                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+    out.that(len(refused) == 6 and refused[0] == "cf:ranger-scout-f16",
+             "six rows are `defect=` -- all of them 'one of the following "
+             "powers' with no list",
+             f"{refused}")
+
+    # -- the four out_of_combat rows, and why not `narrative=` ------------
+    inert = sorted(r for r in rows if REGISTRY[r].out_of_combat)
+    out.that(inert == ["cf:ranger-scout-f17s1", "cf:ranger-scout-f17s2",
+                       "cf:ranger-scout-f17s3", "cf:ranger-scout-f17s4"],
+             "four rows are `out_of_combat=True` and NOT `narrative=` -- "
+             "the second marks one clause of a row that otherwise plays, "
+             "and these have no second clause. Written as `narrative=` "
+             "first, and the sweep reported all four newly silent instead "
+             "of excusing them, which is four rows of known-silence debt "
+             "for using the clause-level marker on a whole row",
+             f"{inert}")
 
 
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
@@ -76197,6 +76417,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "scout_off_hand": (
+        the_scouts_off_hand_forks_read_the_hand_and_not_each_other,
+        "the scout's two off-hand forks read the hand and not each other,"
+        " and its three grants differ for three reasons (#642, #1259)",
     ),
     "blackguard_vice": (
         the_blackguards_four_vice_parents_never_disagree,
