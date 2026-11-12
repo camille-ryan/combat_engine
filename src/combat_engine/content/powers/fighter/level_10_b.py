@@ -200,9 +200,24 @@ def p10337(c: Cast) -> None:
     keywords=[Keyword.MARTIAL, Keyword.STANCE],
 )
 def p10514(c: Cast) -> None:
-    """Nothing marks an attack as unarmed -- the damage context names the row
-    and not the hand -- so the gate is what is in the fighter's hands, which
-    is what makes an attack unarmed in the first place. See the report.
+    """The gate is what is in the fighter's hands, which for a **stance**
+    is the right reading: the card is "while you are in this stance and
+    fighting unarmed", a standing fact about the character rather than a
+    property of one swing.
+
+    **The reason originally given for that has since become false.** It
+    said *"nothing marks an attack as unarmed -- the damage context names
+    the row and not the hand"*. The damage context carries `hand` as of
+    `3fc6e555`, and the attack context has carried it since `#501`
+    (`resolve.py`, *"Which hand swung"*). So a per-swing gate is now
+    possible, and this row still should not use one -- a stance is not
+    asking about a swing.
+
+    The row that does want the per-swing reading is
+    `cf:fighter-weaponmaster-f3s2`, whose *"+2 enhancement bonus to the
+    attack rolls of unarmed attacks"* is about the blow and not the
+    stance. `#1255` is where that lives, and the correction above is why
+    its premise is narrower than it looked.
     """
     me = c.me
     stance = c.stance(label=c.ref)
