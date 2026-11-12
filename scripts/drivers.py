@@ -43436,6 +43436,177 @@ def the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand(
              f"{sorted(owed.get('chargen.spellbook(encounter_as_daily=)', ()))}")
 
 
+def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
+        out: Result) -> None:
+    """`#642`'s wave, the rogue -- and the chassis where **sharing is right
+    for one row and wrong for the one beside it**.
+
+    `cf:rogue-thief-f2` pays its extra damage under the **scoundrel's**
+    label, because the card says to: *"based on your level (see the
+    `cf:rogue-scoundrel-f4` table)"*. That shares the once-a-turn latch, the
+    `cf:rogue-tactic-*` bonuses keyed on it and `FORGO_A_DIE`'s `f952`
+    trade -- none of which a label of its own would reach.
+
+    `cf:rogue-thief-f1` is the scoundrel's First Strike sentence word for
+    word and is **not** shared: a thief is not dealt
+    `cf:rogue-scoundrel-f0` at all, so if its own row did not pay the
+    clause nobody would. One chassis, two opposite calls, and the
+    difference is that a latch is not a payment.
+
+    **And one assertion is here because the sweep cannot make it.**
+    `cf:rogue-thief-f11` is `c.initiative(2)`, which bumps
+    `Initiative.rolled` and re-splices the order and **emits nothing** --
+    so `audit` reports it SILENT however well it works. `f2565` makes the
+    same call and audits green only because it lays a save bonus beside
+    it. The order is the observable, and it is read directly. `#1262`.
+    """
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+    from combat_engine.engine.query import Initiative
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:rogue-thief-"))
+    out.that(len(rows) == 26,
+             "all 26 of the printed thief rows are declared",
+             f"{len(rows)}")
+    out.that("thief" in chargen.declared_chassis("rogue"),
+             "and the chassis is dealable beside the scoundrel",
+             f"{chargen.declared_chassis('rogue')}")
+
+    # -- the two chassis do not share their own rows ---------------------
+    build = chargen.build_of("rogue", "brawny")
+    dealt = {ch: {r for r in chargen.loadout("rogue", level=1, build=build,
+                                             who_chassis=ch)
+                  if r.startswith("cf:")}
+             for ch in ("scoundrel", "thief")}
+    crossed = dealt["thief"] & {r for r in dealt["scoundrel"]
+                                if "scoundrel" in r}
+    out.that(not crossed,
+             "a dealt thief gets NONE of the scoundrel's rows, which is why "
+             "`-f1` writes First Strike out again instead of leaning on "
+             "`cf:rogue-scoundrel-f0`",
+             f"{sorted(crossed)}")
+    out.that(len([r for r in dealt["thief"] if "thief" in r]) == 26,
+             "while all 26 of its own are there",
+             f"{len([r for r in dealt['thief'] if 'thief' in r])}")
+
+    # -- but they DO share the latch, which is the printed table ---------
+    #
+    # Read off the module rather than off the row's source: the constant is
+    # what `extra_damage` is handed, and a source grep would pass a row
+    # that defined the right string and passed a different one.
+    from combat_engine.content.features.thief import SNEAK
+
+    out.that(SNEAK == "cf:rogue-scoundrel-f4",
+             "and `-f2` pays under the scoundrel's label -- the printed "
+             "cross-reference made literal, so the once-a-turn latch, the "
+             "tactic bonuses keyed on it and `f952`'s forgo trade all "
+             "reach a thief",
+             f"{SNEAK!r}")
+    from combat_engine.content.features.strikers import FORGO_A_DIE
+
+    out.that(SNEAK in FORGO_A_DIE,
+             "which is not a formality: `f952`'s *forgo one die for -2 to "
+             "its attacks* is registered against exactly that label, so a "
+             "thief holding the feat gets the trade and would not from a "
+             "label of its own",
+             f"{sorted(FORGO_A_DIE)}")
+
+    # -- f11: the order, which is the thing the sweep cannot see ---------
+    world, me, _ = _posed("cf:rogue-thief-f0", 1)
+    init = world.get(me, Initiative)
+    was_rolled, was_slot = init.rolled, list(world.encounter.order).index(me)
+    emitted = len(world.bus.log)
+    REGISTRY["cf:rogue-thief-f11"].body(
+        Cast(world=world, me=me, ref="cf:rogue-thief-f11"))
+    now = world.get(me, Initiative)
+    out.that(now.rolled == was_rolled + 2
+             and list(world.encounter.order).index(me) < was_slot,
+             "`-f11` raises the thief's initiative by 2 AND moves it up "
+             "the order -- both halves, because the number alone is what "
+             "`c.bonus` would have moved and the order is the only thing "
+             "the number is for",
+             f"rolled {was_rolled}->{now.rolled}, slot {was_slot}->"
+             f"{list(world.encounter.order).index(me)}")
+    out.that(len(world.bus.log) == emitted,
+             "and it emits NOTHING, which is why `audit` calls the row "
+             "SILENT. Asserted so the day somebody adds an event this rule "
+             "reds and the known-silence in `audited.json` gets revisited "
+             "rather than quietly outliving its reason",
+             f"{len(world.bus.log) - emitted} event(s)")
+
+    # -- f3 and f5: the four printed arms, and one that is not ----------
+    #
+    # **`gear.stowed` is cleared, and the plant is why.** The board's rogue
+    # carries its own weapons, so a mace dropped into `gear.weapons` stayed
+    # on the belt and `gear.main` came back `None` -- which made the gate
+    # answer False before reaching the group test. A plant replacing the
+    # whole test with `return True` then PASSED: the mace arm was refused
+    # for the wrong reason and the rule read correct. Both arms have to put
+    # a weapon in the hand for the question to be about the group at all.
+    from combat_engine.content.features.strikers import _weapon_attack
+    from combat_engine.content.features.thief import _with_a_sneak_weapon
+
+    club = replace(chargen.MACE, group="mace")
+    gates: dict[tuple[str, str], tuple[bool, bool]] = {}
+    for ref in ("cf:rogue-thief-f3", "cf:rogue-thief-f5"):
+        for weapon, what in ((chargen.DAGGER, "light blade"),
+                             (club, "a mace")):
+            w, who, _ = _posed("cf:rogue-thief-f0", 1)
+            gear = w.get(who, Gear)
+            gear.weapons = [weapon]
+            gear.stowed = []
+            ctx = {"power": "mba"}
+            in_hand = _weapon_attack(w, who, ctx) is not None
+            c = Cast(world=w, me=who, ref=ref)
+            gates[(ref, what)] = (in_hand, _with_a_sneak_weapon(c)(ctx))
+    out.that(all(hand for hand, _ in gates.values()),
+             "both weapons are genuinely in the hand on all four boards, "
+             "which has to be asserted FIRST: with the mace left on the "
+             "belt the gate refuses it for having no weapon, and a plant "
+             "that deleted the group test entirely passed",
+             f"{ {f'{w}': hand for (_, w), (hand, _) in gates.items()} }")
+    out.that(all(v for (_, what), (_, v) in gates.items()
+                 if what == "light blade")
+             and not any(v for (_, what), (_, v) in gates.items()
+                         if what == "a mace"),
+             "`-f3`'s damage half and `-f5`'s attack bonus both gate on the "
+             "four printed arms and refuse a mace. Asserted through the "
+             "GATE and not the effect: both are per-roll `when=`s, so the "
+             "modifier is laid whatever is in hand",
+             f"{ {f'{r.rsplit(chr(45), 1)[-1]} {w}': v for (r, w), (_, v) in gates.items()} }")
+
+    # -- the six defective rows refuse only themselves -------------------
+    world, me, _ = _posed("cf:rogue-thief-f0", 1)
+    #: **`spent_ok=True`, because the board has already armed every one.**
+    #: These are `action=NONE` encounter traits, so `usable` answers "that
+    #: has been used" for all 26 otherwise -- the first draft of this read
+    #: `1 usable` and looked like the defect had taken the chassis down.
+    why = {r: usable(world, me, get(r), spent_ok=True)[1] for r in rows}
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r, reason in why.items() if reason == DEFECT)
+    out.that(len(refused) == 6,
+             "six rows are `defect=` -- two naming themselves as the power "
+             "they grant, four printing 'one of the following' and no list "
+             "-- and `usable` refuses every one for that reason",
+             f"{refused}")
+    out.that(refused == ["cf:rogue-thief-f14", "cf:rogue-thief-f17",
+                         "cf:rogue-thief-f22", "cf:rogue-thief-f23",
+                         "cf:rogue-thief-f24", "cf:rogue-thief-f25"],
+             "and it is exactly those six and no other row of the 26: "
+             "`dsl.entry_of` returns a `cf:` ref unchanged, so a defective "
+             "row refuses ITSELF. Named rather than counted, because on a "
+             "monster one defective row defects the whole stat block and a "
+             "chassis losing 26 rows to one bad import is a character "
+             "nobody can be dealt",
+             f"{refused}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -75299,6 +75470,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "thief_chassis": (
+        the_thief_shares_the_scoundrels_latch_and_none_of_its_rows,
+        "the thief shares the scoundrel's damage latch and none of its"
+        " rows, and its initiative rung moves the order (#642, #1262)",
     ),
     "bladesinger_hand": (
         the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand,

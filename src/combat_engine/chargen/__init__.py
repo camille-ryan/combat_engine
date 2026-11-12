@@ -2802,8 +2802,28 @@ def legs_for(cls: str, chassis: str = "") -> tuple[Build, ...]:
         if not ref.startswith("cf:") or power.cls != class_word(cls):
             continue
         leg = leg_named_by(power)
-        if leg:
-            owner.setdefault(leg, belongs.get(ref, "") or ORIGINAL)
+        if not leg:
+            continue
+        mine_chassis = belongs.get(ref, "")
+        # **A chassis-less row falls back to `ORIGINAL` only where
+        # `ORIGINAL` is on offer**, and the rogue is why. `cf:rogue-tactic-
+        # club` names the `cutthroat` leg and carries no chassis segment,
+        # so the old `or ORIGINAL` handed that leg to a chassis the rogue
+        # is **not** offered -- `declared_chassis("rogue")` is
+        # `('scoundrel', 'thief')`, because its blank rows are hand-coined
+        # extras rather than a ladder (`drivers.deal_legs` asserts exactly
+        # that). The leg then belonged to nobody and `cutthroat` became
+        # unreachable: 5 legs, 4 in each pool.
+        #
+        # Skipping instead leaves it **open**, which is the same answer the
+        # druid's two shared circles get and for the same reason -- a leg
+        # no declared chassis claims is a leg every chassis may draw. Found
+        # by `deal_legs` the moment the thief landed, which is the rule
+        # working: before the thief the rogue had one chassis and this loop
+        # never ran.
+        if not mine_chassis and ORIGINAL not in declared_chassis(cls):
+            continue
+        owner.setdefault(leg, mine_chassis or ORIGINAL)
     want = chassis or chassis_of(cls)
     mine = tuple(b for b in pool if owner.get(b.name, want) == want)
     # **A chassis every leg is attributed away from keeps the whole pool**,
