@@ -4000,6 +4000,26 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     "cf:druid-sentinel-f0": ("cf:druid-sentinel-f0s0",
                              "cf:druid-sentinel-f0s1",
                              "cf:druid-sentinel-f0s2"),
+    # **The hexblade's four pact forks, and four entries is the honest
+    # shape here.** Everywhere else in this wave a choice read by several
+    # parents gets ONE entry -- the blackguard's vice, the cavalier's
+    # virtue, the sentinel's season. These four cannot share one, because
+    # the option-to-pact mapping is absent from the import and the forks
+    # have 5, 5, 9 and 9 options: there is no common answer for them to
+    # agree about. Each parent carries `chargen.pact_option_map()` saying
+    # so. #642, #1264.
+    "cf:warlock-hexblade-f1": ("cf:warlock-hexblade-f1s0",
+                               "cf:warlock-hexblade-f1s1",
+                               "cf:warlock-hexblade-f1s2",
+                               "cf:warlock-hexblade-f1s3",
+                               "cf:warlock-hexblade-f1s4"),
+    "cf:warlock-hexblade-f2": ("cf:warlock-hexblade-f2s0",
+                               "cf:warlock-hexblade-f2s1",
+                               "cf:warlock-hexblade-f2s2",
+                               "cf:warlock-hexblade-f2s3",
+                               "cf:warlock-hexblade-f2s4"),
+    "cf:warlock-hexblade-f10": tuple(
+        f"cf:warlock-hexblade-f10s{n}" for n in range(9)),
 }
 
 

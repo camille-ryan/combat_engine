@@ -45132,6 +45132,182 @@ def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
              f"{len(refused)}: {refused[:4]} ...")
 
 
+def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
+        out: Result) -> None:
+    """`#642`'s wave, the warlock's second chassis -- 60 rows, the biggest
+    in the wave, and the one where the **arity is right and the identity
+    is not**.
+
+    Four parents print *"associated with your pact"* and the
+    option-to-pact mapping is absent from the import. Everywhere else in
+    this wave a choice read by several parents gets ONE `BUILD_OPTIONS`
+    entry so the readers cannot disagree -- the blackguard's vice, the
+    cavalier's virtue, the sentinel's season. **Here four entries is the
+    honest shape**, because the forks have 5, 5, 9 and 9 options and there
+    is no common answer for them to agree about.
+
+    So this rule asserts what *is* true: each fork deals exactly one
+    option, none deals all of them, and each parent says in its marker
+    that the one it dealt may be the wrong pact's. `#1264`.
+
+    **And it asserts the mapping really is underivable**, which is the
+    load-bearing half: three of `-f1`'s five options name their pact by
+    keyword and two carry `ARCANE` and nothing else. Deriving three and
+    guessing two is what `CLAUDE.md` forbids, and a reader who did not
+    see the measurement would reasonably try.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine import Keyword
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:warlock-hexblade-"))
+    out.that(len(rows) == 60,
+             "all 60 of the printed hexblade rows are declared -- the "
+             "largest chassis in the wave",
+             f"{len(rows)}")
+    out.that("hexblade" in chargen.declared_chassis("warlock"),
+             "and the chassis is dealable beside the plain warlock",
+             f"{chargen.declared_chassis('warlock')}")
+
+    # -- the mapping is not derivable, measured ---------------------------
+    marks = {ref: sorted(k.name for k in get(_F1_POWER[ref]).keywords)
+             for ref in _F1_POWER}
+    bare = sorted(r for r, kw in marks.items() if kw == ["ARCANE"])
+    out.that(len(bare) == 2,
+             "TWO of `-f1`'s five options carry `ARCANE` and nothing else, "
+             "so their pact cannot be read off a keyword -- which is why "
+             "the mapping is not written rather than derived for three of "
+             "five and guessed for two",
+             f"{ {k.rsplit('-', 1)[-1]: v for k, v in marks.items()} }")
+    named = {Keyword.ELEMENTAL, Keyword.TELEPORTATION, Keyword.SHADOW}
+    found = {kw for ref in _F1_POWER for kw in get(_F1_POWER[ref]).keywords}
+    out.that(named <= found,
+             "and the other three DO name a pact by keyword, which is what "
+             "makes the gap two options wide rather than five -- asserted "
+             "so a reader does not conclude the whole thing is opaque",
+             f"{sorted(k.name for k in found)}")
+
+    # -- each fork deals exactly one option ------------------------------
+    forks = {k: v for k, v in chargen.BUILD_OPTIONS.items()
+             if k.startswith("cf:warlock-hexblade-")}
+    out.that(len(forks) == 3 and all(len(v) >= 5 for v in forks.values()),
+             "three of the four pact parents carry their own "
+             "`BUILD_OPTIONS` entry -- four entries where every other "
+             "chassis in this wave shares one, because there is no common "
+             "answer to share",
+             f"{ {k.rsplit('-', 1)[-1]: len(v) for k, v in forks.items()} }")
+
+    was_scored = chargen.SCORED_CHOICES
+    chargen.SCORED_CHOICES = False
+    try:
+        leg = chargen.deal_build(Random("hx"), "warlock", "hexblade")
+        hand = {r for r in chargen.loadout(
+            "warlock", level=1, build=leg, rng=Random("hx:hand"),
+            who_chassis="hexblade") if r.startswith("cf:")}
+    finally:
+        chargen.SCORED_CHOICES = was_scored
+    every_option = {r for opts in forks.values() for r in opts}
+    out.that(not (hand & every_option),
+             "a dealt hexblade is handed NONE of the fork options -- each "
+             "parent chooses, so dealing the siblings would make a "
+             "character every pact at once, which is `#851`",
+             f"{sorted(hand & every_option)}")
+    out.that(all(p in hand for p in forks),
+             "while all three parents ARE dealt, without which nothing "
+             "grants a pact power at all",
+             f"{sorted(p for p in forks if p in hand)}")
+
+    def dealt_one(parent: str) -> int:
+        drawn = {chargen.deal_build_option(Random(f"{s}:{parent}"), parent)
+                 for s in range(60)}
+        return len(drawn)
+
+    spread = {p: dealt_one(p) for p in forks}
+    out.that(all(n == len(forks[p]) for p, n in spread.items()),
+             "and every option of every fork comes out of the dealer, so "
+             "the arity is right even where the identity is not: a "
+             "hexblade gets ONE pact power rather than five or none",
+             f"{ {k.rsplit('-', 1)[-1]: v for k, v in spread.items()} }")
+
+    # -- f2's five damage bonuses: the ability per option ----------------
+    from combat_engine.content.features.hexblade import _F2_ABILITY
+
+    laid = {}
+    for ref, ability in _F2_ABILITY.items():
+        world, me, _ = _posed("cf:warlock-hexblade-f0", 1)
+        c = Cast(world=world, me=me, ref=ref)
+        n0 = len(list(world.effects.of(me)))
+        REGISTRY[ref].body(c)
+        got = [e.label for e in list(world.effects.of(me))[n0:]]
+        want = getattr(c, f"{ability}_mod")
+        laid[ref.rsplit("-", 1)[-1]] = (
+            bool(got) == (want > 0), ability, want)
+    out.that(all(ok for ok, _, _ in laid.values()),
+             "each of `-f2`'s five options lays a damage bonus worth the "
+             "ability ITS OWN printed text names -- two Constitution, two "
+             "Dexterity, one Intelligence -- and lays nothing when that "
+             "modifier is not positive. Over all five, because reading one "
+             "passes a set of options that all spend the same ability",
+             f"{laid}")
+    abilities = sorted(set(_F2_ABILITY.values()))
+    out.that(abilities == ["con", "dex", "int"],
+             "and the five really do span three different abilities, "
+             "without which the assertion above is about one number",
+             f"{abilities}")
+
+    # -- the pact weapon joins an existing symbol group -------------------
+    blade = sorted(r for r, p in REGISTRY.items()
+                   if "chargen.pact_blade()" in (p.unfinished or ()))
+    mine = [r for r in blade if "hexblade" in r]
+    out.that(len(mine) == 9 and len(blade) - len(mine) == 15,
+             "NINE pact-weapon rows join `chargen.pact_blade()`, a symbol "
+             "15 rows already waited on, for 24 in all -- reusing it "
+             "rather than minting a synonym is what lets "
+             "`blocked.py --group` price the gap as one piece of work. "
+             "Both halves named: a count of the new rows alone would pass "
+             "if the 15 had quietly been renamed out from under them",
+             f"{len(mine)} new, {len(blade) - len(mine)} pre-existing, "
+             f"{len(blade)} total")
+
+    # -- f4 carries three symbols, which is the most in the tree ----------
+    three = REGISTRY["cf:warlock-hexblade-f4"].unfinished
+    out.that(len(three) == 3,
+             "`-f4` waits on THREE symbols -- the level, the per-encounter "
+             "ceiling and the pact weapon whose attack power it would add "
+             "a use of. Marking fewer would report it ready while two "
+             "things were still missing",
+             f"{sorted(three)}")
+
+    # -- the twenty-eight the import cannot supply ------------------------
+    world, me, _ = _posed("cf:warlock-hexblade-f0", 1)
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r in rows
+                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+    out.that(len(refused) == 28,
+             "twenty-eight rows are `defect=` -- nineteen summoned "
+             "creatures named with no stat block the summon can field, "
+             "nine 'one of the following powers' with no list. Nearly half "
+             "the chassis, which is the measurement worth having",
+             f"{len(refused)}")
+
+
+#: `-f1`'s five options and the power each grants, for the keyword
+#: measurement above. Duplicated from `features/hexblade.py` deliberately:
+#: a rule that imported the mapping would pass if the mapping were wrong.
+_F1_POWER = {
+    "cf:warlock-hexblade-f1s0": "p16257",
+    "cf:warlock-hexblade-f1s1": "p13669",
+    "cf:warlock-hexblade-f1s2": "p13962",
+    "cf:warlock-hexblade-f1s3": "p13679",
+    "cf:warlock-hexblade-f1s4": "p13721",
+}
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -52923,13 +53099,21 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
     pacts = {f"cf:warlock-f1s{i}" for i in range(7)} | {"cf:warlock-f1"}
     wl_legs = chargen.BUILDS["warlock"]
     wl_leg = wl_legs[0] if isinstance(wl_legs, (list, tuple)) else wl_legs
-    base_held = {r for r in chargen.loadout("warlock", 1, wl_leg, _Rng(3))
+    # **`ORIGINAL` is named, and "no chassis named" was the stale part.**
+    # Omitting it makes `loadout` fall back to `chassis_of`, which answers
+    # the class's first chassis in sorted order -- so the moment `#642`
+    # declared the hexblade this setup silently became a *hexblade* and
+    # read `none`, reddening a rule nothing about the warlock had changed.
+    # The comparison this rule is about is ORIGINAL against the two
+    # Essentials chassis, so it says `ORIGINAL`.
+    base_held = {r for r in chargen.loadout("warlock", 1, wl_leg, _Rng(3),
+                                            who_chassis=chargen.ORIGINAL)
                  if r in pacts}
     out.that(base_held,
-             "the setup landed: a warlock naming no chassis does hold a"
-             " class-wide pact row, so the refusal below is a change rather"
-             " than an empty set",
-             f"held with no chassis named: {sorted(base_held) or 'none'}")
+             "the setup landed: a warlock on the ORIGINAL chassis does hold"
+             " a class-wide pact row, so the refusal below is a change"
+             " rather than an empty set",
+             f"held on ORIGINAL: {sorted(base_held) or 'none'}")
     for chassis in ("hexblade", "binder"):
         got = chargen.loadout("warlock", 1, wl_leg, _Rng(3),
                               who_chassis=chassis)
@@ -76995,6 +77179,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "hexblade_pacts": (
+        the_hexblades_pact_forks_deal_one_option_without_knowing_which,
+        "the hexblade's pact forks deal one option each without knowing"
+        " which pact it belongs to (#642, #1264)",
     ),
     "sentinel_season": (
         the_sentinels_season_agrees_across_five_parents,
