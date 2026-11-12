@@ -1157,6 +1157,108 @@ def _forced_squares(c: Cast) -> None:
 mage_apprentice_s0 = _apprentice_forced("cf:wizard-mage-f0s0", 1, "enchantment")
 mage_apprentice_f3s0 = _apprentice_forced("cf:wizard-mage-f3s0", 4)
 
+#: The mage's six schools, in the order the `sN` refs are numbered, so a
+#: leg can be turned into the index its rows carry and back.
+_SCHOOLS = ("enchantment", "evocation", "illusion",
+            "necromancy", "nethermancy", "pyromancy")
+
+
+@power(
+    "cf:wizard-mage-f3",
+    level=4,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def mage_second_school(c: Cast) -> None:
+    """*"Choose a school of magic different from the one you chose at 1st
+    level. You gain the Apprentice Mage benefit associated with your second
+    school."*
+
+    **A parent, which is why it can be dealt where its options cannot.**
+    `chargen.ladder_row` refuses an above-level-0 **sub-option** that names
+    no leg, because six of them arriving at once is `#851`'s fault. A
+    parent has no siblings, so dealing one cannot over-grant -- it is free
+    to make the choice and grant among its own options, which is what this
+    does. `#1247`.
+
+    **The choice is a build option and not a leg, which is the whole
+    point.** The first school *is* the leg, and a character takes one leg
+    and stays on it -- so *"different from the one you chose"* needs the
+    other axis. `chargen.BUILD_OPTIONS["cf:wizard-mage-f3"]` is it, drawn
+    by `deal_build_option` since `#1085`, and `c.chosen_option` reads it
+    back.
+
+    **The exclusion is enforced here and not in the table**, because the
+    table has no idea what leg the character took and this row does.
+    `BUILD_OPTIONS` offers the three schools the compendium declares a
+    `(Secondary)` row for; if the draw lands on the one the leg already
+    named, the next of the three is taken instead. Deterministic, so the
+    same seed gives the same second school.
+
+    `until=ENCOUNTER` and granted rather than laid: the benefit is one of
+    three written rows, so this hands the character the row instead of
+    repeating what it says -- `_chose_a_school` in `feats/general_r.py` is
+    the same shape for the `f4` family and arrived first.
+    """
+    c.grant_row(_second_school(c), on=c.me, until=When.ENCOUNTER)
+
+
+def _second_school(c: Cast) -> str:
+    """Which `-f3sN` this character's second school is, by ref.
+
+    One derivation, read by `cf:wizard-mage-f3` to grant the Apprentice
+    benefit and by `cf:wizard-mage-f5` to grant the Expert one -- *"the
+    `cf:wizard-mage-f4` benefit associated with the **second** school"*.
+    Two copies would drift, and the drift would be silent: a character
+    would hold one school's Apprentice benefit and another's Expert.
+    """
+    mine = next((sch for sch in _SCHOOLS if c.build(sch)), "")
+    offered = ["cf:wizard-mage-f3s0", "cf:wizard-mage-f3s1",
+               "cf:wizard-mage-f3s2"]
+    chose = c.chosen_option("cf:wizard-mage-f3") or offered[0]
+    if chose not in offered:
+        chose = offered[0]
+    if mine and chose.endswith(f"s{_SCHOOLS.index(mine)}"):
+        # The draw landed on the school the leg already named, which the
+        # card forbids. Take the next one, wrapping, so every build gets a
+        # second school and the same seed always gets the same one.
+        chose = offered[(offered.index(chose) + 1) % len(offered)]
+    return chose
+
+
+@power(
+    "cf:wizard-mage-f5",
+    level=8,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def mage_second_expert(c: Cast) -> None:
+    """*"You gain the `cf:wizard-mage-f4` benefit associated with the second
+    school of magic for which you have the Apprentice Mage benefit."*
+
+    **No choice of its own**, which is what separates it from
+    `cf:wizard-mage-f4`: that one picks among the schools a mage has
+    Apprentice in, and this one is told which -- the second. So it reads
+    the same answer `cf:wizard-mage-f3` acted on and grants the matching
+    `-f5sN`, with `_second_school` the single derivation so the two cannot
+    drift into granting different schools' halves.
+
+    A parent, so `ladder_row` deals it above level 0 without a leg -- see
+    `cf:wizard-mage-f3`. Three of the six are declared, which is the three
+    the compendium prints a `(Secondary)` row for, so the index carries
+    across from `-f3sN` to `-f5sN` unchanged. #1247.
+    """
+    chose = _second_school(c)
+    c.grant_row(chose.replace("-f3s", "-f5s"), on=c.me, until=When.ENCOUNTER)
+
 
 def _apprentice_reroll(ref: str, level: int, leg: str = ""):  # noqa: ANN202
     """One card, two refs -- see `_apprentice_illusion` for why.

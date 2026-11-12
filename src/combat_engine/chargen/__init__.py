@@ -1528,6 +1528,18 @@ def _slug_chassis(name: str) -> str:
 ORIGINAL = "original"
 
 
+#: A class feature that is one option *of* another -- `cf:X-f4s2`. The
+#: distinction `ladder_row` turns on: a sub-option has siblings and so
+#: must be chosen among, a parent does not.
+#:
+#: **Named `_FEATURE_` because `_SUB_OPTION` is taken**, by the racial-trait
+#: one 230 lines down (`^rt:...-s(\d+)$`). Written as the bare name this
+#: was silently shadowed by it, so the test answered **False for every
+#: class feature** and `ladder_row` dealt all six Apprentice schools at
+#: once -- `#851`'s exact bug, introduced by the guard against it.
+_FEATURE_SUB_OPTION = re.compile(r"-f\d+s\d+$")
+
+
 def ladder_row(p, level: int = 1) -> bool:  # noqa: ANN001
     """Is this class-feature row part of the chassis ladder a character of
     `level` is dealt?
@@ -1567,7 +1579,21 @@ def ladder_row(p, level: int = 1) -> bool:  # noqa: ANN001
     """
     if p.level == 0:
         return True
-    return p.level <= level and not p.is_attack and bool(leg_named_by(p))
+    if p.level > level or p.is_attack:
+        return False
+    # **A PARENT feature above level 0 is dealt without naming a leg**, and
+    # the leg clause was about sub-options all along. The risk it guards is
+    # `#851`'s -- six Apprentice schools at once -- and that needs
+    # *siblings*: a parent has none, so dealing one cannot over-grant. It
+    # is then free to read a build-time choice and grant among its own
+    # options, which is what `cf:wizard-mage-f3` does for the second
+    # school a leg cannot express.
+    #
+    # Measured before relaxing it: of the 28 declared rows above level 0,
+    # **24 are sub-options and the other 4 are attack powers** already
+    # refused by the clause above. So this moved nothing on the day it
+    # landed and opens the one shape that was stuck. #1247.
+    return bool(leg_named_by(p)) or not _FEATURE_SUB_OPTION.search(p.ref)
 
 
 def chassis_of(cls: str, named: str = "") -> str:
@@ -3804,6 +3830,20 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # take `p10187` **in place of** `p7635`"*, so `p7635` is the one a
     # character has unless it swaps.
     "cf:artificer-f2": ("p7635", "p10187"),
+    # **The mage's SECOND school**, which is the one choice a leg cannot
+    # carry: *"Choose a school of magic **different** from the one you
+    # chose at 1st level"*, where the first is the leg. A character takes
+    # one leg and stays on it, so the second school needs the other axis
+    # -- which is this table. `#1247`, and `cf:warlord-marshal-f0`'s
+    # `chargen.second_fork()` is the same gap from the other end.
+    #
+    # Three and not six: the compendium declares `Apprentice (Secondary)`
+    # rows for three of the schools only, so those are the three a second
+    # school can be. The *exclusion* is enforced by the row rather than
+    # here -- this table has no idea what leg the character took, and
+    # `cf:wizard-mage-f3` does.
+    "cf:wizard-mage-f3": ("cf:wizard-mage-f3s0", "cf:wizard-mage-f3s1",
+                          "cf:wizard-mage-f3s2"),
 }
 
 

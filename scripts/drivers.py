@@ -42855,6 +42855,101 @@ def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     )
 
 
+def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
+    """*"Choose a school of magic **different** from the one you chose at
+    1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
+    for that same second school.
+
+    **The one choice a leg cannot carry.** The first school *is* the leg,
+    and a character takes one leg and stays on it, so the second needs the
+    other axis -- `chargen.BUILD_OPTIONS`, drawn since `#1085`.
+    `cf:warlord-marshal-f0`'s `chargen.second_fork()` is the same gap from
+    the other end. `#1247`.
+
+    **And the exclusion lives in the row, not the table**, because the
+    table has no idea what leg the character took. If the draw lands on
+    the school the leg already named, the next of the three is taken --
+    deterministically, so a seed always gives the same second school.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    SCHOOLS = ("enchantment", "evocation", "illusion",
+               "necromancy", "nethermancy", "pyromancy")
+    FAM = [f"cf:wizard-mage-f{g}s{n}" for g in (3, 5) for n in range(3)]
+
+    def granted(ref: str, leg: str, chose: str) -> list[str]:
+        """What that parent grants, on a board with the leg and choice set.
+
+        **The family is cleared first**, because `audit.board` grants the
+        row under test *and its first sub-option* -- so an `s0` answer
+        would be a silent no-op, `grant_row` returning `None` for a row
+        already known. Measured: three of four cases read empty before
+        this line existed, which looked like the exclusion failing and was
+        the probe.
+        """
+        world, me, _ = _posed(ref, 1)
+        b = world.get(me, Build)
+        b.choices = {c for c in b.choices
+                     if not c.startswith("option:cf:wizard-mage-f3:")
+                     and c not in SCHOOLS}
+        b.choices |= {leg, f"option:cf:wizard-mage-f3:{chose}"}
+        known = world.get(me, Powers)
+        for r in FAM:
+            while r in known.known:
+                known.known.remove(r)
+        before = set(known.known)
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        return sorted((set(known.known) - before) & set(FAM))
+
+    S0, S2 = "cf:wizard-mage-f3s0", "cf:wizard-mage-f3s2"
+
+    # -- a draw that does not clash is taken as it stands --------------
+    out.that(granted("cf:wizard-mage-f3", "necromancy", S0) == [S0],
+             "a second school the leg did not already name is granted as "
+             "drawn -- the floor, and the case the exclusion must leave "
+             "alone",
+             f"{granted('cf:wizard-mage-f3', 'necromancy', S0)}")
+
+    # -- and one that clashes moves on, wrapping ------------------------
+    clash = granted("cf:wizard-mage-f3", "enchantment", S0)
+    wrap = granted("cf:wizard-mage-f3", "illusion", S2)
+    out.that(clash == ["cf:wizard-mage-f3s1"] and wrap == [S0],
+             "while a draw landing on the school the LEG already named is "
+             "moved on, wrapping past the end -- *different from the one "
+             "you chose* is the printed clause, and without it a mage "
+             "holds one school twice and a second school never",
+             f"enchantment+s0 -> {clash}, illusion+s2 -> {wrap}")
+
+    # -- the two parents must name the SAME second school ---------------
+    #
+    # One derivation (`_second_school`) feeds both, and two copies would
+    # drift silently: a character would hold one school's Apprentice
+    # benefit and another's Expert.
+    agree = {}
+    for leg, chose in (("necromancy", S0), ("enchantment", S0),
+                       ("illusion", S2), ("evocation", "cf:wizard-mage-f3s1")):
+        a = granted("cf:wizard-mage-f3", leg, chose)
+        e = granted("cf:wizard-mage-f5", leg, chose)
+        agree[leg] = ([x[-2:] for x in a], [x[-2:] for x in e])
+    out.that(all(a == e for a, e in agree.values()),
+             "and `-f3` and `-f5` always name the SAME second school -- "
+             "the Apprentice benefit and the Expert one for it come from "
+             "one derivation, so they cannot drift into different halves",
+             f"{ {k: v for k, v in agree.items() if v[0] != v[1]} or agree}")
+
+    # -- no marker on either parent ------------------------------------
+    out.that(not REGISTRY["cf:wizard-mage-f3"].unfinished
+             and not REGISTRY["cf:wizard-mage-f5"].unfinished,
+             "and neither parent carries a marker: the choice is made, the "
+             "exclusion is honoured and both benefits are granted",
+             f"f3 {REGISTRY['cf:wizard-mage-f3'].unfinished}, "
+             f"f5 {REGISTRY['cf:wizard-mage-f5'].unfinished}")
+
+
 def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
     """*"You gain an extra at-will attack power of your choice at 9th level
     and again at 19th"* -- `cf:sorcerer-elementalist-f1`.
@@ -50722,9 +50817,16 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
 
     def _school(ref: str) -> str:
         m = _re.search(r"-f\ds(\d)$", ref)
-        return m.group(1) if m else "?"
+        return m.group(1) if m else ""
 
-    off = {k: v for k, v in schools.items()
+    # **Sub-options only**, because the hand now holds PARENTS too:
+    # `cf:wizard-mage-f3` and `-f5` are dealt above level 0 and carry no
+    # school index, so counting every ref put `""` in the set and made
+    # every leg read as two schools. That is the premise below expiring
+    # exactly as it was written to -- `#1247`'s chooser landed.
+    off = {k: [r for r in v if _school(r)]
+           for k, v in schools.items()}
+    off = {k: v for k, v in off.items()
            if not v or len({_school(r) for r in v}) != 1}
     out.that(not off,
              "and a mage on any of its six legs holds exactly ONE school, "
@@ -50757,14 +50859,29 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
              "character an attack short with nothing failing",
              f"{sorted(p.ref for p in attacks)}")
     later = [p for r, p in _REG.items()
-             if r.startswith("cf:wizard-mage-f") and p.level > 1
+             if _re.search(r"cf:wizard-mage-f\ds\d$", r) and p.level > 1
              and not chargen.leg_named_by(p)]
     out.that(later and not any(chargen.ladder_row(p, 10) for p in later),
-             "and an UNGATED sub-option above level 0 is NOT dealt, so the "
-             "mage's genuinely dependent choices stay undealt rather than "
-             "arriving all at once. `#1247` holds that half",
-             f"{len(later)} ungated rows at levels 4-8, "
+             "and an ungated SUB-OPTION above level 0 is still not dealt, "
+             "so the mage's dependent choices arrive by a chooser rather "
+             "than all at once -- six schools at once is `#851`",
+             f"{len(later)} ungated sub-options at levels 4-8, "
              f"{sum(1 for p in later if chargen.ladder_row(p, 10))} dealt")
+    # **A PARENT above level 0 is dealt without a leg, which is what
+    # `#1247`'s chooser needed.** The risk the leg clause guards is six
+    # siblings arriving together; a parent has none, so it can be dealt
+    # and then choose among its own options. Measured when it landed: of
+    # the 28 declared rows above level 0, 24 were sub-options and the
+    # other 4 attack powers already refused -- so this moved nothing.
+    parents = [p for r, p in _REG.items()
+               if r in ("cf:wizard-mage-f3", "cf:wizard-mage-f5")]
+    out.that(len(parents) == 2
+             and all(chargen.ladder_row(p, 10) for p in parents)
+             and not any(chargen.ladder_row(p, 3) for p in parents),
+             "while the two mage PARENTS are dealt at their printed levels "
+             "and not before -- 4 and 8, which no leg could have carried "
+             "because a character takes one leg and the first school is it",
+             f"{[(p.ref, p.level) for p in parents]}")
 
     # -- the mage's whole printed ladder, one school all the way up -------
     #
@@ -50788,6 +50905,13 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
                 "wizard", level=lvl,
                 build=chargen.build_of("wizard", leg),
                 who_chassis="mage") if r.startswith("cf:")]
+        ladder[leg] = got
+        # The two **parents** ride along from levels 4 and 8 -- they are
+        # the second school's chooser and are not this school's tiers --
+        # so the ladder is read with them filtered out.
+        got = {k: [r for r in v
+                   if r not in ("cf:wizard-mage-f3", "cf:wizard-mage-f5")]
+               for k, v in got.items()}
         ladder[leg] = got
         want = {1: [f"cf:wizard-mage-f0s{idx}"],
                 5: [f"cf:wizard-mage-f0s{idx}", f"cf:wizard-mage-f4s{idx}"],
@@ -74555,6 +74679,11 @@ DRIVERS = {
     "group_check": (
         a_group_check_scores_the_party_once_against_a_threshold,
         "a group check scores the party once against a threshold (#984)",
+    ),
+    "second_school": (
+        the_mages_second_school_is_chosen_and_differs_from_the_first,
+        "the mage's second school is chosen, differs from the first, and"
+        " its Apprentice and Expert halves agree (#1247)",
     ),
     "extra_gain": (
         a_class_feature_may_grant_an_extra_power_gain,
