@@ -46,8 +46,9 @@ from combat_engine.engine import (
     get,
     power,
 )
-from combat_engine.engine.events import PowerResolved
-from combat_engine.engine.query import alive
+from combat_engine.engine.events import PowerResolved, SurgeSpent
+from combat_engine.engine.query import Position, alive, spread, team
+from combat_engine.engine.zones import Zone
 
 
 def out_of_heavy_armour(c: Cast, who: int | None = None) -> bool:
@@ -177,6 +178,307 @@ def druid_rituals(c: Cast) -> None:
     a trait is run at the start of every fight and a line in the log would
     be announcing something that is not happening.
     """
+
+
+# ------------------------------------------------- druid: the protector
+#
+# The class's second chassis, and the first in this tree whose fork is the
+# **same choice** the base class already makes: a protector's circle *is*
+# one of the four aspects above, so `cf:druid-protector-f0s0` restates what
+# `cf:druid-f1`'s first branch pays and adds a second clause to it. The
+# circles are therefore legs -- `c.build("f1s0")` -- and not
+# `chargen.BUILD_OPTIONS`, which is the opposite call from the witch's
+# coven and the berserker's heartland, and for the opposite reason: there
+# the leg was already spent, and here the leg *is* the printed choice.
+#
+# Two of the four aspects are circles and two are not, which
+# `chargen.LEG_CHASSIS["druid"]` records by naming only the two the
+# protector does **not** have. A leg left out of that table falls open to
+# every chassis, and "open to both" is exactly what the other two are.
+
+#: The zone `p15852` lays, found by the exemption word it carries rather
+#: than by a label: the row passes `difficult=c.ref`, so the ref is already
+#: on the zone and nothing in `powers/druid/level_0.py` has to change to
+#: make it findable.
+_GROWTH = "p15852"
+
+
+def _growth_ground(c: Cast) -> frozenset:
+    """"In your p15852 zone or adjacent to it" -- the zone's squares, plus
+    the ring around them.
+
+    `spread(squares, 1)` is inclusive, which is what makes one call answer
+    both halves of the printed "or". Empty when the zone is not up, so the
+    clause costs nothing on a board where the druid never laid it.
+    """
+    ground: set = set()
+    for zid in c.my_zones():
+        zone = c.world.get(zid, Zone)
+        if zone is not None and zone.difficult == _GROWTH:
+            ground |= set(zone.squares)
+    return spread(ground, 1) if ground else frozenset()
+
+
+@power(
+    "cf:druid-protector-f0",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+)
+def protector_circle(c: Cast) -> None:
+    """*"Choose a druid circle. You gain the benefits of that circle."*
+
+    A **parent**, but one whose choice was already made: the circle is the
+    leg, so this reads `c.build` rather than `c.chosen_option` and there is
+    no `chargen.BUILD_OPTIONS` entry for it. Both circles are declared
+    below, so this grants rather than repeating what they say.
+
+    The fall-back is the first circle and not "nothing". A protector
+    without a circle is a character missing the one feature its fork exists
+    to choose, which is the harm `chargen.legs_for` is written to avoid;
+    `cf:wizard-witch-f1` defaults the same way for the same reason.
+    """
+    circle = "cf:druid-protector-f0s1" if c.build("f1s1") else "cf:druid-protector-f0s0"
+    c.grant_row(circle, on=c.me, until=When.ENCOUNTER)
+
+
+@power(
+    "cf:druid-protector-f0s0",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+)
+def protector_circle_con(c: Cast) -> None:
+    """One circle: Constitution for AC, and a surge in the zone heals more.
+
+    The first clause is `cf:druid-f1`'s first branch word for word, written
+    out again rather than reached for. That is not duplication to be tidied
+    away: a protector is not dealt `cf:druid-f1` -- a named chassis
+    supersedes the blank rows, which is what `superseded_for` is -- so if
+    this row did not pay the clause, nobody would. The reading is the same
+    one `cf:warden-f1` gives and `_ability_for_ac` in `guardians.py`
+    records: light armour already takes the better of Dexterity and
+    Intelligence, so the substitution is worth the difference and only when
+    the difference is a gain, which is what the printed "can" makes it.
+
+    The second clause is this circle's own. *"When any ally in your p15852
+    zone or adjacent to it spends a healing surge ... he or she regains
+    additional hit points equal to your Constitution modifier."*
+
+    **"Any ally" is read as not the druid**, which is the edition's own
+    sense of the word, so the watch declines `ev.actor == me`. And the
+    ground is measured **when the surge is spent**, not when the trait
+    arms: `p15852` is a minor-action zone the druid has usually not laid
+    yet at the top of the fight, and measuring at arming would make the
+    clause pay nothing for the whole encounter.
+
+    **The circle is refused in the body and not in an `on_leg` header**,
+    and that cost a measurement to get right. A header here reads as *"this
+    row belongs to leg `f1s0`"*, which `chargen.legs_for` believes: it
+    attributed the leg to the **protector** and took it off the base druid,
+    so `legs_for("druid", "original")` came back `('f1s2', 'f1s3')` and
+    `cf:druid-f1`'s first two branches became unreachable for the class
+    that prints them. A leg shared by two chassis cannot be attributed to
+    either -- `LEG_CHASSIS` maps a leg to one chassis -- so the only way to
+    say "both" is to attribute it to nobody and let it fall open, which is
+    `legs_for`'s own fail-open rule. `cf:druid-f1` gates the same four legs
+    in its body for the same reason, and this row is the sibling of that
+    branch.
+    """
+    me, world = c.me, c.world
+    if not c.build("f1s0"):
+        return
+    if out_of_heavy_armour(c):
+        gain = c.con_mod - max(c.dex_mod, c.int_mod)
+        if gain > 0:
+            c.bonus(AC, gain, until=When.ENCOUNTER, on=me, kind="untyped")
+
+    amount = c.con_mod
+    if amount <= 0:
+        return
+
+    def on_surge(ev: SurgeSpent) -> None:
+        if ev.actor == me or not alive(world, ev.actor):
+            return
+        if team(world, ev.actor) is not team(world, me):
+            return
+        where = world.get(ev.actor, Position)
+        if where is None or where.square not in _growth_ground(c):
+            return
+        c.heal(amount, on=ev.actor)
+
+    c.watch(SurgeSpent, on_surge, until=When.ENCOUNTER, on=me, label=c.ref)
+
+
+@power(
+    "cf:druid-protector-f0s1",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+)
+def protector_circle_speed(c: Cast) -> None:
+    """The other circle: +1 speed, and allies walk through the zone.
+
+    The first clause is `cf:druid-f1`'s second branch, written out again
+    for the reason the sibling above records.
+
+    The second needed nothing built. `p15852` lays its zone with
+    `difficult=c.ref` and exempts the druid with
+    `c.ignores_difficult(c.ref)` -- the exemption is per-creature and takes
+    an `on=`, so this circle is the same call once per ally. The zone does
+    not have to be up yet: the exemption is a standing fact about the
+    creature and `query.difficult_at` asks it when somebody walks.
+
+    Allies are taken at arming, which is the one thing here that is a
+    reading rather than the card. The printed "your allies" is the party,
+    and a party does not change inside a fight -- a creature that joins
+    one mid-fight is a summon, and a summon's own entry says how it moves.
+
+    Refused in the body, not in a header -- the sibling above records why,
+    and it is the one thing in this chassis that a wrong call would have
+    broken silently for the **base** druid rather than for the protector.
+    """
+    me = c.me
+    if not c.build("f1s1"):
+        return
+    if out_of_heavy_armour(c):
+        c.bonus("speed", 1, until=When.ENCOUNTER, on=me, kind="untyped")
+    for friend in c.allies():
+        c.ignores_difficult(_GROWTH, on=friend, until=When.ENCOUNTER)
+
+
+@power(
+    "cf:druid-protector-f1",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+)
+def protector_grasping_claws(c: Cast) -> None:
+    """"You gain the p15852 power."
+
+    A no-op grant: `p15852` is declared `cls="druid"` at level 0, so
+    `chargen.loadout` has already dealt it. Written out because both
+    circles above are about that zone and a reader following them needs to
+    land somewhere. `#1259`.
+    """
+    c.grant_row(_GROWTH, on=c.me, until=When.ENCOUNTER)
+
+
+@power(
+    "cf:druid-protector-f2",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+    todo=("chargen.power_choice()",),
+)
+def protector_attunement(c: Cast) -> None:
+    """"You gain three Primal Attunement powers of your choice."
+
+    A draw and not a combat clause: three rows out of a named printed
+    category, chosen at creation. `chargen.power_choice()` is the symbol
+    four feats already wait on (`f3582`, `f3588`, `f3616`, `f3646`) and it
+    is the same gap -- nothing lets a row say "deal me N of this family".
+
+    `todo=` and not `dropped=`, because the row has no other clause: there
+    is nothing here that plays.
+    """
+
+
+@power(
+    "cf:druid-protector-f3",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+    dropped=("chargen.ladder_swap(daily)",),
+)
+def protector_summon(c: Cast) -> None:
+    """"You gain the p15858 power", and the ladder it is paid for out of.
+
+    The grant is the no-op `-f1` is. What is **not** written is the price:
+    *"Because of this feature, you do not gain a druid attack power at
+    level 5, 9, 15, 19, 25, or 29. Instead ... at level 5 you can use
+    p15858 twice per day, and at level 9 three times per day."*
+
+    Two halves and neither has a writer. `chargen.EXTRA_GAINS` is the
+    table that says what a feature *adds* at a level and there is no table
+    that says what one **takes away** -- the ladder is derived from the
+    class, not declared per row. And `Powers.per_day` counts uses per ref,
+    so the rising allowance is expressible, but granting it without
+    charging for the six lost powers makes a protector strictly stronger
+    than print, which is the wrong direction to land half of. One symbol,
+    because the two halves are one printed bargain and a row that paid the
+    second alone would be wrong.
+
+    The grant itself plays, so this is `dropped=` and not `todo=`.
+    """
+    c.grant_row("p15858", on=c.me, until=When.ENCOUNTER)
+
+
+@power(
+    "cf:druid-protector-f3s0",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+    todo=("chargen.power_choice()",),
+)
+def protector_summon_list_con(c: Cast) -> None:
+    """Which creatures this circle's p15858 can summon: a printed list of
+    two at level 1, two more at 15 and two more at 29.
+
+    The same gap as `-f2` and the same symbol. `p15858`'s own block prints
+    no numbers at all -- `summon_of_your_aspect` takes `Summon`'s defaults
+    and says so -- so the six named creatures are six stat blocks the
+    summon would have to choose between, and nothing lets a row offer a
+    choice among printed options at summon time.
+
+    Declared rather than left out, because the list is what makes the two
+    circles differ at level 15 and a reader looking for it should find a
+    row saying so.
+    """
+
+
+@power(
+    "cf:druid-protector-f3s1",
+    level=0,
+    cls="druid",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.PRIMAL],
+    todo=("chargen.power_choice()",),
+)
+def protector_summon_list_speed(c: Cast) -> None:
+    """The other circle's p15858 list, and the sibling above holds the
+    reasoning."""
 
 
 #: "A divine encounter or daily **attack** power", as the header fields that

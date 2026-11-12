@@ -2714,9 +2714,26 @@ def deal_build(rng: Random, cls: str = "", chassis: str = "",
     `RaceLine.taken(build)` then puts the choosable bonus on whichever of
     the leg's two abilities is among the options -- her third step, which
     was already implemented.
+
+    **A pool of exactly one leg answers that leg, and this used to answer
+    the wrong one.** The short-circuit was `len(options) <= 1 ->
+    build_of(cls, "")`, which is `options[0]` of the **whole class pool**
+    and not of the narrowed one -- so a chassis whose pool narrows to a
+    single leg was dealt the base class's first leg instead. Silent until
+    `#642`'s berserker, the first chassis with one leg of its own: a dealt
+    berserker took `rageblood`, every one of its eight rows refused itself
+    on `on_leg("berserker")`, and the character came out with **one**
+    class feature. The sorcerer could not show it -- both its pools hold
+    four.
+
+    The no-leg case still defers to the resolver, which is what it is
+    for: `build_of` invents a `Build` for a class `BUILDS` has no entry
+    for, and there is nothing here to choose.
     """
     options = legs_for(cls, chassis)
-    if len(options) <= 1:
+    if len(options) == 1:
+        return options[0]
+    if not options:
         return build_of(cls, "")
     if not race:
         return rng.choice(list(options))
@@ -2760,9 +2777,18 @@ def legs_for(cls: str, chassis: str = "") -> tuple[Build, ...]:
     that implements both and branches on `c.build("dragon")` /
     `c.build("wild")` inside itself. One row cannot carry two `on_leg`
     headers, so there is nothing for this to read. `LEG_CHASSIS` names
-    them, and `drivers.deal_legs` asserts that table covers exactly the
-    legs inference misses on a class with more than one chassis -- so the
-    table cannot quietly grow into a second source of truth.
+    them.
+
+    **This used to claim `drivers.deal_legs` asserts that table covers
+    exactly the legs inference misses, and it does not** -- that rule
+    asserts the pools are disjoint, non-empty, and that no chassis is
+    dealt a leg outside its own, which is a different and weaker thing.
+    The table *cannot* cover every missed leg, and the druid is why: a leg
+    shared by two chassis has no entry here, because this maps a leg to
+    **one** chassis and the only way to say "both" is to leave it out and
+    let the fail-open rule above carry it. `drivers.protector_circle`
+    pins the druid's four, and `drivers.berserker_fury` the barbarian's
+    five, by naming the pools outright.
     """
     pool = BUILDS.get(class_word(cls)) or ()
     if not pool or len(declared_chassis(cls)) <= 1:
@@ -2813,6 +2839,20 @@ LEG_CHASSIS: dict[str, dict[str, str]] = {
     # inference finds those without help -- and without this entry a mage
     # could be dealt the arcanist's legs and get no school.
     "wizard": {"control": "arcanist", "war": "arcanist"},
+    # The berserker's own leg carries `on_leg` headers, so inference finds
+    # it. These four are the base class's and are dispatched in the
+    # **bodies** of `cf:barbarian-f1` and the rows beside it -- `c.build(
+    # "rageblood")` and friends -- so there is no header to read and
+    # without this entry a berserker could be dealt `thaneborn` and get
+    # neither fork's feature.
+    "barbarian": {"rageblood": ORIGINAL, "thaneborn": ORIGINAL,
+                  "thunderborn": ORIGINAL, "whirling": ORIGINAL},
+    # The druid's four aspects are all dispatched in one body,
+    # `cf:druid-f1`, so inference sees none of them. Only the two the
+    # protector does **not** have are named: its two circles are the other
+    # two aspects, and a leg left out of this table falls open to every
+    # chassis, which is the one way "belongs to both" can be said here.
+    "druid": {"f1s2": ORIGINAL, "f1s3": ORIGINAL},
 }
 
 
@@ -3863,6 +3903,13 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # legs are spent on the arcanist's two and the mage's six schools, and
     # a character takes one leg. #642.
     "cf:wizard-witch-f1": ("cf:wizard-witch-f1s0", "cf:wizard-witch-f1s1"),
+    # **The berserker's heartland.** Here for the same reason as the two
+    # above and arrived at from the other side: `berserker` *is* the
+    # chassis, so the leg is spent on the chassis itself and the fork
+    # inside it has nowhere else to go. #642.
+    "cf:barbarian-berserker-f4": ("cf:barbarian-berserker-f4s0",
+                                  "cf:barbarian-berserker-f4s1",
+                                  "cf:barbarian-berserker-f4s2"),
 }
 
 

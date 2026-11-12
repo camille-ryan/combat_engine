@@ -43011,6 +43011,289 @@ def a_chassis_whose_fork_is_a_build_option_deals_one_of_it(out: Result) -> None:
              f"{owed}")
 
 
+def the_berserkers_fury_starts_on_a_primal_attack_and_costs_the_aura(
+        out: Result) -> None:
+    """`#642`'s wave, the barbarian. A chassis that stops being a defender.
+
+    `cf:barbarian-berserker-f0` is a trait that lays a **watch**: the fury
+    starts *"when you use a barbarian primal attack power"*, and the whole
+    card is what happens then -- the defender aura `-f1` grants ends, that
+    row and `p15848` are forbidden, and melee basic attacks gain `1d8`.
+
+    **Three things this asserts that a single happy-path reading would
+    not.** A *martial* barbarian attack must NOT start it, because the
+    keyword gate is the only thing between "the fury starts when you
+    attack" and the printed sentence. The aura must be standing before the
+    trigger and gone after, so the ending clause is observed rather than
+    assumed. And three primal attacks must lay **one** `1d8` -- the row
+    re-enters its own trigger for the rest of the encounter, so without the
+    `c.lingers_label` latch a berserker would stack a die per attack.
+
+    **And one assertion is about `chargen` rather than the row.** The
+    berserker is the first chassis whose leg pool narrows to a single leg,
+    and `deal_build` short-circuited a one-leg pool to `build_of(cls, "")`
+    -- the first leg of the **whole class**, not of the pool. So a dealt
+    berserker took `rageblood`, every one of its eight rows refused itself
+    on `on_leg("berserker")`, and the character came out with one feature.
+    The sorcerer could not show it: both its pools hold four.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine import AC, Gear, Keyword, When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackDeclared
+
+    AURA, FURY = "defender aura", "cf:barbarian-berserker-fury"
+    F0 = "cf:barbarian-berserker-f0"
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:barbarian-berserker-"))
+    out.that(len(rows) == 8,
+             "all eight of the printed berserker rows are declared",
+             f"{len(rows)}: {rows}")
+
+    # -- the leg pool, and the bug a one-leg pool used to hide ------------
+    pools = {ch: sorted(b.name for b in chargen.legs_for("barbarian", ch))
+             for ch in chargen.declared_chassis("barbarian")}
+    out.that(pools == {"berserker": ["berserker"],
+                       chargen.ORIGINAL: ["rageblood", "thaneborn",
+                                          "thunderborn", "whirling"]},
+             "the two chassis draw from disjoint pools and the berserker's "
+             "holds exactly one leg, which is the case `deal_build` got "
+             "wrong",
+             f"{pools}")
+    drawn = {chargen.deal_build(Random(f"{s}:b"), "barbarian", "berserker").name
+             for s in range(40)}
+    out.that(drawn == {"berserker"},
+             "and a dealt berserker is ON that leg, every seed. Reds if "
+             "`deal_build` goes back to answering `build_of(cls, '')` for a "
+             "one-leg pool, which dealt `rageblood` and left the character "
+             "with one feature of eight",
+             f"{sorted(drawn)}")
+
+    # -- the fury, armed by hand on a board that has the aura up ----------
+    def enter(power: str) -> dict[str, object]:
+        world, me, _ = _posed(F0, 1)
+        setup = Cast(world=world, me=me, ref="audit:setup")
+        setup.effect(AURA, until=When.ENCOUNTER, on=me)
+        c = Cast(world=world, me=me, ref=F0)
+        REGISTRY[F0].body(c)
+        was = c.lingers_label(AURA, on=me)
+        world.bus.emit(AttackDeclared(attacker=me, target=me,
+                                      power=power, vs=AC))
+        labels = {e.label for e in world.effects.of(me)}
+        return {"aura_before": was, "aura_after": c.lingers_label(AURA, on=me),
+                "fury": c.lingers_label(FURY, on=me),
+                "forbids": sorted(x for x in labels if "forbids p1" in x),
+                "dice": sorted(x for x in labels if x.startswith(f"{F0} damage"))}
+
+    primal = next(r for r, p in REGISTRY.items()
+                  if p.cls == "barbarian" and p.is_attack and p.level == 0
+                  and Keyword.PRIMAL in p.keywords)
+    martial = next(r for r, p in REGISTRY.items()
+                   if p.cls == "barbarian" and p.is_attack and p.level == 0
+                   and Keyword.PRIMAL not in p.keywords)
+    on_primal = enter(primal)
+    out.that(on_primal["aura_before"] and not on_primal["aura_after"],
+             f"a primal barbarian attack ({primal}) starts the fury and the "
+             "defender aura ends -- asserted as standing BEFORE the trigger "
+             "too, so the clause cannot pass by the aura never having been "
+             "there",
+             f"{on_primal}")
+    out.that(on_primal["fury"]
+             and on_primal["forbids"] == [f"{F0} forbids p12660",
+                                          f"{F0} forbids p15848"]
+             and on_primal["dice"] == [f"{F0} damage+1d8"],
+             "and the fury stands, both rows are forbidden by name, and the "
+             "melee-basic die is laid",
+             f"{on_primal}")
+    on_martial = enter(martial)
+    out.that(on_martial["aura_after"] and not on_martial["fury"]
+             and not on_martial["dice"],
+             f"while a MARTIAL barbarian attack ({martial}) starts nothing "
+             "and leaves the aura alone. The negative arm: without the "
+             "keyword gate the fury would start on any attack, and the "
+             "positive arm alone cannot tell",
+             f"{on_martial}")
+
+    # -- the latch: three attacks, one die -------------------------------
+    world, me, _ = _posed(F0, 1)
+    c = Cast(world=world, me=me, ref=F0)
+    REGISTRY[F0].body(c)
+    for _ in range(3):
+        world.bus.emit(AttackDeclared(attacker=me, target=me,
+                                      power=primal, vs=AC))
+    dice = [e.label for e in world.effects.of(me)
+            if e.label.startswith(f"{F0} damage")]
+    out.that(len(dice) == 1,
+             "three primal attacks lay ONE extra die, not three -- the "
+             "fury stands for the encounter and re-enters its own trigger, "
+             "so the latch is what keeps a berserker from stacking a d8 an "
+             "attack",
+             f"{len(dice)}: {dice}")
+
+    # -- the heartland fork, all three options, each with its gate -------
+    heart = chargen.BUILD_OPTIONS.get("cf:barbarian-berserker-f4", ())
+    out.that(len(heart) == 3,
+             "the heartland is a three-way `BUILD_OPTIONS` fork -- the leg "
+             "is spent on the chassis itself, so the fork inside it has "
+             "nowhere else to go",
+             f"{heart}")
+
+    def heartland(ref: str, *, armour: str | None = None,
+                  shield: bool | None = None,
+                  props: set[str] | None = None) -> list[str]:
+        world, me, _ = _posed("cf:barbarian-berserker-f4", 1)
+        gear = world.get(me, Gear)
+        if gear is not None:
+            if armour is not None:
+                gear.armour = armour
+            if shield is not None:
+                gear.shield = shield
+            if props is not None and gear.main is not None:
+                gear.main.properties = frozenset(props)
+        n0 = len(list(world.effects.of(me)))
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        return [e.label for e in list(world.effects.of(me))[n0:]]
+
+    robed = heartland(heart[0], armour="cloth", shield=False)
+    plated = heartland(heart[0], armour="plate", shield=False)
+    hardy = heartland(heart[1])
+    shielded = heartland(heart[2], shield=True, props={"one-handed"})
+    bare = heartland(heart[2], shield=False, props={"one-handed"})
+    out.that(len(robed) == 2 and not plated,
+             "the robed heartland pays AC and Reflex out of armour and "
+             "NOTHING in plate -- two calls, because AC and Reflex are "
+             "separate keys and one `c.bonus` pays only one of them",
+             f"robed {robed}, plated {plated}")
+    out.that(len(hardy) == 2,
+             "the hardy one gates on nothing, so it is the control: if the "
+             "fork itself stopped being dealt this is the row that would go "
+             "silent with no gate to blame",
+             f"{hardy}")
+    out.that(len(shielded) == 1 and not bare,
+             "and the shielded one pays its damage only behind a shield. "
+             "The negative arm is the point -- `audit` reports this row "
+             "SILENT because the board carries no shield, which is the "
+             "board not asking rather than the row not working",
+             f"shielded {shielded}, bare {bare}")
+
+
+def the_protectors_circle_is_a_leg_the_base_druid_also_has(out: Result) -> None:
+    """`#642`'s wave, the druid -- and the one chassis whose fork is a
+    choice the base class **already makes**.
+
+    A protector's circle *is* one of the four printed aspects, so
+    `cf:druid-protector-f0s0` restates what `cf:druid-f1`'s first branch
+    pays and adds a clause to it. The circles are therefore legs and not
+    `chargen.BUILD_OPTIONS` -- the opposite call from the witch's coven and
+    the berserker's heartland, and for the opposite reason: there the leg
+    was already spent, here the leg *is* the printed choice.
+
+    **The expensive half is what that does to the BASE druid, and it broke
+    it once.** Written with `requires=on_leg("f1s0")` on the circle rows,
+    `chargen.legs_for` read the header as *"this leg belongs to the
+    protector"* and took `f1s0` and `f1s1` away from the plain druid, so
+    `legs_for("druid", ORIGINAL)` came back `('f1s2', 'f1s3')` and
+    `cf:druid-f1`'s first two branches became unreachable for the class
+    that prints them. `LEG_CHASSIS` maps a leg to one chassis, so a leg
+    shared by two cannot be attributed to either: the only way to say
+    "both" is to attribute it to nobody and let `legs_for` fail open.
+
+    That is `#730`'s worry arriving from a direction nothing was watching
+    -- not the chassis losing rows, but the base class losing **legs** --
+    so the first assertion here is about the plain druid.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Healed, SurgeSpent
+
+    F0S0, F0S1 = "cf:druid-protector-f0s0", "cf:druid-protector-f0s1"
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:druid-protector-"))
+    out.that(len(rows) == 8,
+             "all eight of the printed protector rows are declared",
+             f"{len(rows)}: {rows}")
+
+    pools = {ch: sorted(b.name for b in chargen.legs_for("druid", ch))
+             for ch in chargen.declared_chassis("druid")}
+    out.that(pools == {"protector": ["f1s0", "f1s1"],
+                       chargen.ORIGINAL: ["f1s0", "f1s1", "f1s2", "f1s3"]},
+             "the plain druid keeps ALL FOUR printed aspects while the "
+             "protector is narrowed to the two that are circles. Reds if "
+             "the circle rows go back to carrying an `on_leg` header, which "
+             "attributed the shared legs away and left the base class with "
+             "two",
+             f"{pools}")
+
+    def circle(ref: str, leg: str) -> list[str]:
+        """What that circle lays, on a board posed on one leg.
+
+        The board is built on `cf:druid-f2` -- an inert druid row -- and
+        **not** on the row under test: `audit.board` arms every row the
+        chassis holds, so a board built on the circle comes back with the
+        circle already standing and a before/after diff subtracts it. That
+        read as NOTHING for a row the sweep says fires, and was the probe.
+        """
+        world, me, _ = _posed("cf:druid-f2", 1)
+        held = world.get(me, Build)
+        held.choices = {x for x in held.choices
+                        if not x.startswith("f1s")} | {leg}
+        n0 = len(list(world.effects.of(me)))
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        return [e.label for e in list(world.effects.of(me))[n0:]]
+
+    laid = {(ref, leg): circle(ref, leg)
+            for ref in (F0S0, F0S1) for leg in ("f1s0", "f1s1")}
+    out.that(laid[(F0S0, "f1s0")] and not laid[(F0S0, "f1s1")]
+             and laid[(F0S1, "f1s1")] and not laid[(F0S1, "f1s0")],
+             "each circle pays on its own leg and refuses itself on the "
+             "other -- over BOTH, because one of them read alone passes a "
+             "row with no gate at all",
+             f"{ {k: v for k, v in laid.items()} }")
+
+    # -- the healing growth, and the two things it must NOT pay ----------
+    def growth(who: str) -> list[int]:
+        world, me, _ = _posed("cf:druid-f2", 1)
+        held = world.get(me, Build)
+        held.choices = {x for x in held.choices
+                        if not x.startswith("f1s")} | {"f1s0"}
+        c = Cast(world=world, me=me, ref=F0S0)
+        seen: list[int] = []
+        world.bus.on(Healed, lambda ev: seen.append(ev.amount))
+        if who == "self":
+            world.bus.emit(SurgeSpent(actor=me, left=3, source=me, healed=7))
+            return seen
+        friend = next(a for a in c.allies())
+        x, y = world.get(me, Position).square
+        world.get(friend, Position).square = (x, y) if who == "in" else (x + 20, y + 20)
+        world.bus.emit(SurgeSpent(actor=friend, left=3, source=friend, healed=7))
+        return seen
+
+    inside, outside, mine = growth("in"), growth("out"), growth("self")
+    out.that(inside and all(h > 0 for h in inside),
+             "an ally spending a surge in the zone regains the extra hit "
+             "points. The row is NOT armed by hand here -- the board arms "
+             "it, and arming it again laid a second watch and healed twice",
+             f"{inside}")
+    out.that(not outside,
+             "an ally twenty squares outside it regains nothing, which is "
+             "what makes the zone test load-bearing rather than decorative",
+             f"{outside}")
+    out.that(not mine,
+             "and the druid's own surge pays nothing -- *any ally* is the "
+             "edition's word for somebody else, so the watch declines "
+             "`ev.actor == me`",
+             f"{mine}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -74864,6 +75147,16 @@ DRIVERS = {
         declaring_an_essentials_chassis_does_not_cost_the_plain_one,
         "declaring an Essentials chassis does not cost the plain one its"
         " rows -- the bard is the first live case (#642, #730)",
+    ),
+    "berserker_fury": (
+        the_berserkers_fury_starts_on_a_primal_attack_and_costs_the_aura,
+        "the berserker's fury starts on a primal attack and costs it the"
+        " defender aura (#642)",
+    ),
+    "protector_circle": (
+        the_protectors_circle_is_a_leg_the_base_druid_also_has,
+        "the protector's circle is a leg the base druid also has, and"
+        " declaring it costs the base druid nothing (#642, #730)",
     ),
     "witch_coven": (
         a_chassis_whose_fork_is_a_build_option_deals_one_of_it,
