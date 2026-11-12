@@ -854,7 +854,34 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("cutthroat", DEX, CHA, (MACE, CROSSBOW)),
     ),
     # A -- Intelligence either way.
-    "wizard": (Build("control", INT, WIS), Build("war", INT, DEX)),
+    # **Two chassis, two sets of legs.** `control` and `war` are the
+    # arcanist's printed build options (`b:c9-0`, `b:c9-3`), and
+    # `cf:wizard-arcanist-f0` branches on both in its body. The six after
+    # them are the **mage's** schools of magic, which is what its level-1
+    # feature chooses among. `legs_for` keeps the two sets apart; without
+    # that split a mage could be dealt `control` and get no school.
+    #
+    # **The school fixes no ability, so all six share the class's own
+    # pair.** `class.abilities` for the wizard reads one primary and a
+    # choice of three seconds, and `build_option` carries four printed
+    # builds that are all the arcanist's -- none per school. So the second
+    # is the first of the three the page offers, taken rather than derived,
+    # and the leg is about which school's row is dealt. The same shape as
+    # the sorcerer's four elemental legs, which also share Cha/Con.
+    #
+    # Six, which is `cf:wizard-mage-f0`'s own count: the refs are
+    # zero-based `s0`..`s5`, and `#1085` records a session that read that
+    # as five and was corrected. #1247.
+    "wizard": (
+        Build("control", INT, WIS),
+        Build("war", INT, DEX),
+        Build("enchantment", INT, CON),
+        Build("evocation", INT, CON),
+        Build("illusion", INT, CON),
+        Build("necromancy", INT, CON),
+        Build("nethermancy", INT, CON),
+        Build("pyromancy", INT, CON),
+    ),
     # V -- swinging or shining.
     #
     # The second leg's secondary is **Strength, off its own page** -- it says
@@ -1499,6 +1526,48 @@ def _slug_chassis(name: str) -> str:
 #: character gets are identical to what the blank gave. What changes is
 #: that it can be *asked for*, and that `Sheet.chassis` can record it.
 ORIGINAL = "original"
+
+
+def ladder_row(p, level: int = 1) -> bool:  # noqa: ANN001
+    """Is this class-feature row part of the chassis ladder a character of
+    `level` is dealt?
+
+    **`p.level == 0` was the whole test, and it left one written chassis
+    undealable.** Every other chassis declares its ladder at level 0,
+    which is this tree's spelling for "from the start". `cf:wizard-mage`
+    declares its rows at their **printed** levels -- 1, 4, 5, 8, 10 -- so
+    none was selected and a level-10 mage came out with **0** class
+    features. 24 written, unmarked rows, reachable by nobody. #1247.
+
+    Three clauses, and each one is load-bearing:
+
+    * **at or below the character's level.** A level-1 mage gets the
+      level-1 school and not the 10th-level one.
+    * **not an attack power.** The other 4 rows above level 0 in the tree
+      -- `cf:warlock-f1c10`..`c12` and `cf:barbarian-f2c0` -- are at-will
+      and daily *attacks* (`is_attack=True`), and `loadout`'s `deal`
+      already hands them out from the power gains: `cf:warlock-f1c11` is
+      in a dealt vestige warlock's list today. Selecting one here would
+      spend a **feature** on a card the attack line was going to deal, so
+      the character comes out one attack power short with nothing failing.
+      The split is exact: 24 traits, all the mage's, and 4 attacks, none
+      of them.
+    * **names a leg.** A row above level 0 is dealt only if the character's
+      fork chose it. Without this, `p.level <= level` deals a level-5 mage
+      all **six** Expert schools at once, which is `#851`'s "one character
+      being two sub-classes" one level down and worse than dealing none --
+      measured, and recorded on `declared_chassis` before this existed.
+      The mage's later groups (`f3`, `f4`, `f5`, `f6`) are **dependent**
+      choices -- *"a school different from the one you chose"*, *"one for
+      which you have Apprentice"* -- which no leg can express, so they stay
+      ungated and stay undealt. `#1247` holds that half.
+
+    The caller still applies the leg *match* (`leg_named_by(p) in ("",
+    build.name)`), so this only asks whether a leg was named at all.
+    """
+    if p.level == 0:
+        return True
+    return p.level <= level and not p.is_attack and bool(leg_named_by(p))
 
 
 def chassis_of(cls: str, named: str = "") -> str:
@@ -2419,28 +2488,33 @@ def deal_race(rng: Random, cls: str = "", build: Build | None = None,
 def declared_chassis(cls: str) -> tuple[str, ...]:
     """Every chassis of this class a character can actually be dealt.
 
-    A **declared level-0 row** is the test, which is `_declared_chassis`'s
-    and is kept deliberately. It excludes the chassis nobody has written --
-    the hazard `chassis_of` records at length, where choosing `knight` gave
-    a fighter no class features at all -- and it excludes one that *is*
-    written and still cannot be dealt.
+    **A row `ladder_row` would deal at level 1** is the test, and it is
+    the same function `loadout` selects with -- so the two cannot drift
+    into disagreeing about what a chassis *is*. It still excludes the
+    chassis nobody has written, which is the hazard `chassis_of` records
+    at length: choosing `knight` gave a fighter no class features at all,
+    because it has no declared row.
 
-    **That one is `cf:wizard-mage`, and widening the test to "any declared
-    row" was my first answer and was wrong.** The mage has **24** written
-    rows and not one at level 0: its school choice is an `Apprentice`
-    feature at level 1, with `Expert` at 5 and `Master` at 10. So:
+    **It used to be `p.level == 0`, and `cf:wizard-mage` was the chassis
+    that cost.** The mage has 24 written, unmarked rows and not one at
+    level 0 -- its school choice is printed at level 1, with later
+    benefits at 4, 5, 8 and 10 -- so it was offered to nobody and a
+    level-10 mage came out with **0** class features.
 
-    * dealt as it stands, a mage arrives with **0** class features, because
-      `loadout` deals the level-0 ones;
-    * dealt under a `p.level <= level` filter, a level-1 mage arrives with
-      **all six Apprentice schools at once** -- measured -- which is `#851`'s
-      "one character being two sub-classes" fault one level down, and worse
-      than none.
+    **Widening the test to "any declared row" was my first answer and was
+    wrong**, and the reason is why `ladder_row`'s third clause exists: an
+    ungated sub-option row dealt by level alone gives a level-1 mage all
+    **six** Apprentice schools at once, which is `#851`'s "one character
+    being two sub-classes" one level down and worse than dealing none. The
+    six carry `on_leg` headers now, one per school, so the leg picks one --
+    the same arrangement the sorcerer's elemental specialties use. The
+    mage's *later* groups are dependent choices (*"a school different from
+    the one you chose"*) that no leg can express; they stay ungated and
+    undealt, and `#1247` holds that half.
 
-    The missing piece is a chooser among a feature's sub-options, which is
-    `#1085` (*"chargen deals sub-option s0 and never chooses"*). The mage
-    becomes dealable when that lands, and this function will pick it up with
-    no change here -- its rows are already written.
+    A chassis whose ladder starts **above** level 1 would need a level
+    argument here. None does -- measured over every declared `cf:` row --
+    so this asks at level 1 and says so rather than taking one.
 
     **And `ORIGINAL` is among them when the class has one**, which is
     `#1191`'s ruling. The test for that is *not* "has a blank level-0 row",
@@ -2472,8 +2546,8 @@ def declared_chassis(cls: str) -> tuple[str, ...]:
         > non hexblade warlocks"*
 
     So: 6 classes have a written chassis and **three** have a dealable
-    choice -- cleric (templar, warpriest), wizard (arcanist, sha-ir) and
-    sorcerer (elementalist, original).
+    choice -- cleric (templar, warpriest), sorcerer (elementalist,
+    original) and wizard (arcanist, mage, sha-ir).
     """
     import combat_engine.content
     from combat_engine.engine.dsl import REGISTRY
@@ -2482,7 +2556,7 @@ def declared_chassis(cls: str) -> tuple[str, ...]:
     mine = [(ref, belongs.get(ref, ""))
             for ref, power in REGISTRY.items()
             if ref.startswith("cf:") and power.cls == class_word(cls)
-            and power.level == 0]
+            and ladder_row(power, 1)]
     named = tuple(sorted({c for _, c in mine if c}))
     blank = [ref for ref, c in mine if not c]
     if blank and (not named
@@ -2618,7 +2692,17 @@ def legs_for(cls: str, chassis: str = "") -> tuple[Build, ...]:
         if leg:
             owner.setdefault(leg, belongs.get(ref, "") or ORIGINAL)
     want = chassis or chassis_of(cls)
-    return tuple(b for b in pool if owner.get(b.name, want) == want)
+    mine = tuple(b for b in pool if owner.get(b.name, want) == want)
+    # **A chassis every leg is attributed away from keeps the whole pool**,
+    # which is the fail-open discipline above taken to its last case. The
+    # sha'ir is it: once `control` and `war` went to the arcanist and the
+    # six schools to the mage, nothing was left and `legs_for` returned
+    # **nothing** -- a character nobody can be dealt, which is the one way
+    # a narrowing selector does real harm and is what `drivers.deal_legs`
+    # asserts against. A chassis with no fork of its own has no leg to be
+    # wrong about: the leg still steers which powers are drawn, so any of
+    # them is as good as another.
+    return mine or tuple(pool)
 
 
 #: Legs whose chassis `legs_for` cannot infer, because the row that
@@ -2635,6 +2719,13 @@ LEG_CHASSIS: dict[str, dict[str, str]] = {
     # `storm` -- are rows of their own and carry `on_leg` headers, so
     # inference finds those without help.
     "sorcerer": {"dragon": ORIGINAL, "wild": ORIGINAL},
+    # `cf:wizard-arcanist-f0` is one row implementing both of the
+    # arcanist's printed build options, branching on `c.build("war")` and
+    # `c.build("control")` in `content/features/controllers.py`. The
+    # mage's six schools are rows of their own with `on_leg` headers, so
+    # inference finds those without help -- and without this entry a mage
+    # could be dealt the arcanist's legs and get no school.
+    "wizard": {"control": "arcanist", "war": "arcanist"},
 }
 
 
@@ -3003,7 +3094,7 @@ def loadout(
     # 12 pairings, 2 kept.
     replaced = superseded_for(cls, chassis)
     out = sorted(p.ref for p in mine
-                 if p.level == 0
+                 if ladder_row(p, level)
                  and _Kw.BLADESPELL not in (p.keywords or ())
                  and leg_named_by(p) in ("", build.name)
                  and belongs.get(p.ref, "") in ("", chassis)

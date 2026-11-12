@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.builds import on_leg
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -839,7 +840,7 @@ def _my_school_hit(word: Keyword):  # noqa: ANN202
     return landed
 
 
-def _apprentice_illusion(ref: str, level: int):  # noqa: ANN202
+def _apprentice_illusion(ref: str, level: int, leg: str = ""):  # noqa: ANN202
     """One card, two refs: the illusion benefit at both levels it prints.
 
     `f0s2` is the school chosen at 1st level and `f3s2` the one chosen at
@@ -858,6 +859,15 @@ def _apprentice_illusion(ref: str, level: int):  # noqa: ANN202
         ref,
         level=level,
         cls="wizard",
+        # **The leg only for the level-1 school, which is why it is a
+        # parameter.** Each of these factories builds two rows: the
+        # `f0sN` benefit a mage gets for its *chosen* school, and the
+        # `f3sN` one for the second school it picks at 4th level. The
+        # card for the second prints *"a school of magic different from
+        # the one you chose"*, so it is a dependent choice a leg cannot
+        # express -- see `#1247`. Gated here, ungated there.
+        requires=on_leg(leg) if leg else None,
+        requires_text=f"needs the {leg} school" if leg else "",
         usage=AT_WILL,
         action=ActionType.FREE,
         reach=PERSONAL,
@@ -924,7 +934,7 @@ def _illusion_penalty(c: Cast) -> None:
               when=lambda ctx: ctx.get("target") == me)
 
 
-mage_apprentice_s2 = _apprentice_illusion("cf:wizard-mage-f0s2", 1)
+mage_apprentice_s2 = _apprentice_illusion("cf:wizard-mage-f0s2", 1, "illusion")
 mage_apprentice_f3s2 = _apprentice_illusion("cf:wizard-mage-f3s2", 4)
 
 
@@ -932,6 +942,8 @@ mage_apprentice_f3s2 = _apprentice_illusion("cf:wizard-mage-f3s2", 4)
     "cf:wizard-mage-f0s3",
     level=1,
     cls="wizard",
+    requires=on_leg("necromancy"),
+    requires_text="needs the necromancy school",
     usage=AT_WILL,
     action=ActionType.FREE,
     reach=PERSONAL,
@@ -960,6 +972,8 @@ def mage_apprentice_s3(c: Cast) -> None:
     "cf:wizard-mage-f0s4",
     level=1,
     cls="wizard",
+    requires=on_leg("nethermancy"),
+    requires_text="needs the nethermancy school",
     usage=AT_WILL,
     action=ActionType.FREE,
     reach=PERSONAL,
@@ -1007,6 +1021,8 @@ def mage_apprentice_s4(c: Cast) -> None:
     "cf:wizard-mage-f0s5",
     level=1,
     cls="wizard",
+    requires=on_leg("pyromancy"),
+    requires_text="needs the pyromancy school",
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=PERSONAL,
@@ -1043,7 +1059,7 @@ def mage_apprentice_s5(c: Cast) -> None:
     c.ignore_resistance(dtype=DamageType.FIRE, on=c.me, until=When.ENCOUNTER)
 
 
-def _apprentice_forced(ref: str, level: int):  # noqa: ANN202
+def _apprentice_forced(ref: str, level: int, leg: str = ""):  # noqa: ANN202
     """One card, two refs -- see `_apprentice_illusion` for why.
 
     The enchantment benefit, printed at 1st level for the first school and
@@ -1054,6 +1070,15 @@ def _apprentice_forced(ref: str, level: int):  # noqa: ANN202
         ref,
         level=level,
         cls="wizard",
+        # **The leg only for the level-1 school, which is why it is a
+        # parameter.** Each of these factories builds two rows: the
+        # `f0sN` benefit a mage gets for its *chosen* school, and the
+        # `f3sN` one for the second school it picks at 4th level. The
+        # card for the second prints *"a school of magic different from
+        # the one you chose"*, so it is a dependent choice a leg cannot
+        # express -- see `#1247`. Gated here, ungated there.
+        requires=on_leg(leg) if leg else None,
+        requires_text=f"needs the {leg} school" if leg else "",
         usage=ENCOUNTER,
         action=ActionType.NONE,
         reach=PERSONAL,
@@ -1094,11 +1119,11 @@ def _forced_squares(c: Cast) -> None:
                        when=arcane_enchantment)
 
 
-mage_apprentice_s0 = _apprentice_forced("cf:wizard-mage-f0s0", 1)
+mage_apprentice_s0 = _apprentice_forced("cf:wizard-mage-f0s0", 1, "enchantment")
 mage_apprentice_f3s0 = _apprentice_forced("cf:wizard-mage-f3s0", 4)
 
 
-def _apprentice_reroll(ref: str, level: int):  # noqa: ANN202
+def _apprentice_reroll(ref: str, level: int, leg: str = ""):  # noqa: ANN202
     """One card, two refs -- see `_apprentice_illusion` for why.
 
     The evocation benefit, printed at 1st level for the first school and at
@@ -1109,6 +1134,15 @@ def _apprentice_reroll(ref: str, level: int):  # noqa: ANN202
         ref,
         level=level,
         cls="wizard",
+        # **The leg only for the level-1 school, which is why it is a
+        # parameter.** Each of these factories builds two rows: the
+        # `f0sN` benefit a mage gets for its *chosen* school, and the
+        # `f3sN` one for the second school it picks at 4th level. The
+        # card for the second prints *"a school of magic different from
+        # the one you chose"*, so it is a dependent choice a leg cannot
+        # express -- see `#1247`. Gated here, ungated there.
+        requires=on_leg(leg) if leg else None,
+        requires_text=f"needs the {leg} school" if leg else "",
         usage=ENCOUNTER,
         action=ActionType.NONE,
         reach=PERSONAL,
@@ -1146,7 +1180,7 @@ def _reroll_one_one(c: Cast) -> None:
     )
 
 
-mage_apprentice_s1 = _apprentice_reroll("cf:wizard-mage-f0s1", 1)
+mage_apprentice_s1 = _apprentice_reroll("cf:wizard-mage-f0s1", 1, "evocation")
 mage_apprentice_f3s1 = _apprentice_reroll("cf:wizard-mage-f3s1", 4)
 
 

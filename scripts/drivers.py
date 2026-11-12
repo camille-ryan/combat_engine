@@ -23390,8 +23390,25 @@ def a_retype_can_name_one_row_and_one_victim(out: Result) -> None:
     # (`through=`, `from_` taking a sequence), so `from_many=` is spent. What
     # is left is the printed **may** -- a choice per instance, which a
     # standing label read inside `_typed` has no moment to ask.
-    # **And the two left now want the SAME thing, which is why this moved.**
-    # `f2179` was pinned here on `c.deals(like=)`. It was re-pointed onto
+    # **`cf:warlock-f1s1` is written now and is out of the table below**,
+    # which is what `2e1f1e7c` did on Camille's ruling, 2026-11-11:
+    #
+    #   > *"Elemental pact: Make the decision when using the power."*
+    #
+    # That answers the "no moment to ask" objection the paragraph above
+    # gives -- `PowerUsed` is announced **before** the body runs, so the
+    # choice is made at the use rather than when the trait is armed, and
+    # `c.deals(may=)` is not wanted for this row at all. Its assertion
+    # moved from *"waits on this one symbol"* to *"waits on nothing"*,
+    # which is the stricter of the two: a marker reappearing reds it.
+    #
+    # **It was red for three commits before anybody looked**, because the
+    # suite was never run after `2e1f1e7c` and two later commits read a
+    # pipeline's exit code -- `grep`'s -- as drivers'. Recorded because
+    # the lesson is about the gate, not the row.
+    #
+    # **So ONE row is left here, not two.** `f2179` was pinned on
+    # `c.deals(like=)` and was re-pointed onto
     # `c.deals(may=)` in `777740f2` after its card was read against the
     # verb: `c.deals` has 14 keywords and none of them is a `may=` or an
     # `optional=`, and what both rows print is a **choice per instance** --
@@ -23410,13 +23427,18 @@ def a_retype_can_name_one_row_and_one_victim(out: Result) -> None:
     # symbol somebody *measured* it onto, and a future re-merge of two
     # unlike needs still reds this.
     left = {
-        "cf:warlock-f1s1": ("c.deals(may=)",),
         "f2179": ("c.deals(may=)",),
     }
-    out.that(not REGISTRY["f1488"].unfinished,
-             "f1488 carries no marker: the two-type retype, the fire keyword"
-             " and the save penalty all play (#706)",
-             f"{REGISTRY['f1488'].unfinished}")
+    for ref, why in (
+        ("f1488", "the two-type retype, the fire keyword and the save"
+                  " penalty all play (#706)"),
+        ("cf:warlock-f1s1", "the pact's retype is offered when the power is"
+                            " used, which is Camille's ruling, so the"
+                            " `may=` it was pinned on is spent (#711)"),
+    ):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker: {why}",
+                 f"{REGISTRY[ref].unfinished}")
     for ref, want in left.items():
         out.that(REGISTRY[ref].unfinished == want,
                  f"{ref} waits on {want[0]} and not on the parameter that"
@@ -30892,6 +30914,29 @@ def every_build_leg_can_be_dealt(out: Result) -> None:
              "narrowing that empties a pool is a character nobody can be "
              "dealt",
              f"{empty}")
+    # **And a chassis every leg is attributed away from keeps the whole
+    # pool.** The sha'ir is the case: once `control` and `war` went to the
+    # arcanist and the six schools to the mage, `legs_for` returned
+    # **nothing** -- a character nobody can be dealt. The assertion above
+    # is what caught it.
+    sha = [b.name for b in chargen.legs_for("wizard", "sha-ir")]
+    whole = [b.name for b in chargen.BUILDS["wizard"]]
+    out.that(sha == whole,
+             "a chassis with no leg of its own keeps the class's whole "
+             "pool rather than an empty one -- fail open, which is what "
+             "`legs_for` says it does",
+             f"{len(sha)} of {len(whole)}")
+    pools = {ch: sorted(b.name for b in chargen.legs_for("wizard", ch))
+             for ch in ("arcanist", "mage")}
+    out.that(pools == {"arcanist": ["control", "war"],
+                       "mage": sorted(["enchantment", "evocation", "illusion",
+                                       "necromancy", "nethermancy",
+                                       "pyromancy"])},
+             "while the wizard's two forked chassis draw from disjoint "
+             "pools -- without that a mage could be dealt `control` and "
+             "get no school at all",
+             f"{pools}")
+
 
     # -- the resolver must NOT draw -------------------------------------
     cls = next(iter(sorted(multi)))
@@ -49980,11 +50025,74 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
         for sheet in _Party.of(level=1, seed=seed).sheets:
             got[sheet.cls].add(sheet.chassis)
     out.that(got.get("cleric") == {"templar", "warpriest"}
-             and got.get("wizard") == {"arcanist", "sha-ir"},
-             "and a dealt PARTY carries both, so the draw reaches a real "
-             "character and `Sheet.chassis` round-trips it",
+             and got.get("wizard") == {"arcanist", "mage", "sha-ir"},
+             "and a dealt PARTY carries every one of them, so the draw "
+             "reaches a real character and `Sheet.chassis` round-trips it",
              f"cleric {sorted(got.get('cleric', ()))}, "
              f"wizard {sorted(got.get('wizard', ()))}")
+    # -- the mage: a ladder declared at its PRINTED levels ---------------
+    #
+    # `loadout` selected `p.level == 0`, and every other chassis declares
+    # its ladder there. `cf:wizard-mage` declares at 1, 4, 5, 8 and 10, so
+    # **24 written, unmarked rows were dealt to nobody** and a level-10
+    # mage came out with 0 class features. `chargen.ladder_row` is the
+    # test now, and `declared_chassis` asks the same function so the two
+    # cannot drift about what a chassis is. #1247.
+    out.that("mage" in chargen.declared_chassis("wizard"),
+             "the mage is a dealable chassis -- it was the one written "
+             "chassis nobody could be dealt",
+             f"{chargen.declared_chassis('wizard')}")
+
+    SCHOOLS = ("enchantment", "evocation", "illusion",
+               "necromancy", "nethermancy", "pyromancy")
+    schools = {}
+    for leg in SCHOOLS:
+        for lvl in (1, 10):
+            schools[(leg, lvl)] = [
+                r for r in chargen.loadout(
+                    "wizard", level=lvl,
+                    build=chargen.build_of("wizard", leg),
+                    who_chassis="mage") if r.startswith("cf:")]
+    off = {k: v for k, v in schools.items() if len(v) != 1}
+    out.that(not off,
+             "and a mage on any of its six legs gets EXACTLY ONE school, "
+             "at level 1 and at 10 alike -- all six at once is `#851`'s "
+             "fault one level down and worse than dealing none",
+             f"{off or 'all 12 hold'}")
+
+    # **The whole mapping, not one leg.** Reading a single leg is a plant
+    # that cannot fail: the row is dealt on its own leg whether it is
+    # gated or not, so stripping a gate leaves that entry green while a
+    # *different* leg quietly gets two schools. That is exactly how my
+    # first version of this assertion passed its own plant, and how
+    # `spirit_present` passed one earlier.
+    at1 = {leg: schools[(leg, 1)][0] for leg in SCHOOLS if schools[(leg, 1)]}
+    want = {leg: f"cf:wizard-mage-f0s{i}" for i, leg in enumerate(SCHOOLS)}
+    out.that(at1 == want and len(set(at1.values())) == 6,
+             "and each leg gets a DIFFERENT one, in the order the refs are "
+             "printed -- an off-by-one here reads green on any single leg, "
+             "which is `#1085`'s own warning about this family",
+             f"{at1}")
+
+    # -- `ladder_row`'s other two clauses, each on its own ---------------
+    above = [p for r, p in _REG.items()
+             if r.startswith("cf:") and 0 < p.level <= 10]
+    attacks = [p for p in above if p.is_attack]
+    out.that(attacks and not any(chargen.ladder_row(p, 10) for p in attacks),
+             "while an above-level-0 row that is an ATTACK POWER is never "
+             "a ladder row -- the ones in the tree are dealt from the "
+             "power gains, and spending a feature on one leaves the "
+             "character an attack short with nothing failing",
+             f"{sorted(p.ref for p in attacks)}")
+    later = [p for r, p in _REG.items()
+             if r.startswith("cf:wizard-mage-f") and p.level > 1]
+    out.that(later and not any(chargen.ladder_row(p, 10) for p in later),
+             "and an ungated sub-option above level 0 is NOT dealt, so the "
+             "mage's later DEPENDENT choices stay undealt rather than "
+             "arriving all at once. `#1247` holds that half",
+             f"{len(later)} rows at levels 4-10, "
+             f"{sum(1 for p in later if chargen.ladder_row(p, 10))} dealt")
+
 
 
 def a_feint_is_an_action_and_one_feat_rides_it(out: Result) -> None:

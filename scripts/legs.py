@@ -367,9 +367,17 @@ def chassis_census() -> tuple[list[str], dict[str, int]]:
 
     chassis = {r["ref"]: r["build"]
                for r in game().execute("SELECT ref, build FROM class_feature")}
+    # **`ladder_row`, not `power.level != 0`, and the difference was a
+    # whole chassis.** `cf:wizard-mage` declares its rows at their printed
+    # levels, so a level test skipped all 24 and this census reported the
+    # wizard with 2 chassis while the dealer was offering 3. Asked of
+    # `chargen`, for the reason the `ORIGINAL` block below gives: a census
+    # that disagrees with the dealer is the drift this file warns about.
+    from combat_engine.chargen import ladder_row
+
     named: dict[str, set[str]] = collections.defaultdict(set)
     for ref, power in REGISTRY.items():
-        if not ref.startswith("cf:") or power.level != 0:
+        if not ref.startswith("cf:") or not ladder_row(power, 1):
             continue
         # Absent from the table, or blank: class-wide, not a chassis.
         if chassis.get(ref):
