@@ -3981,6 +3981,11 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     "cf:ranger-scout-f3": ("cf:ranger-scout-f3s0", "cf:ranger-scout-f3s1"),
     "cf:ranger-scout-f21": ("cf:ranger-scout-f21s0",
                             "cf:ranger-scout-f21s1"),
+    # **The cavalier's virtue, and ONE entry for the same reason the
+    # blackguard's vice gets one.** Four parents print "associated with
+    # your virtue" and the other three read this ref's answer. #642, #851.
+    "cf:paladin-cavalier-f4": ("cf:paladin-cavalier-f4s0",
+                               "cf:paladin-cavalier-f4s1"),
 }
 
 

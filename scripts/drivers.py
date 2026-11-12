@@ -44554,6 +44554,204 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
              f"{inert}")
 
 
+def the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally(
+        out: Result) -> None:
+    """`#642`'s wave, the paladin's third chassis. 34 rows, and
+    structurally the blackguard again -- one **virtue** chosen on `-f4` and
+    read by three other parents, with one `chargen.BUILD_OPTIONS` entry.
+
+    Asserted the same way `drivers.blackguard_vice` asserts the vice,
+    because the failure is the same and equally silent: four independent
+    draws make a character half of each virtue and every row still works.
+
+    **Two things on this chassis are not the blackguard's, and both are
+    one `on=` away from being invisible.**
+
+    `-f13` and `cf:paladin-blackguard-f17` are the same trigger and the
+    same number -- an adjacent ally spends a surge, somebody gains
+    Charisma-modifier temporary hit points -- and the recipient is the
+    **other way round** on each. Two chassis of one class, one sentence
+    apart. So the rule reads who actually got them.
+
+    And three rows grant `p12660`: the knight as a no-op, the berserker
+    and this chassis for real. Same ref, three chassis, two answers.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.content.features.cavalier import VIRTUE, VIRTUES
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Health, Powers
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+    from combat_engine.engine.events import SurgeSpent
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:paladin-cavalier-"))
+    out.that(len(rows) == 34,
+             "all 34 of the printed cavalier rows are declared",
+             f"{len(rows)}")
+    out.that(set(chargen.declared_chassis("paladin"))
+             == {"blackguard", "cavalier", chargen.ORIGINAL},
+             "and the paladin now has all three of its printed chassis",
+             f"{chargen.declared_chassis('paladin')}")
+
+    # -- one entry, four readers -----------------------------------------
+    entries = sorted(k for k in chargen.BUILD_OPTIONS
+                     if k.startswith("cf:paladin-cavalier-"))
+    out.that(entries == [VIRTUE],
+             "exactly ONE `BUILD_OPTIONS` entry on this chassis, and it is "
+             "`-f4`. Four would be four independent draws and the "
+             "character would be half of each virtue -- which nothing "
+             "else here would notice",
+             f"{entries}")
+
+    PARENTS = {
+        VIRTUE: VIRTUES,
+        "cf:paladin-cavalier-f6": ("cf:paladin-cavalier-f6s0",
+                                   "cf:paladin-cavalier-f6s1"),
+        "cf:paladin-cavalier-f10": ("cf:paladin-cavalier-f10s0",
+                                    "cf:paladin-cavalier-f10s1"),
+        "cf:paladin-cavalier-f14": ("cf:paladin-cavalier-f14s0",
+                                    "cf:paladin-cavalier-f14s1"),
+    }
+
+    def granted(chose: str) -> dict[str, str]:
+        """What each of the four parents hands over, with the virtue set.
+
+        The whole family is cleared from `Powers.known` first, because
+        `audit.board` grants the row under test *and its first
+        sub-option* -- an index-0 answer would otherwise be a silent
+        no-op.
+        """
+        world, me, _ = _posed(VIRTUE, 1)
+        held = world.get(me, Build)
+        held.choices = {x for x in held.choices
+                        if not x.startswith(f"option:{VIRTUE}:")}
+        held.choices.add(f"option:{VIRTUE}:{chose}")
+        known = world.get(me, Powers)
+        every = [r for pair in PARENTS.values() for r in pair]
+        for ref in every:
+            while ref in known.known:
+                known.known.remove(ref)
+        answer = {}
+        for parent in PARENTS:
+            before = set(known.known)
+            REGISTRY[parent].body(Cast(world=world, me=me, ref=parent))
+            new = sorted((set(known.known) - before) & set(every))
+            answer[parent] = new[0] if len(new) == 1 else str(new)
+        return answer
+
+    for index, chose in enumerate(VIRTUES):
+        handed = granted(chose)
+        wanted = {p: pair[index] for p, pair in PARENTS.items()}
+        out.that(handed == wanted,
+                 f"with virtue {index} chosen, all four parents hand over "
+                 f"virtue {index}'s option -- the whole map, over both "
+                 "virtues, because one read alone passes four parents that "
+                 "ignore the choice and grant the first",
+                 f"{ {k.rsplit('-', 1)[-1]: v.rsplit('-', 1)[-1] for k, v in handed.items()} }")
+
+    drawn = {chargen.deal_build_option(Random(f"{s}:v"), VIRTUE)
+             for s in range(60)}
+    out.that(drawn == set(VIRTUES),
+             "both virtues come out of the dealer, which has to hold or "
+             "the agreement above is agreement about one value",
+             f"{sorted(drawn)}")
+
+    # -- f13: the ALLY gains the temporary hit points --------------------
+    #
+    # **The sibling chassis' watch is taken off the board first, and
+    # without that this arm cannot fail.** `audit.board` on a
+    # `cf:paladin-cavalier-*` ref arms the rows of **both** paladin
+    # chassis -- measured: `cf:paladin-blackguard-f17` and `-f20` and nine
+    # more are standing on it -- so the blackguard's version of this exact
+    # trigger fires too and gives the *cavalier* the temporary hit points.
+    # The first draft read `ally 2, cavalier 2` and looked like this row
+    # pointing both ways. `#1263`.
+    world, me, _ = _posed("cf:paladin-cavalier-f1", 1)
+    for effect in list(world.effects.of(me)):
+        if "cf:paladin-blackguard-" in (effect.label or ""):
+            world.effects.end(effect)
+    c = Cast(world=world, me=me, ref="cf:paladin-cavalier-f13")
+    REGISTRY["cf:paladin-cavalier-f13"].body(c)
+    friend = next(a for a in c.allies() if c.adjacent(a))
+    mine = world.get(me, Health)
+    theirs = world.get(friend, Health)
+    mine.temp = theirs.temp = 0
+    world.bus.emit(SurgeSpent(actor=friend, left=3, source=friend, healed=7))
+    out.that(theirs.temp > 0 and mine.temp == 0,
+             "`-f13` gives the temporary hit points to the ALLY and none "
+             "to the cavalier. Both sides read, because "
+             "`cf:paladin-blackguard-f17` is the same trigger and the same "
+             "number pointing the other way -- a `c.temp_hp` with the "
+             "wrong `on=` is invisible on either chassis",
+             f"ally {theirs.temp}, cavalier {mine.temp}")
+
+    # -- f4s0 and f4s1: both work and both are invisible to the sweep ----
+    world, me, _ = _posed("cf:paladin-cavalier-f1", 1)
+    health = world.get(me, Health)
+    was_max, was_now = health.max_surges, health.surges
+    emitted = len(world.bus.log)
+    REGISTRY["cf:paladin-cavalier-f4s0"].body(
+        Cast(world=world, me=me, ref="cf:paladin-cavalier-f4s0"))
+    out.that(health.max_surges == was_max + 1
+             and health.surges == was_now + 1,
+             "`-f4s0` raises the ALLOWANCE and the count both -- granting "
+             "a surge the creature cannot spend is half a clause, and "
+             "`Health` keeps the two separately",
+             f"max {was_max}->{health.max_surges}, "
+             f"now {was_now}->{health.surges}")
+    out.that(len(world.bus.log) == emitted,
+             "and it emits nothing, which is why `audit` reports the row "
+             "SILENT. Asserted so the day somebody adds an event this rule "
+             "reds and the known-silence gets revisited rather than "
+             "quietly outliving its reason -- `#1262` is the same hole "
+             "under `c.initiative`, which `-f4s1` sits in",
+             f"{len(world.bus.log) - emitted} event(s)")
+
+    # -- p12660: three chassis, two answers -------------------------------
+    was_scored = chargen.SCORED_CHOICES
+    chargen.SCORED_CHOICES = False
+    try:
+        hands = {}
+        for cls, chassis in (("paladin", "cavalier"), ("fighter", "knight"),
+                             ("barbarian", "berserker")):
+            leg = chargen.deal_build(Random(f"{cls}:g"), cls, chassis)
+            hands[chassis] = "p12660" in set(chargen.loadout(
+                cls, level=1, build=leg, rng=Random(f"{cls}:hand"),
+                who_chassis=chassis))
+    finally:
+        chargen.SCORED_CHOICES = was_scored
+    out.that(hands == {"knight": True, "cavalier": False,
+                       "berserker": False},
+             "`p12660` is dealt to a knight and to neither of the other "
+             "two, so the same granting sentence is a no-op on one chassis "
+             "and load-bearing on two. `SCORED_CHOICES` pinned, for "
+             "`drivers.blackguard_vice`'s reason",
+             f"{hands}")
+
+    # -- the eleven the import cannot supply ------------------------------
+    world, me, _ = _posed("cf:paladin-cavalier-f1", 1)
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r in rows
+                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+    out.that(len(refused) == 11
+             and "cf:paladin-cavalier-f14s0" in refused
+             and "cf:paladin-cavalier-f17" in refused,
+             "eleven rows are `defect=` -- two naming themselves, eight "
+             "printing 'one of the following' with no list, and `-f17`, "
+             "whose spec reads 'the avatar of p7249 power': a printed name "
+             "with a ref embedded in it, and `p7249` is a level-2 attack "
+             "power rather than the epic daily the row means",
+             f"{len(refused)}: {refused}")
+    out.that(get("p7249") is not None and get("p7249").level == 2,
+             "and that ref really is the wrong half of the phrase -- it "
+             "resolves, to a level-2 power, which is what makes `-f17` a "
+             "defect rather than a missing ref",
+             f"p7249 level {get('p7249').level}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -76417,6 +76615,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "cavalier_virtue": (
+        the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally,
+        "the cavalier's virtue agrees across four parents and its temp hp"
+        " goes to the ALLY, not to it (#642, #851)",
     ),
     "scout_off_hand": (
         the_scouts_off_hand_forks_read_the_hand_and_not_each_other,
