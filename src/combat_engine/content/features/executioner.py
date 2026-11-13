@@ -451,7 +451,6 @@ def executioner_veil(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.SHADOW],
-    dropped=("chargen.meets(waived=)",),
 )
 def executioner_bonus_feat(c: Cast) -> None:
     """"You choose a bonus feat, either f162 or f172. You don't have to meet
@@ -468,12 +467,31 @@ def executioner_bonus_feat(c: Cast) -> None:
     The choice is `chargen.BUILD_OPTIONS`, two options, same as every other
     printed pick-one in this wave.
 
-    Dropped: *"you don't have to meet the feat's prerequisite."* Granting
-    the row directly sidesteps `chargen.meets` entirely, so the clause is
-    **already true** of this path and is marked anyway -- because the day
-    the grant goes through the dealer instead, the prerequisite comes back
-    and nothing would say so. One symbol, naming the waiver rather than the
-    grant.
+    **The grant goes through the dealer now, and the prerequisite is
+    waived there.** That is what the marker was holding a place for:
+    `chargen.WAIVED_FEATS` names this row, so the option it was dealt is
+    put in the hand past `choices.legal_feats` -- which asks
+    `chargen.meets`, and both of these feats print an ability minimum the
+    character need not have.
+
+    **And the build-time half is the half that was really missing.**
+    Granting a row at arming is enough for anything that happens in a
+    fight, and one of these two feats is a *proficiency*: the gear is
+    already on when the first initiative is rolled, so a permission that
+    arrives at arming arrives too late. Measured before the change -- an
+    executioner that chose light-shield proficiency came out with no
+    shield on four seeds of four; after it, it carries one.
+
+    Two faults fell out of checking that, both a layer below this row:
+    `chargen.spawn` folded the waived feat into `Powers.known` but not
+    into the proficiency and armour passes that run before it, and `f162`
+    declared no `proficiency=` at all -- so even once held, its
+    permission went nowhere. Both fixed; `f162`'s docstring has the
+    second.
+
+    The body's own `c.grant_row` stays. It is a no-op for a row already
+    in the hand, and it is the path for anything that grants this feature
+    mid-fight rather than dealing it.
     """
     feat = (c.chosen_option("cf:assassin-executioner-f5") or "f162")
     c.grant_row(feat, on=c.me, until=When.ENCOUNTER)

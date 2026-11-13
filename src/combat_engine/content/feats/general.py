@@ -441,9 +441,22 @@ def f161(c: Cast) -> None:
 
 
 @power("f162", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+       reach=PERSONAL, target=NO_TARGET, out_of_combat=True,
+       proficiency=("a7",))
 def f162(c: Cast) -> None:
-    """Shield proficiency is a build-time permission."""
+    """Shield proficiency is a build-time permission.
+
+    **And it has to be declared to be one.** The docstring said that and
+    the header did not: `chargen.armour_opened` reads a feat's own
+    `proficiency=` for exactly this sentence, and with the field empty
+    `armour_opened(["f162"])` answered `(frozenset(), 0)` -- the feat was
+    held, carried no marker, and granted nothing. `a7` is the light
+    shield in the `armour` table, which is where `shield_weight` reads
+    the number from.
+
+    Found from the other end: `cf:assassin-executioner-f5` grants this
+    feat as its waived bonus feat, and checking that the grant took
+    effect found the permission going nowhere."""
 
 
 @power("f165", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

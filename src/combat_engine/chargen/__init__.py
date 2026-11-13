@@ -4873,6 +4873,31 @@ OPTION_PACT: dict[str, str] = {
 }
 
 
+
+#: Rows whose printed text grants a bonus feat **and waives its
+#: prerequisite**, by the row, with the feat read off the option dealt.
+#:
+#: *"You choose a bonus feat, either `f162` or `f172`. You don't have to
+#: meet the feat's prerequisite."* Two things have to happen and only
+#: one did: `BUILD_OPTIONS` records which of the two was chosen, and
+#: nothing ever put it in the character's hand -- measured over three
+#: seeds, the option was recorded every time and the feat was held none.
+#: So the choice decided nothing.
+#:
+#: **The waiver is the reason this is a table and not a feat draw.**
+#: `feats_for` goes through `choices.legal_feats`, which asks
+#: `chargen.meets`; both of these feats print an ability minimum and one
+#: of them a second feat as well, so a character that chose it and did
+#: not meet the line would be refused the thing its own class feature
+#: grants outright. Granted here, past that gate, which is what *"you
+#: don't have to meet the feat's prerequisite"* says.
+#:
+#: Only rows that waive belong here. A bonus feat whose prerequisite
+#: still applies is an ordinary draw and `legal_feats` is right about it.
+WAIVED_FEATS: frozenset[str] = frozenset({
+    "cf:assassin-executioner-f5",
+})
+
 def _build_options(taken: list[str], rng: Random | None = None,
                    leg: str = "") -> set[str]:
     """`option:<ref>:<value>` for every row the build took that asks one.
@@ -6895,6 +6920,16 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         Random(f"{world.rng.seed}:{who.cls}:build-option"),
         build.name,
     )
+    # **A bonus feat whose prerequisite the card waives**, read off the
+    # option its row was dealt. Past `choices.legal_feats` deliberately:
+    # that pass asks `chargen.meets`, and both of the feats this reaches
+    # print an ability minimum the character need not have. See
+    # `WAIVED_FEATS`.
+    waived = sorted({
+        c.rsplit(":", 1)[-1] for c in took_options
+        if c.startswith("option:") and any(
+            c.startswith(f"option:{row}:") for row in WAIVED_FEATS)
+    })
     # The pact weapon, appended to the loadout the page's own way: the
     # feature manifests it *beside* the implement -- "while you hold your
     # implement in your other hand" -- so this must never substitute.
@@ -6942,7 +6977,13 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # worked and was never reached. Priced like a race rather than a feat and
     # for the reason `outfit`'s `spent=` gives: only a feat costs a slot, so
     # only a feat's weapon may displace one the chassis already chose. #718.
-    from_feats = proficiency(feats)
+    # **`waived` is folded in here**, not only into `Powers.known`.
+    # A bonus feat whose benefit is a *proficiency* has to reach this
+    # pass or the permission it grants is lost: the first version
+    # added it to the hand afterwards, and an executioner that chose
+    # light-shield proficiency came out with no shield and no shield
+    # training on four seeds of four.
+    from_feats = proficiency([*feats, *waived])
     from_race = proficiency([*racial, *powers])
     belt = outfit(
         carried,
@@ -6955,7 +6996,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # nothing read it. The shield goes through `_shield_for` on a widened
     # line rather than past it, so a feat cannot hand a shield to a
     # character whose hands are full -- that rule stays in one place.
-    opened_armour, opened_shield = armour_opened(list(feats))
+    opened_armour, opened_shield = armour_opened([*feats, *waived])
     carried_shield = _shield_for(
         replace(line, shield=max(line.shield, opened_shield)), carried
     )
@@ -6999,7 +7040,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         # who is not. A monster leaves this empty -- its ranged attacks are
         # its own printed rows.
         Powers(
-            known=[*powers, *feats, *racial],
+            known=[*powers, *feats, *racial, *waived],
             ranged="rba",
             owned=spellbook(who.cls, who.level, list(powers), line.spellbook)
             if line.spellbook

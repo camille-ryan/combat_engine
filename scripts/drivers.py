@@ -44387,10 +44387,15 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
     for feat in ("f162", "f172"):
         while feat in known.known:
             known.known.remove(feat)
-    before = "f162" in known.all
-    REGISTRY["cf:assassin-executioner-f5"].body(
-        Cast(world=world, me=me, ref="cf:assassin-executioner-f5"))
-    out.that(not before and "f162" in known.all,
+    # **Whichever of the two this character was dealt**, not `f162`. The
+    # assertion named it outright and the draw moved: a board whose
+    # executioner chose the other feat granted exactly what it should and
+    # read as a failure.
+    probe = Cast(world=world, me=me, ref="cf:assassin-executioner-f5")
+    want = probe.chosen_option("cf:assassin-executioner-f5") or "f162"
+    before = want in known.all
+    REGISTRY["cf:assassin-executioner-f5"].body(probe)
+    out.that(not before and want in known.all,
              "`-f5` grants a FEAT with `c.grant_row` -- a feat is an "
              "ordinary row in `Powers.known`, which is what lets one arm "
              "itself at the start of a fight. Asserted because `c.feat` "
@@ -46572,6 +46577,99 @@ def a_short_rest_spends_surges_and_the_song_pays_per_surge(out: Result) -> None:
              "'only one at a time' is a rule with nothing to arbitrate and "
              "the reading above would pass on a body that never latched",
              f"{songs}")
+
+
+def a_waived_bonus_feat_reaches_the_build_and_not_only_the_fight(
+        out: Result) -> None:
+    """`chargen.meets(waived=)`: *"you don't have to meet the feat's
+    prerequisite."*
+
+    `cf:assassin-executioner-f5` chooses between two feats and waives the
+    prerequisite of whichever it takes. Two of the three steps worked and
+    the third was missing in a way nothing reported.
+
+    * The **choice** was recorded -- `BUILD_OPTIONS` held both feats and
+      the option came out of the dealer every time.
+    * The **grant** worked in a fight: the row's body calls
+      `c.grant_row`, and a feat is an ordinary row in `Powers.known`.
+    * The **build** never saw it. One of the two feats is a
+      *proficiency*, and the gear is already on when the first initiative
+      is rolled -- so a permission arriving at arming arrives too late.
+
+    Measured before: an executioner that chose light-shield proficiency
+    carried no shield on four seeds of four, with the option recorded on
+    all four. Two faults a layer down made that so, and both are
+    asserted here rather than described: `spawn` folded the waived feat
+    into the hand but not into the proficiency pass that runs before it,
+    and the feat declared no `proficiency=` at all, so even once held its
+    permission went nowhere.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine import Build as BuildState
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Gear, Powers
+
+    ROW = "cf:assassin-executioner-f5"
+    head = f"option:{ROW}:"
+    seen = {}
+    for seed in (3, 5, 11, 13):
+        world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(seed))
+        eid = chargen.spawn(world, chargen.Character(
+            "assassin", 5, [], chassis="executioner"), (4, 6))
+        state = world.get(eid, BuildState)
+        known = world.get(eid, Powers)
+        gear = world.get(eid, Gear)
+        assert state is not None and known is not None and gear is not None
+        chose = [c[len(head):] for c in state.choices if c.startswith(head)]
+        seen[seed] = (chose[0] if chose else "",
+                      [f for f in chargen.BUILD_OPTIONS[ROW] if f in known.all],
+                      gear.shield)
+
+    out.that(all(v[0] for v in seen.values()),
+             "the row deals one of its two feats on every seed, which is "
+             "the step that already worked",
+             f"{ {k: v[0] for k, v in seen.items()} }")
+    out.that(all(v[1] == [v[0]] for v in seen.values()),
+             "and the one it dealt is the one the character HOLDS, at "
+             "spawn -- not at arming, which is where the body's own "
+             "`c.grant_row` puts it and which is too late for anything "
+             "the build reads",
+             f"{ {k: (v[0], v[1]) for k, v in seen.items()} }")
+    # **The proficiency is the half that proves the build saw it.** A
+    # shield cannot be dealt at arming time, so a character carrying one
+    # is evidence the permission arrived during chargen and nowhere else.
+    shields = {k: v[2] for k, v in seen.items() if v[0] == "f162"}
+    out.that(shields and all(n >= 1 for n in shields.values()),
+             "and a character that chose the shield proficiency carries a "
+             "LIGHT SHIELD -- which can only have been dealt during "
+             "chargen, so it is the one reading that says the build saw "
+             "the feat at all",
+             f"{shields}")
+    out.that(chargen.armour_opened(["f162"])[1] == 1,
+             "which needs the feat to declare its `proficiency=`: with the "
+             "header empty `armour_opened` answered nothing and the feat "
+             "was held, unmarked, and granting nothing",
+             f"{chargen.armour_opened(['f162'])}")
+    # -- and the waiver is load-bearing, not decorative ------------------
+    from combat_engine import db
+
+    g = db.game()
+    prereqs = {f: (g.execute("select prereq from feat where ref = ?",
+                             (f,)).fetchone() or [None])[0]
+               for f in chargen.BUILD_OPTIONS[ROW]}
+    out.that(all(prereqs.values()),
+             "both feats really do print a prerequisite, without which "
+             "the waiver waives nothing and every reading above would "
+             "pass on a row that never needed one",
+             f"{ {k: bool(v) for k, v in prereqs.items()} }")
+    out.that(ROW in chargen.WAIVED_FEATS,
+             "and the row is named in `WAIVED_FEATS`, which is what puts "
+             "the feat past `choices.legal_feats` -- that pass asks "
+             "`chargen.meets`, and both of these feats print an ability "
+             "minimum the character need not have",
+             f"{sorted(chargen.WAIVED_FEATS)}")
+
 
 
 def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
@@ -79703,6 +79801,11 @@ DRIVERS = {
         a_short_rest_spends_surges_and_the_song_pays_per_surge,
         "a short rest spends healing surges and announces each, and"
         " the bard's song pays its modifier with every one (#1257)",
+    ),
+    "waived_feat": (
+        a_waived_bonus_feat_reaches_the_build_and_not_only_the_fight,
+        "a bonus feat whose prerequisite the card waives reaches the"
+        " BUILD and not only the fight, so its proficiency lands",
     ),
     "extra_picks": (
         a_later_row_adds_one_more_pick_of_an_earlier_rows_fork,

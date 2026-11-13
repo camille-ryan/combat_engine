@@ -684,6 +684,16 @@ KNOWN_SILENT = {
                                  " dealt by chargen; this row has no body",
     "cf:wizard-bladesinger-f14": "the two powers and their daily usage are"
                                  " dealt by chargen; this row has no body",
+    # **Silent BECAUSE the fix landed**, which is the direction worth
+    # naming. Its body grants the bonus feat it was dealt, and
+    # `chargen.WAIVED_FEATS` now puts that feat in the hand during the
+    # build -- which is the only moment a proficiency can reach the gear
+    # -- so by the time the body runs there is nothing left to grant.
+    # `drivers.waived_feat` proves the chain against a dealt character
+    # and `drivers.executioner_guild` proves the grant itself on a
+    # character the feat has been taken away from.
+    "cf:assassin-executioner-f5": "grants the bonus feat it dealt; chargen"
+                                  " already put it in the hand",
     "cf:druid-protector-f2": "grants the attunements it dealt; they are"
                              " level 0, so the board's druid holds them"
                              " already",
