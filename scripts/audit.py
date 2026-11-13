@@ -629,6 +629,33 @@ KNOWN_SILENT = {
     # this one against a dealt mage.
     "cf:wizard-mage-f12": "grants the cantrips it dealt; they are level 0,"
                           " so the board's wizard holds them already",
+    # **The stances, the tricks and the bladesinger's cantrips**, which
+    # are the same two reasons once more. Every recovered family here is
+    # level 0 -- that is what makes it a family a character is *given*
+    # rather than drawing -- so `loadout` hands the whole list over with
+    # the rest of the hand and the granting body has nothing to add. The
+    # rungs above them have no body at all, for `EXTRA_PICKS`' reason.
+    # `drivers.extra_picks` proves all nine against a dealt character at
+    # each level of each printed ladder.
+    "cf:fighter-knight-f22": "grants the stances it dealt; they are level"
+                             " 0, so the board's fighter holds them already",
+    "cf:fighter-slayer-f18": "grants the stances it dealt; they are level"
+                             " 0, so the board's fighter holds them already",
+    "cf:rogue-thief-f22": "grants the tricks it dealt; they are level 0, so"
+                          " the board's rogue holds them already",
+    "cf:wizard-bladesinger-f1": "grants the cantrips it dealt; they are"
+                                " level 0, so the board's wizard holds them"
+                                " already",
+    "cf:fighter-knight-f10": "adds a pick to another row's fork; the pick is"
+                             " chargen's and this row has no body",
+    "cf:fighter-slayer-f6": "adds a pick to another row's fork; the pick is"
+                            " chargen's and this row has no body",
+    "cf:rogue-thief-f7": "adds a pick to another row's fork; the pick is"
+                         " chargen's and this row has no body",
+    "cf:rogue-thief-f9": "adds a pick to another row's fork; the pick is"
+                         " chargen's and this row has no body",
+    "cf:rogue-thief-f15": "adds a pick to another row's fork; the pick is"
+                          " chargen's and this row has no body",
     "f1741": "applies a shield bonus; the board's fighter holds no shield",
     "f2860": "applies a shield bonus; the board's fighter holds no shield",
     "f949": "trades a shield bonus away; the board's fighter holds none",

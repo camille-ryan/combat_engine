@@ -43692,11 +43692,10 @@ def the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand(
             owed.setdefault(sorted(REGISTRY[ref].unfinished)[0], []).append(ref)
     out.that(sorted(owed) == ["Weapon.as_wand",
                               "c.widen_to_adjacent(per_day=)",
-                              "chargen.power_choice()",
                               "chargen.power_choice(keyword=)",
                               "chargen.spellbook(encounter_as_daily=)",
                               "triggers.widen(Miss)"],
-             "and the twelve unfinished rows wait on SIX symbols, seven of "
+             "and the eleven unfinished rows wait on FIVE symbols, seven of "
              "them on one -- the spellbook gap is one gap seven times, and "
              "seven symbols would make `blocked.py --group` unable to say "
              "how much work it is",
@@ -43885,21 +43884,18 @@ def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
     why = {r: usable(world, me, get(r), spent_ok=True)[1] for r in rows}
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r, reason in why.items() if reason == DEFECT)
-    out.that(len(refused) == 3,
+    out.that(len(refused) == 2,
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
              # count is the number LEFT, and every one left is out
-             # of reach for a reason this project chose -- a feature
-             # printed above level 10 names powers the ETL does not
-             # import (`MAX_POWER_LEVEL`).
-             "three rows are `defect=` -- two naming themselves as the power "
-             "they grant and one printing 'one of the following' above the "
-             "level this project imports -- and `usable` refuses every one "
-             "for that reason",
+             # of reach for a reason this project chose.
+             "TWO rows are `defect=` -- both naming themselves as the power "
+             "they grant -- and `usable` refuses them for that reason. The "
+             "third printed 'one of the following' and has its list back: "
+             "the thief's nine tricks, which it had none of",
              f"{refused}")
-    out.that(refused == ["cf:rogue-thief-f14", "cf:rogue-thief-f17",
-                         "cf:rogue-thief-f22"],
-             "and it is exactly those three and no other row of the 26: "
+    out.that(refused == ["cf:rogue-thief-f14", "cf:rogue-thief-f17"],
+             "and it is exactly those two and no other row of the 26: "
              "`dsl.entry_of` returns a `cf:` ref unchanged, so a defective "
              "row refuses ITSELF. Named rather than counted, because on a "
              "monster one defective row defects the whole stat block and a "
@@ -44068,18 +44064,18 @@ def the_slayers_three_masteries_each_answer_their_own_weapon(
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(refused == ["cf:fighter-slayer-f10", "cf:fighter-slayer-f13",
-                         "cf:fighter-slayer-f18"],
+    out.that(refused == ["cf:fighter-slayer-f10", "cf:fighter-slayer-f13"],
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
              # count is the number LEFT, and every one left is out
              # of reach for a reason this project chose -- a feature
              # printed above level 10 names powers the ETL does not
              # import (`MAX_POWER_LEVEL`).,
-             "six rows are `defect=` and it is exactly those six -- one "
-             "naming itself as the power it grants, one naming a power by "
-             "its printed name with no ref the importer resolved, four "
-             "printing 'one of the following' and no list",
+             "TWO rows are `defect=` and it is exactly those two -- one "
+             "naming itself as the power it grants and one naming a power "
+             "by its printed name with no ref the importer resolved. The "
+             "four that printed 'one of the following' have their lists "
+             "back, the stance list among them",
              f"{refused}")
 
 
@@ -44500,17 +44496,18 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(refused == ["cf:fighter-knight-f15", "cf:fighter-knight-f18",
-                         "cf:fighter-knight-f22"],
+    out.that(refused == ["cf:fighter-knight-f15", "cf:fighter-knight-f18"],
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
              # count is the number LEFT, and every one left is out
              # of reach for a reason this project chose -- a feature
              # printed above level 10 names powers the ETL does not
              # import (`MAX_POWER_LEVEL`).,
-             "six rows are `defect=` and it is exactly those six -- one "
-             "naming itself, one naming a power by its printed name, four "
-             "printing 'one of the following' and no list",
+             "TWO rows are `defect=` and it is exactly those two -- one "
+             "naming itself and one naming a power by its printed name. "
+             "The four that printed 'one of the following' have their "
+             "lists back, the stance list among them, so a knight has "
+             "stances where it had none",
              f"{refused}")
 
 
@@ -46196,10 +46193,11 @@ def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
     from combat_engine.engine import Bus, Grid, Rng, World
     from combat_engine.engine.dsl import REGISTRY, usable
 
-    def dealt(chassis: str, level: int, seed: int = 4):  # noqa: ANN202
+    def dealt(chassis: str, level: int, seed: int = 4,
+              cls: str = "ranger") -> tuple[World, int]:
         world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(seed))
         eid = chargen.spawn(world, chargen.Character(
-            "ranger", level, [], chassis=chassis), (4, 6))
+            cls, level, [], chassis=chassis), (4, 6))
         return world, eid
 
     def took(world: object, eid: int, fork: str) -> list[str]:
@@ -46209,35 +46207,52 @@ def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
         return sorted(c[len(head):] for c in state.choices
                       if c.startswith(head))
 
-    #: chassis, the fork, and the printed ladder of how many it deals.
+    #: class, chassis, the fork, and the printed ladder of how many it
+    #: deals. Four families across four classes, every one of the shape
+    #: *"you gain N of the following"* with later rows adding one more.
     LADDERS = (
-        ("hunter", "cf:ranger-hunter-f20", {1: 2, 4: 3, 8: 4}),
-        ("scout", "cf:ranger-scout-f17", {1: 2, 4: 3, 8: 4}),
-        ("hunter", "cf:ranger-hunter-f19", {1: 2, 7: 3}),
-        ("scout", "cf:ranger-scout-f16", {1: 2, 7: 3}),
+        ("ranger", "hunter", "cf:ranger-hunter-f20", {1: 2, 4: 3, 8: 4}),
+        ("ranger", "scout", "cf:ranger-scout-f17", {1: 2, 4: 3, 8: 4}),
+        ("ranger", "hunter", "cf:ranger-hunter-f19", {1: 2, 7: 3}),
+        ("ranger", "scout", "cf:ranger-scout-f16", {1: 2, 7: 3}),
+        ("fighter", "knight", "cf:fighter-knight-f22", {1: 2, 7: 3}),
+        ("fighter", "slayer", "cf:fighter-slayer-f18", {1: 2, 7: 3}),
+        ("rogue", "thief", "cf:rogue-thief-f22", {1: 2, 4: 3, 7: 4}),
+        # No rung adds to the bladesinger's, so its ladder is flat --
+        # asserted at two levels anyway, because a fork that silently
+        # grew would otherwise only show up as a count nobody reads.
+        ("wizard", "bladesinger", "cf:wizard-bladesinger-f1", {1: 3, 10: 3}),
     )
-    for chassis, fork, ladder in LADDERS:
+    for cls, chassis, fork, ladder in LADDERS:
         got = {}
         for level in ladder:
-            world, eid = dealt(chassis, level)
+            world, eid = dealt(chassis, level, cls=cls)
             got[level] = len(took(world, eid, fork))
         out.that(got == ladder,
                  f"`{fork}` deals the printed number at each level -- the "
                  "extra picks come from rows the character holds, so the "
                  "count rises only when the granting row does",
                  f"{got} against {ladder}")
-        # The level BELOW each rung still has the earlier count, which is
-        # what says the rung is doing the work rather than the level.
-        below = {}
-        for level in sorted(ladder)[1:]:
-            world, eid = dealt(chassis, level - 1)
+        # **One level below each rung the fork still deals the PREVIOUS
+        # rung's number** -- stated exactly rather than as "fewer than
+        # the next". The bladesinger's ladder is flat (no row adds to
+        # it), so a strict `<` is false there and was: the assertion
+        # indicted a fork that is behaving perfectly. Equality says the
+        # same thing about a rising ladder and the truth about a flat
+        # one, and is stronger on both -- a fork that jumped two would
+        # pass a `<` and fails this.
+        steps = sorted(ladder)
+        below, want_below = {}, {}
+        for i, level in enumerate(steps[1:], start=1):
+            world, eid = dealt(chassis, level - 1, cls=cls)
             below[level - 1] = len(took(world, eid, fork))
-        out.that(all(below[k] < ladder[min(j for j in ladder if j > k)]
-                     for k in below),
-                 f"and one level BELOW each rung `{fork}` still deals the "
-                 "earlier number -- without this the ladder would pass on "
-                 "a fork that simply deals four to everybody",
-                 f"{below}")
+            want_below[level - 1] = ladder[steps[i - 1]]
+        out.that(below == want_below,
+                 f"and one level BELOW each rung `{fork}` deals the "
+                 "PREVIOUS rung's number -- without this the ladder would "
+                 "pass on a fork that simply deals its largest count to "
+                 "everybody",
+                 f"{below} against {want_below}")
 
     # -- each chassis draws from its own list, not the other's ----------
     for chassis, fork, other in (
@@ -46326,14 +46341,14 @@ def three_more_facilities_the_class_work_asked_for(out: Result) -> None:
     # deals two except the one that prints three, which is the shape a
     # bare `== 2` could not say and a bare `> 1` would not catch.
     picks = sorted(chargen.OPTION_PICKS)
-    THREE = "cf:wizard-mage-f12"
+    THREES = ("cf:wizard-bladesinger-f1", "cf:wizard-mage-f12")
     out.that(picks
              and all(chargen.OPTION_PICKS[r] == 2 for r in picks
-                     if r != THREE)
-             and chargen.OPTION_PICKS.get(THREE) == 3,
-             "every fork in `OPTION_PICKS` deals two except the cantrip "
-             "rung, which prints three -- the one card carrying this "
-             "table that does not say two, named so a fourth number "
+                     if r not in THREES)
+             and all(chargen.OPTION_PICKS.get(r) == 3 for r in THREES),
+             "every fork in `OPTION_PICKS` deals two except the two "
+             "cantrip rungs, which print three -- the only cards carrying "
+             "this table that do not say two, named so a third number "
              "cannot arrive unremarked",
              f"{ {r.rsplit('-', 1)[-1]: chargen.OPTION_PICKS[r] for r in picks} }")
     bad, pairs = [], {}
@@ -46536,13 +46551,17 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
         if all((g.execute("select level from power where ref = ?",
                           (o,)).fetchone() or (None,))[0] == 0
                for o in chargen.BUILD_OPTIONS[p]))
-    out.that(granted == ["cf:ranger-hunter-f19", "cf:ranger-scout-f16",
+    out.that(granted == ["cf:fighter-knight-f22", "cf:fighter-slayer-f18",
+                         "cf:ranger-hunter-f19", "cf:ranger-scout-f16",
+                         "cf:rogue-thief-f22", "cf:wizard-bladesinger-f1",
                          "cf:wizard-mage-f12"],
-             "and exactly three forks draw entirely from level 0 -- the "
-             "two ranger aspect lists and the mage's cantrips, which are "
-             "the families a character is GIVEN rather than drawing. "
-             "Named, so the allowance above cannot quietly widen to cover "
-             "a fork whose options really did come from the wrong section",
+             "and exactly SEVEN recovered forks draw entirely from level "
+             "0 -- the two aspect lists, the two stance lists, the "
+             "tricks and the two cantrip lists. Every one is a family a "
+             "character is GIVEN rather than drawing, which is why level "
+             "0 is the right answer and not a loosening. Named, so the "
+             "allowance above cannot quietly widen to cover a fork whose "
+             "options really did come from the wrong section",
              f"{granted}")
 
     # -- the pact summons ------------------------------------------------
@@ -46958,23 +46977,29 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
                    if "chargen.power_choice()" in (p.unfinished or ()))
     rows_ = [r for r in still if r.startswith("cf:")]
     feats = [r for r in still if not r.startswith("cf:")]
-    out.that(len(rows_) == 14 and len(feats) == 4,
-             "and 14 chassis rows plus 4 feats still carry the "
-             "symbol -- down from 31 and 4, then 22 and 4. The eight that "
-             "just went are the ranger's: *one additional knack* and *one "
-             "additional aspect* name a fork the character already has, "
-             "so `chargen.EXTRA_PICKS` adds a pick to it rather than a "
-             "facility inventing a family. What is left names a family "
-             "the data does not record, or is printed above the level "
-             "this project imports. `#1269` has the split. Both counts "
-             "named, because quoting one as the other is how a reader "
-             "concludes the feats were done too",
+    out.that(len(rows_) == 6 and len(feats) == 4,
+             "and 6 chassis rows plus 4 feats still carry the symbol -- "
+             "down from 31 and 4, through 22 and 14. The thirteen that "
+             "have gone all read *one additional <family>*, and every "
+             "one of those families turned out to be an existing fork's "
+             "own printed list: `chargen.EXTRA_PICKS` adds a pick to it "
+             "rather than a facility inventing a family from a keyword "
+             "that does not exist. What is left names a family the data "
+             "really does not record, or is printed above the level this "
+             "project imports. `#1269` has the split. Both counts named, "
+             "because quoting one as the other is how a reader concludes "
+             "the feats were done too",
              f"{len(rows_)} rows, {len(feats)} feats: {feats}")
-    out.that(not [r for r in rows_ if r.startswith("cf:ranger-")],
-             "and no ranger row waits on it at all, which is the half a "
-             "count cannot say: eight going while eight others arrived "
-             "would read identically",
-             f"{[r for r in rows_ if r.startswith('cf:ranger-')]}")
+    left = sorted(rows_)
+    out.that(left == ["cf:druid-protector-f2", "cf:druid-protector-f3s0",
+                      "cf:druid-protector-f3s1",
+                      "cf:paladin-blackguard-f15",
+                      "cf:paladin-blackguard-f16", "cf:warlock-binder-f16"],
+             "and they are exactly these six, which is the half a count "
+             "cannot say: thirteen going while thirteen others arrived "
+             "would read identically. No ranger, fighter, rogue or "
+             "bladesinger row is among them",
+             f"{left}")
 
     out.that(not [r for r, p in REGISTRY.items()
                   if "Powers.per_encounter(extra=)" in (p.unfinished or ())],
@@ -55312,7 +55337,14 @@ def a_feint_is_an_action_and_one_feat_rides_it(out: Result) -> None:
     three of nine seeds and `has_combat_advantage` was False on all nine.
     `on=actor` is the fix and the third assertion below is its control.
     """
-    from audit import board as _posed
+    # **`_board`, not `audit.board` directly.** This rule builds a
+    # board and then rolls a Bluff check against it, so which
+    # character it is given decides whether the check succeeds --
+    # and calling the auditor straight through means running on
+    # whatever `chargen.SCORED_CHOICES` the previous rule left
+    # behind. It passed alone and failed in the suite, which is
+    # the signature. `_board` pins the flag and restores it.
+    _posed = _board
     from combat_engine.engine import actions
     from combat_engine.engine.components import Health, Position, Powers
     from combat_engine.engine.events import SkillCheck

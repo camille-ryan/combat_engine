@@ -228,22 +228,25 @@ def bladesinger_blade(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("chargen.power_choice()",),
 )
 def bladesinger_cantrips(c: Cast) -> None:
     """"You gain three cantrips of your choice."
 
-    A draw: three rows out of a named printed family, chosen at creation.
-    `chargen.power_choice()` is the symbol four feats already wait on
-    (`f3582`, `f3588`, `f3616`, `f3646`), and it is the same gap -- nothing
-    lets a row say *"deal me N of this family"*.
+    **The family IS in the tree and the page names it.** This carried
+    `chargen.power_choice()` on two claims, and the second was the load
+    bearing one: *"`Keyword.CANTRIP` does not exist, so even with the
+    draw there would be nothing to draw from."* True about the keyword
+    and false about the family -- the bladesinger's own class page
+    prints the five cantrips under the sentence, exactly as the mage's
+    page prints the same five under its own. A keyword was never needed;
+    the list was printed all along.
 
-    The family itself is not in the tree either: `Keyword.CANTRIP` does not
-    exist, so even with the draw there would be nothing to draw from. Said
-    here rather than as a second symbol, because one marker names one gap
-    and the gap is the draw -- a keyword is a line in `types.py` the day
-    somebody needs it.
+    So this is an ordinary `chargen.BUILD_OPTIONS` fork with
+    `OPTION_PICKS` of three, and the draw the marker asked for is the
+    one every other fork already used. `#1268`.
     """
+    for took in c.chosen_options("cf:wizard-bladesinger-f1"):
+        c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

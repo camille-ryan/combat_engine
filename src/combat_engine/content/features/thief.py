@@ -525,7 +525,16 @@ thief_extra_use_12 = _extra_use("cf:rogue-thief-f12")
 
 
 def _another_trick(ref: str) -> Any:
-    """One of the three rows reading "you gain one additional rogue trick"."""
+    """One of the rows reading "you gain one additional rogue trick".
+
+    **One more pick of a fork this character already has**, which is what
+    `chargen.EXTRA_PICKS` says and what this carried
+    `chargen.power_choice()` for. The marker named a facility that would
+    have had to invent a family; the family is the base feature's own
+    list, so adding a pick to it is the whole of the work. Counted off
+    the HAND rather than off the level, so a character without this row
+    gets nothing extra.
+    """
 
     @power(
         ref,
@@ -536,7 +545,6 @@ def _another_trick(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.power_choice()",),
     )
     def row(c: Cast) -> None:
         pass
@@ -733,10 +741,17 @@ thief_defect_17 = _defective(
     "the spec reads 'you gain the cf:rogue-thief-f17 power' -- the feature "
     "names itself as the power it grants, and no such ref exists",
 )
-thief_defect_22 = _defective(
+thief_tricks_22 = _printed_pick(
     "cf:rogue-thief-f22",
-    "the spec reads 'you gain two of the following powers of your choice' "
-    "and then lists nothing, so there is no set to choose from")
+    ("p12711", "p12712", "p12713", "p12714", "p12715",
+     "p12716", "p12717", "p12718", "p12719"),
+    "The thief's nine tricks: two at 1st level, a third at "
+    "`cf:rogue-thief-f7`, a fourth at `-f9` and a fifth at `-f15`. This "
+    "carried `defect=` saying the spec lists nothing; the spec does not, "
+    "and the page lists all nine. `defect=` refuses a row, so a thief "
+    "had NO trick at all -- and `combat_engine.levels` recorded this "
+    "feature at 17 rather than 1, having matched the *Level 17 Extra* "
+    "heading of the row that adds a fifth. `#1268`.")
 thief_pick_23 = _printed_pick(
     "cf:rogue-thief-f23",
     ('p10169', 'p1038', 'p12721', 'p1395'),

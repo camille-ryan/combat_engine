@@ -366,7 +366,15 @@ FEATURE_LEVEL: dict[str, int] = {
     "cf:rogue-thief-f19":                    25,  # progression table
     "cf:rogue-thief-f20":                    27,  # progression table
     "cf:rogue-thief-f21":                    29,  # progression table
-    "cf:rogue-thief-f22":                    17,  # progression table
+    # **1, not 17, and the provenance was wrong too.** This read
+    # "progression table" and no progression row names this feature at
+    # all -- the 17 came from matching the chassis's *Level 17 Extra*
+    # heading, which is a different feature that adds one more of what
+    # this one grants. The base feature is named in the page's own
+    # "Class features:" line with no level, which is this table's
+    # first-block rule. Checked across every chassis: it is the only
+    # entry above level 1 whose feature that line names.
+    "cf:rogue-thief-f22":                     1,  # first block
     "cf:rogue-thief-f23":                     2,  # compendium name
     "cf:rogue-thief-f24":                     6,  # compendium name
     "cf:rogue-thief-f25":                    10,  # compendium name

@@ -564,8 +564,16 @@ slayer_extra_use_8 = _extra_use("cf:fighter-slayer-f8")
 
 
 def _another_stance(ref: str) -> Any:
-    """One of the two rows reading "you gain one additional fighter
-    stance"."""
+    """One of the rows reading "you gain one additional fighter stance".
+
+    **One more pick of a fork this character already has**, which is what
+    `chargen.EXTRA_PICKS` says and what this carried
+    `chargen.power_choice()` for. The marker named a facility that would
+    have had to invent a family; the family is the base feature's own
+    list, so adding a pick to it is the whole of the work. Counted off
+    the HAND rather than off the level, so a character without this row
+    gets nothing extra.
+    """
 
     @power(
         ref,
@@ -576,7 +584,6 @@ def _another_stance(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.power_choice()",),
     )
     def row(c: Cast) -> None:
         pass
@@ -698,10 +705,14 @@ slayer_defect_13 = _defective(
     "ref, so the importer did not resolve it; no fighter power in game.db "
     "carries that word anywhere in its spec, so there is nothing to grant",
 )
-slayer_defect_18 = _defective(
+slayer_stances_18 = _printed_pick(
     "cf:fighter-slayer-f18",
-    "the spec reads 'you gain two of the following powers of your choice' "
-    "and then lists nothing, so there is no set to choose from")
+    ("p12662", "p12688", "p12689", "p12690", "p12667", "p12692"),
+    "The slayer's six stances -- two of them the knight's and four its "
+    "own -- taken two at 1st level with a third at "
+    "`cf:fighter-slayer-f6`. This carried `defect=` saying the spec "
+    "lists nothing; the spec does not, and the page lists all six. "
+    "`defect=` refuses a row, so a slayer had NO stance at all. `#1268`.")
 slayer_pick_19 = _printed_pick(
     "cf:fighter-slayer-f19",
     ('p12671', 'p12693', 'p12695', 'p12696'),

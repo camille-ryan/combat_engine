@@ -4303,6 +4303,53 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
         "p2838",
         "p513",
     ),
+    # **Four more lists the page prints and the import dropped**, every
+    # one a level-0 family a character is GIVEN rather than drawing: the
+    # two fighter stance lists, the thief's tricks and the bladesinger's
+    # cantrips. Three of the four carried `defect=` and so were refused
+    # outright -- a knight with no stance, a slayer with no stance, a
+    # thief with no trick -- and the rows printing *"one additional"*
+    # above them had nothing to add to. Recovered exactly as the mage's
+    # eleven were. `#1268`.
+    # the knight's seven stances.
+    "cf:fighter-knight-f22": (
+        "p12662",
+        "p12663",
+        "p12664",
+        "p13774",
+        "p12665",
+        "p12666",
+        "p12667",
+    ),
+    # the slayer's six stances -- two shared with the knight's, four its own.
+    "cf:fighter-slayer-f18": (
+        "p12662",
+        "p12688",
+        "p12689",
+        "p12690",
+        "p12667",
+        "p12692",
+    ),
+    # the thief's nine tricks.
+    "cf:rogue-thief-f22": (
+        "p12711",
+        "p12712",
+        "p12713",
+        "p12714",
+        "p12715",
+        "p12716",
+        "p12717",
+        "p12718",
+        "p12719",
+    ),
+    # the bladesinger's five cantrips -- the same five the mage prints.
+    "cf:wizard-bladesinger-f1": (
+        "p1217",
+        "p1225",
+        "p1227",
+        "p1930",
+        "p12731",
+    ),
     "cf:ranger-hunter-f22": ('p13607', 'p13609'),
     "cf:ranger-hunter-f23": (
         "p13610",
@@ -4580,6 +4627,11 @@ OPTION_PICKS: dict[str, int] = {
     # aspect lists, one per ranger chassis -- see `BUILD_OPTIONS`.
     "cf:ranger-hunter-f19": 2,
     "cf:ranger-scout-f16": 2,
+    # The stances, the tricks and the cantrips.
+    "cf:fighter-knight-f22": 2,
+    "cf:fighter-slayer-f18": 2,
+    "cf:rogue-thief-f22": 2,
+    "cf:wizard-bladesinger-f1": 3,
     # The mage's ladder -- see `BUILD_OPTIONS`.
     "cf:wizard-mage-f9": 2,
     "cf:wizard-mage-f10": 2,
@@ -4627,6 +4679,16 @@ EXTRA_PICKS: dict[str, str] = {
     "cf:ranger-hunter-f13": "cf:ranger-hunter-f19",
     "cf:ranger-scout-f7": "cf:ranger-scout-f16",
     "cf:ranger-scout-f11": "cf:ranger-scout-f16",
+    # The fighter's stances: two at 1st, a third at 7th. Each chassis
+    # adds to its own list, which share two members and differ in the
+    # rest.
+    "cf:fighter-knight-f10": "cf:fighter-knight-f22",
+    "cf:fighter-slayer-f6": "cf:fighter-slayer-f18",
+    # The thief's tricks: two at 1st, a third at 4th, a fourth at 7th
+    # and a fifth at 17th.
+    "cf:rogue-thief-f7": "cf:rogue-thief-f22",
+    "cf:rogue-thief-f9": "cf:rogue-thief-f22",
+    "cf:rogue-thief-f15": "cf:rogue-thief-f22",
 }
 
 
