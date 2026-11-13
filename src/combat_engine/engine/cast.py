@@ -17278,6 +17278,118 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         who = self._who(on)
         return holding(self.world, who, what) if who is not None else []
 
+    def gains_proficiency(self, *refs: str, on: int | None = None) -> int:
+        """"If you are not already proficient with these weapons, you gain
+        proficiency with them." Returns how many were newly permitted.
+
+        **The permission, not the figure**, and the two are separate
+        because `Cast._trained_with` is a gate rather than a sum: it asks
+        `gear.proficient_with(arm) or arm.ref in gear.trained` and, if the
+        answer is no, withholds the weapon's **own** printed proficiency
+        bonus entirely. So `c.weapon_proficiency` sets a number that an
+        untrained weapon never gets to use, and this is what lets it.
+
+        That split is the trap worth naming: a row that calls only the
+        other verb writes a figure no roll reads, which is the silently-
+        false shape `engine/CLAUDE.md` opens with. `cf:fighter-
+        weaponmaster-f3s0` needs both and `c.improvised` below pairs them.
+
+        `Gear.trained` empty means **no record** rather than "trained with
+        nothing" -- a monster and a hand-built board both have none -- so a
+        creature without one is left alone and this returns 0. Adding to an
+        empty record would turn a missing record into a whitelist of
+        exactly what was added, which is the `_trained_with` failure
+        pointed the other way.
+        """
+        from .components import Gear as _Gear
+
+        who = on if on is not None else self.me
+        gear = self.world.get(who, _Gear)
+        if gear is None or not (gear.trained or gear.bands):
+            return 0
+        fresh = {r for r in refs if r and r not in gear.trained}
+        if fresh:
+            gear.trained = gear.trained | fresh
+        return len(fresh)
+
+    def improvised(
+        self,
+        *,
+        one_handed: str = "",
+        two_handed: str = "",
+        proficiency: int = 0,
+        except_group: str = "",
+        on: int | None = None,
+    ) -> int:
+        """"You treat all weapons you are not proficient with as improvised."
+
+        Returns how many held weapons were re-stated.
+        `cf:fighter-weaponmaster-f3s0` is the card: *"you treat all weapons
+        with which you are not proficient as improvised, you gain a +2
+        proficiency bonus with improvised weapons, and your attacks with
+        one-handed improvised weapons deal 1d8 damage and two-handed
+        1d10."*
+
+        **There is no improvised weapon row to add, and the row's marker
+        asked for one.** `c.improvised()` was the symbol, on the ground
+        that *"there is no improvised weapon in the weapon table, so the
+        proficiency header has no ref to name"*. True, and the printed
+        sentence does not want a row: "improvised" is a **state of a
+        weapon relative to a character** -- the one in your hand you were
+        never trained for -- and the engine already records exactly that,
+        in `Gear.trained` and `Gear.bands`. The compendium's own
+        `x_m6475a0` is a glossary entry, and there is no glossary table.
+
+        So this is three existing setters behind one door, over whichever
+        held weapons `Cast._trained_with` would refuse:
+
+        * `c.weapon_dice` for the grip-dependent die;
+        * `c.weapon_proficiency` for the figure;
+        * and the ref into `Gear.trained`, which is what makes the figure
+          **reach the swing**. Without that last step `_trained_with` goes
+          on withholding the bonus and the proficiency set above it is
+          inert -- the silently-false shape this component specialises in.
+
+        `Gear.trained` empty means *no record* rather than "trained with
+        nothing", which `_trained_with` relies on for monsters and
+        hand-built boards -- so a creature with no record has nothing
+        improvised and this returns 0 rather than re-stating its whole
+        hand. That is the safe direction and the same one
+        `Gear.proficient_with` takes.
+
+        **Every change is opt-in**, because the two cards that print this
+        ask for different parts of it. `cf:fighter-weaponmaster-f3s0`
+        restates the die *and* the figure -- *"deal 1d8 ... and a +2
+        proficiency bonus"* -- while `rt:r69-t2` prints only *"you gain
+        proficiency with improvised weapons other than unarmed attacks"*
+        and must leave the glossary's own die alone. So an empty `die`
+        leaves it, a zero `proficiency` leaves that, and `except_group`
+        carries the race's exclusion. What is never optional is the
+        `Gear.trained` entry, because that is what "proficiency" *is* here.
+        """
+        from .components import Gear as _Gear
+
+        who = on if on is not None else self.me
+        gear = self.world.get(who, _Gear)
+        if gear is None or not (gear.trained or gear.bands):
+            return 0
+        touched = 0
+        for arm in list(gear.held):
+            if gear.proficient_with(arm) or arm.ref in gear.trained:
+                continue
+            if except_group and arm.group == except_group:
+                continue
+            die = two_handed if arm.two_handed else one_handed
+            if die:
+                self.weapon_dice(die, ref=arm.ref, on=who)
+            if proficiency:
+                self.weapon_proficiency(proficiency, ref=arm.ref, on=who)
+            # Through the sibling rather than in place, so the one rule
+            # about an empty record lives in one function.
+            self.gains_proficiency(arm.ref, on=who)
+            touched += 1
+        return touched
+
     def weapon_dice(
         self,
         dice: str,

@@ -506,6 +506,28 @@ def attack(
             # a rider gated on an off-hand attack read a key the context
             # did not carry, which is silently false rather than wrong.
             "hand": hand,
+            # **What was swung, by ref and by group.** `result.weapon` has
+            # carried the ref since the field was added and the context did
+            # not, so a gate could ask which *hand* swung and never what
+            # was in it -- and `"hand"` answers a different question:
+            # `Gear.off` is the second held weapon, so a trait requiring the
+            # off hand to be **empty** never sees a swing stamped `"off"`.
+            #
+            # `cf:fighter-weaponmaster-f3s2` is the worked case. It prints
+            # *"a +2 enhancement bonus to the attack rolls of unarmed
+            # attacks"* and carried `Attack.ctx(unarmed)`; the group is how
+            # an unarmed swing is told from an armed one, since
+            # `chargen.UNARMED` and `w3678` both file under the `unarmed`
+            # group. `cf:monk-f1` asks the same question from the other
+            # side.
+            #
+            # Both keys, because a card names one weapon as often as a
+            # family -- the same reason `query.holding` matches a ref *and*
+            # a group. Empty for an attack made through no weapon at all,
+            # which is every implement power, so a gate reading them is
+            # false there rather than wrong.
+            "weapon": weapon,
+            "group": _group_of(world, attacker, weapon),
             # **Which named swing this is**, empty for an ordinary attack.
             # `as_` already rode the events for the counter-attack case; the
             # context did not carry it, so a modifier on "a bull rush attack
@@ -858,6 +880,33 @@ def _is_ranged(ref: str, branch: int = 0, world: World | None = None,
     if world is not None and actor is not None:
         return reach_of(world, actor, p, branch).kind == "ranged"
     return p.reach_of(branch).kind == "ranged"
+
+
+def _group_of(world: World | None, attacker: int, weapon: str) -> str:
+    """The `Weapon.group` of the weapon this swing went through, or `""`.
+
+    Looked up on the attacker rather than passed in, because
+    `resolve.attack` is handed the **ref** and a group is a fact about the
+    object. `Gear.weapons` holds per-character `replace(w)` copies, so this
+    reads whatever `c.weapon_group` or `c.improvised` has done to it rather
+    than the module-level singleton -- which is the point of asking here
+    and not at the call site.
+
+    `""` for a swing through no weapon, for a creature with no `Gear`, and
+    for a ref the hand does not hold. All three are the same answer to a
+    gate: not this group.
+    """
+    if world is None or not weapon:
+        return ""
+    from .components import Gear
+
+    gear = world.get(attacker, Gear)
+    if gear is None:
+        return ""
+    for arm in gear.weapons:
+        if arm.ref == weapon:
+            return arm.group
+    return ""
 
 
 def _reach_kind(power: str, branch: int, world: World | None = None,

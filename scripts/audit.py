@@ -665,6 +665,15 @@ KNOWN_SILENT = {
     # `c.feat`, and here the reader is the predicate beside it. #553 is why
     # that guard exists and it is right; this is the case it does not fit.
     # `drivers.miss_bladespell` proves both arms and plants the gate.
+    # **"Proficiency with improvised weapons" has nothing to permit on a
+    # dealt character**, which is the ordinary case rather than a board
+    # artefact: `chargen` hands a character weapons from its own printed
+    # bands, so every weapon it holds is one it is already trained with and
+    # `c.improvised` correctly re-states none of them. The clause pays the
+    # moment the character picks up somebody else's axe, which no board
+    # does. `drivers.improvised_weapon` plants exactly that weapon.
+    "rt:r69-t2": "grants proficiency with weapons the character is NOT"
+                 " trained with; a dealt hand holds none of those",
     "cf:wizard-bladesinger-f16": "widens the six bladespells' trigger to a"
                                  " miss; a trigger is header data, so the"
                                  " work is in their headers and this row is"

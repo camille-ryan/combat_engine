@@ -79517,6 +79517,149 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def an_untrained_weapon_is_treated_as_improvised(out: Result) -> None:
+    """`cf:fighter-weaponmaster-f3s0`: *"you treat all weapons with which you
+    are not proficient as improvised ... a +2 proficiency bonus ...
+    one-handed deal 1d8 and two-handed 1d10."*
+
+    The row carried `c.improvised()` on the reading that *"there is no
+    improvised weapon at all"*. True of the `weapon` table and of the
+    compendium -- `x_m6475a0` is a glossary ref and there is no glossary
+    table -- and the printed sentence does not want a row. "Improvised" is
+    a **state of a weapon relative to a character**, and the engine records
+    exactly that in `Gear.trained` and `Gear.bands`, because
+    `Cast._trained_with` reads them to decide whether a weapon's
+    proficiency reaches the swing.
+
+    **The load-bearing step is the ref going into `Gear.trained`**, and it
+    is the one a reader would leave out. Setting `Weapon.proficiency` alone
+    is inert: `_trained_with` goes on withholding the figure, so the number
+    is written and no roll reads it -- this component's signature failure.
+    So the rule measures a **swing**, not the field.
+
+    Six things asserted:
+
+    * the fighter is **not** proficient with the planted weapon, so there
+      is something for the clause to be about;
+    * its die becomes the card's `1d10` for a two-handed grip;
+    * its proficiency becomes the card's `2`;
+    * the ref enters `Gear.trained`;
+    * a swing with it carries **2 more** on the roll than the same swing
+      without the clause -- read as `ev.total - ev.natural`, which is the
+      bonus alone and so needs no forced die, and that is the assertion the
+      field-level ones cannot make;
+    * and a weapon the fighter **is** trained with is left alone, which is
+      the plant: a verb that re-stated the whole hand would hand every
+      fighter 1d10 and look like a working clause.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Health, Position, Weapon
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies
+
+    ref = "cf:fighter-weaponmaster-f3s0"
+
+    def posed(apply: bool) -> tuple[int, Weapon, Gear]:
+        world, me, _ = _board(ref, 1)
+        gear = world.need(me, Gear)
+        # A two-handed weapon of a group no class band covers, so the
+        # fighter is certainly not proficient with it.
+        odd = Weapon(ref="w:drivers-exotic", damage="1d4", proficiency=0,
+                     group="drivers-exotic", hands="two-handed")
+        gear.weapons = [odd]
+        gear.stowed = set()
+        c = Cast(world=world, me=me, ref="drivers:improvised")
+        if apply:
+            c.improvised(one_handed="1d8", two_handed="1d10", proficiency=2,
+                         on=me)
+        foe = sorted(enemies(world, me))[0]
+        spot = world.need(me, Position).square
+        beside = (spot[0] + 1, spot[1])
+        world.grid.lift(foe)
+        world.need(foe, Position).square = beside
+        world.grid.place(foe, frozenset({beside}))
+        world.zones.refresh()
+        world.need(foe, Health).hp = 500
+        world.turn = me
+        seen: list[int] = []
+        # **The bonus, not the total**, so the die need not be forced:
+        # `ev.total - ev.natural` is everything added to the roll, and it
+        # is the same number whatever the d20 did. Forcing a natural was
+        # the first attempt and there is no verb for it.
+        world.bus.on(AttackRolled,
+                     lambda ev: seen.append(ev.total - ev.natural))
+        Cast(world=world, me=me, ref="drivers:swing").basic(on=foe)
+        held = next((w for w in gear.held if w.ref == odd.ref), odd)
+        return (seen[-1] if seen else -999), held, gear
+
+    plain_bonus, plain, bare = posed(apply=False)
+    out.that(not bare.proficient_with(plain)
+             and plain.ref not in bare.trained,
+             "the fighter is not proficient with the planted weapon, so the"
+             " clause has something to be about")
+    out.that(plain.damage == "1d4" and plain.proficiency == 0,
+             f"and it starts at its own 1d4/+0 ({plain.damage},"
+             f" {plain.proficiency})")
+
+    armed_bonus, armed, gear = posed(apply=True)
+    out.that(armed.damage == "1d10",
+             f"two-handed, its die becomes the card's 1d10 ({armed.damage})")
+    out.that(armed.proficiency == 2,
+             f"and its proficiency the card's 2 ({armed.proficiency})")
+    out.that(armed.ref in gear.trained,
+             "and the ref enters `Gear.trained`, which is what makes the"
+             " figure reach a roll at all")
+    out.that(armed_bonus - plain_bonus == 2,
+             f"a swing with it rolls exactly 2 better ({plain_bonus} ->"
+             f" {armed_bonus}) -- the assertion the field reads cannot make,"
+             " since `_trained_with` would withhold a proficiency set"
+             " without the `trained` entry")
+
+    # -- the racial trait's arm: permission only, and one group spared --
+    #
+    # `rt:r69-t2` prints *"proficiency with improvised weapons other than
+    # unarmed attacks"* and restates neither the die nor the figure, so the
+    # verb's parameters are opt-in. Asserted here rather than in a rule of
+    # its own because it is the same verb answering a narrower card, and a
+    # second rule would pose the same board twice.
+    racial, rme, _ = _board("rt:r69-t2", 1)
+    rgear = racial.need(rme, Gear)
+    fist = Weapon(ref="w:drivers-fist", damage="1d4", proficiency=0,
+                  group="unarmed", hands="one-handed")
+    club = Weapon(ref="w:drivers-odd-club", damage="1d6", proficiency=0,
+                  group="drivers-exotic", hands="one-handed")
+    rgear.weapons = [club, fist]
+    rgear.stowed = set()
+    rc = Cast(world=racial, me=rme, ref="drivers:racial-improvised")
+    n = rc.improvised(except_group="unarmed", on=rme)
+    out.that(n == 1,
+             f"the race's version permits exactly one of the two planted"
+             f" weapons ({n})")
+    out.that(club.ref in rgear.trained,
+             "the exotic club becomes permitted")
+    out.that(fist.ref not in rgear.trained,
+             "PLANT: and the unarmed one does not -- the printed *'other"
+             " than unarmed attacks'*, read as a group rather than a list"
+             " of refs")
+    out.that(club.damage == "1d6" and club.proficiency == 0,
+             f"and neither the die nor the figure is restated"
+             f" ({club.damage}, {club.proficiency}) -- this card prints"
+             " only the permission, where the fighter's restates both")
+
+    # PLANT: a weapon the fighter IS trained with must be untouched.
+    world, me, _ = _board(ref, 1)
+    kept = world.need(me, Gear)
+    mine = [(w.ref, w.damage, w.proficiency) for w in kept.held]
+    Cast(world=world, me=me, ref="drivers:improvised").improvised(
+        one_handed="1d8", two_handed="1d10", proficiency=2, on=me)
+    after = [(w.ref, w.damage, w.proficiency) for w in kept.held]
+    out.that(mine == after,
+             "PLANT: the fighter's own trained weapons are left exactly as"
+             " they were -- a verb that re-stated the whole hand would give"
+             f" every fighter 1d10 and look like it worked ({mine})")
+
+
 def a_forced_swing_at_an_ally_is_refused(out: Result) -> None:
     """`cf:cleric-warpriest-f1s8`: *"You cannot be forced to attack an ally
     under any circumstances."*
@@ -80949,6 +81092,11 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "improvised_weapon": (
+        an_untrained_weapon_is_treated_as_improvised,
+        "an untrained weapon becomes 1d10/+2 for the arena talent and the"
+        " figure reaches the swing (#1276)",
     ),
     "forced_ally": (
         a_forced_swing_at_an_ally_is_refused,

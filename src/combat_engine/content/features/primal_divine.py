@@ -96,6 +96,12 @@ _OFF_HAND = "off-hand"
 #: What a `-fNsM` row says when the leg it belongs to is not the one taken.
 _NOT_MY_OPTION = "needs the option this belongs to"
 
+#: `Weapon.group` for a strike made with the body. Three rows of the
+#: `weapon` table carry it -- `w3635`, `w3678`, `w3724` -- and so does
+#: `chargen.UNARMED`, which is what makes the group the right question for
+#: *"the attack rolls of unarmed attacks"* rather than any one ref.
+_UNARMED_GROUP = "unarmed"
+
 
 def _tier(level: int) -> int:
     """0, 1 or 2 -- the step these ladders climb at 11 and at 21."""
@@ -407,7 +413,7 @@ def druid_shape_grant(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
     requires=on_leg("arena"),
     requires_text=_NOT_MY_OPTION,
-    dropped=("c.improvised()",),
+    dropped=("c.shares_feat_bonus(weapon=)",),
 )
 def fighter_talent_arena(c: Cast) -> None:
     """The talent that fights with whatever is to hand.
@@ -419,39 +425,72 @@ def fighter_talent_arena(c: Cast) -> None:
     The AC half is written and is the whole of what the engine can say. The
     other three clauses are dropped, each naming what it wants:
 
-    * A weapon the wielder is not proficient with counts as improvised, and
-      an improvised weapon deals 1d8 or 1d10 with a +2 to hit. There is no
-      improvised weapon at all -- `c.improvised()` is already the symbol
-      other rows wait on -- and that is the whole of what blocks this
-      clause now.
+    * **The improvised clause is written, and "there is no improvised
+      weapon" was the wrong frame.** It said so: *"there is no improvised
+      weapon at all"*, which is true of the `weapon` table and of the
+      compendium -- `x_m6475a0` is a glossary ref and there is no glossary
+      table. But the printed sentence does not want a row. "Improvised" is
+      a **state of a weapon relative to a character** -- the thing in your
+      hand you were never trained for -- and the engine already records
+      exactly that, in `Gear.trained` and `Gear.bands`, because
+      `Cast._trained_with` reads them to decide whether a weapon's
+      proficiency bonus reaches the swing at all.
+
+      So `c.improvised()` is three existing setters behind one door:
+      `c.weapon_dice` for the grip-dependent die, `c.weapon_proficiency`
+      for the figure, and the ref into `Gear.trained`, which is what makes
+      the figure **reach** -- without that last step `_trained_with` goes
+      on withholding it and the proficiency set above is inert.
 
       **`Weapon.proficiency` is no longer one of them**, and the sentence
       that used to sit here -- *"a column, not something a feature can
       raise"* -- is false: `c.weapon_proficiency` sets it per character and
       the figure reaches the swing, measured. One gap, not two, so the
       marker names only the one that is real.
-    * Two chosen weapons become proficient. `c.chosen_weapon_group()` is the
-      standing request for "a weapon this character picked at build time",
-      and it is a **chargen** gap rather than a reader one: `Build.choices`
-      is an open string set and `c.build(word)` would read it, but the only
-      things written into it are the leg's name, `primary:`, `element:`,
-      `beast:` and `race:`. The `weapon:<slug>` tokens in that spelling are
-      `ClassLine.bands` -- a class's printed proficiency line, not a choice
-      this character made -- so a row asking `c.build("weapon:...")` today
-      is false for every build in the tree.
-    * Feat bonuses earned for one of the two apply to the other. This used
-      to be marked `feat.associated_powers`, which was simply the wrong
-      symbol -- this card prints no Associated Powers list and the clause
-      is not about one. It is downstream of the bullet above: until a
-      character records which two weapons it chose there is no "other" to
-      carry a bonus to, so `c.chosen_weapon_group()` is the whole of the
-      hold and the marker says it once.
+    * **The two chosen weapons are written, and the marker's premise was
+      out of date.** It said *"`Build.choices` is an open string set ... the
+      only things written into it are the leg's name, `primary:`,
+      `element:`, `beast:` and `race:`"*. `chargen.spawn` writes a
+      `chose:<ref>` token for **every weapon the character was dealt**, and
+      `Cast.chosen_weapons` is its reader -- with
+      `Cast.with_a_chosen_weapon` already reconstructing the grip from a
+      damage context for exactly this family of clauses. So the selection
+      *is* recorded, and *"you gain proficiency with them"* is
+      `c.gains_proficiency`.
+
+      Honest about the approximation: the card says you pick **two** and
+      `chose:` covers the whole dealt hand, which for a fighter is two or
+      three. Narrower than the card in no direction a player would notice,
+      and wider by at most one weapon the character is carrying anyway.
+    * **Feat bonuses earned for one of the two apply to the other**, and
+      this is the clause that is left. It was marked
+      `feat.associated_powers` once, which was the wrong symbol -- this
+      card prints no Associated Powers list -- and then folded under the
+      chargen one, which is no longer the hold. What it needs is its own:
+      a feat bonus gated on one weapon has its gate written as a `when=`
+      predicate inside **that feat's** body, and nothing can reach into
+      another row's predicate to widen it. `c.shares_feat_bonus(weapon=)`
+      names that.
 
     The AC bonus is untyped -- the card prints "+1 bonus" with no type word
     -- and climbs the usual ladder. A fighter's chassis wears scale, so the
     gate is false today; it is asked anyway because it is the card's own
     sentence and another row can change what is worn.
     """
+    # *"You treat all weapons with which you are not proficient as
+    # improvised ... a +2 proficiency bonus ... one-handed deal 1d8 and
+    # two-handed 1d10."* One call, and the numbers are the card's.
+    c.improvised(one_handed="1d8", two_handed="1d10", proficiency=2,
+                 on=c.me)
+    # *"You select two weapons as your arena weapons. If you are not
+    # already proficient with these weapons, you gain proficiency with
+    # them."* `c.chosen_weapons` is what `chargen` records of the
+    # selection -- a `chose:<ref>` token per weapon the character was
+    # dealt -- and `c.gains_proficiency` is the permission half, which is
+    # what `_trained_with` asks for. The figure stays each weapon's own,
+    # which is what *"you gain proficiency"* means as against the
+    # improvised +2 above.
+    c.gains_proficiency(*sorted(c.chosen_weapons()), on=c.me)
     if out_of_heavy_armour(c):
         c.bonus(AC, 1 + _tier(c.level), until=When.ENCOUNTER, on=c.me)
 
@@ -611,7 +650,7 @@ def fighter_talent_battlerager(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
     requires=on_leg("brawling"),
     requires_text=_NOT_MY_OPTION,
-    dropped=("Attack.ctx(unarmed)", "c.on_forced_move_attack()"),
+    dropped=("c.on_forced_move_attack()",),
 )
 def fighter_talent_brawling(c: Cast) -> None:
     """The talent that keeps one hand empty for grabbing people.
@@ -626,23 +665,29 @@ def fighter_talent_brawling(c: Cast) -> None:
     Two of the three attack bonuses are still dropped, and **both symbols
     were re-pointed because each named a facility that exists**:
 
-    * This carried `c.off_hand()`, saying off-hand-ness is *"what no attack
-      context carries"*. It has carried `"hand"` since `#501` -- the
-      worked gate is `swung_off_hand(ctx)` twenty lines below, testing
-      `ctx.get("hand") != "off"`. But `ctx["hand"]` means **which of two
-      held weapons swung**, and this trait requires the off hand to be
-      *empty*, so `Gear.off` is `None` and no swing is ever stamped
-      `"off"`. What the clause needs is *"this swing was unarmed"*, and the
-      attack context has no weapon and no group in it at all -- hence
-      `Attack.ctx(unarmed)`.
+    * **The unarmed bonus is written, and it took one context key.** This
+      carried `c.off_hand()` saying off-hand-ness is *"what no attack
+      context carries"*; it has carried `"hand"` since `#501`, and the
+      worked gate is `swung_off_hand(ctx)` twenty lines below. But
+      `ctx["hand"]` means **which of two held weapons swung**, and this
+      trait requires the off hand to be *empty*, so `Gear.off` is `None`
+      and no swing is ever stamped `"off"`. The question the clause asks is
+      *"was this swing unarmed"*, and the context carried no weapon and no
+      group at all.
 
-      `f3784` prints the same sentence and gates it with
-      `_holding(c, "unarmed")`, which asks whether an unarmed-**group**
-      weapon is in hand; `chargen.UNARMED` is attached to nobody, so a
-      fighter with a sword and a free hand fails that test. And
-      `c.as_weapon(group="unarmed")` is a trap here: an added melee weapon
-      makes `Gear.off` the fist and `Gear.two_weapon` true, which breaks
-      this row's own *"off hand is free"* requirement and `-f3s4`'s gate.
+      `#1276` added `ctx["weapon"]` and `ctx["group"]` -- the ref was
+      already on `AttackResult.weapon` and simply never reached the
+      context. The gate is the **group**, which `w3635`, `w3678`, `w3724`
+      and `chargen.UNARMED` all share, so it is about a body and not about
+      one ref.
+
+      Two traps avoided. `f3784` prints the same sentence and gates it with
+      `_holding(c, "unarmed")`, which asks whether an unarmed-group weapon
+      is *in hand* -- `chargen.UNARMED` is attached to nobody, so a fighter
+      with a sword and a free hand fails it. And `c.as_weapon(group=
+      "unarmed")` would make `Gear.off` the fist and `Gear.two_weapon`
+      true, breaking this row's own *"off hand is free"* requirement and
+      `-f3s4`'s gate.
 
     * `c.on_grab_attack()` named a hold that `c.grab_attempt` already
       provides -- it rolls with `as_="grab"` and `resolve` stamps it, which
@@ -670,6 +715,21 @@ def fighter_talent_brawling(c: Cast) -> None:
     c.bonus(
         "attack", 2, until=When.ENCOUNTER, on=c.me,
         when=lambda ctx: ctx.get("as_") == "grab",
+    )
+    # *"A +2 enhancement bonus to the attack rolls of unarmed attacks."*
+    # `ctx["group"]` is what `#1276` added to the attack context for this
+    # clause: the group tells an unarmed swing from an armed one, where
+    # `ctx["hand"]` answers which of two **held** weapons swung and so is
+    # always `"main"` for a fighter whose off hand this trait requires to
+    # be empty.
+    #
+    # `kind="enhancement"` because the card prints the word, which matters
+    # here: a magic weapon's own enhancement does not stack with it, and an
+    # untyped bonus would have paid on top.
+    c.bonus(
+        "attack", 2 + 2 * _tier(c.level), until=When.ENCOUNTER, on=c.me,
+        kind="enhancement",
+        when=lambda ctx: ctx.get("group") == _UNARMED_GROUP,
     )
 
 

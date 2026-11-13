@@ -1644,14 +1644,33 @@ _inert("rt:r69-t1",
 
 
 @power("rt:r69-t2", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.improvised()",),
-       wants="an improvised weapon in the weapon table, so the "
-             "proficiency header has a ref to name")
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r69_t2(c: Cast) -> None:
-    """Proficiency with improvised weapons. There is no improvised weapon
-    in the `weapon` table to be proficient with, so the header field has
-    no ref to name."""
+    """*"You gain proficiency with improvised weapons other than unarmed
+    attacks."*
+
+    **The marker asked for a weapon row and the clause does not want
+    one.** It said *"there is no improvised weapon in the `weapon` table
+    to be proficient with, so the header field has no ref to name"* --
+    true, and the compendium's `x_m6475a0` is a glossary entry with no
+    table behind it. "Improvised" is a **state of a weapon relative to a
+    character**: the thing in your hand you were never trained for. The
+    engine records that in `Gear.trained` and `Gear.bands`, which
+    `Cast._trained_with` reads to decide whether a weapon's proficiency
+    bonus reaches the swing at all.
+
+    So the clause is `c.improvised()` with **nothing but the permission**
+    -- no die and no figure. This card restates neither: the glossary's
+    own 1d4/1d6 stand, and what the race removes is the refusal.
+    `cf:fighter-weaponmaster-f3s0` is the card that does restate them, and
+    the verb's parameters are opt-in for exactly that difference.
+
+    `except_group="unarmed"` is the printed *"other than unarmed
+    attacks"*. Three rows of the `weapon` table carry that group and so
+    does `chargen.UNARMED`, so the exclusion is a group test rather than a
+    list of refs.
+    """
+    c.improvised(except_group="unarmed", on=c.me)
 
 
 # -- r67 and r68, the two variants whose traits are rows ----------------
