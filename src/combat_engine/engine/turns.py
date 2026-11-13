@@ -880,7 +880,7 @@ def _rest_window(world: World, rested: list[int]) -> None:
         arm_traits(world, eid)
 
 
-def short_rest(world: World) -> None:
+def short_rest(world: World, *, surges: bool = True) -> None:
     """Five minutes: encounter powers come back, daily ones do not.
 
     **This had no callers.** It was written, correct, and unreachable,
@@ -924,8 +924,47 @@ def short_rest(world: World) -> None:
     # first because emitting inside `world.each` would let a listener that
     # grants a power mutate what is being walked.
     _rest_window(world, rested)
+    if surges:
+        _spend_surges_to_full(world, rested)
     for eid in rested:
         world.bus.emit(ShortRested(actor=eid))
+
+
+def _spend_surges_to_full(world: World, rested: list[int]) -> None:
+    """Spend surges up to full, which is what a short rest is for.
+
+    **The board half, which did not exist.** `story.Sheet.heal` has done
+    this on the *record* since the multi-encounter loop was written --
+    without it a party walked into its second fight at -34 hit points --
+    and it moves the numbers directly. So no surge was ever spent on a
+    board at a rest, nothing emitted `SurgeSpent`, and every card reading
+    *"when a character spends healing surges at the end of the rest"* had
+    no moment to hang from. That is `turns.short_rest(surges=)`.
+
+    Through `resolve.spend_surge`, which is the only place `Health.surges`
+    is decremented and the only thing that announces it -- so a row can
+    watch the rest's healing the same way it watches a second wind, and a
+    creature that `c.no_surges` has refused keeps its pool here too.
+
+    Up to full and no further, one surge at a time, which is the obvious
+    reading of *"any number"* for somebody who wants to keep fighting --
+    the wording `story.Sheet.heal` already settled on.
+
+    **Nothing for a creature that is down.** Dying is not a thing five
+    minutes fixes, and the record's version says so; stabilising is
+    `story.Sheet.stabilise`'s job and stays there.
+    """
+    from .query import surge_value
+    from .resolve import spend_surge
+
+    for eid in rested:
+        health = world.get(eid, Health)
+        if health is None or health.max_hp <= 0 or health.hp <= 0:
+            continue
+        while health.hp < health.max_hp and health.surges > 0:
+            if not spend_surge(world, eid, healed=surge_value(world, eid)):
+                break
+            health.hp = min(health.max_hp, health.hp + surge_value(world, eid))
 
 
 def extended_rest(world: World) -> None:

@@ -55,7 +55,13 @@ from combat_engine.engine import (
     get,
     power,
 )
-from combat_engine.engine.events import Hit, ItemPowerUsed, Miss, PowerResolved
+from combat_engine.engine.events import (
+    Hit,
+    ItemPowerUsed,
+    Miss,
+    PowerResolved,
+    SurgeSpent,
+)
 from combat_engine.engine.query import distance_between, team
 
 from .builds import on_leg
@@ -631,23 +637,64 @@ def bard_heal_feature(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE_HEAL,
-    todo=("turns.short_rest(surges=)",),
 )
 def bard_song_of_rest(c: Cast) -> None:
-    """Every word of this is about a short rest: it is set up during one and
-    it pays out on the surges spent at the end of one.
+    """The bard's song, and every word of it is about a short rest.
 
-    Two separate things are missing and both are named. Nothing announces
-    a rest, so the song cannot be started; and `turns.short_rest` does not
-    spend healing surges at all -- it restores encounter powers and says so
-    -- so even a song that was running would have nothing to add its hit
-    points to. The one-at-a-time rule it ends with has nothing to arbitrate
-    until both land.
+    *"When you play an instrument or sing during a short rest, you and
+    each ally who can hear you are affected... when an affected
+    character spends healing surges at the end of the rest, that
+    character regains additional hit points equal to your Charisma
+    modifier with each healing surge. A character can be affected by
+    only one at a time."*
 
-    `docs/blocked.json` records this ref as wanting "a short rest in the
-    engine", which has since arrived; the two clauses above are what is
-    actually left.
+    **Both halves of the hold have landed.** `events.ShortRested`
+    announces the rest and `turns._rest_window` arms a trait so this
+    body runs at one, which is why the watch below can exist at all.
+    And `turns.short_rest` spends surges now -- through
+    `resolve.spend_surge`, the only thing that announces one -- where it
+    used to restore powers and say *"that is `Cast.surge`, not this"*.
+    So there is spending to add to.
+
+    **A watch on `SurgeSpent` and not a sum at the end**, because the
+    card pays *with each healing surge*: a character that spends three
+    gets the modifier three times, and a total worked out afterwards
+    would pay it once.
+
+    **The one-at-a-time rule is a latch on the TARGET**, which is what
+    "a character can be affected by only one" means -- two bards in a
+    party do not stack, and the first song to reach a character is the
+    one it is under. `c.once_per_board` keys on the row's own ref, so it
+    could not tell one bard's song from another's.
     """
+    mine = [c.me, *c.allies()]
+
+    def extra(ev: SurgeSpent) -> None:
+        if ev.actor not in mine or c.cha_mod <= 0:
+            return
+        # **One payment per SURGE, latched on the target and keyed on
+        # the event.** That is what *"a character can be affected by
+        # only one at a time"* comes to: the character is paid once for
+        # each surge it spends, however many songs are running. Two
+        # measurements made the shape:
+        #
+        # * claiming the character for the whole rest pays once and the
+        #   card pays *with each healing surge*, so a character spending
+        #   three would be short twice over;
+        # * not claiming at all double-pays -- the board's bard holds
+        #   three song rows between `cf:bard-f5` and its skald twin, and
+        #   one surge paid the modifier twice.
+        #
+        # `c.latch(on=)` stores on the **target**, keyed by the label
+        # alone, so a second song reads the first one's claim. `ev.seq`
+        # is what makes it per surge rather than per rest.
+        tag = f"song-of-rest:{ev.seq}"
+        if c.latched(tag, on=ev.actor):
+            return
+        c.latch(tag, on=ev.actor)
+        c.heal(c.cha_mod, on=ev.actor)
+
+    c.watch(SurgeSpent, extra, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(

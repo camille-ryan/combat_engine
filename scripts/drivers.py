@@ -46447,6 +46447,133 @@ def the_poison_recipes_and_the_spellbook_are_both_dealt(out: Result) -> None:
              f"{sorted(set(chargen.SPELLBOOK) & set(marked))}")
 
 
+def a_short_rest_spends_surges_and_the_song_pays_per_surge(out: Result) -> None:
+    """`turns.short_rest(surges=)`, and the two rows that waited on it.
+
+    **A short rest never spent a healing surge on a board.**
+    `turns.short_rest` restored encounter powers and said so outright --
+    *"healing surges are spent over a short rest to get hit points back;
+    the pool itself does not refill. That is `Cast.surge`, not this"* --
+    and nothing called `Cast.surge` at a rest. `story.Sheet.heal` has
+    done it on the **record** since the multi-encounter loop was written,
+    moving the numbers directly, so no `SurgeSpent` was ever emitted at a
+    rest and every card reading *"when a character spends healing surges
+    at the end of the rest"* had no moment to hang from.
+
+    Through `resolve.spend_surge`, which is the only place
+    `Health.surges` is decremented and the only thing that announces it.
+    So the rest's healing is watchable exactly as a second wind is, and a
+    creature `c.no_surges` has refused keeps its pool here too.
+
+    The two bard rows pay *with each healing surge*, so they watch rather
+    than totalling at the end: a character spending three gets the
+    modifier three times.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import turns
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import SurgeSpent
+    from combat_engine.engine.query import surge_value
+
+    # -- the rest spends, and announces -----------------------------------
+    world, me, _ = _board("cf:bard-f5", 1)
+    health = world.need(me, Health)
+    health.hp = 1
+    had = health.surges
+    seen: list[int] = []
+    world.bus.on(SurgeSpent, lambda ev: seen.append(ev.actor))
+    turns.short_rest(world)
+    out.that(health.hp == health.max_hp,
+             "a short rest heals to FULL, which it did not do at all -- it "
+             "restored powers and left the hit points where they were",
+             f"{health.hp} of {health.max_hp}")
+    out.that(health.surges < had,
+             "and pays for it out of the surge pool, which is what the "
+             "printed rest does",
+             f"{had} -> {health.surges}")
+    out.that(seen.count(me) == had - health.surges,
+             "and announces EVERY one through `resolve.spend_surge` -- one "
+             "`SurgeSpent` per surge, which is what lets a row watch the "
+             "rest's healing at all",
+             f"{seen.count(me)} events, {had - health.surges} surges")
+
+    # -- nothing for a creature that is down ------------------------------
+    world, me, _ = _board("cf:bard-f5", 1)
+    health = world.need(me, Health)
+    health.hp = -(health.max_hp // 2) - 1
+    down_had = health.surges
+    turns.short_rest(world)
+    out.that(health.surges == down_had and health.hp < 0,
+             "while a creature that is down spends nothing and is not "
+             "raised -- dying is not a thing five minutes fixes, which is "
+             "the reading the record's version already settled on",
+             f"{down_had} -> {health.surges}, hp {health.hp}")
+
+    # -- the song pays the modifier with EACH surge -----------------------
+    # **Measured per surge against the printed number**, not against a
+    # second character: two dealt characters differ in more than the
+    # song, so a comparison between them would attribute whatever else
+    # moved to this clause.
+    def one_surge(ref: str) -> tuple[int, int, int]:
+        w, who, _ = _board(ref, 1)
+        hp = w.need(who, Health)
+        per = surge_value(w, who)
+        cha = Cast(world=w, me=who, ref="probe").cha_mod
+        # **The POOL is capped at one, not the room.** Leaving exactly
+        # one surge's worth of room does not work: the rest spends up to
+        # full, so it simply spends a second surge and arrives at the
+        # same number whether the song paid or not. Measured -- deleting
+        # the song's `c.heal` left this assertion green, which is the
+        # plant finding the check rather than the row.
+        #
+        # With one surge in the pool and plenty of room, exactly one is
+        # spent and what it gave is readable.
+        hp.max_hp = max(hp.max_hp, (per + cha) * 4)
+        hp.hp = 1
+        hp.surges = 1
+        # **Read AFTER the maximum moves**, because a surge is a quarter
+        # of maximum hit points -- raising the ceiling to make room for
+        # one surge raises what a surge is worth. Read before, this
+        # compared a 15-point surge against a 7-point expectation and
+        # called a correct row wrong.
+        per = surge_value(w, who)
+        before = hp.hp
+        turns.short_rest(w)
+        return hp.hp - before, per, cha
+
+    gained, per, cha = one_surge("cf:bard-f5")
+    out.that(cha > 0,
+             "the board's bard has a Charisma modifier to pay, without "
+             "which every reading below is zero and agrees with a song "
+             "that never fired",
+             f"+{cha}")
+    out.that(gained == per + cha,
+             "and ONE surge gives the surge value PLUS the modifier -- the "
+             "card pays 'with each healing surge', so the amount is per "
+             "surge and not per rest",
+             f"{gained} against {per} + {cha}")
+    # **The no-stacking rule, and the board is what makes it testable.**
+    # *"A character can be affected by only one at a time."* The
+    # assertion above is that rule as much as it is the payment: this
+    # board's bard holds more than one song row, so an unlatched body
+    # pays the modifier twice and reads 19 where 15 is right. Asserted
+    # out loud, because with one song armed the rule would be vacuous
+    # and nothing above would say so.
+    from combat_engine.engine.components import Powers
+
+    w2, who2, _ = _board("cf:bard-f5", 1)
+    held = w2.get(who2, Powers)
+    assert held is not None
+    songs = [r for r in held.known
+             if r in ("cf:bard-f5", "cf:bard-skald-f4")]
+    out.that(len(songs) > 1,
+             "and the board's bard holds MORE than one song, without which "
+             "'only one at a time' is a rule with nothing to arbitrate and "
+             "the reading above would pass on a body that never latched",
+             f"{songs}")
+
+
 def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
         out: Result) -> None:
     """`#1268` again, on the ranger: *"you gain one additional X"*.
@@ -79539,6 +79666,11 @@ DRIVERS = {
         the_poison_recipes_and_the_spellbook_are_both_dealt,
         "the executioner's recipes and vials and the bladesinger's"
         " spellbook are dealt, both halves of each card (#1268)",
+    ),
+    "rest_surges": (
+        a_short_rest_spends_surges_and_the_song_pays_per_surge,
+        "a short rest spends healing surges and announces each, and"
+        " the bard's song pays its modifier with every one (#1257)",
     ),
     "extra_picks": (
         a_later_row_adds_one_more_pick_of_an_earlier_rows_fork,

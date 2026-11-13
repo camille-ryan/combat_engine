@@ -28,7 +28,13 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.events import Bloodied, DamageApplied, Dropped, Miss
+from combat_engine.engine.events import (
+    Bloodied,
+    DamageApplied,
+    Dropped,
+    Miss,
+    SurgeSpent,
+)
 
 #: The four defences, for the mantle's one modifier laid four times.
 _DEFENCES = (AC, FORT, REF, WILL)
@@ -401,31 +407,64 @@ def skald_untrained(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
-    todo=("turns.short_rest(surges=)",),
 )
 def skald_rest_healing(c: Cast) -> None:
     """The skald's half of `cf:bard-f5`, which is that card printed again.
 
-    *"When an affected character spends healing surges at the end of the
-    rest, that character regains additional hit points equal to your
-    Charisma modifier with each healing surge."*
+    *"When you play an instrument or sing during a short rest, you and
+    each ally who can hear you are affected... when an affected
+    character spends healing surges at the end of the rest, that
+    character regains additional hit points equal to your Charisma
+    modifier with each healing surge. A character can be affected by
+    only one at a time."*
 
-    **The same gap and the same symbol as `cf:bard-f5`**, deliberately:
-    the two rows print one card between them and the hold is identical, so
-    one symbol over both is the rule working rather than the collapse
-    `content/CLAUDE.md` warns about -- two rows measured to want the same
-    thing sharing one symbol is what that file asks for.
+    **Both halves of the hold have landed.** `events.ShortRested`
+    announces the rest and `turns._rest_window` arms a trait so this
+    body runs at one, which is why the watch below can exist at all.
+    And `turns.short_rest` spends surges now -- through
+    `resolve.spend_surge`, the only thing that announces one -- where it
+    used to restore powers and say *"that is `Cast.surge`, not this"*.
+    So there is spending to add to.
 
-    What is missing is one layer out from the symbol's name, which `#1257`
-    records: `events.ShortRested` exists, and `turns.short_rest`'s own
-    docstring declines to spend surges -- *"that is `Cast.surge`, not
-    this"*. **Nothing calls `Cast.surge` at a rest**, so there is no
-    spending for this to add to. A party-level decision rather than a
-    parameter.
+    **A watch on `SurgeSpent` and not a sum at the end**, because the
+    card pays *with each healing surge*: a character that spends three
+    gets the modifier three times, and a total worked out afterwards
+    would pay it once.
 
-    The one-at-a-time clause it ends with has nothing to arbitrate until
-    then, which is `cf:bard-f5`'s note in the same words.
+    **The one-at-a-time rule is a latch on the TARGET**, which is what
+    "a character can be affected by only one" means -- two bards in a
+    party do not stack, and the first song to reach a character is the
+    one it is under. `c.once_per_board` keys on the row's own ref, so it
+    could not tell one bard's song from another's.
     """
+    mine = [c.me, *c.allies()]
+
+    def extra(ev: SurgeSpent) -> None:
+        if ev.actor not in mine or c.cha_mod <= 0:
+            return
+        # **One payment per SURGE, latched on the target and keyed on
+        # the event.** That is what *"a character can be affected by
+        # only one at a time"* comes to: the character is paid once for
+        # each surge it spends, however many songs are running. Two
+        # measurements made the shape:
+        #
+        # * claiming the character for the whole rest pays once and the
+        #   card pays *with each healing surge*, so a character spending
+        #   three would be short twice over;
+        # * not claiming at all double-pays -- the board's bard holds
+        #   three song rows between `cf:bard-f5` and its skald twin, and
+        #   one surge paid the modifier twice.
+        #
+        # `c.latch(on=)` stores on the **target**, keyed by the label
+        # alone, so a second song reads the first one's claim. `ev.seq`
+        # is what makes it per surge rather than per rest.
+        tag = f"song-of-rest:{ev.seq}"
+        if c.latched(tag, on=ev.actor):
+            return
+        c.latch(tag, on=ev.actor)
+        c.heal(c.cha_mod, on=ev.actor)
+
+    c.watch(SurgeSpent, extra, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(
