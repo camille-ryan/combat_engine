@@ -3045,7 +3045,31 @@ class Cast:
             arm = gear.implement
         else:
             arm = self._wielded()
-        return arm.enhancement if arm is not None else 0
+        if arm is None:
+            return 0
+        # **One family of implements lends its enhancement to a natural
+        # weapon**, which is `cf:monk-f1`'s second clause -- *"your `w3678`
+        # can benefit from an `i1775`."* A natural weapon is the creature's
+        # body and can never be enchanted, so its own enhancement is
+        # always 0; the printed sentence is that such an implement lends
+        # it one.
+        #
+        # **`Weapon.lends_natural` and not a test on the implement**,
+        # because `Gear.implement` answers whichever rod, staff, wand or
+        # symbol is in hand and most of those have no business reaching a
+        # fist. The flag is declared in `chargen`, which is where the
+        # printed family is known -- `engine` must not name an item and
+        # must not import `chargen`.
+        #
+        # Honest limit: everything `chargen` deals is plain, so this pays
+        # nothing until a magic one is in play. Written because the
+        # condition is the card's and cheap, not because a board shows it.
+        # `#1276`.
+        if arm.natural and not arm.enhancement:
+            focus = gear.implement
+            if focus is not None and focus.lends_natural:
+                return focus.enhancement
+        return arm.enhancement
 
     @property
     def str_(self) -> int:

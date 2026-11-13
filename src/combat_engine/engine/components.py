@@ -2101,8 +2101,16 @@ class Gear:
         fallback is `weapons[0]` when nothing else can be swung.
         """
         if self.weapons and not self.stowed:
-            self.wield(next((w for w in self.weapons
-                             if w.group != "implement"), self.weapons[0]))
+            # **A natural weapon is not what gets wielded**, for the same
+            # reason an implement is not: it occupies no hand, so choosing
+            # it would stow the thing the creature actually carries. A monk
+            # listing its own strike first had its greataxe put on the belt
+            # -- measured while `Weapon.natural` was added, `#1276`.
+            self.wield(next(
+                (w for w in self.weapons
+                 if w.group != "implement" and not w.natural),
+                self.weapons[0],
+            ))
 
     @property
     def held(self) -> list[Weapon]:
@@ -2118,14 +2126,31 @@ class Gear:
         """
         self.stowed.discard(weapon.ref)
         if weapon.two_handed:
-            self.stowed |= {w.ref for w in self.weapons if w.ref != weapon.ref}
+            # **A natural weapon is left held even here**, and this is the
+            # branch where it matters: stowing it would be permanent -- the
+            # set persists, so a monk that took up a greataxe would lose
+            # its own strike for good and never get it back on dropping
+            # the axe. It costs no hand (`hands_free`) and `melee`
+            # withholds it while both hands are full, so holding it is
+            # free and correct. `#1276`.
+            self.stowed |= {
+                w.ref for w in self.weapons
+                if w.ref != weapon.ref and not w.natural
+            }
             return
         keep = [weapon]
         for other in self.held:
             if other.ref == weapon.ref or other.two_handed or len(keep) >= 2:
                 continue
             keep.append(other)
-        self.stowed = {w.ref for w in self.weapons if w not in keep}
+        # **A natural weapon is never stowed**, because it is not a thing
+        # that can be put down. It takes no hand either -- see
+        # `hands_free` -- so keeping it cannot crowd out a real weapon, and
+        # `melee` is what withholds it when both hands are full.
+        self.stowed = {
+            w.ref for w in self.weapons
+            if w not in keep and not w.natural
+        }
 
     @property
     def main(self) -> Weapon | None:
@@ -2195,7 +2220,50 @@ class Gear:
         `chargen._shield_for` had already worked this out and was excluding
         implements by hand.
         """
-        return [w for w in self.held if not w.ranged and w.group != "implement"]
+        swingable = [
+            w for w in self.held
+            if not w.ranged and w.group != "implement"
+        ]
+        # **A natural weapon needs a hand free**, which is `cf:monk-f1`'s
+        # printed refusal: *"you must have a hand free to use your `w3678`,
+        # even if you're kicking, kneeing, elbowing, or head-butting."*
+        #
+        # Here rather than in `query.can_wield`, where the row's own
+        # docstring put it, for a measured reason: `can_wield` has **no
+        # production caller at all** -- only `drivers` -- so the refusal
+        # would have been written and read by nobody, which is this
+        # component's signature failure. `melee` is the one door
+        # `Gear.main` filters through and 86 callers reach, so a refusal
+        # here bites wherever the question is actually asked. `can_wield`
+        # carries it too, for whoever wires that up later. `#1276`.
+        if self.hands_free < 1:
+            return [w for w in swingable if not w.natural]
+        return swingable
+
+    @property
+    def hands_free(self) -> int:
+        """How many hands this creature has nothing in. Two, one, or none.
+
+        **A natural weapon occupies nothing**, because it *is* the hand --
+        counting the monk's own strike as a held object would make its
+        hands full by carrying itself, and then `melee` above would
+        withhold the very weapon the count exists to gate.
+
+        A two-handed weapon takes both; a shield takes one; everything else
+        in hand takes one each. Floored at zero rather than going negative,
+        because a creature carrying three one-handed weapons is a thing the
+        board can produce and "minus one hands free" answers no question.
+
+        Implements are counted: a wizard holding an orb has one hand full,
+        which is what `powers/wizard/level_0._sword_hand` has always
+        asked by hand and what `cf:wizard-bladesinger-f0` requires.
+        """
+        taken = 1 if self.shield else 0
+        for arm in self.held:
+            if arm.natural:
+                continue
+            taken += 2 if arm.two_handed else 1
+        return max(0, 2 - taken)
 
     @property
     def implement(self) -> Weapon | None:
@@ -2293,6 +2361,39 @@ class Weapon:
     #: Read by `query.can_wield`, which is where the glossary's refusals
     #: live. PHB 220, *Weapons and Size*. `#1241`.
     size: Size = Size.MEDIUM
+    #: **Is this the creature's own body rather than a thing it carries?**
+    #: `cf:monk-f1` prints *"when you make a weapon attack such as a melee
+    #: basic attack, you can use `w3678`, which is a weapon in the unarmed
+    #: weapon group ... You must have a hand free to use your `w3678`, even
+    #: if you're kicking, kneeing, elbowing, or head-butting."*
+    #:
+    #: **The group cannot carry this**, which is what the row's marker got
+    #: wrong when it asked the ETL for a citation: `w3635` and `w3724` are
+    #: unarmed-group weapons a character **buys and holds**, so refusing
+    #: the group for a full hand would refuse those wrongly. The question
+    #: is about one weapon, and this is the field that answers it.
+    #:
+    #: Two readers, and both fall out of the same fact. `Gear.hands_free`
+    #: does not count a natural weapon as occupying a hand -- it *is* the
+    #: hand -- and `Gear.melee` withholds one when no hand is free, which
+    #: is the printed refusal. `query.can_wield` carries it too, for the
+    #: callers that ask before a thing is picked up.
+    #:
+    #: Set by `chargen` on the monk's strike, not by the ETL: `game.db` has
+    #: no column for it and the compendium's own `x_m6475a0` is a glossary
+    #: ref with no table behind it. `#1276`.
+    natural: bool = False
+    #: **May this implement lend its enhancement to a natural weapon?**
+    #: One printed family of implements does -- `i1775` and its scaling
+    #: rows -- and `cf:monk-f1` prints the sentence from the other side.
+    #:
+    #: A flag rather than a test on the implement's slug or name, for two
+    #: reasons. `engine` must not name a printed item, which is the one
+    #: rule; and `engine` must not import `chargen`, which is a contract
+    #: `.importlinter` holds at zero. So the fact is declared where it is
+    #: known -- `chargen.KI_FOCUS` -- and read here, which is the same
+    #: arrangement `natural` above has. `#1276`.
+    lends_natural: bool = False
     properties: frozenset[str] = frozenset()
     #: A magic weapon's enhancement bonus, which adds to its attack and its
     #: damage. Zero is a plain weapon, and everything `chargen` hands out is

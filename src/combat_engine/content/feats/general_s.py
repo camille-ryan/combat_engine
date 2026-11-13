@@ -763,34 +763,42 @@ def f3698(c: Cast) -> None:
 
 @power("f3699", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("cf:monk-f1",), proficiency=("w:ki-focus",))
+       proficiency=("w:ki-focus", "w3678"))
 def f3699(c: Cast) -> None:
-    """The ki focus is header data `chargen` reads at build time and the
-    training is not a fight. The feature it hands over is `cf:monk-f1`,
-    which is declared -- and declared `todo` itself, because the feature
-    *is* a weapon and that row's own marker says what is missing from it:
-    the off-hand property, the free-hand requirement and the implement
-    clause are fields on a weapon row nothing declares. Granting it here
-    would hand over a card refused in play.
+    """*"You gain training in Athletics or Acrobatics. You also gain the
+    monk's `cf:monk-f1` feature and gain proficiency with ki focuses."*
 
-    **Re-pointed to the sibling, and the old spelling could not say this
-    wait at all.** It carried `spec.weapon_ref()`, copied off
-    `cf:monk-f1`'s own marker -- so the two rows named one gap twice and
-    this row's actual wait, *that row being written*, was nowhere. A ref
-    is the form `blocked._one` resolves: declared **and not itself
-    unfinished**, which is exactly the condition here and is strictly
-    narrower than the symbol. Measured today: `cf:monk-f1` resolves False
-    while `p13506` and `rt:r69-t1` resolve True through the same branch,
-    so the spelling is live in both directions.
+    Three clauses and each lands somewhere different, which is why the
+    body is one line.
 
-    Pointing at the sibling's symbol instead would report this feat ready
-    the day the weapon fields land, which is one step early -- there is
-    nothing to grant until that row is written rather than merely
-    headed. `f2429` is the precedent and `_one`'s own docstring is the
-    argument.
+    * **The training is a column.** `feat.trains_choice` holds
+      `acrobatics,athletics` and `chargen._trained_skills` draws one, which
+      is where training belongs: the sheet is made before there is a board.
+    * **The ki focus is the header.** `chargen.proficiency` reads
+      `Power.proficiency` and resolves `w:ki-focus` out of
+      `chargen.IMPLEMENTS`, so the permission and the object both arrive at
+      build time.
+    * **The feature is the grant**, and it was the wait. This carried
+      `todo=("cf:monk-f1",)` -- a ref rather than a symbol, which is
+      `blocked._one`'s form for *"that row being written"* -- and the note
+      was exact about why: granting it then *"would hand over a card
+      refused in play"*. `cf:monk-f1` is finished now, so the grant is the
+      sentence.
 
-    The whole of what is owed is in the other file. Nothing here is a
-    facility gap: `c.grant_row` is how the hand-over would be written."""
+    **`w3678` joins the header, because the feature IS a weapon.** The
+    monk's own strike reaches a monk through
+    `chargen.CLASSES["monk"].weapons`, and a swordmage taking this feat is
+    on no such line -- so without the ref the character would hold the
+    feature and nothing to swing with it. `PRINTED` carries `w3678`, and
+    `chargen.proficiency` feeds `outfit`, which is what puts it in the
+    hand.
+
+    That ref also carries `natural=True`, so the printed *"you must have a
+    hand free"* comes with it: `Gear.melee` withholds it when both hands
+    are full and `Gear.wield` never stows it. One field, and the feat
+    inherits the rule rather than restating it.
+    """
+    c.grant_row("cf:monk-f1", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3700", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

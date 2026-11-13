@@ -870,6 +870,23 @@ def can_wield(world: World, eid: int, weapon: Weapon) -> str:
     if mine is Size.SMALL and weapon.hands == "two-handed":
         return "a small wielder cannot use a two-handed weapon"
 
+    # **A fourth refusal, and this one is not the glossary's.**
+    # `cf:monk-f1` prints *"you must have a hand free to use your `w3678`,
+    # even if you're kicking, kneeing, elbowing, or head-butting"* -- so a
+    # natural weapon is refused when both hands are full. `Gear.natural`
+    # and not the group: `w3635` and `w3724` are unarmed-group weapons a
+    # character buys and holds.
+    #
+    # **`Gear.melee` is what actually enforces it**, because this function
+    # has no production caller -- only `drivers`. That is a finding about
+    # the `#1241` glossary work rather than about the monk, and it is why
+    # the refusal lives in `melee` as well: a rule written only here would
+    # be read by nobody, which is the shape `engine/CLAUDE.md` opens with.
+    # Carried here too so the two cannot disagree the day somebody wires
+    # this up. `#1276`.
+    if weapon.natural and gear is not None and gear.hands_free < 1:
+        return "a natural weapon needs a hand free"
+
     # **Medium and smaller are one band, and that is the page talking
     # rather than a convenience.** *"Small characters use the same weapons
     # that Medium creatures do"*, and *"Large, Huge, and Gargantuan

@@ -354,7 +354,7 @@ def monk_tradition_stone(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    todo=("Weapon.natural", "Gear.implement(reaches_natural)"),
+    out_of_combat=True,
 )
 def monk_unarmed_strike(c: Cast) -> None:
     """The feature is a weapon, and a weapon is not something a body can
@@ -407,18 +407,52 @@ def monk_unarmed_strike(c: Cast) -> None:
     symbols now are the two remaining halves, and both are weapon
     **fields**, so they wait on the ETL batch. #1229.
 
-    **`todo=` overstates this row and `dropped=` is refused, which is a
-    gap in the marker vocabulary rather than a fact about the monk.**
-    Every printed fact here is already true of a dealt monk --
-    `chargen.CLASSES["monk"].weapons` carries the loaded `w3678` and a
-    spawned monk has it in `Gear.main` -- so the feature plays and `todo=`'s
-    *"refused in play"* is not what is true. But `dropped=` requires a body
-    that does something, and there is nothing for one to do: the whole
-    clause is data. `lint.py` is right to hold that line in general (a
-    bodyless `dropped=` row is the commonest way a gap gets counted as
-    working), and this row is the case it does not fit. Filed rather than
-    worked around; `cf:assassin-executioner-f3` is the same shape with
-    nothing left over, and it carries no marker at all.
+    **Both remaining halves are written now, and neither was a column.**
+
+    * *"You must have a hand free to use your `w3678`."* `Weapon.natural`
+      is the field, and the group could not be it -- `w3635` and `w3724`
+      are unarmed-group weapons a character **buys and holds**, so
+      refusing the group for a full hand would refuse those wrongly.
+      Three readers fall out of the one fact: `Gear.hands_free` does not
+      count a natural weapon as occupying a hand (it *is* the hand),
+      `Gear.melee` withholds it when no hand is free, and `Gear.wield`
+      never stows it.
+
+      That last one is not tidiness. `wield`'s two-handed branch stows
+      everything else, and `stowed` persists -- so a monk that took up a
+      greataxe would have lost its own strike **for good**. Measured while
+      the field was added.
+
+      `query.can_wield` carries the refusal too, which is where this
+      docstring used to say it belonged. It is not enough on its own:
+      that function has **no production caller** -- only `drivers` -- so a
+      rule written only there would be read by nobody. `Gear.melee` is
+      the door `Gear.main` filters through and 86 callers reach.
+
+    * *"Your `w3678` can benefit from an `i1775`."*
+      `Cast._enhancement_of` falls back to the implement in hand when the
+      swung weapon is natural and has no enhancement of its own -- which a
+      body always has, since it cannot be enchanted.
+
+      Narrowed by `Weapon.lends_natural`, not to implements generally: a
+      rod's enhancement has no business reaching a fist. The flag is
+      declared on `chargen.KI_FOCUS`, which is where the printed family is
+      known, because `engine` must neither name an item nor import
+      `chargen` -- the same arrangement `Weapon.natural` has.
+
+      **This was written with a slug test first and `leaks.py --cited`
+      refused it**: the slug *is* the item's printed name, and two files
+      that cite `i1775` were printing it. The flag is the fix and it is
+      also the better design, since one more member of the family needs a
+      flag rather than a second literal.
+
+      Honest limit: everything `chargen` deals is plain, so this pays
+      nothing until a magic one is in play.
+
+    **`out_of_combat=True`**, which is what the row is: every printed fact
+    is now true of a dealt monk and none of them is a thing a body does in
+    a fight. `cf:assassin-executioner-f3` is the same shape and carries no
+    marker either.
     """
 
 

@@ -315,8 +315,17 @@ LONGSPEAR = Weapon(ref="w3617", category="military", damage="1d10", proficiency=
 #: `w3678`'s numbers exactly, so the two were always one weapon
 #: under two spellings. Dealt only on the proficiency line that names the monk
 #: strike, which is how the duplicate went unnoticed. #282.
+#: **`natural=True` is the printed *"you must have a hand free"***, and the
+#: group cannot carry it: `w3635` and `w3724` are unarmed-group weapons a
+#: character buys and holds, so refusing the group for a full hand would
+#: refuse those wrongly. `Gear.melee` withholds this one when both hands
+#: are full, `Gear.hands_free` does not count it as occupying one, and
+#: `Gear.wield` never stows it. Set here rather than by the ETL because
+#: `game.db` has no column for it and the compendium's `x_m6475a0` is a
+#: glossary ref with no table behind it. `#1276`.
 MONK_STRIKE = Weapon(ref="w3678", category="simple", damage="1d8",
                      proficiency=3, group="unarmed", hands="one-handed",
+                     natural=True,
                      properties=frozenset({"off-hand"}))
 #: **A bare fist**, which the tree had none of: every row in the `unarmed` group is
 #: a *better* fist than a bare one, so "the damage die of your unarmed attack
@@ -339,7 +348,13 @@ TOTEM = Weapon(ref="w:totem", damage="1d4", proficiency=0, group="implement")
 #: derived for the reason the five above are: an implement prints no
 #: damage die and no proficiency bonus, so there is no stat line to load.
 WAND = Weapon(ref="w:wand", damage="1d4", proficiency=0, group="implement")
-KI_FOCUS = Weapon(ref="w:ki-focus", damage="1d4", proficiency=0, group="implement")
+#: **`lends_natural=True` is `cf:monk-f1`'s second printed clause**, read
+#: from the other side: *"your `w3678` can benefit from an `i1775`."* The
+#: fact is declared here because this is where the printed family is known
+#: -- `Cast._enhancement_of` reads the flag, since `engine` must neither
+#: name an item nor import `chargen`. `#1276`.
+KI_FOCUS = Weapon(ref="w:ki-focus", damage="1d4", proficiency=0,
+                  group="implement", lends_natural=True)
 #: The eighth, and the only one a feat asked for before anything carried
 #: it: `f3736` narrows its accuracy to a tome and there was no tome to
 #: narrow to. #517.
@@ -415,6 +430,21 @@ def _printed_weapons() -> dict[str, Weapon]:
 
 
 PRINTED: dict[str, Weapon] = _printed_weapons()
+
+#: **`w3678` is the monk's own body and the table cannot say so**, which is
+#: why this one row is patched after the load. `Weapon.natural` has no
+#: column in `game.db` and the compendium's `x_m6475a0` is a glossary ref
+#: with no table behind it -- so the fact is declared here, once, where
+#: `MONK_STRIKE` below also declares it.
+#:
+#: **Patched rather than left to `MONK_STRIKE` alone**, because they are one
+#: weapon under two spellings (#282) and two objects for one ref is how the
+#: flag goes missing: `f3699` hands `w3678` over through
+#: `Power.proficiency`, which reads **this** dict, so a monk got the
+#: free-hand rule and a swordmage taking the feat did not. Measured.
+#: `#1276`.
+if "w3678" in PRINTED:
+    PRINTED["w3678"] = replace(PRINTED["w3678"], natural=True)
 
 
 #: Every field of `Weapon` the compendium's own table is the authority on.

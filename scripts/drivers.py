@@ -79517,6 +79517,136 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def a_natural_weapon_needs_a_hand_free(out: Result) -> None:
+    """`cf:monk-f1`: *"you must have a hand free to use your `w3678`, even
+    if you're kicking, kneeing, elbowing, or head-butting."*
+
+    The row carried `Weapon.natural` and `Gear.implement(reaches_natural)`,
+    and its docstring put the refusal in `query.can_wield` -- *"where the
+    printed refusals live"*. That function has **no production caller at
+    all**, only `drivers`, so a rule written only there would be read by
+    nobody. `Gear.melee` is the door `Gear.main` filters through and 86
+    callers reach, so the refusal lives there and `can_wield` carries it
+    too.
+
+    **The group could not have carried this.** `w3635` and `w3724` are
+    unarmed-group weapons a character buys and holds, so refusing the group
+    for a full hand would refuse those wrongly. It is one weapon's
+    property.
+
+    Seven things asserted, and the fourth is the bug the field found:
+
+    * a free hand, and the strike is swingable;
+    * a weapon **and** a shield, and it is withheld -- both hands full;
+    * a natural weapon costs no hand itself, or the count would make the
+      monk's hands full by carrying its own body and withhold the very
+      weapon the count gates;
+    * **taking up a two-hander does not stow it**, which `Gear.wield`'s
+      two-handed branch would have done -- and `stowed` persists, so the
+      monk would have lost its strike **for good** and never got it back
+      on dropping the axe. Asserted in both directions;
+    * `can_wield` gives the same answer, so the two readers cannot
+      disagree;
+    * a plain unarmed-group weapon that is **not** natural keeps its hand
+      cost and is never withheld -- the plant, since flagging the group
+      instead of the weapon is the mistake available here;
+    * and a ki focus's enhancement reaches a natural strike while a rod's
+      does not.
+    """
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Weapon
+    from combat_engine.engine.query import can_wield
+
+    fist = Weapon(ref="w3678", damage="1d8", proficiency=3, group="unarmed",
+                  hands="one-handed", natural=True)
+    sword = Weapon(ref="w:drivers-sword", damage="1d8", proficiency=2,
+                   group="light blade", hands="one-handed")
+    axe = Weapon(ref="w:drivers-axe", damage="1d12", proficiency=2,
+                 group="axe", hands="two-handed")
+    bought = Weapon(ref="w3635", damage="1d6", proficiency=2,
+                    group="unarmed", hands="one-handed")
+
+    free = Gear(weapons=[fist, sword])
+    out.that(free.hands_free == 1 and fist in free.melee,
+             f"a hand free and the strike is swingable"
+             f" (free={free.hands_free})")
+
+    full = Gear(weapons=[fist, sword], shield=1)
+    out.that(full.hands_free == 0 and fist not in full.melee,
+             f"a weapon and a shield and it is withheld"
+             f" (free={full.hands_free}, melee="
+             f"{[w.ref for w in full.melee]})")
+
+    alone = Gear(weapons=[fist])
+    out.that(alone.hands_free == 2,
+             f"the strike costs no hand itself ({alone.hands_free}) -- "
+             "counting it would make the monk's hands full by carrying its"
+             " own body and withhold the weapon the count gates")
+
+    two = Gear(weapons=[fist, axe])
+    out.that(fist.ref not in two.stowed and two.hands_free == 0
+             and fist not in two.melee,
+             "taking up a two-hander leaves the strike **held** and merely"
+             f" unusable (stowed={sorted(two.stowed)},"
+             f" free={two.hands_free})")
+    two.stowed |= {axe.ref}
+    out.that(fist in two.melee and two.hands_free == 2,
+             "and putting the axe away gives it back -- which a stow would"
+             " not have, because `stowed` persists")
+
+    world, me, _ = _board("cf:monk-f0", 1)
+    gear = world.need(me, Gear)
+    gear.shield = 1
+    gear.weapons = [fist, sword]
+    out.that(can_wield(world, me, fist)
+             and not can_wield(world, me, sword),
+             "`query.can_wield` refuses the strike on the same board and"
+             f" allows the sword ({can_wield(world, me, fist)!r})")
+
+    # PLANT: an unarmed-group weapon that is not natural behaves normally.
+    plain = Gear(weapons=[bought, sword], shield=1)
+    out.that(plain.hands_free == 0 and bought in plain.melee,
+             "PLANT: a bought unarmed-group weapon is never withheld and"
+             " does cost a hand -- flagging the **group** would have"
+             f" refused it wrongly (melee={[w.ref for w in plain.melee]})")
+
+    # **Both spellings of `w3678` carry the flag.** `chargen.MONK_STRIKE`
+    # and `chargen.PRINTED["w3678"]` are one weapon under two spellings
+    # (#282), and `f3699` hands the weapon over through
+    # `Power.proficiency`, which reads `PRINTED` -- so a monk got the
+    # free-hand rule and a swordmage taking that feat did not. Measured
+    # before the patch, and this is the assertion that keeps them agreed.
+    out.that(chargen.MONK_STRIKE.natural
+             and chargen.PRINTED["w3678"].natural,
+             "both spellings of the monk's strike are flagged natural, so"
+             " the rule follows the weapon however it was dealt")
+    opened = {w.ref: w.natural for w in chargen.proficiency(["f3699"])}
+    out.that(opened.get("w3678") is True,
+             f"and `f3699` hands it over flagged ({opened})")
+
+    # The lending implement, by its flag and not by being an implement.
+    focus = replace(chargen.KI_FOCUS, enhancement=3)
+    rod = replace(chargen.ROD, enhancement=3)
+    out.that(focus.lends_natural and not rod.lends_natural,
+             "`chargen` flags the lending implement and not the rod")
+    for arm, want, what in ((focus, 3, "the lending implement"),
+                            (rod, 0, "a rod")):
+        probe, pme, _ = _board("cf:monk-f0", 1)
+        hand = probe.need(pme, Gear)
+        hand.shield = 0
+        hand.weapons = [fist, arm]
+        got = Cast(world=probe, me=pme,
+                   ref="drivers:ki")._enhancement_of(None)
+        out.that(got == want,
+                 f"{what} in the other hand lends the strike {want}"
+                 f" ({got}) -- narrowed by slug, because a rod's"
+                 " enhancement has no business reaching a fist")
+
+
 def the_orb_mastery_offers_two_effects(out: Result) -> None:
     """`cf:wizard-arcanist-f0c1`: a save made harder, or an effect lingering.
 
@@ -81234,6 +81364,11 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "natural_weapon": (
+        a_natural_weapon_needs_a_hand_free,
+        "the monk's strike needs a hand free, is never stowed, and takes a"
+        " ki focus's enhancement (#1276)",
     ),
     "orb_mastery": (
         the_orb_mastery_offers_two_effects,
