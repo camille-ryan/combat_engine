@@ -323,7 +323,6 @@ def warpriest_domain_s3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("spec.granted_powers",),
 )
 def warpriest_domain_s4(c: Cast) -> None:
     """One ability rolled in place of another, and a save bonus for allies.
@@ -349,7 +348,25 @@ def warpriest_domain_s4(c: Cast) -> None:
 
     The powers are `dropped` for `f1s0`'s reason: the spec prints no refs
     and no card row exists to grant.
+
+    **The four powers the domain grants are written now.** They carried
+    `spec.granted_powers` because the spec's *"you also gain the
+    following powers"* lists nothing. The class page lists them, under
+    this domain's own printed name -- which is what bounds the section,
+    since the page gives the domains no banner of their own. All four
+    are declared and imported.
+
+    Recovered for six of the nine domains and **refused for three**,
+    which is the discipline `features/hunter.py`'s `_printed_pick`
+    states: `f1s0`'s section reads three powers where its siblings read
+    four, `f1s6`'s reads none, and `f1s8`'s runs to the end of the page
+    and absorbs ninety-two. A count that does not come out is not
+    written from.
     """
+    c.grant_row("p14246", on=c.me, until=When.ENCOUNTER)
+    c.grant_row("p14247", on=c.me, until=When.ENCOUNTER)
+    c.grant_row("p14248", on=c.me, until=When.ENCOUNTER)
+    c.grant_row("p14249", on=c.me, until=When.ENCOUNTER)
     me = c.me
     gap = c.wis_mod - c.int_mod
     if gap > 0:
@@ -372,7 +389,6 @@ def warpriest_domain_s4(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("spec.granted_powers",),
 )
 def warpriest_domain_s5(c: Cast) -> None:
     """Two resistances, and the creatures crowding whoever was healed.
@@ -390,7 +406,25 @@ def warpriest_domain_s5(c: Cast) -> None:
 
     The -4 and the -6 are paragon and epic. The powers are `dropped` for
     `f1s0`'s reason.
+
+    **The four powers the domain grants are written now.** They carried
+    `spec.granted_powers` because the spec's *"you also gain the
+    following powers"* lists nothing. The class page lists them, under
+    this domain's own printed name -- which is what bounds the section,
+    since the page gives the domains no banner of their own. All four
+    are declared and imported.
+
+    Recovered for six of the nine domains and **refused for three**,
+    which is the discipline `features/hunter.py`'s `_printed_pick`
+    states: `f1s0`'s section reads three powers where its siblings read
+    four, `f1s6`'s reads none, and `f1s8`'s runs to the end of the page
+    and absorbs ninety-two. A count that does not come out is not
+    written from.
     """
+    c.grant_row("p14258", on=c.me, until=When.ENCOUNTER)
+    c.grant_row("p14259", on=c.me, until=When.ENCOUNTER)
+    c.grant_row("p14261", on=c.me, until=When.ENCOUNTER)
+    c.grant_row("p14260", on=c.me, until=When.ENCOUNTER)
     me = c.me
     c.resist(5, DamageType.NECROTIC, on=me, until=When.ENCOUNTER)
     c.resist(5, DamageType.RADIANT, on=me, until=When.ENCOUNTER)

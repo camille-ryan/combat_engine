@@ -46966,13 +46966,45 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
         if all((g.execute("select level from power where ref = ?",
                           (o,)).fetchone() or (None,))[0] == 0
                for o in chargen.BUILD_OPTIONS[p]))
-    out.that(granted == ["cf:fighter-knight-f22", "cf:fighter-slayer-f18",
-                         "cf:ranger-hunter-f19", "cf:ranger-scout-f16",
-                         "cf:rogue-thief-f22", "cf:wizard-bladesinger-f1",
-                         "cf:wizard-mage-f12"],
-             "and exactly SEVEN recovered forks draw entirely from level "
+    # -- the warpriest's two recovered domains, and the three refused ---
+    # The page gives its domains no banner, so each section is bounded by
+    # the domain's **own printed name** -- the same field that held the
+    # level and the pact. Seven of the nine then read four powers each;
+    # three do not, and those are not written from.
+    DOMAINS = {"cf:cleric-warpriest-f1s4":
+               ("p14246", "p14247", "p14248", "p14249"),
+               "cf:cleric-warpriest-f1s5":
+               ("p14258", "p14259", "p14261", "p14260")}
+    for ref, want in DOMAINS.items():
+        world_, me_, _ = _board(ref, 1)
+        held = world_.get(me_, Powers)
+        assert held is not None
+        REGISTRY[ref].body(Cast(world=world_, me=me_, ref=ref))
+        have = [w for w in want if w in world_.get(me_, Powers).all]
+        out.that(len(have) == 4,
+                 f"`{ref}` grants the FOUR powers its domain's section "
+                 "prints, where the spec lists none",
+                 f"{len(have)} of 4")
+    still = sorted(r for r, p in REGISTRY.items()
+                   if "spec.granted_powers" in (p.unfinished or ())
+                   and r.startswith("cf:cleric-warpriest-"))
+    out.that(still == ["cf:cleric-warpriest-f1s0", "cf:cleric-warpriest-f1s8"],
+             "and exactly TWO warpriest domains still wait on their list, "
+             "for the two reasons a count can fail to come out: one "
+             "section reads three powers where its siblings read four, and "
+             "the last runs to the end of the page and absorbs ninety-two. "
+             "Both refused rather than guessed at, and named, because a "
+             "count that does not come out is what this check exists to "
+             "keep visible",
+             f"{still}")
+
+    out.that(granted == ["cf:druid-protector-f2", "cf:fighter-knight-f22",
+                         "cf:fighter-slayer-f18", "cf:ranger-hunter-f19",
+                         "cf:ranger-scout-f16", "cf:rogue-thief-f22",
+                         "cf:wizard-bladesinger-f1", "cf:wizard-mage-f12"],
+             "and exactly EIGHT recovered forks draw entirely from level "
              "0 -- the two aspect lists, the two stance lists, the "
-             "tricks and the two cantrip lists. Every one is a family a "
+             "tricks, the attunements and the two cantrip lists. Every one is a family a "
              "character is GIVEN rather than drawing, which is why level "
              "0 is the right answer and not a loosening. Named, so the "
              "allowance above cannot quietly widen to cover a fork whose "
