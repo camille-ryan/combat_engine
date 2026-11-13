@@ -9126,7 +9126,13 @@ class Cast:
         # call comes from the action menu, so the only thing it can do is
         # record the refusal on the creature and let this ask. Same shape
         # as `no_coup_de_grace` and for the same reason.
-        if heal and self.total("no_second_wind_heal", on=who) <= 0:
+        # **Two holds, and the wider one covers both clauses.** `#1276`:
+        # "you gain no benefit from using your second wind" declines the
+        # defences as well, so it cannot be spelled with the heal hold
+        # alone -- a cavalier trading the whole second wind for an ally's
+        # surge would otherwise keep +2 to all four defences out of it.
+        nothing = self.total("no_second_wind_benefit", on=who) > 0
+        if heal and not nothing and self.total("no_second_wind_heal", on=who) <= 0:
             self.world.heal(who, who, worth)
         # **All four defences, not just AC.** The printed rule is "+2 to
         # all defences until the start of your next turn" and this gave
@@ -9136,8 +9142,9 @@ class Cast:
         # second way: a card reading "+1 AC and +3 to the others" would
         # have to be written against the bug and would go to +5 AC the
         # day it was fixed.
-        for defence in DEFENCES:
-            self.bonus(defence, 2, until=When.SONT, on=who, kind="untyped")
+        if not nothing:
+            for defence in DEFENCES:
+                self.bonus(defence, 2, until=When.SONT, on=who, kind="untyped")
         return True
 
     def forgo_second_wind_heal(
@@ -9165,6 +9172,39 @@ class Cast:
         """
         who = on if on is not None else self.me
         return self.bonus("no_second_wind_heal", 1, on=who, until=until,
+                          stacks=False)
+
+    def forgo_second_wind(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You gain no benefit from using your second wind."
+
+        The stronger half of the pair `forgo_second_wind_heal` is the weak
+        half of, and the distinction is printed rather than invented:
+
+        * *"you can choose to regain no hit points"* declines the healing
+          and nothing else, so the defences still go up -- that is
+          `forgo_second_wind_heal`, and its docstring says so.
+        * *"you gain no benefit from using your second wind"* declines the
+          **whole** benefit, which is the healing and the +2 to all four
+          defences. `cf:paladin-cavalier-f4s0` prints it, trading the
+          entire second wind for an ally's healing surge.
+
+        Reusing the weaker verb here would have left a cavalier who spent
+        a surge on an ally two points harder to hit for a round, which is
+        not what the card gives. One hold, one reader, exactly as the
+        weaker one has: `Cast.second_wind` asks, and because this covers
+        the healing too it is **not** additive with the other -- a
+        creature holding this needs no second hold to decline the hit
+        points.
+
+        Recorded on the creature for the reason the weaker verb records:
+        the card declining it is a standing trait and the second wind
+        comes off the action menu, so there is no call to pass an argument
+        to.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("no_second_wind_benefit", 1, on=who, until=until,
                           stacks=False)
 
     def total_defence(

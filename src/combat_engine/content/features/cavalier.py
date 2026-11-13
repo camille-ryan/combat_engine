@@ -52,8 +52,22 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Health
-from combat_engine.engine.events import PowerResolved, SurgeSpent
+from combat_engine.engine.events import PowerResolved, SecondWind, SurgeSpent
 from combat_engine.engine.query import team
+
+
+def _missing(c: Cast, who: int) -> int:
+    """How many hit points that creature is down, or 0 if it is topped up.
+
+    One reader, for `-f4s0`'s *"heal an ally of your choice"*: a heal
+    offered to an ally at full hit points spends the whole clause on
+    nothing, so the choice is narrowed to the allies it can help before
+    `c.choose` ever sees it.
+    """
+    health = c.world.get(who, Health)
+    if health is None:
+        return 0
+    return max(0, health.max_hp - max(0, health.hp))
 
 #: The one row the virtue is chosen on. Three other parents read this ref
 #: rather than carrying entries of their own -- `features/blackguard.py`
@@ -166,32 +180,78 @@ def cavalier_virtue(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("actions.offer_trait(second_wind_as_minor)",),
 )
 def cavalier_virtue_valour(c: Cast) -> None:
     """One virtue: an extra healing surge, and a second wind spent on an
     ally instead of yourself.
 
-    The surge **is** written -- `Health.max_surges` and `Health.surges`
-    both move, because granting a surge the creature cannot spend is half
-    a clause. Written on the component rather than through a verb because
-    there is none: `c.regain_surge` hands a spent one back and
-    `c.spend_surge` takes one, and neither raises the allowance.
+    The surge is written on the component because there is no verb for it:
+    `c.regain_surge` hands a spent one back and `c.spend_surge` takes one,
+    and neither raises the allowance. Both fields move, since granting a
+    surge the creature cannot spend is half a clause.
 
-    Dropped: *"you can use your second wind as a minor action to heal an
-    ally of your choice within 5 squares."* `c.second_wind(cost=)` already
-    takes the action, so the **cost** is sayable -- what is not is putting
-    a second, differently-priced version of an existing row on the action
-    menu for the player to choose between. `cf:barbarian-berserker-f0` and
-    `cf:paladin-blackguard-f3s0` wait on the same facility.
+    **Guarded by `c.once_per_board`, which it was not.** A trait arms at
+    the start of every encounter, so an unguarded `max_surges += 1` climbs
+    once a fight -- and that verb's own docstring names this exact printed
+    line as the case it exists for, over nine rows. This was a tenth and
+    it was missed. The marker below is what hid it: the row read as
+    half-finished work rather than as a bug.
 
-    The row plays, so `dropped=` and not `todo=`.
+    **`c.grant_action("second_wind", MINOR)` is the offer, and the marker
+    said it did not exist.** It carried
+    `actions.offer_trait(second_wind_as_minor)` on the reading that putting
+    a differently-priced second wind on the menu needed a new facility.
+    `second_wind` has been in `actions.GRANTABLE` with a reader the whole
+    time -- `actions._second_wind` collects every granted cost and offers
+    an entry per cost -- so the clause needed no engine work for its menu
+    half at all.
+
+    **The redirect hangs on `SecondWind.cost`, which exists for this.**
+    That field's docstring says *"a printed feat turns on its being a
+    minor, which is why this is a field and not an assumption"*; this is
+    another. The event is announced **before** the surge is spent and
+    before the healing, so a handler that lays the refusal is read by the
+    same call that announced it.
+
+    **`c.forgo_second_wind`, not `c.forgo_second_wind_heal`.** The card
+    says *"you gain no benefit"*, which is the healing **and** the +2 to
+    all four defences; the weaker verb declines the hit points only, and
+    using it here would have left the cavalier a round harder to hit out
+    of a surge spent on somebody else. `#1276` added the wider hold.
+
+    **The ally's own healing surge value, not this character's** -- *"the
+    ally regains hit points equal to his or her healing surge value"* --
+    so `c.surge_value(of=ally)`. A surge is a quarter of **maximum** hit
+    points, so the two figures differ whenever the ally's constitution or
+    class does, and reading the cavalier's would be wrong in both
+    directions.
+
+    Hurt allies are offered first: a heal on an ally at full hit points is
+    the whole clause wasted, and `c.choose` is handed the pool worth
+    choosing from rather than being left to rank it.
     """
-    health = c.world.get(c.me, Health)
-    if health is None:
-        return
-    health.max_surges += 1
-    health.surges += 1
+    me = c.me
+    if c.once_per_board(me):
+        health = c.world.get(me, Health)
+        if health is not None:
+            health.max_surges += 1
+            health.surges += 1
+    c.grant_action("second_wind", ActionType.MINOR, on=me,
+                   until=When.ENCOUNTER)
+
+    def redirect(ev: SecondWind) -> None:
+        if ev.actor != me or ev.cost is not ActionType.MINOR:
+            return
+        near = set(c.within(5, of=me))
+        pool = [a for a in c.allies() if a != me and a in near]
+        hurt = [a for a in pool if _missing(c, a) > 0]
+        ally = c.choose(hurt or pool, f"{c.ref}: which ally")
+        if ally is None:
+            return
+        c.forgo_second_wind(on=me, until=When.EONT)
+        c.heal(c.surge_value(of=ally), on=ally)
+
+    c.watch(SecondWind, redirect, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

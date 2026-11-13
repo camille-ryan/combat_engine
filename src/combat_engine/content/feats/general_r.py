@@ -2578,10 +2578,41 @@ def f3644(c: Cast) -> None:
 
 
 @power("f3645", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=BERSERKER_FORM)
+       reach=PERSONAL, target=SELF)
 def f3645(c: Cast) -> None:
-    """Berserker Fury is a class feature named in prose, and the benefit
-    is nothing but that feature with a day's limit on it."""
+    """Multiclass Barbarian: a skill, and the berserker's fury once a day.
+
+    *"You gain training in a skill of your choice from the barbarian's list
+    of class skills. You also gain the berserker barbarian's
+    `cf:barbarian-berserker-f0` feature, but you can use it only once per
+    day."*
+
+    **The skill half was already working and is not written here.**
+    `feat.trains_from` holds `barbarian` for this ref and
+    `chargen._trained_skills` reads it through `_from_class_list`, which is
+    the right place: training is settled when the sheet is made, before
+    there is a board. A body writing it would be the second writer of
+    `Skills.trained` and would train the character twice.
+
+    So the body is the grant. `c.grant_row` rather than a rider, because
+    the benefit **is** that feature -- every clause of it, the extra melee
+    damage and the two rows it takes away, all of which
+    `cf:barbarian-berserker-f0` already does.
+
+    **The day limit lives in the feature, not here**, which is
+    `content/CLAUDE.md`'s rule for a feat naming one row and is also the
+    only place it can work: the fury is entered either by a primal attack
+    or by a minor action, and a limit written in this body would see
+    neither. `strikers_sb._enter_fury` spends `c.spend_per_day` for a
+    holder of this feat who is not on the berserker leg, and the leg test
+    is what stops it limiting a real berserker.
+
+    **And `cf:barbarian-berserker-f0`'s `requires=` had to widen for
+    this.** It gated on `on_leg("berserker")`, so the row handed to a
+    multiclass character would have refused itself --
+    `strikers_sb._fury_is_open` is the two-sided gate.
+    """
+    c.grant_row("cf:barbarian-berserker-f0", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3646", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -2646,14 +2677,46 @@ def f3646b(c: Cast) -> None:
 
     The equipment clauses are bookkeeping with no combat consequence."""
     shape = take_beast_form(c)
-    c.endable(shape, MINOR, then=lambda: c.shift(1))
+
+    def _step_out() -> None:
+        """`c.endable`'s `then=` wants `() -> None`, and `c.shift` answers
+        a bool -- so the lambda this replaced was a type error `ty` named
+        the moment the file came into scope. Named rather than silenced:
+        whether the shift happened is not this clause's business, since the
+        printed line is the minor action out of the form and the step is
+        what it gives, taken if there is anywhere to take it."""
+        c.shift(1)
+
+    c.endable(shape, MINOR, then=_step_out)
 
 
 @power("f3647", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=BERSERKER_FORM)
+       reach=PERSONAL, target=SELF,
+       implemented_in=("cf:barbarian-berserker-f0",))
 def f3647(c: Cast) -> None:
-    """"When you enter your Berserker Fury" is a moment a class feature
-    named in prose would have to announce."""
+    """Temporary hit points on entering the fury.
+
+    *"When you enter your `cf:barbarian-berserker-f0`, you gain temporary
+    hit points equal to your healing surge value."*
+
+    **Written into the feature, which is why this row has a body of
+    nothing.** `content/CLAUDE.md`: *"a feat that names one power writes
+    its clause into that power, gated on `c.feat`"* -- so the clause is in
+    `strikers_sb._enter_fury`, inside a `c.credit(ref)` block so the
+    temporary hit points are recorded as **this feat's** doing rather than
+    the feature's. `implemented_in=` says so in the header, and `audit.py`
+    buckets that as ELSEWHERE rather than firing this row.
+
+    Why there and not a watch here: the fury has **two** printed doors --
+    a barbarian primal attack power, and a minor action while bloodied --
+    and `_enter_fury` is the one body both go through. A watch in this row
+    would need a moment to hang from, and the thing it would watch for is
+    the effect that function lays.
+
+    The prerequisite is a real berserker (`{"class": "barbarian"}` and
+    holding the feature), so this never meets `f3645`'s multiclass route
+    and needs no leg test of its own.
+    """
 
 
 @power("f3648", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -3085,16 +3148,21 @@ def f3679(c: Cast) -> None:
     ally = c.target
     if ally is None:
         return
+    # **The tuple is carried beside the effect, not re-read off it.** The
+    # filter proves `eff.ongoing is not None`, and that narrowing does not
+    # survive into the `key=` lambda or the line after -- so `ty` reported
+    # two `not-subscriptable` on `None` the moment this file came into
+    # scope. Pairing them answers both and reads the field once.
     burns = [
-        eff for eff in c.world.effects.of(c.me)
+        (eff, eff.ongoing) for eff in c.world.effects.of(c.me)
         if eff.ongoing is not None
         and eff.ongoing[1] is DamageType.UNTYPED
         and not eff.ongoing_types
     ]
     if not burns:
         return
-    worst = max(burns, key=lambda eff: eff.ongoing[0])
-    amount = worst.ongoing[0]
+    worst, hurt = max(burns, key=lambda pair: pair[1][0])
+    amount = hurt[0]
     if c.transfer(worst, to=ally) is None:
         return
     c.ongoing(amount + 5, DamageType.UNTYPED, on=ally)

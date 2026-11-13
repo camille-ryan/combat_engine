@@ -79353,7 +79353,648 @@ def kill_outright(out: Result) -> None:
         f"returned {again}, {saw}",
     )
 
+
+def _offering_trait(ref: str, cost: object, seed: int = 1):  # noqa: ANN202
+    """One creature holding `ref`, and its menu entry for it at `cost`.
+
+    Shared by the rules below, which assert the same two-step shape: a
+    trait that arms itself *and* puts itself on the action menu at a second
+    price.
+
+    **Nothing is armed here, because the board has already done it.**
+    `audit.board` starts the encounter, so the trait's body has run and the
+    `"<ref> as <cost>"` carrier `c.recast` lays is already standing --
+    measured, and this helper read as though it had to arm the trait
+    itself. An extra `turns.arm_traits` is not a no-op either: the body
+    takes its *second* branch, which for `cf:paladin-blackguard-f3s0`
+    spends the once-a-round latch and for `cf:barbarian-berserker-f0`
+    enters the fury, so the rule would be measuring work the rule itself
+    had done.
+
+    **The two arming paths disagree about expending, which is worth
+    knowing before reading the plant below.** `turns.arm_traits` uses
+    `use(..., spend=True)`, so it expends an `ENCOUNTER` trait and the
+    entry then vanishes; `audit.board` reaches the same traits by a path
+    that leaves `Powers.times(ref)` at 0, so off the board an `ENCOUNTER`
+    trait still offers its entry. `turns.arm_traits` is the production
+    path -- `Encounter.arm_traits_of` is one hop to it -- so the plant
+    calls it by name rather than trusting the board.
+    """
+    from combat_engine.engine.actions import legal
+    from combat_engine.engine.components import Powers
+
+    world, me, _ = _board(ref, seed)
+    enc = world.encounter
+    assert enc is not None
+    known = world.get(me, Powers)
+    assert known is not None and ref in known.all, f"{ref} not dealt on {seed}"
+    entries = [a for a in legal(world, enc, me)
+               if a.ref == ref and a.cost is cost]
+    return world, enc, me, entries
+
+
+def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
+    """Four class features print a second, cheaper way to use a trait.
+
+    All four carried `actions.offer_trait(...)` as a marker, on the reading
+    that *"a trait cannot put itself on the action menu"*. It can:
+    `c.recast(c.ref, action=<cost>)` lays the "<what> as <cost>" carrier
+    with the row's **own** ref, and `actions._recasts` asks only that the
+    ref be known, that the cost differ from the row's declared action, and
+    that `usable` allow it. An `action=NONE` trait satisfies all three, and
+    the entry comes out of `_aimings` as an ordinary `kind="power"` -- so
+    `perform` and the policy needed no new branch and no new action kind.
+
+    **The load-bearing half is `usage`, and it is the half the rows got
+    wrong.** `turns.arm_traits` arms a trait with `use(..., spend=True)`,
+    so an `ENCOUNTER` trait is **expended by its own arming**; `_recasts`
+    then asks `usable`, is told `expended`, and offers nothing. The entry
+    is there before `arm_traits` and gone after it. That is why
+    `cf:barbarian-berserker-f0` and `cf:paladin-blackguard-f3s0` moved to
+    `AT_WILL`, and the negative control below is that exact break --
+    putting either row back to `ENCOUNTER` must empty its menu.
+
+    Four things asserted:
+
+    * the berserker's fury is offered as a **minor**, which is the printed
+      *"alternatively, you can use a minor action while you are
+      bloodied"*;
+    * taking it **while bloodied** enters the fury, and taking it
+      **unbloodied** does not -- the printed condition, checked in the
+      body rather than in `requires=`, which `chargen.meets` reads and
+      which therefore cannot ask about a live fight;
+    * the blackguard's vice is offered as a **free** action;
+    * and `usage=ENCOUNTER` on either row empties the menu, which is the
+      plant.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.features.strikers_sb import FURY
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import bloodied
+    from combat_engine.engine.types import ActionType, Usage
+
+    rage = "cf:barbarian-berserker-f0"
+    vice = "cf:paladin-blackguard-f3s0"
+
+    world, enc, me, offers = _offering_trait(rage, ActionType.MINOR)
+    out.that(bool(offers),
+             f"the fury is on the menu as a minor action"
+             f" ({len(offers)} entry) -- `c.recast` on the row's own ref",
+             f"{offers}")
+
+    # **Bloodied first, because the printed condition gates the door.**
+    # Written through `Health` rather than by swinging: a real blow can
+    # kill, and a dead berserker has no menu at all.
+    health = world.need(me, Health)
+    health.hp = max(1, health.max_hp // 2 - 1)
+    out.that(bloodied(world, me), "the berserker is bloodied for the test",
+             f"{health.hp}/{health.max_hp}")
+    if offers:
+        perform(world, enc, me, offers[0])
+    probe = Cast(world=world, me=me, ref="drivers:fury")
+    out.that(probe.lingers_label(FURY, on=me),
+             "taking the minor action while bloodied enters the fury,"
+             " which is the second printed door into it")
+
+    # The negative control on the condition, not on the facility: an
+    # unbloodied berserker taking the same entry must get nothing.
+    whole, enc2, me2, offers2 = _offering_trait(rage, ActionType.MINOR, seed=2)
+    hale = whole.need(me2, Health)
+    hale.hp = hale.max_hp
+    out.that(not bloodied(whole, me2), "and a second berserker is at full hp",
+             f"{hale.hp}/{hale.max_hp}")
+    if offers2:
+        perform(whole, enc2, me2, offers2[0])
+    out.that(not Cast(world=whole, me=me2,
+                      ref="drivers:fury").lingers_label(FURY, on=me2),
+             "an **unbloodied** berserker taking it enters nothing -- the"
+             " printed condition is checked where the action is taken")
+
+    _w, _e, _m, free = _offering_trait(vice, ActionType.FREE)
+    out.that(bool(free),
+             f"the blackguard's vice is on the menu as a free action"
+             f" ({len(free)} entry)", f"{free}")
+
+    # **The plant: `usage=ENCOUNTER` is the bug these rows had.** Restored
+    # from the real value rather than assumed, so a future change to either
+    # row's usage cannot leave this asserting against a literal.
+    #
+    # `turns.arm_traits` by name, for the reason `_offering_trait` records:
+    # it is the production arming and it spends, where the audit board's
+    # path does not -- so the control has to be the pair *armed that way*,
+    # `AT_WILL` against `ENCOUNTER`, rather than armed against unarmed.
+    def armed(ref: str, cost: object):  # noqa: ANN202
+        from combat_engine.engine.turns import arm_traits
+
+        world2, me2, _ = _board(ref, 4)
+        enc2 = world2.encounter
+        assert enc2 is not None
+        arm_traits(world2, me2)
+        return [a for a in legal(world2, enc2, me2)
+                if a.ref == ref and a.cost is cost]
+
+    for ref, cost in ((rage, ActionType.MINOR), (vice, ActionType.FREE)):
+        declared = REGISTRY[ref]
+        was = declared.usage
+        out.that(was is Usage.AT_WILL, f"`{ref}` is declared `{was}`")
+        out.that(bool(armed(ref, cost)),
+                 f"and survives `turns.arm_traits` -- `{ref}` is still"
+                 " offered after the production arming")
+        object.__setattr__(declared, "usage", Usage.ENCOUNTER)
+        try:
+            broken = armed(ref, cost)
+        finally:
+            object.__setattr__(declared, "usage", was)
+        out.that(not broken,
+                 f"PLANT: `{ref}` at `usage=ENCOUNTER` is expended by that"
+                 " same arming and offers nothing -- which is why both rows"
+                 " are `AT_WILL`",
+                 f"{broken}")
+        out.that(declared.usage is was,
+                 f"and `{ref}` is restored to `{was}`")
+
+
+def two_feats_ride_the_berserkers_fury(out: Result) -> None:
+    """`f3645` and `f3647`, both written into the feature they name.
+
+    Both carried `todo=("cf:barbarian-berserker-f0",)` -- the feature's own
+    ref as the wanted symbol, which is the tree's convention for "the row
+    this names is not declared yet". Finishing the feature made `todo.py`
+    go red naming exactly these two, which is that gate working.
+
+    Neither has a body that does the work, which is `content/CLAUDE.md`'s
+    rule: *"a feat that names one power writes its clause into that power,
+    gated on `c.feat`"*. So the clauses live in
+    `strikers_sb._enter_fury`, the one body both printed doors into the
+    fury go through, and this rule is their reader.
+
+    * `f3647` -- *"when you enter your fury, you gain temporary hit points
+      equal to your healing surge value."* Asserted on the **delta**, and
+      that it equals the surge value rather than some other figure.
+    * `f3645` -- Multiclass Barbarian: *"you also gain the feature, but you
+      can use it only once per day."* Asserted three ways: the widened
+      `requires=` gate opens for a holder who is not on the berserker leg,
+      the first entry works, and a **second** entry on the same day is
+      refused where a real berserker's is not. That last pair is the plant:
+      the limit has to bite the multiclass character and leave the chassis
+      alone, and a single-sided check cannot tell those apart.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.features.strikers_sb import (
+        FURY,
+        _fury_is_open,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.query import surge_value
+
+    fury = "cf:barbarian-berserker-f0"
+
+    # -- f3647: temporary hit points on entering ---------------------------
+    world, me, _ = _board(fury, 1)
+    c = Cast(world=world, me=me, ref="drivers:f3647")
+    out.that(_fury_is_open(world, me),
+             "a real berserker's fury is open to it")
+    known = world.need(me, Powers)
+    if "f3647" not in known.all:
+        known.known.append("f3647")
+    out.that(c.feat("f3647"), "and it is given `f3647` for the measurement")
+
+    health = world.need(me, Health)
+    health.hp = max(1, health.max_hp // 2)
+    worth = surge_value(world, me)
+    was_temp = health.temp
+    c.end_effect(against=FURY, on=me)
+    entered = _enter_fury_through(world, me)
+    out.that(entered, "entering the fury works")
+    out.that(health.temp - was_temp == worth,
+             f"and `f3647` pays {health.temp - was_temp} temporary hit"
+             f" points, which is the healing surge value ({worth})",
+             f"{was_temp} -> {health.temp}")
+
+    # The control: the same entry without the feat pays nothing.
+    bare, me2, _ = _board(fury, 1)
+    hale = bare.need(me2, Health)
+    hale.hp = max(1, hale.max_hp // 2)
+    before = hale.temp
+    Cast(world=bare, me=me2, ref="drivers:f3647").end_effect(
+        against=FURY, on=me2)
+    _enter_fury_through(bare, me2)
+    out.that(hale.temp == before,
+             "PLANT: without `f3647` the same entry pays no temporary hit"
+             f" points ({before} unchanged) -- so the clause is the feat's"
+             " and not the feature's")
+
+    # -- f3645: the fury once a day, for a multiclass character ------------
+    other, me3, _ = _board("f3645", 1)
+    c3 = Cast(world=other, me=me3, ref="drivers:f3645")
+    known3 = other.need(me3, Powers)
+    out.that(c3.feat("f3645"), "a character is dealt `f3645`")
+    out.that(not _on_berserker_leg(other, me3),
+             "and is **not** on the berserker leg, which is what makes it"
+             " the multiclass case")
+    out.that(_fury_is_open(other, me3),
+             "the fury's `requires=` opens for it anyway -- the widened"
+             " gate, without which the granted row would refuse itself")
+
+    if fury not in known3.all:
+        known3.known.append(fury)
+    first = _enter_fury_through(other, me3)
+    out.that(first, "its first entry into the fury works")
+    out.that(c3.per_day_left("f3645", 1) == 0,
+             "and the day's one use is spent", f"{known3.per_day}")
+    c3.end_effect(against=FURY, on=me3)
+    second = _enter_fury_through(other, me3)
+    out.that(not second,
+             "PLANT: a **second** entry the same day is refused --"
+             " *'you can use it only once per day'*")
+    out.that(not Cast(world=other, me=me3,
+                      ref="drivers:f3645").lingers_label(FURY, on=me3),
+             "and nothing was laid by the refused entry, so a spent day"
+             " costs the character no forbidden rows either")
+
+    # The other side of the plant: a real berserker has no day limit.
+    again, me4, _ = _board(fury, 1)
+    c4 = Cast(world=again, me=me4, ref="drivers:f3645")
+    out.that(_on_berserker_leg(again, me4), "a real berserker is on the leg")
+    c4.end_effect(against=FURY, on=me4)
+    out.that(_enter_fury_through(again, me4), "and re-enters the fury")
+    c4.end_effect(against=FURY, on=me4)
+    out.that(_enter_fury_through(again, me4),
+             "and again, as many times as the encounter allows -- the day"
+             " limit is the multiclass feat's and not the chassis's")
+    out.that(c4.per_day_left("f3645", 1) == 1,
+             "with its daily allowance untouched", f"{again.need(me4, Powers).per_day}")
+
+
+def _on_berserker_leg(world: World, eid: int) -> bool:
+    """Is this character built on the berserker chassis?
+
+    **Annotated `World`, not `object`.** A driver helper taking `object`
+    erases the type for every caller and `ty` then reports a cascade of
+    `invalid-argument-type` on perfectly ordinary lines -- 239 of them in
+    this file on the first attempt at these two helpers, none of which was
+    a real fault.
+    """
+    from combat_engine.engine.query import on_build
+
+    return on_build(world, eid, "berserker")
+
+
+def _enter_fury_through(world: World, eid: int) -> bool:
+    """Enter the fury the way the row does, through the shared body.
+
+    **Through `_enter_fury` and not by replaying the clause**, which is the
+    whole point: both printed doors call that function, both feats are
+    written inside it, and a rule that re-implemented the entry would
+    assert nothing about either.
+    """
+    from combat_engine.content.features.strikers_sb import _enter_fury, _tier
+    from combat_engine.engine.cast import Cast
+
+    c = Cast(world=world, me=eid, ref="cf:barbarian-berserker-f0")
+    return _enter_fury(c, 1 + _tier(c.level))
+
+
+def the_vice_pays_the_damage_it_actually_took(out: Result) -> None:
+    """*"The bonus equals the damage you took"*, not the Charisma modifier.
+
+    `cf:paladin-blackguard-f3s0` prints a free action that deals the
+    character its own Charisma modifier in damage and then pays a damage
+    bonus **equal to what was taken**. The two numbers come apart, and
+    that is the point of this rule: the printed condition is *holding
+    temporary hit points*, so the self-damage lands on the temporary pool
+    first, and resistance or a short pool means less is taken than the
+    modifier names.
+
+    Three things asserted, and the third is the negative control:
+
+    * holding temporary hit points, the free action costs hit points or
+      temporary hit points and lays a damage bonus;
+    * the bonus equals what the blow actually removed, which is read off
+      the creature rather than off `c.cha_mod`;
+    * with **no** temporary hit points the clause refuses, which is the
+      printed *"while you have temporary hit points"*;
+    * and it refuses a second time in the same round.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.actions import perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.types import ActionType
+
+    vice = "cf:paladin-blackguard-f3s0"
+    world, enc, me, offers = _offering_trait(vice, ActionType.FREE)
+    out.that(bool(offers), "the vice is offered as a free action", f"{offers}")
+
+    probe = Cast(world=world, me=me, ref="drivers:vice")
+    cha = probe.cha_mod
+    out.that(cha > 0, f"the blackguard's Charisma modifier is {cha},"
+             " so there is a figure to pay")
+
+    # **The board has already fed the vice once**, because `audit.board`
+    # starts the encounter and this blackguard holds temporary hit points
+    # from its own chassis -- so the once-a-round latch is spent before the
+    # rule gets the world. Handed back rather than worked around: the
+    # question here is what the clause pays, and `c.unlatch` returning True
+    # is itself evidence the latch was taken, which the rule asserts.
+    out.that(probe.unlatch(vice, on=me),
+             "the board had already fed the vice once this round, and the"
+             " latch is handed back for the measurement")
+
+    health = world.need(me, Health)
+    health.hp = health.max_hp
+    probe.temp_hp(cha + 5, on=me)
+    pool, hp = health.temp, health.hp
+    out.that(pool > 0, f"and it holds {pool} temporary hit points,"
+             " which is the printed condition")
+
+    # **A delta, never a total.** `c.total("damage")` sums every damage
+    # modifier standing on the creature, and this blackguard already
+    # carries some; reading the total after the action would have reported
+    # the character's whole damage bonus as though the clause had paid it.
+    was_bonus = probe.total("damage", on=me)
+    assert offers
+    perform(world, enc, me, offers[0])
+    took = (pool - health.temp) + (hp - health.hp)
+    out.that(took > 0,
+             f"taking the free action costs it {took} -- {pool} -> "
+             f"{health.temp} temporary, {hp} -> {health.hp} hit points")
+    paid = probe.total("damage", on=me) - was_bonus
+    out.that(paid == took,
+             f"and the damage bonus it laid is {paid}, which is **what was"
+             f" taken** ({took}) rather than a figure read off the modifier",
+             f"total {was_bonus} -> {probe.total('damage', on=me)}")
+
+    # Same round, second helping: "once per round".
+    before = (health.temp, health.hp)
+    perform(world, enc, me, offers[0])
+    out.that((health.temp, health.hp) == before,
+             "a second free action in the same round costs nothing --"
+             f" *'once per round'* ({before} unchanged)")
+
+    # The control on the condition: no temporary hit points, no clause.
+    dry, enc2, me2, offers2 = _offering_trait(vice, ActionType.FREE, seed=3)
+    spare = Cast(world=dry, me=me2, ref="drivers:vice")
+    spare.unlatch(vice, on=me2)
+    bare = dry.need(me2, Health)
+    bare.temp, bare.hp = 0, bare.max_hp
+    dry_bonus = spare.total("damage", on=me2)
+    assert offers2
+    perform(dry, enc2, me2, offers2[0])
+    out.that(bare.hp == bare.max_hp and bare.temp == 0,
+             "and a blackguard holding **no** temporary hit points takes"
+             " none of it -- the printed condition refuses the clause",
+             f"{bare.hp}/{bare.max_hp}, temp {bare.temp}")
+    out.that(spare.total("damage", on=me2) == dry_bonus,
+             "and lays no damage bonus either, so the refusal is whole"
+             " rather than the cost half of it",
+             f"{dry_bonus} unchanged")
+
+
+def a_second_wind_can_be_spent_on_an_ally(out: Result) -> None:
+    """`cf:paladin-cavalier-f4s0`: a minor action, and the ally heals.
+
+    *"You gain an additional healing surge. In addition, you can use your
+    second wind as a minor action to heal an ally of your choice within 5
+    squares of you. If you do so, you gain no benefit from using your
+    second wind, but the ally regains hit points equal to his or her
+    healing surge value."*
+
+    The menu half needed **no** engine work at all, which is what the row's
+    marker got wrong: `second_wind` has been in `actions.GRANTABLE` with a
+    reader the whole time, and `actions._second_wind` offers one entry per
+    granted cost. So `c.grant_action("second_wind", MINOR)` is the clause.
+
+    Four things asserted:
+
+    * the extra surge is granted **once per board**, not once per fight --
+      a trait arms every encounter, and an unguarded `max_surges += 1`
+      climbs;
+    * second wind is on the menu as a minor action beside its standard one;
+    * taking the minor one heals an ally by **the ally's** surge value and
+      leaves the cavalier's own hit points alone;
+    * and it leaves the cavalier **no +2 to its defences**, which is the
+      *"no benefit"* half and the reason `#1276` added
+      `c.forgo_second_wind` beside the narrower
+      `c.forgo_second_wind_heal`.
+
+    The plant is the last of those: paying the ally through the weaker verb
+    puts the defences back, and this rule goes red.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.query import DEFENCES, allies, surge_value
+    from combat_engine.engine.turns import arm_traits
+    from combat_engine.engine.types import ActionType
+
+    ref = "cf:paladin-cavalier-f4s0"
+
+    # **The once-per-board guard, on its own board.** `audit.board` has
+    # already armed the trait, so the surge is granted by the time the rule
+    # sees the world -- what is provable is the invariant that matters,
+    # which is that a *further* arming does not climb. An unguarded
+    # `max_surges += 1` on a trait climbs once a fight, and
+    # `c.once_per_board`'s own docstring names this printed line as the
+    # case it exists for, over nine rows. This row was a tenth.
+    #
+    # Its own board because `turns.arm_traits` runs the body's second
+    # branch on everything else here -- see `_offering_trait`.
+    surge_world, surge_me, _ = _board(ref, 1)
+    sheet = surge_world.need(surge_me, Health)
+    start = sheet.max_surges
+    arm_traits(surge_world, surge_me)
+    arm_traits(surge_world, surge_me)
+    out.that(sheet.max_surges == start,
+             f"two further armings leave the surge pool at {start} --"
+             " `c.once_per_board`, so the allowance cannot climb once a"
+             f" fight ({start} -> {sheet.max_surges})")
+
+    world, me, _ = _board(ref, 1)
+    enc = world.encounter
+    assert enc is not None
+    known = world.get(me, Powers)
+    assert known is not None and ref in known.all, f"{ref} not dealt"
+    health = world.need(me, Health)
+
+    minors = [a for a in legal(world, enc, me)
+              if a.kind == "second_wind" and a.cost is ActionType.MINOR]
+    out.that(bool(minors),
+             f"second wind is on the menu as a minor action ({len(minors)})"
+             " -- `c.grant_action`, read by `actions._second_wind`",
+             f"{minors}")
+
+    friend = next((a for a in allies(world, me) if a != me
+                   and world.get(a, Health) is not None), None)
+    out.that(friend is not None, "there is an ally to heal")
+    assert friend is not None and minors
+    hurt = world.need(friend, Health)
+    hurt.hp = max(1, hurt.max_hp // 3)
+    worth = surge_value(world, friend)
+    mine_worth = surge_value(world, me)
+    out.that(worth != mine_worth,
+             f"the ally's healing surge value ({worth}) differs from the"
+             f" cavalier's ({mine_worth}), so the two readings are"
+             " distinguishable on this board")
+    health.hp = max(1, health.max_hp // 2)
+    was_mine, was_theirs = health.hp, hurt.hp
+    probe = Cast(world=world, me=me, ref="drivers:valour")
+    # A delta, for the reason `vice_hunger` records: a character carries
+    # defence modifiers of its own, so a total cannot say what this clause
+    # laid.
+    was_def = {d: probe.total(d, on=me) for d in DEFENCES}
+
+    perform(world, enc, me, minors[0])
+
+    out.that(hurt.hp > was_theirs,
+             f"the ally heals {was_theirs} -> {hurt.hp}")
+    out.that(hurt.hp - was_theirs == min(worth, hurt.max_hp - was_theirs),
+             f"by **its own** healing surge value ({worth}), not the"
+             f" cavalier's ({mine_worth})",
+             f"gained {hurt.hp - was_theirs}")
+    out.that(health.hp == was_mine,
+             f"and the cavalier regains nothing ({was_mine} -> {health.hp})"
+             " -- *'you gain no benefit'*")
+    now_def = {d: probe.total(d, on=me) for d in DEFENCES}
+    out.that(now_def == was_def,
+             "and gains **no** +2 to its defences either, which is the half"
+             " `c.forgo_second_wind_heal` cannot say and `#1276`'s wider"
+             f" hold does ({was_def} -> {now_def})")
+
+
+def the_word_answers_a_drop_as_a_reaction(out: Result) -> None:
+    """`cf:cleric-warpriest-f5s1`: an enemy drops, and the word is spoken.
+
+    *"When an enemy within 5 squares of you drops to 0 hit points, you can
+    use `p1455` as an immediate reaction."*
+
+    The row carried `actions.offer_trait(requires=enemy_dropped)` and laid
+    a free `c.watch` that only wrote a note. `c.arm_trigger` is the
+    facility it said did not exist: a watch that charges `Encounter.spend`
+    for the action a trigger costs, on the same budget `triggers._ask`
+    uses, so an armed reaction and a declared one cannot both fire in one
+    round.
+
+    **`p13944` has to be taken off the board, and finding out why is half
+    the value of this rule.** This warpriest also holds `p13944`, a
+    declared cleric immediate reaction triggered by *"a creature within 3
+    squares of you drops to 0 hit points"*. Both answer the same moment,
+    both cost an immediate action, and a creature has **one** a round --
+    so the declared one is dispatched first, spends the budget, and
+    `c.arm_trigger` then declines because `Encounter.spend` returns False.
+    That is the engine's rule working, and `arm_trigger`'s own docstring
+    states it: *"an armed reaction and a declared one cannot both fire in
+    one round"*. It is also a confound, so the rule asserts the race
+    first and then forbids `p13944` to measure the clause under test.
+
+    Four things asserted:
+
+    * the race: left alone, the declared reaction takes the round and the
+      armed one does not fire -- which is correct, not a fault;
+    * with `p13944` forbidden, an enemy dropping within 5 squares fires
+      `p1455`;
+    * the character's immediate action for the round is **spent** by it,
+      which is the whole difference from the `c.watch` this replaced;
+    * and a drop **out of range** fires nothing, which is the printed
+      distance and also the plant -- the gate lives in `when=`, before the
+      action is paid, so a failed range test must not cost the round's
+      reaction.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.features.warpriest import WORD
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import ActionType
+
+    ref = "cf:cleric-warpriest-f5s1"
+    rival = "p13944"
+
+    def drop(far: bool, rivals: bool = False):  # noqa: ANN202
+        world, me, _ = _board(ref, 1)
+        enc = world.encounter
+        assert enc is not None
+        if not rivals:
+            Cast(world=world, me=me, ref="drivers:drop").forbid(
+                rival, on=me, until=When.ENCOUNTER)
+        said: list[str] = []
+        world.bus.on(
+            PowerUsed, lambda ev: said.append(getattr(ev, "power", "")))
+        foe = sorted(enemies(world, me))[0]
+        if far:
+            spot = world.need(me, Position).square
+            away = (spot[0] + 20, spot[1])
+            world.grid.lift(foe)
+            world.need(foe, Position).square = away
+            world.grid.place(foe, frozenset({away}))
+            world.zones.refresh()
+        hurt = world.need(foe, Health)
+        hurt.hp = 1
+        # `unpreventable`, so an enemy's resistance cannot keep it up and
+        # leave the rule measuring a drop that never happened.
+        Cast(world=world, me=me, ref="drivers:drop").flat(
+            50, on=foe, unpreventable=True)
+        return world, enc, me, said
+
+    # The race, first, because it is what makes the rest of the rule need
+    # setting up -- and because it is the engine rule `arm_trigger` rests on.
+    _raced, enc0, me0, both = drop(far=False, rivals=True)
+    out.that(rival in both and WORD not in both,
+             f"left alone, the declared reaction `{rival}` takes the round's"
+             f" one immediate action and `{WORD}` does not fire -- the rule"
+             " `c.arm_trigger` states, not a fault", f"{both[-4:]}")
+    out.that(not enc0.can_spend(me0, ActionType.IMMEDIATE_REACTION),
+             "and the budget is gone, which is why the armed one declined")
+
+    _near, enc, me, said = drop(far=False)
+    out.that(WORD in said,
+             f"with `{rival}` forbidden, an enemy dropping within 5 squares"
+             f" speaks the word ({WORD} in the log)", f"{said[-4:]}")
+    out.that(not enc.can_spend(me, ActionType.IMMEDIATE_REACTION),
+             "and the round's immediate action is spent for it, which is"
+             " what `c.arm_trigger` charges and a bare `c.watch` does not")
+
+    _far, enc2, me2, quiet = drop(far=True)
+    out.that(WORD not in quiet,
+             "PLANT: a drop **out of range** speaks nothing"
+             f" ({WORD} not in the log)", f"{quiet[-4:]}")
+    out.that(enc2.can_spend(me2, ActionType.IMMEDIATE_REACTION),
+             "and costs the warpriest nothing -- the range gate sits in"
+             " `when=`, which `arm_trigger` asks **before** it spends")
+
+
 DRIVERS = {
+    "offer_trait": (
+        a_trait_can_put_itself_on_the_action_menu,
+        "a trait offers itself on the menu at a second price, and ENCOUNTER"
+        " usage kills it (#1276)",
+    ),
+    "fury_feats": (
+        two_feats_ride_the_berserkers_fury,
+        "f3645's day limit and f3647's temporary hit points, both written"
+        " into the feature they name (#1276)",
+    ),
+    "vice_hunger": (
+        the_vice_pays_the_damage_it_actually_took,
+        "the blackguard pays the damage it took, not its modifier (#1276)",
+    ),
+    "second_wind_ally": (
+        a_second_wind_can_be_spent_on_an_ally,
+        "a minor second wind heals an ally and benefits the cavalier"
+        " not at all (#1276)",
+    ),
+    "word_on_a_drop": (
+        the_word_answers_a_drop_as_a_reaction,
+        "an enemy dropping within 5 speaks the word, and costs the"
+        " reaction (#1276)",
+    ),
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",

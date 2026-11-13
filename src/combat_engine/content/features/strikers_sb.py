@@ -38,6 +38,7 @@ from combat_engine.content.features.builds import on_leg
 from combat_engine.content.powers.fighter.level_0 import AURA as DEFENDER_AURA
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     NO_TARGET,
@@ -55,8 +56,9 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.basic import MELEE
+from combat_engine.engine.ecs import World
 from combat_engine.engine.events import AttackDeclared, Dropped, Hit, Moved
-from combat_engine.engine.query import team
+from combat_engine.engine.query import feats_of, on_build, team
 
 #: The armours "while you are not wearing heavy armor" rules out. Named
 #: rather than inverted from `chargen.LIGHT`, because that is the printed
@@ -241,6 +243,82 @@ FURY = "cf:barbarian-berserker-fury"
 _FURY_FORBIDS = ("p12660", "p15848")
 
 
+def _fury_is_open(world: World, eid: int) -> bool:
+    """`requires=` for the fury: the berserker leg, **or** `f3645`.
+
+    `on_leg("berserker")` alone was right while the feature could only come
+    from the chassis. `f3645` is a Multiclass Barbarian feat -- *"you also
+    gain the berserker barbarian's `cf:barbarian-berserker-f0` feature, but
+    you can use it only once per day"* -- so a character who is not on that
+    leg can hold the row, and `Power.open_to` would have refused it.
+
+    A row that refuses itself after being handed over looks like the
+    granting verb is broken, which is the fault `on_leg`'s own docstring
+    records for five swordmage and invoker options. Widening the gate is
+    the same fix.
+    """
+    return on_build(world, eid, "berserker") or "f3645" in feats_of(world, eid)
+
+
+def _enter_fury(c: Cast, dice: int) -> bool:
+    """Start the fury, or say it was already standing.
+
+    Factored out because the printed card has **two** ways in and they
+    must do the same thing: *"when you use a barbarian primal attack
+    power"*, and *"alternatively, you can use a minor action while you are
+    bloodied"*. Two copies of this body is how the second way comes to
+    forbid one row and not the other.
+
+    The label guard is the whole reason it returns a bool: the fury stands
+    until the end of the encounter, so a later primal attack re-enters it
+    and without the guard each one lays another `1d8` and forbids the same
+    two rows again. The minor-action door wants the same answer, to tell a
+    wasted action from a spent one.
+
+    **Two feats are written in here rather than in their own bodies**,
+    which is `content/CLAUDE.md`'s rule: *"a feat that names one power
+    writes its clause into that power, gated on `c.feat`"*. Both name this
+    feature in prose and both carry `implemented_in=`:
+
+    * `f3647` -- *"when you enter your fury, you gain temporary hit points
+      equal to your healing surge value."* Inside `c.credit`, so the
+      temporary hit points are the **feat's** doing and not the feature's;
+      without the block the effect's `by` says this row and `f3647`
+      reports SILENT while working perfectly.
+    * `f3645` -- *"you can use it only once per day."* Gated on **not**
+      being on the berserker leg, because a real berserker's fury carries
+      no such limit and this character has the feature twice over if it
+      multiclassed into its own chassis. `c.spend_per_day` is the hold,
+      and a refusal returns False so the caller can tell a spent day from
+      a fury already standing.
+
+    The day limit is checked **before** anything is laid, so a refused
+    entry costs nothing and leaves the two forbidden rows alone.
+    """
+    me = c.me
+    if c.lingers_label(FURY, on=me):
+        return False
+    # **The refs are literals, not constants named above.** `lint.py`
+    # greps the *source* of a row named by an `implemented_in=` pointer
+    # for `c.feat("<the feat>")`, so a constant reads as no reader at all
+    # and `f3647` would be reported finished with nothing holding it up.
+    # That gate is #553 and it caught this.
+    multiclass = (not on_build(c.world, me, "berserker")
+                  and c.feat("f3645"))
+    if multiclass and not c.spend_per_day("f3645", 1):
+        return False
+    c.effect(FURY, until=When.ENCOUNTER, on=me)
+    c.end_effect(against=DEFENDER_AURA, on=me)
+    for ref in _FURY_FORBIDS:
+        c.forbid(ref, on=me, until=When.ENCOUNTER)
+    c.bonus("damage", 0, dice=f"{dice}d8", on=me, until=When.ENCOUNTER,
+            when=_a_melee_basic)
+    if c.feat("f3647"):
+        with c.credit("f3647"):
+            c.temp_hp(c.surge_value(), on=me)
+    return True
+
+
 def _a_melee_basic(ctx: dict[str, Any]) -> bool:
     """"Your melee basic attacks deal 1d8 extra damage."
 
@@ -283,13 +361,12 @@ def _heartland_resist(c: Cast, dtype: DamageType) -> None:
     "cf:barbarian-berserker-f0",
     level=0,
     cls="barbarian",
-    usage=ENCOUNTER,
+    usage=AT_WILL,
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    requires=on_leg("berserker"),
-    dropped=("actions.offer_trait(requires=bloodied)",),
+    requires=_fury_is_open,
 )
 def berserker_fury(c: Cast) -> None:
     """The fury, which a berserker enters by attacking and cannot leave.
@@ -316,15 +393,46 @@ def berserker_fury(c: Cast) -> None:
     naming the label is how it is found, and `against=` matching nothing
     is the "if it was active" the card prints.
 
-    **What is dropped is the second way in**, and it is not redundant with
-    the first. *"Alternatively, you can use a minor action while you are
-    bloodied"* matters because the berserker's martial at-will attacks are
-    **not** primal, so a berserker who swings only those never enters the
-    fury automatically -- and the choice is a real one, since entering it
-    costs the aura and the guardian row. That needs the trait to be
-    offerable on the action menu, which `turns.arm_traits` cannot do for an
-    `action=NONE` row, so the symbol names the offer rather than the
-    bloodied test (`c.bloodied` already exists).
+    **The second way in is `c.recast` on this row's own ref**, and the
+    marker that stood here said no such facility existed.
+    *"Alternatively, you can use a minor action while you are bloodied"*
+    is not redundant with the first way: the berserker's martial at-will
+    attacks are **not** primal, so a berserker who swings only those never
+    enters the fury automatically -- and the choice is a real one, since
+    entering it costs the aura and the guardian row.
+
+    `c.recast(c.ref, action=MINOR)` is the offer. That verb is documented
+    for *"a power you already know for a cheaper action"* and reads as
+    though it were for attack rows, but `actions._recasts` asks only that
+    the ref be known, that the cost differ from the row's declared action,
+    and that `usable` allow it -- all three of which an `action=NONE` trait
+    satisfies. The entry comes out of `_aimings` as an ordinary
+    `kind="power"` at the minor cost, so nothing in `perform` or the policy
+    needed a new branch. Measured before writing it.
+
+    **`usage=AT_WILL`, and this row cannot be `ENCOUNTER` any more.**
+    `turns.arm_traits` arms with `use(..., spend=True)`, so on an
+    `ENCOUNTER` trait the arming expends the row -- and `_recasts` then
+    asks `usable`, gets `expended`, and offers nothing. Measured: the entry
+    is there before `arm_traits` and gone after it. `content/CLAUDE.md`
+    prefers `AT_WILL` on a trait precisely because `ENCOUNTER` "becomes
+    wrong the day the row grows a trigger"; a row growing an **offer** is
+    the same hazard through a second door, and the card prints no limit on
+    the minor action.
+
+    **`c.once_per_board` tells the arming from the use.** `arm_traits`
+    runs a trait's body exactly once per creature per encounter, so the
+    first call is the arming and any later one is the player having picked
+    the entry. There is no field on the `Cast` that says which, and a
+    second variant through `c.instead_of` would be a clause substitution
+    rather than a second door -- so the board latch is the honest
+    discriminator, and it is what `once_per_board` is for.
+
+    **The bloodied test is in the body, not in `requires=`.** That column
+    is read by `chargen.meets` for a build, so it cannot ask a question
+    about a live fight; `c.bloodied` can, and the printed condition is
+    checked where the action is taken. A berserker who picks the entry
+    unbloodied is told so rather than silently entering the fury.
 
     The *"some of your powers ... gain additional benefits"* sentence owes
     this row nothing: it is a pointer, and `FURY` above is what those
@@ -333,22 +441,26 @@ def berserker_fury(c: Cast) -> None:
     me = c.me
     dice = 1 + _tier(c.level)
 
+    if not c.once_per_board(me):
+        # Picked off the action menu: the "alternatively" door.
+        if not c.bloodied(on=me):
+            c.note(f"{c.ref}: not bloodied, so the fury cannot be entered")
+        elif not _enter_fury(c, dice):
+            c.note(f"{c.ref}: the fury is already standing")
+        return
+
     def enter(ev: AttackDeclared) -> None:
-        if ev.attacker != me or c.lingers_label(FURY, on=me):
+        if ev.attacker != me:
             return
         declared = get(ev.power)
         if declared is None or declared.cls != "barbarian":
             return
         if not declared.is_attack or Keyword.PRIMAL not in declared.keywords:
             return
-        c.effect(FURY, until=When.ENCOUNTER, on=me)
-        c.end_effect(against=DEFENDER_AURA, on=me)
-        for ref in _FURY_FORBIDS:
-            c.forbid(ref, on=me, until=When.ENCOUNTER)
-        c.bonus("damage", 0, dice=f"{dice}d8", on=me, until=When.ENCOUNTER,
-                when=_a_melee_basic)
+        _enter_fury(c, dice)
 
     c.watch(AttackDeclared, enter, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.recast(c.ref, action=ActionType.MINOR, until=When.ENCOUNTER, on=me)
 
 
 @power(

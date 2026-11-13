@@ -42,6 +42,7 @@ from typing import Any
 
 from combat_engine.content.features.strikers import _weapon_attack
 from combat_engine.engine import (
+    AT_WILL,
     ENCOUNTER,
     NO_TARGET,
     PERSONAL,
@@ -52,6 +53,7 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.components import Health
 from combat_engine.engine.events import PowerResolved, SurgeSpent
 from combat_engine.engine.query import bloodied, has_combat_advantage, team
 
@@ -211,31 +213,83 @@ def blackguard_vice(c: Cast) -> None:
     "cf:paladin-blackguard-f3s0",
     level=0,
     cls="paladin",
-    usage=ENCOUNTER,
+    usage=AT_WILL,
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    todo=("actions.offer_trait(requires=temp_hp)",),
 )
 def blackguard_vice_hunger(c: Cast) -> None:
     """One vice: hurt yourself before an attack roll to hit harder.
 
     *"Once per round while you have temporary hit points, you can take a
     free action to deal damage to yourself right before making an attack
-    roll."*
+    roll against a target. The damage equals your Charisma modifier. You
+    then gain a bonus to the damage roll against the target. The bonus
+    equals the damage you took."*
 
-    Nothing is written, and the gap is the **offer** rather than any of the
-    effects. All three pieces exist -- `c.flat` for the self-damage,
-    `c.bonus("damage", ...)` for the rider, `c.latch(per_turn=)` for the
-    once-a-round -- but the clause is a free action a player **chooses** at
-    a specific moment, *"right before making an attack roll"*, and a trait
-    cannot put itself on the action menu. `cf:barbarian-berserker-f0` waits
-    on the same facility under the same symbol shape, with a different
-    requirement.
+    **The marker said the offer was unwritable and it was already
+    written.** This carried `actions.offer_trait(requires=temp_hp)` on the
+    reading that a trait cannot put itself on the action menu;
+    `c.recast(c.ref, action=FREE)` does, through `actions._recasts`, which
+    asks only that the ref be known, that the cost differ from the row's
+    declared action and that `usable` allow it. `cf:barbarian-berserker-f0`
+    has the measurement and the `usage=AT_WILL` argument at length -- an
+    `ENCOUNTER` trait is expended by `turns.arm_traits` and then offers
+    nothing -- and this row is the same shape with a different condition.
 
-    Not `dropped=`: there is no second clause here that plays.
+    **The bonus is `once=True`, which is what carries *"against the
+    target"*.** The target is not known when the free action is taken, so
+    the clause cannot be aimed; what it can be is **spent on the next
+    damage roll and no other**, which is the same thing whenever the
+    character does what the card describes and strictly less generous
+    whenever it does not. `until=When.EONT` bounds the case where the
+    attack never comes.
+
+    **The bonus is read off the creature, not off `c.cha_mod` and not off
+    `c.flat`'s return.** *"The bonus equals the damage you took"*, and all
+    three numbers come apart:
+
+    * `c.cha_mod` is what the card *charges*, and resistance, immunity or
+      a short temporary pool mean less than that arrives;
+    * `c.flat` returns the **hit points** lost, and its own docstring says
+      it does not touch temporary hit points -- *"they are spent after all
+      of that and are how hit points work rather than a reduction of the
+      blow"*. Since the printed condition for this clause is **holding
+      temporary hit points**, the ordinary case is the whole blow landing
+      on the temporary pool and `c.flat` returning 0. Measured: the pool
+      fell by 2 and the return was 0, so the bonus was never laid.
+
+    So both pools are read before and after and the drop in either counts.
+    Temporary hit points absorbing the blow is still damage taken -- that
+    is what they are for -- and a reading that said otherwise would make
+    the clause pay nothing in exactly the state the card requires.
+
+    `from_attack=False`: this is a cost the card imposes, not a blow, so
+    nothing that reads "when you are hit by an attack" should answer it.
+
+    **Once per round, not per turn.** `c.latch` without `per_turn=` scopes
+    to `world.round`, which is what *"once per round"* prints; `per_turn=`
+    would give a blackguard a second helping on an opportunity attack
+    inside somebody else's turn.
     """
+    me = c.me
+    if c.once_per_board(me):
+        c.recast(c.ref, action=ActionType.FREE, until=When.ENCOUNTER, on=me)
+        return
+    health = c.world.get(me, Health)
+    if health is None or health.temp <= 0:
+        c.note(f"{c.ref}: no temporary hit points, so the vice cannot be fed")
+        return
+    if c.latched(c.ref, on=me):
+        c.note(f"{c.ref}: already fed this round")
+        return
+    c.latch(c.ref, on=me)
+    pool, hp = health.temp, health.hp
+    c.flat(c.cha_mod, on=me, from_attack=False)
+    took = (pool - health.temp) + (hp - health.hp)
+    if took > 0:
+        c.bonus("damage", took, on=me, until=When.EONT, once=True)
 
 
 @power(

@@ -69,9 +69,15 @@ from combat_engine.engine import (
     When,
     get,
     power,
+    usable,
 )
 from combat_engine.engine.events import Dropped, PowerUsed, TurnStart
-from combat_engine.engine.query import Conditions, bloodied, team
+from combat_engine.engine.query import (
+    Conditions,
+    bloodied,
+    distance_between,
+    team,
+)
 
 #: The one row the domain is chosen on. Nine other parents read this ref.
 DOMAIN = "cf:cleric-warpriest-f1"
@@ -478,7 +484,6 @@ warpriest_word_8 = _word_rider(
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("actions.offer_trait(requires=enemy_dropped)",),
 )
 def warpriest_word_1(c: Cast) -> None:
     """The one of `-f5`'s nine that is not a rider on `p1455` at all.
@@ -486,28 +491,71 @@ def warpriest_word_1(c: Cast) -> None:
     *"When an enemy within 5 squares of you drops to 0 hit points, you can
     use `p1455` as an immediate reaction."*
 
-    The **trigger** plays and the offer does not. `Dropped` carries the
-    creature and the distance is `c.within`, so "an enemy within 5 drops"
-    is answerable -- what cannot be written is putting an existing power
-    on the action menu at a differently-priced action for the player to
-    choose. `cf:barbarian-berserker-f0`,
-    `cf:paladin-blackguard-f3s0` and `cf:paladin-cavalier-f4s0` all wait on
-    the same facility.
+    **`c.arm_trigger`, which is the facility this row's marker said did not
+    exist.** It carried `actions.offer_trait(requires=enemy_dropped)` on the
+    reading that a reaction needs a *header* to declare it, so a body could
+    only lay a free `c.watch` -- and that is what `c.arm_trigger`'s own
+    docstring is about: *"a body that arms a reaction for a duration has no
+    header to write to and falls back to `c.watch`, which is free"*. It
+    charges `Encounter.spend` on the same budget `triggers._ask` uses, so
+    this and a declared reaction cannot both fire in one round, which is the
+    printed rule.
 
-    The watch is laid anyway, so the day that lands this row is one line:
-    everything it needs to know is already in the handler.
+    **The two gates sit in `when=`, not in the handler, because the handler
+    runs after the action is paid.** `arm_trigger` spends first and calls
+    second, so a test placed inside the body burns the character's one
+    immediate action of the round on a drop that was out of range or on a
+    `WORD` already spent. Both questions are answerable before the spend.
+
+    `usable` is the one that is easy to miss: `WORD` is an encounter power
+    and this feature does not grant a second use of it, so a warpriest who
+    has already spoken it this fight has nothing to react *with*. Asking
+    `c.use_power`'s return value instead would be too late.
+
+    **`distance_between`, never `c.within`, and the row it replaced had
+    this wrong.** `c.within` ends on `alive(world, c)` -- so a creature
+    that has just dropped to 0 hit points is **never** in it, and a gate
+    reading *"an enemy within 5 squares of you drops to 0 hit points"*
+    through that verb can never be true. The old body only wrote a
+    `c.note`, so the fault was invisible: the row fired, did something,
+    and audited green on a handler that could not reach its own payload.
+    Measured -- with the handler reached and the range read this way, the
+    word is spoken; read through `c.within`, nothing fires at all.
+
+    `until=When.ENCOUNTER` rather than `arm_trigger`'s `EONT` default: the
+    printed line is a standing feature, not a hold laid by another power.
+
+    One honest limit: a warpriest holding `p13944` -- a declared cleric
+    immediate reaction on the same moment -- spends the round's one
+    immediate action on that one first, so this declines. That is the
+    printed rule rather than a shortfall here, and
+    `drivers.word_on_a_drop` asserts the race before isolating the clause.
     """
     me = c.me
 
-    def dropped(ev: Dropped) -> None:
+    def in_range(ev: Dropped) -> bool:
         victim = getattr(ev, "actor", None)
         if victim is None or team(c.world, victim) is team(c.world, me):
-            return
-        if victim not in c.within(5, of=me):
-            return
-        c.note(f"{c.ref}: {WORD} is offered as an immediate reaction")
+            return False
+        if distance_between(c.world, me, victim) > 5:
+            return False
+        word = get(WORD)
+        if word is None:
+            return False
+        ok, _why = usable(c.world, me, word)
+        return ok
 
-    c.watch(Dropped, dropped, until=When.ENCOUNTER, on=me, label=c.ref)
+    def speak(ev: Dropped) -> None:
+        c.use_power(WORD)
+
+    c.arm_trigger(
+        Dropped, speak,
+        when=in_range,
+        cost=ActionType.IMMEDIATE_REACTION,
+        until=When.ENCOUNTER,
+        on=me,
+        label=c.ref,
+    )
 
 
 # -- f8: nine riders on a divine encounter attack power ---------------------
