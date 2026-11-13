@@ -870,7 +870,9 @@ def swordmage_aegis_shield_choice(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=MARTIAL,
-    todo=("chargen.armor_proficiency()", "chargen.second_fork()"),
+    defect="the Archer feature this row is conditional on is not in the"
+           " import -- no non-marshal warlord class feature exists, so"
+           " nothing can record the choice the card keys on",
 )
 def warlord_archer(c: Cast) -> None:
     """Three clauses and none of them has a subject.
@@ -895,18 +897,35 @@ def warlord_archer(c: Cast) -> None:
     modifier can reach it -- is the problem `rolls_with` was built to
     solve, so keeping the symbol named a gap that is not one.
 
-    What stops the line being written is the gate below, not the mechanism:
-    the swap belongs to whoever *chose* this feature, and nothing records
-    that choice, so laying it here would hand every warlord a
-    Strength-rolled bow. Write it the moment there is a leg to ask for.
+    What stops the line being written is the gate, not the mechanism: the
+    swap belongs to whoever *chose* this feature, and laying it here
+    unconditionally would hand every warlord a Strength-rolled bow.
 
-    `chargen.BUILDS` is wanted as well and
-    **adding legs does not supply it**: the class's six legs are already
-    spent on the six options of a different printed fork, and a character
-    takes one leg and stays on it, so an archer leg would make this choice
-    exclusive with a commanding presence, which the page does not. What is
-    wanted is a second fork per class. `docs/blocked.json` records the
-    same under `cf:warlord-archer`.
+    **And the choice cannot be recorded, because the thing chosen is not
+    in the import.** This is the measurement that moved the marker from
+    two symbols to `defect=`: the card is conditional on *"the Archer
+    `c8` class feature"*, and `class_feature` holds **no non-marshal
+    warlord row at all** -- 13 rows, every one `cf:warlord-marshal-*`.
+    So there is no ref to key a fork on, no row to grant, and nothing for
+    a character to have chosen.
+
+    The two old symbols each described a shape rather than the hold.
+    `chargen.second_fork()` was right that the class's six legs are spent
+    on `-f4`'s six presence options and that a seventh leg would make this
+    choice exclusive with a presence, which the page does not -- but
+    `chargen.BUILD_OPTIONS` **is** a second fork per class and needs only
+    a parent ref, which is the thing missing. And
+    `chargen.armor_proficiency()` is a real gap -- `armour_opened` reads a
+    feat's armour *gains* and nothing reads a **loss** -- but writing the
+    loss alone would take chainmail off every marshal, so it is not what
+    holds the row.
+
+    `defect=` and not `todo=`: no symbol will close this, because what is
+    absent is a compendium row rather than a facility. Plain words, which
+    is what that marker takes. It drops this row alone --
+    `dsl.entry_of` returns a `cf:` ref unchanged -- and the row is the
+    conditional consequence of a choice no character can make, so
+    dropping it costs a marshal nothing it could otherwise have had.
     """
 
 
