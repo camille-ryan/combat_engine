@@ -41,6 +41,9 @@ decided by what the data can support rather than by preference.
 
 from __future__ import annotations
 
+from typing import Any
+
+from combat_engine.content.features.controllers import orb_imposition
 from combat_engine.engine import (
     ENCOUNTER,
     FREE,
@@ -327,6 +330,40 @@ mage_list_12 = _printed_list("cf:wizard-mage-f12", "three", False)
 # -- and the arcanist's last two orb masteries ------------------------------
 
 
+def _a_wizard_at_will(eff: Any, *, also: tuple[str, ...] = ()) -> bool:
+    """Was this effect laid by a wizard at-will spell?
+
+    *"An effect created by a wizard at-will spell (such as `p1164` or
+    `p1167`)"* -- `cf:wizard-arcanist-f0c1`'s second option.
+
+    An effect's label leads with the ref of the row that laid it, which is
+    the same handle `durations.keywords_of` uses to turn a label back into
+    the row's keywords. So the class and the usage are a registry lookup
+    rather than anything the effect has to carry.
+
+    False for a label that resolves to no declared row, which is the safe
+    direction: the clause widens what a character can do, so an
+    unrecognised label gets nothing rather than everything.
+
+    `also` are refs a feat has made count as one. `f2034` prints *"you
+    treat `f2023b` as though it were an at-will wizard spell for the
+    purposes of your `cf:wizard-arcanist-f0c1`"* -- a sentence about this
+    filter and nothing else -- so it is `#550`'s arrangement: the clause
+    lives in the row it names, and the ref is passed in by the body that
+    asks `c.feat` rather than tested here, so `lint.py` can see the
+    pointer has a reader.
+    """
+    ref = (eff.label or "").split(" ", 1)[0]
+    if ref in also:
+        return True
+    row = get(ref)
+    return (
+        row is not None
+        and row.cls == "wizard"
+        and row.usage is Usage.AT_WILL
+    )
+
+
 @power(
     "cf:wizard-arcanist-f0c1",
     level=0,
@@ -336,7 +373,6 @@ mage_list_12 = _printed_list("cf:wizard-mage-f12", "three", False)
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
-    todo=("c.worsen_save(next_only=)", "c.extend_effect()"),
 )
 def wizard_orb_imposition(c: Cast) -> None:
     """The orb's second mastery card: a choice of two effects, neither of
@@ -359,13 +395,84 @@ def wizard_orb_imposition(c: Cast) -> None:
     row is silent in a way nothing reports. `cf:wizard-arcanist-f0c0` and
     `-f0c2` are the two of the four that play.
 
-    **`todo=` and not `dropped=`, and `lint.py` is what said so.** Written
-    `dropped=` first, and the gate was exact about why: *"`dropped=` means
-    it plays with one clause missing. A row that cannot play is `todo=`,
-    which is refused rather than counted ok."* The card prints a choice of
-    two effects and neither has a writer, so there is no third clause for
-    the row to play -- `todo=` refuses it in play, which is the truth.
+    **Both options are written now, and each marker named a facility that
+    existed.**
+
+    `c.worsen_save(next_only=)` said *"`c.penalty("save", ...)` is a
+    standing modifier on every save the creature makes"*. True of a bare
+    call, and the identical sentence was **already written in full** by
+    `cf:wizard-arcanist-f0`'s control leg -- designating the effect rather
+    than the creature, gating the penalty with a `when=` on that effect,
+    and spending it on the matching `SavingThrow`. That body is now
+    `controllers.orb_imposition` and this card calls it.
+
+    **Which raised a double-pay, and the compendium settles who owns the
+    clause.** `cf:wizard-arcanist-f0`'s spec is the implement-mastery
+    *chooser* and `-f0s1` grants this card, while `controllers.py` also
+    pays the sentence off the `control` leg -- both live, since
+    `chargen.legs_for("wizard")` answers `('control', 'war')`. `i1986p1`,
+    the item that raises the penalty, names **this ref** rather than
+    `-f0`. So the card owns it and the leg defers when the character holds
+    the card.
+
+    `c.extend_effect()` said *"`Effects` clocks a duration off a `When`,
+    and there is no way to push one effect's clock on by a turn without
+    rewriting what it is."* Rewriting what it is **is** the operation, and
+    five content rows already did it by hand. The verb is the sixth copy
+    of three lines -- and the third line is the one a copy leaves out:
+    `Effects.apply` computes `latch` from `when` and `world.turn`, so a
+    duration pushed to `EONT` without re-latching expires at the end of
+    the turn it was pushed *on*.
+
+    **The printed filter is this row's, not the verb's.** *"An effect ...
+    that would otherwise end at the end of your current turn"* is
+    `when is When.EOT`, and *"created by a wizard at-will spell"* is the
+    laying row's class and usage -- read off `durations.keywords_of`'s
+    sibling, the label, which leads with the ref of the row that laid it.
+    `c.extend_effect` ranks no durations, because `durations` has no
+    ordering table and inventing one would be a judgement no page makes.
+
+    *"You can use your orb to gain one of the following two effects"*, so
+    the two are offered and one is taken -- `c.choose` over whichever of
+    the two can actually do something, which is what stops the row
+    spending its free action on an option with no subject.
     """
+    me = c.me
+    # `f2034`: *"you treat `f2023b` as though it were an at-will wizard
+    # spell for the purposes of your `cf:wizard-arcanist-f0c1`."* The
+    # literal `c.feat("f2034")` is here rather than inside the filter
+    # because `lint.py` reads **this row's** source to prove the feat's
+    # `implemented_in=` pointer has a reader -- #553.
+    treated = ("f2023b",) if c.feat("f2034") else ()
+    offers: list[str] = []
+    if sorted(c.suffering()):
+        offers.append("harder to shake off")
+    # *"...an effect created by a wizard at-will spell that would otherwise
+    # end at the end of your current turn."* The label leads with the ref
+    # of the row that laid it, which is how the laying row's class and
+    # usage are read back.
+    # `Effects` has no "by source" reader, so the walk goes through the
+    # creatures this caster is holding something on -- which is what
+    # `c.suffering()` answers and what `orb_imposition` uses for its own
+    # half of this card.
+    pushable = sorted(
+        (eff
+         for victim in sorted(c.suffering())
+         for eff in c.world.effects.of(victim)
+         if eff.source == me and eff.when is When.EOT
+         and _a_wizard_at_will(eff, also=treated)),
+        key=lambda e: e.id,
+    )
+    if pushable:
+        offers.append("linger a turn")
+    took = c.choose(offers, f"{c.ref}: which of the orb's two effects")
+    if took == "harder to shake off":
+        orb_imposition(c)
+    elif took == "linger a turn":
+        chose = c.choose(pushable, f"{c.ref}: which effect lingers")
+        if chose is not None:
+            c.extend_effect(chose, until=When.EONT)
+
 
 
 @power(

@@ -544,20 +544,29 @@ def f2030(c: Cast) -> None:
 
 @power("f2034", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("cf:wizard-arcanist-f0c1", "c.counts_as(usage=)"))
+       implemented_in=("cf:wizard-arcanist-f0c1",))
 def f2034(c: Cast) -> None:
     """Treats `f2023b` as an at-will wizard spell for one arcanist option.
-    That option has a ref and no row, and nothing makes a row count as a
-    different sort.
 
-    **Split off `c.counts_as(kind=)`, which was never this row's gap.** That
-    symbol is about a creature's *type* -- "a power that targets undead may
-    also target the elemental origin" -- and landed for `f1509`/`f1511` with
-    #770. This row is about a *row's* usage and class: treating one card as
-    an at-will wizard spell so a class feature will accept it. One symbol
-    serving both could not have gone red or green correctly for either, and
-    it went green for neither.
+    *"You treat `f2023b` as though it were an at-will wizard spell for the
+    purposes of your `cf:wizard-arcanist-f0c1`."*
 
-    So the usage half is `c.counts_as(usage=)` and the real hold is still
-    the first symbol: the arcanist option has a ref and no row, so there is
-    nothing for the treated card to be accepted *by*."""
+    **Written into the card it names, which is `#550`'s arrangement, and
+    both old symbols are gone.** The first -- `cf:wizard-arcanist-f0c1` --
+    said *"that option has a ref and no row"*; it has a row now, and its
+    second printed option offers whichever of this caster's effects was
+    laid by a wizard at-will spell. The second -- `c.counts_as(usage=)` --
+    asked for a general facility making one row count as a different sort,
+    and this sentence needs no such thing: it widens **one filter**, which
+    is a list of refs that filter accepts.
+
+    So `mage_ladder._a_wizard_at_will` takes an `also=` of refs a feat has
+    made count, and `cf:wizard-arcanist-f0c1`'s body asks
+    `c.feat("f2034")` for it. The literal lives in that body rather than
+    in the filter so `lint.py` can see this pointer has a reader -- the
+    `#553` guard, which caught the same mistake on
+    `cf:wizard-bladesinger-f16` in this batch.
+
+    The row stays declared as the pointer, as `#550` says a feat-side row
+    does, and `audit.py` buckets `implemented_in=` as ELSEWHERE rather
+    than firing it."""

@@ -17278,6 +17278,64 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         who = self._who(on)
         return holding(self.world, who, what) if who is not None else []
 
+    def extend_effect(
+        self, effect: Effect, *, until: When, clock: int | None = None,
+    ) -> bool:
+        """Push a standing effect's clock on. False if it already runs that
+        long.
+
+        *"Extend the duration of an effect created by a wizard at-will
+        spell that would otherwise end at the end of your current turn. The
+        effect instead ends at the end of your next turn."* --
+        `cf:wizard-arcanist-f0c1`, which carried `c.extend_effect()` saying
+        *"`Effects` clocks a duration off a `When`, and there is no way to
+        push one effect's clock on by a turn without rewriting what it
+        is."*
+
+        Rewriting what it is **is** the operation, and five content rows
+        already do it by hand -- `general_l.f2694`'s neighbour,
+        `implement_a`, two monster rows and a druid one. `Effect` is a
+        plain mutable dataclass, so this is not a new capability; it is the
+        sixth copy of three lines, which is what a verb is for.
+
+        **All three fields, and the third is the one a copy leaves out.**
+        `Effects.apply` computes `latch=(when in (EONT, EOTNT) and
+        world.turn == clock)`, so a duration pushed to `EONT` without
+        re-latching expires at the end of the turn it was pushed *on*
+        rather than the next one -- the extension silently buying nothing.
+        The rule is read off `durations` rather than restated here, so the
+        two cannot drift.
+
+        `clock` defaults to the caster, which is what *"your* next turn"*
+        means. A card measuring from the creature carrying the effect
+        passes its id.
+
+        Returns False when the effect already runs to that duration, so a
+        row can tell a real extension from a wasted use -- the same reason
+        `c.spend_per_day` returns a bool.
+
+        **It does not rank durations, and deliberately.** There is no
+        ordering table in `durations` and inventing one here would be a
+        judgement about which of `SAVE_ENDS` and `EONT` is "longer" that no
+        page makes. So this moves the clock wherever it is told and the
+        **caller** does the printed filtering -- `cf:wizard-arcanist-f0c1`
+        offers only effects standing at `When.EOT`, because that is the
+        clause's own words: *"an effect that would otherwise end at the end
+        of your current turn"*.
+        """
+        from .durations import _TARGET_CLOCKED
+
+        who = self.me if clock is None else clock
+        if effect.when is until:
+            return False
+        effect.when = until
+        effect.clock = effect.owner if until in _TARGET_CLOCKED else who
+        effect.latch = (
+            until in (When.EONT, When.EOTNT)
+            and self.world.turn == effect.clock
+        )
+        return True
+
     def gains_proficiency(self, *refs: str, on: int | None = None) -> int:
         """"If you are not already proficient with these weapons, you gain
         proficiency with them." Returns how many were newly permitted.

@@ -30,6 +30,86 @@ from combat_engine.engine import (
 #: which is what that row's old docstring said made it unwritable. #715.
 IMPOSITION_RAISE = "arcanist:imposition-raise"
 
+#: The orb mastery's own card, which prints the same sentence this file's
+#: control leg pays. See `orb_imposition`.
+ORB_CARD = "cf:wizard-arcanist-f0c1"
+
+
+def orb_imposition(c: Cast) -> bool:
+    """*"Designate one creature you have cast a wizard spell upon that has
+    an effect that lasts until the subject succeeds on a saving throw.
+    That creature takes a penalty to its next saving throw against that
+    effect equal to your Wisdom modifier."*
+
+    **One body for two refs, because the compendium prints the sentence
+    once and models it twice.** `cf:wizard-arcanist-f0`'s spec is the
+    implement-mastery *chooser* -- *"choose one of the following forms:
+    `-f0s1` ... `-f0s5`"* -- and `-f0s1` grants `ORB_CARD`, which is where
+    the orb's two effects are printed. This file's `-f0` instead branches
+    on the `control` and `war` legs and pays the clauses itself, which is
+    the older reading and still live: `chargen.legs_for("wizard")` answers
+    `('control', 'war')`.
+
+    So both rows can reach this sentence on one character, and
+    `i1986p1` -- which names `ORB_CARD` by ref, not `-f0` -- shows which of
+    the two the compendium thinks owns it. The card does. `-f0` defers when
+    the character holds it and pays otherwise, so a control-leg arcanist
+    that never took the orb mastery is unaffected.
+
+    Returns whether a penalty was laid, so a caller can tell a designation
+    from a creature with nothing to designate.
+
+    **The effect is designated, not merely the creature.** A wizard holding
+    two save-ends effects on one target used to spend the penalty on
+    whichever save came first, and a save against somebody else's effect
+    spent it for nothing at all.
+
+    *"Its **next** saving throw"*, which `once=True` cannot say: a one-shot
+    modifier is spent by watching `AttackRolled`, so a save penalty written
+    that way would be burned by the next attack anybody made and never by
+    the save it is for. `Effects.save` reads the modifiers and *then*
+    announces the throw, so ending the hold on `SavingThrow` spends it on
+    the right one -- and `SavingThrow.against` is the effect rendered,
+    which is what tells one of this creature's saves from another.
+    """
+    me = c.me
+    victims = sorted(c.suffering())
+    who = c.choose(victims, f"{c.ref}: who finds it harder to shake off") \
+        if victims else None
+    if who is None:
+        return False
+    held_by_target = [
+        eff
+        for eff in c.world.effects.of(who)
+        if eff.source == me and eff.when is When.SAVE_ENDS
+    ]
+    if not held_by_target:
+        return False
+    against = c.choose(
+        sorted(held_by_target, key=lambda eff: eff.id),
+        f"{c.ref}: which effect it must shake off",
+    )
+    if against is None:
+        return False
+
+    def this_one(ctx: dict[str, Any]) -> bool:
+        return ctx.get("effect") is against
+
+    held = c.penalty(
+        "save", c.wis_mod + c.amount_for(IMPOSITION_RAISE, 0),
+        on=who, until=When.ENCOUNTER, when=this_one,
+    )
+    if held is None:
+        return False
+    label = str(against)
+
+    def used(ev: SavingThrow) -> None:
+        if ev.actor == who and ev.against == label:
+            c.world.effects.end(held, "used")
+
+    c.watch(SavingThrow, used, until=When.ENCOUNTER, on=who, label=c.ref)
+    return True
+
 
 @power(
     "cf:wizard-arcanist-f0",
@@ -81,63 +161,14 @@ def wizard_implement(c: Cast) -> None:
         return
     if not c.build("control"):
         return
-
-    # The other leg: somebody already carrying one of this wizard's
-    # save-ends effects has a harder time shaking *that one* off.
-    me = c.me
-    victims = sorted(c.suffering())
-    who = c.choose(victims, "cf:wizard-arcanist-f0: who finds it harder to shake off") \
-        if victims else None
-    if who is None:
+    # **The card owns this clause when the character holds it.** `ORB_CARD`
+    # prints the same sentence and `-f0s1` grants it, so a control-leg
+    # arcanist that also took the orb mastery would otherwise pay the
+    # penalty twice -- and `i1986p1`, which raises it, names the **card**
+    # by ref rather than this row. `orb_imposition` has the whole argument.
+    if c.feat(ORB_CARD):
         return
-
-    # "An effect that lasts until the subject succeeds on a saving throw",
-    # and the penalty is to the next save **against that effect**. The
-    # effect is designated, not merely the creature: a wizard holding two
-    # of them on one target used to spend the penalty on whichever save
-    # came first, and a save against somebody else's effect spent it for
-    # nothing at all.
-    held_by_target = [
-        eff
-        for eff in c.world.effects.of(who)
-        if eff.source == me and eff.when is When.SAVE_ENDS
-    ]
-    if not held_by_target:
-        return
-    against = c.choose(
-        sorted(held_by_target, key=lambda eff: eff.id),
-        "cf:wizard-arcanist-f0: which effect it must shake off",
-    )
-    if against is None:
-        return
-
-    def this_one(ctx: dict[str, Any]) -> bool:
-        return ctx.get("effect") is against
-
-    held = c.penalty(
-        "save", c.wis_mod + c.amount_for(IMPOSITION_RAISE, 0),
-        on=who, until=When.ENCOUNTER, when=this_one,
-    )
-    if held is None:
-        return
-
-    # "Its **next** saving throw", which `once=True` cannot say: a one-shot
-    # modifier is spent by watching `AttackRolled`, so a save penalty
-    # written that way would be burned by the next attack anybody made and
-    # never by the save it is for. `Effects.save` reads the modifiers and
-    # then announces the throw, so ending it here spends it on the right one
-    # -- and `SavingThrow.against` is the effect rendered, which is what
-    # tells one of this creature's saves from another.
-    label = str(against)
-
-    def used(ev: SavingThrow) -> None:
-        if ev.actor == who and ev.against == label:
-            c.world.effects.end(held, "used")
-
-    c.watch(
-        SavingThrow, used, until=When.ENCOUNTER, on=who,
-        label="cf:wizard-arcanist-f0",
-    )
+    orb_imposition(c)
 
 
 @power(

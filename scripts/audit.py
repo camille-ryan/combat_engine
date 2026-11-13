@@ -665,6 +665,18 @@ KNOWN_SILENT = {
     # `c.feat`, and here the reader is the predicate beside it. #553 is why
     # that guard exists and it is right; this is the case it does not fit.
     # `drivers.miss_bladespell` proves both arms and plants the gate.
+    # **The orb's two options each need something the board does not
+    # supply**, measured three ways while writing `drivers.orb_mastery`:
+    # `c.suffering()` is empty, so there is no save-ends effect of this
+    # caster's to designate; `c.wis_mod` is **0** on the board's wizard, so
+    # even with one the penalty would be 0 and `c.penalty` lays nothing;
+    # and no effect of the caster's stands at `When.EOT` from a wizard
+    # at-will, which is the second option's printed filter. The rule poses
+    # all three and both options pay.
+    "cf:wizard-arcanist-f0c1": "offers a save penalty or a longer clock;"
+                               " the board has no save-ends effect of this"
+                               " caster's, 0 Wisdom modifier, and no EOT"
+                               " at-will effect",
     # **"Proficiency with improvised weapons" has nothing to permit on a
     # dealt character**, which is the ordinary case rather than a board
     # artefact: `chargen` hands a character weapons from its own printed

@@ -79517,6 +79517,148 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def the_orb_mastery_offers_two_effects(out: Result) -> None:
+    """`cf:wizard-arcanist-f0c1`: a save made harder, or an effect lingering.
+
+    The row carried `c.worsen_save(next_only=)` and `c.extend_effect()`.
+    The first was **already written in full** by
+    `cf:wizard-arcanist-f0`'s control leg; that body is now
+    `controllers.orb_imposition` and this card calls it. The second said
+    *"there is no way to push one effect's clock on by a turn without
+    rewriting what it is"* -- rewriting what it is **is** the operation,
+    and five content rows already did it by hand.
+
+    **The double-pay the first fix created, and who owns the clause.**
+    `cf:wizard-arcanist-f0`'s spec is the implement-mastery chooser and
+    `-f0s1` grants this card, while `controllers.py` also pays the sentence
+    off the `control` leg -- both live. `i1986p1`, the item that raises the
+    penalty, names **this card** by ref. So the card owns it and the leg
+    defers when the character holds the card, which is the last assertion
+    here.
+
+    Six things asserted:
+
+    * option one lays a save penalty on the designated creature, and
+      **only** against the designated effect -- a second save-ends effect
+      on the same victim is unaffected, which is the whole reason the
+      effect is designated and not just the creature;
+    * `c.extend_effect` moves an `EOT` effect to `EONT`, and re-latches it
+      -- read off `Effect.latch`, because a push without that expires on
+      the turn it was pushed on and the extension buys nothing;
+    * it returns False for an effect already at that duration;
+    * the filter takes a wizard **at-will** effect and refuses an
+      encounter one, which is the printed *"created by a wizard at-will
+      spell"*;
+    * `f2034` widens that filter to `f2023b` and nothing else -- the plant;
+    * and `cf:wizard-arcanist-f0`'s control leg lays **nothing** when the
+      character holds this card, so the sentence is paid once.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.features.controllers import ORB_CARD
+    from combat_engine.content.features.mage_ladder import _a_wizard_at_will
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import (
+        Build,
+        Mods,
+        Powers,
+        Stats,
+    )
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Ability, DamageType
+
+    card = "cf:wizard-arcanist-f0c1"
+    world, me, _ = _board(card, 1)
+    c = Cast(world=world, me=me, ref="drivers:orb")
+    foe = sorted(enemies(world, me))[0]
+
+    # -- option two: the clock ------------------------------------------
+    mine = c.ongoing(5, DamageType.FIRE, on=foe)
+    assert mine is not None
+    mine.when = When.EOT
+    mine.latch = False
+    moved = c.extend_effect(mine, until=When.EONT)
+    out.that(moved and mine.when is When.EONT,
+             f"an EOT effect is pushed to EONT ({mine.when})")
+    out.that(mine.latch is (world.turn == mine.clock),
+             "and is re-latched by the rule `Effects.apply` uses -- a push"
+             " without it expires on the turn it was pushed on, so the"
+             f" extension would buy nothing (latch={mine.latch},"
+             f" turn={world.turn}, clock={mine.clock})")
+    out.that(not c.extend_effect(mine, until=When.EONT),
+             "and pushing it again answers False, so a row can tell a real"
+             " extension from a wasted use")
+
+    # -- the printed filter --------------------------------------------
+    at_will = next(r for r, p in sorted(REGISTRY.items())
+                   if p.cls == "wizard" and p.usage.value == "at-will")
+    encounter = next(r for r, p in sorted(REGISTRY.items())
+                     if p.cls == "wizard" and p.usage.value == "encounter")
+
+    class _Eff:
+        def __init__(self, label: str) -> None:
+            self.label = label
+
+    out.that(_a_wizard_at_will(_Eff(f"{at_will} zone")),
+             f"the filter takes an effect laid by a wizard at-will"
+             f" ({at_will})")
+    out.that(not _a_wizard_at_will(_Eff(f"{encounter} zone")),
+             f"PLANT: and refuses a wizard **encounter** one ({encounter})"
+             " -- the printed *'created by a wizard at-will spell'*")
+    out.that(_a_wizard_at_will(_Eff("f2023b zone"), also=("f2023b",))
+             and not _a_wizard_at_will(_Eff("f2023b zone")),
+             "`f2034` widens it to `f2023b` and the widening is that ref"
+             " alone -- without the feat the same effect is refused")
+
+    # -- option one, and who pays it -----------------------------------
+    # **The control leg is pinned, because the board's wizard is on the
+    # war one** -- measured: the first draft read 19 -> 20 and the mod was
+    # the war branch's attack bonus, a different clause that correctly
+    # still pays. The row branches on `c.build`, which reads
+    # `Build.choices`.
+    def leg_pays(holding_card: bool) -> int:
+        leg, lme, _ = _board("cf:wizard-arcanist-f0", 1)
+        build = leg.need(lme, Build)
+        build.choices = {
+            ch for ch in build.choices if ch != "war"
+        } | {"control"}
+        known = leg.need(lme, Powers)
+        known.known = [r for r in known.known if r != ORB_CARD]
+        if holding_card:
+            known.known.append(ORB_CARD)
+        # **Three things the board does not supply**, each of which made an
+        # earlier draft read 0 for both arms -- so the "lays nothing" plant
+        # passed for the wrong reason three times over:
+        #
+        # * `c.suffering()` is what `orb_imposition` opens on, and the
+        #   board carries no save-ends effect of this caster's;
+        # * `c.wis_mod` is **0** on this wizard, so the penalty is 0 and
+        #   `c.penalty` lays nothing at all -- the trap
+        #   `audit.board`'s own notes record for `c.temp_hp(c.wis_mod)`;
+        # * the penalty goes on the **victim**, not the caster, so the
+        #   caster's `Mods` is the wrong thing to count.
+        leg.need(lme, Stats).scores[Ability.WIS] = 18
+        victim = sorted(enemies(leg, lme))[0]
+        Cast(world=leg, me=lme, ref="drivers:orb-setup").ongoing(
+            5, DamageType.FIRE, on=victim, until=When.SAVE_ENDS)
+        held = leg.get(victim, Mods)
+        before = len(held.items) if held else 0
+        use(leg, lme, "cf:wizard-arcanist-f0", spend=False)
+        mods = leg.get(victim, Mods)
+        return (len(mods.items) if mods else 0) - before
+
+    without = leg_pays(holding_card=False)
+    out.that(without > 0,
+             f"on the control leg, `cf:wizard-arcanist-f0` lays the save"
+             f" penalty itself when the card is **not** held ({without})")
+    with_card = leg_pays(holding_card=True)
+    out.that(with_card == 0,
+             "PLANT: and lays nothing while the character holds"
+             f" `{ORB_CARD}` -- the card owns the sentence, which"
+             f" `i1986p1` names by ref ({with_card})")
+
+
 def an_untrained_weapon_is_treated_as_improvised(out: Result) -> None:
     """`cf:fighter-weaponmaster-f3s0`: *"you treat all weapons with which you
     are not proficient as improvised ... a +2 proficiency bonus ...
@@ -81092,6 +81234,11 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "orb_mastery": (
+        the_orb_mastery_offers_two_effects,
+        "the orb's two effects, the clock re-latched, and the leg deferring"
+        " to the card (#1276)",
     ),
     "improvised_weapon": (
         an_untrained_weapon_is_treated_as_improvised,
