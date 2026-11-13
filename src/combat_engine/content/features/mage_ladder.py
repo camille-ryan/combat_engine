@@ -53,6 +53,7 @@ from combat_engine.engine import (
     Cast,
     Keyword,
     Powers,
+    ShortRested,
     Usage,
     When,
     get,
@@ -216,25 +217,101 @@ def mage_lore(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("turns.short_rest(swap=)",),
 )
 def mage_recall(c: Cast) -> None:
     """"When you take a short rest, you can replace one unexpended `c9`
     attack power with another from your spellbook of the same level or
     lower."
 
-    A **short** rest, which is the distinction worth marking:
-    `cf:wizard-witch-f3` waits on `turns.extended_rest(swap=)` and this
-    one is the other rest, so it gets the other symbol rather than
-    sharing. The engine has neither, and the two would land separately --
-    a short rest happens several times a day and an extended rest once.
+    **Written, and the symbol it waited on was the wrong question.**
+    `turns.short_rest(swap=)` asked for a parameter on the rest, and the
+    rest does not need one: it needs a *moment*, and `#498` built that.
+    `turns._rest_window` arms every resting creature's traits and only
+    then emits `ShortRested`, so a watch laid by this body during the
+    arming catches the event it was armed for. Inside a fight nothing
+    emits `ShortRested`, so the same watch laid at encounter start never
+    fires -- which is the printed restriction, got for free.
 
-    The printed level constraint is the harder half and is named here
-    rather than in the symbol: *"the level of the second power must be
-    different from that of any unexpended wizard daily attack powers you
-    have prepared"* reads the whole prepared set, not just the one being
-    swapped.
+    `#498`'s own docstring is the warning worth repeating: three class
+    features and five feats were written against `events.ShortRested`,
+    **all audited green, and every one of them was dead** in both of
+    `fight.py`'s paths. The audit board arms traits and then provokes, so
+    it cannot see this. `drivers.mage_short_rest_swap` plays a real
+    `turns.short_rest` instead, which is the only thing that can.
+
+    A **short** rest, and `cf:wizard-witch-f3` waits on the *other* one.
+    That distinction stands: a short rest happens several times a day and
+    an extended rest once, and the two rows are not the same mechanic.
+
+    **Three existing verbs do the work and none was a gap:**
+
+    * `c.unspent(cls=, usage=, attacks=True)` is *"one unexpended `c9`
+      attack power"* -- it walks `Powers.all`, which is the **prepared**
+      list, so it answers the printed *"you have prepared"* rather than
+      the book;
+    * `c.spellbook()` is the book -- `Powers.owned`, the rows held and
+      not prepared, which is a different field for exactly this reason;
+    * `c.prepare(got, instead_of=out)` is the swap, and `Powers.prepare`
+      already puts the replaced row back in the book, because the slot
+      count never changes.
+
+    So the row is a filter between two readers. The filter is written
+    here rather than as a fourth verb because it is one card's arithmetic
+    -- there is no second row printing it.
+
+    **The level constraint is two separate tests and reading it as one
+    gets it wrong.** *"Another power of the same level or lower"* bounds
+    the candidate against the row being replaced; *"the level of the
+    second power must be different from that of any unexpended wizard
+    daily attack power you have prepared"* bounds it against **the rest
+    of the prepared set**, which is why `others` is computed with the
+    outgoing row excluded. A candidate equal in level to the one going
+    back is therefore legal, and one equal to any *other* prepared row is
+    not.
+
+    `c.choose` twice, optional both times, because the card says *"you
+    can"*: a mage with nothing worth swapping declines and the rest is
+    unchanged.
     """
+    def swap_at_rest(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me:
+            return
+        mine = c.unspent(cls="wizard", usage=Usage.DAILY, attacks=True)
+        if not mine:
+            return
+        out = c.choose(mine, "put one daily attack power back",
+                       optional=True, decline="keep what is prepared")
+        if out is None:
+            return
+
+        def level_of(ref: str) -> int:
+            got = get(ref)
+            return got.level if got is not None else 0
+
+        # **The outgoing row excluded**, which is the whole of the second
+        # printed test: its level is free again, every other prepared
+        # row's level is not.
+        others = {level_of(ref) for ref in mine if ref != out}
+        ceiling = level_of(out)
+        wanted = []
+        for ref in c.spellbook():
+            got = get(ref)
+            if got is None or got.cls != "wizard" or got.attack is None:
+                continue
+            if got.usage is not Usage.DAILY:
+                continue
+            if got.level > ceiling or got.level in others:
+                continue
+            wanted.append(ref)
+        if not wanted:
+            return
+        got_one = c.choose(sorted(wanted), "prepare instead",
+                           optional=True, decline="leave the slot empty")
+        if got_one is not None:
+            c.prepare(got_one, instead_of=out)
+
+    c.watch(ShortRested, swap_at_rest, until=When.ENCOUNTER, on=c.me,
+            label=c.ref)
 
 
 def _printed_list(ref: str, how_many: str, into_book: bool) -> object:

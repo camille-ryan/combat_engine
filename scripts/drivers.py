@@ -13761,6 +13761,374 @@ def arena_feat_sharing(out: Result) -> None:
              " nobody would notice")
 
 
+def mage_short_rest_swap(out: Result) -> None:
+    """A mage swaps one prepared daily for one out of its spellbook.
+
+    `cf:wizard-mage-f8`: *"when you take a short rest, you can replace one
+    unexpended `c9` attack power with another from your spellbook of the
+    same level or lower ... the level of the second power must be
+    different from that of any unexpended wizard daily attack power you
+    have prepared."*
+
+    **Played through a real `turns.short_rest`, and it has to be.**
+    `#498` is the precedent and the warning: three class features and
+    five feats were written against `events.ShortRested`, every one
+    audited green, and every one was dead -- because the audit board arms
+    traits and then provokes, and a rest happens *between* encounters.
+    A green audit on this row would be worth nothing, which is why
+    `audit.KNOWN_SILENT` names it and points here.
+
+    Six readings. The first two are the clause; the last four are the two
+    printed level tests, which are **different tests** and which reading
+    the sentence as one gets wrong:
+
+    * the swap happens at the rest: the chosen book row is prepared;
+    * and the row it replaced goes **back into the book**, because the
+      slot count never changes -- `Powers.prepare` already does this, and
+      a row that only appended would give the mage a free power;
+    * a candidate of **higher** level than the one going back is refused;
+    * a candidate whose level matches **another** prepared unexpended
+      daily is refused -- the printed second test;
+    * a candidate whose level matches the row **going back** is allowed,
+      which is the half a single combined test would wrongly refuse;
+    * and an **expended** daily is not offered at all, since the card
+      says *unexpended*.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.turns import short_rest
+
+    ref = "cf:wizard-mage-f8"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+        return
+
+    # Real wizard daily attack rows, picked off the registry rather than
+    # invented, so the filter is reading what a mage would really hold.
+    def dailies(level: int) -> list[str]:
+        from combat_engine.engine.types import Usage
+        return sorted(
+            r for r, p in REGISTRY.items()
+            if p.cls == "wizard" and p.usage is Usage.DAILY
+            and p.attack is not None and p.level == level
+            and not p.unfinished
+        )
+
+    one, five, nine = dailies(1), dailies(5), dailies(9)
+    if len(one) < 3 or len(five) < 2 or len(nine) < 1:
+        out.skip(f"the registry holds {len(one)}/{len(five)}/{len(nine)}"
+                 " wizard daily attacks at levels 1/5/9")
+        return
+
+    def pose(prepared: list[str], book: list[str],
+             spent: tuple[str, ...] = ()) -> Powers:
+        world, me, _ = _board(seed=1)
+        known = world.need(me, Powers)
+        known.known = list(prepared)
+        known.owned = list(book)
+        for ref_ in spent:
+            known.note_use(ref_, world.round)
+        # The body lays the watch; `short_rest` emits the event it is
+        # waiting for, in that order -- which is `turns.short_rest`'s own
+        # ordering and the reason a watch laid at arming time catches it.
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        short_rest(world)
+        return known
+
+    # --- the clause: one prepared level-5, a level-1 in the book.
+    got = pose([five[0]], [one[0]])
+    out.that(one[0] in got.known,
+             f"the book row is prepared at the rest ({one[0]} in the"
+             " prepared list)",
+             f"prepared {got.known}")
+    out.that(five[0] in got.owned and five[0] not in got.known,
+             "and the row it replaced goes back into the book -- the slot"
+             " count never changes, so a mage does not gain a power",
+             f"book {got.owned}")
+
+    # --- too high: a level-9 in the book, a level-5 prepared.
+    higher = pose([five[0]], [nine[0]])
+    out.that(nine[0] not in higher.known,
+             f"a candidate of higher level is refused ({nine[0]} stayed in"
+             " the book) -- *the same level or lower*",
+             f"prepared {higher.known}")
+
+    # --- the second printed test: the candidate's level collides with
+    # another prepared unexpended daily. Prepared: a level-5 (the one
+    # going back) and a level-1; the book offers a different level-1.
+    collide = pose([five[0], one[0]], [one[1]])
+    out.that(one[1] not in collide.known,
+             "a candidate whose level matches ANOTHER prepared unexpended"
+             f" daily is refused ({one[1]} stayed in the book)",
+             f"prepared {collide.known}")
+
+    # --- and the half a single combined test would get wrong: the
+    # candidate's level matches the row GOING BACK, which frees it.
+    freed = pose([one[0]], [one[1]])
+    out.that(one[1] in freed.known,
+             "but a candidate matching the level of the row going BACK is"
+             f" allowed ({one[1]} was prepared) -- that level is free"
+             " again, which is why the two tests cannot be one",
+             f"prepared {freed.known}")
+
+    # --- *unexpended*: the only prepared daily is spent, so there is
+    # nothing to put back and the book row stays where it is.
+    used = pose([five[0]], [one[0]], spent=(five[0],))
+    out.that(one[0] not in used.known,
+             "an expended daily is not offered to be swapped out, so"
+             f" nothing moves ({one[0]} stayed in the book) -- the card"
+             " says *unexpended*",
+             f"prepared {used.known}, book {used.owned}")
+
+
+def sentinel_season_gifts(out: Result) -> None:
+    """Two season gifts that say *"you or your companion"*, and mean it.
+
+    `cf:druid-sentinel-f9s0`: *"when you or your `cf:druid-sentinel-f1`
+    reduces a nonminion enemy to 0 hit points, you and your
+    `cf:druid-sentinel-f1` each regain 10 hit points."*
+    `cf:druid-sentinel-f9s2`: *"the first time each encounter that you or
+    your `cf:druid-sentinel-f1` becomes bloodied, you can use an
+    immediate reaction to become insubstantial and shift up to 5
+    squares."*
+
+    **Both markers were stale on their own premise rather than wrong
+    about the engine.** Each read *"there is no companion on the board
+    (`-f1s0`'s symbol, shared)"*, true when written; `-f1s0` calls
+    `c.call_companion` now, so there is one. The symbol they carried,
+    `chargen.companion_from_option()`, names something that still does
+    not exist -- chargen cannot deal a companion off a `BUILD_OPTIONS`
+    answer -- and neither row ever needed it, because the parent picks
+    the season and grants the beast.
+
+    Which is why this rule poses the beast by hand: the claim is about
+    the two rows reading *"or your companion"*, not about how it arrived.
+
+    Five readings for the heal, and the two controls are the point -- a
+    row crediting only itself and a row crediting everybody look the same
+    from the sentinel's side:
+
+    * the sentinel's own kill heals **both** of them;
+    * the **companion's** kill heals both, which is the half that was
+      dropped;
+    * a **minion** heals neither, since the card says *nonminion*;
+    * and a drop by **somebody else entirely** heals neither.
+
+    Then two for the reaction: the companion being bloodied arms it, and
+    the limit is **one between the two** rather than one each --
+    *"the first time each encounter that you **or** your companion"*.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Bloodied, Dropped
+    from combat_engine.engine.query import enemies, takes_half
+
+    heal, react = "cf:druid-sentinel-f9s0", "cf:druid-sentinel-f9s2"
+    for ref in (heal, react):
+        if ref not in REGISTRY:
+            out.skip(f"{ref} is not declared")
+            return
+
+    def pose(ref: str):  # noqa: ANN202
+        world, me, _ = _board(seed=1)
+        c = Cast(world=world, me=me, ref=ref)
+        pet = c.call_companion(kind="beast")
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        return world, me, pet, c
+
+    def wounded(world, who: int) -> int:  # noqa: ANN001
+        """Halve this creature's hit points, so a 10-point heal fits.
+
+        **Not a fixed subtraction.** The first draft took 20 off, which
+        floors a companion at 1 of 9 maximum -- so `c.heal(10)` capped at
+        the maximum and the assertion `before + 10` failed on a row that
+        was working. A companion's pool is the summoner's bloodied value
+        and is much smaller than a character's.
+        """
+        health = world.need(who, Health)
+        health.max_hp = max(health.max_hp, 40)
+        health.hp = health.max_hp // 2
+        return health.hp
+
+    # ---- the heal, and who it credits
+    world, me, pet, _ = pose(heal)
+    foe = sorted(enemies(world, me))[0]
+    world.need(foe, Health).max_hp = 40          # a nonminion
+    mine, theirs = wounded(world, me), wounded(world, pet)
+    world.bus.emit(Dropped(actor=foe, source=me, dead=True))
+    out.that(world.need(me, Health).hp == mine + 10,
+             "the sentinel's own kill heals the sentinel 10",
+             f"{mine} -> {world.need(me, Health).hp}")
+    out.that(world.need(pet, Health).hp == theirs + 10,
+             "and heals the companion the same 10 -- *you and your"
+             " companion each*",
+             f"{theirs} -> {world.need(pet, Health).hp}")
+
+    # **The companion's kill**, which is the clause that was dropped.
+    world, me, pet, _ = pose(heal)
+    foe = sorted(enemies(world, me))[0]
+    world.need(foe, Health).max_hp = 40
+    mine, theirs = wounded(world, me), wounded(world, pet)
+    world.bus.emit(Dropped(actor=foe, source=pet, dead=True))
+    out.that(world.need(me, Health).hp == mine + 10
+             and world.need(pet, Health).hp == theirs + 10,
+             "the COMPANION's kill heals both of them, which is the half"
+             " the marker was about",
+             f"sentinel {mine} -> {world.need(me, Health).hp}, companion"
+             f" {theirs} -> {world.need(pet, Health).hp}")
+
+    # **A minion**, which the card excludes.
+    world, me, pet, _ = pose(heal)
+    foe = sorted(enemies(world, me))[0]
+    world.need(foe, Health).max_hp = 1
+    mine, theirs = wounded(world, me), wounded(world, pet)
+    world.bus.emit(Dropped(actor=foe, source=me, dead=True))
+    out.that(world.need(me, Health).hp == mine
+             and world.need(pet, Health).hp == theirs,
+             "a minion heals neither of them -- the card says *nonminion*"
+             " and a minion is `max_hp <= 1` here",
+             f"sentinel {world.need(me, Health).hp}, companion"
+             f" {world.need(pet, Health).hp}")
+
+    # **Somebody else's kill**, the control that stops this crediting
+    # every drop in the fight.
+    world, me, pet, _ = pose(heal)
+    foes = sorted(enemies(world, me))
+    world.need(foes[0], Health).max_hp = 40
+    mine, theirs = wounded(world, me), wounded(world, pet)
+    world.bus.emit(Dropped(actor=foes[0], source=foes[-1], dead=True))
+    out.that(world.need(me, Health).hp == mine
+             and world.need(pet, Health).hp == theirs,
+             "and a drop neither of them caused heals neither",
+             f"sentinel {world.need(me, Health).hp}, companion"
+             f" {world.need(pet, Health).hp}")
+
+    # ---- the reaction, and the shared limit
+    world, me, pet, _ = pose(react)
+    # **The row's own ref**, because `c.once_per_board` keys on
+    # `(self.ref, *key)` -- a reader with a driver's ref asks about a
+    # different latch entirely and reports the row never fired.
+    reader = Cast(world=world, me=me, ref=react)
+    world.bus.emit(Bloodied(actor=pet))
+    # `query.takes_half` is the reader -- there is no `c.is_...`, because
+    # insubstantial is a property of the creature and `takes_half` is the
+    # one question the damage path asks about it.
+    out.that(takes_half(world, me),
+             "the COMPANION being bloodied arms the sentinel's reaction --"
+             " the other half the marker named")
+
+    # **One limit across the two**, not one each: the printed *"the first
+    # time each encounter that you OR your companion"*. The sentinel
+    # going down after the companion must not buy a second use, which a
+    # per-creature latch would have allowed.
+    spent = reader.once_per_board(me)
+    out.that(not spent,
+             "and the once-a-board latch is already spent, so the"
+             " sentinel being bloodied next buys nothing -- one limit"
+             " between the two, which is what *you or your companion*"
+             " means")
+
+
+def hexblade_summon_boost(out: Result) -> None:
+    """The +3 lands on the creature `p13649` summoned, and on nothing else.
+
+    `cf:warlock-hexblade-f8`: *"when you summon a creature using
+    `p13649`, it gains a +3 power bonus to damage rolls."*
+
+    **The row was already laying the bonus, and laying it too widely.**
+    It watched `PowerResolved` and then boosted `c.companions()` -- every
+    companion this caster owns -- so a hexblade with a beast from
+    anywhere else had that boosted too. Measured on the audit board: the
+    bonus landed, labelled with this row, on a companion `p13649` had not
+    put down. That is why this rule's **control** is the assertion that
+    matters: a row paying too much reads exactly like a row paying
+    correctly from the recipient's side.
+
+    `events.Summoned` carries `actor`, `summon` and `ref`, which is
+    precisely the three things the printed sentence asks about, so the
+    body infers nothing.
+
+    Four readings:
+
+    * the summoned creature gets the +3, and it is a **power** bonus,
+      because the card prints the word;
+    * a companion that was already there gets **nothing** -- the control;
+    * a summon from a **different** power gets nothing;
+    * and a summon by a **different warlock** gets nothing, which is the
+      two-summoner case `actor` is asked for.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Summoned
+
+    ref = "cf:warlock-hexblade-f8"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+        return
+    SUMMON = "p13649"
+
+    world, me, _ = _board(seed=1)
+    c = Cast(world=world, me=me, ref=ref)
+    # A companion that was already here, which is the control: it must
+    # come out of this untouched.
+    bystander = c.call_companion(kind="beast")
+    REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+    called = c.call_companion(kind="beast", second=True)
+
+    def owed(who: int) -> int:
+        mods = world.get(who, Mods)
+        if mods is None:
+            return 0
+        return sum(m.value for m in mods.items
+                   if m.what == "damage" and m.label.startswith(ref))
+
+    world.bus.emit(Summoned(actor=me, summon=called, ref=SUMMON))
+    out.that(owed(called) == 3,
+             f"the summoned creature gets the +3 ({owed(called)})")
+    out.that(owed(bystander) == 0,
+             "and a companion that was already on the board gets nothing"
+             f" ({owed(bystander)}) -- the control, and the bug the old"
+             " body had: it boosted every companion the caster owned",
+             f"bystander carries {owed(bystander)}")
+
+    mods = world.need(called, Mods)
+    kinds = {m.kind for m in mods.items
+             if m.what == "damage" and m.label.startswith(ref)}
+    out.that(kinds == {"power"},
+             "a POWER bonus, because the card prints the word -- so a"
+             f" second power bonus does not stack with it ({sorted(kinds)})")
+
+    # **A different power, and a different summoner.** Two separate
+    # refusals, both in the body, and neither visible from the board
+    # without asking.
+    world2, me2, _ = _board(seed=1)
+    c2 = Cast(world=world2, me=me2, ref=ref)
+    REGISTRY[ref].body(Cast(world=world2, me=me2, ref=ref))
+    other = c2.call_companion(kind="beast")
+
+    def owed2(who: int) -> int:
+        mods_ = world2.get(who, Mods)
+        return 0 if mods_ is None else sum(
+            m.value for m in mods_.items
+            if m.what == "damage" and m.label.startswith(ref))
+
+    world2.bus.emit(Summoned(actor=me2, summon=other, ref="p99999"))
+    out.that(owed2(other) == 0,
+             "a summon from a different power gets nothing"
+             f" ({owed2(other)})")
+    world2.bus.emit(Summoned(actor=me2 + 1000, summon=other, ref=SUMMON))
+    out.that(owed2(other) == 0,
+             "and a summon by a different warlock gets nothing"
+             f" ({owed2(other)}) -- a party with two summoners would"
+             " otherwise have each boosting the other's")
+
+
 def pull_what_you_hold(out: Result) -> None:
     """Dragging a grabbed creature is a **granted action**, not a flag on
     the grab.
@@ -84084,6 +84452,15 @@ DRIVERS = {
     "pull_what_you_hold": (
         pull_what_you_hold,
         "dragging a grabbed creature is a granted action, offered live"),
+    "hexblade_summon_boost": (
+        hexblade_summon_boost,
+        "the +3 lands on the creature p13649 summoned and nothing else"),
+    "sentinel_season_gifts": (
+        sentinel_season_gifts,
+        "two season gifts that say 'you or your companion' and mean it"),
+    "mage_short_rest_swap": (
+        mage_short_rest_swap,
+        "a mage swaps a prepared daily for one out of its spellbook"),
     "arena_feat_sharing": (
         arena_feat_sharing,
         "a feat bonus for one arena weapon pays with the other"),

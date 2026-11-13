@@ -421,7 +421,6 @@ def sentinel_season_gift(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    dropped=("chargen.companion_from_option()",),
 )
 def sentinel_gift_first(c: Cast) -> None:
     """The first season's gift: dropping a non-minion heals both of you.
@@ -430,25 +429,45 @@ def sentinel_gift_first(c: Cast) -> None:
     0 hit points, you and your `cf:druid-sentinel-f1` each regain 10 hit
     points."*
 
-    **The sentinel's half plays and the companion's does not**, which is
-    why this is `dropped=` rather than `todo=`: `Dropped` carries `actor`
-    and `source`, so "you reduced it" is answerable, and `c.heal` pays the
-    10. What cannot be written is the other two mentions of the companion
-    -- it reducing the enemy, and it being healed -- because there is no
-    companion on the board (`-f1s0`'s symbol, shared).
+    **Written, and the marker went stale on its own premise.** It read
+    *"there is no companion on the board (`-f1s0`'s symbol, shared)"*, and
+    that was true when written. `-f1s0` is written now -- all three
+    seasons call `c.call_companion`, after one missing `associate` branch
+    was added to that verb -- so the companion this row's other two
+    clauses are about is on the board, and `c.companion()` finds it.
+
+    Found by its **premise** rather than by its name: the symbol it
+    carried, `chargen.companion_from_option()`, still names something
+    that does not exist -- chargen cannot deal a companion off a
+    `BUILD_OPTIONS` answer -- and this row never needed it. The parent
+    chooses the season and grants the companion row, so the choice is
+    already made by the time any of this runs.
+
+    All three mentions of the companion now land: it reducing the enemy,
+    and both of them being healed.
 
     *"Nonminion"* is `Health.max_hp > 1`, which is what a minion is in this
     engine. Asked of the creature that went down rather than of its stat
     block, because a minion raised to real hit points by anything would
     not be one.
+
+    **The heal is read per-creature, not paid twice to the sentinel.** A
+    companion that is not on the board leaves the second `c.heal` unmade
+    rather than redirecting it -- which is the difference between a row
+    that works without a beast and one that quietly doubles.
     """
     me, world = c.me, c.world
 
     def on_drop(ev: Dropped) -> None:
-        if getattr(ev, "source", None) != me:
+        # *"You or your companion"*, so the credited source is either.
+        # `c.companion()` is asked at the moment of the drop rather than
+        # at arming: a beast called later in the fight still counts, and
+        # one that has died does not.
+        pet = c.companion()
+        if getattr(ev, "source", None) not in (me, pet):
             return
         victim = getattr(ev, "actor", None)
-        if victim is None or victim == me:
+        if victim is None or victim in (me, pet):
             return
         if team(world, victim) is team(world, me):
             return
@@ -458,6 +477,8 @@ def sentinel_gift_first(c: Cast) -> None:
         if health is None or health.max_hp <= 1:
             return
         c.heal(10, on=me)
+        if pet is not None:
+            c.heal(10, on=pet)
 
     c.watch(Dropped, on_drop, until=When.ENCOUNTER, on=me, label=c.ref)
 
@@ -507,15 +528,19 @@ def sentinel_gift_second(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    dropped=("chargen.companion_from_option()",),
 )
 def sentinel_gift_third(c: Cast) -> None:
     """The third season's gift: becoming insubstantial on being bloodied.
 
-    *"The first time each encounter that you or your living zephyr
-    companion becomes bloodied, you can use an immediate reaction to
-    become insubstantial and shift up to 5 squares. You are insubstantial
-    until the start of your next turn."*
+    *"The first time each encounter that you or your `cf:druid-sentinel-f1`
+    becomes bloodied, you can use an immediate reaction to become
+    insubstantial and shift up to 5 squares. You are insubstantial until
+    the start of your next turn."*
+
+    **The quote used to name the companion's printed species**, two
+    ordinary words in running prose, which is exactly the shape
+    `leaks.py`'s tree-wide walk waives -- so it passed every run. The ref
+    says the same thing and is checkable.
 
     The sentinel's half plays. `c.arm_trigger(Bloodied, ...,
     cost=IMMEDIATE_REACTION)` is the printed action -- a bare watch would
@@ -531,13 +556,26 @@ def sentinel_gift_third(c: Cast) -> None:
     `When.SOTNT` is *"until the start of your next turn"*, clocked on the
     sentinel.
 
-    Dropped: the companion becoming bloodied is the other trigger and
-    there is no companion (`-f1s0`'s symbol, shared).
+    **Written, and the marker was stale on its premise.** It read *"the
+    companion becoming bloodied is the other trigger and there is no
+    companion"*, true when written: `-f1s0` now calls
+    `c.call_companion`, so there is one, and `c.companion()` finds it.
+    The symbol it carried, `chargen.companion_from_option()`, named a
+    chargen writer this row never needed -- the parent picks the season
+    and grants the beast.
+
+    **`once_per_board` is keyed on the sentinel for both triggers**, and
+    that is the printed reading: *"the first time each encounter that you
+    **or** your companion becomes bloodied"* is one limit across the two,
+    not one each. The same argument `content/CLAUDE.md` makes about a
+    once-per-encounter clause spanning the powers it names.
     """
     me = c.me
 
-    def bloodied_me(ev: Any) -> bool:
-        return getattr(ev, "actor", None) == me
+    def bloodied_either(ev: Any) -> bool:
+        # *"You or your companion"*, asked live -- a beast called later in
+        # the fight arms this and one already dead does not.
+        return getattr(ev, "actor", None) in (me, c.companion())
 
     def vanish(ev: Any) -> None:
         if not c.once_per_board(me):
@@ -549,7 +587,7 @@ def sentinel_gift_third(c: Cast) -> None:
 
     from combat_engine.engine.events import Bloodied
 
-    c.arm_trigger(Bloodied, vanish, when=bloodied_me,
+    c.arm_trigger(Bloodied, vanish, when=bloodied_either,
                   cost=ActionType.IMMEDIATE_REACTION,
                   until=When.ENCOUNTER, on=me, label=c.ref)
 

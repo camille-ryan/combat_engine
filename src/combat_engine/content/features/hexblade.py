@@ -62,7 +62,7 @@ from combat_engine.engine import (
     get,
     power,
 )
-from combat_engine.engine.events import PowerResolved, Summoned
+from combat_engine.engine.events import Summoned
 
 #: The summoning row `-f7` grants and `-f8`, `-f10` are about.
 SUMMON = "p13649"
@@ -331,40 +331,51 @@ for _ref in _F2:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("chargen.companion_from_option()",),
 )
 def hexblade_summon_damage(c: Cast) -> None:
     """"When you summon a creature using p13649, it gains a +3 power bonus
     to damage rolls."
 
-    The watch is written and the recipient is not. `PowerResolved` for
-    `p13649` is the moment, and `c.bonus("damage", 3, on=<the summon>,
-    kind="power")` is the whole effect -- but there is **no summon on the
-    board**, because all nineteen creatures `-f7` and `-f10` name are
-    printed names with no ref the importer resolved.
+    **Written, and the marker was wrong about the layer AND about the
+    row.** It carried `chargen.companion_from_option()` -- a chargen
+    writer -- on the reasoning that there is *"no summon on the board,
+    because all nineteen creatures `-f7` and `-f10` name are printed
+    names with no ref the importer resolved"*. Every part of that is now
+    false: `#1268` found the `Associate` table carries the whole block,
+    `etl/build.py` imports it, and `c.summon` has routed an `x10_` ref to
+    `loader.spawn_associate` since `#459`. `p13649` really does put a
+    creature down.
 
-    So the row lays the bonus on whatever the summoning row put down, and
-    lays nothing when it put down nothing -- which is the honest shape:
-    the day the creatures have refs this works unchanged.
+    **And the old body was over-wide in a way nothing reported.** It
+    watched `PowerResolved` and then boosted `c.companions()` -- *every*
+    companion this caster owns -- so a hexblade with a beast from
+    somewhere else had that boosted too, on a card that says *"a creature
+    you summon using `p13649`"*. Measured: the bonus landed, labelled
+    correctly, on a companion `p13649` had not put down. A row paying too
+    much reads exactly like a row paying correctly.
 
-    `c.companions()` is the reader and it answers about **this** caster's
-    own -- which matters, because a party with two summoners would
-    otherwise have each boosting the other's.
+    `events.Summoned` is the right moment and carries the right
+    creature. It was written for this shape of clause -- its own
+    docstring says *"it makes 'when a creature is summoned' writable,
+    which nothing could say before"* -- and it gives `summon` directly,
+    so there is nothing to infer and nothing to over-reach.
+
+    `actor` is asked as well as `ref`, which matters: a party with two
+    summoners would otherwise have each boosting the other's.
 
     `kind="power"` because the card prints the word.
     """
     me = c.me
 
-    def boost(ev: PowerResolved) -> None:
+    def boost(ev: Summoned) -> None:
         if getattr(ev, "actor", None) != me:
             return
-        if getattr(ev, "power", "") != SUMMON:
+        if getattr(ev, "ref", "") != SUMMON:
             return
-        for who in c.companions():
-            c.bonus("damage", 3, on=who, until=When.ENCOUNTER,
-                    kind="power")
+        c.bonus("damage", 3, on=ev.summon, until=When.ENCOUNTER,
+                kind="power")
 
-    c.watch(PowerResolved, boost, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(Summoned, boost, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # -- `-f3`: the weapon itself, seven rows on an existing symbol ------------
