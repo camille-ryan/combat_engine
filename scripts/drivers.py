@@ -45563,19 +45563,34 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
              "without which the assertion above is about one number",
              f"{abilities}")
 
-    # -- the pact weapon joins an existing symbol group -------------------
+    # -- the pact weapon's symbol group, and what is left in it -----------
+    # **This read `9 new and 15 pre-existing, 24 in all` and both halves
+    # have moved**, in the direction the symbol existed to reach: `#730`
+    # dealt the weapon, so the 15 power rows that waited on it declare
+    # their printed Requirement instead and carry no marker. What is left
+    # is the nine chassis rows, whose remaining clause is not the weapon
+    # at all -- see `drivers.pact_weapon`, which pins the dealing.
+    #
+    # Named rather than counted, for the reason the old note gave and
+    # which still holds one direction on: a bare `== 9` would pass just as
+    # happily if nine *different* rows had drifted onto the symbol.
     blade = sorted(r for r, p in REGISTRY.items()
                    if "chargen.pact_blade()" in (p.unfinished or ()))
-    mine = [r for r in blade if "hexblade" in r]
-    out.that(len(mine) == 9 and len(blade) - len(mine) == 15,
-             "NINE pact-weapon rows join `chargen.pact_blade()`, a symbol "
-             "15 rows already waited on, for 24 in all -- reusing it "
-             "rather than minting a synonym is what lets "
-             "`blocked.py --group` price the gap as one piece of work. "
-             "Both halves named: a count of the new rows alone would pass "
-             "if the 15 had quietly been renamed out from under them",
-             f"{len(mine)} new, {len(blade) - len(mine)} pre-existing, "
-             f"{len(blade)} total")
+    out.that(blade == ["cf:warlock-hexblade-f3", "cf:warlock-hexblade-f3s0",
+                       "cf:warlock-hexblade-f3s1", "cf:warlock-hexblade-f3s2",
+                       "cf:warlock-hexblade-f3s3", "cf:warlock-hexblade-f3s4",
+                       "cf:warlock-hexblade-f3s5", "cf:warlock-hexblade-f4",
+                       "cf:warlock-hexblade-f6"],
+             "`chargen.pact_blade()` is down to the NINE chassis rows and "
+             "holds no power row: the 15 that waited on it are dealt a "
+             "weapon now and declare their Requirement against it instead. "
+             "Named rather than counted, so nine other rows drifting onto "
+             "the symbol cannot pass as these nine",
+             f"{len(blade)}: {blade}")
+    out.that(not [r for r in blade if not r.startswith("cf:")],
+             "and nothing but a chassis row waits on it, which is the half "
+             "that says the 15 were finished rather than renamed",
+             f"{[r for r in blade if not r.startswith('cf:')]}")
 
     # -- f4 carried three symbols and one of them has landed --------------
     # It read `len(...) == 3` -- the level, the per-encounter ceiling and
@@ -45623,6 +45638,166 @@ _F1_POWER = {
     "cf:warlock-hexblade-f1s3": "p13679",
     "cf:warlock-hexblade-f1s4": "p13721",
 }
+
+
+def the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers(
+        out: Result) -> None:
+    """`#730`: the pact weapon is dealt, and the Requirement it satisfies.
+
+    Fifteen rows print *"Requirement: You must use this power with your
+    <weapon>"* and for the whole of their life **none of them declared
+    it** -- so every one fired on whatever happened to be in hand. The
+    marker on all fifteen was `chargen.pact_blade()`, and three successive
+    notes in `powers/warlock/level_0.py` argued the weapon "is conjured by
+    another row rather than carried off the weapon table", so there was
+    "no `w:` ref" to match on.
+
+    **Every clause of that was false, which is the half worth asserting.**
+    All six weapons are ordinary rows of the `weapon` table and
+    `chargen.PRINTED` carried every one of them the whole time. What was
+    genuinely missing was a *dealer*, and it is one table plus one call.
+
+    So this rule asserts both directions of the thing that was missing:
+
+    * the weapon **follows the pact**, which is how the hexblade's class
+      page prints it -- one headed section per pact, each naming the
+      weapon that pact grants. `BUILD_OPTIONS` cannot say that, because
+      `_build_options` is handed a hand rather than a build; a free draw
+      would give an infernal hexblade the gloom pact's weapon and refuse
+      all fifteen rows while looking like a character holding its blade.
+    * it is **appended to the loadout, not substituted** -- the first
+      attempt put it in `Build.weapons`, which `spawn` reads as
+      `build.weapons or line.weapons`, so four of the seven legs came out
+      holding a weapon and **no implement**. That is every implement power
+      the class has, and nothing would have said so.
+    * the **chassis** decides, not the leg alone: the base warlock's page
+      and the binder's print no pact-weapon section, so neither manifests
+      one.
+    * and the gate is **load-bearing**, which is the measurement that
+      makes it worth declaring: a dealt hexblade is handed all six pacts'
+      power sets rather than its own pact's, so without `holding` an
+      infernal hexblade could swing the star pact's rows.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine import Build as BuildState
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+
+    #: The pact, the weapon its section names, and one row that requires
+    #: it. Written out rather than derived from `PACT_BLADE`, so the rule
+    #: cannot agree with the table by reading it -- the fault the
+    #: "a rule reading the constant under test" note is about.
+    PACTS = (("infernal", "w3741", "p13680"),
+             ("star", "w3742", "p13722"),
+             ("elemental", "w3752", "p16258"))
+    #: The three the page prints no section for.
+    BARE = ("dark", "sorcerer-king", "vestige")
+
+    def dealt(chassis: str, leg: str,
+              seed: int = 3) -> tuple[list[str], int, World]:
+        world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(seed))
+        eid = chargen.spawn(world, chargen.Character(
+            "warlock", 7, [], build=leg, chassis=chassis), (4, 6))
+        gear = world.get(eid, Gear)
+        assert gear is not None
+        return [w.ref for w in gear.weapons], eid, world
+
+    # -- the weapon follows the pact, and the row it gates fires ----------
+    for leg, want, row in PACTS:
+        held, eid, world = dealt("hexblade", leg)
+        out.that(want in held,
+                 f"a hexblade on the `{leg}` pact is dealt `{want}` -- the "
+                 "weapon its own section names",
+                 f"{held}")
+        gate = REGISTRY[row].requires
+        assert gate is not None
+        out.that(gate(world, eid),
+                 f"so `{row}`'s printed Requirement is satisfied, which "
+                 "nothing could satisfy before",
+                 f"{want} in {held}")
+        # The negative control the whole gate exists for: the other two
+        # pacts' rows refuse themselves on this character.
+        # Bound explicitly. The closure is consumed inside this iteration
+        # so the late binding would be harmless -- but a loop-captured
+        # board is how a rule comes to answer about another one, so it is
+        # not left to luck.
+        def passes(row: str, w: World = world, who: int = eid) -> bool:
+            gate_of = REGISTRY[row].requires
+            return gate_of is not None and gate_of(w, who)
+
+        wrong = [r for other, _w, r in PACTS
+                 if other != leg and passes(r)]
+        out.that(not wrong,
+                 "and the other pacts' rows refuse themselves on it -- the "
+                 "hand holds all six sets, so this gate is what makes five "
+                 "of them inert",
+                 f"{wrong}")
+
+    # -- the implement survives, which the first attempt destroyed -------
+    for leg, _want, _row in PACTS:
+        held, _eid, _world = dealt("hexblade", leg)
+        out.that("w:rod" in held,
+                 f"and the `{leg}` hexblade still holds its implement -- the "
+                 "weapon is appended, never substituted for the loadout",
+                 f"{held}")
+
+    # -- the chassis decides -------------------------------------------
+    for chassis in ("original", "binder"):
+        for leg, want, _row in PACTS:
+            held, _eid, _world = dealt(chassis, leg)
+            out.that(want not in held,
+                     f"a `{chassis}` warlock on `{leg}` manifests nothing -- "
+                     "its class page prints no pact-weapon section",
+                     f"{held}")
+
+    # -- a pact with no printed section gets none ----------------------
+    for leg in BARE:
+        held, _eid, world = dealt("hexblade", leg)
+        blades = sorted(set(held) & set(chargen.PACT_BLADE.values()))
+        out.that(not blades,
+                 f"and a hexblade on `{leg}` manifests nothing either -- the "
+                 "page prints no section for it, which is an answer and not "
+                 "a gap",
+                 f"{blades}")
+
+    # -- the one fork draws both, over seeds ---------------------------
+    forked = {w for seed in range(24)
+              for w in dealt("hexblade", "fey", seed)[0]
+              if w in ("w3740", "w3743")}
+    out.that(forked == {"w3740", "w3743"},
+             "the one pact whose page prints TWO sections draws both over "
+             "24 seeds -- so the variant's three rows are reachable rather "
+             "than merely declared",
+             f"{sorted(forked)}")
+
+    # -- and the choice is recorded where a row can read it ------------
+    _held, eid, world = dealt("hexblade", "infernal")
+    state = world.get(eid, BuildState)
+    assert state is not None
+    mine = sorted(c for c in state.choices if "hexblade-f3:" in c)
+    out.that(mine == ["option:cf:warlock-hexblade-f3:cf:warlock-hexblade-f3s4"],
+             "and the weapon manifested is recorded under the same "
+             "`option:<ref>:<value>` key every other build option uses, so "
+             "`cf:warlock-hexblade-f6`'s six options need no new reader",
+             f"{mine}")
+
+    # -- `rng=None` is the one fixed answer the resolver needs ----------
+    out.that(chargen.deal_pact_weapon(None, "warlock", "hexblade", "fey")
+             == "cf:warlock-hexblade-f3s1",
+             "and `rng=None` answers the first printed section, which is "
+             "the fixed answer per ref `audit.board` and `_build_for` both "
+             "want -- the branch `deal_build_option` already has",
+             f"{chargen.deal_pact_weapon(None, 'warlock', 'hexblade', 'fey')}")
+    out.that(chargen.deal_pact_weapon(Random("x"), "cleric", "hexblade",
+                                      "infernal") == "",
+             "and a class that is not the warlock answers nothing, so the "
+             "table cannot reach a chassis word another class happens to "
+             "share",
+             f"{chargen.deal_pact_weapon(Random('x'), 'cleric', 'hexblade', 'infernal')!r}")
 
 
 def three_more_facilities_the_class_work_asked_for(out: Result) -> None:
@@ -78412,6 +78587,12 @@ DRIVERS = {
         the_hexblades_pact_forks_deal_one_option_without_knowing_which,
         "the hexblade's pact forks deal one option each without knowing"
         " which pact it belongs to (#642, #1264)",
+    ),
+    "pact_weapon": (
+        the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers,
+        "the hexblade's pact weapon follows its pact, joins the loadout"
+        " rather than replacing it, and gates the 15 rows that require"
+        " it (#730)",
     ),
     "sentinel_season": (
         the_sentinels_season_agrees_across_five_parents,

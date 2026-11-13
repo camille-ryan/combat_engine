@@ -4431,6 +4431,87 @@ def deal_build_options(rng: Random | None, ref: str) -> tuple[str, ...]:
     return tuple(sorted(rng.sample(options, pick)))
 
 
+#: The pact weapon a hexblade manifests, by the pact its leg names, as the
+#: sub-option refs of `cf:warlock-hexblade-f3` -- the pact-weapon feature.
+#:
+#: Printed as one headed section per pact on the hexblade's own class page,
+#: each naming the weapon that pact grants, so **the weapon follows the
+#: pact** and a pact the page prints no section for grants none. `dark`,
+#: `sorcerer-king` and `vestige` have no printed section and so manifest
+#: nothing.
+#:
+#: **Six sections are printed and this keys four of them.** One more is a
+#: pact the *base* warlock's page does not print, so it is not a leg in
+#: `BUILDS` and there is nothing here to key it on -- `PACT_BLADE` carries
+#: its weapon anyway, which puts its three rows one `BUILDS` entry away
+#: rather than behind a gap in this table. Adding a leg moves every
+#: warlock draw, so it is a baseline write and its own change. #730.
+#:
+#: The fey pact is the one fork -- the page prints two sections for it, a
+#: plain one and a variant -- so a fey hexblade is dealt one of two.
+#:
+#: Recorded under the same `option:<ref>:<value>` key every other build
+#: option uses, so `Cast.chosen_option` answers it with no new reader.
+PACT_WEAPON: dict[str, tuple[str, ...]] = {
+    "elemental": ("cf:warlock-hexblade-f3s0",),
+    "fey": ("cf:warlock-hexblade-f3s1", "cf:warlock-hexblade-f3s2"),
+    "infernal": ("cf:warlock-hexblade-f3s4",),
+    "star": ("cf:warlock-hexblade-f3s5",),
+}
+
+#: Which weapon each of those sub-options manifests, by ref. The six are
+#: `cf:warlock-hexblade-f3s0`..`s5` in the order `features/hexblade.py`
+#: declares them; this is the half chargen needs, written out rather than
+#: imported, because content is the thing chargen deals.
+PACT_BLADE: dict[str, str] = {
+    "cf:warlock-hexblade-f3s0": "w3752",
+    "cf:warlock-hexblade-f3s1": "w3740",
+    "cf:warlock-hexblade-f3s2": "w3743",
+    "cf:warlock-hexblade-f3s3": "w3744",
+    "cf:warlock-hexblade-f3s4": "w3741",
+    "cf:warlock-hexblade-f3s5": "w3742",
+}
+
+
+def deal_pact_weapon(rng: Random | None, cls: str, chassis: str,
+                     leg: str) -> str:
+    """Which pact-weapon sub-option this character took, or `""`.
+
+    The **hexblade chassis only**: the base warlock's class page prints no
+    pact-weapon section at all and the binder's prints none either, so
+    neither manifests a weapon and both answer `""`. A hexblade on a leg
+    `PACT_WEAPON` has no entry for answers `""` too, which is the printed
+    answer and not a gap -- see that table.
+
+    **`BUILD_OPTIONS` cannot express this, which is why this is its own
+    table and its own dealer.** That dict is keyed on the parent ref alone
+    and `_build_options` is handed a *hand* rather than a build, so an
+    entry on `cf:warlock-hexblade-f3` would deal any of the six weapons to
+    any pact -- an infernal hexblade manifesting the gloom pact's. The
+    printed sections tie the weapon to the pact, and a wrong weapon is
+    worse than none: the 15 powers that name one all print
+    *"Requirement: You must use this power with your <weapon>"*, so a
+    mismatch refuses every one of them while looking like a character that
+    has its blade.
+
+    Uniform over the fork, for `deal_build`'s stated reason: the two fey
+    weapons are ways of playing the pact rather than a better and a worse
+    one, and nothing scores them.
+
+    `rng` of `None` answers the first printed option, which keeps
+    `audit.board`'s one fixed answer per ref -- the same branch
+    `deal_build_option` and `deal_build_options` both have.
+    """
+    if class_word(cls) != "warlock" or chassis != "hexblade":
+        return ""
+    options = PACT_WEAPON.get(leg, ())
+    if not options:
+        return ""
+    if rng is None or len(options) == 1:
+        return options[0]
+    return rng.choice(options)
+
+
 def feats_for(
     cls: str, level: int = 1, build: Build | None = None,
     rng: Random | None = None, powers: list[str] | None = None,
@@ -6068,6 +6149,22 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # sword in the game, in this fight and every later one, and nothing
     # anywhere would say so.
     carried = [replace(w) for w in (build.weapons or line.weapons)]
+    # **The hexblade's pact weapon, appended rather than substituted.** The
+    # feature manifests the blade *beside* the implement -- its card reads
+    # "while you hold your implement in your other hand" -- so putting it
+    # in `Build.weapons` would have taken the rod instead of joining it,
+    # because the line above reads `build.weapons or line.weapons` and the
+    # `or` is a replacement. Measured on the first attempt: four of the
+    # seven warlock legs came out holding a blade and **no implement**,
+    # which is every implement power the class has. #730.
+    pact_option = deal_pact_weapon(
+        Random(f"{world.rng.seed}:{who.cls}:{build.name}:pact-weapon"),
+        who.cls, who.chassis, build.name,
+    )
+    if pact_option:
+        _blade = PRINTED.get(PACT_BLADE[pact_option])
+        if _blade is not None:
+            carried.append(replace(_blade))
     scores = scores_for(line, build)
     if race is not None:
         for ability in race.taken(build):
@@ -6296,6 +6393,14 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 # The pool draw above, under the same `option:` key, so
                 # one reader (`Cast.chosen_option`) answers both. #1114.
                 *swapped_in,
+                # The hexblade's pact weapon, under that same key, so the
+                # six `cf:warlock-hexblade-f6` options can read which one
+                # was manifested without a reader of their own. Drawn by
+                # `deal_pact_weapon` rather than `_build_options` because
+                # the weapon follows the pact and that pass cannot see a
+                # leg -- its docstring has the argument. #730.
+                *((f"option:cf:warlock-hexblade-f3:{pact_option}",)
+                  if pact_option else ()),
             }
         ),
         # **Training, which nothing recorded until #565.** Its own stream,

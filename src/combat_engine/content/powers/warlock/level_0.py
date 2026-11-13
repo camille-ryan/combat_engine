@@ -1,33 +1,30 @@
 """Warlock, level 0: the pact boons and the pact blades.
 
-**Five pact blades, fifteen rows, and none applied its Requirement.** Each set is
-a trio -- two "you must use this power with your <blade>" and one "you must be
-holding" it -- and the blade is conjured by another row rather than carried off
-the weapon table. So `query.holding` has nothing to match: there is no `w:` ref
-for a weapon the character summons.
+**Five pact weapons, fifteen rows, and every one applies its Requirement
+now.** Each set is a trio -- two "you must use this power with your <blade>"
+and one "you must be holding" it -- and all three come to the same question,
+which `holding` below asks.
 
-They play, and what they do not do is refuse a character who is not holding the
-thing. That is one named clause. #236 guessed these "may want a marker rather
-than a predicate", and they do.
+**This note argued for three different symbols and the premise under all
+three was false.** It said the weapon "is conjured by another row rather
+than carried off the weapon table", and therefore that there was "no `w:`
+ref for a weapon the character summons" and that "nothing in the tree
+creates a pact blade at all". Measured: all six are ordinary rows of the
+`weapon` table -- `w3740`, `w3741`, `w3742`, `w3743`, `w3744`, `w3752`, each
+with a group, a hand count and its properties -- and `chargen.PRINTED`
+has carried every one of them the whole time. So the thing to match on was
+always there and three successive notes looked past it: the marker was
+re-argued by name three times and none of the three re-measured its premise.
 
-**This note used to argue the symbol should be `c.as_weapon()`** -- eleven
-other rows waited on it, and a fifteenth name for one gap looked worse.
-`c.as_weapon` has since landed: it adds a weapon profile to `Gear.weapons`
-so `c.w()`, `c.wielding` and `Gear.main` all find it, which is exactly the
-tool a conjured blade needs. Unifying the fifteen markers onto it turned
-`todo.py` red inside one run -- the symbol exists and the rows are still not
-finished.
+What was genuinely missing was the **dealer**: nothing put the weapon into a
+hexblade's `Gear`. `chargen.PACT_WEAPON` does, keyed on the pact the
+character's leg names, because the hexblade's class page prints one headed
+section per pact and each names the weapon that pact grants. So the weapon
+follows the pact, and `chargen.deal_pact_weapon` has the argument for why
+`BUILD_OPTIONS` could not express that.
 
-The reason is a step further back. **Nothing in the tree creates a pact blade
-at all**: this note says the blade "is conjured by another row", and there is
-no such row -- no conjuration, no summon, nothing under `powers/warlock/`
-that calls `c.as_weapon` or puts a blade in a hand. So the verb is available
-and has no caller, the same shape #499 and #501 both have.
-
-`chargen.pact_blade()` is the honest symbol after all: the warlock has to be
-*given* the blade, which is a chargen question, and `c.as_weapon` is what the
-granting row will use once it exists. A fifteenth name is right where the gap
-genuinely is its own.
+#236 guessed these "may want a marker rather than a predicate". It is a
+predicate, and a load-bearing one -- see `holding`.
 
 Nine of these are the free-action boon every pact prints, and all nine share
 one Trigger written twice: `Dropped` with `by_me` for "you reduce an enemy to
@@ -36,19 +33,19 @@ you drops to 0 hit points". `Dropped` carries `source`, so the first half is
 declarable outright rather than routed off `DamageApplied`, which announces
 before the creature is down.
 
-The rest are the weapon rows each pact grants. Every one of them prints
-"Requirement: you must use this power with your <pact blade>". The chassis
-has no gear property for a named weapon, so the requirement is not declared:
-a character who has the row has the blade. The "Special: you can use this
-power as a melee basic attack" line is likewise not declared -- what a
-creature's basic attack *is* lives on `Powers.basic`, and the header has no
-field that sets it.
+The rest are the weapon rows each pact grants, and every one of them prints
+"Requirement: you must use this power with your <pact weapon>", declared as
+`requires=holding("<ref>")`. The "Special: you can use this power as a melee
+basic attack" line is still not declared -- what a creature's basic attack
+*is* lives on `Powers.basic`, and the header has no field that sets it.
 
 Two-type damage -- "cold and psychic damage" -- is one roll and the engine
 types a roll once, so the first printed type carries it.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 from combat_engine.engine import *
 from combat_engine.engine.query import distance_between, team
@@ -62,6 +59,39 @@ ELEMENTS = (
     DamageType.LIGHTNING,
     DamageType.THUNDER,
 )
+
+
+def holding(blade: str) -> Callable[[World, int], bool]:
+    """"Requirement: You must be holding your `<blade>`."
+
+    All fifteen pact-weapon rows print one, in two wordings -- "use this
+    power with your <blade>" and "be holding your <blade>" -- and both
+    come to the same question, which is whether that weapon is in hand.
+    `chargen.PACT_WEAPON` puts it there, keyed on the pact the character's
+    leg names, so there is a weapon ref to match on: all six are ordinary
+    rows of the `weapon` table (`w3740`..`w3752`).
+
+    **Load-bearing rather than decorative, and the measurement is why.** A
+    dealt hexblade is handed **all six** pacts' power sets rather than the
+    one its own pact grants -- measured over four legs, 14 of the 15 rows
+    in every hand -- so without this an infernal hexblade could swing the
+    star pact's rows with whatever was in its hand, and `c.w()` would
+    quietly read that weapon's dice. This is what makes the five sets a
+    character should not have refuse themselves, which is the printed
+    behaviour.
+
+    Narrowing the *hand* is the other half and is a chargen gap rather
+    than this one: a printed Requirement is a per-use gate and reads the
+    same either way.
+    """
+
+    def gate(world: World, eid: int) -> bool:
+        gear = world.get(eid, Gear)
+        return gear is not None and any(w.ref == blade for w in gear.weapons)
+
+    gate.__name__ = f"holding_{blade}"
+    gate.__doc__ = f'"Requirement: ... your `{blade}`."'
+    return gate
 
 
 def _dropped_beside_me(world: World, me: int, ev: Dropped) -> bool:
@@ -219,7 +249,8 @@ def p13679(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3741"),
+    requires_text="you must use this power with your w3741",
 )
 def p13680(c: Cast) -> None:
     victim = c.target
@@ -246,7 +277,8 @@ def p13680(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=FORT),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3741"),
+    requires_text="you must use this power with your w3741",
 )
 def p13681(c: Cast) -> None:
     victim = c.target
@@ -270,7 +302,8 @@ def p13681(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.NECROTIC],
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3741"),
+    requires_text="you must be holding your w3741",
 )
 def p13682(c: Cast) -> None:
     c.flat(
@@ -311,7 +344,8 @@ def p13721(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3742"),
+    requires_text="you must use this power with your w3742",
 )
 def p13722(c: Cast) -> None:
     victim = c.target
@@ -343,7 +377,8 @@ def p13722(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=FORT),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3742"),
+    requires_text="you must use this power with your w3742",
 )
 def p13723(c: Cast) -> None:
     """The destination is named rather than measured, so the teleport is
@@ -368,7 +403,8 @@ def p13723(c: Cast) -> None:
     keywords=ARCANE,
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3742"),
+    requires_text="you must be holding your w3742",
 )
 def p13724(c: Cast) -> None:
     c.blinded(until=When.EONT)
@@ -387,7 +423,8 @@ def p13724(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.WEAPON],
     attack=Attack(CHA, vs=REF),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3743"),
+    requires_text="you must use this power with your w3743",
 )
 def p13746(c: Cast) -> None:
     victim = c.target
@@ -411,7 +448,8 @@ def p13746(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3743"),
+    requires_text="you must use this power with your w3743",
 )
 def p13747(c: Cast) -> None:
     """"While in the aura, your enemies have vulnerable 3 radiant to **your**
@@ -507,7 +545,9 @@ def p13913(c: Cast) -> None:
     """Who is 3 or more squares off is measured once, when the dark settles;
     an unseen-relation cannot re-ask the distance as the fight moves."""
     victim = c.target
-    if c.strike():
+    # Narrowed here rather than at the `distance_between` call: a row with
+    # no target cannot strike either, so one guard is the whole of it.
+    if victim is not None and c.strike():
         c.damage("2d10" if c.level >= 21 else "1d10", c.cha_mod, dtype=DamageType.PSYCHIC)
         for friend in c.allies():
             if distance_between(c.world, friend, victim) >= 3:
@@ -547,7 +587,8 @@ def p13962(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=AC),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3744"),
+    requires_text="you must use this power with your w3744",
 )
 def p13963(c: Cast) -> None:
     if c.strike():
@@ -574,7 +615,8 @@ def p13963(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=REF),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3744"),
+    requires_text="you must use this power with your w3744",
 )
 def p13964(c: Cast) -> None:
     dice = 1 + (c.level >= 13) + (c.level >= 23)
@@ -596,7 +638,8 @@ def p13964(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.NECROTIC, Keyword.PSYCHIC, Keyword.SHADOW],
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3744"),
+    requires_text="you must be holding your w3744",
 )
 def p13965(c: Cast) -> None:
     flat = 5 * (1 + (c.level >= 13) + (c.level >= 23))
@@ -637,7 +680,8 @@ def p16257(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3752"),
+    requires_text="you must use this power with your w3752",
 )
 def p16258(c: Cast) -> None:
     if c.strike():
@@ -655,7 +699,9 @@ def p16258(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON],
     attack=Attack(CHA, vs=REF),
-    dropped=("chargen.pact_blade()", "c.resist(immunity=)"),
+    requires=holding("w3752"),
+    requires_text="you must use this power with your w3752",
+    dropped=("c.resist(immunity=)",),
 )
 def p16259(c: Cast) -> None:
     """"The target loses any resistance or immunity to this power's damage
@@ -714,14 +760,23 @@ def p16259(c: Cast) -> None:
     `i1184p1` prints the same sentence and moved with it.
     """
     dtype = c.choose(list(ELEMENTS), "what this one is made of")
+    # **Guarded once, over the whole body, where it used to guard only the
+    # resist clause.** `c.choose` answers `None` for an empty list or a
+    # declined `optional=`, and this call is neither -- so the three
+    # clauses below could never really see one. But the narrow `if dtype
+    # is not None:` sat around the resist half while `c.damage` and
+    # `_bites` took the same value unchecked, which reads as though the
+    # None case had been thought about and handled. It had not, in two of
+    # three places. Behaviour is unchanged; `types.py` found it. #1155.
+    if dtype is None:
+        return
     dice = 2 + (c.level >= 13) + (c.level >= 23)
     if c.strike():
         c.damage(c.w(dice), c.cha_mod, dtype=dtype)
-        if dtype is not None:
-            foe = c.target
-            standing = c.resistances(on=foe).get(dtype, 0)
-            if standing:
-                c.resist(-standing, dtype, on=foe, until=When.EONT)
+        foe = c.target
+        standing = c.resistances(on=foe).get(dtype, 0)
+        if standing:
+            c.resist(-standing, dtype, on=foe, until=When.EONT)
     ring = c.aura(1, until=When.EONT, on=c.me)
     _bites(c, ring, c.con_mod, dtype, until=When.EONT)
 
@@ -737,7 +792,8 @@ def p16259(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.PSYCHIC],
     trigger="an adjacent enemy attacks you",
     on=ADJACENT_SWING,
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3752"),
+    requires_text="you must be holding your w3752",
 )
 def p16260(c: Cast) -> None:
     flat = 5 * (1 + (c.level >= 17) + (c.level >= 27))

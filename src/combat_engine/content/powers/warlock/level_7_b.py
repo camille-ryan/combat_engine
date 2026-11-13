@@ -25,6 +25,7 @@ say so, the way `level_1.py`'s pact prerequisites already do.
 
 from __future__ import annotations
 
+from combat_engine.content.powers.warlock.level_0 import holding
 from combat_engine.content.powers.warlock.shared import augmenting
 from combat_engine.content.powers.warlock.shared import rally as _rally
 from combat_engine.engine import (
@@ -230,7 +231,8 @@ def p13672(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.PSYCHIC, Keyword.RADIANT],
     trigger=_ADJACENT_ATTACKED_ME,
     on=Trigger(AttackDeclared, when=_adjacent_attacker, text=_ADJACENT_ATTACKED_ME),
-    dropped=("chargen.pact_blade()",),
+    requires=holding("w3743"),
+    requires_text="you must use this power with your w3743",
 )
 def p13752(c: Cast) -> None:
     """Its Requirement names one particular sword; see `p13672`."""
