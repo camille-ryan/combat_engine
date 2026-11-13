@@ -1266,6 +1266,8 @@
   "EffectExpired(actor=8, what='e102[dead, end of encounter]', why='encounter over')",
   "ConditionEnded(target=7, condition=<Condition.DEAD: 'dead'>, why='encounter over')",
   "EffectExpired(actor=7, what='e104[dead, end of encounter]', why='encounter over')",
+  "SurgeSpent(actor=1, left=10, healed=7)",
+  "SurgeSpent(actor=3, left=5, healed=6)",
   "ShortRested(actor=1)",
   "ShortRested(actor=2)",
   "ShortRested(actor=3)",
