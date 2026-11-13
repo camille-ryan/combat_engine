@@ -4684,6 +4684,12 @@ EXTRA_PICKS: dict[str, str] = {
     # rest.
     "cf:fighter-knight-f10": "cf:fighter-knight-f22",
     "cf:fighter-slayer-f6": "cf:fighter-slayer-f18",
+    # And a fourth at 17th on each, which is out of the levels this
+    # project imports and is entered anyway: the rows exist, they are
+    # made by the same helper as the 7th-level ones, and leaving them
+    # out would have the row claim to be finished while adding nothing.
+    "cf:fighter-knight-f16": "cf:fighter-knight-f22",
+    "cf:fighter-slayer-f11": "cf:fighter-slayer-f18",
     # The thief's tricks: two at 1st, a third at 4th, a fourth at 7th
     # and a fifth at 17th.
     "cf:rogue-thief-f7": "cf:rogue-thief-f22",

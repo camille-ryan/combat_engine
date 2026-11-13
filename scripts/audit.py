@@ -656,6 +656,37 @@ KNOWN_SILENT = {
                          " chargen's and this row has no body",
     "cf:rogue-thief-f15": "adds a pick to another row's fork; the pick is"
                           " chargen's and this row has no body",
+    "cf:fighter-knight-f16": "adds a pick to another row's fork; the pick"
+                             " is chargen's and this row has no body",
+    "cf:fighter-slayer-f11": "adds a pick to another row's fork; the pick"
+                             " is chargen's and this row has no body",
+    # **The forks themselves, where the board already holds what they
+    # deal.** Same reason as the recovered lists above: these grant from
+    # a family the hand carries, so the grant is a no-op here. Each is
+    # proved against a dealt character by a rule that a draw cannot move
+    # -- `drivers.extra_picks` for the two knack forks,
+    # `drivers.sentinel_season` for the season.
+    "cf:ranger-hunter-f20": "grants the knacks it dealt; the board's"
+                            " ranger holds all five already",
+    "cf:ranger-scout-f17": "grants the knacks it dealt; the board's"
+                           " ranger holds all five already",
+    "cf:druid-sentinel-f13": "grants the options it dealt; the board's"
+                             " druid holds them already",
+    # The pact weapon's six options have no body at all: the weapon is
+    # dealt by `chargen.PACT_BLADE`, which is the whole of their effect.
+    # `drivers.pact_weapon` proves all six.
+    "cf:warlock-hexblade-f3s0": "the weapon is dealt by chargen; this"
+                                " option has no body",
+    "cf:warlock-hexblade-f3s1": "the weapon is dealt by chargen; this"
+                                " option has no body",
+    "cf:warlock-hexblade-f3s2": "the weapon is dealt by chargen; this"
+                                " option has no body",
+    "cf:warlock-hexblade-f3s3": "the weapon is dealt by chargen; this"
+                                " option has no body",
+    "cf:warlock-hexblade-f3s4": "the weapon is dealt by chargen; this"
+                                " option has no body",
+    "cf:warlock-hexblade-f3s5": "the weapon is dealt by chargen; this"
+                                " option has no body",
     "f1741": "applies a shield bonus; the board's fighter holds no shield",
     "f2860": "applies a shield bonus; the board's fighter holds no shield",
     "f949": "trades a shield bonus away; the board's fighter holds none",
