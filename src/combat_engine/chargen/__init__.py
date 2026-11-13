@@ -4213,6 +4213,96 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
         "p13621",
         "p13622",
     ),
+    # **The mage's eleven recovered lists.** Every one printed *"you add
+    # two of the following powers to your spellbook"* or *"you gain
+    # two/three of the following powers of your choice"* and then, in the
+    # import, nothing -- so all eleven carried `defect=` and a mage was
+    # **refused** every ladder rung it has. Not a thin character: no
+    # at-will, no cantrip, no daily, no utility, nothing at any level.
+    #
+    # The page prints each list under an ALL-CAPS banner naming the level
+    # and the usage, and each feature's printed NAME names the same two
+    # things -- so the pairing is read rather than guessed, which is the
+    # third time in this chassis work that the printed name held what the
+    # columns did not. Options are this class's already-imported power
+    # names found inside the banner's own section, so a boundary read
+    # wrongly cannot invent a power; second cards (`p…b`) are excluded,
+    # being a card rather than a choice. `#1268`.
+    # level 1, daily: 3 printed, 2 taken.
+    "cf:wizard-mage-f9": (
+        "p12740",
+        "p3216",
+        "p451",
+    ),
+    # level 1, encounter: 3 printed, 2 taken.
+    "cf:wizard-mage-f10": (
+        "p10138",
+        "p12739",
+        "p159",
+    ),
+    # level 1, at-will: 6 printed, 2 taken.
+    "cf:wizard-mage-f11": (
+        "p12732",
+        "p12733",
+        "p12734",
+        "p12735",
+        "p12736",
+        "p12737",
+    ),
+    # level 0, cantrip: 5 printed, 3 taken.
+    "cf:wizard-mage-f12": (
+        "p1217",
+        "p1225",
+        "p1227",
+        "p12731",
+        "p1930",
+    ),
+    # level 2, utility: 4 printed, 2 taken.
+    "cf:wizard-mage-f13": (
+        "p10143",
+        "p1212",
+        "p1235",
+        "p12742",
+    ),
+    # level 3, encounter: 3 printed, 2 taken.
+    "cf:wizard-mage-f14": (
+        "p12743",
+        "p1530",
+        "p3218",
+    ),
+    # level 5, daily: 3 printed, 2 taken.
+    "cf:wizard-mage-f15": (
+        "p12744",
+        "p1553",
+        "p4074",
+    ),
+    # level 6, utility: 4 printed, 2 taken.
+    "cf:wizard-mage-f16": (
+        "p1208",
+        "p1229",
+        "p2273",
+        "p6902",
+    ),
+    # level 7, encounter: 3 printed, 2 taken.
+    "cf:wizard-mage-f17": (
+        "p10146",
+        "p12745",
+        "p251",
+    ),
+    # level 9, daily: 3 printed, 2 taken.
+    "cf:wizard-mage-f18": (
+        "p12746",
+        "p12748",
+        "p191",
+    ),
+    # level 10, utility: 5 printed, 2 taken.
+    "cf:wizard-mage-f19": (
+        "p12749",
+        "p1543",
+        "p2274",
+        "p2838",
+        "p513",
+    ),
     "cf:ranger-hunter-f22": ('p13607', 'p13609'),
     "cf:ranger-hunter-f23": (
         "p13610",
@@ -4490,6 +4580,18 @@ OPTION_PICKS: dict[str, int] = {
     # aspect lists, one per ranger chassis -- see `BUILD_OPTIONS`.
     "cf:ranger-hunter-f19": 2,
     "cf:ranger-scout-f16": 2,
+    # The mage's ladder -- see `BUILD_OPTIONS`.
+    "cf:wizard-mage-f9": 2,
+    "cf:wizard-mage-f10": 2,
+    "cf:wizard-mage-f11": 2,
+    "cf:wizard-mage-f12": 3,
+    "cf:wizard-mage-f13": 2,
+    "cf:wizard-mage-f14": 2,
+    "cf:wizard-mage-f15": 2,
+    "cf:wizard-mage-f16": 2,
+    "cf:wizard-mage-f17": 2,
+    "cf:wizard-mage-f18": 2,
+    "cf:wizard-mage-f19": 2,
 }
 
 

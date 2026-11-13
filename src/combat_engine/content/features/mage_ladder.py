@@ -234,6 +234,51 @@ def mage_recall(c: Cast) -> None:
     """
 
 
+def _printed_list(ref: str, how_many: str, into_book: bool) -> object:
+    """One of the eleven rows whose list was printed and not imported.
+
+    Every one read *"you add two of the following powers to your
+    spellbook"* or *"you gain two (or three) of the following powers of
+    your choice"* and then listed nothing, so every one carried
+    `defect=` -- which **refuses** a row. A mage was therefore refused
+    every rung of its ladder at once: no at-will, no cantrip, no daily,
+    no utility, at any level. That is not a thin character, it is no
+    character.
+
+    The spec lists nothing; the class page lists all eleven, each under
+    an ALL-CAPS banner naming a level and a usage. Each feature's
+    printed NAME names the same two things, so the pairing is read
+    rather than guessed -- the third time in this chassis work that the
+    printed name held what the columns did not. `chargen.BUILD_OPTIONS`
+    carries the options and `chargen.OPTION_PICKS` how many are taken.
+    `#1268`.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="wizard",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.ARCANE],
+    )
+    def row(c: Cast) -> None:
+        for took in c.chosen_options(ref):
+            c.grant_row(took, on=c.me, until=When.ENCOUNTER)
+
+    row.__name__ = "mage_list_" + ref.rsplit("-f", 1)[-1]
+    verb = "add" if into_book else "gain"
+    tail = " to your spellbook" if into_book else " of your choice"
+    row.__doc__ = (
+        f'*"You {verb} {how_many} of the following powers{tail}."*\n\n'
+        f"The list is recovered from the printed page -- see "
+        f"`_printed_list`. `#1268`."
+    )
+    return row
+
+
 def _no_list(ref: str, how_many: str, into_book: bool) -> object:
     """One of the twenty-one rows naming a list the import did not carry."""
 
@@ -261,13 +306,22 @@ def _no_list(ref: str, how_many: str, into_book: bool) -> object:
     return row
 
 
-#: Nineteen rows add two powers to the book and two give a count of
-#: powers outright. Every one of the twenty-one prints no list.
-for _n in (9, 10, *range(13, 30)):
+#: **Eleven of the twenty-one have their list back**, and they are the
+#: eleven inside the levels this project imports. The ten above them
+#: stay `defect=` honestly: the page prints their lists too, but the
+#: powers in them are above `MAX_POWER_LEVEL` and so are not in the
+#: database to be chosen. That is a different sentence from "the spec
+#: lists nothing", and it is the true one for those ten.
+for _n in (*range(13, 20),):
+    globals()[f"mage_list_{_n}"] = _printed_list(
+        f"cf:wizard-mage-f{_n}", "two", True)
+for _n in range(20, 30):
     globals()[f"mage_no_list_{_n}"] = _no_list(
         f"cf:wizard-mage-f{_n}", "two", True)
-mage_no_list_11 = _no_list("cf:wizard-mage-f11", "two", False)
-mage_no_list_12 = _no_list("cf:wizard-mage-f12", "three", False)
+mage_list_9 = _printed_list("cf:wizard-mage-f9", "two", True)
+mage_list_10 = _printed_list("cf:wizard-mage-f10", "two", True)
+mage_list_11 = _printed_list("cf:wizard-mage-f11", "two", False)
+mage_list_12 = _printed_list("cf:wizard-mage-f12", "three", False)
 
 
 # -- and the arcanist's last two orb masteries ------------------------------

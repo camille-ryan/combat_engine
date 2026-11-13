@@ -46026,6 +46026,142 @@ def the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers(
              f"{len(bare)}: {bare}")
 
 
+def the_mages_whole_ladder_was_refused_for_a_list_the_page_prints(
+        out: Result) -> None:
+    """Eleven rungs, every one `defect=`, and the page printed all of them.
+
+    `cf:wizard-mage-f9`..`f19` each read *"you add two of the following
+    powers to your spellbook"* or *"you gain two (or three) of the
+    following powers of your choice"* and then listed nothing. All
+    eleven carried `defect=`, which **refuses** a row -- so a mage was
+    refused every rung of its ladder at once: no at-will, no cantrip, no
+    daily, no utility, at any level. Not a thin character; no character.
+
+    The spec lists nothing. The class page lists all eleven, each under
+    an ALL-CAPS banner naming a level and a usage, and each feature's
+    printed **name** names the same two things -- so each list is paired
+    with its feature by reading rather than by guessing. That is the
+    third time in this chassis work that the printed name carried what
+    the columns did not, after `#1261`'s level and `#1264`'s pact.
+
+    What this asserts is the pairing, which is the half that could be
+    wrong in a way nothing else would catch: a list attached to the
+    neighbouring rung would deal real powers of the wrong level, and
+    every other check here would pass.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen, db, levels
+    from combat_engine.engine import Build as BuildState
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.dsl import REGISTRY, usable
+
+    g = db.game()
+    RUNGS = tuple(f"cf:wizard-mage-f{n}" for n in range(9, 20))
+    #: What each rung's own printed name states, as a (column, value)
+    #: against the `power` table. Written out rather than parsed off the
+    #: name, because the name is a printed string and may not live here.
+    #:
+    #: **Two columns and not one**, which the first draft got wrong: the
+    #: banner word is sometimes a *usage* (at-will, encounter, daily) and
+    #: sometimes a *kind* (utility, cantrips). A utility power's usage is
+    #: encounter or daily, so asking `usage == "utility"` fails every
+    #: option of three rungs that are perfectly correct -- the check
+    #: indicting the data, which is the thing this file warns about.
+    WANTS = {9: ("usage", "daily"), 10: ("usage", "encounter"),
+             11: ("usage", "at-will"), 12: ("kind", "Utility"),
+             13: ("kind", "Utility"), 14: ("usage", "encounter"),
+             15: ("usage", "daily"), 16: ("kind", "Utility"),
+             17: ("usage", "encounter"), 18: ("usage", "daily"),
+             19: ("kind", "Utility")}
+
+    world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(6))
+    eid = chargen.spawn(world, chargen.Character(
+        "wizard", 10, [], chassis="mage"), (4, 6))
+    state = world.get(eid, BuildState)
+    assert state is not None
+
+    refused = [r for r in RUNGS if not usable(world, eid, REGISTRY[r])[0]]
+    out.that(not refused,
+             "all ELEVEN mage rungs are usable, where `defect=` refused "
+             "every one of them and left a mage with no at-will, no "
+             "cantrip, no daily and no utility at any level",
+             f"{refused}")
+
+    # **The printed numbers, written out.** Reading them from
+    # `OPTION_PICKS` is reading the constant under test: setting the
+    # cantrips to one and asking the table what it should be gives one,
+    # and the check passes while a mage loses two cantrips. Caught by
+    # planting exactly that, which is why the literal is here.
+    PRINTS = {9: 2, 10: 2, 11: 2, 12: 3, 13: 2, 14: 2,
+              15: 2, 16: 2, 17: 2, 18: 2, 19: 2}
+    short = {}
+    for r in RUNGS:
+        head = f"option:{r}:"
+        took = [c[len(head):] for c in state.choices if c.startswith(head)]
+        want = PRINTS[int(r.rsplit("-f", 1)[-1])]
+        if len(took) != want:
+            short[r] = (len(took), want)
+    out.that(not short,
+             "and each deals the number its own card prints -- two for "
+             "ten of them and three for the cantrips, counted against the "
+             "printed figure and not against the table that sets it",
+             f"{short}")
+
+    # -- the pairing, which is what could be silently wrong -------------
+    off = []
+    for r in RUNGS:
+        n = int(r.rsplit("-f", 1)[-1])
+        want_level = levels.level_of(r)
+        column, value = WANTS[n]
+        for o in chargen.BUILD_OPTIONS[r]:
+            row = g.execute(
+                "select class, level, usage, kind from power where ref = ?",
+                (o,)).fetchone()
+            if row is None:
+                off.append((r, o, "not a power"))
+                continue
+            cls, lvl, usage, kind = row[0], row[1], row[2], row[3]
+            # The cantrips are level 0 and the at-wills level 1, and both
+            # features are printed at the mage's 1st level -- so a level
+            # mismatch of exactly that shape is the card, not an error.
+            level_ok = lvl == want_level or (want_level == 1 and lvl == 0)
+            said = usage if column == "usage" else kind
+            if (cls or "").lower() != "wizard" or not level_ok \
+                    or not (said or "").startswith(value):
+                off.append((r, o, f"{cls}/{lvl}/{usage}/{kind}"))
+    out.that(not off,
+             "and every option is a WIZARD power at the level and usage "
+             "its rung's own printed name states -- the half a list "
+             "attached to the neighbouring rung would break while every "
+             "other check here still passed",
+             f"{off[:4] or 'none'}")
+
+    # -- the ten above the import stay refused, and honestly ------------
+    above = tuple(f"cf:wizard-mage-f{n}" for n in range(20, 30))
+    still = [r for r in above
+             if r in REGISTRY and not usable(world, eid, REGISTRY[r])[0]]
+    out.that(len(still) == len(above),
+             "while the ten rungs ABOVE the levels this project imports "
+             "stay refused -- their lists are printed too, and the powers "
+             "in them are not in the database to be chosen, which is a "
+             "different sentence from 'the spec lists nothing' and the "
+             "true one for those ten",
+             f"{len(still)} of {len(above)}")
+
+    # -- and no rung shares a list with another --------------------------
+    seen: dict[str, str] = {}
+    shared = []
+    for r in RUNGS:
+        key = ",".join(chargen.BUILD_OPTIONS[r])
+        if key in seen:
+            shared.append((seen[key], r))
+        seen[key] = r
+    out.that(not shared,
+             "and no two rungs carry the same list, which is what a "
+             "section boundary read one banner too far produces",
+             f"{shared}")
+
+
 def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
         out: Result) -> None:
     """`#1268` again, on the ranger: *"you gain one additional X"*.
@@ -46182,23 +46318,36 @@ def three_more_facilities_the_class_work_asked_for(out: Result) -> None:
     from combat_engine.engine.components import Ident
     from combat_engine.engine.dsl import REGISTRY
 
-    # -- OPTION_PICKS: two, and DISTINCT ---------------------------------
+    # -- OPTION_PICKS: more than one, and DISTINCT -----------------------
+    # **This said "every fork deals TWO" and one deals three.** The
+    # cantrip rung prints *"you gain three of the following powers"*, so
+    # the claim was about the three cards that carried the table when it
+    # was written rather than about the table. Named instead: every fork
+    # deals two except the one that prints three, which is the shape a
+    # bare `== 2` could not say and a bare `> 1` would not catch.
     picks = sorted(chargen.OPTION_PICKS)
-    out.that(picks and all(chargen.OPTION_PICKS[r] == 2 for r in picks),
-             "every fork in `OPTION_PICKS` deals two, which is what the "
-             "three cards carrying it print",
+    THREE = "cf:wizard-mage-f12"
+    out.that(picks
+             and all(chargen.OPTION_PICKS[r] == 2 for r in picks
+                     if r != THREE)
+             and chargen.OPTION_PICKS.get(THREE) == 3,
+             "every fork in `OPTION_PICKS` deals two except the cantrip "
+             "rung, which prints three -- the one card carrying this "
+             "table that does not say two, named so a fourth number "
+             "cannot arrive unremarked",
              f"{ {r.rsplit('-', 1)[-1]: chargen.OPTION_PICKS[r] for r in picks} }")
     bad, pairs = [], {}
     for ref in picks:
+        want = chargen.OPTION_PICKS[ref]
         drawn = {chargen.deal_build_options(Random(s), ref) for s in range(30)}
         pairs[ref] = len(drawn)
         for got in drawn:
-            if len(got) != 2 or len(set(got)) != 2:
+            if len(got) != want or len(set(got)) != want:
                 bad.append((ref, got))
     out.that(not bad,
-             "and every draw is TWO DISTINCT options -- `rng.sample`, which "
-             "is the whole reason this is a count on one fork rather than "
-             "a second `BUILD_OPTIONS` entry: two entries are two "
+             "and every draw is that many DISTINCT options -- `rng.sample`, "
+             "which is the whole reason this is a count on one fork rather "
+             "than a second `BUILD_OPTIONS` entry: two entries are two "
              "independent draws and could hand the same option over twice",
              f"{bad[:3] or 'none repeated over 30 seeds each'}")
     out.that(all(n > 1 for n in pairs.values()),
@@ -46387,11 +46536,13 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
         if all((g.execute("select level from power where ref = ?",
                           (o,)).fetchone() or (None,))[0] == 0
                for o in chargen.BUILD_OPTIONS[p]))
-    out.that(granted == ["cf:ranger-hunter-f19", "cf:ranger-scout-f16"],
-             "and exactly two forks draw entirely from level 0 -- the two "
-             "ranger aspect lists. Named, so the allowance above cannot "
-             "quietly widen to cover a fork whose options really did come "
-             "from the wrong section",
+    out.that(granted == ["cf:ranger-hunter-f19", "cf:ranger-scout-f16",
+                         "cf:wizard-mage-f12"],
+             "and exactly three forks draw entirely from level 0 -- the "
+             "two ranger aspect lists and the mage's cantrips, which are "
+             "the families a character is GIVEN rather than drawing. "
+             "Named, so the allowance above cannot quietly widen to cover "
+             "a fork whose options really did come from the wrong section",
              f"{granted}")
 
     # -- the pact summons ------------------------------------------------
@@ -79030,6 +79181,11 @@ DRIVERS = {
         the_hexblades_pact_forks_deal_one_option_without_knowing_which,
         "the hexblade's pact forks deal one option each, and it is the"
         " one its pact prescribes (#642, #1264)",
+    ),
+    "mage_ladder": (
+        the_mages_whole_ladder_was_refused_for_a_list_the_page_prints,
+        "the mage's eleven ladder rungs were all defect= for lists the"
+        " page prints, and each list pairs with its own rung (#1268)",
     ),
     "extra_picks": (
         a_later_row_adds_one_more_pick_of_an_earlier_rows_fork,

@@ -620,6 +620,15 @@ KNOWN_SILENT = {
                             " the character all eight before the body runs",
     "cf:ranger-scout-f16": "grants the aspects it dealt; the board hands"
                            " the character all eight before the body runs",
+    # **The one rung of eleven that is silent, and for the board's
+    # reason.** The other ten grant powers the board's wizard does not
+    # already hold; the cantrips are level 0, so `loadout` hands them
+    # over with the rest of the hand before any body runs and
+    # `c.grant_row` has nothing to add. Its ten siblings fire, which is
+    # what says the recovered list works. `drivers.mage_ladder` proves
+    # this one against a dealt mage.
+    "cf:wizard-mage-f12": "grants the cantrips it dealt; they are level 0,"
+                          " so the board's wizard holds them already",
     "f1741": "applies a shield bonus; the board's fighter holds no shield",
     "f2860": "applies a shield bonus; the board's fighter holds no shield",
     "f949": "trades a shield bonus away; the board's fighter holds none",
