@@ -59,6 +59,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Health
 from combat_engine.engine.events import Hit
+from combat_engine.engine.query import holding
 from combat_engine.engine.triggers import about_me
 
 #: The three guilds, each with the three powers it hands over. Written out
@@ -81,6 +82,11 @@ _SHOOTER_GROUPS = ("bow",)
 #: row in this tree prints this table. Contrast `features/thief.py`, where
 #: the card says outright to read the scoundrel's.
 SNEAK = "cf:assassin-executioner-f1"
+
+#: The scout's Dexterity swap, which `-f2s2` extends to its two superior
+#: weapons. An executioner holds it only by multiclassing, so the clause
+#: asks rather than assuming.
+SCOUT_DEXTERITY = "cf:ranger-scout-f0"
 
 
 def _with_a_quiet_weapon(c: Cast) -> Any:
@@ -219,7 +225,8 @@ def executioner_guild(c: Cast) -> None:
 
 
 def _guild(ref: str, extra: tuple[str, ...] = (),
-           opens: tuple[str, ...] = ()) -> Any:
+           opens: tuple[str, ...] = (),
+           extends_scout: tuple[str, ...] = ()) -> Any:
     """One guild: three powers kept and the other six taken away.
 
     The one helper the global rule allows, for a run of rows that share a
@@ -269,6 +276,29 @@ def _guild(ref: str, extra: tuple[str, ...] = (),
                 continue
             for gone in theirs:
                 c.forbid(gone, on=me, until=When.ENCOUNTER)
+        if extends_scout and c.feat(SCOUT_DEXTERITY):
+            # *"Your `cf:ranger-scout-f0` class feature also applies to
+            # `w3750` and <the blade>."* That feature is
+            # `c.rolls_with("mba", Ability.DEX)` and already covers **any**
+            # melee basic attack, so what this sentence adds is the
+            # **ranged** one: the blade is thrown, and a thrown basic
+            # attack is an `rba`.
+            #
+            # `when=` is `c.rolls_with`'s own `(world, eid)` gate, which
+            # its docstring names this exact case for -- *"while wielding
+            # a bow"*. Asked live, so putting the weapon away takes the
+            # swap with it.
+            #
+            # Gated on actually holding the scout's feature, because an
+            # executioner has it only by multiclassing and the sentence is
+            # about *your* `cf:ranger-scout-f0`.
+            arms = tuple(extends_scout)
+
+            def with_one_of_ours(world: Any, eid: int) -> bool:
+                return any(holding(world, eid, arm) for arm in arms)
+
+            c.rolls_with("rba", Ability.DEX, on=me, until=When.ENCOUNTER,
+                         when=with_one_of_ours)
 
     row.__name__ = "executioner_guild_" + ref.rsplit("s", 1)[-1]
     row.__doc__ = (
@@ -304,20 +334,25 @@ executioner_guild_2 = _guild(
     # shared one would report both ready the day either landed. Neither is
     # the proficiency the old marker named:
     #
-    # * *"your `cf:ranger-scout-f0` class feature also applies to `w3750`
-    #   and <the blade>"* -- that feature is `c.rolls_with("mba",
-    #   Ability.DEX)`, which already covers any melee basic attack, so what
-    #   the sentence adds is a **ranged** basic attack with a thrown blade.
-    #   `c.rolls_with` keys on `"mba"` and `"rba"` separately and nothing
-    #   narrows either by weapon.
-    # * *"your assassin poisons that can be applied to ammunition can also
-    #   be applied to <the blade>"* -- `chargen.POISON_VIALS` deals the
-    #   vials and nothing records which weapon a vial may be put on.
+    # **The scout clause is written now** -- see `extends_scout` in the
+    # helper -- and only the poison one is left.
     #
-    # Both are conditional on a multiclass character actually holding the
-    # scout's feature, which an executioner does not by default.
-    ("c.rolls_with(rba, weapon=)", "chargen.poison_on_weapon()"),
-    opens=("w3632", "w3750"))
+    # *"Your assassin poisons that can be applied to ammunition can also be
+    # applied to <the blade>."* `c.apply_poison` exists and takes a
+    # `groups=` narrowing, so widening what may be coated is not the gap.
+    # The gap is the sentence's own **precondition**: it is about poisons
+    # that can be applied to *ammunition*, and coating ammunition is the
+    # one thing that verb declines outright -- its docstring says the hold
+    # is keyed on a `Weapon` and *"the choice would be between two
+    # different kinds of thing"*, with `Gear.quiver` and `c.ammunition`
+    # waiting on the other side.
+    #
+    # So the symbol names that, rather than a widening that would have
+    # nothing to widen: until a poison can go on a piece of ammunition,
+    # there is no set of poisons for this clause to pick out.
+    ("c.apply_poison(ammunition=)",),
+    opens=("w3632", "w3750"),
+    extends_scout=("w3632", "w3750"))
 
 
 @power(

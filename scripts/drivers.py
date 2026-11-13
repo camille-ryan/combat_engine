@@ -80175,6 +80175,7 @@ def a_chosen_option_opens_its_printed_weapons(out: Result) -> None:
 
     third = "cf:assassin-executioner-f2s2"
     fork = "cf:assassin-executioner-f2"
+    SCOUT = "cf:ranger-scout-f0"
     opens = ("w3632", "w3750")
 
     out.that(tuple(REGISTRY[third].proficiency) == opens,
@@ -80230,6 +80231,52 @@ def a_chosen_option_opens_its_printed_weapons(out: Result) -> None:
     # ones that chose another guild. An assertion there would pass for the
     # wrong reason, which is worse than none. `chargen.proficiency` above
     # is the reader, and the plant is the other two guilds opening nothing.
+
+    # -- the scout clause, which the same option extends -------------
+    #
+    # *"Your `cf:ranger-scout-f0` class feature also applies to `w3750`
+    # and <the blade>."* That feature already covers **any** melee basic
+    # attack, so what this adds is the **ranged** one -- the blade is
+    # thrown. Gated on actually holding the scout's feature, since an
+    # executioner has it only by multiclassing.
+    from combat_engine.engine.components import Gear, Powers, Weapon
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.types import Ability
+
+    def swapped(with_scout: bool, armed: bool) -> bool:
+        world, me, _ = _board(third, 1)
+        known = world.need(me, Powers)
+        known.known = [r for r in known.known if r != SCOUT]
+        if with_scout:
+            known.known.append(SCOUT)
+        gear = world.need(me, Gear)
+        gear.weapons = [
+            Weapon(ref="w3632" if armed else "w:drivers-plain",
+                   damage="1d4", proficiency=3, group="light blade",
+                   hands="one-handed", thrown=(5, 10)),
+        ]
+        gear.stowed = set()
+        use(world, me, third, spend=False)
+        # **Read the way `Attack.ability_for` reads it**, which is the one
+        # reader: `Powers.rolls[ref]` holds `(ability, when)` pairs and the
+        # `when` is a live `(world, eid)` gate. Asking the store rather
+        # than a `Cast` property, because there is no reader verb for
+        # "which ability does this row roll for me".
+        store = world.need(me, Powers).rolls.get("rba", ())
+        return any(
+            ability is Ability.DEX and (when is None or when(world, me))
+            for ability, when in store
+        )
+
+    out.that(swapped(with_scout=True, armed=True),
+             "holding the scout's feature and one of the two weapons, a"
+             " ranged basic attack rolls Dexterity")
+    out.that(not swapped(with_scout=False, armed=True),
+             "PLANT: without the scout's feature it does not -- the"
+             " sentence is about *your* `cf:ranger-scout-f0`")
+    out.that(not swapped(with_scout=True, armed=False),
+             "PLANT: and with the feature but a different weapon in hand it"
+             " does not either -- the `when=` gate is asked live")
 
     # **Neither weapon is inside what the class already allows**, or the
     # clause would be a restatement rather than a permission. Asked of the
