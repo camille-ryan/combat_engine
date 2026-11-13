@@ -79517,6 +79517,102 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def a_pact_weapon_takes_the_implements_magic(out: Result) -> None:
+    """`cf:warlock-hexblade-f3`: *"your pact weapon shares your implement's
+    enhancement bonus, critical hit effect, properties, and powers."*
+
+    The row carried `c.shares_enhancement()` -- **one symbol over four
+    printed facilities**, which `content/CLAUDE.md` forbids for the reason
+    this rule demonstrates: it could not have gone green or red correctly
+    for any one of them, and the `properties` quarter was writable the
+    whole time.
+
+    **Three of the four are one write.** A magic weapon here is a printed
+    base weapon with a `Magic` laid on it -- `Weapon.item` names which
+    item, `Weapon.enhancement` carries the plus -- and every reader of a
+    crit rider or of an item's own rows goes through those two. So
+    `c.shares_magic` copies them rather than imitating three things
+    separately: the crit rider is `Magic.crit`, resolved off the item, and
+    the item's rows are `Magic.powers`, already in `Powers.known` while it
+    is worn -- so what the sentence adds is that they may be used
+    **through** this weapon, which naming the item is what says.
+
+    Five things asserted:
+
+    * the enhancement crosses;
+    * the item crosses, which is what carries the crit effect and the
+      item's rows;
+    * the properties are **unioned**, not replaced -- the pact weapon
+      keeps its own printed grip;
+    * a plain implement shares nothing, so the verb answers False rather
+      than blanking the weapon -- the plant;
+    * and the blade is found **by ref** and not by `Gear.main`, which on
+      this board answers the implement first.
+    """
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import use
+
+    ref = "cf:warlock-hexblade-f3"
+    blades = set(chargen.PACT_BLADE.values())
+
+    def posed(magic: bool):  # noqa: ANN202
+        world, me, _ = _board(ref, 1)
+        gear = world.need(me, Gear)
+        imp = gear.implement
+        assert imp is not None, "the board's hexblade carries no implement"
+        at = gear.weapons.index(imp)
+        gear.weapons[at] = (
+            replace(imp, enhancement=2, item="i:drivers-focus",
+                    properties=imp.properties | {"drivers-shared"})
+            if magic else replace(imp, enhancement=0, item="",
+                                  properties=frozenset())
+        )
+        blade = next((w for w in gear.held if w.ref in blades), None)
+        assert blade is not None, "no pact weapon in hand"
+        was = (blade.enhancement, blade.item, frozenset(blade.properties))
+        use(world, me, ref, spend=False)
+        now = next(w for w in gear.held if w.ref in blades)
+        return was, now, gear
+
+    was, now, gear = posed(magic=True)
+    out.that(now.enhancement == 2,
+             f"the implement's enhancement crosses to the pact weapon"
+             f" ({was[0]} -> {now.enhancement})")
+    out.that(now.item == "i:drivers-focus",
+             f"and so does the item, which is what carries the crit rider"
+             f" and the item's own rows ({was[1]!r} -> {now.item!r})")
+    out.that("drivers-shared" in now.properties
+             and was[2] <= now.properties,
+             "the properties are unioned, so the pact weapon keeps its own"
+             f" printed grip ({sorted(was[2])} -> {sorted(now.properties)})")
+    # **Found by ref, and `Gear.main` is not a safe substitute even
+    # though it happens to answer the blade here.** `main` returns
+    # `melee[0]`, which depends on the order the hand was dealt in; the
+    # pact weapon is whichever of `chargen.PACT_BLADE`'s six this
+    # character's pact took, which is a fact about the character.
+    out.that(any(w.ref in blades for w in gear.held),
+             f"the pact weapon is found among the held weapons by ref"
+             f" ({[w.ref for w in gear.held]})")
+    out.that(len(blades) == 6,
+             f"and the table it is matched against is the six printed pact"
+             f" weapons ({len(blades)})")
+
+    # **PLANT: a plain implement must leave the weapon exactly as it
+    # was** -- not blank it. The board's hexblade is dealt a pact weapon
+    # that already carries magic of its own, so "shares nothing" is
+    # "unchanged" and the first draft asserted `0, ''` and failed on the
+    # board's own numbers.
+    was2, plain, _g2 = posed(magic=False)
+    out.that((plain.enhancement, plain.item, frozenset(plain.properties))
+             == was2,
+             "PLANT: a plain implement shares nothing and the pact weapon"
+             f" is untouched ({was2[0]}, {was2[1]!r} unchanged)")
+
+
 def the_protector_pays_for_its_summon(out: Result) -> None:
     """`cf:druid-protector-f3`: one printed bargain, both halves.
 
@@ -81505,6 +81601,11 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "pact_magic": (
+        a_pact_weapon_takes_the_implements_magic,
+        "the pact weapon takes the implement's enhancement, item and"
+        " properties in one write (#1276)",
     ),
     "protector_ladder": (
         the_protector_pays_for_its_summon,

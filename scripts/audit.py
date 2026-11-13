@@ -665,6 +665,18 @@ KNOWN_SILENT = {
     # `c.feat`, and here the reader is the predicate beside it. #553 is why
     # that guard exists and it is right; this is the case it does not fit.
     # `drivers.miss_bladespell` proves both arms and plants the gate.
+    # **Nothing to share on a board where every implement is plain.**
+    # `cf:warlock-hexblade-f3` hands the pact weapon the implement's
+    # enhancement, item and properties, and `chargen` deals plain
+    # implements -- `Weapon.enhancement` 0, no `item` -- so
+    # `c.shares_magic` correctly answers False and lays nothing. The
+    # clause pays the moment the hexblade holds a magic implement.
+    # `drivers.pact_magic` gives it one, and plants the other arm: a plain
+    # implement must leave the weapon untouched rather than blanking it.
+    "cf:warlock-hexblade-f3": "shares a magic implement's enhancement,"
+                              " item and properties; everything chargen"
+                              " deals is plain, so there is nothing to"
+                              " share",
     # **The orb's two options each need something the board does not
     # supply**, measured three ways while writing `drivers.orb_mastery`:
     # `c.suffering()` is empty, so there is no save-ends effect of this

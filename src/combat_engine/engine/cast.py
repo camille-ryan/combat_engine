@@ -17360,6 +17360,60 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         )
         return True
 
+    def shares_magic(
+        self, weapon: Weapon, *, from_: Weapon, on: int | None = None,
+    ) -> bool:
+        """"Your pact weapon shares your implement's enhancement bonus,
+        critical hit effect, properties, and powers."
+
+        `cf:warlock-hexblade-f3`, which carried `c.shares_enhancement()` --
+        one symbol over four printed facilities, so it could not have gone
+        green or red correctly for any of them.
+
+        **Three of the four are one write, because they all resolve through
+        the same two fields.** A magic weapon in this engine is a printed
+        base weapon with a `Magic` laid on it -- `Weapon.item` names which
+        item, `Weapon.enhancement` carries the plus -- and every reader of
+        a crit rider or an item's rows goes through those. So copying them
+        across hands the weapon the implement's *whole* magic rather than
+        three separate imitations of it:
+
+        * the **enhancement** is `Weapon.enhancement`, read by
+          `Cast._enhancement_of` and by the attack path;
+        * the **critical effect** is `Magic.crit`, which `equipment`
+          resolves off the item -- so naming the item is what carries it,
+          and a copied dice string would have been a fourth place for the
+          same number to drift;
+        * the **powers** are `Magic.powers`, which go into `Powers.known`
+          while the item is worn -- so they are *already* known, and what
+          the sentence adds is that they may be used **through** this
+          weapon, which naming the item is exactly what says.
+
+        The **properties** are the one genuinely separate field, unioned
+        rather than replaced: the pact weapon keeps its own printed grip
+        and reach and gains the implement's.
+
+        **In place, which is the same argument `c.weapon_dice` makes.**
+        `Gear.weapons` holds per-character `replace(w)` copies, so this
+        edits one character's weapon and not the module-level singleton --
+        and that is why there is no `until=`: a card that un-shares would
+        need the originals kept, and none prints one. *"The weapon cannot
+        be enchanted"* is the printed reason the sharing is the only magic
+        it will ever have.
+
+        Returns False when there is nothing to share, so a row can tell a
+        plain implement from an absent one.
+        """
+        who = on if on is not None else self.me
+        if self.world.get(who, Gear) is None:
+            return False
+        if not (from_.enhancement or from_.item or from_.properties):
+            return False
+        weapon.enhancement = from_.enhancement
+        weapon.item = from_.item
+        weapon.properties = weapon.properties | from_.properties
+        return True
+
     def gains_proficiency(self, *refs: str, on: int | None = None) -> int:
         """"If you are not already proficient with these weapons, you gain
         proficiency with them." Returns how many were newly permitted.

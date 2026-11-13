@@ -49,12 +49,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.chargen import PACT_BLADE
 from combat_engine.engine import (
     ENCOUNTER,
     NO_TARGET,
     PERSONAL,
     ActionType,
     Cast,
+    Gear,
     Keyword,
     When,
     get,
@@ -368,7 +370,8 @@ def hexblade_summon_damage(c: Cast) -> None:
 # -- the pact weapon: seven rows on an existing symbol ----------------------
 
 
-def _pact_blade(ref: str, what: str, *, marks: tuple[str, ...] = ()) -> Any:
+def _pact_blade(ref: str, what: str, *, marks: tuple[str, ...] = (),
+                shares: bool = False) -> Any:
     """One of the pact-weapon rows.
 
     **The weapon is dealt now, and these used to say it could not be.**
@@ -403,7 +406,28 @@ def _pact_blade(ref: str, what: str, *, marks: tuple[str, ...] = ()) -> Any:
         todo=marks,
     )
     def row(c: Cast) -> None:
-        pass
+        if not shares:
+            return
+        # *"Your pact weapon shares your implement's enhancement bonus,
+        # critical hit effect, properties, and powers."* Three of the four
+        # resolve through `Weapon.item` and `Weapon.enhancement`, which is
+        # what `c.shares_magic` copies -- see that verb for why naming the
+        # item carries the crit rider and the item's own rows rather than
+        # imitating them.
+        #
+        # **The blade is found by ref and not by `Gear.main`.** A hexblade
+        # holds an implement and a blade, and which one `main` answers
+        # depends on the order they were dealt in; the pact weapon is
+        # whichever of `chargen.PACT_BLADE`'s six this character's pact
+        # took, which is a fact about the character rather than the hand.
+        gear = c.world.get(c.me, Gear)
+        if gear is None:
+            return
+        blades = set(PACT_BLADE.values())
+        blade = next((w for w in gear.held if w.ref in blades), None)
+        focus = gear.implement
+        if blade is not None and focus is not None:
+            c.shares_magic(blade, from_=focus, on=c.me)
 
     row.__name__ = "hexblade_blade_" + ref.rsplit("-f", 1)[-1].replace("s", "_")
     row.__doc__ = f"{what}\n\nThe helper above has the argument."
@@ -412,16 +436,11 @@ def _pact_blade(ref: str, what: str, *, marks: tuple[str, ...] = ()) -> Any:
 
 hexblade_blade_3 = _pact_blade(
     "cf:warlock-hexblade-f3",
-    "The pact weapon itself. The weapon is dealt -- see the helper -- and "
-    "what is still missing is the rest of the printed sentence: it is "
-    "manifested as a minor action while an implement is in the other "
-    "hand, shares that implement's enhancement, critical effect, "
-    "properties and powers, and is gone when either is let go.",
-    # **A narrower symbol than the one this used to carry**, naming what
-    # is actually left rather than the weapon. The weapon arrives; what
-    # no facility does is make one carried item take another's
-    # enhancement and properties for as long as both are held.
-    marks=("c.shares_enhancement()",))
+    "The pact weapon itself, and the implement's magic that rides it. "
+    "The weapon is dealt -- see the helper -- and the sharing is "
+    "`c.shares_magic`, which carries the enhancement, the critical "
+    "effect, the item's own rows and the properties in one write.",
+    shares=True)
 for _n, _w in enumerate(("w3752", "w3740", "w3743", "w3744", "w3741", "w3742")):
     globals()[f"hexblade_blade_3_{_n}"] = _pact_blade(
         f"cf:warlock-hexblade-f3s{_n}",
