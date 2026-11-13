@@ -424,6 +424,111 @@ def hexblade_another_use(c: Cast) -> None:
 # -- the nineteen summoned creatures, and the nine lists --------------------
 
 
+def _printed_pick(ref: str, options: tuple[str, ...], what: str) -> Any:
+    """A row printing *"one of the following powers"* with the list recovered.
+
+    These carried `defect=` saying the spec *"lists nothing, so there is no
+    set to choose from"*. The **spec** lists nothing; the compendium's class
+    page prints the list immediately after the sentence, and every power in
+    it is already imported. So the marker was describing the import rather
+    than the source. `#1268`.
+
+    How each list was recovered, and why it is a join rather than a parse:
+    the page carries a `LEVEL N <CHASSIS> <USAGE> POWER` banner above the
+    sentence, so a section is bounded on both sides; within it, the options
+    are found by asking which of **this class's already-imported power
+    names at that level** appear in the section. Presence of a known name,
+    never a guess at where an unknown one ends -- so a boundary read wrongly
+    cannot invent a power. The join is on `(level, usage)` from the banner
+    against `combat_engine.levels` on this ref, and it **refuses** rather
+    than guessing wherever the number of features at a level does not match
+    the number of printed sections: the sentinel prints two level-1 banners
+    (at-will and daily) and an earlier pass gave both features the first
+    list.
+
+    `chargen.BUILD_OPTIONS` carries the options and `c.chosen_option` reads
+    the draw, which is the arrangement the pact forks already use -- and
+    `c.grant_row` grants a power ref as readily as a feature one.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="warlock",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.ARCANE],
+    )
+    def row(c: Cast) -> None:
+        c.grant_row(c.chosen_option(ref) or options[0], on=c.me,
+                    until=When.ENCOUNTER)
+
+    row.__name__ = "hexblade_pick_" + ref.rsplit("-f", 1)[-1]
+    row.__doc__ = (
+        f'*"You gain one of the following powers of your choice."* {what}\n\n'
+        f"{len(options)} options, recovered from the printed page rather "
+        f"than from the spec -- see `_printed_pick`. `#1268`."
+    )
+    return row
+
+
+def _summon_option(ref: str) -> Any:
+    """One `-f7` option whose creature `p13649` summons.
+
+    A pointer: the creature is named here and fielded there, because
+    `p13649` is the row that summons and no modifier can reach into
+    another row's `c.summon` call. The binder's `-f12` prints the same
+    seven creatures and `features/binder.py` has the identical helper --
+    two chassis, one list, and `p13649` names both chassis' refs in each
+    of its seven branches.
+
+    What these were marked with was wrong three times over: the
+    compendium's `Associate` table carries the block, `etl/build.py`
+    imports it into `associate`, and `c.summon` has routed an `x10_` ref
+    to `loader.spawn_associate` since `#459`. `#1268`.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="warlock",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.ARCANE],
+        implemented_in=("p13649",),
+    )
+    def row(c: Cast) -> None:
+        pass
+
+    row.__name__ = ("hexblade_summon_"
+                    + ref.rsplit("-f", 1)[-1].replace("s", "_"))
+    row.__doc__ = (
+        '*"You can use `p13649` to summon a creature."*\n\n'
+        "Written into `p13649`, which reads which option the character "
+        "holds and fields the matching `associate` block. `#1268`."
+    )
+    return row
+
+
+_SUMMON_OPTIONS = (
+    "cf:warlock-hexblade-f7s0",
+    "cf:warlock-hexblade-f7s1",
+    "cf:warlock-hexblade-f7s4",
+    "cf:warlock-hexblade-f7s5",
+    "cf:warlock-hexblade-f7s6",
+    "cf:warlock-hexblade-f7s7",
+    "cf:warlock-hexblade-f7s8",
+)
+
+for _r in _SUMMON_OPTIONS:
+    globals()["hexblade_summon_"
+              + _r.rsplit("-f", 1)[-1].replace("s", "_")] = _summon_option(_r)
+
+
 def _defective(ref: str, why: str) -> Any:
     """A row naming something no ref resolves."""
 
@@ -451,18 +556,9 @@ def _defective(ref: str, why: str) -> Any:
 #: because a creature summoned by `p13649` needs a stat block the summon
 #: can read and these refs are a power and five associates, not monsters.
 _SUMMONS = {
-    "cf:warlock-hexblade-f7s0": "a creature named and not referenced",
-    "cf:warlock-hexblade-f7s1": "a creature named and not referenced",
     "cf:warlock-hexblade-f7s2": "p13680, which is a POWER and not a creature",
     "cf:warlock-hexblade-f7s3": "a creature named and not referenced, in "
                                 "four elemental variants chosen on a d4",
-    "cf:warlock-hexblade-f7s4": "x10_6, an associate and not a monster",
-    "cf:warlock-hexblade-f7s5": "a creature named and not referenced",
-    "cf:warlock-hexblade-f7s6": "x10_8, an associate and not a monster",
-    "cf:warlock-hexblade-f7s7": "a creature named and not referenced",
-    "cf:warlock-hexblade-f7s8": "a creature named and not referenced, and "
-                                "gated on holding w3743, which is not a "
-                                "declared weapon either",
     "cf:warlock-hexblade-f10s0": "a creature named and not referenced",
     "cf:warlock-hexblade-f10s1": "a creature named and not referenced",
     "cf:warlock-hexblade-f10s2": "a creature named and not referenced",
@@ -497,7 +593,32 @@ hexblade_defect_9 = _defective(
 _NO_LIST = ("the spec reads 'you gain one of the following powers of your "
             "choice' and then lists nothing, so there is no set to choose "
             "from")
-for _n in (11, 12, 13, 14, 15, 17):
+# **The in-scope ones had their list recovered from the page.**
+# `#1268`: the spec lists nothing, the class page prints the list
+# straight after the sentence, and every power in it is already
+# imported. The rest are printed above level 10, which this
+# project does not import, so they keep the marker.
+hexblade_pick_11 = _printed_pick(
+    "cf:warlock-hexblade-f11",
+    ('p13635', 'p13636', 'p13637'),
+    "The level-1 daily list.")
+hexblade_pick_12 = _printed_pick(
+    "cf:warlock-hexblade-f12",
+    ('p13638', 'p13640', 'p1923'),
+    "The level-2 utility list.")
+hexblade_pick_13 = _printed_pick(
+    "cf:warlock-hexblade-f13",
+    ('p13642b', 'p13644', 'p13645'),
+    "The level-5 daily list.")
+hexblade_pick_14 = _printed_pick(
+    "cf:warlock-hexblade-f14",
+    ('p13646', 'p13648', 'p2264'),
+    "The level-6 utility list.")
+hexblade_pick_15 = _printed_pick(
+    "cf:warlock-hexblade-f15",
+    ('p13650b', 'p13652', 'p13653'),
+    "The level-10 utility list.")
+for _n in (17,):
     globals()[f"hexblade_defect_{_n}"] = _defective(
         f"cf:warlock-hexblade-f{_n}", _NO_LIST)
 for _n in (16, 18, 19):

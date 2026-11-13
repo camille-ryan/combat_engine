@@ -579,6 +579,40 @@ binder_pick_23 = _pick(
 # -- the thirty-one rows the import cannot supply ---------------------------
 
 
+def _summon_option(ref: str) -> Any:
+    """One `-f12` option whose creature `p13649` summons.
+
+    A pointer: the creature is named here and fielded there, because
+    `p13649` is the row that does the summoning and no modifier can reach
+    into another row's `c.summon` call. `implemented_in=` says so, and
+    `p13649`'s body names each of these refs in its own source -- which is
+    what `lint.py` requires of a pointer and is why the mapping is seven
+    `c.feat` branches there rather than a dict here.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="warlock",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.ARCANE],
+        implemented_in=(SUMMON,),
+    )
+    def row(c: Cast) -> None:
+        pass
+
+    row.__name__ = "binder_summon_" + ref.rsplit("-f", 1)[-1].replace("s", "_")
+    row.__doc__ = (
+        f'*"You can use `{SUMMON}` to summon a creature."*\n\n'
+        f"Written into `{SUMMON}`, which reads which option the character "
+        f"holds and fields the matching `associate` block. `#1268`."
+    )
+    return row
+
+
 def _defective(ref: str, why: str) -> Any:
     """A row naming something no ref resolves."""
 
@@ -610,11 +644,17 @@ _NAMED = ("a creature named and not referenced, so there is no stat block "
 _AS_REF = ("the ref the spec gives is an associate or a power rather than "
            "a monster, so there is no stat block the summon can field")
 
-for _base in (12, 21):
-    for _i in range(9):
-        _r = f"cf:warlock-binder-f{_base}s{_i}"
-        globals()["binder_defect_" + _r.rsplit("-f", 1)[-1].replace("s", "_")] = (
-            _defective(_r, _AS_REF if _i in (2, 4, 6) else _NAMED))
+# `-f21`'s nine keep the marker: they are the 19th-level fork, above the
+# level this project imports, so nothing there is reachable either way.
+for _i in range(9):
+    _r = f"cf:warlock-binder-f21s{_i}"
+    globals()["binder_defect_" + _r.rsplit("-f", 1)[-1].replace("s", "_")] = (
+        _defective(_r, _AS_REF if _i in (2, 4, 6) else _NAMED))
+# and the two `-f12` options whose creature resolves to nothing at all
+for _i in (2, 3):
+    _r = f"cf:warlock-binder-f12s{_i}"
+    globals()["binder_defect_" + _r.rsplit("-f", 1)[-1].replace("s", "_")] = (
+        _defective(_r, _AS_REF if _i == 2 else _NAMED))
 
 #: The twelve later pact options, every one a printed power name with no
 #: ref. Four forks of three, and the pattern is what makes it worth a
@@ -637,3 +677,28 @@ binder_defect_19 = _defective(
     "-f9 power' -- a slash-joined pair of FEATURE refs where a power ref "
     "belongs, one of them this row itself. `cf:warlock-hexblade-f9` carries "
     "the identical spec, so the two chassis share one unresolved line")
+
+
+#: **The seven `-f12` options whose creature resolves.** Each prints *"you
+#: can use `p13649` to summon a <creature>"*, and every one was `defect=`
+#: on the ground that the creature had no stat block. Three clauses, all
+#: false: the compendium's `Associate` table carries the whole block,
+#: `etl/build.py` imports it into `associate`, and `c.summon` has routed an
+#: `x10_` ref to `loader.spawn_associate` since `#459`. Measured -- all
+#: seven spawn, each at the summoner's bloodied value.
+#:
+#: The clause lives in `p13649`, which reads which of these the character
+#: holds, so these are pointers. `#1268`.
+_RESOLVED = (
+    "cf:warlock-binder-f12s0",
+    "cf:warlock-binder-f12s1",
+    "cf:warlock-binder-f12s4",
+    "cf:warlock-binder-f12s5",
+    "cf:warlock-binder-f12s6",
+    "cf:warlock-binder-f12s7",
+    "cf:warlock-binder-f12s8",
+)
+
+for _r in _RESOLVED:
+    globals()["binder_summon_" + _r.rsplit("-f", 1)[-1].replace("s", "_")] = (
+        _summon_option(_r))

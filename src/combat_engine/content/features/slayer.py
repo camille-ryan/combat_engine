@@ -601,6 +601,56 @@ slayer_another_stance_11 = _another_stance("cf:fighter-slayer-f11")
 # -- the six rows the import cannot supply -----------------------------------
 
 
+def _printed_pick(ref: str, options: tuple[str, ...], what: str) -> Any:
+    """A row printing *"one of the following powers"* with the list recovered.
+
+    These carried `defect=` saying the spec *"lists nothing, so there is no
+    set to choose from"*. The **spec** lists nothing; the compendium's class
+    page prints the list immediately after the sentence, and every power in
+    it is already imported. So the marker was describing the import rather
+    than the source. `#1268`.
+
+    How each list was recovered, and why it is a join rather than a parse:
+    the page carries a `LEVEL N <CHASSIS> <USAGE> POWER` banner above the
+    sentence, so a section is bounded on both sides; within it, the options
+    are found by asking which of **this class's already-imported power
+    names at that level** appear in the section. Presence of a known name,
+    never a guess at where an unknown one ends -- so a boundary read wrongly
+    cannot invent a power. The join is on `(level, usage)` from the banner
+    against `combat_engine.levels` on this ref, and it **refuses** rather
+    than guessing wherever the number of features at a level does not match
+    the number of printed sections: the sentinel prints two level-1 banners
+    (at-will and daily) and an earlier pass gave both features the first
+    list.
+
+    `chargen.BUILD_OPTIONS` carries the options and `c.chosen_option` reads
+    the draw, which is the arrangement the pact forks already use -- and
+    `c.grant_row` grants a power ref as readily as a feature one.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="fighter",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.MARTIAL],
+    )
+    def row(c: Cast) -> None:
+        c.grant_row(c.chosen_option(ref) or options[0], on=c.me,
+                    until=When.ENCOUNTER)
+
+    row.__name__ = "slayer_pick_" + ref.rsplit("-f", 1)[-1]
+    row.__doc__ = (
+        f'*"You gain one of the following powers of your choice."* {what}\n\n'
+        f"{len(options)} options, recovered from the printed page rather "
+        f"than from the spec -- see `_printed_pick`. `#1268`."
+    )
+    return row
+
+
 def _defective(ref: str, why: str) -> Any:
     """One of the six rows whose printed text is missing what it names.
 
@@ -644,20 +694,16 @@ slayer_defect_13 = _defective(
 slayer_defect_18 = _defective(
     "cf:fighter-slayer-f18",
     "the spec reads 'you gain two of the following powers of your choice' "
-    "and then lists nothing, so there is no set to choose from",
-)
-slayer_defect_19 = _defective(
+    "and then lists nothing, so there is no set to choose from")
+slayer_pick_19 = _printed_pick(
     "cf:fighter-slayer-f19",
-    "the spec reads 'you gain one of the following powers of your choice' "
-    "and then lists nothing, so there is no set to choose from",
-)
-slayer_defect_20 = _defective(
+    ('p12671', 'p12693', 'p12695', 'p12696'),
+    "The level-2 utility list.")
+slayer_pick_20 = _printed_pick(
     "cf:fighter-slayer-f20",
-    "the spec reads 'you gain one of the following powers of your choice' "
-    "and then lists nothing, so there is no set to choose from",
-)
-slayer_defect_22 = _defective(
+    ('p12698', 'p12699', 'p12700', 'p12701'),
+    "The level-6 utility list.")
+slayer_pick_22 = _printed_pick(
     "cf:fighter-slayer-f22",
-    "the spec reads 'you gain one of the following powers of your choice' "
-    "and then lists nothing, so there is no set to choose from",
-)
+    ('p12702', 'p12703', 'p12704', 'p12705'),
+    "The level-10 utility list.")

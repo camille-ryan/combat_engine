@@ -169,6 +169,56 @@ def _grant(ref: str, got: str) -> Any:
     return row
 
 
+def _printed_pick(ref: str, options: tuple[str, ...], what: str) -> Any:
+    """A row printing *"one of the following powers"* with the list recovered.
+
+    These carried `defect=` saying the spec *"lists nothing, so there is no
+    set to choose from"*. The **spec** lists nothing; the compendium's class
+    page prints the list immediately after the sentence, and every power in
+    it is already imported. So the marker was describing the import rather
+    than the source. `#1268`.
+
+    How each list was recovered, and why it is a join rather than a parse:
+    the page carries a `LEVEL N <CHASSIS> <USAGE> POWER` banner above the
+    sentence, so a section is bounded on both sides; within it, the options
+    are found by asking which of **this class's already-imported power
+    names at that level** appear in the section. Presence of a known name,
+    never a guess at where an unknown one ends -- so a boundary read wrongly
+    cannot invent a power. The join is on `(level, usage)` from the banner
+    against `combat_engine.levels` on this ref, and it **refuses** rather
+    than guessing wherever the number of features at a level does not match
+    the number of printed sections: the sentinel prints two level-1 banners
+    (at-will and daily) and an earlier pass gave both features the first
+    list.
+
+    `chargen.BUILD_OPTIONS` carries the options and `c.chosen_option` reads
+    the draw, which is the arrangement the pact forks already use -- and
+    `c.grant_row` grants a power ref as readily as a feature one.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="cleric",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.DIVINE],
+    )
+    def row(c: Cast) -> None:
+        c.grant_row(c.chosen_option(ref) or options[0], on=c.me,
+                    until=When.ENCOUNTER)
+
+    row.__name__ = "warpriest_pick_" + ref.rsplit("-f", 1)[-1]
+    row.__doc__ = (
+        f'*"You gain one of the following powers of your choice."* {what}\n\n'
+        f"{len(options)} options, recovered from the printed page rather "
+        f"than from the spec -- see `_printed_pick`. `#1268`."
+    )
+    return row
+
+
 def _defective(ref: str, why: str) -> Any:
     """A row naming something no ref resolves."""
 
@@ -681,7 +731,36 @@ for _base, _count in ((9, 9), (10, 9), (11, 9), (12, 8)):
 _NO_LIST = ("the spec reads 'you gain one of the following powers of your "
             "choice' and then lists nothing, so there is no set to choose "
             "from")
-for _n in (13, 14, 15, 16, 17, 18, 20, 22):
+# **Six of the twelve had their list recovered from the page.**
+# `#1268`: the spec lists nothing, the class page prints the list
+# straight after the sentence, and every power in it is imported.
+# The other six are above level 10, which this project does not
+# import, so they keep the marker -- see the loop below.
+warpriest_pick_13 = _printed_pick(
+    "cf:cleric-warpriest-f13",
+    ('p12603', 'p12604', 'p12605'),
+    "The level-1 daily list.")
+warpriest_pick_14 = _printed_pick(
+    "cf:cleric-warpriest-f14",
+    ('p12607', 'p665', 'p945'),
+    "The level-2 utility list.")
+warpriest_pick_15 = _printed_pick(
+    "cf:cleric-warpriest-f15",
+    ('p12609', 'p12610', 'p1406'),
+    "The level-5 daily list.")
+warpriest_pick_16 = _printed_pick(
+    "cf:cleric-warpriest-f16",
+    ('p12612', 'p12613', 'p652'),
+    "The level-6 utility list.")
+warpriest_pick_17 = _printed_pick(
+    "cf:cleric-warpriest-f17",
+    ('p12615', 'p12616', 'p12617', 'p929'),
+    "The level-9 daily list.")
+warpriest_pick_18 = _printed_pick(
+    "cf:cleric-warpriest-f18",
+    ('p12618', 'p12619', 'p12620'),
+    "The level-10 utility list.")
+for _n in (20, 22):
     globals()[f"warpriest_defect_{_n}"] = _defective(
         f"cf:cleric-warpriest-f{_n}", _NO_LIST)
 for _n in (19, 21, 23, 24):

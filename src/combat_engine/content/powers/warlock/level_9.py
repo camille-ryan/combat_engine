@@ -241,15 +241,59 @@ def p1474(c: Cast) -> None:
     summon=Summon(),
 )
 def p13649(c: Cast) -> None:
-    """The spec prints no stat block -- which creature arrives is the pact's and
-    the pacts' creatures are not given -- so the summon takes the defaults,
-    which are the summoner's defences and a surge's worth of hit points.
+    """Which creature arrives is the pact's, and the pacts' creatures ARE
+    given -- this note used to say they were not.
+
+    Fourteen class-feature rows print *"you can use `p13649` to summon a
+    <creature>"*, one per pact, on the binder's `-f12` and the hexblade's
+    `-f7`. Every one of them was marked `defect=` *"an associate and not a
+    monster, so there is no stat block the summon can field"*, and all
+    three clauses of that were false:
+
+    * the compendium's `Associate` table carries the whole block -- *"HP
+      your bloodied value; Defenses your defenses + 2; Speed land 8"* and
+      an attack line;
+    * `etl/build.py` imports it, into `associate`, with `hp`, `defences`,
+      `speed` and `size` parsed out;
+    * and `c.summon` has routed an `x10_` ref to
+      `loader.spawn_associate` since `#459`. Measured: all seven of the
+      creatures below spawn, each at the summoner's bloodied value.
+
+    So the creature is read off what the character was dealt. `c.feat` on
+    the sub-option rather than `c.chosen_option` on the parent, for two
+    reasons: the parent grants the option it drew, so the sub-option IS in
+    `Powers.known`; and `lint.py` requires an `implemented_in=` pointer's
+    target to name the ref in its own source, which a dict-driven loop
+    does not. The binder and the hexblade print the same seven creatures,
+    so each branch names both refs. `#1268`.
+
+    **The inline default is kept as the fallback**, not removed: two of
+    the nine options on each chassis name a creature that resolves to no
+    `Associate` row at all, and those two keep their marker. A pact with
+    no recorded creature gets the generic summon it got before, which is
+    the printed *"the summoned creature uses your defences"* reading.
 
     "Or hit points equal to your surge value if you have no surges left" is the
     fallback when `c.spend_surge` comes back False. Dropped: dismissing it as a
     minor action, which would be a second row and the spec names no id for
     one."""
-    made = c.summon_inline(get(c.ref).summon, at=c.origin)
+    beast = ""
+    if c.feat("cf:warlock-binder-f12s0") or c.feat("cf:warlock-hexblade-f7s0"):
+        beast = "x10_82"
+    elif c.feat("cf:warlock-binder-f12s1") or c.feat("cf:warlock-hexblade-f7s1"):
+        beast = "x10_21"
+    elif c.feat("cf:warlock-binder-f12s4") or c.feat("cf:warlock-hexblade-f7s4"):
+        beast = "x10_6"
+    elif c.feat("cf:warlock-binder-f12s5") or c.feat("cf:warlock-hexblade-f7s5"):
+        beast = "x10_25"
+    elif c.feat("cf:warlock-binder-f12s6") or c.feat("cf:warlock-hexblade-f7s6"):
+        beast = "x10_8"
+    elif c.feat("cf:warlock-binder-f12s7") or c.feat("cf:warlock-hexblade-f7s7"):
+        beast = "x10_10"
+    elif c.feat("cf:warlock-binder-f12s8") or c.feat("cf:warlock-hexblade-f7s8"):
+        beast = "x10_19"
+    made = (c.summon(beast, at=c.origin, after=c.me) if beast
+            else c.summon_inline(get(c.ref).summon, at=c.origin))
     if not made:
         return
 

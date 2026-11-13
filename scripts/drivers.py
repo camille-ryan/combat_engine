@@ -25395,6 +25395,23 @@ def at_most_one_applies(out: Result) -> None:
 #: only entries here that are a gap rather than a reading**, and they are
 #: `#1178`: when movement grows a credit channel they come off this list.
 UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
+    # **The pact summon.** `p13649` reads which of fourteen options the
+    # character holds to decide WHICH creature it fields -- a summon it
+    # makes either way -- so this is the first shape above: the gate picks
+    # a value on a call the row makes regardless, and crediting an option
+    # would hand it the whole summon. The fourteen carry
+    # `implemented_in=("p13649",)`, which is what keeps them out of the
+    # silent list. `#1268`.
+    "p13649": (
+        "cf:warlock-binder-f12s0", "cf:warlock-binder-f12s1",
+        "cf:warlock-binder-f12s4", "cf:warlock-binder-f12s5",
+        "cf:warlock-binder-f12s6", "cf:warlock-binder-f12s7",
+        "cf:warlock-binder-f12s8",
+        "cf:warlock-hexblade-f7s0", "cf:warlock-hexblade-f7s1",
+        "cf:warlock-hexblade-f7s4", "cf:warlock-hexblade-f7s5",
+        "cf:warlock-hexblade-f7s6", "cf:warlock-hexblade-f7s7",
+        "cf:warlock-hexblade-f7s8",
+    ),
     # **The eight chassis ladders.** Each base row lays one bonus (or
     # reads one ceiling) at every level and its rungs print *"increases
     # to N"*, so the gate picks the size of a call the row makes either
@@ -43773,15 +43790,21 @@ def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
     why = {r: usable(world, me, get(r), spent_ok=True)[1] for r in rows}
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r, reason in why.items() if reason == DEFECT)
-    out.that(len(refused) == 6,
-             "six rows are `defect=` -- two naming themselves as the power "
-             "they grant, four printing 'one of the following' and no list "
-             "-- and `usable` refuses every one for that reason",
+    out.that(len(refused) == 3,
+             # `#1268` moved 51 chassis rows out of `defect=`: the
+             # compendium held what they were marked as missing. The
+             # count is the number LEFT, and every one left is out
+             # of reach for a reason this project chose -- a feature
+             # printed above level 10 names powers the ETL does not
+             # import (`MAX_POWER_LEVEL`).
+             "three rows are `defect=` -- two naming themselves as the power "
+             "they grant and one printing 'one of the following' above the "
+             "level this project imports -- and `usable` refuses every one "
+             "for that reason",
              f"{refused}")
     out.that(refused == ["cf:rogue-thief-f14", "cf:rogue-thief-f17",
-                         "cf:rogue-thief-f22", "cf:rogue-thief-f23",
-                         "cf:rogue-thief-f24", "cf:rogue-thief-f25"],
-             "and it is exactly those six and no other row of the 26: "
+                         "cf:rogue-thief-f22"],
+             "and it is exactly those three and no other row of the 26: "
              "`dsl.entry_of` returns a `cf:` ref unchanged, so a defective "
              "row refuses ITSELF. Named rather than counted, because on a "
              "monster one defective row defects the whole stat block and a "
@@ -43951,8 +43974,13 @@ def the_slayers_three_masteries_each_answer_their_own_weapon(
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
     out.that(refused == ["cf:fighter-slayer-f10", "cf:fighter-slayer-f13",
-                         "cf:fighter-slayer-f18", "cf:fighter-slayer-f19",
-                         "cf:fighter-slayer-f20", "cf:fighter-slayer-f22"],
+                         "cf:fighter-slayer-f18"],
+             # `#1268` moved 51 chassis rows out of `defect=`: the
+             # compendium held what they were marked as missing. The
+             # count is the number LEFT, and every one left is out
+             # of reach for a reason this project chose -- a feature
+             # printed above level 10 names powers the ETL does not
+             # import (`MAX_POWER_LEVEL`).,
              "six rows are `defect=` and it is exactly those six -- one "
              "naming itself as the power it grants, one naming a power by "
              "its printed name with no ref the importer resolved, four "
@@ -44378,8 +44406,13 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
     out.that(refused == ["cf:fighter-knight-f15", "cf:fighter-knight-f18",
-                         "cf:fighter-knight-f22", "cf:fighter-knight-f23",
-                         "cf:fighter-knight-f24", "cf:fighter-knight-f25"],
+                         "cf:fighter-knight-f22"],
+             # `#1268` moved 51 chassis rows out of `defect=`: the
+             # compendium held what they were marked as missing. The
+             # count is the number LEFT, and every one left is out
+             # of reach for a reason this project chose -- a feature
+             # printed above level 10 names powers the ETL does not
+             # import (`MAX_POWER_LEVEL`).,
              "six rows are `defect=` and it is exactly those six -- one "
              "naming itself, one naming a power by its printed name, four "
              "printing 'one of the following' and no list",
@@ -44656,8 +44689,13 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
              f"p13600 {get('p13600').cls}/{get('p13600').level}")
 
     # -- two forks, two entries -------------------------------------------
-    entries = sorted(k for k in chargen.BUILD_OPTIONS
-                     if k.startswith("cf:ranger-scout-"))
+    # **Scoped to the forks this claim is about.** It counted every
+    # `BUILD_OPTIONS` entry on the chassis, which `#1268` added to:
+    # each recovered power list is an entry of its own and has
+    # nothing to do with these forks. The claim was never about the
+    # total.
+    OFF_HAND = ("cf:ranger-scout-f3", "cf:ranger-scout-f21")
+    entries = sorted(k for k in chargen.BUILD_OPTIONS if k in OFF_HAND)
     out.that(entries == ["cf:ranger-scout-f21", "cf:ranger-scout-f3"],
              "TWO `BUILD_OPTIONS` entries on this chassis, not one -- the "
              "opposite call from the blackguard's four vice parents, "
@@ -44739,7 +44777,13 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(len(refused) == 6 and refused[0] == "cf:ranger-scout-f16",
+    out.that(len(refused) == 3 and refused[0] == "cf:ranger-scout-f16",
+             # `#1268` moved 51 chassis rows out of `defect=`: the
+             # compendium held what they were marked as missing. The
+             # count is the number LEFT, and every one left is out
+             # of reach for a reason this project chose -- a feature
+             # printed above level 10 names powers the ETL does not
+             # import (`MAX_POWER_LEVEL`).,
              "six rows are `defect=` -- all of them 'one of the following "
              "powers' with no list",
              f"{refused}")
@@ -44800,10 +44844,15 @@ def the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally(
              f"{chargen.declared_chassis('paladin')}")
 
     # -- one entry, four readers -----------------------------------------
-    entries = sorted(k for k in chargen.BUILD_OPTIONS
-                     if k.startswith("cf:paladin-cavalier-"))
+    # **Scoped to the virtue forks** -- it counted every `BUILD_OPTIONS`
+    # entry on the chassis, which `#1268` added four recovered power lists
+    # to. The claim is about the virtue, not the total.
+    VIRTUE_FORKS = ("cf:paladin-cavalier-f4", "cf:paladin-cavalier-f6",
+                    "cf:paladin-cavalier-f14", "cf:paladin-cavalier-f16")
+    entries = sorted(k for k in chargen.BUILD_OPTIONS if k in VIRTUE_FORKS)
     out.that(entries == [VIRTUE],
-             "exactly ONE `BUILD_OPTIONS` entry on this chassis, and it is "
+             "exactly ONE `BUILD_OPTIONS` entry among the virtue forks, "
+             "and it is "
              "`-f4`. Four would be four independent draws and the "
              "character would be half of each virtue -- which nothing "
              "else here would notice",
@@ -44939,7 +44988,7 @@ def the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally(
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(len(refused) == 11
+    out.that(len(refused) == 7
              and "cf:paladin-cavalier-f14s0" in refused
              and "cf:paladin-cavalier-f17" in refused,
              "eleven rows are `defect=` -- two naming themselves, eight "
@@ -45044,8 +45093,13 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
              f"{sorted(without)}")
 
     # -- two forks, two entries ------------------------------------------
-    entries = sorted(k for k in chargen.BUILD_OPTIONS
-                     if k.startswith("cf:ranger-hunter-"))
+    # **Scoped to the forks this claim is about.** It counted every
+    # `BUILD_OPTIONS` entry on the chassis, which `#1268` added to:
+    # each recovered power list is an entry of its own and has
+    # nothing to do with these forks. The claim was never about the
+    # total.
+    SHOT = ("cf:ranger-hunter-f11", "cf:ranger-hunter-f18")
+    entries = sorted(k for k in chargen.BUILD_OPTIONS if k in SHOT)
     out.that(entries == ["cf:ranger-hunter-f11", "cf:ranger-hunter-f18"],
              "TWO `BUILD_OPTIONS` entries, as the scout has -- both gate "
              "on what is in the ranged slot now and the benefits differ",
@@ -45119,7 +45173,13 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(len(refused) == 7 and "cf:ranger-hunter-f1" in refused,
+    out.that(len(refused) == 4 and "cf:ranger-hunter-f1" in refused,
+             # `#1268` moved 51 chassis rows out of `defect=`: the
+             # compendium held what they were marked as missing. The
+             # count is the number LEFT, and every one left is out
+             # of reach for a reason this project chose -- a feature
+             # printed above level 10 names powers the ETL does not
+             # import (`MAX_POWER_LEVEL`).,
              "seven rows are `defect=`, and `-f1` is the sharpest: *you "
              "gain the following three powers* and then no list at all",
              f"{refused}")
@@ -45175,13 +45235,23 @@ def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
              "and the druid now has all three of its printed chassis",
              f"{chargen.declared_chassis('druid')}")
 
-    entries = sorted(k for k in chargen.BUILD_OPTIONS
-                     if k.startswith("cf:druid-sentinel-"))
-    out.that(entries == [SEASON],
-             "exactly ONE `BUILD_OPTIONS` entry, and it is `-f0`. Five "
-             "would be five independent draws and the character would be "
-             "a different season in each of its five features",
-             f"{entries}")
+    # **Scoped to the SEASON forks, which is what the claim is about.**
+    # This counted every `BUILD_OPTIONS` entry on the chassis and wanted
+    # exactly one -- true until `#1268` recovered seven printed power
+    # lists, each of which is an entry of its own and has nothing to do
+    # with the season. The point was never the total: it is that the five
+    # season-reading parents share `-f0`'s single draw, because five
+    # entries would be five independent draws and the character would be
+    # a different season in each of its five features.
+    READS_SEASON = (SEASON, "cf:druid-sentinel-f1", "cf:druid-sentinel-f9",
+                    "cf:druid-sentinel-f10", "cf:druid-sentinel-f12")
+    seasonal = sorted(k for k in chargen.BUILD_OPTIONS if k in READS_SEASON)
+    out.that(seasonal == [SEASON],
+             "exactly ONE `BUILD_OPTIONS` entry among the season-reading "
+             "parents, and it is `-f0`. Five would be five independent "
+             "draws and the character would be a different season in each "
+             "of its five features",
+             f"{seasonal}")
 
     PARENTS = {
         SEASON: SEASONS,
@@ -45316,7 +45386,13 @@ def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(len(refused) == 13,
+    out.that(len(refused) == 6,
+             # `#1268` moved 51 chassis rows out of `defect=`: the
+             # compendium held what they were marked as missing. The
+             # count is the number LEFT, and every one left is out
+             # of reach for a reason this project chose -- a feature
+             # printed above level 10 names powers the ETL does not
+             # import (`MAX_POWER_LEVEL`).,
              "thirteen rows are `defect=` -- every one 'you gain one of "
              "the following powers of your choice' with no list, which is "
              "more than a quarter of the chassis",
@@ -45384,13 +45460,24 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
              f"{sorted(k.name for k in found)}")
 
     # -- each fork deals exactly one option ------------------------------
-    forks = {k: v for k, v in chargen.BUILD_OPTIONS.items()
-             if k.startswith("cf:warlock-hexblade-")}
-    out.that(len(forks) == 3 and all(len(v) >= 5 for v in forks.values()),
-             "three of the four pact parents carry their own "
-             "`BUILD_OPTIONS` entry -- four entries where every other "
-             "chassis in this wave shares one, because there is no common "
-             "answer to share",
+    # **Scoped to the forks this claim is about.** It counted every
+    # `BUILD_OPTIONS` entry on the chassis, which `#1268` added to:
+    # each recovered power list is an entry of its own and has
+    # nothing to do with these forks. The claim was never about the
+    # total.
+    # **All FOUR now, and `-f7` is the one this work added.** It read
+    # "three of the four" and that was the bug: `-f7` is a summon fork
+    # with nine printed creatures and carried no entry at all, so a dealt
+    # hexblade chose none of them and `p13649` fell back to its generic
+    # summon. `#1268`.
+    PACTS = ("cf:warlock-hexblade-f1", "cf:warlock-hexblade-f2",
+             "cf:warlock-hexblade-f7", "cf:warlock-hexblade-f10")
+    forks = {k: v for k, v in chargen.BUILD_OPTIONS.items() if k in PACTS}
+    out.that(len(forks) == 4 and all(len(v) >= 5 for v in forks.values()),
+             "all four pact parents carry their own `BUILD_OPTIONS` entry "
+             "-- four entries where every other chassis in this wave "
+             "shares one, because there is no common answer to share, and "
+             "`-f7` had none until `#1268`",
              f"{ {k.rsplit('-', 1)[-1]: len(v) for k, v in forks.items()} }")
 
     # **Dealt at 30, not at 1.** This asked for all three parents in a
@@ -45510,7 +45597,13 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(len(refused) == 28,
+    out.that(len(refused) == 16,
+             # `#1268` moved 51 chassis rows out of `defect=`: the
+             # compendium held what they were marked as missing. The
+             # count is the number LEFT, and every one left is out
+             # of reach for a reason this project chose -- a feature
+             # printed above level 10 names powers the ETL does not
+             # import (`MAX_POWER_LEVEL`).,
              "twenty-eight rows are `defect=` -- nineteen summoned "
              "creatures named with no stat block the summon can field, "
              "nine 'one of the following powers' with no list. Nearly half "
@@ -45528,6 +45621,130 @@ _F1_POWER = {
     "cf:warlock-hexblade-f1s3": "p13679",
     "cf:warlock-hexblade-f1s4": "p13721",
 }
+
+
+def a_defect_marker_the_compendium_disproves(out: Result) -> None:
+    """51 chassis rows were `defect=` for data the compendium holds.
+
+    `defect=` means *the compendium is missing what the row would be
+    written from*, and a `defect=` row is **dropped from the game** --
+    `dsl.entry_defect` refuses the whole entry, so `pick` stops offering
+    it. So a wrongly-marked row is not merely unwritten, it is withheld.
+    Two clusters were wrong, found by reading the compendium rather than
+    the marker. `#1268`.
+
+    **37 said their list was empty.** *"You gain one of the following
+    powers of your choice"* with nothing after it -- true of the **spec**,
+    false of the page: the class page prints the list immediately after
+    the sentence and every power in it is already imported. Recovered by
+    joining the page's `LEVEL N <CHASSIS> <USAGE> POWER` banner against
+    `combat_engine.levels` on the feature, and refusing wherever the
+    feature count at a level did not match the printed section count.
+
+    **14 said their creature had no stat block.** Three clauses, each
+    false: the compendium's `Associate` table carries the block -- *"HP
+    your bloodied value; Defenses your defenses + 2; Speed land 8"* and an
+    attack line -- `etl/build.py` imports it into `associate` with those
+    fields parsed, and `c.summon` has routed an `x10_` ref to
+    `loader.spawn_associate` since `#459`.
+
+    **What this rule does NOT assert**: that no `defect=` row is left.
+    135 remain and most are out of reach for a reason this project chose
+    -- `MAX_POWER_LEVEL = 10`, so a feature printed at 13th or 23rd names
+    powers that were never imported. Asserting a count would make ordinary
+    ETL work red.
+    """
+    import re
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen, db, levels
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Ident, Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    g = db.game()
+
+    # -- the recovered lists ---------------------------------------------
+    picks = sorted(r for r in chargen.BUILD_OPTIONS
+                   if re.match(r"^cf:[a-z']+-[a-z']+-f\d+$", r)
+                   and REGISTRY.get(r) is not None
+                   and not getattr(REGISTRY[r], "defect", "")
+                   and all(o.startswith("p") for o in chargen.BUILD_OPTIONS[r]))
+    out.that(len(picks) >= 37,
+             "at least 37 chassis forks now carry a list of POWER refs, "
+             "which is what the recovered lists are -- every other fork in "
+             "the tree offers features or feats",
+             f"{len(picks)}")
+
+    # **Every option is a real imported power of the right class.** The
+    # join could in principle have picked up a name belonging to another
+    # class printed on the same page, so this is the half that says it did
+    # not.
+    wrong = []
+    for parent in picks:
+        cls = parent.split(":")[1].split("-")[0]
+        for o in chargen.BUILD_OPTIONS[parent]:
+            row = g.execute("select class, level from power where ref = ?",
+                            (o,)).fetchone()
+            if row is None or (row[0] or "").lower() != cls:
+                wrong.append((parent, o, row and row[0]))
+    out.that(not wrong,
+             "and every option is an imported power of the FORK'S OWN "
+             "class -- the join read names off a page that prints other "
+             "classes' powers too, so this is what says it did not stray",
+             f"{wrong[:4] or 'none'}")
+
+    # **And each option is printed at the level the feature is.** The
+    # second half of the same question, and the one that catches a section
+    # boundary read one banner too far.
+    off = []
+    for parent in picks:
+        want = levels.level_of(parent)
+        for o in chargen.BUILD_OPTIONS[parent]:
+            row = g.execute("select level from power where ref = ?",
+                            (o,)).fetchone()
+            if row and row[0] != want:
+                off.append((parent, o, want, row[0]))
+    out.that(not off,
+             "and printed at the FEATURE'S OWN level, which is what a "
+             "section boundary read one banner too far would break",
+             f"{off[:4] or 'none'}")
+
+    # -- the pact summons ------------------------------------------------
+    subs = sorted(r for r in REGISTRY
+                  if re.match(r"^cf:warlock-(binder-f12|hexblade-f7)s\d$", r)
+                  and "p13649" in (getattr(REGISTRY[r], "implemented_in", ()) or ()))
+    out.that(len(subs) == 14,
+             "fourteen pact-summon options are pointers into `p13649` -- "
+             "seven creatures on each of two chassis, which print the same "
+             "list",
+             f"{len(subs)}")
+
+    # **Each one really fields its own creature**, which is the assertion
+    # the marker was standing in the way of. Over all 14, because reading
+    # one would pass for a body that summons the same creature every time.
+    fielded = {}
+    for sub in subs:
+        world, me, _ = _board(sub, 1)
+        kn = world.need(me, Powers)
+        kn.known = [k for k in kn.known
+                    if not re.match(r"^cf:warlock-(binder-f12|hexblade-f7)s",
+                                    k)] + [sub]
+        before = set(world.entities)
+        REGISTRY["p13649"].body(Cast(world=world, me=me, ref="p13649"))
+        made = [getattr(world.get(e, Ident), "ref", None)
+                for e in world.entities if e not in before]
+        fielded[sub] = [m for m in made if (m or "").startswith("x10_")]
+    missing = sorted(s for s, got in fielded.items() if len(got) != 1)
+    out.that(not missing,
+             "and each fields exactly one `associate` creature through "
+             "`p13649` -- all 14, because reading one would pass for a "
+             "body that summons the same creature whatever was chosen",
+             f"{missing or 'all 14 fielded'}")
+    out.that(len({tuple(v) for v in fielded.values()}) >= 7,
+             "and the fourteen name at least seven DIFFERENT creatures, "
+             "which is what says the choice is read rather than ignored",
+             f"{len({tuple(v) for v in fielded.values()})} distinct")
 
 
 def a_chassis_rung_is_dealt_at_the_level_the_page_prints(out: Result) -> None:
@@ -78029,6 +78246,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "defect_disproved": (
+        a_defect_marker_the_compendium_disproves,
+        "51 chassis rows were defect= for data the compendium holds"
+        " (#1268)",
     ),
     "feature_levels": (
         a_chassis_rung_is_dealt_at_the_level_the_page_prints,

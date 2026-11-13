@@ -706,6 +706,56 @@ def scout_keen_eye(c: Cast) -> None:
 # -- the six rows the import cannot supply -----------------------------------
 
 
+def _printed_pick(ref: str, options: tuple[str, ...], what: str) -> Any:
+    """A row printing *"one of the following powers"* with the list recovered.
+
+    These carried `defect=` saying the spec *"lists nothing, so there is no
+    set to choose from"*. The **spec** lists nothing; the compendium's class
+    page prints the list immediately after the sentence, and every power in
+    it is already imported. So the marker was describing the import rather
+    than the source. `#1268`.
+
+    How each list was recovered, and why it is a join rather than a parse:
+    the page carries a `LEVEL N <CHASSIS> <USAGE> POWER` banner above the
+    sentence, so a section is bounded on both sides; within it, the options
+    are found by asking which of **this class's already-imported power
+    names at that level** appear in the section. Presence of a known name,
+    never a guess at where an unknown one ends -- so a boundary read wrongly
+    cannot invent a power. The join is on `(level, usage)` from the banner
+    against `combat_engine.levels` on this ref, and it **refuses** rather
+    than guessing wherever the number of features at a level does not match
+    the number of printed sections: the sentinel prints two level-1 banners
+    (at-will and daily) and an earlier pass gave both features the first
+    list.
+
+    `chargen.BUILD_OPTIONS` carries the options and `c.chosen_option` reads
+    the draw, which is the arrangement the pact forks already use -- and
+    `c.grant_row` grants a power ref as readily as a feature one.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="ranger",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.MARTIAL],
+    )
+    def row(c: Cast) -> None:
+        c.grant_row(c.chosen_option(ref) or options[0], on=c.me,
+                    until=When.ENCOUNTER)
+
+    row.__name__ = "scout_pick_" + ref.rsplit("-f", 1)[-1]
+    row.__doc__ = (
+        f'*"You gain one of the following powers of your choice."* {what}\n\n'
+        f"{len(options)} options, recovered from the printed page rather "
+        f"than from the spec -- see `_printed_pick`. `#1268`."
+    )
+    return row
+
+
 def _defective(ref: str, n: str) -> Any:
     """One of the six "one of the following powers" rows with no list."""
 
@@ -733,8 +783,17 @@ def _defective(ref: str, n: str) -> Any:
 
 
 scout_defect_16 = _defective("cf:ranger-scout-f16", "two")
-scout_defect_18 = _defective("cf:ranger-scout-f18", "one")
-scout_defect_19 = _defective("cf:ranger-scout-f19", "one")
-scout_defect_20 = _defective("cf:ranger-scout-f20", "one")
+scout_pick_18 = _printed_pick(
+    "cf:ranger-scout-f18",
+    ('p13623', 'p13624', 'p13625'),
+    "The level-2 utility list.")
+scout_pick_19 = _printed_pick(
+    "cf:ranger-scout-f19",
+    ('p13607', 'p13626'),
+    "The level-6 utility list.")
+scout_pick_20 = _printed_pick(
+    "cf:ranger-scout-f20",
+    ('p13610', 'p13612', 'p13627'),
+    "The level-10 utility list.")
 scout_defect_22 = _defective("cf:ranger-scout-f22", "one")
 scout_defect_23 = _defective("cf:ranger-scout-f23", "one")

@@ -849,6 +849,56 @@ def sentinel_abilities(c: Cast) -> None:
 # -- the thirteen rows the import cannot supply -----------------------------
 
 
+def _printed_pick(ref: str, options: tuple[str, ...], what: str) -> Any:
+    """A row printing *"one of the following powers"* with the list recovered.
+
+    These carried `defect=` saying the spec *"lists nothing, so there is no
+    set to choose from"*. The **spec** lists nothing; the compendium's class
+    page prints the list immediately after the sentence, and every power in
+    it is already imported. So the marker was describing the import rather
+    than the source. `#1268`.
+
+    How each list was recovered, and why it is a join rather than a parse:
+    the page carries a `LEVEL N <CHASSIS> <USAGE> POWER` banner above the
+    sentence, so a section is bounded on both sides; within it, the options
+    are found by asking which of **this class's already-imported power
+    names at that level** appear in the section. Presence of a known name,
+    never a guess at where an unknown one ends -- so a boundary read wrongly
+    cannot invent a power. The join is on `(level, usage)` from the banner
+    against `combat_engine.levels` on this ref, and it **refuses** rather
+    than guessing wherever the number of features at a level does not match
+    the number of printed sections: the sentinel prints two level-1 banners
+    (at-will and daily) and an earlier pass gave both features the first
+    list.
+
+    `chargen.BUILD_OPTIONS` carries the options and `c.chosen_option` reads
+    the draw, which is the arrangement the pact forks already use -- and
+    `c.grant_row` grants a power ref as readily as a feature one.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="druid",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.PRIMAL],
+    )
+    def row(c: Cast) -> None:
+        c.grant_row(c.chosen_option(ref) or options[0], on=c.me,
+                    until=When.ENCOUNTER)
+
+    row.__name__ = "sentinel_pick_" + ref.rsplit("-f", 1)[-1]
+    row.__doc__ = (
+        f'*"You gain one of the following powers of your choice."* {what}\n\n'
+        f"{len(options)} options, recovered from the printed page rather "
+        f"than from the spec -- see `_printed_pick`. `#1268`."
+    )
+    return row
+
+
 def _defective(ref: str, swaps: bool) -> Any:
     """One of the thirteen "one of the following powers" rows with no
     list."""
@@ -879,7 +929,40 @@ def _defective(ref: str, swaps: bool) -> Any:
     return row
 
 
-for _n in (14, 15, 16, 17, 18, 19, 20, 22, 24):
+# **The in-scope ones had their list recovered from the page.**
+# `#1268`: the spec lists nothing, the class page prints the list
+# straight after the sentence, and every power in it is already
+# imported. The rest are printed above level 10, which this
+# project does not import, so they keep the marker.
+sentinel_pick_14 = _printed_pick(
+    "cf:druid-sentinel-f14",
+    ('p13507', 'p13508', 'p13509'),
+    "The level-1 at-will list.")
+sentinel_pick_15 = _printed_pick(
+    "cf:druid-sentinel-f15",
+    ('p13510', 'p13511', 'p13512'),
+    "The level-1 daily list.")
+sentinel_pick_16 = _printed_pick(
+    "cf:druid-sentinel-f16",
+    ('p13513', 'p13514', 'p13515', 'p13516'),
+    "The level-2 utility list.")
+sentinel_pick_17 = _printed_pick(
+    "cf:druid-sentinel-f17",
+    ('p13517', 'p13518', 'p13519'),
+    "The level-5 daily list.")
+sentinel_pick_18 = _printed_pick(
+    "cf:druid-sentinel-f18",
+    ('p13520', 'p13521', 'p13522', 'p7393'),
+    "The level-6 utility list.")
+sentinel_pick_19 = _printed_pick(
+    "cf:druid-sentinel-f19",
+    ('p13525', 'p13526', 'p13527'),
+    "The level-9 daily list.")
+sentinel_pick_20 = _printed_pick(
+    "cf:druid-sentinel-f20",
+    ('p13528', 'p13529', 'p9667'),
+    "The level-10 utility list.")
+for _n in (22, 24):
     globals()[f"sentinel_defect_{_n}"] = _defective(
         f"cf:druid-sentinel-f{_n}", False)
 for _n in (21, 23, 25, 26):

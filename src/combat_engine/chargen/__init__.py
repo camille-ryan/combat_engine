@@ -3927,6 +3927,198 @@ def given_skills(cls: str, race: str = "") -> frozenset[str]:
 #: dealer to prove themselves on one kind before the other twelve proxies
 #: are switched over, because each switch changes what a character does.
 BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
+    # **The hexblade's summon fork.** `-f12`, `-f21` and `-f10`
+    # carried one and this did not, so a dealt hexblade chose no
+    # creature and `p13649` fell to its generic summon. `#1268`.
+    "cf:warlock-hexblade-f7": tuple(
+        f"cf:warlock-hexblade-f7s{_i}" for _i in range(9)),
+    # **The 37 printed lists the import dropped.** `#1268`: each of
+    # these rows prints *"you gain one of the following powers of
+    # your choice"* and its spec lists nothing, while the class page
+    # prints the list straight after the sentence and every power in
+    # it is already imported. Recovered by joining the page's
+    # `LEVEL N <CHASSIS> <USAGE> POWER` banner against
+    # `combat_engine.levels` on the feature, and refusing wherever
+    # the feature count at a level did not match the printed section
+    # count -- the sentinel prints two level-1 banners and an earlier
+    # pass gave both its features the first list.
+    #
+    # Options are POWER refs, which `c.grant_row` grants as readily
+    # as a feature ref -- `cf:assassin-executioner-f5`'s feats are
+    # the existing precedent for a non-feature option.
+    "cf:cleric-warpriest-f13": (
+        "p12603",
+        "p12604",
+        "p12605",
+    ),
+    "cf:cleric-warpriest-f14": (
+        "p12607",
+        "p665",
+        "p945",
+    ),
+    "cf:cleric-warpriest-f15": (
+        "p12609",
+        "p12610",
+        "p1406",
+    ),
+    "cf:cleric-warpriest-f16": (
+        "p12612",
+        "p12613",
+        "p652",
+    ),
+    "cf:cleric-warpriest-f17": (
+        "p12615",
+        "p12616",
+        "p12617",
+        "p929",
+    ),
+    "cf:cleric-warpriest-f18": (
+        "p12618",
+        "p12619",
+        "p12620",
+    ),
+    "cf:druid-sentinel-f14": (
+        "p13507",
+        "p13508",
+        "p13509",
+    ),
+    "cf:druid-sentinel-f15": (
+        "p13510",
+        "p13511",
+        "p13512",
+    ),
+    "cf:druid-sentinel-f16": (
+        "p13513",
+        "p13514",
+        "p13515",
+        "p13516",
+    ),
+    "cf:druid-sentinel-f17": (
+        "p13517",
+        "p13518",
+        "p13519",
+    ),
+    "cf:druid-sentinel-f18": (
+        "p13520",
+        "p13521",
+        "p13522",
+        "p7393",
+    ),
+    "cf:druid-sentinel-f19": (
+        "p13525",
+        "p13526",
+        "p13527",
+    ),
+    "cf:druid-sentinel-f20": (
+        "p13528",
+        "p13529",
+        "p9667",
+    ),
+    "cf:fighter-knight-f23": (
+        "p12669",
+        "p12670",
+        "p12671",
+        "p12672",
+    ),
+    "cf:fighter-knight-f24": (
+        "p12673",
+        "p12674",
+        "p12675",
+        "p12676",
+    ),
+    "cf:fighter-knight-f25": (
+        "p12678",
+        "p12679",
+        "p12680",
+        "p12681",
+    ),
+    "cf:fighter-slayer-f19": (
+        "p12671",
+        "p12693",
+        "p12695",
+        "p12696",
+    ),
+    "cf:fighter-slayer-f20": (
+        "p12698",
+        "p12699",
+        "p12700",
+        "p12701",
+    ),
+    "cf:fighter-slayer-f22": (
+        "p12702",
+        "p12703",
+        "p12704",
+        "p12705",
+    ),
+    "cf:paladin-cavalier-f18": ('p13558', 'p13559'),
+    "cf:paladin-cavalier-f19": ('p1279', 'p13560'),
+    "cf:paladin-cavalier-f20": ('p13562', 'p13563'),
+    "cf:paladin-cavalier-f21": ('p13564', 'p13565'),
+    "cf:ranger-hunter-f21": (
+        "p13597",
+        "p13598",
+        "p13599",
+    ),
+    "cf:ranger-hunter-f22": ('p13607', 'p13609'),
+    "cf:ranger-hunter-f23": (
+        "p13610",
+        "p13611",
+        "p13612",
+    ),
+    "cf:ranger-scout-f18": (
+        "p13623",
+        "p13624",
+        "p13625",
+    ),
+    "cf:ranger-scout-f19": ('p13607', 'p13626'),
+    "cf:ranger-scout-f20": (
+        "p13610",
+        "p13612",
+        "p13627",
+    ),
+    "cf:rogue-thief-f23": (
+        "p10169",
+        "p1038",
+        "p12721",
+        "p1395",
+    ),
+    "cf:rogue-thief-f24": (
+        "p10172",
+        "p12724",
+        "p365",
+        "p7399",
+    ),
+    "cf:rogue-thief-f25": (
+        "p12725",
+        "p12726",
+        "p12727",
+        "p1396",
+    ),
+    "cf:warlock-hexblade-f11": (
+        "p13635",
+        "p13636",
+        "p13637",
+    ),
+    "cf:warlock-hexblade-f12": (
+        "p13638",
+        "p13640",
+        "p1923",
+    ),
+    "cf:warlock-hexblade-f13": (
+        "p13642b",
+        "p13644",
+        "p13645",
+    ),
+    "cf:warlock-hexblade-f14": (
+        "p13646",
+        "p13648",
+        "p2264",
+    ),
+    "cf:warlock-hexblade-f15": (
+        "p13650b",
+        "p13652",
+        "p13653",
+    ),
     "f2743": ("necrotic", "cold"),
     # **Refs rather than printed words, which this table had not held
     # before.** `f2694` says *"choose one of the monk's Flurry of Blows
