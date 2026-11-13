@@ -536,8 +536,23 @@ blackguard_extra_use_14 = _extra_use("cf:paladin-blackguard-f14")
 # -- the six power picks, and the three that replace a daily -----------------
 
 
-def _power_pick(ref: str, what: str) -> Any:
-    """One of the six "you gain a new c4 attack or utility power" rows."""
+def _power_pick(ref: str, what: str, *, gained: bool = False) -> Any:
+    """One of the six "you gain a new c4 attack or utility power" rows.
+
+    `gained=True` for the four whose gain is now a
+    `chargen.EXTRA_GAINS` entry. The card is a **gain** and not a pick
+    from a named list, so no body can make it -- it is a slot in the hand
+    the dealer builds. What was missing was the LEVEL the gain happens
+    at, which `class_feature` carries none of; `combat_engine.levels`
+    carries it now (`#1261`), so the entry is read rather than guessed.
+
+    `out_of_combat=True` with it, because the whole row is a draw and has
+    nothing to do on a board -- the same call `cf:warlock-binder-f6` and
+    `cf:assassin-executioner-f6` already made.
+
+    The other two are printed above the level this project imports, so
+    their pool was never imported and an entry would deal nothing.
+    """
 
     @power(
         ref,
@@ -548,7 +563,8 @@ def _power_pick(ref: str, what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.DIVINE],
-        todo=("chargen.power_choice()",),
+        todo=() if gained else ("chargen.power_choice()",),
+        out_of_combat=gained,
     )
     def row(c: Cast) -> None:
         pass
@@ -556,22 +572,31 @@ def _power_pick(ref: str, what: str) -> Any:
     row.__name__ = "blackguard_pick_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         f"{what}\n\n"
-        "`chargen.power_choice()`'s gap -- a draw from a named printed "
-        "family, which four feats and four chassis in this wave now wait "
-        "on. No level symbol: an extra choice is not wrong early the way a "
-        "superseding number is."
+        + ("**Written as a `chargen.EXTRA_GAINS` entry**, keyed on this "
+           "ref so `loadout` deals the extra power to a character holding "
+           "this row and nobody else. An A/B against the entry deals "
+           "exactly one more power, which is the check `#1112` exists for "
+           "-- a wrong level deals nothing and says nothing."
+           if gained else
+           "`chargen.power_choice()`'s gap, and specifically the pool: "
+           "this card is printed above the level this project imports, so "
+           "there are no rows for the gain to draw from. `#1269`.")
     )
     return row
 
 
 blackguard_pick_9 = _power_pick(
-    "cf:paladin-blackguard-f9", "A `c4` attack power of your level or lower.")
+    "cf:paladin-blackguard-f9", "A `c4` attack power of your level or lower.",
+    gained=True)
 blackguard_pick_10 = _power_pick(
-    "cf:paladin-blackguard-f10", "A `c4` utility power of your level or lower.")
+    "cf:paladin-blackguard-f10", "A `c4` utility power of your level or lower.",
+    gained=True)
 blackguard_pick_12 = _power_pick(
-    "cf:paladin-blackguard-f12", "Another `c4` attack power.")
+    "cf:paladin-blackguard-f12", "Another `c4` attack power.",
+    gained=True)
 blackguard_pick_13 = _power_pick(
-    "cf:paladin-blackguard-f13", "Another `c4` utility power.")
+    "cf:paladin-blackguard-f13", "Another `c4` utility power.",
+    gained=True)
 blackguard_pick_15 = _power_pick(
     "cf:paladin-blackguard-f15", "Another `c4` attack power.")
 blackguard_pick_16 = _power_pick(

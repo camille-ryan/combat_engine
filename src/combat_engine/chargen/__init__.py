@@ -3194,6 +3194,36 @@ EXTRA_GAINS: dict[str, tuple[tuple[Usage, int, int], ...]] = {
     "cf:warlock-binder-f0": ((None, 1, 1),),
     "cf:warlock-binder-f6": ((None, 2, 2),),
     "cf:assassin-executioner-f6": ((None, 2, 2),),
+    # **Nine more, and the thing that was missing was the level.** The note
+    # above says "only three of the 39 rows state their own level ... an
+    # entry invented for those would be a guess about when the gain
+    # happens", and it was right while `class_feature` carried no level.
+    # `combat_engine.levels` carries it now (`#1261`), so the gain level is
+    # read rather than guessed.
+    #
+    # Each of these prints *"you gain a new c<N> attack/utility power of
+    # your level or lower"*. Two readings follow from `deal`'s own
+    # docstring -- *"the level is what makes it a utility"*:
+    #
+    #   a UTILITY gain  -> `usage=None` at a level in `UTILITY_GAINS`
+    #                      (2, 6, 10), where the pool is utilities by print
+    #   an ATTACK gain  -> the slot, because attack levels are shared.
+    #                      5 and 9 are `ATTACK_GAINS[DAILY]`, so DAILY
+    #
+    # `from_level` is the feature's own level, which is one reading of *"of
+    # your level or lower"* and the only one a single number can carry.
+    # **Checked against an empty pool for each**, which is `#1112`'s trap:
+    # every one of the nine has rows of its class printed at that level, so
+    # none is the silent no-op that entry was.
+    "cf:assassin-executioner-f10": ((None, 6, 6),),
+    "cf:assassin-executioner-f14": ((None, 10, 10),),
+    "cf:paladin-blackguard-f10": ((None, 6, 6),),
+    "cf:paladin-blackguard-f13": ((None, 10, 10),),
+    "cf:warlock-binder-f10": ((None, 6, 6),),
+    "cf:warlock-binder-f13": ((None, 10, 10),),
+    "cf:paladin-blackguard-f9": ((Usage.DAILY, 5, 5),),
+    "cf:warlock-binder-f9": ((Usage.DAILY, 5, 5),),
+    "cf:paladin-blackguard-f12": ((Usage.DAILY, 9, 9),),
 }
 
 #: Utility powers are gained on their own levels and are not attack powers, so
@@ -3927,6 +3957,16 @@ def given_skills(cls: str, race: str = "") -> frozenset[str]:
 #: dealer to prove themselves on one kind before the other twelve proxies
 #: are switched over, because each switch changes what a character does.
 BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
+    # **The three forks that deal TWO.** `OPTION_PICKS` carries the
+    # count; these are the sets it draws from. All three print *"you
+    # gain two of the following"* and had no entry at all, so the
+    # options were never dealt and the rows read nothing.
+    "cf:druid-sentinel-f13": tuple(
+        f"cf:druid-sentinel-f13s{_i}" for _i in range(5)),
+    "cf:ranger-hunter-f20": tuple(
+        f"cf:ranger-hunter-f20s{_i}" for _i in range(5)),
+    "cf:ranger-scout-f17": tuple(
+        f"cf:ranger-scout-f17s{_i}" for _i in range(5)),
     # **The hexblade's summon fork.** `-f12`, `-f21` and `-f10`
     # carried one and this did not, so a dealt hexblade chose no
     # creature and `p13649` fell to its generic summon. `#1268`.
@@ -4285,6 +4325,30 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
 }
 
 
+#: How many of its options a fork deals, where the card says more than one.
+#:
+#: `BUILD_OPTIONS` deals **one**, which is what nearly every fork prints.
+#: Four rows print *"you gain **two** of the following"* and had no way to
+#: say so: `cf:druid-sentinel-f13`, the two rangers' wilderness knacks, and
+#: `cf:ranger-hunter-f20`'s sibling.
+#:
+#: **A second entry is not the alternative, and that is why this is a count
+#: rather than a second fork.** Two entries are two *independent* draws, so
+#: a character could draw the same option twice or a pair the page does not
+#: offer together -- which is what `drivers.sentinel_season` and
+#: `drivers.cavalier_virtue` both assert against, and `#851` is the same
+#: failure from the other end. `_build_options` draws `pick` **distinct**
+#: options with one `rng.sample`, so neither can happen.
+#:
+#: Absent means one. Nothing has to be added for the 60-odd forks that
+#: deal one, and a fork whose count is 1 is spelled by leaving it out.
+OPTION_PICKS: dict[str, int] = {
+    "cf:druid-sentinel-f13": 2,
+    "cf:ranger-hunter-f20": 2,
+    "cf:ranger-scout-f17": 2,
+}
+
+
 def _build_options(taken: list[str], rng: Random | None = None) -> set[str]:
     """`option:<ref>:<value>` for every row the build took that asks one.
 
@@ -4322,8 +4386,9 @@ def _build_options(taken: list[str], rng: Random | None = None) -> set[str]:
     that have no seed do.
     """
     return {
-        f"option:{ref}:{deal_build_option(rng, ref)}"
+        f"option:{ref}:{took}"
         for ref in taken if ref in BUILD_OPTIONS
+        for took in deal_build_options(rng, ref)
     }
 
 
@@ -4341,10 +4406,29 @@ def deal_build_option(rng: Random | None, ref: str) -> str:
     same reason: `audit.board` needs one fixed answer per ref or the sweep
     wobbles.
     """
-    options = BUILD_OPTIONS[ref]
-    if rng is None or len(options) <= 1:
-        return options[0]
-    return rng.choice(list(options))
+    return deal_build_options(rng, ref)[0]
+
+
+def deal_build_options(rng: Random | None, ref: str) -> tuple[str, ...]:
+    """Every option this character took for `ref`, which is usually one.
+
+    `OPTION_PICKS` says how many the card deals; absent means one, so the
+    sixty-odd forks that deal one need no entry.
+
+    **`rng.sample`, so the picks are distinct.** That is the whole reason
+    this is a count on one fork rather than a second `BUILD_OPTIONS` entry:
+    two entries are two independent draws and could hand the same option
+    over twice, or hand over a pair the page does not offer together.
+
+    `rng` of `None` answers the **first `pick`** printed, which keeps
+    `audit.board`'s one fixed answer per ref -- the same reason
+    `deal_build_option` had that branch.
+    """
+    options = list(BUILD_OPTIONS[ref])
+    pick = min(OPTION_PICKS.get(ref, 1), len(options))
+    if rng is None:
+        return tuple(options[:pick])
+    return tuple(sorted(rng.sample(options, pick)))
 
 
 def feats_for(

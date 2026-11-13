@@ -634,10 +634,10 @@ executioner_utility_6 = _utility_pick(
     gained=True)
 executioner_utility_10 = _utility_pick(
     "cf:assassin-executioner-f10",
-    "A `c466` utility power of your level or lower.")
+    "A `c466` utility power of your level or lower.", gained=True)
 executioner_utility_14 = _utility_pick(
     "cf:assassin-executioner-f14",
-    "Another `c466` utility power of your level or lower.")
+    "Another `c466` utility power of your level or lower.", gained=True)
 
 
 # -- the disguise, and the two the import cannot supply ----------------------

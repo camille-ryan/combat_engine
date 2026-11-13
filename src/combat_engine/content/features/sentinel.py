@@ -342,19 +342,24 @@ def sentinel_companion(c: Cast) -> None:
 def _companion(ref: str, got: str) -> Any:
     """One of `-f1`'s three animal companions.
 
-    **Measured, not assumed:** `c.call_companion("x10_1")` raises
-    `KeyError: no monster x10_1`. That verb reads the **monster** table and
-    all three of these live in `associate`, which holds 88 rows and is a
-    different table.
+    **Written, and the symbol was naming the wrong layer.** It said the
+    gap was a chargen writer -- *"the facility exists for a companion
+    chosen with a leg and not for one chosen with a `BUILD_OPTIONS`
+    answer"* -- and that was a reasonable reading of a true measurement:
+    `c.call_companion("x10_1")` really did raise `KeyError: no monster
+    x10_1`.
 
-    `c.call_beast` is the near miss and shows what is missing: it spawns
-    the ranger's beast by reading `beast:<ref>` off the **build**. So the
-    facility exists for a companion chosen with a **leg** and not for one
-    chosen with a `BUILD_OPTIONS` answer -- which is what the symbol
-    names, rather than "no companions" which would be false.
+    But the row needs nothing from chargen. **This row IS the answer**:
+    the parent chooses among the three and grants the one it drew, so by
+    the time this body runs the character has already chosen it and the
+    companion's ref is right here. What was missing was one branch in
+    `c.call_companion`, which read the `monster` table and had no
+    `associate` arm -- where `c.summon` has had one since `#459`. Added,
+    and all three now field at the owner's bloodied value.
 
-    `todo=` and not `defect=`: the source is fine. `associate` holds all
-    three stat blocks; what is absent is a writer.
+    `kind="beast"` because that is what the page calls them and what
+    `c.call_beast` produces, so a row asking about the character's beast
+    finds this one.
     """
 
     @power(
@@ -366,10 +371,9 @@ def _companion(ref: str, got: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.PRIMAL],
-        todo=("chargen.companion_from_option()",),
     )
     def row(c: Cast) -> None:
-        pass
+        c.call_companion(got, kind="beast")
 
     row.__name__ = "sentinel_companion_" + ref.rsplit("s", 1)[-1]
     row.__doc__ = (
@@ -829,7 +833,6 @@ sentinel_inert_13s4 = _inert(
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    todo=("chargen.BUILD_OPTIONS(pick=2)",),
 )
 def sentinel_abilities(c: Cast) -> None:
     """*"You gain **two** of the following abilities of your choice."*
@@ -843,10 +846,18 @@ def sentinel_abilities(c: Cast) -> None:
     of its own rather than folding into `chargen.power_choice()`: that one
     is a draw from a *family*, and this is a pick of N from a *printed
     list the table already holds*.
+
+    **Written: `chargen.OPTION_PICKS` carries the arity.** The fork
+    now deals TWO distinct options and `c.chosen_options` reads both,
+    so this grants exactly what the card prints -- not one, which is
+    half the feature, and not all five, which is stronger than print.
+    `rng.sample` is what makes them distinct, which a second
+    `BUILD_OPTIONS` entry could not have guaranteed.
     """
+    for took in c.chosen_options("cf:druid-sentinel-f13") or [
+            "cf:druid-sentinel-f13s0", "cf:druid-sentinel-f13s1"]:
+        c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
-
-# -- the thirteen rows the import cannot supply -----------------------------
 
 
 def _printed_pick(ref: str, options: tuple[str, ...], what: str) -> Any:

@@ -65,7 +65,7 @@ from combat_engine.engine import (
     get,
     power,
 )
-from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.events import PowerResolved, Summoned
 
 #: The summoning row `-f7` grants and `-f8`, `-f10` are about.
 SUMMON = "p13649"
@@ -242,10 +242,26 @@ def _pact_damage(ref: str) -> Any:
     off the rolling row. A paragon path is not modelled here, so the test
     is the class, which is the whole of what this tree can say.
 
-    Dropped: *"at 9th level, you also gain this bonus to the damage rolls
-    of the creature you summon with `p13649`"*. The summon itself is
-    `#1264`-adjacent -- all nineteen of its creatures are named and not
-    referenced -- so there is nothing on the board to pay.
+    **The summon half is written now, and the premise that refused it was
+    false.** It read *"the summon itself is `#1264`-adjacent -- all
+    nineteen of its creatures are named and not referenced -- so there is
+    nothing on the board to pay"*, and `#1268` disproved every clause of
+    that: the creatures are in `associate`, the ETL imports them, and
+    `c.summon` has fielded an `x10_` ref since `#459`. `p13649` now
+    summons the pact's own creature, so there IS something to pay.
+
+    *"At 9th level you also gain this bonus to the damage rolls of the
+    creature you summon with `p13649`"* is therefore a `Summoned` watch:
+    the creature does not exist when this trait arms, so the bonus cannot
+    be laid on it then. Gated on level 9 and on the summoner being this
+    character, because a hexblade standing beside another one's summon
+    pays nothing for it.
+
+    The marker it carried was `chargen.companion_from_option()`, which was
+    simply the wrong symbol -- this row has no companion and no option of
+    its own to read. Recorded because a wrong symbol is worse than a
+    missing one: `blocked.py --group` filed five damage rows under a
+    companion gap.
     """
     ability = _F2_ABILITY[ref]
 
@@ -258,7 +274,6 @@ def _pact_damage(ref: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.ARCANE],
-        dropped=("chargen.companion_from_option()",),
     )
     def row(c: Cast) -> None:
         me = c.me
@@ -274,6 +289,18 @@ def _pact_damage(ref: str) -> Any:
 
         c.bonus("damage", amount, on=me, until=When.ENCOUNTER,
                 kind="untyped", when=a_warlock_row)
+        if c.level < 9:
+            return
+
+        def summoned(ev: Summoned) -> None:
+            if getattr(ev, "actor", None) != me:
+                return
+            if getattr(ev, "ref", "") != SUMMON:
+                return
+            c.bonus("damage", amount, on=ev.summon, until=When.ENCOUNTER,
+                    kind="untyped")
+
+        c.watch(Summoned, summoned, until=When.ENCOUNTER, on=me, label=c.ref)
 
     row.__name__ = "hexblade_damage_" + ref.rsplit("s", 1)[-1]
     row.__doc__ = (

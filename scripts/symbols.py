@@ -437,7 +437,8 @@ CATEGORIES: dict[str, dict] = {
             # settle -- asked of a sub-choice a card printed rather than of
             # the weapon in hand. #758.
             ("state and identity", [
-                "bloodied", "build", "chosen_option", "chosen_weapons",
+                "bloodied", "build", "chosen_option", "chosen_options",
+                "chosen_weapons",
                 # `set_build` is the writer for the reader beside it: six
                 # feats stand a character on a build leg chargen did not
                 # deal. Placed here rather than under choices, because the

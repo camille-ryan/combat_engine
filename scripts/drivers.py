@@ -44765,12 +44765,13 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
     for ref in rows:
         if REGISTRY[ref].unfinished:
             owed.setdefault(sorted(REGISTRY[ref].unfinished)[0], []).append(ref)
-    out.that("chargen.BUILD_OPTIONS(pick=2)" in owed,
-             "`-f17` waits on a fork that deals TWO, which is a gap no "
-             "other row in the tree has: `deal_build_option` draws one ref "
-             "and `c.chosen_option` returns one. Dealing one would give a "
-             "scout half its feature and granting all five is stronger "
-             "than print, so neither half is landed",
+    out.that("chargen.BUILD_OPTIONS(pick=2)" not in owed
+             and not REGISTRY["cf:ranger-scout-f17"].unfinished,
+             "`-f17`'s fork deals TWO now and the row is written -- "
+             "`chargen.OPTION_PICKS` carries the arity and "
+             "`c.chosen_options` reads both. Dealing one gave a scout half "
+             "its feature and granting all five was stronger than print, "
+             "so neither half was landable before",
              f"{sorted(owed)}")
 
     world, me, _ = _posed("cf:ranger-scout-f1", 1)
@@ -45348,38 +45349,39 @@ def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
     companions = sorted(r for r in rows
                         if "chargen.companion_from_option()"
                         in (REGISTRY[r].unfinished or ()))
-    out.that(companions == ["cf:druid-sentinel-f1s0",
-                            "cf:druid-sentinel-f1s1",
-                            "cf:druid-sentinel-f1s2",
-                            "cf:druid-sentinel-f9s0",
+    # **The three `-f1` options are written and the symbol is gone from
+    # them.** The assertion here used to require all five, and the one
+    # below it required `c.call_companion("x10_1")` to RAISE -- *"asserted
+    # so the day the verb learns to, this reds and the three rows get
+    # written"*, which is this gate doing exactly its job. It learned:
+    # `call_companion` had no `associate` arm where `c.summon` has had one
+    # since `#459`, and adding it is the whole fix.
+    out.that(companions == ["cf:druid-sentinel-f9s0",
                             "cf:druid-sentinel-f9s2"],
-             "FIVE rows wait on the companion, not three -- the three "
-             "`-f1` options are `todo=` (that is all they are) and two of "
-             "`-f9`'s are `dropped=`, because each of those has a half "
-             "that plays and a half about the companion. One symbol over "
-             "both kinds, which is what lets `blocked.py --group` price "
-             "the gap at five rows rather than three",
+             "only `-f9`'s two still wait on the companion -- the three "
+             "`-f1` options are written. Those two are printed at 13th "
+             "level, above what this project imports, and each has a half "
+             "that plays, which is why they are `dropped=` rather than "
+             "`todo=`",
              f"{companions}")
-    kinds = {r: bool(REGISTRY[r].todo) for r in companions}
-    out.that(sum(kinds.values()) == 3,
-             "and the split is three `todo=` to two `dropped=`, asserted "
-             "because the marker is what tells a reader whether the row "
-             "plays at all",
-             f"{kinds}")
+    out.that(all(not REGISTRY[r].todo for r in companions),
+             "and both are `dropped=` rather than `todo=`, which is what "
+             "tells a reader the rest of each row plays",
+             f"{ {r: bool(REGISTRY[r].todo) for r in companions} }")
     world, me, _ = _posed("cf:druid-sentinel-f2", 1)
     c = Cast(world=world, me=me, ref="probe")
-    try:
-        c.call_companion("x10_1")
-        raised = ""
-    except Exception as exc:
-        raised = f"{type(exc).__name__}: {exc}"
-    out.that("x10_1" in raised,
-             "and the symbol rests on a measurement rather than a reading: "
-             "`c.call_companion(\"x10_1\")` raises, because that verb reads "
-             "the MONSTER table and all three of these live in "
-             "`associate`. Asserted so the day the verb learns to, this "
-             "reds and the three rows get written",
-             f"{raised or 'it did NOT raise'}")
+    from combat_engine.engine.components import Ident as _Ident
+
+    made = c.call_companion("x10_1", kind="beast")
+    got = getattr(world.get(made, _Ident), "ref", None)
+    out.that(got == "x10_1",
+             "and `c.call_companion(\"x10_1\")` FIELDS it now, where it "
+             "raised `KeyError: no monster x10_1` before -- the verb read "
+             "the monster table and all three of these live in "
+             "`associate`. Asserted on the creature that arrives rather "
+             "than on the absence of a raise, so a branch that swallowed "
+             "the error would still red",
+             f"{got!r}")
 
     # -- the thirteen the import cannot supply ----------------------------
     world, me, _ = _posed("cf:druid-sentinel-f2", 1)
@@ -45621,6 +45623,131 @@ _F1_POWER = {
     "cf:warlock-hexblade-f1s3": "p13679",
     "cf:warlock-hexblade-f1s4": "p13721",
 }
+
+
+def three_more_facilities_the_class_work_asked_for(out: Result) -> None:
+    """`OPTION_PICKS`, `call_companion`'s associate arm, and nine gains.
+
+    Each closed a marker group, and each was a *smaller* gap than its
+    symbol claimed -- which is the thing worth gating, because the symbol
+    is what a reader prices the work from:
+
+    * **`chargen.OPTION_PICKS`** -- three rows print *"you gain two of the
+      following"* and `BUILD_OPTIONS` deals one. A count on the fork, not
+      a second entry, because two entries are two independent draws.
+    * **`c.call_companion`'s `x10_` arm** -- eight rows carried
+      `chargen.companion_from_option()`, which named a chargen writer. The
+      gap was one missing branch: the verb read the `monster` table and
+      `c.summon` has had an `associate` arm since `#459`.
+    * **nine `chargen.EXTRA_GAINS` entries** -- blocked because *"only
+      three of the 39 rows state their own level"*, which was true while
+      `class_feature` carried none. `combat_engine.levels` carries it now.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen, levels
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Ident
+    from combat_engine.engine.dsl import REGISTRY
+
+    # -- OPTION_PICKS: two, and DISTINCT ---------------------------------
+    picks = sorted(chargen.OPTION_PICKS)
+    out.that(picks and all(chargen.OPTION_PICKS[r] == 2 for r in picks),
+             "every fork in `OPTION_PICKS` deals two, which is what the "
+             "three cards carrying it print",
+             f"{ {r.rsplit('-', 1)[-1]: chargen.OPTION_PICKS[r] for r in picks} }")
+    bad, pairs = [], {}
+    for ref in picks:
+        drawn = {chargen.deal_build_options(Random(s), ref) for s in range(30)}
+        pairs[ref] = len(drawn)
+        for got in drawn:
+            if len(got) != 2 or len(set(got)) != 2:
+                bad.append((ref, got))
+    out.that(not bad,
+             "and every draw is TWO DISTINCT options -- `rng.sample`, which "
+             "is the whole reason this is a count on one fork rather than "
+             "a second `BUILD_OPTIONS` entry: two entries are two "
+             "independent draws and could hand the same option over twice",
+             f"{bad[:3] or 'none repeated over 30 seeds each'}")
+    out.that(all(n > 1 for n in pairs.values()),
+             "and the pair VARIES by seed, so the fork chooses rather than "
+             "answering the first two -- the fault `#1085` is about, one "
+             "arity up",
+             f"{ {r.rsplit('-', 1)[-1]: n for r, n in pairs.items()} }")
+
+    # **The rows read both**, which is the half a draw alone does not give.
+    granted = {}
+    for ref in picks:
+        world, me, _ = _board(ref, 1)
+        from combat_engine.engine.components import Build, Powers
+
+        kn = world.need(me, Powers)
+        kn.known = [k for k in kn.known if not k.startswith(ref + "s")]
+        held = world.need(me, Build)
+        held.choices = {c for c in held.choices
+                        if not c.startswith(f"option:{ref}:")}
+        held.choices |= {f"option:{ref}:{ref}s2", f"option:{ref}:{ref}s4"}
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        granted[ref] = sorted(k for k in kn.known if k.startswith(ref + "s"))
+    out.that(all(v == [f"{r}s2", f"{r}s4"] for r, v in granted.items()),
+             "and each row grants BOTH of the options its build recorded, "
+             "not the first -- reading one would hand over half a feature "
+             "and nothing else would say so",
+             f"{granted}")
+
+    # -- call_companion's associate arm ----------------------------------
+    world, me, _ = _board("cf:druid-sentinel-f1s0", 1)
+    fielded = {}
+    for ref in ("x10_1", "x10_5", "x10_64"):
+        w2, m2, _ = _board("cf:druid-sentinel-f1s0", 1)
+        made = Cast(world=w2, me=m2, ref="probe").call_companion(ref, kind="beast")
+        fielded[ref] = getattr(w2.get(made, Ident), "ref", None)
+    out.that(all(k == v for k, v in fielded.items()),
+             "`c.call_companion` fields an `associate` ref, which it could "
+             "not before -- it read the `monster` table and raised "
+             "`KeyError: no monster x10_1`. All three of the sentinel's "
+             "companions, because one would pass for a branch that "
+             "hard-codes a ref",
+             f"{fielded}")
+
+    # -- the nine gains, each worth exactly one more power ---------------
+    NEW = ["cf:assassin-executioner-f10", "cf:assassin-executioner-f14",
+           "cf:paladin-blackguard-f10", "cf:paladin-blackguard-f13",
+           "cf:warlock-binder-f10", "cf:warlock-binder-f13",
+           "cf:paladin-blackguard-f9", "cf:warlock-binder-f9",
+           "cf:paladin-blackguard-f12"]
+    out.that(all(r in chargen.EXTRA_GAINS for r in NEW),
+             "nine more rows carry a `chargen.EXTRA_GAINS` entry, keyed on "
+             "the feature's ref so the gain lands on a character holding "
+             "that row and nobody else",
+             f"{len(chargen.EXTRA_GAINS)} entries in all")
+    # **A/B against the entry, which is `#1112`'s check**: a wrong level
+    # deals NOTHING and says nothing, so the count moving is the only
+    # evidence the entry works.
+    moved = {}
+    for ref in NEW:
+        cls = ref.split(":")[1].split("-")[0]
+        lvl = chargen.EXTRA_GAINS[ref][0][1]
+        saved = chargen.EXTRA_GAINS.pop(ref)
+        try:
+            without = len(chargen.loadout(cls, lvl, rng=Random(3)))
+        finally:
+            chargen.EXTRA_GAINS[ref] = saved
+        moved[ref] = len(chargen.loadout(cls, lvl, rng=Random(3))) - without
+    out.that(all(n == 1 for n in moved.values()),
+             "and each is worth exactly ONE more power -- A/B'd against "
+             "the entry, because a `from_level` whose pool is empty deals "
+             "nothing and reports nothing, which is the silent no-op "
+             "`#1112` was filed for",
+             f"{ {r.rsplit('-', 1)[-1]: n for r, n in moved.items()} }")
+    out.that(all(chargen.EXTRA_GAINS[r][0][1] == levels.level_of(r)
+                 for r in NEW),
+             "and every gain happens at the level `combat_engine.levels` "
+             "prints for its own feature, rather than at a number chosen "
+             "here -- which is what made these nine writable at all",
+             f"{ {r.rsplit(chr(45), 1)[-1]: chargen.EXTRA_GAINS[r][0][1]
+                  for r in NEW[:4]} }")
 
 
 def a_defect_marker_the_compendium_disproves(out: Result) -> None:
@@ -46111,25 +46238,28 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
                      "cf:assassin-executioner-f6")}
     out.that(len(mine) == 3 and all(u is None for v in mine.values()
                                     for (u, _, _) in v),
-             "three rows carry a `chargen.EXTRA_GAINS` entry and every one "
-             "has `usage=None` -- the cards say *utility* and *attack* "
-             "rather than naming a slot, and at these levels the pool "
-             "answers for itself. A `Usage` here would be a second guess "
-             "on top of the first",
+             "every `chargen.EXTRA_GAINS` entry for a UTILITY gain has "
+             "`usage=None` -- the cards say *utility* rather than naming "
+             "a slot, and at a level in `UTILITY_GAINS` the pool answers "
+             "for itself. A `Usage` there would be a second guess on top "
+             "of the first. The attack gains DO name a slot, because 5 "
+             "and 9 are `ATTACK_GAINS[DAILY]` and attack levels are "
+             "shared",
              f"{mine}")
     still = sorted(r for r, p in REGISTRY.items()
                    if "chargen.power_choice()" in (p.unfinished or ()))
     rows_ = [r for r in still if r.startswith("cf:")]
     feats = [r for r in still if not r.startswith("cf:")]
-    out.that(len(rows_) == 31 and len(feats) == 4,
-             "and 31 CHASSIS ROWS plus 4 feats still carry the symbol, "
-             "because only those three state the level the gain happens "
-             "at. The rest say *of your level or lower* or name a family "
-             "with no level, and `class_feature` carries none -- so an "
-             "entry would be a guess about WHEN, which is `#1261`. Both "
-             "counts named: the figure for this wave is 31 and the figure "
-             "for the symbol is 35, and quoting one as the other is how a "
-             "reader concludes the feats were done too",
+    out.that(len(rows_) == 22 and len(feats) == 4,
+             "and 22 chassis rows plus 4 feats still carry the "
+             "symbol -- down from 31 and 4, because `combat_engine.levels` "
+             "now states the level every gain happens at and nine more "
+             "rows became `EXTRA_GAINS` entries. What is left says *one "
+             "additional <family>* and names a family the data does not "
+             "record, or is printed above the level this project imports. "
+             "`#1269` has the split. Both counts named, because quoting "
+             "one as the other is how a reader concludes the feats were "
+             "done too",
              f"{len(rows_)} rows, {len(feats)} feats: {feats}")
 
     out.that(not [r for r, p in REGISTRY.items()
@@ -78246,6 +78376,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "more_facilities": (
+        three_more_facilities_the_class_work_asked_for,
+        "OPTION_PICKS, call_companion's associate arm, and nine gains"
+        " (#1269, #1270, #1273)",
     ),
     "defect_disproved": (
         a_defect_marker_the_compendium_disproves,

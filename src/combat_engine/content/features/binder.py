@@ -563,9 +563,9 @@ binder_pick_0 = _pick("cf:warlock-binder-f0",
                       "A 1st-level `c7` attack power.", gained=True)
 binder_pick_6 = _pick("cf:warlock-binder-f6",
                       "A 2nd-level `c7` utility power.", gained=True)
-binder_pick_9 = _pick("cf:warlock-binder-f9", "A `c7` attack power.")
-binder_pick_10 = _pick("cf:warlock-binder-f10", "A `c7` utility power.")
-binder_pick_13 = _pick("cf:warlock-binder-f13", "Another `c7` utility power.")
+binder_pick_9 = _pick("cf:warlock-binder-f9", "A `c7` attack power.", gained=True)
+binder_pick_10 = _pick("cf:warlock-binder-f10", "A `c7` utility power.", gained=True)
+binder_pick_13 = _pick("cf:warlock-binder-f13", "Another `c7` utility power.", gained=True)
 binder_pick_16 = _pick("cf:warlock-binder-f16", "Another `c7` utility power.")
 binder_pick_15 = _pick(
     "cf:warlock-binder-f15", "A `c7` attack power replacing a daily.",

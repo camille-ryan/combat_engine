@@ -588,7 +588,6 @@ scout_pick_11 = _pick("cf:ranger-scout-f11", "One more aspect of the wild.")
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("chargen.BUILD_OPTIONS(pick=2)",),
 )
 def scout_abilities(c: Cast) -> None:
     """*"You gain **two** of the following abilities of your choice."*
@@ -605,7 +604,16 @@ def scout_abilities(c: Cast) -> None:
 
     `-f17s0` carries a gap of its own on top -- see it -- and the other
     four are skill clauses the story engine owns.
+    **Written: `chargen.OPTION_PICKS` carries the arity.** The fork deals
+    TWO distinct options now and `c.chosen_options` reads both, so this
+    grants what the card prints -- not one, which is half the feature, and
+    not all five, which is stronger than print. `rng.sample` is what makes
+    the two distinct, which a second `BUILD_OPTIONS` entry could not have
+    guaranteed: two entries are two independent draws.
     """
+    for took in c.chosen_options("cf:ranger-scout-f17") or [
+            "cf:ranger-scout-f17s0", "cf:ranger-scout-f17s1"]:
+        c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
 
 def _narrative(ref: str, what: str, why: str) -> Any:

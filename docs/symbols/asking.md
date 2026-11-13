@@ -153,6 +153,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Was an attack behind the blow being announced?
 - `c.chosen_option(self, ref: 'str', *, on: 'int | None' = None) -> 'str | None'`
   - Which option this character's build settled on for `ref`.
+- `c.chosen_options(self, ref: 'str', *, on: 'int | None' = None) -> 'list[str]'`
+  - **Every** option this character's build settled on for `ref`.
 - `c.chosen_weapons(self, *, on: 'int | None' = None) -> 'frozenset[str]'`
   - The weapon refs this character's build settled on, by ref.
 - `c.considered_bloodied(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

@@ -567,7 +567,6 @@ def hunter_keen_eye(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("chargen.BUILD_OPTIONS(pick=2)",),
 )
 def hunter_abilities(c: Cast) -> None:
     """*"You gain **two** of the following abilities of your choice."*
@@ -578,7 +577,16 @@ def hunter_abilities(c: Cast) -> None:
 
     Not approximated by dealing one, which gives a hunter half its
     feature, and not by granting all five, which is stronger than print.
+    **Written: `chargen.OPTION_PICKS` carries the arity.** The fork deals
+    TWO distinct options now and `c.chosen_options` reads both, so this
+    grants what the card prints -- not one, which is half the feature, and
+    not all five, which is stronger than print. `rng.sample` is what makes
+    the two distinct, which a second `BUILD_OPTIONS` entry could not have
+    guaranteed: two entries are two independent draws.
     """
+    for took in c.chosen_options("cf:ranger-hunter-f20") or [
+            "cf:ranger-hunter-f20s0", "cf:ranger-hunter-f20s1"]:
+        c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
 
 def _ability(ref: str, what: str, why: str) -> Any:

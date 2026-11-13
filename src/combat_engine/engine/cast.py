@@ -1474,6 +1474,32 @@ class Cast:
                 return by_value.get(choice.split(":", 1)[1])
         return None
 
+    def chosen_options(self, ref: str, *, on: int | None = None) -> list[str]:
+        """**Every** option this character's build settled on for `ref`.
+
+        `chosen_option` answers one, which is right for the sixty-odd forks
+        that deal one. Four cards print *"you gain **two** of the
+        following"* and `chargen.OPTION_PICKS` deals that many, so a row
+        whose card says two needs all of them -- reading one would hand
+        over half a feature and nothing would say so.
+
+        Storage needs nothing new: the choices are a **set** of
+        `option:<ref>:<value>`, so several entries for one ref were always
+        expressible and only the reader was missing.
+
+        Sorted, so a row that lays one effect per option lays them in a
+        stable order and a fixture of its log does not wobble.
+        """
+        from .components import Build
+
+        who = self.me if on is None else on
+        held = self.world.get(who, Build)
+        if held is None:
+            return []
+        want = f"option:{ref}:"
+        return sorted(c[len(want):] for c in held.choices
+                      if c.startswith(want))
+
     def chosen_option(self, ref: str, *, on: int | None = None) -> str | None:
         """Which option this character's build settled on for `ref`.
 
@@ -9790,6 +9816,25 @@ class Cast:
                     damage=damage,
                     ability=block.ability.value,
                 ),
+            )
+            return made
+        # **An `x10_` ref is an `associate`, not a monster.** `c.summon`
+        # has had this branch since `#459` and this one did not, so a
+        # companion whose block lives in that table raised `KeyError: no
+        # monster x10_1` -- eight chassis rows carried
+        # `chargen.companion_from_option()` for it, and the symbol was
+        # describing the missing branch rather than a missing chargen
+        # facility. The blocks derive their numbers from the owner ("HP
+        # your bloodied value", "Defenses your defenses + 2"), which is
+        # why they spawn through a path that is handed one.
+        if ref.startswith("x10_"):
+            from combat_engine.content import loader
+
+            made = loader.spawn_associate(
+                self.world, ref, where, of=self.me, team=side)
+            self.world.add(
+                made,
+                Companion(owner=self.me, ref=ref, kind=kind, damage=damage),
             )
             return made
         if ref:
