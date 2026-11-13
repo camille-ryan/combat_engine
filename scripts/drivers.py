@@ -79517,6 +79517,89 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def a_forced_swing_at_an_ally_is_refused(out: Result) -> None:
+    """`cf:cleric-warpriest-f1s8`: *"You cannot be forced to attack an ally
+    under any circumstances."*
+
+    The row carried `c.refuses_forced_attack()` saying *"nothing routes a
+    compelled attack through anything the compelled creature can fail"*.
+    The two doors it named -- `Cast.basic(who=)` and `Cast.grant_attack` --
+    both hand `dsl.use` a `granted_by`, so there is exactly one moment to
+    read and `#1276` reads it there.
+
+    **The control is a non-holder on the same board, not the same creature
+    before the trait.** `audit.board` arms traits, so the hold is already
+    standing when the rule gets the world -- measured, the refusal note
+    fires on a `grant_attack` made *before* the body is called again. And
+    `c.end_effect` does not reach a `Mods` entry, so it cannot be taken
+    away either. A second creature that does not hold the feature, forced
+    the same way on the same board, is the comparison that works.
+
+    Four things asserted, and three of them are the printed exceptions:
+
+    * a holder forced onto an adjacent ally does **not** swing;
+    * an **ally who does not hold the feature**, forced the same way, does
+      -- so the refusal is the feature's and not the board's;
+    * the holder forced onto an **enemy** swings, so the refusal is about
+      the target's side and not about being granted a swing at all;
+    * and the holder's **own** swing at an ally lands, which the card
+      insists on: *"You can attack an ally if you choose to do so."*
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.query import adjacent, allies, enemies
+
+    ref = "cf:cleric-warpriest-f1s8"
+    world, me, _ = _board(ref, 1)
+    friends = [a for a in sorted(allies(world, me))
+               if a != me and world.get(a, Health) is not None]
+    out.that(len(friends) >= 2,
+             f"the board fields at least two allies ({len(friends)})")
+    if len(friends) < 2:
+        return
+    friend, bystander = friends[0], friends[1]
+    foe = sorted(enemies(world, me))[0]
+
+    # Beside the holder, so reach cannot be what refuses the swing -- which
+    # it was on the first attempt, and it reads identically to the feature
+    # working.
+    # **In a line, so every pair that is compared is in reach.** Placed
+    # on either side of the holder first, and the control failed for the
+    # dullest reason: the bystander was two squares from the ally it was
+    # being forced to hit, so a melee basic could not connect and the
+    # refusal and the reach read identically.
+    spot = world.need(me, Position).square
+    for who, where in ((friend, (spot[0] + 1, spot[1])),
+                       (bystander, (spot[0] + 2, spot[1]))):
+        world.grid.lift(who)
+        world.need(who, Position).square = where
+        world.grid.place(who, frozenset({where}))
+        world.need(who, Health).hp = 500
+    world.zones.refresh()
+    world.need(foe, Health).hp = 500
+    world.turn = me
+    out.that(adjacent(world, me, friend)
+             and adjacent(world, bystander, friend),
+             "the holder and the bystander are each adjacent to the ally"
+             " they are forced at, so reach is not what any refusal below"
+             " is about")
+
+    forcer = Cast(world=world, me=foe, ref="drivers:dominate")
+    out.that(not forcer.grant_attack(me, on=friend),
+             "a forced swing at an adjacent ally does not happen")
+    out.that(forcer.grant_attack(bystander, on=friend),
+             "PLANT: the same forced swing by an ally that does **not**"
+             " hold the feature does happen -- so the refusal is the"
+             " feature's and not the board's")
+    out.that(forcer.grant_attack(me, on=foe),
+             "and the holder forced onto an **enemy** swings, so what is"
+             " refused is the target's side rather than the grant")
+    out.that(Cast(world=world, me=me, ref="drivers:own").basic(on=friend),
+             "while the holder's **own** swing at an ally lands --"
+             " *'you can attack an ally if you choose to do so'*")
+
+
 def a_waiver_answers_the_question_that_asks_it(out: Result) -> None:
     """`Gear.counts_as` had a writer and two unreachable readers.
 
@@ -80866,6 +80949,11 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "forced_ally": (
+        a_forced_swing_at_an_ally_is_refused,
+        "a warpriest of the ninth domain cannot be made to swing at an"
+        " ally, but may choose to (#1276)",
     ),
     "counts_as_reader": (
         a_waiver_answers_the_question_that_asks_it,

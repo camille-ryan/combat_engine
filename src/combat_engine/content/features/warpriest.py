@@ -158,6 +158,29 @@ def warpriest_domain_s0(c: Cast) -> None:
     The last sentence is `dropped`. The spec prints "the following powers"
     and no refs, and `class_feature` holds no `cf:cleric-warpriest-f1s0c<N>`
     card either, so there is nothing to grant and nothing to guess.
+
+    **And the page is not in `resources/` either, which is the measurement
+    that stops this being re-attempted.** Six of the nine domains were
+    recovered off the class page and this one refused on a count that did
+    not come out -- so the obvious next move is to go back to the page.
+    Searched all 18 PDFs for this domain's five-word printed name and for
+    its first two words, with whitespace collapsed so a line break cannot
+    hide it: **no hit on either**, and no page carries a warpriest domain
+    section at all. `#1021`'s lesson cuts the other way here -- a failed
+    search is not an absent table, so the search was made twice and the
+    second time against a fragment.
+
+    So the four refs exist in no source this project holds. `dropped=` and
+    not `defect=`, because the rest of the row plays and
+    `content/CLAUDE.md` is explicit that `defect=` is *"only when nothing
+    survives"* -- flagging it would refuse a domain a warpriest can
+    otherwise take in full but for one clause. Filed rather than landed,
+    which is the rule for a clause whose only source would be a guess.
+
+    **`spec.granted_powers` is kept and is the honest symbol**, with one
+    caveat worth knowing: it names the ETL, and no ETL change can conjure
+    data the compendium does not carry. What would close it is the page
+    arriving in `resources/`.
     """
     me = c.me
 
@@ -355,12 +378,19 @@ def warpriest_domain_s4(c: Cast) -> None:
     since the page gives the domains no banner of their own. All four
     are declared and imported.
 
-    Recovered for six of the nine domains and **refused for three**,
+    Recovered for six of the nine domains and **refused for two**,
     which is the discipline `features/hunter.py`'s `_printed_pick`
     states: `f1s0`'s section reads three powers where its siblings read
-    four, `f1s6`'s reads none, and `f1s8`'s runs to the end of the page
-    and absorbs ninety-two. A count that does not come out is not
-    written from.
+    four, and `f1s8`'s runs to the end of the page and absorbs
+    ninety-two. A count that does not come out is not written from.
+
+    **This said "three" and named `f1s6` as the third, which is stale.**
+    `f1s6`'s four refs are in its own **spec** -- `p12634` through
+    `p12637` -- so it never needed the page and carries no marker. Five of
+    the nine list their refs that way; the page was only ever needed for
+    the other four. And `resources/` holds no warpriest domain page at
+    all, measured twice -- see `cf:cleric-warpriest-f1s0` -- so the two
+    refusals cannot be revisited from any source here.
     """
     c.grant_row("p14246", on=c.me, until=When.ENCOUNTER)
     c.grant_row("p14247", on=c.me, until=When.ENCOUNTER)
@@ -413,12 +443,19 @@ def warpriest_domain_s5(c: Cast) -> None:
     since the page gives the domains no banner of their own. All four
     are declared and imported.
 
-    Recovered for six of the nine domains and **refused for three**,
+    Recovered for six of the nine domains and **refused for two**,
     which is the discipline `features/hunter.py`'s `_printed_pick`
     states: `f1s0`'s section reads three powers where its siblings read
-    four, `f1s6`'s reads none, and `f1s8`'s runs to the end of the page
-    and absorbs ninety-two. A count that does not come out is not
-    written from.
+    four, and `f1s8`'s runs to the end of the page and absorbs
+    ninety-two. A count that does not come out is not written from.
+
+    **This said "three" and named `f1s6` as the third, which is stale.**
+    `f1s6`'s four refs are in its own **spec** -- `p12634` through
+    `p12637` -- so it never needed the page and carries no marker. Five of
+    the nine list their refs that way; the page was only ever needed for
+    the other four. And `resources/` holds no warpriest domain page at
+    all, measured twice -- see `cf:cleric-warpriest-f1s0` -- so the two
+    refusals cannot be revisited from any source here.
     """
     c.grant_row("p14258", on=c.me, until=When.ENCOUNTER)
     c.grant_row("p14259", on=c.me, until=When.ENCOUNTER)
@@ -536,32 +573,41 @@ def warpriest_domain_s7(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("c.refuses_forced_attack()", "spec.granted_powers"),
+    dropped=("spec.granted_powers",),
 )
 def warpriest_domain_s8(c: Cast) -> None:
-    """The refusal has no seam to sit in; the rider is `f1752`'s shape.
+    """The refusal, and a rider that is `f1752`'s shape.
 
-    **Nothing routes a compelled attack through anything the compelled
-    creature can fail.** A card that turns a creature on its own side calls
-    `c.basic(who=victim, on=foe)` outright --
-    `monsters/level_08/controllers_sa._forced_basic_against_own_side` is
-    the worked case and there are others -- so there is no moment at which
-    "such an attempt automatically fails" could be read.
+    **The seam the old marker said did not exist is `dsl.use`.** It read
+    *"nothing routes a compelled attack through anything the compelled
+    creature can fail"*, and the two doors it names --
+    `c.basic(who=victim, on=foe)` and `c.grant_attack` -- both hand
+    `dsl.use` a `granted_by`. So there **is** a moment at which *"such an
+    attempt automatically fails"* can be read, and it is one moment rather
+    than two: `c.refuses_forced_attack` lays the hold and that single guard
+    consults it, after the targets are resolved.
 
-    And the card's own second sentence rules out the near miss: "damage or
-    conditions associated with the effect can still affect you" means this
-    must **not** be written as an immunity to the condition that compels.
-    Refusing the condition would be strictly stronger than print and in
-    the wrong place. What is wanted is narrow -- a creature-level refusal
-    the attack-granting verbs consult.
+    `granted_by != actor` is what tells a forced swing from a chosen one,
+    which the card insists on in its third sentence -- *"you can attack an
+    ally if you choose to do so"* -- so a defender's self-granted
+    punishment swing is untouched.
+
+    And the card's second sentence is why the guard sits where it does
+    rather than refusing the condition: *"damage or conditions associated
+    with the effect can still affect you"*. An immunity to the compelling
+    condition would be strictly stronger than print. By the time the
+    forcing row hands the swing over it has already done its other work,
+    so losing the attack loses the attack and nothing else.
 
     The rider plays, and it is `f1752` at a different duration: a +2 power
     bonus to all four defences on the creature healed, until the end of the
     caster's next turn.
 
     The powers are `dropped` for `f1s0`'s reason -- the spec prints no refs
-    and no card row exists to grant.
+    and no card row exists to grant. That one is not revisitable: no page
+    in `resources/` carries a warpriest domain section, measured twice.
     """
+    c.refuses_forced_attack(on=c.me, until=When.ENCOUNTER)
 
     def warded(ev: Any) -> None:
         for defence in _DEFENCES:

@@ -9195,6 +9195,37 @@ class Cast:
         return self.bonus("no_second_wind_heal", 1, on=who, until=until,
                           stacks=False)
 
+    def refuses_forced_attack(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You cannot be forced to attack an ally under any circumstances."
+
+        `cf:cleric-warpriest-f1s8` prints it, and the reader is a single
+        guard in `dsl.use` -- the one place both doors to a compelled swing
+        pass through. `Cast.grant_attack` and `Cast.basic(who=)` are those
+        doors and each hands `use` a `granted_by`, so one reader there
+        cannot disagree with itself the way 22 readers of
+        `granted_keywords` did.
+
+        **What it refuses is narrower than it sounds, and the card says
+        so.** *"You can attack an ally if you choose to do so"*, so a swing
+        the creature grants itself -- a defender's punishment, which eight
+        feats are about -- is untouched. The test is `granted_by != actor`.
+
+        And *"such an attempt automatically fails, although damage or
+        conditions associated with the effect that would cause you to
+        attack your ally can still affect you"*: the guard sits where the
+        targets are already resolved and the forcing row has already done
+        its other work, so the attack is lost and nothing else is.
+
+        A hold rather than a field, so a printed duration can bound it --
+        this card's is the character's whole life, but the shape is the one
+        every other refusal in this class uses.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("no_forced_ally_attack", 1, on=who, until=until,
+                          stacks=False)
+
     def forgo_second_wind(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
     ) -> Effect | None:

@@ -4451,6 +4451,37 @@ def use(
         chosen, origin = _auto_targets(world, actor, p, origin, branch, augment,
                                        source)
         chosen = list(chosen)
+    # **"You cannot be forced to attack an ally under any circumstances."**
+    # `cf:cleric-warpriest-f1s8`, and this is the one place the refusal can
+    # live: a compelled swing reaches the board through `Cast.grant_attack`
+    # *or* `Cast.basic(who=)`, and both pass `granted_by=self.me` into this
+    # function. One reader at the choke point, rather than two that could
+    # disagree -- the argument `Cast.more_uses` makes against
+    # `granted_keywords`' 22 sites.
+    #
+    # **`granted_by != actor` is what tells forced from chosen**, which the
+    # card insists on: *"You can attack an ally if you choose to do so."* A
+    # self-grant -- a defender's punishment swing, eight feats' worth -- is
+    # the creature's own doing and passes.
+    #
+    # Refusing here and not earlier is also what the printed sentence
+    # wants: *"such an attempt automatically fails, although damage or
+    # conditions associated with the effect ... can still affect you."* The
+    # forcing row has already done the rest of its work by the time it
+    # hands the swing over, so returning False loses the attack and nothing
+    # else.
+    if granted_by >= 0 and granted_by != actor and p.is_attack and chosen:
+        from .components import Mods as _Mods
+        from .events import Note as _Note
+        from .query import team as _team
+
+        mods = world.get(actor, _Mods)
+        if mods is not None and mods.total("no_forced_ally_attack") > 0:
+            mine = _team(world, actor)
+            if any(_team(world, t) is mine for t in chosen):
+                world.bus.emit(_Note(
+                    text=f"{actor} cannot be forced to attack an ally"))
+                return False
     cast = Cast(
         world=world,
         me=actor,
