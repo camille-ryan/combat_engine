@@ -1704,7 +1704,6 @@ def _coven(ref: str, grants: str, first: str, second: str):  # noqa: ANN202
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.ARCANE],
-        dropped=("c.gains_training()",),
     )
     def row(c: Cast) -> None:
         c.grant_row(grants, on=c.me, until=When.ENCOUNTER)
@@ -1718,8 +1717,9 @@ def _coven(ref: str, grants: str, first: str, second: str):  # noqa: ANN202
     row.__doc__ = (
         f"One coven: the `{grants}` power, and from 5th level +2 to "
         f"{first} and {second} checks.\n\n"
-        f"    The training half is `dropped=` on `c.gains_training()` --\n"
-        f"    see `_coven`, which carries the reasoning and `#1258`.\n"
+        f"    The training half is `chargen.FEATURE_TRAINS` -- training\n"
+        f"    is settled before the first initiative is rolled, so no\n"
+        f"    verb could have been the answer. `#1258`.\n"
     )
     return row
 

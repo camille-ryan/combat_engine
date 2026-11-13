@@ -692,6 +692,11 @@ KNOWN_SILENT = {
     # `drivers.waived_feat` proves the chain against a dealt character
     # and `drivers.executioner_guild` proves the grant itself on a
     # character the feat has been taken away from.
+    # Its training is chargen's -- `chargen.FEATURE_TRAINS` -- and the
+    # one clause left is the story runner's, so the body has nothing to
+    # do in a fight. `drivers.feature_trains` proves the training.
+    "cf:rogue-thief-f4": "its extra trained skill is dealt by chargen; the"
+                         " clause left is the story runner's",
     "cf:assassin-executioner-f5": "grants the bonus feat it dealt; chargen"
                                   " already put it in the hand",
     "cf:druid-protector-f2": "grants the attunements it dealt; they are"

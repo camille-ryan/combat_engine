@@ -217,7 +217,6 @@ def warpriest_domain_s1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("class_feature.trains",),
 )
 def warpriest_domain_s2(c: Cast) -> None:
     """A skill training with no column to live in, and a rider that plays.

@@ -6482,9 +6482,43 @@ def _class_skill_pool(db: sqlite3.Connection, printed: str) -> set[str]:
     return {r["skill"] for r in rows}
 
 
+
+#: Skills a **class feature** trains, by the row, since the import
+#: carries no column for it.
+#:
+#: `feat` has `trains`, `trains_choice` and `trains_from`;
+#: `class_feature` has `ref`, `class`, `ord`, `build`, `spec` and
+#: `duplicate_of`, and none of those is a skill. So four rows printing
+#: *"you gain training in the Intimidate skill"* in plain words had
+#: nowhere for that to land, and three of them carried
+#: `c.gains_training()` -- a symbol for a verb, where what was wanted is
+#: a build-time fact. Training is settled before the first initiative is
+#: rolled; no verb could have been the answer.
+#:
+#: Transcribed from each row's own printed text, which is `levels.py`'s
+#: precedent and the fourth time this session the thing was printed and
+#: the column was empty.
+#:
+#: **Granted and chosen are kept apart**, exactly as `_trained_skills`
+#: already keeps them apart for feats: reading a choice as a grant would
+#: train one character in every option a card offers between, which is
+#: what `#574` measured on `f1222`. A tuple is granted; a frozenset is
+#: a choice of one.
+FEATURE_TRAINS: dict[str, tuple[str, ...] | frozenset[str]] = {
+    "cf:cleric-warpriest-f1s2": ("intimidate",),
+    "cf:wizard-witch-f1s0": ("intimidate",),
+    "cf:wizard-witch-f1s1": ("heal",),
+    # *"an additional trained skill, chosen from the following list."*
+    "cf:rogue-thief-f4": frozenset({
+        "bluff", "dungeoneering", "insight", "intimidate", "perception",
+        "stealth",
+    }),
+}
+
 def _trained_skills(cls: str, feats: list[str], rng: Random,
                     race: str = "",
-                    wanted: Sequence[str] = ()) -> frozenset[str]:
+                    wanted: Sequence[str] = (),
+                    features: Sequence[str] = ()) -> frozenset[str]:
     """Which skills this character is trained in: the given, plus the chosen.
 
     Off `class_skill`, which `etl/build.py` fills from the two sentences
@@ -6561,6 +6595,21 @@ def _trained_skills(cls: str, feats: list[str], rng: Random,
                 from_feats.add(rng.choice(sorted(offered)))
         if got["trains_from"]:
             from_feats |= _from_class_list(db, got["trains_from"], rng)
+    # **And what a class feature trains**, which no column carries -- see
+    # `FEATURE_TRAINS`. Folded in here rather than beside the class pool
+    # so it gets the same treatment a feat's does: one training and not
+    # a free pick in exchange.
+    for ref in features:
+        grant = FEATURE_TRAINS.get(ref)
+        if grant is None:
+            continue
+        if isinstance(grant, frozenset):
+            # A choice of one, drawn from the same stream the feats'
+            # choices use so a character's training stays settled by its
+            # seed.
+            from_feats.add(rng.choice(sorted(grant)))
+        else:
+            from_feats |= set(grant)
     # A feat training a skill the class also offers is one training, not
     # two -- the set does that for free -- and it does **not** buy a free
     # pick in exchange, which is the printed rule and is why the union
@@ -7113,6 +7162,22 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 # `Sheet.character` hands it back, exactly as `#1101` did
                 # for the kit.
                 who.skills,
+                # **The class features it holds AND the ones its forks
+                # chose**, which train skills no column carries -- see
+                # `FEATURE_TRAINS`. Both, because a fork's sub-option is
+                # recorded under `option:` and is **not** put in the
+                # hand: three of the four rows here are sub-options, and
+                # reading the hand alone found none of them.
+                [r for r in powers if r.startswith("cf:")]
+                #
+                # **Cut at the LAST `:cf:`, not with `rsplit`.** An
+                # `option:` key is `option:{parent}:{value}` and both
+                # halves carry their own colons, so `rsplit(":", 1)`
+                # yields `wizard-witch-f1s1` -- which matches no ref and
+                # trains nobody. Fourth time this shape has bitten in
+                # this file.
+                + [c[c.rindex(":cf:") + 1:] for c in took_options
+                   if ":cf:" in c],
             )
         ),
         Gear(

@@ -256,20 +256,26 @@ def thief_dexterity(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("c.gains_training()", "story.auto_success_on_20()"),
+    dropped=("story.auto_success_on_20()",),
 )
 def thief_skills(c: Cast) -> None:
     """An extra trained skill off a printed list of six, and a natural 20 on
     a skill challenge check counting double.
 
-    Two clauses, two gaps, two symbols -- the row has nothing that plays,
-    so `todo=` rather than `dropped=`.
+    **The training half lands and the row plays now**, so `dropped=`
+    rather than `todo=`.
 
-    `c.gains_training()` is the symbol `cf:wizard-witch-f1s0` and its
-    sibling already wait on: `vocab.py --find training` returns `c.check`
-    and `c.substitute_check` and no granter, `chargen` deals training, and
-    nothing adds to it. `#1258` carries the question of whether a row
-    should be able to.
+    It carried `c.gains_training()`, and the reasoning was right about
+    the search and wrong about the shape: `vocab.py --find training`
+    returns `c.check` and `c.substitute_check` and no granter, and there
+    is no granter because training is settled **before** the first
+    initiative is rolled. A verb could not have been the answer. What
+    was missing is a build-time fact, and `class_feature` carries no
+    column for one -- `feat` has `trains`, `trains_choice` and
+    `trains_from`; `class_feature` has none of them.
+    `chargen.FEATURE_TRAINS` is the transcription, and this row is the
+    one of its four that offers a **choice** of six rather than naming a
+    skill, which is `#574`'s distinction kept. `#1258`.
 
     The second is the story engine's and not the kernel's. A skill
     challenge counts successes against a target; *"that check automatically

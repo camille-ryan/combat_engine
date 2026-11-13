@@ -43309,12 +43309,14 @@ def a_chassis_whose_fork_is_a_build_option_deals_one_of_it(out: Result) -> None:
              "all six of the printed rows are declared",
              f"{len(witch)}: {sorted(witch)}")
     owed = {r: v for r, v in witch.items() if v}
-    out.that(owed == {"cf:wizard-witch-f1s0": ["c.gains_training()"],
-                      "cf:wizard-witch-f1s1": ["c.gains_training()"],
-                      "cf:wizard-witch-f3": ["turns.extended_rest(swap=)"]},
-             "and the three clauses still owed are the two skill-training "
-             "grants and the rest-time power swap -- named exactly, so a "
-             "row quietly acquiring another marker reds here",
+    out.that(owed == {"cf:wizard-witch-f3": ["turns.extended_rest(swap=)"]},
+             "and ONE clause is still owed, down from three: the two "
+             "skill-training grants land through "
+             "`chargen.FEATURE_TRAINS` -- training is settled before the "
+             "first initiative is rolled, so the verb those two asked "
+             "for could not have been the answer -- and the rest-time "
+             "power swap is what is left. Named exactly, so a row "
+             "quietly acquiring another marker reds here",
              f"{owed}")
 
 
@@ -46670,6 +46672,124 @@ def a_waived_bonus_feat_reaches_the_build_and_not_only_the_fight(
              "minimum the character need not have",
              f"{sorted(chargen.WAIVED_FEATS)}")
 
+
+
+def a_class_feature_can_train_a_skill(out: Result) -> None:
+    """`c.gains_training()` asked for a verb; training is a build fact.
+
+    Four class features print *"you gain training in the Intimidate
+    skill"* or *"an additional trained skill, chosen from the following
+    list"*, and three carried `c.gains_training()`. The search behind
+    that symbol was right -- `vocab.py --find training` returns
+    `c.check` and `c.substitute_check` and no granter -- and the
+    conclusion was wrong: there is no granter because training is
+    settled **before** the first initiative is rolled. A row armed at
+    the top of a fight cannot add to it.
+
+    What was missing is a column. `feat` has `trains`, `trains_choice`
+    and `trains_from`; `class_feature` has `ref`, `class`, `ord`,
+    `build`, `spec` and `duplicate_of`, and none of those is a skill --
+    so four rows saying it in plain words had nowhere for it to land.
+    `chargen.FEATURE_TRAINS` is the transcription, the fourth time this
+    session the thing was printed and the column was empty.
+
+    **Three of the four are sub-options of a fork, which is the trap
+    worth asserting.** A fork's chosen sub-option is recorded under
+    `option:` and is **not** put in the hand, so reading the hand alone
+    found none of them. And the key is `option:{parent}:{value}` with
+    colons in both halves, so `rsplit(":", 1)` yields a ref-shaped
+    string that matches nothing and trains nobody -- the fourth time
+    that shape has bitten.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine import Build as BuildState
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Skills
+
+    def dealt(cls: str, chassis: str, seed: int):  # noqa: ANN202
+        world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(seed))
+        eid = chargen.spawn(world, chargen.Character(
+            cls, 5, [], chassis=chassis), (4, 6))
+        state = world.get(eid, BuildState)
+        skills = world.get(eid, Skills)
+        assert state is not None and skills is not None
+        chose = [c[c.rindex(":cf:") + 1:] for c in state.choices
+                 if ":cf:" in c]
+        return chose, set(skills.trained)
+
+    out.that(len(chargen.FEATURE_TRAINS) == 4,
+             "four class features train a skill, which is every one whose "
+             "printed text says so -- counted off the specs rather than "
+             "listed, so a fifth arriving is seen",
+             f"{sorted(chargen.FEATURE_TRAINS)}")
+    named = {r: v for r, v in chargen.FEATURE_TRAINS.items()
+             if not isinstance(v, frozenset)}
+    out.that(len(named) == 3 and len(chargen.FEATURE_TRAINS) - len(named) == 1,
+             "three NAME their skill and one offers a choice of six -- kept "
+             "apart, because reading a choice as a grant trains one "
+             "character in every option a card offers between, which is "
+             "what `#574` measured on a feat",
+             f"{len(named)} named, {len(chargen.FEATURE_TRAINS) - len(named)} chosen")
+
+    # -- the witch, whose two covens name different skills ---------------
+    seen = {}
+    for seed in (4, 8, 12, 16):
+        chose, trained = dealt("wizard", "witch", seed)
+        for ref, want in (("cf:wizard-witch-f1s0", "intimidate"),
+                          ("cf:wizard-witch-f1s1", "heal")):
+            if ref in chose:
+                seen[ref] = seen.get(ref, True) and want in trained
+    out.that(len(seen) == 2 and all(seen.values()),
+             "a witch is trained in the skill ITS OWN coven names, and both "
+             "covens come up over four seeds -- without both, the reading "
+             "is about one row and a table keyed on the wrong ref would "
+             "pass",
+             f"{seen}")
+
+    # -- the warpriest, found by search because its fork has nine --------
+    hits = 0
+    for seed in range(1, 60):
+        chose, trained = dealt("cleric", "warpriest", seed)
+        if "cf:cleric-warpriest-f1s2" in chose:
+            hits += 1
+            if "intimidate" not in trained:
+                hits = -1
+                break
+    out.that(hits > 0,
+             "and a warpriest that draws its one trained domain is trained "
+             "in what that domain names. Searched over seeds because the "
+             "fork has nine options and four seeds never drew it -- a "
+             "check that only tried four would have been vacuous and "
+             "green",
+             f"{hits} seed(s) of 59 drew it, all trained")
+
+    # -- the thief, whose extra skill is a choice from six ---------------
+    offered = set(chargen.FEATURE_TRAINS["cf:rogue-thief-f4"])
+    picks, each = set(), {}
+    for seed in (4, 8, 12, 16, 20):
+        _chose, trained = dealt("rogue", "thief", seed)
+        each[seed] = len(trained & offered)
+        picks |= trained & offered
+    out.that(len(picks) > 1,
+             "a thief's additional skill is DRAWN from its printed six and "
+             "varies by seed -- a table read as a constant would give the "
+             "same skill always",
+             f"{sorted(picks)}")
+    # **Fewer than all six on every seed, which is what tells a choice
+    # from a grant.** `len(picks) > 1` cannot: reading the frozenset as a
+    # grant trains the character in all six and the union is still
+    # bigger than one, so that assertion passed with the distinction
+    # deleted. Measured, the honest reading gives 3 or 4 of the six --
+    # the class pool overlaps the list -- and the grant reading gives 6.
+    out.that(all(n < len(offered) for n in each.values()),
+             "and never ALL six on any one seed, which is the reading that "
+             "separates a choice of one from a grant of the list -- the "
+             "fault `#574` measured on a feat",
+             f"{each} of {len(offered)}")
+    out.that(picks <= offered,
+             "and never anything outside that list",
+             f"{sorted(picks - offered)}")
 
 
 def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
@@ -79806,6 +79926,11 @@ DRIVERS = {
         a_waived_bonus_feat_reaches_the_build_and_not_only_the_fight,
         "a bonus feat whose prerequisite the card waives reaches the"
         " BUILD and not only the fight, so its proficiency lands",
+    ),
+    "feature_trains": (
+        a_class_feature_can_train_a_skill,
+        "a class feature trains the skill its own text names, which"
+        " no column carried (#1258, #574)",
     ),
     "extra_picks": (
         a_later_row_adds_one_more_pick_of_an_earlier_rows_fork,
