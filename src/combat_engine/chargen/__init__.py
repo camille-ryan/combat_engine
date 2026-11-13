@@ -1020,6 +1020,16 @@ BUILDS: dict[str, tuple[Build, ...]] = {
     # Seven pacts are printed and four had a leg, so three pact rows were
     # refused in play and their at-wills reached nobody. The three names
     # are the ones `features/warlock.py` was already written against.
+    #
+    # **Eight now, and the eighth is not on the base class's page at
+    # all.** `CHASSIS_LEGS` is what makes that safe: the pact belongs to
+    # the hexblade and the binder, both of which print a headed section
+    # for it (`Pact Boon`, `Pact Reward`, `Pact Weapon`, `Pact Lore`),
+    # and the base warlock's page prints none -- so it is in those two
+    # pools and not in `original`'s. Without an eighth leg its rows were
+    # unreachable rather than unwritten: three pact-weapon powers, a
+    # boon, a reward, a lore and six binder encounter powers all keyed to
+    # a pact nothing could deal. #730.
     "warlock": (
         Build("infernal", CON, CHA),
         Build("fey", CHA, CON),
@@ -1030,6 +1040,17 @@ BUILDS: dict[str, tuple[Build, ...]] = {
         Build("sorcerer-king", CHA, INT),
         Build("star", CHA, CON),
         Build("vestige", CHA, CON),
+        # **Dexterity, and said plainly: the page prints no "best as your
+        # secondary ability score" line for this pact.** Every other leg
+        # here has one, on the base class's page, and this pact is not on
+        # that page. The nearest printed source is its own `Pact Reward`
+        # section -- "the bonus equals your Dexterity modifier", which
+        # `features/hexblade.py`'s `_F2_ABILITY` already reads as `dex`
+        # and which agrees with the page on all five pacts. That is a
+        # rider's ability rather than a stated secondary, so this is the
+        # one leg in the warlock's list whose secondary is read off an
+        # adjacent sentence instead of its own.
+        Build("gloom", CHA, DEX),
     ),
     # A -- Strength either way, and a third leg for the leader feature that
     # is a shield and a granted row rather than a score.
@@ -2828,6 +2849,22 @@ def legs_for(cls: str, chassis: str = "") -> tuple[Build, ...]:
     pool = BUILDS.get(class_word(cls)) or ()
     if not pool or len(declared_chassis(cls)) <= 1:
         return tuple(pool)
+    # **An explicit pool wins over inference**, for the case inference
+    # cannot reach: two chassis with overlapping but different lists. See
+    # `CHASSIS_LEGS`, which has the warlock's three and why no
+    # leg-to-one-chassis mapping gives them. Fails open per chassis, so a
+    # class with an entry for one chassis and not another still infers the
+    # rest.
+    written = CHASSIS_LEGS.get(class_word(cls), {}).get(
+        chassis or chassis_of(cls))
+    if written:
+        named = tuple(b for b in pool if b.name in written)
+        # Still `or tuple(pool)`, which is `legs_for`'s own last rule: an
+        # empty pool is a character nobody can be dealt, and that is the
+        # one way a narrowing selector does real harm. A written pool
+        # naming only legs `BUILDS` does not hold would otherwise empty
+        # it silently.
+        return named or tuple(pool)
     import combat_engine.content
     from combat_engine.engine.dsl import REGISTRY
 
@@ -2918,6 +2955,48 @@ LEG_CHASSIS: dict[str, dict[str, str]] = {
     # the right one: a chassis with no fork of its own has no leg to be
     # wrong about.
     "fighter": {"great-weapon": "weaponmaster", "guardian": "weaponmaster"},
+}
+
+
+#: A chassis's **whole** leg pool, written out, for the case
+#: `LEG_CHASSIS` cannot say.
+#:
+#: That table maps a leg to **one** chassis, so the only way it can say
+#: "both" is to leave a leg out and let `legs_for`'s fail-open rule carry
+#: it -- which is right for the druid's two shared circles and wrong the
+#: moment two chassis have *overlapping but different* pools. The warlock
+#: is that case and nothing could express it:
+#:
+#:     original   infernal, fey, dark, elemental, sorcerer-king, star,
+#:                vestige                                      -- 7
+#:     hexblade   elemental, fey, gloom, infernal, star         -- 5
+#:     binder     fey, gloom, star                             -- 3
+#:
+#: `fey` and `star` are in all three and `gloom` in two, so no leg-to-one-
+#: chassis mapping gives those three pools, and inference gave all three
+#: chassis the same seven. Read off each chassis's own class page, which
+#: prints one headed section per pact it offers -- `Pact Boon`,
+#: `Pact Reward`, `Pact Weapon`, `Pact Lore` -- so the pool is the set of
+#: pacts those headings name and not a judgement.
+#:
+#: **This is load-bearing rather than tidying, and `OPTION_PACT` is why.**
+#: Once a pact-keyed build option is dealt *by the pact*, a chassis dealt
+#: a leg its page prints no section for gets **no option at all** --
+#: where the old uniform draw at least gave it the wrong one. A binder on
+#: `infernal` would come out with no pact boon, no pact lore and no pact
+#: encounter power: a character missing the one feature its fork exists
+#: to choose, which is the fault `deal_build`'s docstring records for the
+#: sorcerer.
+#:
+#: Fails open exactly as `legs_for` does: a class or a chassis with no
+#: entry here is unchanged.
+CHASSIS_LEGS: dict[str, dict[str, tuple[str, ...]]] = {
+    "warlock": {
+        ORIGINAL: ("infernal", "fey", "dark", "elemental",
+                   "sorcerer-king", "star", "vestige"),
+        "hexblade": ("elemental", "fey", "gloom", "infernal", "star"),
+        "binder": ("fey", "gloom", "star"),
+    },
 }
 
 
