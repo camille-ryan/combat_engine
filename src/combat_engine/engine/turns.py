@@ -898,6 +898,13 @@ def short_rest(world: World) -> None:
     for eid, powers in world.each(Powers):
         for ref in list(powers.used):
             declared = get(ref)
+            # **`as_daily` first**, because it is a fact about this
+            # creature and `Power.usage` is a fact about the card -- the
+            # same card is an encounter power for everybody else. The
+            # three `cf:wizard-bladesinger-f2` rungs are the printed
+            # case -- see `chargen.SPELLBOOK`.
+            if ref in powers.as_daily:
+                continue
             if declared is None or declared.usage is not Usage.DAILY:
                 powers.restore(ref)
         # Per-encounter charges go back whole. They are not rows, so the

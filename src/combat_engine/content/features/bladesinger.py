@@ -130,11 +130,30 @@ def _spellbook_slots(ref: str, ceiling: str, what: str) -> Callable[[Cast], None
       bladesinger carries holds them and the row is the pointer that says
       so. `out_of_combat=True`, because owning a power is not a thing that
       happens in a fight.
-    * **encounter-as-daily** -- one shared symbol. The book explicitly
-      excludes encounter attack powers and nothing reinterprets a usage
-      per character, so neither half of the printed sentence has a writer.
+    * **encounter-as-daily** -- dealt for the three rungs inside the
+      levels this project imports, and still marked for the four above
+      them. Both halves of the sentence have a writer now:
+      `chargen.SPELLBOOK` draws two wizard encounter attack powers at or
+      below the card's own ceiling, and `Powers.as_daily` is what makes
+      them function as dailies -- a fact about the creature, where
+      `Power.usage` is a fact about the card.
+
+      The direction is why the second half could not be skipped: an
+      encounter power used as a daily is **weaker**, so dealing the
+      powers without it would hand the character something stronger than
+      its own card prints, and nothing would have reported it.
+
+      The four above `MAX_POWER_LEVEL` keep the symbol: their ceilings
+      are 13th, 17th, 23rd and 27th level, and those powers are not in
+      the database to be drawn.
     """
     utility = what == "utility"
+    # The three rungs `chargen.SPELLBOOK` deals. Named here rather than
+    # imported so a reader of this row sees which three without leaving
+    # the file -- and asserted against the table by `drivers.spellbook`,
+    # so the two cannot drift apart.
+    dealt = ref in ("cf:wizard-bladesinger-f2", "cf:wizard-bladesinger-f11",
+                    "cf:wizard-bladesinger-f14")
 
     @power(
         ref,
@@ -146,7 +165,8 @@ def _spellbook_slots(ref: str, ceiling: str, what: str) -> Callable[[Cast], None
         target=NO_TARGET,
         keywords=[Keyword.ARCANE],
         out_of_combat=utility,
-        todo=() if utility else ("chargen.spellbook(encounter_as_daily=)",),
+        todo=() if utility or dealt
+        else ("chargen.spellbook(encounter_as_daily=)",),
     )
     def row(c: Cast) -> None:
         pass

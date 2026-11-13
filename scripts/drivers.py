@@ -46208,6 +46208,186 @@ def the_mages_whole_ladder_was_refused_for_a_list_the_page_prints(
              f"{shared}")
 
 
+def the_poison_recipes_and_the_spellbook_are_both_dealt(out: Result) -> None:
+    """Two ladders whose cards print two halves apiece, and both halves.
+
+    **The executioner's poisons.** *"You learn the recipes for two
+    1st-level assassin poisons of your choice"*, with another at 5th and
+    another at 9th, and *"during an extended rest you can prepare one
+    vial"* rising to two and three. Three rows shared one symbol for the
+    right reason -- a recipe with nowhere to prepare it is inert and a
+    vial allowance with no recipe is empty -- and the content claim
+    beside it was wrong: `features/executioner.py` said the 19-row
+    `poison` table was the content, and those 19 are a different printed
+    set at levels 5 to 25. The six 1st-level **assassin** poisons are
+    `Consumable` items, every one imported with both power blocks
+    written.
+
+    **The book rungs.** *"You add two wizard encounter
+    attack powers to your spellbook... the two function as daily attack
+    powers for you"*, three times with rising ceilings. Not a
+    `BUILD_OPTIONS` entry: the pool is a whole class's encounter attacks
+    at or below a level -- 20, 38 and 58 of them -- so there is nothing
+    to transcribe and the ceiling is all the card adds.
+
+    **The second half is the one that could not be skipped**, and its
+    direction is why: an encounter power used as a daily is *weaker*, so
+    dealing the powers without `Powers.as_daily` would hand the
+    character something stronger than its own card prints and nothing
+    would report it. That is asserted against a control here, because a
+    short rest giving everything back looks identical to one giving
+    nothing back if only the spellbook is read.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen, db
+    from combat_engine.engine import Build as BuildState
+    from combat_engine.engine import Bus, Grid, Rng, World, turns
+    from combat_engine.engine.components import Gear, Powers
+
+    g = db.game()
+
+    def dealt(cls: str, chassis: str, level: int, seed: int = 7
+              ) -> tuple[World, int]:
+        world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(seed))
+        eid = chargen.spawn(world, chargen.Character(
+            cls, level, [], chassis=chassis), (4, 6))
+        return world, eid
+
+    # -- the executioner: recipes and vials rise together ---------------
+    FORK = "cf:assassin-executioner-f3"
+    head = f"option:{FORK}:"
+    WANT = {1: (2, 1), 5: (3, 2), 9: (4, 3)}
+    got = {}
+    for level in WANT:
+        world, eid = dealt("assassin", "executioner", level)
+        state = world.get(eid, BuildState)
+        gear = world.get(eid, Gear)
+        assert state is not None and gear is not None
+        knows = [c[len(head):] for c in state.choices if c.startswith(head)]
+        vials = [r for r in gear.carried if r in set(chargen.BUILD_OPTIONS[FORK])]
+        got[level] = (len(knows), knows, vials)
+    out.that({k: v[0] for k, v in got.items()}
+             == {k: n for k, (n, _v) in WANT.items()},
+             "an executioner learns TWO recipes at 1st, three at 5th and "
+             "four at 9th -- the printed ladder, counted off the hand",
+             f"{ {k: v[0] for k, v in got.items()} }")
+    # **The vials are counted off what the dealer returned, not off
+    # `carried`.** The ordinary consumable draw deals from the same pool,
+    # so a poison in `carried` need not be a prepared vial -- counting
+    # them read 2 vials at 1st level where the dealer had made 1.
+    made = {}
+    for level in WANT:
+        world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(7))
+        seen: list[list[str]] = []
+        real = chargen._stock_vials
+
+        # Both bound explicitly: the closure is consumed inside this
+        # iteration, but a loop-captured accumulator is how a rule comes
+        # to record another level's answer.
+        def spy(gear: object, powers: object, held: set[str],
+                knows: list[str], rng: object,
+                _real: object = real,
+                _into: list[list[str]] = seen) -> list[str]:
+            out_ = _real(gear, powers, held, knows, rng)  # ty: ignore[call-non-callable]
+            _into.append(list(out_))
+            return out_
+
+        chargen._stock_vials = spy
+        try:
+            chargen.spawn(world, chargen.Character(
+                "assassin", level, [], chassis="executioner"), (4, 6))
+        finally:
+            chargen._stock_vials = real
+        made[level] = seen[0] if seen else []
+    out.that({k: len(v) for k, v in made.items()}
+             == {k: n for k, (_r, n) in WANT.items()},
+             "and prepares ONE vial at 1st, two at 5th and three at 9th -- "
+             "the other half of the same cards, counted off the dealer and "
+             "not off `carried`, which the ordinary consumable draw also "
+             "writes into",
+             f"{ {k: len(v) for k, v in made.items()} }")
+    stray = {k: [r for r in v if r not in got[k][1]] for k, v in made.items()}
+    out.that(not any(stray.values()),
+             "and every vial is a recipe this character knows -- the card "
+             "prepares what it has the recipe for, so a vial it could not "
+             "have made is the fault worth catching",
+             f"{stray}")
+
+    # -- the bladesinger: two powers a rung, and daily ------------------
+    BOOK = {1: 2, 5: 4, 9: 6}
+    book = {}
+    for level in BOOK:
+        world, eid = dealt("wizard", "bladesinger", level, seed=9)
+        known = world.get(eid, Powers)
+        assert known is not None
+        book[level] = sorted(known.as_daily)
+    out.that({k: len(v) for k, v in book.items()} == BOOK,
+             "a bladesinger writes TWO wizard encounter attack powers into "
+             "its spellbook at 1st, two more at 5th and two more at 9th",
+             f"{ {k: len(v) for k, v in book.items()} }")
+    out.that(all(len(set(v)) == len(v) for v in book.values()),
+             "and they are DISTINCT across the whole book -- the later "
+             "cards say 'two NEW powers', so a rung may not hand over one "
+             "an earlier rung already wrote in",
+             f"{ {k: len(set(v)) for k, v in book.items()} }")
+    off = []
+    for level, refs in book.items():
+        cap = {1: 1, 5: 3, 9: 7}[level]
+        for r in refs:
+            row = g.execute(
+                "select class, level, usage, kind from power where ref = ?",
+                (r,)).fetchone()
+            if row is None or (row[0] or "").lower() != "wizard" \
+                    or not (1 <= row[1] <= cap) or row[2] != "encounter" \
+                    or row[3] != "Attack":
+                off.append((level, r, row and tuple(row)))
+    out.that(not off,
+             "and every one is a WIZARD encounter ATTACK power at or below "
+             "the ceiling its own card prints -- 1st, 3rd and 7th",
+             f"{off[:3] or 'none'}")
+
+    # -- and they function as dailies, against a control ----------------
+    world, eid = dealt("wizard", "bladesinger", 9, seed=9)
+    known = world.get(eid, Powers)
+    assert known is not None
+    mine = sorted(known.as_daily)[:2]
+    attacks = {r for r, in g.execute(
+        "select ref from power where usage='encounter' and kind='Attack'")}
+    control = [r for r in known.known
+               if r in attacks and r not in known.as_daily][:2]
+    out.that(len(mine) == 2 and len(control) == 2,
+             "the board's bladesinger holds two spellbook powers AND two "
+             "ordinary encounter attacks -- without the second pair a "
+             "short rest giving nothing back is indistinguishable from "
+             "one giving everything back",
+             f"{len(mine)} spellbook, {len(control)} control")
+    for r in (*mine, *control):
+        known.used[r] = 1
+    turns.short_rest(world)
+    out.that(all(r in known.used for r in mine),
+             "and a short rest does NOT give the spellbook powers back, "
+             "which is what 'function as daily attack powers for you' "
+             "means",
+             f"{[r for r in mine if r in known.used]} of {mine}")
+    out.that(all(r not in known.used for r in control),
+             "while it gives the ordinary encounter attacks back -- the "
+             "control, and the one that says `as_daily` reads the set and "
+             "not the rest",
+             f"{[r for r in control if r in known.used]}")
+
+    # -- the two tables agree with the rows that name them --------------
+    from combat_engine.engine.dsl import REGISTRY
+
+    marked = sorted(r for r, p in REGISTRY.items()
+                    if "chargen.spellbook(encounter_as_daily=)"
+                    in (p.unfinished or ()))
+    out.that(not (set(chargen.SPELLBOOK) & set(marked)),
+             "and no rung `chargen.SPELLBOOK` deals still carries the "
+             "symbol -- the row names its three refs in its own source "
+             "and the table names them here, so the two cannot drift",
+             f"{sorted(set(chargen.SPELLBOOK) & set(marked))}")
+
+
 def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
         out: Result) -> None:
     """`#1268` again, on the ranger: *"you gain one additional X"*.
@@ -79295,6 +79475,11 @@ DRIVERS = {
         the_mages_whole_ladder_was_refused_for_a_list_the_page_prints,
         "the mage's eleven ladder rungs were all defect= for lists the"
         " page prints, and each list pairs with its own rung (#1268)",
+    ),
+    "recipes_and_spellbook": (
+        the_poison_recipes_and_the_spellbook_are_both_dealt,
+        "the executioner's recipes and vials and the bladesinger's"
+        " spellbook are dealt, both halves of each card (#1268)",
     ),
     "extra_picks": (
         a_later_row_adds_one_more_pick_of_an_earlier_rows_fork,

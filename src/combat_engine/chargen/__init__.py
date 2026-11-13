@@ -4350,6 +4350,26 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
         "p1930",
         "p12731",
     ),
+    # **The executioner's six 1st-level poisons.** Its card reads *"you
+    # learn the recipes for two 1st-level assassin poisons of your
+    # choice"* and listed nothing, so three rungs carried
+    # `chargen.poison_recipes()`.
+    #
+    # The six are ordinary `Consumable` items, imported, and every one of
+    # their twelve power blocks is written and unmarked -- so the content
+    # was never the gap. Found by asking the compendium's `Item` table
+    # for level-1 entries whose text says "assassin poison", which is
+    # where the printed list lives; the 19-row `poison` table that
+    # `features/executioner.py` named is a different printed set at
+    # levels 5 to 25, and that note is corrected.
+    "cf:assassin-executioner-f3": (
+        "i710",
+        "i835",
+        "i1483",
+        "i1595",
+        "i1919",
+        "i2955",
+    ),
     "cf:ranger-hunter-f22": ('p13607', 'p13609'),
     "cf:ranger-hunter-f23": (
         "p13610",
@@ -4627,6 +4647,8 @@ OPTION_PICKS: dict[str, int] = {
     # aspect lists, one per ranger chassis -- see `BUILD_OPTIONS`.
     "cf:ranger-hunter-f19": 2,
     "cf:ranger-scout-f16": 2,
+    # *"the recipes for TWO 1st-level assassin poisons."*
+    "cf:assassin-executioner-f3": 2,
     # The stances, the tricks and the cantrips.
     "cf:fighter-knight-f22": 2,
     "cf:fighter-slayer-f18": 2,
@@ -4698,6 +4720,11 @@ EXTRA_PICKS: dict[str, str] = {
     # they move no board. That is an inconsistency and it is stated
     # rather than tidied away: the honest fix is the discrepancy, not the
     # table. #1275.
+    # The executioner's recipes: two at 1st, a third at 5th, a fourth
+    # at 9th. Each rung also raises how many vials it prepares -- see
+    # `POISON_VIALS`, which is the other half of the same card.
+    "cf:assassin-executioner-f9": "cf:assassin-executioner-f3",
+    "cf:assassin-executioner-f13": "cf:assassin-executioner-f3",
     # The thief's tricks: two at 1st, a third at 4th, a fourth at 7th
     # and a fifth at 17th.
     "cf:rogue-thief-f7": "cf:rogue-thief-f22",
@@ -5276,6 +5303,109 @@ def _stock_quiver(gear: Gear | None) -> None:
 #: exclude yet (`#793`), which is why nothing here tests for one -- the
 #: second half of the ruling constrains whoever builds that.
 DEALT_CONSUMABLES = 2
+
+
+#: How many vials of a known poison an executioner walks in having
+#: prepared, by the recipe rungs it holds.
+#:
+#: The other half of the card `BUILD_OPTIONS["cf:assassin-executioner-f3"]`
+#: deals the recipes for. Each rung prints both halves in one breath --
+#: *"you learn the recipe for another 1st-level assassin poison... during
+#: an extended rest, you can now prepare two vials"* -- which is why the
+#: three rows shared one symbol: a recipe with nowhere to prepare it is
+#: inert and a vial allowance with no recipe is empty.
+#:
+#: **Prepared, not conjured.** The card's vials come out of an extended
+#: rest and a dealt character has had one, exactly as it has had its
+#: ammunition counted out and its potions bought. That is Camille's
+#: ruling on `#520` applied one item over: a dealt character carries the
+#: consumables its own sheet says it would have.
+POISON_VIALS: dict[str, int] = {
+    "cf:assassin-executioner-f3": 1,
+    "cf:assassin-executioner-f9": 1,
+    "cf:assassin-executioner-f13": 1,
+}
+
+
+def _stock_vials(gear: Gear | None, powers: Powers | None,
+                 held: set[str], knows: list[str], rng: Random) -> list[str]:
+    """One vial per poison rung held, of a recipe this character knows.
+
+    Returns what it added, so the caller can say so. Adds nothing when
+    the character holds no rung or knows no recipe -- both of which are
+    every character that is not an executioner.
+
+    **Drawn rather than taken in order**, so a character holding two
+    recipes and two rungs is not always carrying two of the first one.
+    `rng.choice` per vial and not `sample`: the card says how many vials,
+    not how many *different* ones, and two of the same poison is a legal
+    and sometimes sensible preparation.
+    """
+    if gear is None or not knows:
+        return []
+    vials = sum(n for ref, n in POISON_VIALS.items() if ref in held)
+    made = [rng.choice(knows) for _ in range(vials)]
+    if made:
+        gear.carried.extend(made)
+        _offer_carried(gear, powers, made)
+    return made
+
+
+#: The book a bladesinger writes into rungs, and the level each caps its pick at.
+#:
+#: Three cards, each *"you add two wizard encounter attack powers to your
+#: spellbook"* with a level ceiling and the clause this table's other
+#: half is about: *"the two function as daily attack powers for you"*.
+#:
+#: **Not a `BUILD_OPTIONS` entry**, and the difference is the point: the
+#: other forks name a printed list of a handful, and this names a whole
+#: class's encounter attack powers at or below a level -- 20, 38 and 58
+#: of them. There is nothing to transcribe. The pool is a query and the
+#: ceiling is the only thing the card adds to it.
+SPELLBOOK: dict[str, int] = {
+    "cf:wizard-bladesinger-f2": 1,
+    "cf:wizard-bladesinger-f11": 3,
+    "cf:wizard-bladesinger-f14": 7,
+}
+
+
+def _spellbook_picks(held: set[str], level: int,
+                     rng: Random) -> dict[str, list[str]]:
+    """Two wizard encounter attack powers per rung held, by rung.
+
+    **Distinct across the whole spellbook**, not merely within a rung:
+    the later cards say *"two NEW wizard encounter attack powers"*, so a
+    rung may not hand over one an earlier rung already wrote in. Drawn
+    lowest rung first so the ceilings nest the way the levels do.
+
+    A rung the character has not reached contributes nothing, which is
+    what keeps this a property of the hand rather than of the level.
+    """
+    import combat_engine.content
+    from combat_engine.db import game
+    from combat_engine.engine.dsl import REGISTRY
+
+    db = game()
+    out: dict[str, list[str]] = {}
+    taken: set[str] = set()
+    for ref, cap in sorted(SPELLBOOK.items(), key=lambda kv: kv[1]):
+        if ref not in held:
+            continue
+        pool = sorted(
+            r for r, in db.execute(
+                "select ref from power where class='Wizard' "
+                "and usage='encounter' and kind='Attack' "
+                "and level>0 and level<=?", (cap,))
+            # Written and usable, so the spellbook cannot be filled with
+            # a row that would be refused the moment it was reached for.
+            if r in REGISTRY and not REGISTRY[r].unfinished
+            and r not in taken)
+        if len(pool) < 2:
+            continue
+        got = sorted(rng.sample(pool, 2))
+        taken.update(got)
+        out[ref] = got
+    return out
 
 
 def _stock_consumables(
@@ -7006,6 +7136,36 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         Random(f"{world.rng.seed}:{who.cls}:{build.name}:consumables"),
         pinned=who.carried,
     )
+    # **The executioner's prepared vials**, which are the other half of
+    # the card its recipes come from -- see `POISON_VIALS`. Its own keyed
+    # stream, like every dealer here, so counting out vials cannot move
+    # the dice the fight is about to roll.
+    _stock_vials(
+        world.get(eid, Gear),
+        world.get(eid, Powers),
+        set(powers) | set(feats),
+        [c[len("option:cf:assassin-executioner-f3:"):] for c in took_options
+         if c.startswith("option:cf:assassin-executioner-f3:")],
+        Random(f"{world.rng.seed}:{who.cls}:{build.name}:vials"),
+    )
+    # **The three book rungs**, both halves of each card together:
+    # the powers go into the hand and into `Powers.as_daily`, so a short
+    # rest does not give them back. Dealing them without the second half
+    # would hand the character encounter powers where its own card gives
+    # it dailies -- stronger than print, and silent. `SPELLBOOK`.
+    #
+    # Its own keyed stream, like every dealer here.
+    _book = _spellbook_picks(
+        set(powers) | set(feats), who.level,
+        Random(f"{world.rng.seed}:{who.cls}:{build.name}:spellbook"),
+    )
+    if _book:
+        _known = world.get(eid, Powers)
+        if _known is not None:
+            for _got in sorted({r for v in _book.values() for r in v}):
+                if _got not in _known.known:
+                    _known.known.append(_got)
+                _known.as_daily.add(_got)
     # A racial skill bonus is a sheet number and not a thing that happens
     # in a fight, so it is laid straight into `Mods` where the armour
     # penalty and the enhancement bonus already live -- `engine/skills.py`

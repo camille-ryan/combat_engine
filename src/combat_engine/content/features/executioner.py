@@ -523,18 +523,30 @@ executioner_finish_21 = _finish_rung("cf:assassin-executioner-f21", 30)
 # -- the poison ladder: seven rows, one gap ----------------------------------
 
 
-def _poison_rung(ref: str, what: str) -> Any:
+def _poison_rung(ref: str, what: str, *,
+                 marks: tuple[str, ...] = ()) -> Any:
     """One rung of the recipe-and-vial ladder.
 
-    Seven rows, **one** symbol, because they are one gap seven times: the
-    recipes are a draw, the vials are an extended-rest allowance, and the
-    two are inseparable on every one of the seven cards -- a row that
-    learned a recipe with nowhere to prepare it would be inert, and a vial
-    allowance with no recipe would be empty.
+    Both halves are dealt for the three 1st-level rungs now. The recipes
+    are `chargen.BUILD_OPTIONS["cf:assassin-executioner-f3"]` with
+    `OPTION_PICKS` of two and the later rungs adding one each through
+    `chargen.EXTRA_PICKS`; the vials are `chargen.POISON_VIALS`, one per
+    rung held, drawn from what the character knows. Measured: 2/3/4
+    recipes and 1/2/3 vials at levels 1/5/9, every vial a known recipe.
 
-    The poison table itself exists -- 19 rows -- so unlike some gaps in
-    this wave the content is here and what is missing is the machinery
-    between an extended rest and a consumable.
+    They stayed one symbol while both halves were missing, and the reason
+    was sound -- a recipe with nowhere to prepare it is inert and a vial
+    allowance with no recipe is empty. What was wrong was the content
+    claim: this said *"the poison table itself exists -- 19 rows"*, and
+    those 19 are a different printed set at levels 5 to 25. The six
+    1st-level **assassin** poisons are `Consumable` items -- `i710`,
+    `i835`, `i1483`, `i1595`, `i1919`, `i2955` -- every one imported with
+    both of its power blocks written and unmarked. Nothing was missing
+    but the dealing.
+
+    `marks` is for the four rungs above the levels this project imports:
+    their recipes are 15th and 25th level and those poisons are not in
+    the database to be chosen.
     """
 
     @power(
@@ -546,7 +558,7 @@ def _poison_rung(ref: str, what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.SHADOW],
-        todo=("chargen.poison_recipes()",),
+        todo=marks,
     )
     def row(c: Cast) -> None:
         pass
@@ -572,16 +584,20 @@ executioner_poison_13 = _poison_rung(
     "cf:assassin-executioner-f13", "Another 1st-level recipe; three vials.")
 executioner_poison_16 = _poison_rung(
     "cf:assassin-executioner-f16",
-    "A 15th-level recipe, and one vial may be up to 15th level.")
+    "A 15th-level recipe, and one vial may be up to 15th level.",
+    marks=("chargen.poison_recipes(above_level_10)",))
 executioner_poison_19 = _poison_rung(
     "cf:assassin-executioner-f19",
-    "Another 15th-level recipe; two vials may be 15th level.")
+    "Another 15th-level recipe; two vials may be 15th level.",
+    marks=("chargen.poison_recipes(above_level_10)",))
 executioner_poison_22 = _poison_rung(
     "cf:assassin-executioner-f22",
-    "A 25th-level recipe; one vial up to 25th and two up to 15th.")
+    "A 25th-level recipe; one vial up to 25th and two up to 15th.",
+    marks=("chargen.poison_recipes(above_level_10)",))
 executioner_poison_23 = _poison_rung(
     "cf:assassin-executioner-f23",
-    "Another 25th-level recipe; two vials up to 25th and one up to 15th.")
+    "Another 25th-level recipe; two vials up to 25th and one up to 15th.",
+    marks=("chargen.poison_recipes(above_level_10)",))
 
 
 # -- the three utility picks -------------------------------------------------

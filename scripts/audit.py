@@ -666,6 +666,24 @@ KNOWN_SILENT = {
     # proved against a dealt character by a rule that a draw cannot move
     # -- `drivers.extra_picks` for the two knack forks,
     # `drivers.sentinel_season` for the season.
+    # **The recipes, the vials and the three book rungs**, which are the
+    # same shape once more: everything these six cards do happens in
+    # chargen, before any body runs, so each body is `pass` and correctly
+    # so. `drivers.recipes_and_spellbook` proves all six against a dealt
+    # character at every level of each printed ladder, with a control
+    # that tells "gives nothing back" from "gives everything back".
+    "cf:assassin-executioner-f3": "the recipes and the vial are dealt by"
+                                  " chargen; this row has no body",
+    "cf:assassin-executioner-f9": "the recipe and the vial are dealt by"
+                                  " chargen; this row has no body",
+    "cf:assassin-executioner-f13": "the recipe and the vial are dealt by"
+                                   " chargen; this row has no body",
+    "cf:wizard-bladesinger-f2": "the two powers and their daily usage are"
+                                " dealt by chargen; this row has no body",
+    "cf:wizard-bladesinger-f11": "the two powers and their daily usage are"
+                                 " dealt by chargen; this row has no body",
+    "cf:wizard-bladesinger-f14": "the two powers and their daily usage are"
+                                 " dealt by chargen; this row has no body",
     "cf:ranger-hunter-f20": "grants the knacks it dealt; the board's"
                             " ranger holds all five already",
     "cf:ranger-scout-f17": "grants the knacks it dealt; the board's"

@@ -1185,6 +1185,25 @@ class Powers:
     #: Wiped by **both** rests -- `turns.short_rest` and
     #: `turns.extended_rest` -- because the card names both.
     vestiges_used: list[str] = field(default_factory=list)
+    #: Rows this creature uses as **daily** powers whatever their card
+    #: declares, by ref.
+    #:
+    #: `Power.usage` is a fact about the card and the same card is an
+    #: encounter power for everybody else, so the override cannot live
+    #: there. It is a fact about the creature, which is why it lives
+    #: here beside `used`.
+    #:
+    #: `cf:wizard-bladesinger-f2` and its two later rungs are the printed case: *"you add two
+    #: wizard encounter attack powers to your spellbook... the two
+    #: function as daily attack powers for you"*, three times over. The
+    #: direction matters -- an encounter power used as a daily is
+    #: **weaker**, so dealing those powers without this would hand the
+    #: character something stronger than its own card prints.
+    #:
+    #: Read by `turns.short_rest`, which is where the two usages differ:
+    #: a short rest gives back everything that is not daily, and a ref in
+    #: here is daily for this creature.
+    as_daily: set[str] = field(default_factory=set)
     #: Augment clauses a **feat** lent to a named row, as `(cost, clause)`.
     #:
     #: Four feats print "your <power> gains the augmentable keyword. When you
