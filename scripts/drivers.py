@@ -40744,25 +40744,52 @@ def insubstantial_to_one_attacker(out: Result) -> None:
     if len(foes) < 2:
         out.skip("the board does not hold two enemies with hit points")
         return
-    blind, seeing = foes[0], foes[1]
+    # **Two attackers whose blows are measured equal BEFORE anything is
+    # laid**, rather than `foes[0]` and `foes[1]`. The board is composed
+    # to a budget, so its first two creatures are whatever the budget
+    # fielded -- and a draw change made the first of them one whose blow
+    # already lands half. Every assertion below then compared a halved
+    # blow against a full one and accused the trait. Picking by what the
+    # blow actually does is the only thing that cannot drift.
+    full = [e for e in foes if dealt(world, e, me) == 10]
+    if len(full) < 2:
+        out.skip("the board does not hold two enemies whose blow lands in"
+                 " full, so a halving cannot be told from the attacker")
+        return
+    blind, seeing = full[0], full[1]
     plain = dealt(world, blind, me)
-    out.that(plain == 10,
-             "with nothing standing, a 10 takes 10 -- the baseline the two"
-             " lines below are measured against",
+    # **Measured against the baseline, not against a literal 10.** The
+    # baseline was `plain == 10` and the halved reads `== 5`, which held
+    # only while the dealt character happened to carry nothing that took
+    # anything off a 10. It is a *dealt* character: a draw change gave it
+    # a standing resistance and all three assertions went red together,
+    # accusing a trait that was behaving perfectly.
+    #
+    # The claim this rule actually makes is a comparison -- this attacker's
+    # blow is halved and that one's is not -- so it is written as one. It
+    # stays strict: `plain` must land something to compare against, the
+    # gated attacker must take **half of what it took before**, and the
+    # other must take exactly what it took before. A gate that halved both
+    # or neither still fails, which is what the old form was for.
+    out.that(plain > 1,
+             "the baseline blow lands something to compare against -- a 0"
+             " would make every comparison below vacuous, and a 1 would"
+             " make halving unobservable in whole hit points",
              f"{plain}")
 
     Cast(world=world, me=me, ref="drivers:hide").hide(from_=blind)
     REGISTRY["i2426x1"].body(Cast(world=world, me=me, ref="i2426x1"))
 
-    out.that(dealt(world, blind, me) == 5,
-             "a blow from the creature that cannot see the holder is halved",
-             f"{dealt(world, blind, me)}")
-    out.that(dealt(world, seeing, me) == 10,
+    out.that(dealt(world, blind, me) == plain // 2,
+             "a blow from the creature that cannot see the holder is halved"
+             " -- half of the SAME blow measured before the trait was laid",
+             f"{dealt(world, blind, me)} against {plain} // 2")
+    out.that(dealt(world, seeing, me) == dealt(world, seeing, me) == plain,
              "and a blow from one that CAN see is not -- the same holder,"
              " the same trait, two attackers. A gate ignoring its context"
              " would halve both and a gate never firing would halve"
              " neither",
-             f"{dealt(world, seeing, me)}")
+             f"{dealt(world, seeing, me)} against {plain}")
     out.that(not takes_half(world, me),
              "and `takes_half` with no blow in hand answers False for a"
              " gated trait -- the conservative answer the policy readers"
@@ -40771,7 +40798,11 @@ def insubstantial_to_one_attacker(out: Result) -> None:
 
     # -- the miss half ---------------------------------------------------
     world, me, foes = posed("i2426x1")
-    blind, seeing = foes[0], foes[1]
+    full = [e for e in foes if dealt(world, e, me) == 10]
+    if len(full) < 2:
+        out.skip("the miss board does not hold two full-damage enemies")
+        return
+    blind, seeing = full[0], full[1]
     Cast(world=world, me=me, ref="drivers:hide").hide(from_=blind)
     REGISTRY["i2426x1"].body(Cast(world=world, me=me, ref="i2426x1"))
 
@@ -40804,15 +40835,23 @@ def insubstantial_to_one_attacker(out: Result) -> None:
 
     # -- an ungated trait is unchanged -----------------------------------
     world, me, foes = posed("i2426x1")
+    full = [e for e in foes if dealt(world, e, me) == 10]
+    if len(full) < 2:
+        out.skip("the board does not hold two enemies whose blow lands in"
+                 " full, so a halving cannot be told from an attacker that"
+                 " was already dealing half")
+        return
     Cast(world=world, me=me, ref="drivers:flat").insubstantial(
         on=me, until=When.ENCOUNTER)
     out.that(takes_half(world, me),
              "an UNGATED insubstantial answers True with no context -- every"
              " printed stat block is one, and this is what says #747 took"
              " nothing away")
-    out.that(dealt(world, foes[0], me) == 5 and dealt(world, foes[1], me) == 5,
-             "and halves both attackers' blows",
-             f"{dealt(world, foes[0], me)}, {dealt(world, foes[1], me)}")
+    out.that(dealt(world, full[0], me) == 5 and dealt(world, full[1], me) == 5,
+             "and halves both attackers' blows -- both chosen because their"
+             " blow landed in FULL before this was laid, so a 5 is this"
+             " trait's doing and not the attacker's",
+             f"{dealt(world, full[0], me)}, {dealt(world, full[1], me)}")
 
     # -- a blanket trait BESIDE a gated one, which is the real board -----
     #
@@ -40823,7 +40862,13 @@ def insubstantial_to_one_attacker(out: Result) -> None:
     # suppressed `p2482` and halved nothing against an attacker that could
     # see. This is the assertion that says it does not.
     world, me, foes = posed()
-    blind, seeing = foes[0], foes[1]
+    full = [e for e in foes if dealt(world, e, me) == 10]
+    if len(full) < 2:
+        out.skip("the board does not hold two enemies whose blow lands in"
+                 " full, so a halving cannot be told from an attacker that"
+                 " was already dealing half")
+        return
+    blind, seeing = full[0], full[1]
     Cast(world=world, me=me, ref="drivers:flat").insubstantial(
         on=me, until=When.ENCOUNTER)
     REGISTRY["i2426x1"].body(Cast(world=world, me=me, ref="i2426x1"))
@@ -40843,7 +40888,11 @@ def insubstantial_to_one_attacker(out: Result) -> None:
     if len(foes) < 2:
         out.skip("the i3401x1 board does not hold two enemies with hit points")
     else:
-        hidden_from, other = foes[0], foes[1]
+        full = [e for e in foes if dealt(world, e, me) == 10]
+        if len(full) < 2:
+            out.skip("the i3401x1 board holds no two full-damage enemies")
+            return
+        hidden_from, other = full[0], full[1]
         REGISTRY["i3401x1"].body(Cast(world=world, me=me, ref="i3401x1"))
         out.that(dealt(world, hidden_from, me) == 10,
                  "with no concealment standing, the row does nothing -- the"
@@ -57899,6 +57948,11 @@ def what_provoked_the_opening_reaches_the_attack(out: Result) -> None:
         got: dict[str, Any] = {
             "by": str(getattr(world.provocation, "by", "") or ""),
             "kind": str(getattr(world.provocation, "kind_", "") or ""),
+            # **Who swung.** Without it a window's defence can only be
+            # compared against one creature's, and the board stands
+            # several in reach whose swings are rolled against different
+            # defences of the caster. See the two assertions that use it.
+            "actor": ev.actor,
         }
         del told[:]
         got["defence"] = swing(world, ev.actor, ev.provoker,
@@ -57933,6 +57987,16 @@ def what_provoked_the_opening_reaches_the_attack(out: Result) -> None:
              "the caster has an AC to be rolled against at all, which every"
              " comparison below is a difference from",
              f"AC {base}")
+    # **Every adjacent enemy's own base, not just this one's.** The board
+    # stands four creatures in reach and opens a window for each, and
+    # this compared all four against the defence measured for ONE of
+    # them. That held only while they happened to agree: a draw change
+    # fielded a creature whose swing is rolled against a different AC
+    # and two assertions went red, accusing a rider that had paid
+    # exactly what it should on every window. The AC an opportunity
+    # attack is rolled against depends on who is swinging, which is this
+    # rule's own subject.
+
 
     # -- a ranged power's use: the row-provoked opening -----------------
     seen.clear()
@@ -57952,11 +58016,17 @@ def what_provoked_the_opening_reaches_the_attack(out: Result) -> None:
                  " the ranged power and `kind_` is empty, because a row"
                  " opened this and not a move",
                  f"{[(g['by'], g['kind']) for g in seen]}")
-        out.that(all(g["defence"] == base + 4 for g in seen),
-                 "so `f2565` pays on each: the opportunity attack is rolled"
-                 " against an AC 4 higher, which is the clause its"
-                 " docstring said could not be written",
-                 f"{base} -> {[g['defence'] for g in seen]}")
+        # **Kept per attacker**, so the move-provoked windows below can be
+        # compared against the SAME creature's row-provoked one. The board
+        # stands several creatures in reach and their swings are rolled
+        # against different defences of the caster, so one number cannot
+        # stand for all of them -- which is what this rule assumed until a
+        # draw change fielded a creature that disagreed.
+        paid = {g["actor"]: g["defence"] for g in seen}
+        out.that(len(paid) == len(seen) and all(d > 0 for d in paid.values()),
+                 "so `f2565` pays on each: one window per creature in"
+                 " reach, each with an AC to compare",
+                 f"{sorted(paid.values())}")
     # Snapshot before the move case reuses `seen`. The first draft asserted
     # the event half *after* that reuse and read the move windows' empty
     # refs -- a real FAIL, of the rule rather than of the engine.
@@ -57979,12 +58049,19 @@ def what_provoked_the_opening_reaches_the_attack(out: Result) -> None:
                  " move kind `movement.step` was given. The absence of `by`"
                  " is the signal `f1302` reads",
                  f"{[(g['by'], g['kind']) for g in seen]}")
-        out.that(all(g["defence"] == base for g in seen),
+        # **Four lower than the SAME creature's row-provoked window**, which
+        # is the comparison that says the rider paid there and not here.
+        # Comparing against one creature's AC made three assertions red the
+        # day the board fielded a creature whose swing is rolled against a
+        # different defence -- accusing a rider that had paid exactly what
+        # it should on every window.
+        moved = {g["actor"]: g["defence"] for g in seen if g["actor"] in paid}
+        out.that(moved and all(moved[a] == paid[a] - 4 for a in moved),
                  "and `f2565` does **not** pay for it, which is the"
                  " over-payment its old `opportunity`-only gate made and the"
                  " control that a rule asserting only the ranged case would"
-                 " miss",
-                 f"{base} vs {[g['defence'] for g in seen]}")
+                 " miss. Per creature, against its OWN row-provoked window",
+                 f"{ {a: (paid[a], moved[a]) for a in moved} }")
 
     # -- an ordinary attack inherits nothing, in both moments ----------
     # The risk #880 deferred itself over. Two guards, and the plants say

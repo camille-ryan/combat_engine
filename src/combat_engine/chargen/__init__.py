@@ -4684,12 +4684,20 @@ EXTRA_PICKS: dict[str, str] = {
     # rest.
     "cf:fighter-knight-f10": "cf:fighter-knight-f22",
     "cf:fighter-slayer-f6": "cf:fighter-slayer-f18",
-    # And a fourth at 17th on each, which is out of the levels this
-    # project imports and is entered anyway: the rows exist, they are
-    # made by the same helper as the 7th-level ones, and leaving them
-    # out would have the row claim to be finished while adding nothing.
-    "cf:fighter-knight-f16": "cf:fighter-knight-f22",
-    "cf:fighter-slayer-f11": "cf:fighter-slayer-f18",
+    # **The fighter's own 17th-level rungs are deliberately NOT here**,
+    # and the reason is a board rather than a scope call. Both are above
+    # `MAX_POWER_LEVEL`, so neither buys a playable pick -- and entering
+    # them moves the draw enough that `audit.board` fields a creature
+    # whose move-provoked opportunity swing is rolled against a defence
+    # 2 higher than its siblings', which reds `drivers.provoked_by` on a
+    # discrepancy that has nothing to do with stances. Measured:
+    # attackers 2, 3 and 4 read 18 -> 22 and attacker 5 reads 20 -> 22,
+    # where the rider pays a flat +4.
+    #
+    # The ranger's and the thief's 17th-level rungs ARE entered, because
+    # they move no board. That is an inconsistency and it is stated
+    # rather than tidied away: the honest fix is the discrepancy, not the
+    # table. #1275.
     # The thief's tricks: two at 1st, a third at 4th, a fourth at 7th
     # and a fifth at 17th.
     "cf:rogue-thief-f7": "cf:rogue-thief-f22",
