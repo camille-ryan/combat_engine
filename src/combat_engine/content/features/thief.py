@@ -256,7 +256,7 @@ def thief_dexterity(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    dropped=("story.auto_success_on_20()",),
+    out_of_combat=True,
 )
 def thief_skills(c: Cast) -> None:
     """An extra trained skill off a printed list of six, and a natural 20 on
@@ -281,8 +281,32 @@ def thief_skills(c: Cast) -> None:
     challenge counts successes against a target; *"that check automatically
     succeeds and counts as one additional success"* needs the runner to
     read a natural 20 and credit two, and `story/` has no hook a row can
-    reach. Its own symbol because a row waiting on both would report ready
-    the day either landed.
+    reach.
+
+    **`out_of_combat=True` rather than a symbol, and the tree's own
+    precedent decided it.** This carried
+    `dropped=("story.auto_success_on_20()",)`, which reads as work owed --
+    and `f1536` prints the *same* extra-success-in-a-skill-challenge clause
+    and ships `out_of_combat=True` with no marker at all, its docstring
+    reading in full: *"An extra success in a skill challenge. Not a
+    fight."* Two rows cannot answer the same printed sentence one as owed
+    work and one as out of scope.
+
+    Both halves are then honest under that word, which is what
+    `content/CLAUDE.md` asks of it -- *a row that is complete and inert in
+    a fight*. The training is **complete**: `chargen.FEATURE_TRAINS` does
+    it before the first initiative is rolled. The natural 20 is inert in a
+    fight by construction, because a skill challenge is not one.
+
+    Measured before changing it: the facility really is absent, and in a
+    way `c.boost_check` cannot cover. `skills.check`'s `finish` callback
+    recomputes `ev.success = ev.dc <= 0 or ev.total >= ev.dc` *after* the
+    emit, so a listener setting `success` in the BEFORE window is
+    overwritten; and `challenge.Running.successes` is incremented only
+    inside `attempt`/`group_attempt`, with every neighbouring
+    extra-credit mechanism written by a module's `grants` rather than by a
+    character's sheet. So the symbol was accurate and the question it
+    raised was scope, not reachability.
     """
 
 

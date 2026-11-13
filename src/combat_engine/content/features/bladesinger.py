@@ -345,25 +345,37 @@ def bladesinger_song(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("chargen.power_choice(keyword=)",),
 )
 def bladesinger_bladespells(c: Cast) -> None:
     """"You gain three wizard at-will attack powers that have the bladespell
     keyword."
 
-    **This one is load-bearing and the others of its kind are not.** All
-    six bladespells are written -- `p14286` through `p14291`, every one
-    firing -- and `Keyword.BLADESPELL` exists, so unlike the cantrips there
-    is a real family to draw from. What is missing is the draw: `loadout`
-    deals a class's at-wills from the whole class pool, so a bladesinger
-    gets whatever the wizard's at-wills are and the six rows its own two
-    later features are *about* may not be among them.
+    **The keyword was never the gap, and this row's marker said it was.**
+    It carried `chargen.power_choice(keyword=)` on the argument that the
+    gap here is *"a draw narrowed by keyword"*, distinct from `-f1`'s "a
+    draw from a family". The distinction does not survive: the keyword is
+    how the family is **found**, and once found it is an ordinary list of
+    six refs -- exactly what `-f1` is, and what `#1268` already settled for
+    it a hundred lines above.
 
-    A different symbol from `-f1`'s for that reason. The gap there is "a
-    draw from a family"; the gap here is "a draw **narrowed by keyword**",
-    and the keyword is the thing that exists. One marker naming one gap --
-    a shared symbol would report both ready the day either landed.
+    `Keyword.BLADESPELL` matches `p14286` through `p14291`, all of them
+    `cls="wizard"`, level 0, at-will, attack rows with no marker. So this
+    is a `chargen.BUILD_OPTIONS` fork with `OPTION_PICKS` of three, like
+    every other.
+
+    **The draw really was broken, which is why the row was not simply
+    wrong.** `loadout` *excludes* all six from the generic wizard at-will
+    pool by keyword, so a bladesinger reaches them through this fork and no
+    other way -- and until the fork existed, the six rows its own two later
+    features are **about** were unreachable by the character that needs
+    them.
+
+    `drivers.bladespells` gates the transcription against the keyword, so
+    a seventh bladespell lands red rather than silently missing from the
+    list.
     """
+    for took in c.chosen_options("cf:wizard-bladesinger-f5"):
+        c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

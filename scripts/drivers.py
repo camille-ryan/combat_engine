@@ -79517,6 +79517,387 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def a_stealth_check_helps_the_allies_next_one(out: Result) -> None:
+    """`cf:ranger-hunter-f20s0` and `cf:ranger-scout-f17s0`, one sentence.
+
+    *"Whenever you make a Stealth check, each ally within 10 squares of you
+    gains a +2 bonus to his or her next Stealth check before the end of
+    your next turn."*
+
+    Both rows carried `c.on_check(skill=)` saying *"nothing watches a skill
+    check being made"*. `skills.check` emits `CheckDeclared` and
+    `SkillCheck`, and `triggers.my_check` has been the reader for this
+    exact sentence; `powers/ranger/level_6.py` declares it.
+
+    Four things asserted, and the third is the one `once=True` cannot do:
+
+    * a Stealth check by the ranger lays +2 on an ally within 10;
+    * an ally **out of range** gets nothing, which is the printed distance;
+    * the ally's **next** Stealth check spends it, so a second check is
+      unhelped -- a bonus declared `once=True` would have stood for the
+      whole duration and helped every check in it;
+    * and a check of a **different skill** neither lays it nor spends it.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.query import allies
+
+    PAIR = ("cf:ranger-hunter-f20s0", "cf:ranger-scout-f17s0")
+    for ref in PAIR:
+        world, me, _ = _board(ref, 1)
+        c = Cast(world=world, me=me, ref="drivers:stealth")
+        # **The board's ranger holds BOTH chassis rows**, so both fire and
+        # each lends its own +2. A real ranger takes one chassis; this is
+        # the board pre-setting the number, so the expected figure is
+        # counted off what the creature actually holds rather than written
+        # as a literal 2. Measured: +4 on this board, with both held.
+        held = [r for r in PAIR if c.feat(r)]
+        want = 2 * len(held)
+        out.that(len(held) >= 1,
+                 f"{ref}: the board's ranger holds {len(held)} of the two"
+                 f" rows that print this sentence, so +{want} is expected")
+        friends = [a for a in sorted(allies(world, me))
+                   if a != me and world.get(a, Health) is not None]
+        out.that(len(friends) >= 2,
+                 f"{ref}: the board fields at least two allies"
+                 f" ({len(friends)})")
+        if len(friends) < 2:
+            continue
+        near, far = friends[0], friends[1]
+        # Far out of the printed 10, moved through the grid so
+        # `Grid.occupants` does not go stale.
+        spot = world.need(me, Position).square
+        away = (spot[0] + 20, spot[1])
+        world.grid.lift(far)
+        world.need(far, Position).square = away
+        world.grid.place(far, frozenset({away}))
+        world.zones.refresh()
+
+        # **Nothing is armed here: `audit.board` already did it**, and
+        # running the body again lays a second watch, so the ally was lent
+        # +6 instead of +2. The same trap `_offering_trait` records.
+        # **Deltas, never totals.** An ally already carries Stealth
+        # modifiers of its own -- training, a racial, armour -- so a total
+        # read after the check cannot say what this clause laid. Measured:
+        # the near ally reads 8 before the ranger does anything.
+        base_near = c.total("skill:stealth", on=near)
+        base_far = c.total("skill:stealth", on=far)
+
+        c.check("stealth", 0)
+        lent = c.total("skill:stealth", on=near) - base_near
+        out.that(lent == want,
+                 f"a Stealth check lends the ally within 10 exactly"
+                 f" +{want} ({base_near} -> {base_near + lent})")
+        out.that(c.total("skill:stealth", on=far) - base_far == 0,
+                 "and nothing to the ally 20 squares away -- the printed"
+                 " distance",
+                 f"{base_far} -> {c.total('skill:stealth', on=far)}")
+
+        # A different skill neither spends it nor lays more.
+        c.check("athletics", 0, who=near)
+        after_other = c.total("skill:stealth", on=near) - base_near
+        out.that(after_other == want,
+                 "an Athletics check by the ally spends nothing -- the hold"
+                 f" is for its next **Stealth** check ({after_other})")
+
+        c.check("stealth", 0, who=near)
+        left = c.total("skill:stealth", on=near) - base_near
+        out.that(left == 0,
+                 f"and its next Stealth check spends it (back to"
+                 f" {base_near}), which is what `once=True` could not have"
+                 " said -- a one-shot is watched off an attack roll, not a"
+                 " check")
+
+
+def a_season_gift_ends_one_burn(out: Result) -> None:
+    """`cf:druid-sentinel-f12s0`: a second wind ends an ally's ongoing damage
+    and conceals it.
+
+    The row played the concealment and carried `c.end_ongoing()` for the
+    burn, on the reading that *"nothing in the tree ends one --
+    `c.end_effect(carrying=)` narrows by `Condition` and ongoing damage is
+    not one"*. True, and it skips `c.end_effect`'s commonest shape: hand it
+    the effect. `Effect.ongoing` is a declared field and `p12705` has been
+    filtering on it.
+
+    Three things asserted:
+
+    * an ally carrying ongoing damage has it ended by the druid's second
+      wind;
+    * the concealment still lands, so the clause that already worked did
+      not regress;
+    * and an effect **carrying no burn** is left alone -- which is the
+      plant, and the reason the filter is `ongoing is not None` rather
+      than the one-line `c.end_effect(on=friend, save_ends=True)`: ongoing
+      damage defaults to `SAVE_ENDS`, so the short version would also end
+      a save-ends daze the card says nothing about.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, concealment_of
+    from combat_engine.engine.types import ActionType, Cover, DamageType
+
+    ref = "cf:druid-sentinel-f12s0"
+    world, me, _ = _board(ref, 1)
+    c = Cast(world=world, me=me, ref="drivers:season")
+    friend = next((a for a in sorted(allies(world, me))
+                   if a != me and world.get(a, Health) is not None), None)
+    out.that(friend is not None, "the board fields an ally to help")
+    assert friend is not None
+
+    use(world, me, ref, spend=False)
+    burn = c.ongoing(5, DamageType.FIRE, on=friend)
+    daze = c.effect("drivers:save-ends-no-burn", until=When.SAVE_ENDS,
+                    on=friend)
+    out.that(burn is not None and daze is not None,
+             "the ally is given an ongoing burn **and** a save-ends effect"
+             " carrying no burn")
+    assert burn is not None and daze is not None
+
+    health = world.need(me, Health)
+    health.hp = max(1, health.max_hp // 2)
+    c.second_wind(cost=ActionType.STANDARD)
+
+    out.that(burn.ended,
+             "the second wind ends the ongoing damage")
+    out.that(not daze.ended,
+             "PLANT: and leaves the save-ends effect standing -- the filter"
+             " asks `ongoing is not None`, where the one-line"
+             " `end_effect(save_ends=True)` would have taken both")
+    out.that(concealment_of(world, friend) is not Cover.NONE,
+             "and the concealment clause, which already worked, still runs"
+             f" ({concealment_of(world, friend)})")
+
+
+def a_fort_rider_pays_only_on_a_hit(out: Result) -> None:
+    """`cf:cleric-warpriest-f8s3`: melee, Fortitude, and only targets hit.
+
+    The row carried `dsl.Attack.vs(read_at_use)` -- that a rider cannot
+    know which defence the power it watches went after. `AttackRolled.vs`
+    carries it, which is what `i1743x1` reads and says so.
+
+    Moving to that event fixed a second fault the marker never named: the
+    eight siblings watch `PowerUsed` and pay every **aimed** target, where
+    this card says *"any target you **hit**"*.
+
+    Three things asserted, each a printed condition and each its own
+    control:
+
+    * a melee cleric encounter attack against **Fortitude** that **hits**
+      makes the target grant combat advantage;
+    * the same attack against a **different defence** pays nothing;
+    * and an attack that **misses** pays nothing -- the fault `PowerUsed`
+      had.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import AC, FORT
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import has_combat_advantage
+
+    ref = "cf:cleric-warpriest-f8s3"
+
+    def pose(vs: object, hit: bool, melee: bool = True):  # noqa: ANN202
+        world, me, _ = _board(ref, 1)
+        use(world, me, ref, spend=False)
+        victim = _hardiest(world, me)
+        world.need(victim, Health).hp = 500
+        # A cleric melee encounter attack row to name on the event, found
+        # rather than hard-coded so a content change cannot leave this
+        # asserting against a ref nobody holds.
+        from combat_engine.engine.dsl import REGISTRY
+        row = next(
+            (r for r, p in sorted(REGISTRY.items())
+             if p.cls == "cleric" and p.is_attack
+             and p.usage.value == "encounter"
+             and p.reach.kind.startswith("melee" if melee else "ranged")
+             and not p.unfinished),
+            "")
+        assert row, "no cleric encounter attack row of that reach"
+        world.bus.emit(AttackRolled(
+            attacker=me, target=victim, power=row, vs=vs,
+            natural=15, bonus=10, total=25,
+            defence=20 if hit else 99, advantage=False,
+        ))
+        return has_combat_advantage(world, me, victim), row
+
+    paid, row = pose(FORT, hit=True)
+    out.that(bool(paid),
+             f"a melee cleric encounter attack vs Fortitude that hits makes"
+             f" the target grant combat advantage (via {row})", f"{paid}")
+
+    other, _ = pose(AC, hit=True)
+    out.that(not other,
+             "PLANT: the same attack **vs AC** pays nothing -- `ev.vs` is"
+             " the gate", f"{other}")
+
+    missed, _ = pose(FORT, hit=False)
+    out.that(not missed,
+             "PLANT: and a **miss** pays nothing, which is the fault the"
+             " eight `PowerUsed` siblings still have", f"{missed}")
+
+
+def a_surge_bonus_reaches_every_door(out: Result) -> None:
+    """`cf:paladin-cavalier-f4s1`: *"your healing surge value increases by
+    2."*
+
+    The row carried `Health.surge_bonus` -- a **field** -- on the claim
+    that *"`c.surge_value` computes a quarter of maximum hit points with
+    nothing added to it"*. It does not: `query.surge_value` is
+    `health.surge_value + mods.total("surge_value")`, and that is the one
+    reader every door comes through. So the clause is an ordinary
+    `c.bonus`, and the marker named a second place to record the same fact.
+
+    **Asserted at three doors, not one**, because the whole argument for
+    the modifier key over a field is that it reaches all of them:
+
+    * `query.surge_value` itself, which is what the sheet shows;
+    * `Cast.surge_value`, which content rows read;
+    * and a **second wind**, where the surge is actually cashed -- this is
+      the one a field on `Health` would have been easiest to miss, since
+      `turns.py` reads the query rather than the component.
+
+    The plant is the row's own clause removed: every one of the three must
+    drop by 2 together, which is what distinguishes "the modifier reaches
+    this door" from "this door happens to agree".
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import surge_value
+    from combat_engine.engine.turns import arm_traits
+    from combat_engine.engine.types import ActionType
+
+    ref = "cf:paladin-cavalier-f4s1"
+
+    def reading(armed: bool):  # noqa: ANN202
+        world, me, _ = _board(ref, 1)
+        health = world.need(me, Health)
+        health.max_hp = 40
+        health.hp = 1
+        if armed:
+            arm_traits(world, me)
+        c = Cast(world=world, me=me, ref="drivers:zeal")
+        before = health.hp
+        c.second_wind(cost=ActionType.STANDARD)
+        return surge_value(world, me), c.surge_value(), health.hp - before
+
+    query_on, cast_on, healed_on = reading(armed=True)
+    out.that(query_on == cast_on,
+             f"`query.surge_value` and `Cast.surge_value` agree ({query_on})")
+    out.that(healed_on == query_on,
+             f"and a second wind restores that figure ({healed_on}), so the"
+             " surge really is cashed at the modified value")
+
+    # **Attribution, which a control board cannot give.** A second board
+    # without the trait armed differs by every *other* trait too, and
+    # `c.end_effect` does not reach a `Mods` entry -- measured, the surge
+    # value did not move. Running this row's own body once and reading the
+    # delta names the +2 as **this row's**, which is the question.
+    world, me, _ = _board(ref, 1)
+    health = world.need(me, Health)
+    health.max_hp = 40
+    health.hp = 1
+    before = surge_value(world, me)
+    use(world, me, ref, spend=False)
+    after = surge_value(world, me)
+    out.that(after - before == 2,
+             f"one run of `{ref}`'s body raises the surge value by exactly"
+             f" 2 ({before} -> {after}) -- so the printed figure is this"
+             " row's and not the board's")
+    out.that(before >= 10 and health.max_hp == 40,
+             f"and the base is a quarter of maximum as printed"
+             f" ({health.max_hp} hp)")
+
+
+def the_bladesinger_is_dealt_three_bladespells(out: Result) -> None:
+    """`cf:wizard-bladesinger-f5`: *"three wizard at-will attack powers that
+    have the bladespell keyword."*
+
+    The row carried `chargen.power_choice(keyword=)` on the reading that a
+    draw **narrowed by keyword** was a facility the dealer lacked. The
+    keyword is how the family is found, not a facility: it matches exactly
+    six rows, so the clause is an ordinary `BUILD_OPTIONS` fork with
+    `OPTION_PICKS` of three -- which is what `cf:wizard-bladesinger-f1` was
+    settled as under `#1268`, a hundred lines above it in the same file.
+
+    **This rule is the gate on the transcription, which is the half a
+    hand-written table needs.** `chargen` must not walk the registry to
+    build its own tables, so the six refs are written out -- and a seventh
+    bladespell landing in a later import would leave the list quietly
+    short. Asserting the table **equals** the keyword-matching set is what
+    turns that into a red run.
+
+    Four things asserted:
+
+    * the table is exactly the set `Keyword.BLADESPELL` matches, in both
+      directions, so neither a new bladespell nor a stale ref can hide;
+    * every one of them is a wizard level-0 at-will **attack** row, which
+      is what the printed sentence says they are;
+    * the dealer gives a bladesinger **three**, not six and not one;
+    * and `loadout` excludes them from the generic wizard pool, which is
+      why the fork is load-bearing rather than decorative -- a plant on
+      that exclusion would make the fork redundant, so the rule states the
+      fact it rests on.
+    """
+    import random
+
+    from combat_engine import chargen
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Keyword, Usage
+
+    fork = "cf:wizard-bladesinger-f5"
+    listed = tuple(chargen.BUILD_OPTIONS[fork])
+    matched = tuple(sorted(
+        r for r, p in REGISTRY.items()
+        if Keyword.BLADESPELL in (p.keywords or ())))
+
+    out.that(tuple(sorted(listed)) == matched,
+             f"the fork's {len(listed)} refs are exactly the rows"
+             f" `Keyword.BLADESPELL` matches ({len(matched)})",
+             f"listed {listed}\n            matched {matched}")
+
+    wrong = [r for r in listed
+             if not (REGISTRY[r].cls == "wizard"
+                     and REGISTRY[r].level == 0
+                     and REGISTRY[r].usage is Usage.AT_WILL
+                     and REGISTRY[r].is_attack)]
+    out.that(not wrong,
+             "and every one is a wizard level-0 at-will **attack** row,"
+             " which is what the card calls them", f"{wrong}")
+
+    unfinished = [r for r in listed if REGISTRY[r].unfinished]
+    out.that(not unfinished,
+             "and none of them is marked, so the fork deals nothing the"
+             " dealer would have to refuse", f"{unfinished}")
+
+    got = chargen.deal_build_options(random.Random(1), fork)
+    out.that(len(got) == 3,
+             f"the dealer gives three of the six ({len(got)})", f"{got}")
+    out.that(set(got) <= set(listed),
+             "and all three come from the fork's own list")
+
+    # **The fact the fork rests on**, stated rather than assumed: the six
+    # are kept out of the generic wizard at-will pool by keyword, so a
+    # bladesinger reaches them through this fork and no other way. If that
+    # exclusion ever goes, the fork becomes a redundant grant and this
+    # line is where a reader finds out.
+    pool = [r for r, p in REGISTRY.items()
+            if p.cls == "wizard" and p.level == 0
+            and p.usage is Usage.AT_WILL and p.is_attack
+            and Keyword.BLADESPELL not in (p.keywords or ())]
+    out.that(bool(pool) and not (set(pool) & set(listed)),
+             f"and the generic wizard at-will pool ({len(pool)} rows) holds"
+             " none of them -- which is why the fork is load-bearing")
+
+
 def two_feats_ride_the_berserkers_fury(out: Result) -> None:
     """`f3645` and `f3647`, both written into the feature they name.
 
@@ -79975,6 +80356,30 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "group_stealth": (
+        a_stealth_check_helps_the_allies_next_one,
+        "a Stealth check lends allies within 10 their next one (#1276)",
+    ),
+    "season_burn": (
+        a_season_gift_ends_one_burn,
+        "a sentinel's second wind ends an ally's ongoing damage and not a"
+        " save-ends daze (#1276)",
+    ),
+    "fort_rider": (
+        a_fort_rider_pays_only_on_a_hit,
+        "the warpriest's Fortitude rider reads ev.vs and pays only on a"
+        " hit (#1276)",
+    ),
+    "surge_bonus": (
+        a_surge_bonus_reaches_every_door,
+        "the +2 surge value reaches the query, the Cast and a second wind"
+        " (#1276)",
+    ),
+    "bladespells": (
+        the_bladesinger_is_dealt_three_bladespells,
+        "the bladespell fork equals the keyword's six and deals three"
+        " (#1276)",
     ),
     "fury_feats": (
         two_feats_ride_the_berserkers_fury,

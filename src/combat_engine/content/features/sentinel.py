@@ -635,16 +635,38 @@ def _chosen_ally(c: Cast, me: int) -> int | None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    dropped=("c.end_ongoing()",),
 )
 def sentinel_wind_0(c: Cast) -> None:
     """One season's second-wind gift: an ongoing damage effect ends and the
     ally gains partial concealment.
 
-    Only the concealment is laid: `c.ongoing` LAYS ongoing damage and
-    takes no `clear=`, and nothing in the tree ends one --
-    `c.end_effect(carrying=)` narrows by `Condition` and ongoing damage is
-    not one. The marker names that half.
+    **The burn half was marked `c.end_ongoing()` and needed no verb.** The
+    reason given was that *"`c.ongoing` LAYS ongoing damage and takes no
+    `clear=`, and nothing in the tree ends one -- `c.end_effect(carrying=)`
+    narrows by `Condition` and ongoing damage is not one"*. Both halves of
+    that are true and the conclusion skips `c.end_effect`'s **first and
+    commonest** shape, which its own docstring calls out: hand it the
+    effect. `carrying=` is one of several ways to *find* one, not the only
+    way in.
+
+    And the selector is an ordinary field read rather than a gap:
+    `Effect.ongoing` is a declared `tuple[int, DamageType] | None`, and
+    `p12705` has been walking `c.world.effects.of(...)` on exactly that
+    test. Sorted by id so the offer is stable rather than dict-ordered.
+
+    **`c.end_effect(on=friend, save_ends=True)` is the one-liner and is
+    wrong.** Ongoing damage does default to `When.SAVE_ENDS`, so it would
+    usually find the burn -- and it would also offer save-ends effects
+    carrying no burn at all, which makes the row green on a wider clause
+    than the card prints. Filtering on `ongoing is not None` asks the
+    printed question.
+
+    One honest limit: nothing strips `Effect.ongoing` and leaves the rest
+    of a package standing, so an effect that both burns **and** dazes is
+    ended whole here. Every ongoing in this tree is laid by `c.ongoing` as
+    its own effect, so the case does not arise today; said because the
+    reading *"ends one ongoing damage effect"* could mean the narrower
+    thing if such a package is ever written.
 
     No `kind=` because the card names no bonus at all -- concealment is
     not a +N of any type.
@@ -655,8 +677,17 @@ def sentinel_wind_0(c: Cast) -> None:
         if getattr(ev, "actor", None) != me:
             return
         friend = _chosen_ally(c, me)
-        if friend is not None:
-            c.conceal(on=friend, until=When.EONT)
+        if friend is None:
+            return
+        burns = [
+            eff for eff in sorted(c.world.effects.of(friend),
+                                  key=lambda eff: eff.id)
+            if not eff.ended and eff.ongoing is not None
+        ]
+        pick = c.choose(burns, f"{c.ref}: which burn the ally shakes off")
+        if pick is not None:
+            c.end_effect(pick, why=c.ref)
+        c.conceal(on=friend, until=When.EONT)
 
     c.watch(SecondWind, gift, until=When.ENCOUNTER, on=me, label=c.ref)
 

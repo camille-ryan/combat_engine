@@ -4350,6 +4350,30 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
         "p1930",
         "p12731",
     ),
+    # **The bladesinger's three bladespells**, and this one is derived
+    # rather than transcribed off a page: the card reads *"you gain three
+    # wizard at-will attack powers that have the bladespell keyword"*, and
+    # `Keyword.BLADESPELL` matches exactly these six rows -- all
+    # `cls="wizard"`, level 0, at-will, attack, none of them marked.
+    #
+    # The keyword is how the family is **found**, not a facility the draw
+    # lacks, which is what `chargen.power_choice(keyword=)` claimed for it.
+    # The only keyword machinery `loadout` has is the opposite one: it
+    # *excludes* all six from the generic wizard at-will pool, so they
+    # reach a bladesinger through this fork and no other way.
+    #
+    # Listed here rather than derived at runtime because `chargen` must not
+    # walk the registry to build its own tables -- and `drivers.bladespells`
+    # is the gate that keeps the list honest, asserting it equals the
+    # keyword-matching set on every run.
+    "cf:wizard-bladesinger-f5": (
+        "p14286",
+        "p14287",
+        "p14288",
+        "p14289",
+        "p14290",
+        "p14291",
+    ),
     # **The executioner's six 1st-level poisons.** Its card reads *"you
     # learn the recipes for two 1st-level assassin poisons of your
     # choice"* and listed nothing, so three rungs carried
@@ -4669,6 +4693,8 @@ OPTION_PICKS: dict[str, int] = {
     "cf:fighter-slayer-f18": 2,
     "cf:rogue-thief-f22": 2,
     "cf:wizard-bladesinger-f1": 3,
+    # *"You gain three wizard at-will attack powers"* -- three of the six.
+    "cf:wizard-bladesinger-f5": 3,
     # The mage's ladder -- see `BUILD_OPTIONS`.
     "cf:wizard-mage-f9": 2,
     "cf:wizard-mage-f10": 2,

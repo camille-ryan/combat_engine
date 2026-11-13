@@ -686,7 +686,7 @@ executioner_utility_14 = _utility_pick(
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.SHADOW],
-    todo=("story.disguise()",),
+    out_of_combat=True,
 )
 def executioner_disguise(c: Cast) -> None:
     """A disguise crafted on a short rest, seen through by an Insight check
@@ -695,12 +695,31 @@ def executioner_disguise(c: Cast) -> None:
     The story engine's and not the kernel's: it happens on a rest, the
     contest is a skill check against a party member or an NPC, and what it
     changes is who a creature appears to be -- none of which a `World` has
-    a field for.
+    a field for. Measured: nothing in `story/` holds who a creature appears
+    to be (`story/reflavour.py` dresses a *stat block* for encounter
+    design, a different question), `Party.rest` is pure `Sheet`
+    bookkeeping with no board and runs no rows, and `Sheet.consumables` is
+    on record as spent by nothing yet, so the kit cannot be consumed
+    either.
+
+    **`out_of_combat=True`, and this row was `todo=`, which was the live
+    fault.** `todo=` makes `usable` refuse the whole feature in play -- and
+    this feature prints *one* clause, so the row was refused outright for
+    the only thing it says. Seven rows print a disguise on a short rest --
+    `f3674`, `f929`, `f2882`, `i481p1`, `i1512x1`, `i2075p1`, `p15916` --
+    and **all seven** ship `out_of_combat=True` with no marker. `f3674`'s
+    docstring is the sentence this one should have carried: *"A disguise
+    assumed during a short rest and undone as a minor action. There is no
+    recognition on the board, so it is inert."*
+
+    So eight rows now answer the same printed sentence the same way, where
+    before seven were playable and this one was refused.
 
     **Not `narrative=`**, which would claim the clause has no combat
-    meaning. An opposed check that decides whether a guard attacks is
-    exactly combat meaning; what it lacks is a writer. `story/` owns the
-    rest and the contest, so the symbol names that side.
+    meaning -- an opposed check that decides whether a guard attacks has
+    plenty. `out_of_combat=True` says the narrower and true thing: the
+    clause is complete as far as a fight is concerned, because it happens
+    outside one.
     """
 
 

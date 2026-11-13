@@ -52,6 +52,7 @@ from combat_engine.engine.events import (
     MoveEnd,
     MoveStart,
     OpportunityWindow,
+    SkillCheck,
     TurnStart,
 )
 from combat_engine.engine.query import (
@@ -1003,3 +1004,75 @@ def warlock_shadow(c: Cast) -> None:
 
     for kind, fn in ((TurnStart, on_turn), (MoveEnd, on_end)):
         c.watch(kind, fn, until=When.ENCOUNTER, on=me, label="cf:warlock-f3")
+
+
+def group_stealth(c: Cast) -> None:
+    """*"Whenever you make a Stealth check, each ally within 10 squares of
+    you gains a +2 bonus to his or her next Stealth check before the end of
+    your next turn."*
+
+    One body for two rows -- `cf:ranger-hunter-f20s0` and
+    `cf:ranger-scout-f17s0` print the same sentence word for word, and both
+    chassis files already import from here, so the clause is written once.
+
+    **Both rows carried `c.on_check(skill=)` on a premise that was false.**
+    They said *"nothing watches a skill check being made; `c._stealth_hide`
+    rolls one and emits no event a row can answer"*. `skills.check` -- the
+    one place a skill check's d20 is rolled -- emits **two** answerable
+    events, `CheckDeclared` before the roll and `SkillCheck` with the
+    settled total, and `Cast._stealth_hide` reaches it by calling
+    `self.check(...)`, so a hide announces both. `triggers.my_check` is the
+    declared-trigger reader for exactly this sentence, and
+    `powers/ranger/level_6.py` has been using it.
+
+    **`once=True` is not the one-shot for a check, which is the trap worth
+    writing down.** `Cast.bonus`'s one-shot is spent by watching an attack
+    roll, a damage roll or a blow landing, and a check is none of the three
+    -- so a bonus declared `once=True` would stand for the whole duration
+    and help every Stealth check the ally made in it. `p12965` prints the
+    same sentence one skill wider and says so in terms; the spend is a
+    second `c.watch(SkillCheck, ...)` per ally, which is what this does.
+
+    **The spend watches `SkillCheck` and not `CheckDeclared`**, for
+    `p12965`'s reason: `skills.check` totals the modifiers in its resolve
+    callback, which runs first, so ending the hold on the declaration would
+    take the bonus away before the roll it is for could read it.
+
+    The caster is left out -- *"each **ally**"* -- which `c.allies()`
+    already does, and the radius is measured per ally rather than off
+    `c.within`, because the allies wanted are the ones within 10 **of the
+    caster** and that is what `distance_between` says plainly.
+    """
+    me = c.me
+
+    def spread(ev: SkillCheck) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        if getattr(ev, "skill", "") != "stealth":
+            return
+        for friend in sorted(allies(c.world, me)):
+            if friend == me or not alive(c.world, friend):
+                continue
+            if distance_between(c.world, me, friend) > 10:
+                continue
+            held = c.bonus("skill:stealth", 2, on=friend, until=When.EONT)
+            if held is None:
+                continue
+
+            def spent(used: SkillCheck, who: int = friend, hold: Any = held) -> None:
+                # **The skill is tested as well as the actor.** Written
+                # without it first, and `drivers.group_stealth` caught it:
+                # the ally's next *Athletics* check spent the hold, so the
+                # bonus was for "the ally's next check of any kind" where
+                # the card says *"his or her next Stealth check"*. One
+                # wasted helping per unrelated check the ally made.
+                if getattr(used, "actor", None) != who:
+                    return
+                if getattr(used, "skill", "") != "stealth":
+                    return
+                c.world.effects.end(hold, "used")
+
+            c.watch(SkillCheck, spent, until=When.EONT, on=friend,
+                    label=f"{c.ref} next stealth {friend}")
+
+    c.watch(SkillCheck, spread, until=When.ENCOUNTER, on=me, label=c.ref)

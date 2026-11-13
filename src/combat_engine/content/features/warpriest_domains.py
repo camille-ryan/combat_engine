@@ -59,6 +59,7 @@ from combat_engine.content.features.warpriest import (
 )
 from combat_engine.engine import (
     ENCOUNTER,
+    FORT,
     NO_TARGET,
     PERSONAL,
     ActionType,
@@ -71,7 +72,12 @@ from combat_engine.engine import (
     power,
     usable,
 )
-from combat_engine.engine.events import Dropped, PowerUsed, TurnStart
+from combat_engine.engine.events import (
+    AttackRolled,
+    Dropped,
+    PowerUsed,
+    TurnStart,
+)
 from combat_engine.engine.query import (
     Conditions,
     bloodied,
@@ -647,10 +653,77 @@ def _divine_rider(ref: str, what: str, keyword: Keyword | None,
 warpriest_divine_0 = _divine_rider(
     "cf:cleric-warpriest-f8s0", "the warpriest teleports 1",
     Keyword.RADIANT)
-warpriest_divine_3 = _divine_rider(
+@power(
     "cf:cleric-warpriest-f8s3",
-    "each target hit grants combat advantage", None,
-    dropped=("dsl.Attack.vs(read_at_use)",))
+    level=0,
+    cls="cleric",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.DIVINE],
+)
+def warpriest_divine_3(c: Cast) -> None:
+    """*"Whenever you use a **melee** divine encounter attack power that
+    attacks **Fortitude** defense, any target you **hit** also grants
+    combat advantage until the end of your next turn."*
+
+    **The one of `-f8`'s nine that cannot share `_divine_rider`**, and the
+    marker said the reason was a missing facility. It carried
+    `dsl.Attack.vs(read_at_use)` -- the claim being that a row's Attack
+    line is header data, so a rider cannot know which defence the power it
+    is watching actually went after.
+
+    `events.AttackRolled` carries it. `ev.vs` is the defence the attack
+    really attacked, and `i1743x1`'s docstring states the argument for
+    reading it there rather than off the header: *"the event carries the
+    defence the attack actually went after, so a row whose secondary
+    attack goes after a different defence than its printed Attack line is
+    exact here"*. `_defence_gate(FORT)` reading `row.attack.vs` is the
+    declaration-time alternative and covers only the two thirds of cleric
+    encounter attack rows that declare a header `Attack` at all.
+
+    **Changing the event fixed a second fault the marker did not name.**
+    The eight siblings watch `PowerUsed` and pay every **aimed** target;
+    this card says *"any target you **hit**"*, so on `PowerUsed` it paid
+    on a miss. `AttackRolled` carries `total` and `defence` together with
+    `vs`, so one event answers all three printed conditions --
+    `powers/psion/level_3.py` already composes the same pair.
+
+    And the melee gate is the third: *"a melee divine encounter attack
+    power"*, read off the rolling row's `reach.kind` the way
+    `features/hunter.py` reads its ranged one.
+
+    **A sibling is over-paying and is not fixed here.** `-f8s7` prints
+    *"**you** have combat advantage against the power's targets"* and
+    shares `_divine_rider`'s `c.grants_advantage(on=victim)` branch, which
+    makes the victim grant it to **everybody**. That is a different row
+    and a different facility -- advantage for one named attacker -- so it
+    is filed rather than widened into this change.
+    """
+    me = c.me
+
+    def rolled(ev: AttackRolled) -> None:
+        if getattr(ev, "attacker", None) != me:
+            return
+        if getattr(ev, "vs", None) is not FORT:
+            return
+        # "Any target you hit." `resolve` decides by `total >= against`,
+        # which is the comparison these two fields are.
+        if ev.total < ev.defence:
+            return
+        rolling = get(getattr(ev, "power", "") or "")
+        if rolling is None or rolling.cls != "cleric":
+            return
+        if not rolling.is_attack or rolling.usage.value != "encounter":
+            return
+        if not rolling.reach.kind.startswith("melee"):
+            return
+        c.grants_advantage(on=ev.target, until=When.EONT)
+
+    c.watch(AttackRolled, rolled, until=When.ENCOUNTER, on=me, label=c.ref)
+
+
 warpriest_divine_4 = _divine_rider(
     "cf:cleric-warpriest-f8s4",
     "each target grants combat advantage", Keyword.PSYCHIC)

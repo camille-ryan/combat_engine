@@ -263,7 +263,6 @@ def cavalier_virtue_valour(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("Health.surge_bonus",),
 )
 def cavalier_virtue_zeal(c: Cast) -> None:
     """The other virtue: +4 to initiative, and a surge worth 2 more.
@@ -272,16 +271,29 @@ def cavalier_virtue_zeal(c: Cast) -> None:
     `Initiative.bonus` is summed before the d20 and `Mods` is never
     consulted, so the modifier would be laid and no roll would read it.
     `cf:rogue-thief-f11` records the measurement and `#1262` is why a row
-    whose whole content is this reads SILENT; this one has a second clause
-    marked beside it, so the verdict here is about the marker.
+    whose whole content is this reads SILENT.
 
-    Dropped: *"your healing surge value increases by 2."* `c.surge_value`
-    is the **reader** and computes a quarter of maximum hit points with
-    nothing added to it -- there is no field for a flat increase, and
-    `Health` carries none. One symbol, naming the field the reader would
-    have to consult rather than the clause.
+    **The surge clause is an ordinary `c.bonus`, and this row's own
+    docstring said it could not be.** It carried
+    `dropped=("Health.surge_bonus",)` under the claim that *"`c.surge_value`
+    computes a quarter of maximum hit points with nothing added to it"*.
+    It does not: `Cast.surge_value` delegates to `query.surge_value`, which
+    is `health.surge_value + mods.total("surge_value")`, and that reader's
+    docstring states the design outright -- *"`Health.surge_value` is a
+    property computed on every read, so there was nothing to hang a change
+    on ... a single `c.bonus("surge_value", n)` reaches every place a surge
+    is cashed"*. Every door comes through it: the second wind, the natural
+    twenty on a death save, and `Cast.surge_value` itself.
+
+    So the marker named a field that would have been a **second** place to
+    record the same fact, and `f1101` has been writing the identical printed
+    sentence through the modifier key for as long as the key has existed.
+
+    No `kind=`: the card prints no bonus-type word, which is `f1101`'s call
+    for the same sentence.
     """
     c.initiative(4, on=c.me)
+    c.bonus("surge_value", 2, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

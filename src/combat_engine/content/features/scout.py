@@ -41,7 +41,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.content.features.strikers import _weapon_attack
+from combat_engine.content.features.strikers import (
+    _weapon_attack,
+    group_stealth,
+)
 from combat_engine.engine import (
     ENCOUNTER,
     NO_TARGET,
@@ -446,21 +449,18 @@ def scout_mastery_blade(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("c.on_check(skill=)",),
 )
 def scout_group_stealth(c: Cast) -> None:
     """"Whenever you make a Stealth check, each ally within 10 squares of
     you gains a +2 bonus to his or her next Stealth check before the end of
     your next turn."
 
-    The effect half is writable -- `c.bonus("skill:stealth", 2, on=ally,
-    once=True)` is every piece of it -- and the **trigger** is not: nothing
-    watches a skill check being made. `c._stealth_hide` rolls one and
-    emits no event a row can answer, so there is no door.
-
-    One symbol, naming the watch rather than the bonus, because the bonus
-    is not what is missing.
+    `cf:ranger-hunter-f20s0` prints the same sentence word for word, so the
+    body is `strikers.group_stealth` and lives there -- that helper has the
+    measurement, the `SkillCheck` events the old marker said did not exist,
+    and the reason `once=True` cannot spell *"his or her next"* on a check.
     """
+    group_stealth(c)
 
 
 # -- the four ladder rungs --------------------------------------------------

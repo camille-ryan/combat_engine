@@ -646,6 +646,16 @@ KNOWN_SILENT = {
     "cf:wizard-bladesinger-f1": "grants the cantrips it dealt; they are"
                                 " level 0, so the board's wizard holds them"
                                 " already",
+    # **The bladespells, and the board's reason is sharper than `-f1`'s.**
+    # These six are *excluded* from the generic wizard at-will pool by
+    # keyword, so unlike the cantrips the board's wizard would not hold
+    # them by accident -- it holds them because `board` grants every option
+    # of the row under test, so all six land and `c.grant_row` has nothing
+    # to add. `drivers.bladespells` proves the fork against a dealt
+    # bladesinger, where exactly three arrive and the grant is real.
+    "cf:wizard-bladesinger-f5": "grants the bladespells its own fork dealt;"
+                                " the board hands the row under test every"
+                                " option, so all six are already held",
     "cf:fighter-knight-f10": "adds a pick to another row's fork; the pick is"
                              " chargen's and this row has no body",
     "cf:fighter-slayer-f6": "adds a pick to another row's fork; the pick is"
