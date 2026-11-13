@@ -1041,7 +1041,47 @@ class Mod:
     dtype: tuple[DamageType, ...] = ()
 
     def applies(self, ctx: dict[str, Any]) -> bool:
-        return self.when is None or self.when(ctx)
+        """Does this modifier's own gate pass for this roll?
+
+        **Plus one substitution, which is a printed rule and not a
+        kindness.** `cf:fighter-weaponmaster-f3s0` prints *"any of your
+        feats that grant feat bonuses to attack rolls or damage rolls with
+        one of your arena weapons apply to your other arena weapon as
+        well"*, and a feat's weapon gate is a `when=` predicate inside
+        **that feat's** body -- so nothing could reach in and widen it.
+        That is what `c.shares_feat_bonus(weapon=)` named.
+
+        So the widening happens on the **reading** side instead: when a
+        gate fails, it is asked again with the context rewritten as
+        though the swing had been with the other arena weapon.
+        `resolve` puts the substitutions on the context and only when the
+        creature actually swung one of the pair, so this costs a second
+        predicate call on exactly the rolls the card is about.
+
+        **Three narrowings, each straight off the printed sentence**, and
+        together they are why this is not a general back door:
+
+        * `kind == "feat"` -- the card says *feat* bonuses. A power's
+          untyped rider is not shared.
+        * `what in ("attack", "damage")` -- the card names those two
+          rolls. A feat bonus to AC or to a skill is not shared.
+        * only when the gate **failed**, so a predicate that already
+          passes is never asked twice and nothing is double-counted:
+          `Mods.total` buckets by kind, so two readings of one modifier
+          could not add anyway, but the saving is real on the hot path.
+
+        One door for both `Mods.total` and `Mods.split`, which is why it
+        is here rather than in either -- the damage half of the printed
+        sentence goes through `split`.
+        """
+        if self.when is None:
+            return True
+        if self.when(ctx):
+            return True
+        if self.kind != "feat" or self.what not in ("attack", "damage"):
+            return False
+        return any(self.when({**ctx, **alt})
+                   for alt in ctx.get("arena_alt") or ())
 
     def amount(self) -> int:
         return self.value + (self.roll() if self.roll is not None else 0)
@@ -1940,6 +1980,20 @@ class Gear:
     #: property, a group, a category -- **plus the printed slug**, because
     #: several of these cards name one weapon rather than a group.
     counts_as: list[tuple[str, str]] = field(default_factory=list)
+    #: This creature's **arena weapons**, by ref.
+    #:
+    #: `cf:fighter-weaponmaster-f3s0` prints *"you select two weapons as
+    #: your arena weapons ... any of your feats that grant feat bonuses to
+    #: attack rolls or damage rolls with one of your arena weapons apply to
+    #: your other arena weapon as well"*, and the sharing is read by
+    #: `Mod.applies` off a substitution `resolve` puts on the context.
+    #:
+    #: A fact about the character rather than about any feat, for the
+    #: reason `counts_as` above is: the feats this widens are written by
+    #: other rows and cannot know they are being widened. A tuple rather
+    #: than a pair because `Cast.chosen_weapons` answers the whole dealt
+    #: hand, which for a fighter is two or three -- the row says so.
+    arena: tuple[str, ...] = ()
     #: The weapons this creature is **trained** with, by ref -- its chassis's
     #: printed lines plus whatever its feats and its race opened up.
     #:

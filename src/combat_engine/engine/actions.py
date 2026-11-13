@@ -2887,12 +2887,28 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # pull goes through it rather than writing a `Position` by hand --
         # a direct write leaves `Grid.occupants` stale and the board reads
         # empty afterwards.
+        from .cast import Cast as _Cast
         from .movement import forced
         from .types import Forced
 
+        # **It rolls now, and it did not.** *"You can move a creature you
+        # have grabbed"* is a printed manoeuvre with an attack, and this
+        # branch went straight to `forced` -- so dragging a held creature
+        # succeeded unconditionally and cost nothing, strictly more
+        # generous than print and reported by nothing.
+        #
+        # `cf:fighter-weaponmaster-f3s2` found it: its *"+2 to the attack
+        # rolls of ... attacks to move a creature you're grabbing"* had no
+        # attack to gate on. `Cast.move_grabbed` is the roll and
+        # `as_="move_grabbed"` is what that row reads. `#1276`.
+        moved = False
         for victim in action.targets:
+            roller = _Cast(world=world, me=actor, ref="move-grabbed")
+            if not roller.move_grabbed(on=victim):
+                continue
             forced(world, actor, victim, Forced.PULL, 1, to=action.dest)
-        return True
+            moved = True
+        return moved
 
     if action.kind == "mount":
         # Through `Cast.ride`, not `relations.set`, so the one verb content

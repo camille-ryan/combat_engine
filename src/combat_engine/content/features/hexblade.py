@@ -6,7 +6,7 @@ seven pacts are legs already, and four of the hexblade's parents print
 *"associated with your pact"*.
 
     14  play
-     7  the pact weapon -- `chargen.pact_blade()`, 15 rows already wait
+     7  `-f3` and its six options -- `chargen.pact_blade()`, 15 rows wait
      4  the pact forks, which cannot pick without a mapping
     19  a summoned creature named and not referenced -- `defect=`
      9  "one of the following powers" and no list -- `defect=`
@@ -32,11 +32,11 @@ looked there. `chargen.OPTION_PACT` is the transcription,
 The same shape as `#1261`'s level and found the same way. `#1264`.
 
 **"The engine has no verb that puts a weapon into a creature's `Gear`
-from a ref."** `-f3`'s six options are the pact weapon, and the 24 rows
+from a ref."** `-f3`'s six options are the weapon itself, and the 24 rows
 on `chargen.pact_blade()` rested on that plus *"none of `w3740`..`w3752`
 is a declared row"*. All six are ordinary rows of the `weapon` table and
 `chargen.PRINTED` had carried them throughout. There is no verb because
-a pact weapon needs none -- it is **dealt**, and chargen is where gear
+`-f3`'s weapon needs none -- it is **dealt**, and chargen is where gear
 comes from. `#730`.
 
 What survives from both: the arity reasoning was sound, and writing the
@@ -367,7 +367,7 @@ def hexblade_summon_damage(c: Cast) -> None:
     c.watch(PowerResolved, boost, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
-# -- the pact weapon: seven rows on an existing symbol ----------------------
+# -- `-f3`: the weapon itself, seven rows on an existing symbol ------------
 
 
 def _pact_blade(ref: str, what: str, *, marks: tuple[str, ...] = (),
@@ -408,7 +408,7 @@ def _pact_blade(ref: str, what: str, *, marks: tuple[str, ...] = (),
     def row(c: Cast) -> None:
         if not shares:
             return
-        # *"Your pact weapon shares your implement's enhancement bonus,
+        # *"Your `cf:warlock-hexblade-f3` shares your implement's
         # critical hit effect, properties, and powers."* Three of the four
         # resolve through `Weapon.item` and `Weapon.enhancement`, which is
         # what `c.shares_magic` copies -- see that verb for why naming the
@@ -417,7 +417,7 @@ def _pact_blade(ref: str, what: str, *, marks: tuple[str, ...] = (),
         #
         # **The blade is found by ref and not by `Gear.main`.** A hexblade
         # holds an implement and a blade, and which one `main` answers
-        # depends on the order they were dealt in; the pact weapon is
+        # depends on the order they were dealt in; `-f3`'s weapon is
         # whichever of `chargen.PACT_BLADE`'s six this character's pact
         # took, which is a fact about the character rather than the hand.
         gear = c.world.get(c.me, Gear)
@@ -436,7 +436,8 @@ def _pact_blade(ref: str, what: str, *, marks: tuple[str, ...] = (),
 
 hexblade_blade_3 = _pact_blade(
     "cf:warlock-hexblade-f3",
-    "The pact weapon itself, and the implement's magic that rides it. "
+    "`cf:warlock-hexblade-f3` itself, and the implement's magic that "
+    "rides it. "
     "The weapon is dealt -- see the helper -- and the sharing is "
     "`c.shares_magic`, which carries the enhancement, the critical "
     "effect, the item's own rows and the properties in one write.",
@@ -450,7 +451,7 @@ for _n, _w in enumerate(("w3752", "w3740", "w3743", "w3744", "w3741", "w3742")):
 for _ref, _got in _F6_POWERS.items():
     globals()["hexblade_grant_" + _ref.rsplit("-f", 1)[-1].replace("s", "_")] = (
         _grant(_ref, _got,
-               "One of `-f6`'s six options, keyed to a pact weapon by "
+               "One of `-f6`'s six options, keyed to a weapon by "
                "`chargen.OPTION_PACT` -- the same six pacts in the same "
                "printed order as `-f3`'s, so the rider and the weapon "
                "agree without either row reading the other."))
@@ -467,7 +468,7 @@ for _ref, _got in _F6_POWERS.items():
     keywords=[Keyword.ARCANE],
 )
 def hexblade_pact_6(c: Cast) -> None:
-    """*"You gain a power associated with your pact weapon."*
+    """*"You gain a power associated with your `cf:warlock-hexblade-f3`."*
 
     **It used to wait on `chargen.pact_blade()` for a reason that read
     backwards**: the note said this parent "needs the weapon before it
@@ -512,18 +513,57 @@ def hexblade_pact_6(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("chargen.pact_blade()",),
+    defect="the power this adds a use of does not exist in the"
+           " compendium: the hexblade gains one at-will and three daily"
+           " attacks at 1st level and no encounter attack, and none of"
+           " the 19 warlock level-1 encounter attacks belongs to"
+           " `cf:warlock-hexblade-f3`",
 )
 def hexblade_another_use(c: Cast) -> None:
     """"You gain one more use per encounter of the `cf:warlock-hexblade-f3`
     attack power that you gained at 1st level."
 
-    **Two symbols, and it was three.** `Powers.per_encounter(extra=)` is
-    built now -- `c.more_uses` writes `Powers.extra_uses` and `dsl.usable`
-    reads it -- so what is left is the level (`#1261`) and the pact weapon
-    whose attack power this would add a use of (`chargen.pact_blade()`).
-    A row cannot be written while either is absent, and marking fewer
-    would report it ready early.
+    **The verb is ready and the referent does not exist.** `c.more_uses`
+    writes `Powers.extra_uses` and `dsl.usable` reads it at the one site
+    that compares a spend against an allowance, and `#1261` settled the
+    level -- this row is gained at 3rd. What is missing is the power.
+
+    The printed sentence is on `Class` 793 in `compendium.sqlite`, and is
+    **paraphrased here rather than quoted** -- it names
+    `cf:warlock-hexblade-f3` in words, and `leaks.py` caught the quote
+    this paragraph used to carry. One more use per encounter of the
+    `cf:warlock-hexblade-f3` **encounter attack power** gained at 1st
+    level, still only once per turn.
+
+    What makes the spec misleading is the import: it substituted
+    `cf:warlock-hexblade-f3` for the two words naming that feature and
+    **dropped the three that said what kind of thing was meant** -- so
+    the spec reads as though the row named a feature, where the printed
+    sentence names an encounter attack power *associated with* one.
+
+    **Searched four ways and it is not there:**
+
+    * the hexblade class page's level-1 section holds **one at-will**
+      (`p13634`) and **three dailies**, and no encounter attack --
+      counted off every `Warlock Attack N` block on the page;
+    * `-f1`, the *"power associated with your pact"* fork, grants five
+      **Utility** powers;
+    * of the **19** warlock level-1 Encounter attack powers in the
+      compendium, not one is named for a `-f3` option or shares a word
+      with one;
+    * and the six `-f3` options' printed names appear nowhere in
+      `Heroes of The Forgotten Kingdoms`, which is the book this page
+      comes from.
+
+    So the card points at content the compendium does not carry.
+    `defect=` and not a symbol: no facility will close it, and `todo.py`
+    would otherwise report this row ready the day somebody minted a name
+    for the thing. Plain words, which is what that marker takes.
+
+    `dsl.entry_of` returns a `cf:` ref unchanged, so this drops **this row
+    alone** -- checked rather than assumed. It is the row's only clause,
+    which is the `content/CLAUDE.md` test for `defect=`: *"only when
+    nothing survives"*. `#1276`.
     """
 
 

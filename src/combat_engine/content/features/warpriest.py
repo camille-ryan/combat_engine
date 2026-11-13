@@ -126,7 +126,6 @@ def _on_word_target(c: Cast, fn: Callable[[Any], None]) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("spec.granted_powers",),
 )
 def warpriest_domain_s0(c: Cast) -> None:
     """An extra throw against a charm, and rough ground ignored on a shift.
@@ -159,28 +158,43 @@ def warpriest_domain_s0(c: Cast) -> None:
     and no refs, and `class_feature` holds no `cf:cleric-warpriest-f1s0c<N>`
     card either, so there is nothing to grant and nothing to guess.
 
-    **And the page is not in `resources/` either, which is the measurement
-    that stops this being re-attempted.** Six of the nine domains were
-    recovered off the class page and this one refused on a count that did
-    not come out -- so the obvious next move is to go back to the page.
-    Searched all 18 PDFs for this domain's five-word printed name and for
-    its first two words, with whitespace collapsed so a line break cannot
-    hide it: **no hit on either**, and no page carries a warpriest domain
-    section at all. `#1021`'s lesson cuts the other way here -- a failed
-    search is not an absent table, so the search was made twice and the
-    second time against a fragment.
+    **The four powers are written, and the source was `compendium.sqlite`
+    all along.** This row and `-f1s8` were refused twice -- once on a
+    count that did not come out, and once by me on the ground that *"no
+    page in `resources/` carries a warpriest domain section"*. That second
+    refusal was measured and useless: `resources/` holds 18 **PDFs**, and
+    the class page is in the compendium database the ETL is built from,
+    which I never opened. `Class` row 705 carries 74,931 characters of
+    `PlainTxt` and **all nine** domain names.
 
-    So the four refs exist in no source this project holds. `dropped=` and
-    not `defect=`, because the rest of the row plays and
-    `content/CLAUDE.md` is explicit that `defect=` is *"only when nothing
-    survives"* -- flagging it would refuse a domain a warpriest can
-    otherwise take in full but for one clause. Filed rather than landed,
-    which is the rule for a clause whose only source would be a guess.
+    How the four were recovered, and what validates it. The section is
+    bounded by this domain's own printed name and the next one's; within
+    it, the options are found by asking which of this class's
+    already-imported power **names** appear -- presence of a known name,
+    never a guess at where an unknown one ends, which is
+    `features/hunter.py`'s `_printed_pick` discipline.
 
-    **`spec.granted_powers` is kept and is the honest symbol**, with one
-    caveat worth knowing: it names the ETL, and no ETL change can conjure
-    data the compendium does not carry. What would close it is the page
-    arriving in `resources/`.
+    **Validated against five answers it did not get to see**: s1, s2 and
+    s3 list their refs in their own specs, and s4 and s5 were recovered
+    off the page by an earlier session. The method reproduces all five
+    exactly. Its one false positive is on s7, where a short generic title
+    also matches -- so a count that comes out at four is the test, and s7
+    comes out at five.
+
+    Three independent lines then agree on these four:
+
+    * the section gives exactly four;
+    * they are a **contiguous run** of ids, which all nine domains' sets
+      are;
+    * and their profile is three `Cleric Attack 1` and one
+      `Cleric Utility 1`, which **8 of 9** share -- s7 is the one variant
+      and its answer is ground truth from its own spec.
+
+    `-f1s8`'s section needed one extra step: it is last in print order, so
+    the next-name boundary runs to the end of the page and absorbs 46
+    titles. Cut to its siblings' length it gives four, stably across
+    windows of 1,800 and 2,000 characters, and those four are the run
+    immediately before its own Channel Divinity. `#1276`.
     """
     me = c.me
 
@@ -190,6 +204,9 @@ def warpriest_domain_s0(c: Cast) -> None:
         for held in list(c.world.effects.of(me)):
             if held.when is When.SAVE_ENDS and Keyword.CHARM in keywords_of(held):
                 c.save(on=me, when_="early", against=held.label)
+
+    for got in ("p14233", "p14234", "p14235", "p14236"):
+        c.grant_row(got, on=me, until=When.ENCOUNTER)
 
     c.watch(TurnStart, extra_throws, until=When.ENCOUNTER, on=me, label=c.ref)
 
@@ -573,7 +590,6 @@ def warpriest_domain_s7(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("spec.granted_powers",),
 )
 def warpriest_domain_s8(c: Cast) -> None:
     """The refusal, and a rider that is `f1752`'s shape.
@@ -603,11 +619,24 @@ def warpriest_domain_s8(c: Cast) -> None:
     bonus to all four defences on the creature healed, until the end of the
     caster's next turn.
 
-    The powers are `dropped` for `f1s0`'s reason -- the spec prints no refs
-    and no card row exists to grant. That one is not revisitable: no page
-    in `resources/` carries a warpriest domain section, measured twice.
+    **The four powers are written**, recovered the same way `-f1s0`'s
+    were and from the same source -- `Class` row 705 of
+    `compendium.sqlite`, which carries all nine domain sections. That
+    row's docstring has the method and the five answers it was validated
+    against.
+
+    **This section needed one extra step.** It is last in print order, so
+    bounding it by "the next domain's name" runs to the end of the page
+    and picks up 46 titles -- which is the *"absorbs ninety-two"* the
+    earlier refusal recorded, met again. Cut to its siblings' length it
+    gives exactly four, stably across windows of 1,800 and 2,000
+    characters, and they are the contiguous run immediately before this
+    domain's own Channel Divinity with the three-attacks-and-one-utility
+    profile 8 of 9 domains share.
     """
     c.refuses_forced_attack(on=c.me, until=When.ENCOUNTER)
+    for got in ("p14271", "p14272", "p14273", "p14274"):
+        c.grant_row(got, on=c.me, until=When.ENCOUNTER)
 
     def warded(ev: Any) -> None:
         for defence in _DEFENCES:

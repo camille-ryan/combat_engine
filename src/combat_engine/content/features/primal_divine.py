@@ -413,7 +413,6 @@ def druid_shape_grant(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
     requires=on_leg("arena"),
     requires_text=_NOT_MY_OPTION,
-    dropped=("c.shares_feat_bonus(weapon=)",),
 )
 def fighter_talent_arena(c: Cast) -> None:
     """The talent that fights with whatever is to hand.
@@ -422,8 +421,10 @@ def fighter_talent_arena(c: Cast) -> None:
     already exists -- `chargen.BUILDS["fighter"]` has all six -- so the
     header asks for it and the parent never fires for this leg.
 
-    The AC half is written and is the whole of what the engine can say. The
-    other three clauses are dropped, each naming what it wants:
+    **Written in full.** All four clauses land, and each of the three that
+    were once dropped is written up below with what its marker got wrong
+    -- in every case the symbol named a facility that existed, or was one
+    reader short of existing:
 
     * **The improvised clause is written, and "there is no improvised
       weapon" was the wrong frame.** It said so: *"there is no improvised
@@ -463,14 +464,33 @@ def fighter_talent_arena(c: Cast) -> None:
       three. Narrower than the card in no direction a player would notice,
       and wider by at most one weapon the character is carrying anyway.
     * **Feat bonuses earned for one of the two apply to the other**, and
-      this is the clause that is left. It was marked
-      `feat.associated_powers` once, which was the wrong symbol -- this
-      card prints no Associated Powers list -- and then folded under the
-      chargen one, which is no longer the hold. What it needs is its own:
-      a feat bonus gated on one weapon has its gate written as a `when=`
-      predicate inside **that feat's** body, and nothing can reach into
-      another row's predicate to widen it. `c.shares_feat_bonus(weapon=)`
-      names that.
+      it is written. The symbol went through two wrong homes first --
+      `feat.associated_powers`, which this card prints no list for, and
+      then the chargen one -- before `c.shares_feat_bonus(weapon=)` named
+      the real difficulty: a feat bonus gated on one weapon has its gate
+      written as a `when=` predicate inside **that feat's** body, closed
+      over the group it was earned for, and nothing can reach into
+      another row's predicate to widen it.
+
+      So the sharing is done where the predicate is **read**, not where
+      it is written. `Gear.arena` records the selection, `resolve` puts a
+      substitution on the attack and the damage context when the swing
+      was with one of the pair, and `Mod.applies` asks a *failed*
+      feat-kind gate again as though the other arena weapon had swung.
+      One door serves `Mods.total` and `Mods.split`, so the attack half
+      and the damage half of the printed sentence are the same code.
+
+      **Three narrowings, all printed**: feat-kind bonuses only, to
+      attack and damage rolls only, and only gates that already failed.
+      A power's untyped rider is not shared and neither is a feat bonus
+      to AC.
+
+      **The damage half needed two context keys that did not exist.**
+      `resolve.deal_damage` has taken a `weapon` parameter all along and
+      never put it on the context, so a card naming a weapon had an
+      exact attack clause and nothing to read on the damage side -- the
+      same gap `hand` had, and `-f3s4` is where that one was found.
+      `drivers.arena_feat_sharing` measures both halves and plants both.
 
     The AC bonus is untyped -- the card prints "+1 bonus" with no type word
     -- and climbs the usual ladder. A fighter's chassis wears scale, so the
@@ -491,6 +511,13 @@ def fighter_talent_arena(c: Cast) -> None:
     # which is what *"you gain proficiency"* means as against the
     # improvised +2 above.
     c.gains_proficiency(*sorted(c.chosen_weapons()), on=c.me)
+    # *"Any of your feats that grant feat bonuses to attack rolls or
+    # damage rolls with one of your arena weapons apply to your other
+    # arena weapon as well."* The same selection, which is why it reads
+    # `c.chosen_weapons` again rather than being folded into the call
+    # above: those are two printed sentences doing two different things,
+    # and only this one reaches other rows' predicates.
+    c.shares_feat_bonus(*sorted(c.chosen_weapons()), on=c.me)
     if out_of_heavy_armour(c):
         c.bonus(AC, 1 + _tier(c.level), until=When.ENCOUNTER, on=c.me)
 
@@ -650,7 +677,6 @@ def fighter_talent_battlerager(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
     requires=on_leg("brawling"),
     requires_text=_NOT_MY_OPTION,
-    dropped=("c.on_forced_move_attack()",),
 )
 def fighter_talent_brawling(c: Cast) -> None:
     """The talent that keeps one hand empty for grabbing people.
@@ -662,8 +688,9 @@ def fighter_talent_brawling(c: Cast) -> None:
     context** (#501), so "the attack rolls of grab attacks" is an ordinary
     gate; the card prints no type word, so untyped.
 
-    Two of the three attack bonuses are still dropped, and **both symbols
-    were re-pointed because each named a facility that exists**:
+    **Written in full.** Both remaining symbols were re-pointed, because
+    each named a facility that either existed already or was one verb
+    short:
 
     * **The unarmed bonus is written, and it took one context key.** This
       carried `c.off_hand()` saying off-hand-ness is *"what no attack
@@ -691,11 +718,25 @@ def fighter_talent_brawling(c: Cast) -> None:
 
     * `c.on_grab_attack()` named a hold that `c.grab_attempt` already
       provides -- it rolls with `as_="grab"` and `resolve` stamps it, which
-      is why the grab bonus above is written. What is left is the other
-      half of the printed sentence, *"attacks to move a creature you're
-      grabbing"*, a manoeuvre with no `as_` of its own and the same hold
-      `m4388a3` waits on. Laid without one it would pay on every attack
-      roll instead.
+      is why the grab bonus above is written.
+
+    * **`c.on_forced_move_attack()` was the last, and the honest reason it
+      stood was that there was no attack to gate on.** *"Attacks to move a
+      creature you're grabbing"* is the other half of the printed sentence,
+      and `actions.perform`'s `pull_grabbed` branch went straight to
+      `movement.forced` -- so dragging a held creature succeeded
+      unconditionally, cost no roll, and nothing reported it. Strictly more
+      generous than print, and invisible because both halves were
+      individually correct.
+
+      `c.move_grabbed` is that roll now: Strength vs **Fortitude**, where a
+      grab is vs Reflex, because dodging a grasp is reflexes and resisting
+      being hauled is not. It stamps `as_="move_grabbed"`, so this clause
+      is the same ordinary gate the grab half already was, and the two are
+      one `c.bonus` because the card prints one number for both.
+      `drivers.pull_what_you_hold` measures both arms -- a forced hit drags,
+      a forced miss does not -- and used to assert the free move, pinning
+      the bug in place. `#1276`.
 
     The Requirement is read once, when the trait is armed, so a fighter who
     puts a second weapon in hand mid-fight keeps the bonus. That is the same
@@ -712,9 +753,15 @@ def fighter_talent_brawling(c: Cast) -> None:
         return
     c.bonus(AC, 1, until=When.ENCOUNTER, on=c.me)
     c.bonus(FORT, 2, until=When.ENCOUNTER, on=c.me)
+    # *"A +2 bonus to the attack rolls of grab attacks and attacks to move
+    # a creature you're grabbing."* **One bonus over two manoeuvres**, which
+    # is why this is a single `c.bonus` with a two-way gate rather than two:
+    # the card prints one number for both, and a swing cannot be both at
+    # once, so laying two would read as a stacking question that print does
+    # not ask.
     c.bonus(
         "attack", 2, until=When.ENCOUNTER, on=c.me,
-        when=lambda ctx: ctx.get("as_") == "grab",
+        when=lambda ctx: ctx.get("as_") in ("grab", "move_grabbed"),
     )
     # *"A +2 enhancement bonus to the attack rolls of unarmed attacks."*
     # `ctx["group"]` is what `#1276` added to the attack context for this

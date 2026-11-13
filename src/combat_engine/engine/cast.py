@@ -6612,6 +6612,91 @@ class Cast:
         self.grab(on=who)
         return True
 
+    def shares_feat_bonus(self, *refs: str, on: int | None = None) -> None:
+        """Select arena weapons: a feat bonus for one reaches the others.
+
+        *"You select two weapons as your arena weapons ... any of your
+        feats that grant feat bonuses to attack rolls or damage rolls
+        with one of your arena weapons apply to your other arena weapon
+        as well."* `cf:fighter-weaponmaster-f3s0`, and the only row that
+        prints it.
+
+        **The hard part is not here.** A feat's weapon gate is a `when=`
+        predicate written inside *that feat's* body, closed over the
+        group it was earned for, and nothing can reach into another row's
+        predicate to widen it -- which is exactly what the marker
+        `c.shares_feat_bonus(weapon=)` was naming. So this verb only
+        records the selection, and the sharing happens where the
+        predicate is **read**: `resolve` puts a substitution on the
+        attack and damage contexts, and `Mod.applies` asks a *failed*
+        feat-kind gate again as though the swing had been with the other
+        arena weapon.
+
+        That is why it writes a field and lays no modifier. The three
+        narrowings that keep it to what the card says -- feat-kind only,
+        attack and damage only, failed gates only -- are argued in
+        `Mod.applies` rather than restated here.
+
+        **Not an effect and so not laid `until=`**, deliberately: the
+        selection is made at character creation and is a standing fact
+        about the character, like `Gear.counts_as` beside it. A fighter
+        does not re-pick its arena weapons when the fight ends.
+
+        Takes any number rather than exactly two, because
+        `Cast.chosen_weapons` answers the whole dealt hand -- two or
+        three for a fighter. The row says so and the widening is at most
+        one weapon the character is already carrying.
+
+        Refuses silently for a creature with no `Gear`, which is every
+        monster.
+        """
+        who = self._who(on)
+        if who is None:
+            return
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return
+        gear.arena = tuple(dict.fromkeys((*gear.arena, *refs)))
+
+    def move_grabbed(self, *, on: int | None = None) -> bool:
+        """Drag a creature you have hold of. A Strength attack vs Fortitude.
+
+        *"You can move a creature you have grabbed"*, and the printed
+        manoeuvre is a **roll** -- which this engine did not have.
+        `actions.perform`'s `pull_grabbed` branch went straight to
+        `movement.forced`, so dragging a held creature succeeded
+        unconditionally and cost nothing, strictly more generous than
+        print and reported by nothing.
+
+        `cf:fighter-weaponmaster-f3s2` is what found it: its printed
+        *"+2 bonus to the attack rolls of grab attacks **and attacks to
+        move a creature you're grabbing**"* carried
+        `c.on_forced_move_attack()`, and the honest reason was that there
+        was no attack to stamp an `as_` onto. There is now, and the gate
+        is `as_="move_grabbed"`.
+
+        **The sibling of `c.grab_attempt`, down to the shape**: a
+        Strength attack with no weapon modifiers, a distinct `as_` so the
+        14 modifiers that gate on a manoeuvre can tell the two apart, and
+        a bool so the caller can tell a refusal from a drag.
+
+        **Against Fortitude where a grab is against Reflex**, which is the
+        printed difference: dodging a grasp is reflexes, resisting being
+        hauled is not. Said out loud because the two rolls are otherwise
+        identical and a copy would have used Reflex.
+
+        Refuses when the creature is not actually held, so a caller cannot
+        drag somebody it never grabbed.
+        """
+        who = self._who(on)
+        # `c.grabbing()` answers the **list** this creature is holding and
+        # is keyword-only, so the test is membership rather than a call
+        # with the victim as a positional.
+        if who is None or who not in self.grabbing():
+            return False
+        return self.attack(self.str_, Defense.FORT, on=who,
+                           as_="move_grabbed")
+
     def aid_attack(self, enemy: int, ally: int, *, until: When = When.EONT) -> Effect | None:
         """"That ally gains a +2 bonus to its next attack roll against the
         chosen enemy."

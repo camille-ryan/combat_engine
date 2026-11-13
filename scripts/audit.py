@@ -665,6 +665,21 @@ KNOWN_SILENT = {
     # `c.feat`, and here the reader is the predicate beside it. #553 is why
     # that guard exists and it is right; this is the case it does not fit.
     # `drivers.miss_bladespell` proves both arms and plants the gate.
+    # **A trait the board's fighter cannot have.**
+    # `cf:fighter-weaponmaster-f3s2` is gated on `on_leg("brawling")` and
+    # every modifier it lays is further gated on a manoeuvre -- a grab
+    # attempt or a drag. Measured: the dealt fighter is a *slayer*
+    # carrying a shield, so the row returns at its printed Requirement
+    # (*"your off hand is free"*) before laying anything, and no board
+    # modifier is labelled with this ref. Nothing here can be fixed by a
+    # better row; it needs a different chassis and a manoeuvre.
+    # `drivers.brawler_manoeuvres` poses both, and measures the **two**
+    # arms the card prints one number for -- planted in both directions,
+    # narrowed and ungated.
+    "cf:fighter-weaponmaster-f3s2": "a brawling-leg trait whose every"
+                                    " modifier is gated on a grab or a"
+                                    " drag; the board deals a shielded"
+                                    " slayer",
     # **A cap with nothing to cap.** `cf:bard-skald-f1` sets a budget
     # across the class's daily attack powers, and the board's skald knows
     # **none** of them -- measured -- so `Powers.daily_cap` is written and

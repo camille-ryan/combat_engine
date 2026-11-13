@@ -528,6 +528,13 @@ def attack(
             # false there rather than wrong.
             "weapon": weapon,
             "group": _group_of(world, attacker, weapon),
+            # **The arena-weapon substitution**, empty for everybody who
+            # has not selected a pair. `Mod.applies` re-asks a *failed*
+            # feat-kind gate with each of these laid over the context,
+            # which is how `cf:fighter-weaponmaster-f3s0`'s printed
+            # sharing reaches a predicate written inside another feat's
+            # body. `#1276`.
+            "arena_alt": _arena_alts(world, attacker, weapon),
             # **Which named swing this is**, empty for an ordinary attack.
             # `as_` already rode the events for the counter-attack case; the
             # context did not carry it, so a modifier on "a bull rush attack
@@ -880,6 +887,44 @@ def _is_ranged(ref: str, branch: int = 0, world: World | None = None,
     if world is not None and actor is not None:
         return reach_of(world, actor, p, branch).kind == "ranged"
     return p.reach_of(branch).kind == "ranged"
+
+
+def _arena_alts(
+    world: World | None, attacker: int, weapon: str
+) -> tuple[dict[str, str], ...]:
+    """The other arena weapons, as context substitutions.
+
+    `cf:fighter-weaponmaster-f3s0` prints *"any of your feats that grant
+    feat bonuses to attack rolls or damage rolls with one of your arena
+    weapons apply to your other arena weapon as well"*. A feat's weapon
+    gate is a predicate inside that feat's own body, so the only place
+    the sharing can happen is where the predicate is **read** -- see
+    `Mod.applies`, which asks a failed feat-kind gate again with each of
+    these laid over the context.
+
+    **Empty unless the swing was with one of the pair**, which is the
+    whole of the printed condition and the reason this is cheap: every
+    creature that has not selected arena weapons, and every swing with
+    something else, gets `()` and no second predicate call.
+
+    Each substitution carries both `weapon` and `group`, because a feat
+    names one weapon as often as a family -- the same reason the attack
+    context carries both.
+    """
+    if world is None or not weapon:
+        return ()
+    from .components import Gear
+
+    gear = world.get(attacker, Gear)
+    if gear is None or weapon not in gear.arena:
+        return ()
+    out: list[dict[str, str]] = []
+    for other in gear.arena:
+        if other == weapon:
+            continue
+        out.append({"weapon": other,
+                    "group": _group_of(world, attacker, other)})
+    return tuple(out)
 
 
 def _group_of(world: World | None, attacker: int, weapon: str) -> str:
@@ -1277,6 +1322,19 @@ def deal_damage(
         # sets as a plain attribute for the reason `vs` is one -- it stays
         # off the wire and out of a replay fixture.
         "hand": hand,
+        # **What was swung, by ref and by group -- the two keys the attack
+        # context has carried since `#1276` and this one did not.** The
+        # parameter was already here and simply never reached the
+        # context, so the damage half of a card naming a weapon had
+        # nothing to read while its attack half was exact. The same shape
+        # of gap `hand` had, found the same way and from the same family:
+        # `cf:fighter-weaponmaster-f3s0` prints *"feat bonuses to attack
+        # rolls **or damage rolls** with one of your arena weapons"*, so
+        # half of that clause lived here.
+        "weapon": weapon,
+        "group": _group_of(world, source, weapon),
+        # The arena substitution, as on the attack context above.
+        "arena_alt": _arena_alts(world, source, weapon),
         "dtype": dtype,
         "crit": crit,
         # **Asked of the board, not carried from the roll.** "+2 damage

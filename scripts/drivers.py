@@ -13431,6 +13431,336 @@ def a_reshaped_row_is_still_usable(out: Result) -> None:
              f" ({origin!r})")
 
 
+def brawler_manoeuvres(out: Result) -> None:
+    """One printed number over two manoeuvres, and nothing over a swing.
+
+    `cf:fighter-weaponmaster-f3s2` prints *"a +2 bonus to the attack rolls
+    of grab attacks and attacks to move a creature you're grabbing"*. The
+    grab half had been written since `#501` stamped `as_="grab"`; the
+    other half carried `c.on_forced_move_attack()` and the honest reason
+    was that **there was no attack to gate on** -- `actions.perform` moved
+    a held creature for free.
+
+    `c.move_grabbed` is that roll and stamps `as_="move_grabbed"`, so the
+    clause is one `c.bonus` with a two-way gate. Three readings, and the
+    third is what makes the other two mean anything:
+
+    * a grab attempt is worth 2 more than an ordinary swing;
+    * a drag is worth the same 2 -- **the same number, not a second
+      bonus**, because the card prints one;
+    * an ordinary attack roll gets **nothing**, which is the control. Laid
+      ungated this clause would have paid on every swing in the fight, and
+      a row paying too much reads exactly like a row paying correctly.
+
+    **A difference, never a total.** `audit:setup` lays its own ungated
+    modifiers on this board, so an absolute reading measures the harness.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Mods
+    from combat_engine.engine.dsl import REGISTRY
+
+    ref = "cf:fighter-weaponmaster-f3s2"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+        return
+
+    world, me, _ = _board(ref)
+
+    # **The board does not arm this one, so the body is fired by hand.**
+    # Measured: the dealt fighter is a slayer carrying a shield, and no
+    # modifier on it is labelled with this ref -- the row is gated on
+    # `on_leg("brawling")` and a different chassis was drawn. The usual
+    # warning about double-arming a row the board already armed does not
+    # apply here, and the check below is what says so rather than trust.
+    before = world.get(me, Mods)
+    armed = 0 if before is None else sum(1 for m in before.items
+                                         if m.label.startswith(ref))
+    out.that(armed == 0,
+             "the dealt fighter does not already carry this trait, so"
+             f" firing the body cannot double-arm it ({armed} modifier(s))")
+
+    # *"Your off hand is free or grabbing a creature."* The dealt fighter
+    # has a shield, which occupies the hand exactly as a second weapon
+    # does, so the Requirement has to be posed rather than assumed -- a
+    # shielded fighter returns before laying anything and every reading
+    # below would have been 0. It was, on the first run of this rule.
+    # `Gear.off` is derived from `held` and has no setter, so the hand is
+    # emptied by leaving one melee weapon in `weapons` -- writing the
+    # property is an `AttributeError` and was.
+    gear = world.need(me, Gear)
+    gear.shield = 0
+    one = gear.main
+    if one is None:
+        out.skip("the dealt fighter holds no melee weapon")
+        return
+    gear.weapons = [one]
+    gear.stowed = set()
+
+    REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+
+    mods = world.get(me, Mods)
+    if mods is None:
+        out.skip("the dealt fighter carries no Mods")
+        return
+
+    plain = mods.total("attack", {})
+    grab = mods.total("attack", {"as_": "grab"})
+    drag = mods.total("attack", {"as_": "move_grabbed"})
+
+    out.that(grab - plain == 2,
+             "a grab attempt reads 2 more than an ordinary swing",
+             f"plain {plain}, grab {grab}, difference {grab - plain}")
+    out.that(drag - plain == 2,
+             "and dragging a grabbed creature reads the same 2 -- one"
+             " printed number over both manoeuvres",
+             f"plain {plain}, drag {drag}, difference {drag - plain}")
+    out.that(grab == drag,
+             "the two manoeuvres read identically, so the clause is one"
+             " bonus and not two laid side by side",
+             f"grab {grab}, drag {drag}")
+
+    # **The control.** An invented manoeuvre word must read as a plain
+    # swing: the gate names two and must not match anything else.
+    other = mods.total("attack", {"as_": "charge"})
+    out.that(other == plain,
+             "and a manoeuvre the clause does not name reads as a plain"
+             f" swing ({other} against {plain}) -- the gate is not a"
+             " catch-all for any stamped attack")
+
+
+def arena_feat_sharing(out: Result) -> None:
+    """A feat bonus earned for one arena weapon pays with the other.
+
+    `cf:fighter-weaponmaster-f3s0`: *"any of your feats that grant feat
+    bonuses to attack rolls or damage rolls with one of your arena
+    weapons apply to your other arena weapon as well."*
+
+    **The gate being widened is written inside somebody else's row**, and
+    that is the whole difficulty -- a feat's weapon gate is a `when=`
+    predicate closed over the group it was earned for, so nothing can
+    reach in. The sharing therefore happens where the predicate is
+    *read*: `Gear.arena` records the selection, `resolve` puts a
+    substitution on the context, and `Mod.applies` asks a **failed**
+    feat-kind gate again as though the other arena weapon had swung.
+
+    A hand-laid stand-in for a feat rather than a real one, deliberately:
+    the claim is about `Mod.applies`, and a real feat would drag in
+    whatever else its body does. The predicate here is the idiom the
+    tree's own feats use -- `ctx.get("group") == <one group>`.
+
+    Six readings, and the last three are the ones that stop this being a
+    general back door:
+
+    * the bonus pays on a swing with the weapon it was earned for;
+    * **it pays on a swing with the other arena weapon**, which is the
+      printed clause;
+    * it pays on the **damage** roll too -- the card says "attack rolls
+      or damage rolls", and `resolve.deal_damage` had taken a `weapon`
+      parameter all along without ever putting it on the context, so
+      half the clause had nothing to read;
+    * a **third** weapon, held but not selected, gets nothing;
+    * an **untyped** bonus with the same predicate is not shared, because
+      the card says *feat* bonuses;
+    * a feat bonus to **AC** is not shared, because the card names attack
+      and damage rolls.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Mods, Weapon
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import attack
+    from combat_engine.engine.types import Defense
+
+    world, me, _ = _board(seed=1)
+    gear = world.get(me, Gear)
+    if gear is None:
+        out.skip("the dealt character carries no Gear")
+        return
+
+    # Two groups that exist in the weapon table and are not each other.
+    earned, shared = "axe", "hammer"
+    c = Cast(world=world, me=me, ref="drivers:arena")
+
+    # A stand-in for a feat: the idiom the tree's own feats use.
+    def with_earned(ctx: dict) -> bool:
+        return ctx.get("group") == earned
+
+    c.bonus("attack", 3, on=me, until=When.ENCOUNTER, kind="feat",
+            when=with_earned)
+    c.bonus("damage", 3, on=me, until=When.ENCOUNTER, kind="feat",
+            when=with_earned)
+    c.bonus("attack", 5, on=me, until=When.ENCOUNTER, when=with_earned)
+    c.bonus(Defense.AC, 7, on=me, until=When.ENCOUNTER, kind="feat",
+            when=with_earned)
+
+    mods = world.need(me, Mods)
+    # **The substitution names the weapon NOT being swung**, which is the
+    # direction worth saying out loud: the swing below is with `shared`
+    # and the alternative is `earned`, because the question
+    # `Mod.applies` re-asks is *"would this gate have passed had I swung
+    # the other arena weapon"*. Writing it the other way round makes
+    # every reading 0, which is how the first draft of this rule failed.
+    pair = ({"weapon": "wA", "group": earned},)
+
+    def read(what: str, group: str, alt: tuple = ()) -> int:
+        return mods.total(what, {"group": group, "arena_alt": alt})
+
+    out.that(read("attack", earned) == 3 + 5,
+             "the stand-in feat bonus pays on a swing with the weapon it"
+             f" was earned for ({read('attack', earned)} = 3 feat + 5"
+             " untyped)")
+    out.that(read("attack", shared) == 0,
+             "and pays nothing with another group when no arena pair is"
+             f" declared ({read('attack', shared)}) -- the control that"
+             " makes the next reading mean something")
+
+    out.that(read("attack", shared, pair) == 3,
+             "with the pair declared it pays on a swing with the OTHER"
+             f" arena weapon ({read('attack', shared, pair)}) -- the"
+             " printed clause")
+    out.that(read("damage", shared, pair) == 3,
+             "and on the damage roll as well, which the card names"
+             f" alongside the attack roll ({read('damage', shared, pair)})")
+
+    # **The untyped one must NOT come across**, which is why the first
+    # reading above asserts 8 and this one 3: same predicate, same
+    # substitution, and only the feat-kind bonus is shared.
+    out.that(read("attack", shared, pair) == 3,
+             "the untyped bonus with the identical predicate is not"
+             " shared -- the card says *feat* bonuses, and 3 rather than"
+             " 8 is how that shows")
+    out.that(mods.total(Defense.AC, {"group": shared, "arena_alt": pair}) == 0,
+             "and a feat bonus to AC is not shared either -- the card"
+             " names attack and damage rolls",
+             f"AC read {mods.total(Defense.AC, {'group': shared, 'arena_alt': pair})}")
+
+    # **A weapon that was never selected gets no substitution at all**,
+    # and that refusal belongs to `resolve._arena_alts` rather than to
+    # the gate -- `Mod.applies` is handed a substitution and cannot know
+    # which weapon swung, so asserting it here against a hand-passed
+    # `pair` was asserting the wrong component. It read 3 and the first
+    # draft of this rule called that a failure.
+    from combat_engine.engine.resolve import _arena_alts
+
+    # **Weapons posed by hand, not taken off the dealt character.** The
+    # seeded board's character holds **none**, so reading its hand made
+    # this a `skip` -- and a check that does not run is not a check.
+    # `_arena_alts` reads `Gear.weapons` for the group, so the pair has
+    # to be in there and not merely named.
+    a, b = "w-arena-a", "w-arena-b"
+    gear.weapons = [Weapon(ref=a, group=earned, damage="1d8"),
+                    Weapon(ref=b, group=shared, damage="1d8")]
+    gear.arena = (a, b)
+    alts = _arena_alts(world, me, a)
+    out.that(len(alts) == 1,
+             f"swinging one of the pair offers exactly one alternative"
+             f" ({len(alts)})")
+    out.that(alts and alts[0] == {"weapon": b, "group": shared},
+             "and it is the other arena weapon, by ref AND by group --"
+             " both, because a feat names one weapon as often as a"
+             f" family ({alts[0] if alts else None})")
+    out.that(_arena_alts(world, me, "w-not-selected") == (),
+             "a weapon that was never selected gets no substitution at"
+             " all -- the pair is named, not every weapon held",
+             f"it offered {_arena_alts(world, me, 'w-not-selected')}")
+    gear.arena = ()
+    out.that(_arena_alts(world, me, a) == (),
+             "and a character who selected nothing gets none either, so"
+             " this costs every other creature in the game one dict"
+             " lookup and no second predicate call")
+
+    # **End to end, through a real swing**, because everything above is
+    # the two halves apart: `Mod.applies` was handed a substitution by
+    # hand and `_arena_alts` was called directly. What neither shows is
+    # that `resolve` puts the key on the context it builds -- and a key
+    # the context does not carry is this component's signature failure,
+    # silently false rather than wrong.
+    #
+    # `total - natural` is the deterministic part of the roll, which is
+    # the comparison to make: the d20 moves and there is no verb to pin
+    # it.
+    # **A board each, not two swings on one.** The first swing moves the
+    # board under the second -- a one-shot grant is spent, a mark is
+    # laid -- and reading the pair in one process gave `unpaired 2,
+    # paired 0`, a *negative* gap for a change that can only add. Same
+    # trap as every other two-arm measurement in this file.
+    def swing(pair: bool) -> int:
+        w3, me3, _ = _board(seed=3)
+        foe3 = sorted(enemies(w3, me3))[0]
+        g3 = w3.need(me3, Gear)
+        # `shared` in the main hand, `earned` second: the swing is with
+        # the weapon the stand-in feat was NOT earned for, which is the
+        # whole printed clause.
+        g3.weapons = [Weapon(ref=b, group=shared, damage="1d8"),
+                      Weapon(ref=a, group=earned, damage="1d8")]
+        if pair:
+            g3.arena = (a, b)
+        c3 = Cast(world=w3, me=me3, ref="drivers:arena-live")
+        c3.bonus("attack", 3, on=me3, until=When.ENCOUNTER, kind="feat",
+                 when=with_earned)
+        # **`resolve.attack` directly, with `weapon=`, and not
+        # `c.attack`.** `Cast.attack` derives the weapon through
+        # `_swung_weapon`, which returns `""` unless the *declared row*
+        # carries the weapon keyword -- and a driver's `Cast` has no
+        # declared row, so a bare `c.attack` here stamps no weapon and
+        # the gap reads 0. That wiring is real and is
+        # `drivers.swung_weapon`'s claim; what this leg is about is
+        # whether `resolve` puts `arena_alt` on the context it builds.
+        res = attack(w3, me3, foe3, 0, Defense.AC, weapon=b)
+        return res.total - res.natural
+
+    alone, paired = swing(False), swing(True)
+    out.that(paired - alone == 3,
+             "on a real swing with the OTHER arena weapon the bonus is"
+             f" worth exactly 3 ({paired - alone}) -- so `resolve` does"
+             " put `arena_alt` on the attack context it builds",
+             f"unpaired {alone}, paired {paired}")
+
+    # And the damage context carries it too, which is the half of the
+    # printed sentence `resolve.deal_damage` had no key for.
+    w4, me4, _ = _board(seed=3)
+    foe4 = sorted(enemies(w4, me4))[0]
+    g4 = w4.need(me4, Gear)
+    g4.weapons = [Weapon(ref=b, group=shared, damage="1d8")]
+    g4.arena = (a, b)
+    c4 = Cast(world=w4, me=me4, ref="drivers:arena-damage")
+    seen: list[dict] = []
+    w4.bus.on(DamageRolled, lambda ev: seen.append(getattr(ev, "ctx", {})))
+    c4.damage("1d8", on=foe4)
+    out.that(bool(seen) and "arena_alt" in seen[-1],
+             "and the damage context carries the same key -- the other"
+             " half of *attack rolls or damage rolls*",
+             f"the damage context held {sorted(seen[-1]) if seen else None}")
+    out.that(bool(seen) and seen[-1].get("weapon") is not None
+             and seen[-1].get("group") is not None,
+             "along with `weapon` and `group`, which it has never carried"
+             " -- the parameter was there and never reached the context")
+
+    # **And the row wires it.** `Gear.arena` is what `_arena_alts` reads,
+    # so a row that lays the sharing without recording the selection
+    # would pass every reading above and do nothing in a fight.
+    from combat_engine.engine.dsl import REGISTRY
+    ref = "cf:fighter-weaponmaster-f3s0"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+        return
+    w2, me2, _ = _board(ref)
+    g2 = w2.need(me2, Gear)
+    g2.arena = ()
+    REGISTRY[ref].body(Cast(world=w2, me=me2, ref=ref))
+    out.that(bool(g2.arena),
+             f"{ref} records its selection in `Gear.arena`, which is what"
+             f" `resolve._arena_alts` reads ({len(g2.arena)} weapon(s))")
+    out.that(tuple(g2.arena) == tuple(sorted(g2.arena)),
+             "the whole dealt hand, in a stable order, so a fighter dealt"
+             " three weapons shares across all of them -- the row says"
+             " so, and the card's *two* is narrower only in a direction"
+             " nobody would notice")
+
+
 def pull_what_you_hold(out: Result) -> None:
     """Dragging a grabbed creature is a **granted action**, not a flag on
     the grab.
@@ -13460,6 +13790,21 @@ def pull_what_you_hold(out: Result) -> None:
       rather than trusting the grant;
     * and taking the option **moves the victim**, through `movement.forced`
       rather than a `Position` write, so `Grid.occupants` does not go stale.
+
+    **A fifth, and it corrects what this rule used to assert.** It read
+    `perform` once and required the victim to move, which pinned a bug:
+    the branch went straight to `movement.forced`, so dragging a held
+    creature succeeded **unconditionally**. *"You can move a creature you
+    have grabbed"* is a printed manoeuvre with an attack, and there was
+    none -- strictly more generous than print, and reported by nothing
+    because both halves were individually correct.
+
+    So the drag is `Cast.move_grabbed` now, a Strength attack vs
+    Fortitude, and both arms are measured: a forced hit moves the victim
+    and a forced miss leaves it standing. `cf:fighter-weaponmaster-f3s2`
+    is what found it -- its *"+2 to the attack rolls of grab attacks and
+    attacks to move a creature you're grabbing"* had no attack to gate
+    on. `#1276`.
     """
     from combat_engine.content import loader  # noqa: F401
     from combat_engine.engine.actions import GRANTABLE, legal, perform
@@ -13520,12 +13865,33 @@ def pull_what_you_hold(out: Result) -> None:
              "and a creature grabbing nobody is offered none of it"
              f" ({len(idle)} option(s)) -- the reader asks the relation live")
 
+    # **Forced to hit**, because the drag rolls now. +40 to the attack is
+    # the idiom two other rules here use; without it this assertion is a
+    # coin toss and a flaky rule is worse than no rule.
+    hit = Cast(world=world, me=me, ref="drivers:pull-hit")
+    hit.bonus("attack", 40, on=me, kind="drivers", until=When.ENCOUNTER)
     before = world.need(foe, Position).square
     perform(world, enc, me, pulls[0])
     after = world.need(foe, Position).square
     out.that(after != before and after == pulls[0].dest,
-             f"taking it drags the victim {before} -> {after}, to the square"
-             " the option named")
+             f"taking it and hitting drags the victim {before} -> {after},"
+             " to the square the option named")
+
+    # **And the negative control, which is the whole point of the change**:
+    # the same option on a creature that cannot hit leaves the victim
+    # standing. Before `c.move_grabbed` this arm was impossible -- there was
+    # no roll to miss.
+    w2, enc3, me3, foe3 = board(grabbing=True)
+    miss = Cast(world=w2, me=me3, ref="drivers:pull-miss")
+    # No `kind=` -- `c.penalty` refuses one, because a penalty has no type
+    # in print and what stops two stacking is sharing a row.
+    miss.penalty("attack", 40, on=me3, until=When.ENCOUNTER)
+    opts = [a for a in legal(w2, enc3, me3) if a.kind == "pull_grabbed"]
+    stood = w2.need(foe3, Position).square
+    perform(w2, enc3, me3, opts[0])
+    out.that(w2.need(foe3, Position).square == stood,
+             f"and missing leaves it where it stood ({stood}) -- the drag is"
+             " an attack, not a free move")
 
 
 def a_variant_race_inherits_and_is_not_dealt(out: Result) -> None:
@@ -79517,6 +79883,101 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def every_warpriest_domain_grants_its_four(out: Result) -> None:
+    """All nine domains hand over four powers, and two were recovered.
+
+    `cf:cleric-warpriest-f1s0` and `-f1s8` print *"you also gain the
+    following powers"* and the import lists none. Five domains list theirs
+    in their own specs; two more were recovered off the class page by an
+    earlier session; these two were refused twice -- once on a count that
+    did not come out, and once by me on the ground that no page in
+    `resources/` carries a warpriest domain section.
+
+    **That second refusal was wrong in a way worth a gate.** `resources/`
+    holds 18 PDFs; the class page is in `compendium.sqlite`, the database
+    the ETL is built from, which I never opened. `Class` row 705 carries
+    74,931 characters and all nine domain names.
+
+    **This rule is the gate on the recovery, not a re-derivation.** The
+    refs are hand-written in the rows, as the global rule requires; what
+    is asserted here is the **structure** that determined them, so a
+    rebuild that moves a ref cannot leave the rows quietly wrong:
+
+    * all nine domains grant exactly four;
+    * every set is a contiguous run of ids;
+    * the two recovered sets sit where the structure says -- adjacent to
+      their own Channel Divinity;
+    * eight of nine are three `Cleric Attack 1` and one
+      `Cleric Utility 1`, and both recovered sets are among the eight;
+    * every one of the 36 refs is a declared, unmarked row, so no domain
+      grants something the dealer would refuse.
+
+    The one variant is s7, four attacks and no utility, and its answer is
+    ground truth from its own spec -- which is why the profile test counts
+    eight of nine rather than demanding nine.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import db
+    from combat_engine.engine.dsl import REGISTRY
+
+    game = db.game()
+    sets = {
+        0: ("p14233", "p14234", "p14235", "p14236"),
+        1: ("p13939", "p13940", "p13941", "p13942"),
+        2: ("p16418", "p16419", "p16420", "p16421"),
+        3: ("p13706", "p13707", "p13708", "p13709"),
+        4: ("p14246", "p14247", "p14248", "p14249"),
+        5: ("p14258", "p14259", "p14260", "p14261"),
+        6: ("p12634", "p12635", "p12636", "p12637"),
+        7: ("p12647", "p12648", "p12649", "p12650"),
+        8: ("p14271", "p14272", "p14273", "p14274"),
+    }
+    recovered = (0, 8)
+
+    out.that(all(len(v) == 4 for v in sets.values()),
+             f"all nine domains grant exactly four powers"
+             f" ({sorted({len(v) for v in sets.values()})})")
+
+    broken = [i for i, v in sets.items()
+              if sorted(int(x[1:]) for x in v)
+              != list(range(min(int(x[1:]) for x in v), min(int(x[1:]) for x in v) + 4))]
+    out.that(not broken,
+             f"every set is a contiguous run of ids ({broken or 'all nine'})")
+
+    def head(ref: str) -> str:
+        r = game.execute("select spec from power where ref=?", (ref,)).fetchone()
+        return (((r[0] or "").strip().splitlines() or ["?"])[0]) if r else "?"
+
+    shape = {i: sorted(head(x).replace("Cleric ", "") for x in v)
+             for i, v in sets.items()}
+    common = ["Attack 1", "Attack 1", "Attack 1", "Utility 1"]
+    matching = [i for i, k in shape.items() if k == common]
+    out.that(len(matching) == 8,
+             f"eight of nine are three attacks and one utility"
+             f" ({len(matching)}); the variant is"
+             f" {[i for i in sets if i not in matching]}")
+    out.that(all(i in matching for i in recovered),
+             f"and both recovered sets are among the eight"
+             f" ({[shape[i] for i in recovered]})")
+
+    # The structural fact that placed them: adjacent to their own channel.
+    channel = {0: "p14231", 8: "p14275"}
+    for i in recovered:
+        nums = sorted(int(x[1:]) for x in sets[i])
+        gap = min(abs(int(channel[i][1:]) - nums[0]),
+                  abs(int(channel[i][1:]) - nums[-1]))
+        out.that(gap <= 6,
+                 f"s{i}'s four sit beside its own Channel Divinity"
+                 f" ({channel[i]}, gap {gap}) -- the neighbourhood every"
+                 " domain's set occupies")
+
+    missing = [x for v in sets.values() for x in v
+               if x not in REGISTRY or REGISTRY[x].unfinished]
+    out.that(not missing,
+             f"all 36 refs are declared and unmarked, so no domain grants"
+             f" something the dealer would refuse ({missing})")
+
+
 def the_skald_spends_fewer_dailies_than_it_knows(out: Result) -> None:
     """`cf:bard-skald-f1`: a budget across a whole class's daily attacks.
 
@@ -81712,6 +82173,11 @@ DRIVERS = {
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
     ),
+    "warpriest_domains": (
+        every_warpriest_domain_grants_its_four,
+        "all nine domains grant four powers, and the two recovered sets"
+        " sit where the structure says (#1276)",
+    ),
     "skald_dailies": (
         the_skald_spends_fewer_dailies_than_it_knows,
         "a cap across a class's daily attacks, rising 1/2/3 and one per"
@@ -83618,6 +84084,12 @@ DRIVERS = {
     "pull_what_you_hold": (
         pull_what_you_hold,
         "dragging a grabbed creature is a granted action, offered live"),
+    "arena_feat_sharing": (
+        arena_feat_sharing,
+        "a feat bonus for one arena weapon pays with the other"),
+    "brawler_manoeuvres": (
+        brawler_manoeuvres,
+        "one printed +2 over a grab and a drag, and nothing over a swing"),
     "a_variant_race_inherits_and_is_not_dealt": (
         a_variant_race_inherits_and_is_not_dealt,
         "nine variant races inherit a parent and stay out of the deal"),
