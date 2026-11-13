@@ -4370,6 +4370,19 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
         "i1919",
         "i2955",
     ),
+    # **The protector's five attunements.** *"You gain three Primal
+    # Attunement powers of your choice"* and the import listed none, so
+    # the row carried `chargen.power_choice()` -- a symbol for a facility
+    # that would have had to invent a family from a category name. The
+    # family is five printed powers, all level 0, all declared and
+    # unmarked, listed under the sentence on the chassis's own page.
+    "cf:druid-protector-f2": (
+        "p15853",
+        "p15854",
+        "p15855",
+        "p15856",
+        "p15857",
+    ),
     "cf:ranger-hunter-f22": ('p13607', 'p13609'),
     "cf:ranger-hunter-f23": (
         "p13610",
@@ -4649,6 +4662,8 @@ OPTION_PICKS: dict[str, int] = {
     "cf:ranger-scout-f16": 2,
     # *"the recipes for TWO 1st-level assassin poisons."*
     "cf:assassin-executioner-f3": 2,
+    # *"three Primal Attunement powers of your choice."*
+    "cf:druid-protector-f2": 3,
     # The stances, the tricks and the cantrips.
     "cf:fighter-knight-f22": 2,
     "cf:fighter-slayer-f18": 2,

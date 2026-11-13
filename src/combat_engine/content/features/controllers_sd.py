@@ -389,19 +389,25 @@ def protector_grasping_claws(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    todo=("chargen.power_choice()",),
 )
 def protector_attunement(c: Cast) -> None:
     """"You gain three `cf:druid-protector-f2` powers of your choice."
 
     A draw and not a combat clause: three rows out of a named printed
-    category, chosen at creation. `chargen.power_choice()` is the symbol
-    four feats already wait on (`f3582`, `f3588`, `f3616`, `f3646`) and it
-    is the same gap -- nothing lets a row say "deal me N of this family".
+    category, chosen at creation. This carried `chargen.power_choice()`
+    on the reading that nothing lets a row say *"deal me N of this
+    family"* -- and the family is not a category to be invented, it is
+    five powers printed under the sentence on this chassis's own page.
+    All five are level 0, declared and unmarked. So it is an ordinary
+    `chargen.BUILD_OPTIONS` fork with `OPTION_PICKS` of three, which is
+    the facility the marker was asking for and which already existed.
 
-    `todo=` and not `dropped=`, because the row has no other clause: there
-    is nothing here that plays.
+    The body stays empty for the reason every `BUILD_OPTIONS` option's
+    does: the dealing is the effect, and it happens in chargen before
+    any body runs.
     """
+    for took in c.chosen_options("cf:druid-protector-f2"):
+        c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -447,7 +453,7 @@ def protector_summon(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    todo=("chargen.power_choice()",),
+    implemented_in=("p15858",),
 )
 def protector_summon_list_con(c: Cast) -> None:
     """Which creatures this circle's p15858 can summon: a printed list of
@@ -474,7 +480,7 @@ def protector_summon_list_con(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    todo=("chargen.power_choice()",),
+    implemented_in=("p15858",),
 )
 def protector_summon_list_speed(c: Cast) -> None:
     """The other circle's p15858 list, and the sibling above holds the

@@ -43612,6 +43612,65 @@ def the_protectors_circle_is_a_leg_the_base_druid_also_has(out: Result) -> None:
              "`ev.actor == me`",
              f"{mine}")
 
+    # -- the attunements and the two summon lists ------------------------
+    # Three rows carried `chargen.power_choice()` for a facility that
+    # would have had to invent a family. Both families are printed.
+    from combat_engine.engine import Build as BuildState
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Health, Powers
+
+    FIVE = ("p15853", "p15854", "p15855", "p15856", "p15857")
+    world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(3))
+    eid = chargen.spawn(world, chargen.Character(
+        "druid", 3, [], chassis="protector"), (4, 6))
+    state = world.get(eid, BuildState)
+    assert state is not None
+    head = "option:cf:druid-protector-f2:"
+    took = sorted(c[len(head):] for c in state.choices if c.startswith(head))
+    out.that(len(took) == 3 and set(took) <= set(FIVE),
+             "a protector takes THREE of the five printed attunements -- "
+             "the family the marker said had to be invented is five rows "
+             "listed under the sentence on this chassis's own page",
+             f"{took}")
+    out.that(sorted(chargen.BUILD_OPTIONS["cf:druid-protector-f2"]) == sorted(FIVE),
+             "and the fork holds exactly those five, named here so a sixth "
+             "arriving in the table is seen rather than absorbed",
+             f"{sorted(chargen.BUILD_OPTIONS['cf:druid-protector-f2'])}")
+
+    # **The summon, told apart by a NUMBER and not by a flag.** An
+    # associate arrives with the summoner's bloodied value and the inline
+    # fallback with a surge's worth, so the two paths are distinguishable
+    # without asking which branch ran.
+    def summoned(option: str) -> int:
+        w, me_, _ = _board("p15858", 1)
+        known = w.get(me_, Powers)
+        assert known is not None
+        for other in ("cf:druid-protector-f3s0", "cf:druid-protector-f3s1"):
+            if other in known.known and other != option:
+                known.known.remove(other)
+        if option and option not in known.known:
+            known.known.append(option)
+        before = {e for e, _ in w.each(Health)}
+        w.decider = lambda _a, _k, o, _p: o[0]
+        REGISTRY["p15858"].body(Cast(world=w, me=me_, ref="p15858"))
+        made = sorted({e for e, _ in w.each(Health)} - before)
+        return w.need(made[0], Health).max_hp if made else 0
+
+    con, str_, bare = (summoned("cf:druid-protector-f3s0"),
+                       summoned("cf:druid-protector-f3s1"),
+                       summoned(""))
+    out.that(con > 0 and str_ > 0 and bare > 0,
+             "`p15858` summons something on every circle and on none -- a "
+             "druid that is not a protector keeps the inline summon it had",
+             f"{con}, {str_}, {bare}")
+    out.that(con == str_ and con != bare,
+             "and a protector's creature is the printed ASSOCIATE -- it "
+             "arrives with the summoner's bloodied value where the inline "
+             "fallback gives a surge's worth. The two circles agree "
+             "because all four printed creatures share one block; what "
+             "separates them from the fallback is the number",
+             f"circles {con}, inline {bare}")
+
 
 def the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand(
         out: Result) -> None:

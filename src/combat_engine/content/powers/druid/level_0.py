@@ -357,8 +357,38 @@ def summon_of_your_aspect(c: Cast) -> None:
 
     `get(c.ref).summon` and not a captured spec: `c.ref` is the **caller's**
     ref, so each printing reads its own declared `Summon`.
+
+    **Which creature arrives is the aspect's, and the aspects' creatures
+    ARE given** -- this note used to say the block "prints no numbers at
+    all" and take `Summon`'s defaults for everybody. The two
+    `cf:druid-protector-f3` sub-options each print two creatures at 1st
+    level, and all four are rows of the compendium's `Associate` table,
+    imported with their hit points, defences, speed and size. `c.summon`
+    has routed an `x10_` ref to `loader.spawn_associate` since `#459`.
+
+    The pair is **offered** rather than picked, because the card offers
+    it: *"you can use this power to summon <one> or <the other>"* is a
+    choice made each time the power is used, not at creation. A druid
+    holding neither sub-option -- every druid that is not a protector --
+    gets the inline summon it got before, which is the printed reading
+    for a block that names no creature.
+
+    `c.feat` on the sub-option rather than `c.chosen_option` on the
+    parent, for `p13649`'s two reasons: the parent grants the option it
+    drew, so the sub-option is in `Powers.known`; and `lint.py` wants an
+    `implemented_in=` pointer's target to name the ref in its own
+    source, which a dict-driven loop does not.
     """
-    beast = c.summon_inline(get(c.ref).summon, at=c.origin)
+    pair: tuple[str, ...] = ()
+    if c.feat("cf:druid-protector-f3s0"):
+        pair = ("x10_40", "x10_42")
+    elif c.feat("cf:druid-protector-f3s1"):
+        pair = ("x10_47", "x10_48")
+    picked = c.choose(list(pair), f"{c.ref}: which creature") if pair else None
+    beast = (c.summon(picked, at=c.origin, after=c.me) if picked
+             else c.summon_inline(get(c.ref).summon, at=c.origin))
+    if not beast:
+        return
     c.endable(
         c.effect(f"{c.ref} summoned", until=When.ENCOUNTER, on=c.me),
         MINOR, then=c.dismiss_companion,
