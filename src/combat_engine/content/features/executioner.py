@@ -330,27 +330,36 @@ executioner_guild_1 = _guild("cf:assassin-executioner-f2s1")
 #: `hands="double"` superior flail it names by ref.
 executioner_guild_2 = _guild(
     "cf:assassin-executioner-f2s2",
-    # **Two clauses left and two symbols**, because they are two gaps and a
-    # shared one would report both ready the day either landed. Neither is
-    # the proficiency the old marker named:
+    # **Every clause of this option is written now, and the last needed
+    # nothing.**
     #
-    # **The scout clause is written now** -- see `extends_scout` in the
-    # helper -- and only the poison one is left.
+    # *"Your assassin poisons that can be applied to ammunition can also
+    # be applied to <the blade>."* This carried `chargen.poison_on_weapon()`
+    # and then `c.apply_poison(ammunition=)`, and both looked in the wrong
+    # place. Measured, in two steps:
     #
-    # *"Your assassin poisons that can be applied to ammunition can also be
-    # applied to <the blade>."* `c.apply_poison` exists and takes a
-    # `groups=` narrowing, so widening what may be coated is not the gap.
-    # The gap is the sentence's own **precondition**: it is about poisons
-    # that can be applied to *ammunition*, and coating ammunition is the
-    # one thing that verb declines outright -- its docstring says the hold
-    # is keyed on a `Weapon` and *"the choice would be between two
-    # different kinds of thing"*, with `Gear.quiver` and `c.ammunition`
-    # waiting on the other side.
+    # * **The set is real and identifiable.** Four of the six poisons
+    #   `cf:assassin-executioner-f3` offers print *"your melee weapon or
+    #   one piece of your ammunition"* -- `i710p1`, `i835p1`, `i1483p1`,
+    #   `i1919p1` -- so the sentence's precondition picks out those four
+    #   and not the other two. (The `poison` table is a different corpus:
+    #   19 rows, **none** of which prints an ammunition line, which is
+    #   what made the first reading look blocked.)
+    # * **And all four already accept the blade.** Every one calls
+    #   `c.apply_poison(coated)` with **no** `groups=`, and that verb's
+    #   pool is then every weapon in hand. Checked on a dealt executioner:
+    #   the blade is carried, and wielding it puts it in the coating pool
+    #   beside the chassis's own.
     #
-    # So the symbol names that, rather than a widening that would have
-    # nothing to widen: until a poison can go on a piece of ammunition,
-    # there is no set of poisons for this clause to pick out.
-    ("c.apply_poison(ammunition=)",),
+    # So the clause is true by construction, subject to the same
+    # hold-it-to-coat-it rule every weapon has -- `apply_poison` reads
+    # `c.held`, so a belted weapon cannot be coated whoever carries it.
+    # That is a uniform reading rather than a gap in this card.
+    #
+    # The ammunition **alternative** is still not modelled -- that verb
+    # takes the weapon branch of the printed choice and says so -- but
+    # that is those four poisons' clause, not this one's, and it widens
+    # nothing here either way. `#1276`.
     opens=("w3632", "w3750"),
     extends_scout=("w3632", "w3750"))
 
