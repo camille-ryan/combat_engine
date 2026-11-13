@@ -79517,6 +79517,100 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def the_protector_pays_for_its_summon(out: Result) -> None:
+    """`cf:druid-protector-f3`: one printed bargain, both halves.
+
+    *"You gain the `p15858` power. Because of this feature, you do not gain
+    a `c126` attack power at level 5, 9, 15, 19, 25, or 29. Instead ... at
+    level 5 you can use `p15858` twice per day, and at level 9 three times
+    per day."*
+
+    The row carried `chargen.ladder_swap(daily)` and insisted both halves
+    land together, which was right: paying the allowance without charging
+    for the lost powers makes a protector strictly stronger than print and
+    nothing would report it.
+
+    **The price is attributed by clearing the table, not by comparing
+    chassis.** A plain druid differs by its leg and its whole feature
+    ladder, so the first attempt compared two different characters and read
+    "no power differs" -- the skip was working the whole time. Clearing
+    `LADDER_SKIPS` and re-dealing the **same** seed and leg is the only
+    comparison that names this table as the cause.
+
+    Six things asserted:
+
+    * the table names the feature's own ref, with `DAILY` at the six
+      printed levels;
+    * at 5th the protector's levelled daily attack powers are **fewer**
+      with the table than without;
+    * at 9th likewise;
+    * at **1st** the count is unchanged -- the card does not take the
+      first-level gain, and a table that did would be the easy
+      off-by-one;
+    * the allowance rises 1 / 2 / 3 across those levels, read off
+      `Powers.extra_uses` the way `dsl.usable` reads it;
+    * and it **replaces** rather than accumulating -- two `c.more_uses`
+      calls would give four at 9th, since that verb's values add.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.components import Powers, Stats
+    from combat_engine.engine.dsl import REGISTRY, get, use
+    from combat_engine.engine.types import Usage
+
+    ref = "cf:druid-protector-f3"
+    entry = chargen.LADDER_SKIPS.get(ref, ())
+    out.that(entry == ((Usage.DAILY, (5, 9, 15, 19, 25, 29)),),
+             f"the table names this feature's daily rungs ({entry})")
+
+    def dailies(level: int) -> int:
+        leg = chargen.deal_build(Random("drivers"), "druid", "protector")
+        hand = chargen.loadout("druid", level=level, build=leg,
+                               who_chassis="protector")
+        return sum(
+            1 for r in hand
+            if (p := get(r)) is not None and p.is_attack
+            and p.usage is Usage.DAILY and p.level and p.level > 0
+        )
+
+    saved = dict(chargen.LADDER_SKIPS)
+    try:
+        for at, want_fewer in ((1, False), (5, True), (9, True)):
+            chargen.LADDER_SKIPS.clear()
+            chargen.LADDER_SKIPS.update(saved)
+            charged = dailies(at)
+            chargen.LADDER_SKIPS.clear()
+            free = dailies(at)
+            if want_fewer:
+                out.that(charged < free,
+                         f"at level {at} the protector holds {charged}"
+                         f" levelled daily attacks against {free} with the"
+                         " table cleared -- the rungs are paid for")
+            else:
+                out.that(charged == free,
+                         f"at level {at} the count is unchanged"
+                         f" ({charged}) -- the card does not take the"
+                         " first-level gain")
+    finally:
+        chargen.LADDER_SKIPS.clear()
+        chargen.LADDER_SKIPS.update(saved)
+
+    # The allowance, read the way `dsl.usable` reads it.
+    for at, want in ((1, 1), (5, 2), (9, 3)):
+        world, me, _ = _board(ref, 1)
+        world.need(me, Stats).level = at
+        known = world.need(me, Powers)
+        known.extra_uses.clear()
+        use(world, me, ref, spend=False)
+        allowed = (REGISTRY["p15858"].uses
+                   + known.extra_uses.get("p15858", 0))
+        out.that(allowed == want,
+                 f"at level {at} `p15858` may be used {want} time(s) a day"
+                 f" ({allowed}) -- rising, not accumulating")
+
+
 def a_natural_weapon_needs_a_hand_free(out: Result) -> None:
     """`cf:monk-f1`: *"you must have a hand free to use your `w3678`, even
     if you're kicking, kneeing, elbowing, or head-butting."*
@@ -81411,6 +81505,11 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "protector_ladder": (
+        the_protector_pays_for_its_summon,
+        "the protector loses its daily rungs and gains uses of p15858"
+        " instead (#1276)",
     ),
     "natural_weapon": (
         a_natural_weapon_needs_a_hand_free,

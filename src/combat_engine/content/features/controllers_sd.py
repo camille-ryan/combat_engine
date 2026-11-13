@@ -419,29 +419,43 @@ def protector_attunement(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    dropped=("chargen.ladder_swap(daily)",),
 )
 def protector_summon(c: Cast) -> None:
     """"You gain the p15858 power", and the ladder it is paid for out of.
 
-    The grant is the no-op `-f1` is. What is **not** written is the price:
-    *"Because of this feature, you do not gain a druid attack power at
+    *"Because of this feature, you do not gain a `c126` attack power at
     level 5, 9, 15, 19, 25, or 29. Instead ... at level 5 you can use
-    p15858 twice per day, and at level 9 three times per day."*
+    `p15858` twice per day, and at level 9 three times per day."*
 
-    Two halves and neither has a writer. `chargen.EXTRA_GAINS` is the
-    table that says what a feature *adds* at a level and there is no table
-    that says what one **takes away** -- the ladder is derived from the
-    class, not declared per row. And `Powers.per_day` counts uses per ref,
-    so the rising allowance is expressible, but granting it without
-    charging for the six lost powers makes a protector strictly stronger
-    than print, which is the wrong direction to land half of. One symbol,
-    because the two halves are one printed bargain and a row that paid the
-    second alone would be wrong.
+    **One printed bargain, so both halves land together** -- which is what
+    the old marker insisted on and was right about: a row that paid the
+    allowance without charging for the lost powers makes a protector
+    strictly stronger than print, and nothing would have reported it.
 
-    The grant itself plays, so this is `dropped=` and not `todo=`.
+    * **The price is `chargen.LADDER_SKIPS`.** The marker said *"there is
+      no table that says what [a feature] takes away"*, which was true:
+      `EXTRA_GAINS` says what one adds and every other table is additive.
+      The skip is its mirror, keyed by the feature's ref and read against
+      the hand, so it follows the row rather than the class.
+      `chargen.power_swap` is the near miss and answers a different
+      question -- a 1:1 trade at a level floor, where this card drops two
+      rungs inside the tier alone.
+    * **The allowance is `c.more_uses`**, which the marker had already
+      spotted as expressible. `p15858` is `usage=DAILY` with `uses=1`, and
+      `dsl.usable` compares what has been spent against `p.uses +
+      Powers.extra_uses` -- so +1 at 5th and +2 at 9th *is* twice and
+      three times a day. Daily uses come back on an extended rest, which
+      is what "per day" means.
+
+      Rising rather than cumulative: a plain `if` ladder in ascending
+      order, so the 9th-level figure replaces the 5th rather than adding
+      to it. Two `c.more_uses` calls would give four uses at 9th, since
+      that verb's values **add** by design.
     """
     c.grant_row("p15858", on=c.me, until=When.ENCOUNTER)
+    extra = 2 if c.level >= 9 else 1 if c.level >= 5 else 0
+    if extra:
+        c.more_uses("p15858", extra, on=c.me)
 
 
 @power(

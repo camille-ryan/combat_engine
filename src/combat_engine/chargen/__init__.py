@@ -3261,6 +3261,30 @@ ATTACK_GAINS: dict[Usage, tuple[int, ...]] = {
     Usage.DAILY: (1, 5, 9),
 }
 
+#: **Gains a class feature takes away**, keyed by the feature's ref.
+#:
+#: `cf:druid-protector-f3` prints *"because of this feature, you do not
+#: gain a `c126` attack power at level 5, 9, 15, 19, 25, or 29"*, and it
+#: carried `chargen.ladder_swap(daily)` for it. Every table above is
+#: **additive** and none was keyed by a feature that removes a rung, which
+#: the marker was right about -- and the sibling it was pointed at answers
+#: a different question: `chargen.power_swap` is a 1:1 trade at a level
+#: floor, so one entry removes one power and this card removes two inside
+#: the tier.
+#:
+#: `superseded_for` is the other near miss and is about feature **rows** a
+#: chassis replaces, by `ord` coverage; it says nothing about power gains.
+#:
+#: The mirror of `EXTRA_GAINS`, down to being read against the hand rather
+#: than against a per-class list, so the skip follows the row. Levels above
+#: `MAX_POWER_LEVEL` are listed as the card prints them and cost nothing:
+#: the loop skips any gain above the character's level anyway. `#1276`.
+LADDER_SKIPS: dict[str, tuple[tuple[Usage, tuple[int, ...]], ...]] = {
+    "cf:druid-protector-f3": (
+        (Usage.DAILY, (5, 9, 15, 19, 25, 29)),
+    ),
+}
+
 #: Extra power gains a **class feature** prints, beyond the table above.
 #:
 #: `cf:sorcerer-elementalist-f1` ends *"you gain an extra at-will attack
@@ -3509,9 +3533,19 @@ def loadout(
             chosen.append(spare.pop(0))
         return sorted(chosen)
 
+    # **And the gains a dealt class feature takes AWAY.** Read against
+    # `out`, which already holds this character's features, so the skip
+    # lands on the character that has the row and on nobody else -- the
+    # same arrangement `EXTRA_GAINS` has below, pointed the other way.
+    skipped: set[tuple[Usage, int]] = {
+        (usage, at)
+        for ref in out
+        for usage, levels in LADDER_SKIPS.get(ref, ())
+        for at in levels
+    }
     for usage, gains in ATTACK_GAINS.items():
         for at in sorted(set(gains)):
-            if at > level:
+            if at > level or (usage, at) in skipped:
                 continue
             out += deal(at, usage, sum(1 for g in gains if g == at))
     # **And the extra gains a dealt class feature prints.** Read against
