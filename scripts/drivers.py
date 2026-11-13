@@ -31643,18 +31643,33 @@ def a_curse_already_placed_pays_its_damage_instead(out: Result) -> None:
     The `may` is asserted in both directions, because an offered choice
     that is taken either way is not a choice.
     """
-    from audit import board as audit_board
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.query import enemies
 
     REF = "cf:warlock-f1c11"
+    standing: list[bool] = []
 
     def swing(*, pre_cursed: bool, take: bool) -> int:
         """Hit points the foe loses. One seed, so the dice are the same and
-        the difference is the clause."""
-        world, me, _ = audit_board(REF, 1)
+        the difference is the clause.
+
+        **`_board`, not `audit.board` directly**, and that was this rule's
+        whole fault. It called the auditor straight through, so it ran on
+        whatever `chargen.SCORED_CHOICES` the previous rule happened to
+        leave -- the exact hazard `_board`'s docstring is about, reached
+        by skipping `_board` rather than by an import order.
+
+        What it cost here is worth recording, because the symptom named
+        the wrong thing. On the scored board the warlock's own damage
+        **kills the foe** before the curse settles, so `c.cursed` is
+        false on a corpse, the printed branch is never entered and the
+        rule reported `16 -> 16` -- which reads exactly like the clause
+        being unwritten. Measured side by side: unscored 26 / 48 / 26,
+        scored 16 / 16 / 16, same body.
+        """
+        world, me, _ = _board(REF, 1)
         foe = enemies(world, me)[0]
         setup = Cast(world=world, me=me, ref="driver", target=foe, targets=[foe])
         if pre_cursed:
@@ -31665,6 +31680,7 @@ def a_curse_already_placed_pays_its_damage_instead(out: Result) -> None:
         was = world.need(foe, Health).hp
         REGISTRY[REF].body(
             Cast(world=world, me=me, ref=REF, target=foe, targets=[foe]))
+        standing.append(world.need(foe, Health).hp > 0)
         return was - world.need(foe, Health).hp
 
     plain = swing(pre_cursed=False, take=True)
@@ -31675,6 +31691,28 @@ def a_curse_already_placed_pays_its_damage_instead(out: Result) -> None:
              "the power lands its own damage on a foe nobody has cursed, "
              "which is the arm that worked before this clause",
              f"{plain} hit points")
+    # **The precondition, asserted, because its failure looks like the
+    # clause's.** A board whose foe dies to the power's OWN damage has no
+    # creature left to be already-cursed by the time the curse settles,
+    # so every arm collapses to the same number and the rule reads as
+    # "the clause does nothing". That is exactly what the scored board
+    # did here. Said out loud so the next board change names itself
+    # instead of indicting the row.
+    #
+    # **The two arms that pay no extra, not all three.** The taken arm is
+    # *expected* to finish the foe -- that is the clause working -- so
+    # asserting all three asserts the clause away. These two run the same
+    # dice and the same base damage, so a foe standing in both was
+    # standing when the taken arm read `already`.
+    base_arms = [standing[0], standing[2]]
+    out.that(all(base_arms),
+             "and the foe survives the power's own damage, so there is "
+             "somebody left to be already cursed when the curse settles "
+             "-- a board where it dies first collapses every arm below to "
+             "one number, which is a board fault wearing the clause's "
+             "symptoms",
+             f"plain {standing[0]}, declined {standing[2]}; "
+             f"taken {standing[1]} (expected to finish it)")
     out.that(taken > plain,
              "and against a foe ALREADY cursed, taking the printed option "
              "pays the curse's extra damage there and then -- the clause "
@@ -46769,12 +46807,26 @@ def a_build_time_option_is_drawn_and_both_halves_are_dealt(out: Result) -> None:
     from combat_engine import chargen
 
     # -- every entry's every option comes out of the draw ---------------
+    # **Through `deal_build_options`, the PLURAL dealer, because that is
+    # the one `_build_options` calls.** This asked the singular
+    # `deal_build_option`, which is `deal_build_options(...)[0]` over a
+    # **sorted** tuple -- so on a fork that deals two, the alphabetically
+    # last option can never be `[0]` and reads as unreachable while the
+    # real dealer hands it over perfectly well. Measured on the three
+    # `OPTION_PICKS` forks: the singular reaches 4 of 5 on each and the
+    # plural reaches 5 of 5.
+    #
+    # That is a check testing a dealer nothing uses, so it was the
+    # check's definition that was wrong and not the rows -- and the fix
+    # is stricter rather than looser, since a fork dealing two now has
+    # both of its picks examined instead of one.
     missed = {}
     for ref, options in chargen.BUILD_OPTIONS.items():
         if len(options) < 2:
             continue
-        seen = {chargen.deal_build_option(Random(f"{s}:{ref}"), ref)
-                for s in range(400)}
+        seen = {took for s in range(400)
+                for took in chargen.deal_build_options(
+                    Random(f"{s}:{ref}"), ref)}
         gap = sorted(set(options) - seen)
         if gap:
             missed[ref] = gap
@@ -46783,6 +46835,20 @@ def a_build_time_option_is_drawn_and_both_halves_are_dealt(out: Result) -> None:
              "-- an option that cannot be drawn is a row's other card dead, "
              "which is what this table's own note measured",
              f"unreachable: {missed}")
+    # The trap named, so it cannot come back quietly: a fork that deals
+    # more than one must be asked through the plural dealer.
+    multi = sorted(r for r in chargen.BUILD_OPTIONS
+                   if chargen.OPTION_PICKS.get(r, 1) > 1)
+    blind = {r: sorted(set(chargen.BUILD_OPTIONS[r]) -
+                       {chargen.deal_build_option(Random(f"{s}:{r}"), r)
+                        for s in range(400)})
+             for r in multi}
+    out.that(all(blind.values()),
+             "and every fork that deals MORE than one is unreachable "
+             "through the singular dealer -- asserted in the positive so "
+             "the paragraph above cannot quietly revert to asking the "
+             "wrong one and still pass",
+             f"{ {k: len(v) for k, v in blind.items()} }")
 
     # -- while the resolver stays fixed, as `build_of` does -------------
     fixed = {ref: {chargen.deal_build_option(None, ref) for _ in range(20)}
