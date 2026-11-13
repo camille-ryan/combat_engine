@@ -665,6 +665,14 @@ KNOWN_SILENT = {
     # `c.feat`, and here the reader is the predicate beside it. #553 is why
     # that guard exists and it is right; this is the case it does not fit.
     # `drivers.miss_bladespell` proves both arms and plants the gate.
+    # **A cap with nothing to cap.** `cf:bard-skald-f1` sets a budget
+    # across the class's daily attack powers, and the board's skald knows
+    # **none** of them -- measured -- so `Powers.daily_cap` is written and
+    # no row is ever refused by it. The cap itself is the row's whole
+    # content, and `drivers.skald_dailies` grants two of one level and one
+    # of another to prove both halves of the printed rule.
+    "cf:bard-skald-f1": "caps the class's daily attack powers per day;"
+                        " the board's skald is dealt none of them",
     # **Nothing to share on a board where every implement is plain.**
     # `cf:warlock-hexblade-f3` hands the pact weapon the implement's
     # enhancement, item and properties, and `chargen` deals plain

@@ -17414,6 +17414,53 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         weapon.properties = weapon.properties | from_.properties
         return True
 
+    def dailies_per_day(
+        self, count: int, *, cls: str = "", on: int | None = None,
+    ) -> int:
+        """"Each day you can use only one bard attack power." Returns the
+        budget set.
+
+        `cf:bard-skald-f1` prints the whole shape: *"each day you can use
+        only one `c104` attack power ... two per day [at 5th] ... three
+        [at 9th], but no more than one of a particular level."*
+
+        **A cap over a family, which is why no existing allowance could
+        say it.** `Powers.used`, `per_day` and `extra_uses` are all **per
+        ref**; `c.spend_per_day` on a shared label is the nearest and is a
+        pool for *named* rows -- `cf:artificer-f2`'s three infusions --
+        rather than a cap over everything a class knows.
+
+        So it is one field, `Powers.daily_cap`, read at the single site in
+        `dsl.usable` that compares a spend against an allowance. That is
+        `extra_uses`' own safety argument: one reader cannot be honoured in
+        one place and ignored in another.
+
+        **`cls` is named by the caller and has no default**, because
+        `Build` carries only `choices` -- there is no "this creature's
+        class" to read, which is worth knowing before reaching for one.
+        Naming it is also what the printed sentence does, and naming it
+        rather than "any daily attack" is what keeps a multiclass or
+        racial daily out of the budget -- something
+        `c.forbid(usage=DAILY, attacks_only=True)` could not have done,
+        which is why that was the wrong tool.
+
+        **The per-level half comes free with the cap** and is not a second
+        parameter: *"no more than one of a particular level"* is a
+        property of the printed rule rather than of this character, so
+        `usable` applies it whenever a cap is set.
+
+        Rising rather than cumulative -- the caller passes the figure for
+        its level, so 1 at 1st, 2 at 5th, 3 at 9th.
+        """
+        from .components import Powers as _Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, _Powers)
+        if known is None or not cls:
+            return 0
+        known.daily_cap = (cls, count)
+        return count
+
     def gains_proficiency(self, *refs: str, on: int | None = None) -> int:
         """"If you are not already proficient with these weapons, you gain
         proficiency with them." Returns how many were newly permitted.

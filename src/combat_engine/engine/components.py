@@ -1427,6 +1427,28 @@ class Powers:
     #: above the allowance, so raising the per-encounter count cannot
     #: accidentally allow two in a turn. #642.
     extra_uses: dict[str, int] = field(default_factory=dict)
+    #: **A budget across a whole class's daily attack powers**, as
+    #: `(class, how many a day)`. `None` is no cap, which is every class
+    #: but one.
+    #:
+    #: `cf:bard-skald-f1` prints it: *"each day you can use only one `c104`
+    #: attack power ... two per day [at 5th] ... three [at 9th], but no
+    #: more than one of a particular level."* Every other allowance in this
+    #: file is **per ref** -- `used`, `per_day`, `extra_uses` -- and this
+    #: is a cap over a family, which is why it could not be spelled with
+    #: any of them. `c.spend_per_day` on a shared label is the nearest and
+    #: is a pool for *named* rows (`cf:artificer-f2`'s three infusions),
+    #: not a cap over everything a class knows.
+    #:
+    #: Read at the one site in `dsl.usable` that compares a spend against
+    #: an allowance, which is the safety argument `extra_uses` above makes:
+    #: one reader cannot be honoured in one place and ignored in another.
+    #:
+    #: **The tally is `used`, and that it works is a fact about the rest
+    #: model rather than a new field.** `turns.extended_rest` is the only
+    #: thing that clears `used`, so for a daily power `used` already *is*
+    #: "spent today" -- a short rest leaves it alone. `#1276`.
+    daily_cap: tuple[str, int] | None = None
     #: Skills this creature rolls **twice** on, keeping either result, by
     #: lower-case skill name.
     #:

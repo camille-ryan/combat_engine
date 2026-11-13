@@ -79517,6 +79517,116 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def the_skald_spends_fewer_dailies_than_it_knows(out: Result) -> None:
+    """`cf:bard-skald-f1`: a budget across a whole class's daily attacks.
+
+    *"You gain two 1st-level bard daily attack powers of your choice, but
+    each day you can use only one `c104` attack power ... two per day [at
+    5th] ... three [at 9th], but no more than one of a particular level."*
+
+    The row carried `chargen.dailies_per_day()` and was right that nothing
+    could say it: every allowance in `Powers` is **per ref** -- `used`,
+    `per_day`, `extra_uses` -- and this is a cap over a family.
+
+    **The tally needed no new field**, which is the finding.
+    `turns.extended_rest` is the only thing that clears `Powers.used`, so
+    for a daily power `used` already means "spent **today**" -- a short
+    rest leaves it alone. So the cap counts what is in `used`.
+
+    Seven things asserted, and the last two are the ones a looser design
+    would have got wrong:
+
+    * the cap is set and rises 1 / 2 / 3 at 1st, 5th and 9th;
+    * with a cap of one, a first bard daily is usable;
+    * after it is spent a second is refused, **whatever its level**;
+    * with a cap of two, one of a **different** level is allowed;
+    * but a second of the **same** level is refused -- *"no more than one
+      of a particular level"*, with its own reason;
+    * a **non-bard** daily attack is untouched, so a multiclass or racial
+      daily stays outside the budget -- which is what
+      `c.forbid(usage=DAILY, attacks_only=True)` could not have done and
+      is why that was the wrong tool;
+    * and an **encounter** bard attack is untouched, so the cap is about
+      dailies and not about the class.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.components import Powers, Stats
+    from combat_engine.engine.dsl import REGISTRY, usable, use
+    from combat_engine.engine.types import Usage
+
+    ref = "cf:bard-skald-f1"
+
+    def skald(level: int):  # noqa: ANN202
+        world, me, _ = _board(ref, 1)
+        world.need(me, Stats).level = level
+        known = world.need(me, Powers)
+        use(world, me, ref, spend=False)
+        return world, me, known
+
+    for level, want in ((1, 1), (5, 2), (9, 3)):
+        _w, _m, known = skald(level)
+        out.that(known.daily_cap == ("bard", want),
+                 f"at level {level} the budget is {want} bard daily attack"
+                 f" power(s) a day ({known.daily_cap})")
+
+    pool = sorted(
+        r for r, p in REGISTRY.items()
+        if p.cls == "bard" and p.usage is Usage.DAILY and p.is_attack
+        and p.level and not p.unfinished
+    )
+    same = [r for r in pool if REGISTRY[r].level == 1][:2]
+    other = next(r for r in pool if REGISTRY[r].level != 1)
+    out.that(len(same) == 2,
+             f"two bard daily attacks of one level exist to test with"
+             f" ({same})")
+
+    # Cap of one: a second is refused whatever its level.
+    world, me, known = skald(1)
+    known.known.extend([*same, other])
+    out.that(usable(world, me, REGISTRY[same[0]])[0],
+             "with nothing spent, a bard daily is usable")
+    known.note_use(same[0], 1)
+    for r in (same[1], other):
+        ok, why = usable(world, me, REGISTRY[r])
+        out.that(not ok and "a day" in why,
+                 f"after one is spent, `{r}` (level {REGISTRY[r].level}) is"
+                 f" refused -- {why!r}")
+
+    # Cap of two: the per-level rule becomes distinguishable.
+    world, me, known = skald(5)
+    known.known.extend([*same, other])
+    known.note_use(same[0], 1)
+    ok_other, _why = usable(world, me, REGISTRY[other])
+    out.that(ok_other,
+             f"at a cap of two, one of a different level is allowed"
+             f" (`{other}`, level {REGISTRY[other].level})")
+    ok_same, why_same = usable(world, me, REGISTRY[same[1]])
+    out.that(not ok_same and "particular" not in why_same
+             and "level" in why_same,
+             "but a second of the **same** level is refused, with its own"
+             f" reason -- {why_same!r}")
+
+    # PLANT: the budget is about bard dailies and nothing else.
+    outsider = next(
+        (r for r, p in REGISTRY.items()
+         if p.cls and p.cls != "bard" and p.usage is Usage.DAILY
+         and p.is_attack and p.level and not p.unfinished), "")
+    encounter = next(
+        (r for r, p in REGISTRY.items()
+         if p.cls == "bard" and p.usage is Usage.ENCOUNTER and p.is_attack
+         and not p.unfinished), "")
+    world, me, known = skald(1)
+    known.known.extend([same[0], outsider, encounter])
+    known.note_use(same[0], 1)
+    for r, what in ((outsider, "a non-bard daily"),
+                    (encounter, "a bard **encounter** attack")):
+        if not r:
+            continue
+        ok, why = usable(world, me, REGISTRY[r])
+        out.that(ok, f"PLANT: {what} (`{r}`) is untouched by the budget"
+                     f" -- {why!r}")
+
+
 def a_pact_weapon_takes_the_implements_magic(out: Result) -> None:
     """`cf:warlock-hexblade-f3`: *"your pact weapon shares your implement's
     enhancement bonus, critical hit effect, properties, and powers."*
@@ -81601,6 +81711,11 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "skald_dailies": (
+        the_skald_spends_fewer_dailies_than_it_knows,
+        "a cap across a class's daily attacks, rising 1/2/3 and one per"
+        " level (#1276)",
     ),
     "pact_magic": (
         a_pact_weapon_takes_the_implements_magic,

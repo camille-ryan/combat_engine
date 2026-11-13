@@ -3830,6 +3830,34 @@ def usable(
                     )
                 if p.group and _group_spent(world, actor, p):
                     return False, f"one {p.group} power per encounter"
+                # **A class-wide daily budget**, which `cf:bard-skald-f1`
+                # prints and nothing else in this file could say: every
+                # other allowance here is per ref. Read at this site for
+                # `extra_uses`' reason -- it is the one place a spend is
+                # compared against an allowance.
+                #
+                # The tally is `used`, which only `turns.extended_rest`
+                # clears, so for a daily it already means "spent today".
+                cap = powers.daily_cap
+                if (cap is not None and p.usage is Usage.DAILY
+                        and p.is_attack and p.cls == cap[0]):
+                    spent = [
+                        other for other in powers.used
+                        if (q := REGISTRY.get(other)) is not None
+                        and q.usage is Usage.DAILY and q.is_attack
+                        and q.cls == cap[0] and powers.times(other)
+                    ]
+                    if len(spent) >= cap[1]:
+                        return False, (
+                            f"{cap[1]} {cap[0]} daily attack power(s) a day"
+                        )
+                    # *"But no more than one of a particular level."*
+                    if any((q := REGISTRY.get(other)) is not None
+                           and q.level == p.level for other in spent):
+                        return False, (
+                            f"one {cap[0]} daily attack power of level"
+                            f" {p.level} a day"
+                        )
     if augment:
         # A form that was never declared is not a refusal to explain to a
         # player -- it is a caller asking for something that does not

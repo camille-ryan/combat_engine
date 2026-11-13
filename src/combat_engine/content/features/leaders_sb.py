@@ -320,7 +320,6 @@ def skald_charisma(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("chargen.dailies_per_day()",),
 )
 def skald_dailies(c: Cast) -> None:
     """*"You gain two 1st-level bard daily attack powers of your choice, but
@@ -341,17 +340,42 @@ def skald_dailies(c: Cast) -> None:
     (`cf:artificer-f2`), but that is one pool for three **named** rows,
     not a cap over everything a class knows.
 
-    So the marker names the budget rather than the gain: granting the extra
-    daily without the cap makes the skald strictly stronger than print,
-    which is the wrong direction to ship half a card in. Both halves land
-    together or neither.
+    **Both halves land together, which is what the old marker insisted on
+    and was right about**: granting the extra daily without the cap makes
+    the skald strictly stronger than print.
+
+    The budget is `c.dailies_per_day`, one field on `Powers` read at the
+    single site in `dsl.usable` that compares a spend against an
+    allowance. That is `extra_uses`' safety argument -- one reader cannot
+    be honoured in one place and ignored in another.
+
+    **The tally needed no new field, which is the part worth recording.**
+    `turns.extended_rest` is the only thing that clears `Powers.used`, so
+    for a daily power `used` already means "spent **today**" -- a short
+    rest leaves it alone. So the cap counts what is in `used` and the
+    per-day clock was there all along.
+
+    **`c.forbid(usage=DAILY, attacks_only=True)` was the obvious tool and
+    is the wrong one**: it bars a multiclass or racial daily attack too,
+    where the card caps *bard* ones. Naming the class is what keeps those
+    out, and it is what the printed sentence does. `c.spend_per_day` on a
+    shared label is the other near miss -- a pool for *named* rows, which
+    is `cf:artificer-f2`'s three infusions, not a cap over everything a
+    class knows.
+
+    *"But no more than one of a particular level"* comes with the cap
+    rather than as a second knob: it is a property of the printed rule and
+    not of this character, so `usable` applies it whenever a cap is set.
+
+    The ladder is 1 / 2 / 3 at 1st, 5th and 9th, passed as the figure for
+    this character's level -- rising, not cumulative.
 
     **`todo=` and not `dropped=`**, which is what "neither" means in a
     marker: the body is empty, so the row does not play, and `dropped=`
     claims it plays with one clause missing. `lint.py` names exactly this.
     """
-
-
+    cap = 3 if c.level >= 9 else 2 if c.level >= 5 else 1
+    c.dailies_per_day(cap, cls="bard", on=c.me)
 @power(
     "cf:bard-skald-f2",
     level=0,
