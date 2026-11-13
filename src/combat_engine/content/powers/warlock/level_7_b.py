@@ -211,6 +211,8 @@ def p13449(c: Cast) -> None:
     ],
     trigger=_ATTACKED_ME,
     on=Trigger(AttackDeclared, when=targets_me, text=_ATTACKED_ME),
+    requires=holding("w3740"),
+    requires_text="you must be holding your w3740",
 )
 def p13672(c: Cast) -> None:
     """The printed Requirement names one particular weapon, and `Weapon`

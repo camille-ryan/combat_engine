@@ -246,7 +246,6 @@ def binder_summoning(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("chargen.pact_option_map()",),
 )
 def binder_second_summon(c: Cast) -> None:
     """*"You gain another creature that you can summon when you use p13649.
@@ -261,8 +260,18 @@ def binder_second_summon(c: Cast) -> None:
     So the parent hands one over and the option refuses itself, which is
     the case `cf:paladin-blackguard-f19` and `cf:paladin-cavalier-f14` are
     in: the parent is not broken, its options are.
+
+    **Which pact each option belongs to is known now**, so this no longer
+    carries `chargen.pact_option_map()`: `chargen.OPTION_PACT` reads it
+    off each option's printed name and `deal_build_options` narrows the
+    fork to the character's leg. That does not make the options playable
+    -- their `defect=` is a different sentence about a different gap --
+    and it does stop a binder being handed the hexblade's creature, which
+    the nine-option list made possible. Three of the nine blame "an
+    associate and not a monster", which is the premise `#1268` disproved
+    for this fork's siblings; they are not re-examined here.
     """
-    options = tuple(f"cf:warlock-binder-f21s{i}" for i in range(9))
+    options = tuple(f"cf:warlock-binder-f21s{i}" for i in range(3))
     c.grant_row(c.chosen_option("cf:warlock-binder-f21") or options[0],
                 on=c.me, until=When.ENCOUNTER)
 
@@ -380,18 +389,24 @@ PACT_FORKS: dict[str, tuple[str, ...]] = {
 def _pact_parent(ref: str, what: str, *, replaces: bool = False) -> Any:
     """One of the nine parents printing "associated with your pact".
 
-    `dropped=` and not `todo=`: the parent **does** hand over one option,
-    so a binder gets one pact power rather than three or none. What is
-    missing is the identity, and `chargen.pact_option_map()` names exactly
-    that -- the same symbol the hexblade's four parents carry, so
-    `blocked.py --group` prices the gap at thirteen rows across two
-    chassis rather than two gaps of four and nine.
+    **The identity is known now.** These carried
+    `chargen.pact_option_map()` -- the same symbol the hexblade's parents
+    had, priced by `blocked.py --group` at thirteen rows across two
+    chassis -- on `#1264`'s premise that the option-to-pact mapping was
+    "absent from the import". The columns do not carry it; each option's
+    printed **name** does -- each begins with its pact, and the per-level
+    ones carry their level there too -- for all 61 options of all 16
+    pact-keyed forks.
+    `chargen.OPTION_PACT` is the transcription and `deal_build_options`
+    narrows the fork to the character's leg, so a binder is dealt its own
+    pact's option. See `features/hexblade.py`'s `_pact_parent`.
 
-    `replaces=True` adds the second symbol for the five later forks, whose
-    text also says the new power **replaces** the one gained earlier: a
-    grant without the replacement leaves a binder a power up on print.
+    `replaces=True` keeps the one symbol that is still true for the five
+    later forks, whose text also says the new power **replaces** the one
+    gained earlier: a grant without the replacement leaves a binder a
+    power up on print.
     """
-    marks = ["chargen.pact_option_map()"]
+    marks = []
     if replaces:
         marks.append("chargen.power_swap(encounter)")
 

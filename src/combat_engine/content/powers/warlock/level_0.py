@@ -180,6 +180,8 @@ def p13669(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.IMPLEMENT, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
+    requires=holding("w3740"),
+    requires_text="you must use this power with your w3740",
 )
 def p13670(c: Cast) -> None:
     victim = c.target
@@ -208,6 +210,8 @@ def p13670(c: Cast) -> None:
         Keyword.WEAPON,
     ],
     attack=Attack(CHA, vs=WILL),
+    requires=holding("w3740"),
+    requires_text="you must use this power with your w3740",
 )
 def p13671(c: Cast) -> None:
     victim = c.target

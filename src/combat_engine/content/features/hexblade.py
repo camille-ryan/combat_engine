@@ -13,41 +13,36 @@ seven pacts are legs already, and four of the hexblade's parents print
      2  another use of the pact-weapon attack per encounter
      5  the pact damage bonus, which is the best content here
 
-## The pact forks cannot pick, and the reason is a gap in the import
+## Both of this file's headline findings turned out to be false
 
-`-f1`, `-f2`, `-f7` and `-f10` each read *"associated with your pact"* and
-each has its own options. **The option-to-pact mapping is not in the
-import.** The base class has it -- `cf:warlock-f1s0`..`s6` carry `on_leg`
-headers for all seven pacts in alphabetical order -- and the hexblade's
-own sub-options print only *"you gain the pXXXXX power"* with no pact
-named.
+They are kept, corrected, because each was argued at length from a real
+measurement and each was wrong about where to look.
 
-It is partly derivable and that is not enough. Three of `-f1`'s five
-options identify themselves by keyword:
+**"The option-to-pact mapping is not in the import."** `-f1`, `-f2`,
+`-f7` and `-f10` each read *"associated with your pact"*, and this file
+measured that only three of `-f1`'s five options identify their pact by
+keyword -- `ELEMENTAL`, `TELEPORTATION`, `SHADOW`, with two carrying
+`ARCANE` and nothing else. All of that is true, and deriving three and
+guessing two is what `CLAUDE.md` forbids. The conclusion does not
+follow: the pact is in each option's **printed name**, for all 61
+options of all 16 pact-keyed forks across both chassis, and nothing had
+looked there. `chargen.OPTION_PACT` is the transcription,
+`deal_build_options` narrows a fork to the character's leg, and
+`drivers.pact_weapon` checks the table against the names on every run.
+The same shape as `#1261`'s level and found the same way. `#1264`.
 
-    p16257  ELEMENTAL      -> the elemental pact
-    p13669  TELEPORTATION  -> the fey pact
-    p13962  SHADOW         -> the dark pact
-    p13679  ARCANE only    -> ambiguous
-    p13721  ARCANE only    -> ambiguous
+**"The engine has no verb that puts a weapon into a creature's `Gear`
+from a ref."** `-f3`'s six options are the pact weapon, and the 24 rows
+on `chargen.pact_blade()` rested on that plus *"none of `w3740`..`w3752`
+is a declared row"*. All six are ordinary rows of the `weapon` table and
+`chargen.PRINTED` had carried them throughout. There is no verb because
+a pact weapon needs none -- it is **dealt**, and chargen is where gear
+comes from. `#730`.
 
-Deriving three and guessing two is what `CLAUDE.md` forbids -- *"if a spec
-is garbled, refer it up rather than guessing"* -- so the mapping is not
-written.
-
-**What is written instead is the arity, not the identity.** Each parent is
-a `chargen.BUILD_OPTIONS` fork, so a hexblade is dealt **one** pact power
-rather than all five or none, and each parent carries
-`chargen.pact_option_map()` saying the chosen one may not be the one its
-pact prescribes. That is strictly better than either alternative and the
-marker says exactly what is wrong. `#1264`.
-
-## The pact weapon already had a symbol
-
-`-f3` and its six options are the pact weapon, and
-`chargen.pact_blade()` is the symbol **15 rows already wait on** -- so
-these seven join an existing group rather than minting a synonym, which
-is what `blocked.py --group` exists to make possible.
+What survives from both: the arity reasoning was sound, and writing the
+arity while the identity was unknown was better than either alternative.
+The marker was doing its job; its premise was not re-measured for a
+year.
 """
 
 from __future__ import annotations
@@ -173,12 +168,22 @@ _F6_POWERS = {
 
 
 def _pact_parent(ref: str, options: tuple[str, ...], what: str) -> Any:
-    """One of the four parents that print "associated with your pact".
+    """One of the parents that print "associated with your pact".
 
-    `dropped=` and not `todo=`: the parent **does** hand over one option,
-    so a hexblade gets one pact power rather than five or none. What is
-    missing is the identity -- which option belongs to which pact -- and
-    `chargen.pact_option_map()` names exactly that. `#1264`.
+    **The identity is known now, and these carried `dropped=
+    ("chargen.pact_option_map()",)` saying it was not.** The parent always
+    handed over one option, so a hexblade got one pact power rather than
+    five or none; what was missing was *which* pact that option belonged
+    to, and `#1264` recorded it as "absent from the import".
+
+    The columns do not carry it, which is what that was measured on. The
+    option's own printed **name** does: each begins with its pact, and
+    the one pact printed twice says which of the two it is. That holds
+    for all 61 options of all 16 pact-keyed forks, checked against
+    `db.localisation()`. `chargen.OPTION_PACT` is the transcription and
+    `deal_build_options` narrows the fork to the character's own leg
+    before drawing, so the option a hexblade is dealt is its pact's.
+    `#1264`, and the same shape as `#1261`'s level.
     """
 
     @power(
@@ -190,7 +195,6 @@ def _pact_parent(ref: str, options: tuple[str, ...], what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.ARCANE],
-        dropped=("chargen.pact_option_map()",),
     )
     def row(c: Cast) -> None:
         c.grant_row(_chosen(c, ref, options), on=c.me, until=When.ENCOUNTER)
@@ -364,20 +368,27 @@ def hexblade_summon_damage(c: Cast) -> None:
 # -- the pact weapon: seven rows on an existing symbol ----------------------
 
 
-def _pact_blade(ref: str, what: str) -> Any:
-    """One of the seven pact-weapon rows.
+def _pact_blade(ref: str, what: str, *, marks: tuple[str, ...] = ()) -> Any:
+    """One of the pact-weapon rows.
 
-    `chargen.pact_blade()` is the symbol **15 rows already wait on**, so
-    these seven join that group rather than minting a synonym -- which is
-    what `content/CLAUDE.md` asks (*"reuse a symbol already in the tree so
-    the groups mean something"*) and what makes `blocked.py --group` able
-    to price the gap at 22 rows.
-
-    What is missing, precisely: a weapon manifested in a hand that shares
-    the implement's enhancement, critical effect, properties and powers,
-    and which vanishes when either is let go. None of `w3740`..`w3752` is
+    **The weapon is dealt now, and these used to say it could not be.**
+    `chargen.pact_blade()` was the symbol 15 power rows waited on too, 24
+    in all, and the claim under it was that *"none of `w3740`..`w3752` is
     a declared row, and the engine has no verb that puts a weapon into a
-    creature's `Gear` from a ref.
+    creature's `Gear` from a ref"*. Both halves were false about the
+    thing that mattered: all six are ordinary rows of the `weapon` table
+    and `chargen.PRINTED` has carried them the whole time. There was no
+    verb because the weapon does not need one -- it is **dealt**, not
+    manifested by a body, and `chargen` is where a character's gear comes
+    from.
+
+    So `cf:warlock-hexblade-f3`'s six options each carry a weapon that
+    `chargen.PACT_BLADE` names and `spawn` appends to the loadout, keyed
+    to the pact by `chargen.OPTION_PACT` so the weapon follows the pact
+    the way the page prints it. The body stays empty for the reason every
+    `BUILD_OPTIONS` option's does: the dealing *is* the effect.
+
+    `marks` is for the parent, which is not finished -- see its call.
     """
 
     @power(
@@ -389,7 +400,7 @@ def _pact_blade(ref: str, what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.ARCANE],
-        todo=("chargen.pact_blade()",),
+        todo=marks,
     )
     def row(c: Cast) -> None:
         pass
@@ -401,24 +412,73 @@ def _pact_blade(ref: str, what: str) -> Any:
 
 hexblade_blade_3 = _pact_blade(
     "cf:warlock-hexblade-f3",
-    "The pact weapon itself: manifested as a minor action while an "
-    "implement is in the other hand, sharing the implement's enhancement "
-    "and properties, and gone when either is let go.")
+    "The pact weapon itself. The weapon is dealt -- see the helper -- and "
+    "what is still missing is the rest of the printed sentence: it is "
+    "manifested as a minor action while an implement is in the other "
+    "hand, shares that implement's enhancement, critical effect, "
+    "properties and powers, and is gone when either is let go.",
+    # **A narrower symbol than the one this used to carry**, naming what
+    # is actually left rather than the weapon. The weapon arrives; what
+    # no facility does is make one carried item take another's
+    # enhancement and properties for as long as both are held.
+    marks=("c.shares_enhancement()",))
 for _n, _w in enumerate(("w3752", "w3740", "w3743", "w3744", "w3741", "w3742")):
     globals()[f"hexblade_blade_3_{_n}"] = _pact_blade(
         f"cf:warlock-hexblade-f3s{_n}",
-        f"One pact's weapon: `{_w}`.")
+        f"One pact's weapon: `{_w}`. Dealt by `chargen.PACT_BLADE` when "
+        f"this option is the one the character's pact takes.")
 
-hexblade_pact_6 = _pact_blade(
-    "cf:warlock-hexblade-f6",
-    "A power associated with the pact weapon chosen -- so this parent "
-    "needs the weapon before it can pick.")
 for _ref, _got in _F6_POWERS.items():
     globals()["hexblade_grant_" + _ref.rsplit("-f", 1)[-1].replace("s", "_")] = (
         _grant(_ref, _got,
-               "One of `-f6`'s six options, each keyed to a pact weapon "
-               "the engine cannot manifest -- so the option is written and "
-               "its parent waits on `chargen.pact_blade()`."))
+               "One of `-f6`'s six options, keyed to a pact weapon by "
+               "`chargen.OPTION_PACT` -- the same six pacts in the same "
+               "printed order as `-f3`'s, so the rider and the weapon "
+               "agree without either row reading the other."))
+
+
+@power(
+    "cf:warlock-hexblade-f6",
+    level=0,
+    cls="warlock",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def hexblade_pact_6(c: Cast) -> None:
+    """*"You gain a power associated with your pact weapon."*
+
+    **It used to wait on `chargen.pact_blade()` for a reason that read
+    backwards**: the note said this parent "needs the weapon before it
+    can pick". It does not -- it needs to know *which option of `-f3` was
+    taken*, and that is now recorded.
+
+    **It reads `-f3`'s answer rather than drawing its own, and the fey
+    pact is why.** A `BUILD_OPTIONS` entry of its own was the first
+    attempt and it is a second independent draw: six options keyed to
+    five pacts, because the fey pact's section is printed twice -- a
+    plain one and a variant -- so on that one pact the two draws
+    disagree. Measured, with an entry in place: a fey hexblade came out
+    holding the plain weapon and carrying the variant's rider, which no
+    gate would have reported because each half was individually right.
+
+    One choice, one entry, several readers is the arrangement
+    `content/CLAUDE.md` already prescribes -- the blackguard's vice, the
+    cavalier's virtue, the sentinel's season -- and this is a fourth
+    case of it.
+
+    The six options sit in the same printed order under both parents
+    -- each parent's option for a given pact sits at the same index --
+    so the index carries across and `_F6_POWERS` is read by
+    position rather than by a second mapping that could drift from the
+    first.
+    """
+    took = c.chosen_option("cf:warlock-hexblade-f3")
+    mine = took.replace("-f3s", "-f6s") if took else ""
+    if mine in _F6_POWERS:
+        c.grant_row(mine, on=c.me, until=When.ENCOUNTER)
 
 
 # -- another use, and the rest -----------------------------------------------

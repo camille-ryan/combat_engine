@@ -197,6 +197,37 @@ def _board(ref: str = "m145a0", seed: int = 1):  # noqa: ANN202
         chargen.SCORED_CHOICES = was
 
 
+def _hardiest(world: object, me: int) -> int:
+    """The enemy with the most hit points, for a rule whose clause needs
+    its target to survive the blow that triggers it.
+
+    **`enemies(world, me)[0]` is the usual spelling and it is a trap for
+    these rules**, because the board's composition is not fixed: it is
+    built to a budget from a dealt party, so anything that moves the
+    party moves which creatures are fielded and in what order. A warlock
+    change that narrowed a build-time draw added one 14-hit-point
+    creature at the front of a list that had begun with a 37, and four
+    rules went red at once -- every one of them reporting that its
+    *clause* did nothing, when what had happened was that the target
+    died to the blow meant to set the clause up.
+
+    That failure is silent in the worst way: a dead target makes an
+    "and then X happens to it" assertion false without making it wrong,
+    so the rule indicts the row. `drivers.curse_instead` had the same
+    morning twice over.
+
+    So a rule that needs a live target asks for the sturdiest creature on
+    the board rather than the first, and asserts afterwards that it
+    survived -- the two halves together, because the pick alone is still
+    a guess about how hard the blow lands.
+    """
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.query import enemies
+
+    foes = [e for e in enemies(world, me) if world.get(e, Health) is not None]
+    return max(foes, key=lambda e: world.need(e, Health).hp)
+
+
 def phasing(out: Result) -> None:
     """A phasing creature moves *through* a body and may not stop in one.
 
@@ -8151,6 +8182,19 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
             hp = world.need(who, Health)
             hp.max_hp = max(hp.max_hp, 999)
             hp.hp = hp.max_hp
+        # **The attack has to land, and nothing here made it.** The pose
+        # pins hit points at 999 so the victim cannot die -- that half was
+        # thought about -- and then left the attack roll to the dice. So
+        # whether a rider paid depended on a d20 against whichever
+        # creature the encounter budget happened to field first, and three
+        # of these clauses went red the day a warlock change altered the
+        # board's composition. Nothing about that red named an attack
+        # roll: each clause simply reported itself inert.
+        #
+        # **19 and not 20**, which `drivers.vestige_augment` learnt the
+        # same way: a natural 20 is a critical, and a critical at this
+        # level kills the thing the next assertion has to read.
+        world.rng.loaded = 19
         use = Cast(world=world, me=me, ref=power, targets=[victim])
         use.target = victim
         return world, me, use, victim, neighbour
@@ -31646,7 +31690,6 @@ def a_curse_already_placed_pays_its_damage_instead(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health
     from combat_engine.engine.dsl import REGISTRY
-    from combat_engine.engine.query import enemies
 
     REF = "cf:warlock-f1c11"
     standing: list[bool] = []
@@ -31670,12 +31713,26 @@ def a_curse_already_placed_pays_its_damage_instead(out: Result) -> None:
         scored 16 / 16 / 16, same body.
         """
         world, me, _ = _board(REF, 1)
-        foe = enemies(world, me)[0]
+        # The sturdiest, not the first -- see `_hardiest`. This rule is
+        # where that lesson was learnt and it learnt it twice.
+        foe = _hardiest(world, me)
         setup = Cast(world=world, me=me, ref="driver", target=foe, targets=[foe])
         if pre_cursed:
             setup.curse(on=foe)
-        # first option is the pick / accept, last is the decline
-        world.decider = lambda a, k, o, p: (o[0] if take else o[-1])
+        # **The cursed creature when it is on offer, else the first.**
+        # The body asks twice -- who the curse settles on, then whether to
+        # pay its damage now -- and a blanket `o[0]` answers the first
+        # with the lowest entity id, which is not this rule's foe once
+        # the board stops starting with it. That silently put the curse
+        # on a *different* creature, so `already` was false, the printed
+        # branch was never entered, and the rule read `24 -> 24` exactly
+        # as if the clause were unwritten. The decline stays last.
+        def decide(_a: object, _k: str, options: list, _p: str) -> object:
+            if not take:
+                return options[-1]
+            return foe if foe in options else options[0]
+
+        world.decider = decide
         world.rng.loaded = 20
         was = world.need(foe, Health).hp
         REGISTRY[REF].body(
@@ -45442,26 +45499,29 @@ def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
 def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
         out: Result) -> None:
     """`#642`'s wave, the warlock's second chassis -- 60 rows, the biggest
-    in the wave, and the one where the **arity is right and the identity
-    is not**.
+    in the wave, and the one where the arity was right and the identity
+    was missing. **It is not missing any more**, and the name of this
+    function is kept as written because it is the question the rule was
+    built to ask.
 
-    Four parents print *"associated with your pact"* and the
-    option-to-pact mapping is absent from the import. Everywhere else in
-    this wave a choice read by several parents gets ONE `BUILD_OPTIONS`
-    entry so the readers cannot disagree -- the blackguard's vice, the
-    cavalier's virtue, the sentinel's season. **Here four entries is the
-    honest shape**, because the forks have 5, 5, 9 and 9 options and there
-    is no common answer for them to agree about.
+    Four parents print *"associated with your pact"*. Each is its own
+    `BUILD_OPTIONS` entry rather than one shared one -- the forks have 5,
+    5, 9 and 9 options, so there is no common answer for them to agree
+    about, which is the opposite of the blackguard's vice, the cavalier's
+    virtue and the sentinel's season. They agree through the character's
+    **leg** instead, which is better than agreeing with each other.
 
-    So this rule asserts what *is* true: each fork deals exactly one
-    option, none deals all of them, and each parent says in its marker
-    that the one it dealt may be the wrong pact's. `#1264`.
+    So this rule asserts: each fork deals exactly one option, none deals
+    all of them, and the option dealt is the one its pact prescribes.
 
-    **And it asserts the mapping really is underivable**, which is the
-    load-bearing half: three of `-f1`'s five options name their pact by
-    keyword and two carry `ARCANE` and nothing else. Deriving three and
-    guessing two is what `CLAUDE.md` forbids, and a reader who did not
-    see the measurement would reasonably try.
+    **The measurement that used to justify the marker is kept**, because
+    it is true and it is the reason the mapping was called underivable:
+    three of `-f1`'s five options name their pact by keyword and two
+    carry `ARCANE` and nothing else, so deriving three and guessing two
+    is what `CLAUDE.md` forbids. The conclusion drawn from it was the
+    error -- the pact is in each option's printed *name*, and no amount
+    of keyword reasoning was going to find it. `chargen.OPTION_PACT`,
+    `#1264`.
     """
     from random import Random
 
@@ -45614,21 +45674,28 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
     # happily if nine *different* rows had drifted onto the symbol.
     blade = sorted(r for r, p in REGISTRY.items()
                    if "chargen.pact_blade()" in (p.unfinished or ()))
-    out.that(blade == ["cf:warlock-hexblade-f3", "cf:warlock-hexblade-f3s0",
-                       "cf:warlock-hexblade-f3s1", "cf:warlock-hexblade-f3s2",
-                       "cf:warlock-hexblade-f3s3", "cf:warlock-hexblade-f3s4",
-                       "cf:warlock-hexblade-f3s5", "cf:warlock-hexblade-f4",
-                       "cf:warlock-hexblade-f6"],
-             "`chargen.pact_blade()` is down to the NINE chassis rows and "
-             "holds no power row: the 15 that waited on it are dealt a "
-             "weapon now and declare their Requirement against it instead. "
-             "Named rather than counted, so nine other rows drifting onto "
-             "the symbol cannot pass as these nine",
+    out.that(blade == ["cf:warlock-hexblade-f4"],
+             "`chargen.pact_blade()` is down to ONE row from 24. The 15 "
+             "power rows that waited on it declare their printed "
+             "Requirement instead, the weapon's six options are dealt, "
+             "and the parent has a narrower symbol naming what is really "
+             "left. This one is the extra use per encounter, which needs "
+             "the weapon to be an activatable power and not merely held. "
+             "Named rather than counted, so a different row drifting onto "
+             "the symbol cannot pass as this one",
              f"{len(blade)}: {blade}")
     out.that(not [r for r in blade if not r.startswith("cf:")],
              "and nothing but a chassis row waits on it, which is the half "
              "that says the 15 were finished rather than renamed",
              f"{[r for r in blade if not r.startswith('cf:')]}")
+    gone = sorted(r for r, p in REGISTRY.items()
+                  if "chargen.pact_option_map()" in (p.unfinished or ()))
+    out.that(not gone,
+             "and `chargen.pact_option_map()` holds NOTHING -- all 13 "
+             "parents across both chassis read their pact's option now, "
+             "off a mapping that was printed in each option's name the "
+             "whole time",
+             f"{len(gone)}: {gone}")
 
     # -- f4 carried three symbols and one of them has landed --------------
     # It read `len(...) == 3` -- the level, the per-encounter ceiling and
@@ -45716,6 +45783,7 @@ def the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers(
       power sets rather than its own pact's, so without `holding` an
       infernal hexblade could swing the star pact's rows.
     """
+    import re
     from random import Random
 
     import combat_engine.content  # noqa: F401
@@ -45824,18 +45892,128 @@ def the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers(
              f"{mine}")
 
     # -- `rng=None` is the one fixed answer the resolver needs ----------
-    out.that(chargen.deal_pact_weapon(None, "warlock", "hexblade", "fey")
-             == "cf:warlock-hexblade-f3s1",
-             "and `rng=None` answers the first printed section, which is "
-             "the fixed answer per ref `audit.board` and `_build_for` both "
-             "want -- the branch `deal_build_option` already has",
-             f"{chargen.deal_pact_weapon(None, 'warlock', 'hexblade', 'fey')}")
-    out.that(chargen.deal_pact_weapon(Random("x"), "cleric", "hexblade",
-                                      "infernal") == "",
-             "and a class that is not the warlock answers nothing, so the "
-             "table cannot reach a chassis word another class happens to "
-             "share",
-             f"{chargen.deal_pact_weapon(Random('x'), 'cleric', 'hexblade', 'infernal')!r}")
+    # **Narrowed first, THEN fixed**, which is the half worth asserting:
+    # a fixed answer taken before the leg narrowing would be the first of
+    # all six options for every pact, so every hexblade would resolve to
+    # the elemental weapon and five pacts' rows would be unprovable.
+    FORK = "cf:warlock-hexblade-f3"
+    fixed = {leg: chargen.deal_build_options(None, FORK, leg)
+             for leg in ("elemental", "fey", "infernal", "star", "gloom")}
+    out.that(all(len(v) == 1 for v in fixed.values())
+             and len({v[0] for v in fixed.values()}) == 5,
+             "`rng=None` answers ONE option per pact and a different one "
+             "for each -- the fixed answer per ref `audit.board` and "
+             "`_build_for` both want, taken after the leg narrowing and "
+             "not before it",
+             f"{ {k: v[0].rsplit('s', 1)[-1] for k, v in fixed.items()} }")
+    out.that(chargen.deal_build_options(Random("x"), FORK, "dark") == (),
+             "and a pact the page prints no section for answers NOTHING "
+             "rather than falling back to somebody else's weapon, which "
+             "is the printed answer and is what `CHASSIS_LEGS` keeps from "
+             "becoming a character with no features",
+             f"{chargen.deal_build_options(Random('x'), FORK, 'dark')}")
+    # -- an unkeyed fork is untouched, which is most of them ------------
+    plain = "cf:druid-sentinel-f0"
+    out.that(chargen.deal_build_options(Random("x"), plain, "infernal")
+             == chargen.deal_build_options(Random("x"), plain),
+             "while a fork whose options are NOT all pact-keyed draws "
+             "exactly as before, leg or no leg -- the narrowing is opt-in "
+             "by the table and cannot reach the sixty-odd ordinary forks",
+             f"{chargen.deal_build_options(Random('x'), plain, 'infernal')}")
+
+    # -- every pact-keyed option says its pact on the printed page ------
+    # **The table is a transcription, so this checks the transcription.**
+    # `OPTION_PACT` is read off each option's printed name, which lives in
+    # git-ignored `localization/` -- so a run without that file cannot
+    # ask, and says so rather than passing.
+    from combat_engine import db
+
+    loc = db.localisation()
+    if not loc:
+        out.skip("`OPTION_PACT` could not be checked against the printed "
+                 "names -- `localization/` is absent, and a transcription "
+                 "with nothing to compare against is not a pass")
+    else:
+        off = []
+        for opt, pact in chargen.OPTION_PACT.items():
+            name = (loc.get(opt) or {}).get("name", "")
+            # **The fey pact's variant is named by the variant alone on
+            # three of its five options.** `cf:warlock-hexblade-f3s2` is
+            # names the pact as well as the variant, but the two summon
+            # forks' options name only the variant -- so a check asking
+            # for the pact word alone fails on
+            # exactly the options the table's own docstring warns about.
+            # Accepted here rather than dropped from the table, because
+            # dropping them is how a binder gets a hexblade's creature.
+            if pact == "fey" and "White Well" in name:
+                continue
+            if not re.search(pact.replace("-", "[- ]?"), name, re.I):
+                off.append((opt, pact, name))
+        out.that(not off,
+                 f"all {len(chargen.OPTION_PACT)} pact-keyed options name "
+                 "their own pact in the printed name this table was "
+                 "transcribed from -- the whole of `#1264`'s answer, and "
+                 "the half that rots if the import is rebuilt",
+                 f"{len(off)} disagree: {off[:3]}")
+
+    # -- the weapon and its rider agree, which needs ONE entry ----------
+    # **The fey pact is the only one that can show this**, because it is
+    # the only pact whose section is printed twice. Giving
+    # `cf:warlock-hexblade-f6` a `BUILD_OPTIONS` entry of its own made it
+    # a second independent draw and a fey hexblade came out holding the
+    # plain weapon with the variant's rider -- neither half wrong on its
+    # own, so nothing would have reported it.
+    from combat_engine.content.features.hexblade import _F6_POWERS
+
+    out.that("cf:warlock-hexblade-f6" not in chargen.BUILD_OPTIONS,
+             "the pact weapon's RIDER has no entry of its own -- one "
+             "choice read by two parents is one entry, or the two draws "
+             "disagree on the one pact printed twice",
+             f"{'cf:warlock-hexblade-f6' in chargen.BUILD_OPTIONS}")
+    # **The prefix is stripped by length, not by splitting on a colon.**
+    # An `option:` key is `option:{parent}:{value}` and both halves are
+    # refs carrying their own colons, so `split(":", 2)[2]` keeps half the
+    # parent and matches nothing. It fails silently -- the same slip this
+    # rule's own subject hit in `spawn`, found there by a red assertion
+    # and here by this one reading `0 of 40`.
+    MINE = "option:cf:warlock-hexblade-f3:"
+    paired = []
+    for seed in range(8):
+        for leg in ("elemental", "fey", "infernal", "star", "gloom"):
+            _h, eid, world = dealt("hexblade", leg, seed)
+            state = world.get(eid, BuildState)
+            assert state is not None
+            took = [c[len(MINE):] for c in state.choices
+                    if c.startswith(MINE)]
+            paired.append(bool(took) and
+                          took[0].replace("-f3s", "-f6s") in _F6_POWERS)
+    out.that(all(paired),
+             "and every dealt hexblade's weapon option has a rider at the "
+             "same index -- which is what lets `-f6` read `-f3`'s answer "
+             "by position instead of carrying a second mapping that could "
+             "drift from the first",
+             f"{sum(paired)} of {len(paired)}")
+
+    # -- no row prints a weapon Requirement without declaring it --------
+    # **Eighteen rows, and the first pass found fifteen.** The three it
+    # missed are the fey weapon's trio: they carried no marker, because
+    # the marker named the *dealer* and that weapon's rows were never
+    # blocked on it. A census over the printed text finds them where a
+    # walk of the marked rows cannot.
+    from combat_engine import db as _db
+    from combat_engine.engine.dsl import REGISTRY as _REG
+
+    _g = _db.game()
+    needs = re.compile(r"Requirement[^\n]*?\byour (w\d+)\b", re.I)
+    printed = {r: s or "" for r, s in _g.execute("select ref, spec from power")}
+    bare = sorted(r for r, s in printed.items()
+                  if needs.search(s) and r in _REG and _REG[r].requires is None)
+    out.that(not bare,
+             "and NO declared row prints 'Requirement: ... your <weapon>' "
+             "without declaring it -- counted off the printed spec rather "
+             "than off the marked rows, which is how the fey weapon's "
+             "three were found after the other fifteen were done",
+             f"{len(bare)}: {bare}")
 
 
 def three_more_facilities_the_class_work_asked_for(out: Result) -> None:
@@ -75024,15 +75202,27 @@ def the_at_will_gains_the_active_remnants_augment(out: Result) -> None:
         return False
 
     def a_foe(c, world, me):  # noqa: ANN001, ANN202
-        """Enemies that are actually on the grid.
+        """Enemies that are actually on the grid, sturdiest first.
 
         **`Position` is asked for**, because a creature off the grid has no
         distance and the "ally stands nearer" setup below would compare
         against nothing. `Cast.enemies` is the side question; standing
         somewhere is the other half.
+
+        **Sturdiest first, because every read below needs the target to
+        outlive the blow that sets it up.** This returned them in entity
+        order, which is the order the encounter budget fielded them in --
+        so when a warlock change altered the board's composition and put
+        a 14-hit-point creature at the front of a list that had begun
+        with a 37, the caster killed its own target and four assertions
+        reported the *clause* as inert. `_hardiest` has the argument;
+        this is the same answer in the shape this rule wants.
         """
-        return [e for e in c.enemies()
-                if e != me and world.get(e, Position) is not None]
+        there = [e for e in c.enemies()
+                 if e != me and world.get(e, Position) is not None]
+        return sorted(there,
+                      key=lambda e: -(world.need(e, Health).hp
+                                      if world.get(e, Health) else 0))
 
     # -- remnant 0: an ally who hits the target gets a saving throw -------
     world, me, c = posed(REMNANTS[0])
@@ -75382,7 +75572,16 @@ def a_feat_granted_remnant_offers_pays_and_augments(out: Result) -> None:
     # Two cursed enemies are needed: one to drop and a *different* one to
     # slide. With one, "a different creature" finds nobody and the clause
     # pays nothing while looking as though it had been asked.
-    foes = [e for e in c.enemies() if world.get(e, Position) is not None]
+    # **Sturdiest first**, so the creature this rule strikes outlives the
+    # blow. In entity order the board's first creature is whatever the
+    # encounter budget fielded first, and a warlock change that put a
+    # 14-hit-point creature at the front of a list beginning with a 37
+    # killed the target outright -- the slide this rule is about then had
+    # nobody to move and the rule blamed the slide. `_hardiest`.
+    foes = sorted((e for e in c.enemies()
+                   if world.get(e, Position) is not None),
+                  key=lambda e: -(world.need(e, Health).hp
+                                  if world.get(e, Health) else 0))
     out.that(len(foes) >= 2,
              "the board fields two enemies -- the printed 'a different"
              " creature' needs somebody other than the one that fell",
@@ -75476,7 +75675,13 @@ def a_feat_granted_remnant_offers_pays_and_augments(out: Result) -> None:
     REGISTRY[REF].body(Cast(world=w3, me=me3, ref=REF))
     c3.bargain(REF)
     held3 = w3.get(me3, Powers)
-    foes3 = [e for e in c3.enemies() if w3.get(e, Position) is not None]
+    # Sturdiest first, for the reason the `foes` list above gives: this
+    # board is composed to a budget and its first creature is whatever
+    # the budget fielded first, which need not survive the blow.
+    foes3 = sorted((e for e in c3.enemies()
+                    if w3.get(e, Position) is not None),
+                   key=lambda e: -(w3.need(e, Health).hp
+                                   if w3.get(e, Health) else 0))
     out.that(held3 is not None and "cf:warlock-f1c11" in held3.known,
              "the holder has the at-will the augment lands on")
     out.that(c3.active_vestige() == REF,
@@ -78651,8 +78856,8 @@ DRIVERS = {
     ),
     "hexblade_pacts": (
         the_hexblades_pact_forks_deal_one_option_without_knowing_which,
-        "the hexblade's pact forks deal one option each without knowing"
-        " which pact it belongs to (#642, #1264)",
+        "the hexblade's pact forks deal one option each, and it is the"
+        " one its pact prescribes (#642, #1264)",
     ),
     "pact_weapon": (
         the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers,
