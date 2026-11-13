@@ -30,6 +30,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.chargen import WAND
 from combat_engine.content.powers.wizard.level_0 import _sword_hand
 from combat_engine.engine import (
     AC,
@@ -58,6 +59,20 @@ BLADES = ("light blade", "heavy blade")
 #: The armours "while you are wearing light armor or no armor" allows. The
 #: empty string is what a creature with no `Gear` armour field is wearing.
 UNARMOURED = ("", "cloth", "leather", "hide")
+
+
+def _blade_group(c: Cast) -> str:
+    """Which of the two printed blade groups is in the caster's main hand.
+
+    `cf:wizard-bladesinger-f0` hands this to `c.counts_as(holding=)`, which
+    matches a *weapon* rather than a hand -- so naming the group is how the
+    waiver stays attached to the blade the card chose and not to whatever
+    else the bladesinger picks up. Empty if the hand does not hold one,
+    which the caller has already refused by then.
+    """
+    gear = c.world.get(c.me, Gear)
+    weapon = gear.main if gear is not None else None
+    return weapon.group if weapon is not None and weapon.group in BLADES else ""
 
 
 def _a_blade_in_one_hand(c: Cast, who: int | None = None) -> bool:
@@ -210,7 +225,6 @@ def _spellbook_slots(ref: str, ceiling: str, what: str) -> Callable[[Cast], None
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("Weapon.as_wand",),
 )
 def bladesinger_blade(c: Cast) -> None:
     """The chosen blade is an implement.
@@ -228,15 +242,32 @@ def bladesinger_blade(c: Cast) -> None:
     thing in every fight. What is asked instead is that the thing in hand
     *is* a one-handed blade, which is the half that can be false.
 
-    Dropped: *"the weapon also counts as a wand for you, although it can
-    be enchanted only as a weapon."* `Gear.implement` picks a held weapon
-    by group and `as_implement` makes this one eligible, but "counts as a
-    **wand**" is narrower -- it is what a wand-only implement feat or item
-    asks about -- and there is no field for a weapon's implement *kind*.
+    **The wand half is `c.counts_as`, and the marker named a field where a
+    reader was missing.** It carried `Weapon.as_wand` saying *"there is no
+    field for a weapon's implement kind"* -- true, and the kind is not kept
+    in a field at all: all eight of `chargen`'s implements share
+    `group="implement"` and differ only by an invented ref, so the wand
+    question is asked by **ref** through `query.holding`'s `w.ref == what`
+    branch. Four places ask it that way.
+
+    `Gear.counts_as` is already how a creature says a thing in hand is also
+    something else, and `Cast.wielding` has consulted it for a printed
+    Requirement all along. What it was not consulted by was
+    `query.holding`, which is the path the wand question takes -- so the
+    writer existed, the field existed, and `#1276` added the reader. One
+    reader for one question, and the same change finishes
+    `cf:fighter-knight-f4`'s notional shield from the other side.
+
     The enchantment half is out of scope the way every `Level 11:` line is.
     """
     if _a_blade_in_one_hand(c):
         c.as_implement(on=c.me)
+        # `WAND.ref`, not the printed word: `chargen` mints the eight
+        # implements with invented refs and that ref is the only handle
+        # distinguishing a wand from a totem. Imported rather than spelled,
+        # so a rename cannot leave this matching nothing.
+        c.counts_as(WAND.ref, holding=_blade_group(c), on=c.me,
+                    until=When.ENCOUNTER)
 
 
 @power(

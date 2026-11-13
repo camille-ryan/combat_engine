@@ -177,7 +177,6 @@ def knight_bonus_feat(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    dropped=("Gear.counts_as(shield)",),
 )
 def knight_staff_shield(c: Cast) -> None:
     """A quarterstaff counts as a shield, and pays a shield bonus.
@@ -189,13 +188,30 @@ def knight_staff_shield(c: Cast) -> None:
     which matters: a knight that somehow also carries a shield gets one
     bonus and not two.
 
-    Dropped: *"you are considered to be wielding a shield for powers and
-    effects that require you to wield one."* `Gear.counts_as` exists and is
-    the right home -- it is how a creature says a thing in hand is also
-    something else -- but nothing reads it for the **shield** question;
-    every shield test in the tree asks `Gear.shield` directly. One symbol,
-    naming the field rather than the clause, because what is missing is a
-    reader and not a writer.
+    **The notional shield is `c.counts_as`, and the marker was right that
+    nothing read it -- for one prop only.** This carried
+    `Gear.counts_as(shield)` saying *"every shield test in the tree asks
+    `Gear.shield` directly"*. `Cast.wielding` is the reader and already had
+    a `counts_as` fallback; what it also had was
+    `if prop == "shield": return bool(gear.shield)` **above** it, so the
+    fallback was unreachable for exactly the prop a card most often waives.
+    `#1276` guards that return instead, and a real shield still
+    short-circuits.
+
+    **The clause is the requirement question and nothing wider**, which is
+    why fixing `wielding` is the whole of it: *"for powers and effects that
+    **require you to wield one**"*. `query.shield_bonus` still reads
+    `Gear.shield` and is untouched, so the staff satisfies the Requirement
+    without paying a shield's AC -- and writing `gear.shield = 1` instead
+    would have paid the bonus twice over, once through that reader and once
+    through the +1 below, which is this row's own separate sentence.
+
+    *"You gain a +1 shield bonus to AC and Reflex"* is two calls, because
+    AC and Reflex are separate keys and one `c.bonus` pays only one of them
+    -- the mistake `cf:barbarian-f0` records at the top of
+    `strikers_sb.py`. `kind="shield"` because the card prints the word,
+    which matters: a knight that somehow also carries a shield gets one
+    bonus and not two.
 
     The staff is read once when the trait arms, as every standing weapon
     gate in this tree is. `group` and not a property: a quarterstaff is the
@@ -205,6 +221,7 @@ def knight_staff_shield(c: Cast) -> None:
     weapon = gear.main if gear is not None else None
     if weapon is None or weapon.group != STAFF:
         return
+    c.counts_as("shield", holding=STAFF, on=c.me, until=When.ENCOUNTER)
     c.bonus(AC, 1, on=c.me, until=When.ENCOUNTER, kind="shield")
     c.bonus(REF, 1, on=c.me, until=When.ENCOUNTER, kind="shield")
 

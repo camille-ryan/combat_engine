@@ -79517,6 +79517,234 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def a_waiver_answers_the_question_that_asks_it(out: Result) -> None:
+    """`Gear.counts_as` had a writer and two unreachable readers.
+
+    Two rows printed *"X counts as Y for you"* and both carried a marker
+    naming a **field**:
+
+    * `cf:fighter-knight-f4` -- `Gear.counts_as(shield)`, for *"while you
+      are wielding a quarterstaff you are considered to be wielding a
+      shield for powers and effects that require you to wield one"*;
+    * `cf:wizard-bladesinger-f0` -- `Weapon.as_wand`, for *"the weapon also
+      counts as a wand for you"*.
+
+    The field existed, `Cast.counts_as` wrote it, and `Cast.wielding`
+    consulted it -- but each row's question took a path that did not:
+
+    * `Cast.wielding` opened with `if prop == "shield": return
+      bool(gear.shield)`, **above** its own `counts_as` fallback, so the
+      one prop a card most often waives could never reach it;
+    * the implement *kind* question is not asked of `wielding` at all. All
+      eight of `chargen`'s implements share `group="implement"` and differ
+      only by an invented ref, so "is this a wand" is
+      `query.holding(world, eid, WAND.ref)` -- which had no `counts_as`
+      branch.
+
+    So one facility, two readers, two rows. Six things asserted:
+
+    * a staff satisfies *"wielding a shield"* **after** the knight's trait
+      and not before;
+    * and pays **no** shield bonus, because `query.shield_bonus` reads
+      `Gear.shield` and is untouched -- setting that field instead would
+      have paid the knight's own printed +1 twice;
+    * a real shield still answers without any waiver, so the guard did not
+      cost the ordinary path;
+    * a blade answers the wand question after the bladesinger's trait and
+      not before;
+    * and does **not** answer for a totem -- the plant, since a waiver that
+      satisfied every implement kind would be worse than none;
+    * a creature with no waiver answers neither, which is the control for
+      both halves.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Weapon
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import holding, shield_bonus
+
+    # -- the knight's notional shield ------------------------------------
+    knight = "cf:fighter-knight-f4"
+    world, me, _ = _board(knight, 1)
+    gear = world.need(me, Gear)
+    gear.shield = 0
+    staff = Weapon(ref="w:drivers-staff", damage="1d8", proficiency=2,
+                   group="staff")
+    gear.weapons = [staff]
+    gear.stowed = set()
+    c = Cast(world=world, me=me, ref="drivers:waiver")
+
+    out.that(not c.wielding("shield"),
+             "a knight holding a staff and no shield does not satisfy"
+             " *'wielding a shield'* before its trait runs")
+    before_bonus = shield_bonus(world, me)
+    use(world, me, knight, spend=False)
+    out.that(c.wielding("shield"),
+             "and does after it -- which `Cast.wielding`'s early return on"
+             " `prop == 'shield'` made unreachable")
+    out.that(shield_bonus(world, me) == before_bonus,
+             f"while `query.shield_bonus` is unmoved ({before_bonus}), so"
+             " the staff satisfies the Requirement without paying a"
+             " shield's AC -- the row's own +1 is a separate sentence",
+             f"{shield_bonus(world, me)}")
+
+    # The ordinary path: a real shield, no waiver.
+    plain, me2, _ = _board(knight, 2)
+    world2 = plain
+    gear2 = world2.need(me2, Gear)
+    gear2.shield = 1
+    gear2.counts_as.clear()
+    out.that(Cast(world=world2, me=me2, ref="drivers:waiver").wielding("shield"),
+             "a creature carrying a real shield still answers with no"
+             " waiver at all, so the guard cost the ordinary path nothing")
+
+    # -- the bladesinger's wand ------------------------------------------
+    singer = "cf:wizard-bladesinger-f0"
+    third, me3, _ = _board(singer, 1)
+    gear3 = third.need(me3, Gear)
+    gear3.shield = 0
+    blade = Weapon(ref="w:drivers-blade", damage="1d8", proficiency=3,
+                   group="light blade")
+    gear3.weapons = [blade]
+    gear3.stowed = set()
+    wand, totem = chargen.WAND.ref, chargen.TOTEM.ref
+
+    out.that(not holding(third, me3, wand),
+             "a bladesinger's blade does not answer the wand question"
+             " before its trait runs")
+    use(third, me3, singer, spend=False)
+    held = [w.ref for w in holding(third, me3, wand)]
+    out.that(blade.ref in held,
+             f"and does after it ({held}) -- the reader `query.holding`"
+             " lacked")
+    out.that(not holding(third, me3, totem),
+             "PLANT: and does **not** answer for a totem, so the waiver is"
+             " the one implement kind the card names and not every one",
+             f"{[w.ref for w in holding(third, me3, totem)]}")
+
+    # The control for both halves on one creature.
+    bare, me4, _ = _board("cf:fighter-knight-f0", 1)
+    gear4 = bare.need(me4, Gear)
+    gear4.shield = 0
+    gear4.counts_as.clear()
+    gear4.weapons = [Weapon(ref="w:drivers-club", damage="1d6",
+                            proficiency=2, group="mace")]
+    gear4.stowed = set()
+    out.that(not Cast(world=bare, me=me4,
+                      ref="drivers:waiver").wielding("shield")
+             and not holding(bare, me4, wand),
+             "and a creature with no waiver answers neither question")
+
+
+def a_chosen_option_opens_its_printed_weapons(out: Result) -> None:
+    """`cf:assassin-executioner-f2s2`: *"you have proficiency with <a
+    superior light blade> and the `w3750`."*
+
+    The row carried `chargen.proficiency(w3750)`, and the reader has
+    existed the whole time: `Power.proficiency` is read by
+    `chargen.proficiency`, whose output feeds `outfit` -- the weapon
+    reaches the hand or the belt -- and `Gear.trained`, which
+    `Cast._trained_with` reads to award the bonus. So the **header is the
+    grant**, and `cf:rogue-scoundrel-f1s3` has been declaring exactly this
+    for a class-feature sub-option since `#718`.
+
+    **What was missing was one of three lists, which is `#718` again one
+    list over.** That issue fixed `powers` being unread; this one is
+    `took_options`. A `BUILD_OPTIONS` option never lands in `powers` -- it
+    lands as `option:{parent}:{value}` -- so the header was as unreachable
+    as the scoundrel's was, for the same reason: a list the reader never
+    saw.
+
+    Five things asserted:
+
+    * the header carries both refs;
+    * `chargen.proficiency` reads them off the option ref;
+    * the **other two guilds** open neither, so the permission follows the
+      printed choice rather than the chassis -- the plant;
+    * the `option:` key cuts back to the ref with `rindex(":cf:")`, and
+      **not** with `rsplit(":", 1)`, which is the trap this file records
+      four times;
+    * and neither weapon is inside the assassin's printed bands, so both
+      are real permissions rather than a restatement of what the class
+      already allows.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY
+
+    third = "cf:assassin-executioner-f2s2"
+    fork = "cf:assassin-executioner-f2"
+    opens = ("w3632", "w3750")
+
+    out.that(tuple(REGISTRY[third].proficiency) == opens,
+             f"the third guild's header opens {opens}",
+             f"{REGISTRY[third].proficiency}")
+    got = tuple(w.ref for w in chargen.proficiency([third]))
+    out.that(got == opens,
+             f"and `chargen.proficiency` reads both off the option ref"
+             f" ({got})")
+
+    # PLANT: the other two guilds must open neither, or the permission is
+    # the chassis's rather than the printed choice's.
+    for other in ("cf:assassin-executioner-f2s0",
+                  "cf:assassin-executioner-f2s1"):
+        theirs = {w.ref for w in chargen.proficiency([other])}
+        out.that(not (theirs & set(opens)),
+                 f"PLANT: `{other}` opens neither of them"
+                 f" ({sorted(theirs)})")
+
+    # **The cut, on both key shapes**, because an option's value is a
+    # `cf:` ref on some forks and a power or an item on others -- and the
+    # two want different cuts. `chargen.option_value` looks the parent up
+    # in `BUILD_OPTIONS` instead of splitting, which cannot be wrong for
+    # either.
+    pairs = (
+        (f"option:{fork}:{third}", third),
+        ("option:cf:assassin-executioner-f3:i1483", "i1483"),
+        ("option:cf:wizard-bladesinger-f5:p14286", "p14286"),
+        ("chose:w:orb", ""),
+    )
+    wrong = [(k, chargen.option_value(k), want)
+             for k, want in pairs if chargen.option_value(k) != want]
+    out.that(not wrong,
+             "`chargen.option_value` reads the value half of every key"
+             " shape the dealer makes, and answers empty for a key that is"
+             " not an option", f"{wrong}")
+    key = f"option:{fork}:{third}"
+    out.that(key.rsplit(":", 1)[-1] != third
+             and key[key.rindex(":cf:") + 1:] == third,
+             "the two cuts this file has used are each wrong on one shape:"
+             f" `rsplit` gives {key.rsplit(':', 1)[-1]!r} here, and"
+             " `rindex(':cf:')` returns an item-valued key unchanged")
+
+    seed = next(s for s in range(1, 12)
+                if chargen.deal_build_options(Random(s), fork) == (third,))
+    out.that(chargen.deal_build_options(Random(seed), fork) == (third,),
+             f"seed {seed} is a draw that takes the third guild")
+
+    # **No end-to-end assertion through `audit.board`, deliberately.**
+    # Measured: the board puts **all three** guild rows into `powers`, so a
+    # boarded executioner reads the third guild's header whichever guild it
+    # chose -- every seed came out trained in both weapons, including the
+    # ones that chose another guild. An assertion there would pass for the
+    # wrong reason, which is worse than none. `chargen.proficiency` above
+    # is the reader, and the plant is the other two guilds opening nothing.
+
+    # **Neither weapon is inside what the class already allows**, or the
+    # clause would be a restatement rather than a permission. Asked of the
+    # dealer: a plain executioner that chose a different guild must not be
+    # trained in either, which is the same question the plant above asks
+    # of the reader and this asks of the whole pass.
+    plain = {w.ref for w in chargen.proficiency(
+        ["cf:assassin-executioner-f2", "cf:assassin-executioner-f0"])}
+    out.that(not (plain & set(opens)),
+             "the chassis itself opens neither, so both are the option's"
+             f" doing ({sorted(plain)})")
+
+
 def a_witch_confers_with_its_familiar_on_a_rest(out: Result) -> None:
     """`cf:wizard-witch-f3`: a prepared power swapped at an extended rest.
 
@@ -80638,6 +80866,16 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "counts_as_reader": (
+        a_waiver_answers_the_question_that_asks_it,
+        "a staff satisfies the shield Requirement and a blade answers the"
+        " wand question, each without paying anything (#1276)",
+    ),
+    "guild_weapons": (
+        a_chosen_option_opens_its_printed_weapons,
+        "a chosen BUILD_OPTIONS option's proficiency= reaches the dealer"
+        " (#1276)",
     ),
     "witch_confer": (
         a_witch_confers_with_its_familiar_on_a_rest,

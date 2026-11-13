@@ -5001,6 +5001,41 @@ def deal_build_option(rng: Random | None, ref: str) -> str:
     return deal_build_options(rng, ref)[0]
 
 
+def option_value(key: str) -> str:
+    """The value half of an `option:{parent}:{value}` key, or `""`.
+
+    **Both halves carry their own colons**, which is why this is a lookup
+    against `BUILD_OPTIONS` rather than a split. `rsplit(":", 1)` is the
+    trap this file has recorded four times -- on a `cf:` value it yields
+    `wizard-witch-f1s1`, matching no ref. `rindex(":cf:") + 1` is the fix
+    for that case and is wrong for the **other** kind: an option's value is
+    often a power or an item, so
+    `option:cf:assassin-executioner-f3:i1483` has one `:cf:` and that cut
+    returns the whole thing unchanged.
+
+    Both were live. The `rindex` form was written into the proficiency
+    pass and produced `cf:assassin-executioner-f3:i1483` as a ref --
+    harmless, because it matches nothing, and exactly the shape that stays
+    harmless until the day it collides with something real.
+
+    So the parent is found by asking which `BUILD_OPTIONS` ref the key
+    actually names, which cannot be wrong for either kind, and an
+    unrecognised key answers `""` rather than a guess.
+
+    `_trained_skills` carries the `rindex` form still. It is sound there
+    for a narrower reason -- `FEATURE_TRAINS.get()` on a malformed ref
+    answers `None` -- and moving it is a separate change to a function
+    with its own fixtures.
+    """
+    body = key.removeprefix("option:")
+    if body == key:
+        return ""
+    for parent in BUILD_OPTIONS:
+        if body.startswith(parent + ":"):
+            return body[len(parent) + 1:]
+    return ""
+
+
 def deal_build_options(rng: Random | None, ref: str, leg: str = "", *,
                        extra: int = 0) -> tuple[str, ...]:
     """Every option this character took for `ref`, which is usually one.
@@ -7058,8 +7093,20 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # added it to the hand afterwards, and an executioner that chose
     # light-shield proficiency came out with no shield and no shield
     # training on four seeds of four.
+    # **And a chosen OPTION does too, which is the third list this pass
+    # was missing.** A `BUILD_OPTIONS` option never lands in `powers`: it
+    # lands in `took_options` as `option:{parent}:{value}`, so
+    # `cf:assassin-executioner-f2s2`'s `proficiency=("w3632", "w3750")`
+    # was as unreachable as `cf:rogue-scoundrel-f1s3`'s was before `#718`
+    # -- and for the same reason, a list the reader never saw.
+    #
+    # Cut at the **last** `:cf:`, which is what `_trained_skills` does a
+    # hundred lines below and for the reason stated there: both halves of
+    # an `option:` key carry their own colons, so `rsplit(":", 1)` yields
+    # a tail that matches no ref and grants nothing.
+    from_options = [v for v in map(option_value, took_options) if v]
     from_feats = proficiency([*feats, *waived])
-    from_race = proficiency([*racial, *powers])
+    from_race = proficiency([*racial, *powers, *from_options])
     belt = outfit(
         carried,
         [*from_feats, *from_race],

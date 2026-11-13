@@ -399,11 +399,32 @@ def holding(world: World, eid: int, what: str = "") -> list[Any]:
         # was false for every creature in the game and the docstring
         # rationalised it as a chargen limitation.
         named = what.replace(" ", "-")
-        return [
+        printed = [
             w for w in out
             if what in w.properties or w.group == what or w.category == what
             or w.slug == named or w.ref == what
         ]
+        if printed:
+            return printed
+        # **A waiver counts here too, and `#1276` is why.** `Gear.counts_as`
+        # is how a creature says a thing in hand is also something else, and
+        # `Cast.wielding` has consulted it for a printed Requirement all
+        # along -- but the **implement kind** question is asked here, by
+        # ref, because all eight implements share `group="implement"` and
+        # differ only by `chargen`'s invented ref. So
+        # `cf:wizard-bladesinger-f0`'s *"the weapon also counts as a wand
+        # for you"* had a writer and no reader on this path.
+        #
+        # Asked only when the printed test found nothing, so a character
+        # with no waiver takes exactly the list it always did -- the same
+        # ordering `Cast.wielding` uses and for the same reason.
+        from .cast import _weapon_is
+
+        if any(satisfies == what and _weapon_is(w, holding)
+               for w in out
+               for holding, satisfies in gear.counts_as):
+            return out
+        return printed
     return out
 
 

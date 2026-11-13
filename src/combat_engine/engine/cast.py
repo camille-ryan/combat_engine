@@ -3584,13 +3584,26 @@ class Cast:
         gear = self.world.get(self.me, Gear)
         if gear is None:
             return False
-        if prop == "shield":
+        if prop == "shield" and gear.shield:
             # **A count, not a flag.** `Gear.shield` is 0/1/2 -- none, light,
             # heavy -- because the number *is* the printed AC and Reflex
             # bonus. Returned bare it made this `-> bool` hand back an int,
             # and seven content copies of the same helper repeat the mistake
             # one for one. #618.
-            return bool(gear.shield)
+            #
+            # **Guarded rather than returned outright, which is `#1276`.**
+            # This was `return bool(gear.shield)`, so the `counts_as`
+            # fallback at the bottom of this method was unreachable for the
+            # one prop a card most often waives -- a
+            # `("staff", "shield")` pair could be laid and nothing would
+            # ever read it. `cf:fighter-knight-f4` prints exactly that:
+            # *"you are considered to be wielding a shield for powers and
+            # effects that require you to wield one"*, which is this
+            # method's question and no other.
+            #
+            # A real shield still short-circuits, so a character with one
+            # takes the path it always did.
+            return True
         if prop in ("two-weapon", "two melee weapons"):
             return gear.two_weapon
         # **Every weapon in hand, not just `Gear.main`.** A printed
@@ -3619,6 +3632,14 @@ class Cast:
         # for. Checked after the printed test rather than folded into it,
         # so a character with no waiver takes exactly the path it always
         # did.
+        #
+        # **This is deliberately the requirement question and not the
+        # bonus.** `query.shield_bonus` reads `Gear.shield` and is
+        # untouched, so a notional shield satisfies *"you must be wielding
+        # a shield"* without paying a shield's AC -- which is what
+        # `cf:fighter-knight-f4` prints, its own +1 being a separate
+        # sentence it writes itself. Setting `gear.shield = 1` instead
+        # would have paid that bonus twice.
         return any(
             satisfies == prop and _weapon_is(weapon, holding)
             for weapon in arms

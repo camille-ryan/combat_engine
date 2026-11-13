@@ -611,7 +611,7 @@ def fighter_talent_battlerager(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
     requires=on_leg("brawling"),
     requires_text=_NOT_MY_OPTION,
-    dropped=("c.off_hand()", "c.on_grab_attack()"),
+    dropped=("Attack.ctx(unarmed)", "c.on_forced_move_attack()"),
 )
 def fighter_talent_brawling(c: Cast) -> None:
     """The talent that keeps one hand empty for grabbing people.
@@ -623,13 +623,34 @@ def fighter_talent_brawling(c: Cast) -> None:
     context** (#501), so "the attack rolls of grab attacks" is an ordinary
     gate; the card prints no type word, so untyped.
 
-    Two of the three attack bonuses are still dropped and the symbols say
-    why. `c.off_hand()` is the standing request for "the attack was made
-    with the empty hand", which is what the unarmed bonus needs and which no
-    attack context carries. `c.on_grab_attack()` now names only the other
-    half -- an attack to *move* a creature already held, which is a
-    manoeuvre with no `as_` of its own, the same hold `m4388a3` waits on.
-    Laid without it, that one would pay on every attack roll instead.
+    Two of the three attack bonuses are still dropped, and **both symbols
+    were re-pointed because each named a facility that exists**:
+
+    * This carried `c.off_hand()`, saying off-hand-ness is *"what no attack
+      context carries"*. It has carried `"hand"` since `#501` -- the
+      worked gate is `swung_off_hand(ctx)` twenty lines below, testing
+      `ctx.get("hand") != "off"`. But `ctx["hand"]` means **which of two
+      held weapons swung**, and this trait requires the off hand to be
+      *empty*, so `Gear.off` is `None` and no swing is ever stamped
+      `"off"`. What the clause needs is *"this swing was unarmed"*, and the
+      attack context has no weapon and no group in it at all -- hence
+      `Attack.ctx(unarmed)`.
+
+      `f3784` prints the same sentence and gates it with
+      `_holding(c, "unarmed")`, which asks whether an unarmed-**group**
+      weapon is in hand; `chargen.UNARMED` is attached to nobody, so a
+      fighter with a sword and a free hand fails that test. And
+      `c.as_weapon(group="unarmed")` is a trap here: an added melee weapon
+      makes `Gear.off` the fist and `Gear.two_weapon` true, which breaks
+      this row's own *"off hand is free"* requirement and `-f3s4`'s gate.
+
+    * `c.on_grab_attack()` named a hold that `c.grab_attempt` already
+      provides -- it rolls with `as_="grab"` and `resolve` stamps it, which
+      is why the grab bonus above is written. What is left is the other
+      half of the printed sentence, *"attacks to move a creature you're
+      grabbing"*, a manoeuvre with no `as_` of its own and the same hold
+      `m4388a3` waits on. Laid without one it would pay on every attack
+      roll instead.
 
     The Requirement is read once, when the trait is armed, so a fighter who
     puts a second weapon in hand mid-fight keeps the bonus. That is the same

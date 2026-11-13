@@ -354,7 +354,7 @@ def monk_tradition_stone(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PSIONIC,
-    todo=("spec.weapon_ref()",),
+    todo=("Weapon.natural", "Gear.implement(reaches_natural)"),
 )
 def monk_unarmed_strike(c: Cast) -> None:
     """The feature is a weapon, and a weapon is not something a body can
@@ -402,8 +402,23 @@ def monk_unarmed_strike(c: Cast) -> None:
 
     So the marker is right that this is *"a weapon, and a weapon is not
     something a body can make"*, and wrong about which facts are missing.
-    Narrowed rather than written, because both remaining halves are weapon
-    **fields** and so wait on the ETL batch. #1229.
+    `spec.weapon_ref()` is gone: the spec **does** name `w3678` by ref, and
+    it names `i1775` too, both read straight out of `game.db`. The two
+    symbols now are the two remaining halves, and both are weapon
+    **fields**, so they wait on the ETL batch. #1229.
+
+    **`todo=` overstates this row and `dropped=` is refused, which is a
+    gap in the marker vocabulary rather than a fact about the monk.**
+    Every printed fact here is already true of a dealt monk --
+    `chargen.CLASSES["monk"].weapons` carries the loaded `w3678` and a
+    spawned monk has it in `Gear.main` -- so the feature plays and `todo=`'s
+    *"refused in play"* is not what is true. But `dropped=` requires a body
+    that does something, and there is nothing for one to do: the whole
+    clause is data. `lint.py` is right to hold that line in general (a
+    bodyless `dropped=` row is the commonest way a gap gets counted as
+    working), and this row is the case it does not fit. Filed rather than
+    worked around; `cf:assassin-executioner-f3` is the same shape with
+    nothing left over, and it carries no marker at all.
     """
 
 

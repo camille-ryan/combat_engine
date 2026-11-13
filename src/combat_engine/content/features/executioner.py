@@ -218,7 +218,8 @@ def executioner_guild(c: Cast) -> None:
     c.grant_row(guild, on=c.me, until=When.ENCOUNTER)
 
 
-def _guild(ref: str, extra: str = "") -> Any:
+def _guild(ref: str, extra: tuple[str, ...] = (),
+           opens: tuple[str, ...] = ()) -> Any:
     """One guild: three powers kept and the other six taken away.
 
     The one helper the global rule allows, for a run of rows that share a
@@ -237,6 +238,14 @@ def _guild(ref: str, extra: str = "") -> Any:
     `c.forbid` follows `c.target` and a trait has none, so `on=c.me` is
     required -- the commonest single mistake in this tree and one
     `cf:barbarian-f1` records in a comment of its own.
+
+    **`opens` is a `proficiency=` header, not body code**, which is the
+    rule for a printed *"you have proficiency with X"*: `Power.proficiency`
+    is read by `chargen.proficiency`, whose output feeds `outfit` -- the
+    weapon reaches the hand or the belt -- and `Gear.trained`, which is
+    what `Cast._trained_with` reads to award the bonus. So the header *is*
+    the grant, and `cf:rogue-scoundrel-f1s3` has been declaring the same
+    thing for a class-feature sub-option.
     """
 
     @power(
@@ -248,7 +257,8 @@ def _guild(ref: str, extra: str = "") -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.SHADOW],
-        dropped=(extra,) if extra else (),
+        proficiency=opens,
+        dropped=extra,
     )
     def row(c: Cast) -> None:
         me = c.me
@@ -268,15 +278,46 @@ def _guild(ref: str, extra: str = "") -> Any:
         "assassin row that `loadout` has already dealt -- so the six "
         "`c.forbid` calls are what the printed choice is worth. The helper "
         "above has the argument."
-        + (f"\n\nDropped: `{extra}`." if extra else "")
+        + (f"\n\nDropped: {', '.join(f'`{e}`' for e in extra)}."
+           if extra else "")
     )
     return row
 
 
 executioner_guild_0 = _guild("cf:assassin-executioner-f2s0")
 executioner_guild_1 = _guild("cf:assassin-executioner-f2s1")
+#: **The third guild opens two superior weapons**, and the marker on this
+#: row said the dealer could not say so. `chargen.proficiency` has read
+#: `Power.proficiency` since before the row was written -- what it did not
+#: read was a chosen **option**, which never lands in `powers`. That is the
+#: `#718` fault one list over, and it is fixed in `chargen` rather than
+#: here.
+#:
+#: Neither weapon is covered by the assassin's printed bands (`military:
+#: light blade`, `military: heavy blade`, `simple: ranged`, `simple:
+#: one-handed melee`), so both are real permissions: `w3632` is the
+#: one-handed superior light blade the spec names in words, and `w3750` the
+#: `hands="double"` superior flail it names by ref.
 executioner_guild_2 = _guild(
-    "cf:assassin-executioner-f2s2", "chargen.proficiency(w3750)")
+    "cf:assassin-executioner-f2s2",
+    # **Two clauses left and two symbols**, because they are two gaps and a
+    # shared one would report both ready the day either landed. Neither is
+    # the proficiency the old marker named:
+    #
+    # * *"your `cf:ranger-scout-f0` class feature also applies to `w3750`
+    #   and <the blade>"* -- that feature is `c.rolls_with("mba",
+    #   Ability.DEX)`, which already covers any melee basic attack, so what
+    #   the sentence adds is a **ranged** basic attack with a thrown blade.
+    #   `c.rolls_with` keys on `"mba"` and `"rba"` separately and nothing
+    #   narrows either by weapon.
+    # * *"your assassin poisons that can be applied to ammunition can also
+    #   be applied to <the blade>"* -- `chargen.POISON_VIALS` deals the
+    #   vials and nothing records which weapon a vial may be put on.
+    #
+    # Both are conditional on a multiclass character actually holding the
+    # scout's feature, which an executioner does not by default.
+    ("c.rolls_with(rba, weapon=)", "chargen.poison_on_weapon()"),
+    opens=("w3632", "w3750"))
 
 
 @power(
