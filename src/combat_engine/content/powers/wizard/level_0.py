@@ -40,6 +40,7 @@ from combat_engine.engine import (
     Gear,
     Hit,
     Keyword,
+    Miss,
     MoveEnd,
     Ranged,
     Trigger,
@@ -74,8 +75,63 @@ def _bladespell(world: World, me: int, ev: Hit) -> bool:
     )
 
 
+def _bladespell_missed(world: World, me: int, ev: Miss) -> bool:
+    """The same swing, missed, for a bladesinger holding `-f16`.
+
+    *"When you make a melee basic attack while your `p14285` is active, you
+    can use a bladespell power even if the attack misses."* --
+    `cf:wizard-bladesinger-f16`, which carried `triggers.widen(Miss)` on
+    the reading that *"a `requires=` cannot add an event to a trigger that
+    is already declared"*.
+
+    Nothing has to. `Power.triggers` is a **tuple** and `power(on=)` takes
+    a `Sequence[Trigger]`, so a row answers whichever of its printed
+    triggers happened -- `Triggers._answers` is explicit that it is *"any
+    of them"*. And `Trigger.when` is per-responder by construction, so the
+    second arm can be gated on the responder holding the feature without
+    affecting any other bladesinger.
+
+    So this is `#550`'s arrangement -- the clause lives in the rows it
+    governs, gated on `c.feat`'s question -- and `-f16` stays declared as
+    the pointer, which is what that convention says a feature-side row
+    does.
+
+    **Two gates beyond `_bladespell`'s**, both printed: the feature, and
+    `p14285` standing. Without the second a bladesinger would get the
+    miss arm all the time, where the card says *"while your `p14285` is
+    active"*.
+    """
+    from combat_engine.engine.components import Powers as _Powers
+
+    known = world.get(me, _Powers)
+    if known is None or "cf:wizard-bladesinger-f16" not in known.all:
+        return False
+    # `p14285` lays a bare hold labelled with its own ref precisely so
+    # *"while your `p14285` is active"* is askable -- its docstring says
+    # so, naming this row as one of three readers. Spelled out here rather
+    # than through `c.lingers_label` because a trigger predicate is handed
+    # `(world, me, ev)` and has no `Cast`.
+    if not any(e.label == "p14285" for e in world.effects.of(me)):
+        return False
+    return (
+        ev.attacker == me
+        and ev.power == MELEE
+        and world.turn == me
+        and _sword_hand(world, me)
+    )
+
+
 BLADESPELL = Trigger(
     Hit, _bladespell, "you hit an enemy with a one-handed melee basic attack"
+)
+
+#: The second arm `cf:wizard-bladesinger-f16` adds, carried by all six
+#: bladespells beside `BLADESPELL`. Declared here rather than in the
+#: feature because a trigger is header data on the row that owns it.
+BLADESPELL_MISSED = Trigger(
+    Miss, _bladespell_missed,
+    "you miss with a one-handed melee basic attack and hold"
+    " cf:wizard-bladesinger-f16",
 )
 
 
@@ -307,7 +363,7 @@ def p14285(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
-    on=BLADESPELL,
+    on=(BLADESPELL, BLADESPELL_MISSED),
 )
 def p14286(c: Cast) -> None:
     """`c.flat`, not `c.damage`: the card prints a bare ability modifier as
@@ -328,7 +384,7 @@ def p14286(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.RADIANT, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
-    on=BLADESPELL,
+    on=(BLADESPELL, BLADESPELL_MISSED),
 )
 def p14287(c: Cast) -> None:
     """`c.flat` for the same reason as `p14286`: a bare printed modifier on
@@ -347,7 +403,7 @@ def p14287(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
-    on=BLADESPELL,
+    on=(BLADESPELL, BLADESPELL_MISSED),
 )
 def p14288(c: Cast) -> None:
     """`c.flat` for the same reason as `p14286`: a bare printed modifier on
@@ -366,7 +422,7 @@ def p14288(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.LIGHTNING, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
-    on=BLADESPELL,
+    on=(BLADESPELL, BLADESPELL_MISSED),
 )
 def p14289(c: Cast) -> None:
     """The second jolt is the same number again, so it is the amount dealt
@@ -397,7 +453,7 @@ def p14289(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.NECROTIC, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
-    on=BLADESPELL,
+    on=(BLADESPELL, BLADESPELL_MISSED),
 )
 def p14290(c: Cast) -> None:
     """`c.flat` for the same reason as `p14286`: a bare printed modifier on
@@ -418,7 +474,7 @@ def p14290(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.FORCE, Keyword.BLADESPELL],
     trigger="you hit an enemy with a one-handed melee basic attack on your turn",
-    on=BLADESPELL,
+    on=(BLADESPELL, BLADESPELL_MISSED),
 )
 def p14291(c: Cast) -> None:
     """`c.flat` for the same reason as `p14286`: a bare printed modifier on

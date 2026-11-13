@@ -656,6 +656,19 @@ KNOWN_SILENT = {
     "cf:wizard-bladesinger-f5": "grants the bladespells its own fork dealt;"
                                 " the board hands the row under test every"
                                 " option, so all six are already held",
+    # **A trigger-arm pointer, which has no body by design.** `-f16` widens
+    # the bladespells' printed trigger to a miss, and a trigger is header
+    # data on the row that owns it -- so the work is six
+    # `on=(BLADESPELL, BLADESPELL_MISSED)` headers plus
+    # `_bladespell_missed`, which asks about this ref. `implemented_in=`
+    # cannot say that: `lint.py` requires the named row's *body* to ask
+    # `c.feat`, and here the reader is the predicate beside it. #553 is why
+    # that guard exists and it is right; this is the case it does not fit.
+    # `drivers.miss_bladespell` proves both arms and plants the gate.
+    "cf:wizard-bladesinger-f16": "widens the six bladespells' trigger to a"
+                                 " miss; a trigger is header data, so the"
+                                 " work is in their headers and this row is"
+                                 " the pointer",
     "cf:fighter-knight-f10": "adds a pick to another row's fork; the pick is"
                              " chargen's and this row has no body",
     "cf:fighter-slayer-f6": "adds a pick to another row's fork; the pick is"

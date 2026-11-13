@@ -47,7 +47,7 @@ from combat_engine.engine import (
     get,
     power,
 )
-from combat_engine.engine.events import Hit, PowerResolved
+from combat_engine.engine.events import Hit, PowerResolved, PowerUsed
 
 #: The row `-f4` grants, whose bare hold two rows below read.
 SONG = "p14285"
@@ -577,29 +577,47 @@ def bladesinger_riposte(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("triggers.widen(Miss)",),
 )
 def bladesinger_unerring(c: Cast) -> None:
     """"When you make a melee basic attack while your p14285 is active, you
     can use a bladespell power even if the attack misses."
 
-    What this needs is a **trigger widened from outside the rows it
-    governs**. All six bladespells declare `on=BLADESPELL`, which is
-    `Trigger(Hit, _bladespell, ...)` -- keyed on `Hit`, because hitting is
-    what the printed bladespell asks for. This feature relaxes that to
-    hit-or-miss for one character, so neither of the two doors fits:
-    migrating the clause into the six bodies (`#550`'s arrangement) cannot
-    help, because the bodies never run on a miss; and a `requires=` cannot
-    add an event to a trigger that is already declared.
+    **Written into the six rows it governs, which is why this body is
+    empty.** It carried `triggers.widen(Miss)` on two claims, and both were
+    wrong in the same way:
 
-    `c.pre_empt`/`c.instead_of` is the documented exception for a feature
-    naming a *class* of powers, and this is one -- but those replace what a
-    power does, where this changes **when** it may be used.
+    * *"migrating the clause into the six bodies cannot help, because the
+      bodies never run on a miss"* -- true of the **bodies** and beside the
+      point, because what is migrated is a **trigger**, not a clause. A
+      row's triggers are header data, and `Power.triggers` is a tuple:
+      `power(on=)` takes a `Sequence[Trigger]` and `Triggers._answers`
+      says of itself that a row naming several *"answers whichever one
+      actually happened"*.
+    * *"a `requires=` cannot add an event to a trigger that is already
+      declared"* -- correct, and nothing needs to. `Trigger.when` is
+      per-responder by construction, so the second arm is simply **gated
+      on the responder** and no other bladesinger notices it.
 
-    So one symbol, and it names the facility rather than the row: a
-    declared `Trigger` that a standing effect can add an event arm to. The
-    `p14285` gate above is already written and proved, so the day that
-    lands this row is three lines.
+    So all six bladespells now declare `on=(BLADESPELL, BLADESPELL_MISSED)`
+    and `powers/wizard/level_0._bladespell_missed` holds the two printed
+    gates -- this feature, and `p14285` standing. `#550` says a
+    feature-side row stays declared as the pointer, and this is that.
+
+    **`implemented_in=` is deliberately NOT carried, and `lint.py` is what
+    settled it.** That pointer requires the named row's own source to ask
+    `c.feat("<this ref>")`, which is `#553`'s guard against a pointer with
+    no reader -- and here the reader is a **trigger predicate** beside the
+    rows rather than a line inside their bodies, so all six were reported
+    as pointers nothing held up. The reader is real; the marker is for a
+    body clause. So this row stays plainly declared and gets a
+    `KNOWN_SILENT` entry naming where the work lives, which is the honest
+    pair.
+
+    **The `p14285` gate is what keeps the arm honest.** Without it a
+    bladesinger holding this feature would get a bladespell off every
+    missed swing, where the card says *"while your `p14285` is active"* --
+    and `p14285`'s own docstring names this row as one of three readers of
+    the bare hold it lays for exactly that purpose.
     """
 
 
@@ -612,29 +630,67 @@ def bladesinger_unerring(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("c.widen_to_adjacent(per_day=)",),
 )
 def bladesinger_whirl(c: Cast) -> None:
     """"Once per day when you use a bladespell power against an adjacent
     enemy, you can use that power against each adjacent enemy."
 
-    A target widening with a daily hold, and neither half has a writer.
-    The widening is not `c.aura` or a burst: the printed line keeps the
-    power's own effect and repeats it per adjacent enemy, which is a
-    different thing from a power that happens to hit several -- a
-    bladespell's Effect lines fire once per target and some of them are
-    about the triggering enemy specifically.
+    **Both halves had writers, and the daily one is where the marker went
+    wrong.** It said *"`Powers.per_day` counts per ref and this hold is not
+    a power's"*. `c.spend_per_day(ref, limit)` takes **any string key**,
+    not a power's ref -- three unrelated rows already key one on a shared
+    label -- and `story._wear` mirrors `Powers.per_day` to `Sheet.per_day`
+    with a comment naming exactly this case: *"a `per_day` count is keyed
+    on the row that **grants** the allowance, which for a class feature is
+    not in `powers.known` at all"*. So this row's own ref is the key, and
+    `drivers.long_rest` already proves the day boundary.
 
-    `c.once_per_board` is the wrong clock: *"once per day"* spans the
-    encounters between extended rests and that verb keys on the `World`,
-    which is one fight. `Powers.per_day` counts per ref and this hold is
-    not a power's.
+    The row was right that `c.once_per_board` is the wrong clock -- that
+    verb keys on the `World`, which is one fight, where *"once per day"*
+    spans the fights between extended rests.
 
-    One symbol for both, because they are one printed sentence and a row
-    that paid the widening without the limit would give a bladesinger the
-    effect every round -- strictly stronger than print, which is the wrong
-    direction to land half of.
+    **The widening is `c.use_power` per enemy, and the row was right about
+    why a burst is not it.** The printed line repeats the power, and
+    `c.use_power`'s body runs once per target the same way an ordinary use
+    does -- so a bladespell's Effect lines that are about the triggering
+    enemy specifically stay about whichever enemy they are aimed at.
+    `c.add_target` is the near miss and answers a different question: it
+    edits the target list of a use this row is nested inside, which would
+    make the extra enemies targets of **one** use rather than the repeated
+    uses the card asks for.
+
+    **The daily spend doubles as the recursion guard**, which is the one
+    thing to see before reading this as fragile: `c.use_power` emits
+    `PowerUsed`, so the watch re-enters -- and the re-entered call gets
+    `False` from `c.spend_per_day` and stops. The spend therefore happens
+    **before** the loop, not inside it.
+
+    *"You can"*, so `c.may` carries the offer: the widening costs the day's
+    one use, which is something to weigh.
     """
+    me = c.me
+
+    def whirl(ev: PowerUsed) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        row = get(getattr(ev, "power", "") or "")
+        if row is None or Keyword.BLADESPELL not in (row.keywords or ()):
+            return
+        aimed = list(getattr(ev, "targets", ()) or ())
+        near = c.within(1, of=me, side="enemy")
+        if not any(v in near for v in aimed):
+            return
+        others = [v for v in near if v not in aimed]
+        if not others:
+            return
+        if not c.may(f"{c.ref}: spend the day's whirl on {len(others)} more"):
+            return
+        if not c.spend_per_day(c.ref, 1):
+            return
+        for victim in others:
+            c.use_power(ev.power, on=victim, spend=False)
+
+    c.watch(PowerUsed, whirl, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # -- the twelve spellbook rows -----------------------------------------------

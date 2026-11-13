@@ -30,6 +30,7 @@ from combat_engine.engine import (
     Gear,
     Keyword,
     Trigger,
+    Usage,
     When,
     World,
     by_me,
@@ -37,10 +38,11 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.cast import MANOEUVRE_GRANTED_ATTACK
-from combat_engine.engine.components import Companion, Weapon
+from combat_engine.engine.components import Companion, Powers, Weapon
 from combat_engine.engine.dsl import get, keywords_of
 from combat_engine.engine.events import (
     AttackDeclared,
+    ExtendedRested,
     Hit,
     Miss,
     PowerUsed,
@@ -1761,23 +1763,108 @@ def witch_cantrips(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("turns.extended_rest(swap=)",),
 )
 def witch_bonus_feat(c: Cast) -> None:
-    """*"You gain the `f738` feat as a bonus feat."* Granted; the rest is
-    clocked on a rest.
+    """*"You gain the `f738` feat as a bonus feat."* Granted, and the swap
+    is clocked on a rest.
 
     The feat is declared and unmarked, so this hands it over.
 
-    **The swap is dropped and the symbol is the moment, not a verb.**
-    *"At the end of each extended rest, when you confer with your familiar
-    you can replace one of your wizard daily attack powers or wizard
-    utility powers with another power of the same type"* needs an extended
-    rest that offers a choice. `events.ExtendedRested` exists, and what
-    does not is anything *swapping a known power* at it -- `power_swap` is
-    `chargen`'s and runs when the character is built, not between fights.
+    **Both halves of the swap were already built, and the marker said one
+    was not.** It carried `turns.extended_rest(swap=)` on the claim that
+    *"what does not [exist] is anything swapping a known power at it --
+    `power_swap` is `chargen`'s and runs when the character is built"*.
+    True of `chargen.power_swap`, and `c.prepare(ref, instead_of=)` is the
+    other verb: `Powers.prepare` moves a row out of the book into the
+    prepared list and puts the replaced one **back** into the book, and its
+    docstring says why that is the whole shape -- *"a swap is what every
+    printed line of this shape is: the slot count never changes"*.
+
+    `cf:paladin-blackguard-f18`'s own note already classified this row's
+    case as *"swaps a **prepared** power at a rest"*, which is that verb's
+    one job.
+
+    **A `c.watch`, not a declared trigger.** `events.ExtendedRested` and
+    `triggers.after_extended_rest` both exist and **no content row used
+    either** -- but declaring one here would break
+    `content/CLAUDE.md`'s rule that a row holds a printed trigger *or*
+    standing modifiers and not both: the body would then run only on the
+    rest, and the `f738` grant would never happen. So the grant stays at
+    arming and the swap is a watch.
+
+    The three printed conditions are read off the registry: *"another
+    `c9` power"* is the class, *"of the same type"* is daily-attack
+    against utility, and *"its level must be the same as the old
+    power's"*. The old row comes from `Powers.known` and the new from
+    `Powers.owned`, which is what those two lists are.
+
+    **A self-inverse clause is the one shape a double arming hides
+    completely**, and it is worth knowing before anybody adds a second
+    `arm_traits` anywhere near a rest. Two watches means the handler runs
+    twice, and the second swap puts the pair straight back -- so the row
+    reports nothing, changes nothing, and every piece of it is working.
+    Measured while writing `drivers.witch_confer`, which re-armed the row
+    and read "nothing moved". `turns.arm_traits` runs a trait once per
+    creature per encounter and `_rest_window` is a no-op while an
+    encounter is live, so production arms it once; the hazard is a harness.
+
+    **One honest limit, and it is not this row's.** The campaign's extended
+    rest is `story.Party.rest(extended=True)`, which runs with no board and
+    announces nothing, and `harvest` writes `sheet.spent`, `per_day` and
+    `vestiges_used` but never `sheet.powers` -- so a swap made on a board
+    does not survive into the next fight. That is the story engine's gap,
+    already filed, and it is why this clause plays where the event fires
+    rather than across a campaign.
 
     The 24th-level clause is epic and the tree stops at 10, which
     `ATTACK_GAINS` says of itself too, so it is not a gap.
     """
-    c.grant_row("f738", on=c.me, until=When.ENCOUNTER)
+    me = c.me
+    c.grant_row("f738", on=me, until=When.ENCOUNTER)
+
+    def confer(ev: ExtendedRested) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        known = c.world.get(me, Powers)
+        if known is None:
+            return
+
+        def swappable(ref: str) -> tuple[int, bool] | None:
+            """Its level and whether it is the attack type, or None."""
+            row = get(ref)
+            if row is None or row.cls != "wizard" or not row.level:
+                return None
+            attack = bool(row.is_attack)
+            if attack and row.usage is not Usage.DAILY:
+                return None
+            return row.level, attack
+
+        # **Only powers that have a counterpart are offered**, which is
+        # the printed condition read in the useful direction: *"the new
+        # power must have a level, and its level must be the same as the
+        # old power's"*, so an old power with nothing matching it in the
+        # book cannot be swapped at all.
+        #
+        # Offering all of them instead is what `drivers.witch_confer`
+        # caught. A headless `c.choose` takes the first option, which on a
+        # dealt witch is a 6th-level daily against a book holding one
+        # 1st-level daily and one 1st-level utility -- so the first choice
+        # was always a dead end and the clause swapped nothing, every
+        # time, while every piece of it worked.
+        book: dict[tuple[int, bool], list[str]] = {}
+        for ref in sorted(known.owned):
+            key = swappable(ref)
+            if key is not None:
+                book.setdefault(key, []).append(ref)
+        mine = [r for r in sorted(known.known)
+                if (k := swappable(r)) is not None and k in book]
+        old = c.choose(mine, f"{c.ref}: which power the familiar sets aside")
+        if old is None:
+            return
+        key = swappable(old)
+        new = c.choose(book[key] if key else [],
+                       f"{c.ref}: which power it confers instead")
+        if new is not None:
+            c.prepare(new, instead_of=old, on=me)
+
+    c.watch(ExtendedRested, confer, until=When.ENCOUNTER, on=me, label=c.ref)

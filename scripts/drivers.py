@@ -79517,6 +79517,288 @@ def a_trait_can_put_itself_on_the_action_menu(out: Result) -> None:
                  f"and `{ref}` is restored to `{was}`")
 
 
+def a_witch_confers_with_its_familiar_on_a_rest(out: Result) -> None:
+    """`cf:wizard-witch-f3`: a prepared power swapped at an extended rest.
+
+    The row carried `turns.extended_rest(swap=)` saying nothing *"swaps a
+    known power"* at a rest. `c.prepare(ref, instead_of=)` does -- and
+    `Powers.prepare`'s docstring states the shape the printed line wants:
+    the replaced row goes **back into the book**, so *"the slot count never
+    changes"*.
+
+    Five things asserted:
+
+    * the feat half still lands, so the clause that already worked did not
+      regress;
+    * `events.ExtendedRested` reaches the row at all -- it and
+      `triggers.after_extended_rest` both existed with **no content reader
+      at all** before this, which is this component's commonest failure
+      shape (`#498`: correct, observable, and reaching no row);
+    * the swap happens: the chosen power leaves the book and enters the
+      prepared list;
+    * the replaced one goes **back** into the book, so the slot count is
+      unchanged -- a swap that only added would be strictly stronger than
+      print;
+    * and a **short** rest does nothing, which is the printed *"extended"*
+      and the plant.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.turns import extended_rest, short_rest
+    from combat_engine.engine.types import Usage
+
+    ref = "cf:wizard-witch-f3"
+
+    def swappable(known: Powers, pool: list[str]) -> list[str]:
+        """The rows the printed line can move: a levelled wizard daily
+        attack or utility."""
+        out_: list[str] = []
+        for r in pool:
+            row = get(r)
+            if row is None or row.cls != "wizard" or not row.level:
+                continue
+            if row.is_attack and row.usage is not Usage.DAILY:
+                continue
+            out_.append(r)
+        return out_
+
+    # **Nothing is armed here: the board already did it.** Running the
+    # body again lays a *second* watch, and this clause is self-inverse --
+    # the second handler swapped the pair straight back, so the rule read
+    # "nothing moved" while every piece worked. `_offering_trait` records
+    # the same trap for a different row.
+    world, me, _ = _board(ref, 1)
+    known = world.need(me, Powers)
+    out.that("f738" in known.all,
+             "the bonus feat is granted, so the half that already worked"
+             " still does")
+
+    book = swappable(known, list(known.owned))
+    hand = swappable(known, list(known.known))
+    out.that(bool(book) and bool(hand),
+             f"the witch has something to swap: {len(hand)} prepared and"
+             f" {len(book)} in the book",
+             f"hand {hand}\n            book {book}")
+    if not book or not hand:
+        return
+    slots = len(known.known)
+
+    # A short rest first: the printed word is "extended".
+    short_rest(world)
+    out.that(swappable(known, list(known.known)) == hand,
+             "PLANT: a **short** rest swaps nothing -- the printed word is"
+             " *extended*", f"{swappable(known, list(known.known))}")
+
+    extended_rest(world)
+    now_hand = swappable(known, list(known.known))
+    now_book = swappable(known, list(known.owned))
+    moved = [r for r in now_hand if r not in hand]
+    back = [r for r in now_book if r not in book]
+    out.that(len(moved) == 1,
+             f"an extended rest moves exactly one power into the prepared"
+             f" list ({moved})")
+    out.that(len(back) == 1,
+             f"and puts exactly one back into the book ({back})")
+    out.that(len(known.known) == slots,
+             f"so the slot count is unchanged ({slots}) -- a swap, not a"
+             f" gain", f"{len(known.known)}")
+
+
+def a_whirl_repeats_a_bladespell_once_a_day(out: Result) -> None:
+    """`cf:wizard-bladesinger-f21`: *"Once per day when you use a bladespell
+    power against an adjacent enemy, you can use that power against each
+    adjacent enemy."*
+
+    The row carried `c.widen_to_adjacent(per_day=)` with two reasons, and
+    the daily one was false: *"`Powers.per_day` counts per ref and this
+    hold is not a power's"*. `c.spend_per_day` takes any string key, and
+    `story._wear`'s own comment names the class-feature case.
+
+    Four things asserted:
+
+    * the day's allowance starts whole and is **spent** by one whirl;
+    * the power is used again on the other adjacent enemies, and not on
+      the one already aimed at;
+    * a **second** whirl the same day does nothing -- the printed limit;
+    * and an enemy **not adjacent** is left out, which is the printed
+      reach.
+
+    **The recursion guard is the same spend, and that is worth asserting
+    rather than trusting.** `c.use_power` emits `PowerUsed`, so the watch
+    re-enters -- and the re-entered call is refused by `c.spend_per_day`.
+    If the spend ever moved inside the loop, each repeat would re-enter and
+    the rule's "used once per other enemy" count would blow up, so the
+    count is what catches it.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.query import enemies
+
+    ref = "cf:wizard-bladesinger-f21"
+    spell = "p14286"
+
+    world, me, _ = _board(ref, 1)
+    c = Cast(world=world, me=me, ref="drivers:whirl")
+    out.that(c.per_day_left(ref, 1) == 1,
+             "the day's one whirl is unspent to begin with")
+
+    foes = sorted(enemies(world, me))
+    out.that(len(foes) >= 3, f"the board fields at least three enemies"
+             f" ({len(foes)})")
+    if len(foes) < 3:
+        return
+    spot = world.need(me, Position).square
+    # Two adjacent, one far, so "each adjacent enemy" has both a member
+    # and a non-member to tell apart.
+    # **Every enemy is placed, not the first three.** Written that way
+    # first and the rule caught it: a fourth enemy the board happened to
+    # field adjacent made "one other adjacent enemy" into two, and the
+    # repeat count read 2 against an expected 1.
+    for i, foe in enumerate(foes):
+        where = ((spot[0] + (1 if i == 0 else -1), spot[1]) if i < 2
+                 else (spot[0] + 12 + i, spot[1]))
+        world.grid.lift(foe)
+        world.need(foe, Position).square = where
+        world.grid.place(foe, frozenset({where}))
+    far = foes[2]
+    world.zones.refresh()
+    for foe in foes:
+        world.need(foe, Health).hp = 500
+
+    aimed, other = foes[0], foes[1]
+    out.that(set(c.within(1, of=me, side="enemy")) == {aimed, other},
+             f"exactly two enemies are adjacent ({aimed}, {other}) and"
+             f" {far} is not",
+             f"{sorted(c.within(1, of=me, side='enemy'))}")
+
+    use(world, me, ref, spend=False)
+    seen: list[tuple[int, str]] = []
+    world.bus.on(PowerUsed, lambda ev: seen.append(
+        (getattr(ev, "actor", -1), getattr(ev, "power", ""))))
+    world.bus.emit(PowerUsed(actor=me, power=spell, targets=(aimed,)))
+    repeats = [p for a, p in seen if a == me and p == spell][1:]
+    out.that(len(repeats) == 1,
+             f"the whirl repeats the power once -- one other adjacent enemy,"
+             f" one repeat ({len(repeats)})",
+             f"{seen}")
+    out.that(c.per_day_left(ref, 1) == 0,
+             "and the day's allowance is spent")
+
+    seen.clear()
+    world.bus.emit(PowerUsed(actor=me, power=spell, targets=(aimed,)))
+    again = [p for a, p in seen if a == me and p == spell][1:]
+    out.that(not again,
+             "PLANT: a second whirl the same day repeats nothing --"
+             " *'once per day'*", f"{again}")
+
+
+def a_bladespell_answers_a_miss_for_one_chassis(out: Result) -> None:
+    """`cf:wizard-bladesinger-f16` widens the bladespells' trigger to a miss.
+
+    The feature carried `triggers.widen(Miss)`, claiming a declared
+    `Trigger` cannot gain an event arm from outside. It does not need to:
+    `Power.triggers` is a tuple, `power(on=)` takes a `Sequence[Trigger]`,
+    and `Trigger.when` is per-responder -- so the second arm is declared
+    beside the first and **gated on the responder holding the feature**.
+
+    **Asserted through the real predicate**, not through a staged fight.
+    `_bladespell_missed` is the whole of the new behaviour and it takes
+    `(world, me, ev)`, so it can be asked directly with the board in each
+    of the four states that matter. A staged miss would exercise the same
+    function behind more machinery and could not separate the gates.
+
+    Five things asserted:
+
+    * all six bladespells carry **both** arms, so none was missed when the
+      headers were edited -- the `#583` failure shape, a word carried
+      without its reader, pointed the other way;
+    * `Miss` is the second arm's event and `Hit` the first's;
+    * a bladesinger holding the feature with `p14285` standing answers a
+      miss;
+    * **without the feature** it does not -- so no other bladesinger is
+      affected, which is the whole reason the gate is per-responder;
+    * **without `p14285`** it does not either, which is the printed
+      *"while your `p14285` is active"* and the gate that stops the arm
+      paying off every missed swing.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.powers.wizard.level_0 import (
+        BLADESPELL,
+        BLADESPELL_MISSED,
+        _bladespell_missed,
+    )
+    from combat_engine.engine.basic import MELEE
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Powers, Weapon
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit, Miss
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Keyword
+
+    feature = "cf:wizard-bladesinger-f16"
+    six = sorted(r for r, p in REGISTRY.items()
+                 if Keyword.BLADESPELL in (p.keywords or ()))
+    out.that(len(six) == 6, f"six bladespells ({len(six)})", f"{six}")
+
+    missing = [r for r in six
+               if BLADESPELL_MISSED not in (REGISTRY[r].triggers or ())]
+    out.that(not missing,
+             "every bladespell carries the miss arm, so none was skipped"
+             " when the headers were edited", f"{missing}")
+    no_hit = [r for r in six if BLADESPELL not in (REGISTRY[r].triggers or ())]
+    out.that(not no_hit,
+             "and every one still carries the hit arm -- the second was"
+             " added beside the first, not in place of it", f"{no_hit}")
+    out.that(BLADESPELL_MISSED.event is Miss and BLADESPELL.event is Hit,
+             "the two arms answer `Miss` and `Hit`",
+             f"{BLADESPELL_MISSED.event.__name__}, {BLADESPELL.event.__name__}")
+
+    world, me, _ = _board(feature, 1)
+    c = Cast(world=world, me=me, ref="drivers:unerring")
+    known = world.need(me, Powers)
+    out.that(feature in known.all, "the board's bladesinger holds the feature")
+
+    # The printed Requirement for a bladespell at all: a one-handed melee
+    # weapon and nothing in the other hand. Set outright rather than hoped
+    # for, since `_sword_hand` is a gate this rule is not about.
+    # `Gear.two_weapon` is a property derived from what is held, so the
+    # hand is set rather than the flag: one blade, held, and nothing else.
+    gear = world.need(me, Gear)
+    gear.shield = 0
+    blade = Weapon(ref="w:drivers-blade", damage="1d8", proficiency=3,
+                   group="light blade")
+    gear.weapons = [blade]
+    gear.stowed = set()
+    foe = sorted(enemies(world, me))[0]
+    world.turn = me
+    swing = Miss(attacker=me, target=foe, power=MELEE)
+
+    c.effect("p14285", until=When.EONT, on=me)
+    out.that(_bladespell_missed(world, me, swing),
+             "a miss answers the second arm while `p14285` stands and the"
+             " feature is held")
+
+    # PLANT 1: the same board without the feature.
+    known.known = [r for r in known.known if r != feature]
+    out.that(not _bladespell_missed(world, me, swing),
+             "PLANT: without the feature the arm is dead -- so the widening"
+             " reaches one chassis and not every bladesinger")
+    known.known.append(feature)
+
+    # PLANT 2: the feature back, the song gone.
+    for eff in list(world.effects.of(me)):
+        if eff.label == "p14285":
+            world.effects.end(eff, "drivers plant")
+    out.that(not _bladespell_missed(world, me, swing),
+             "PLANT: and with `p14285` down it is dead too -- the printed"
+             " *'while your p14285 is active'*")
+
+
 def a_stealth_check_helps_the_allies_next_one(out: Result) -> None:
     """`cf:ranger-hunter-f20s0` and `cf:ranger-scout-f17s0`, one sentence.
 
@@ -80356,6 +80638,21 @@ DRIVERS = {
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
         " usage kills it (#1276)",
+    ),
+    "witch_confer": (
+        a_witch_confers_with_its_familiar_on_a_rest,
+        "the witch swaps one prepared power at an extended rest and not a"
+        " short one (#1276)",
+    ),
+    "whirl_per_day": (
+        a_whirl_repeats_a_bladespell_once_a_day,
+        "the bladesinger's whirl repeats a bladespell on each adjacent"
+        " enemy, once a day (#1276)",
+    ),
+    "miss_bladespell": (
+        a_bladespell_answers_a_miss_for_one_chassis,
+        "the bladespells answer a miss for a bladesinger holding -f16 with"
+        " p14285 up, and nobody else (#1276)",
     ),
     "group_stealth": (
         a_stealth_check_helps_the_allies_next_one,
