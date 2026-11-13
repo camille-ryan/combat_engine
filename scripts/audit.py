@@ -581,6 +581,45 @@ KNOWN_SILENT = {
     # also proves a `chargen.spawn` character keeps it, which is the half
     # that was being flattened. A dummy posing a shield-bearer would retire
     # all four entries (#437), as it would `f1873`.
+    # **The ranger's picks and the two aspect lists under them.** Ten rows
+    # that moved out of `todo=` and `defect=` together, and every one of
+    # them is silent here for a reason about this board rather than about
+    # itself. `drivers.extra_picks` is the cover and proves all ten
+    # against a dealt character, where a draw cannot move them.
+    #
+    # The eight `one additional X` rows have **no body at all**, and
+    # correctly: the whole of what they do is add a pick to a fork, which
+    # `chargen.EXTRA_PICKS` does before any row runs. They were `todo=`
+    # before, so they were *refused* and the baseline never had to
+    # mention them -- which is the same direction `f1873` and the four
+    # shield rows record, and the right one.
+    #
+    # The two lists they add to grant their chosen powers, and grant
+    # nothing here because the board already handed the character every
+    # sibling of the row under test: all eight aspects are in the hand
+    # before the body runs, so `c.grant_row` has nothing to add. A dummy
+    # posing a ranger that holds only the feature would retire both, as
+    # `#437` would the shield rows.
+    "cf:ranger-hunter-f4": "adds a pick to another row's fork; the pick is"
+                           " chargen's and this row has no body",
+    "cf:ranger-hunter-f7": "adds a pick to another row's fork; the pick is"
+                           " chargen's and this row has no body",
+    "cf:ranger-hunter-f9": "adds a pick to another row's fork; the pick is"
+                           " chargen's and this row has no body",
+    "cf:ranger-hunter-f13": "adds a pick to another row's fork; the pick is"
+                            " chargen's and this row has no body",
+    "cf:ranger-scout-f5": "adds a pick to another row's fork; the pick is"
+                          " chargen's and this row has no body",
+    "cf:ranger-scout-f7": "adds a pick to another row's fork; the pick is"
+                          " chargen's and this row has no body",
+    "cf:ranger-scout-f8": "adds a pick to another row's fork; the pick is"
+                          " chargen's and this row has no body",
+    "cf:ranger-scout-f11": "adds a pick to another row's fork; the pick is"
+                           " chargen's and this row has no body",
+    "cf:ranger-hunter-f19": "grants the aspects it dealt; the board hands"
+                            " the character all eight before the body runs",
+    "cf:ranger-scout-f16": "grants the aspects it dealt; the board hands"
+                           " the character all eight before the body runs",
     "f1741": "applies a shield bonus; the board's fighter holds no shield",
     "f2860": "applies a shield bonus; the board's fighter holds no shield",
     "f949": "trades a shield bonus away; the board's fighter holds none",

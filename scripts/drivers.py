@@ -44873,15 +44873,19 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(len(refused) == 3 and refused[0] == "cf:ranger-scout-f16",
+    out.that(refused == ["cf:ranger-scout-f22", "cf:ranger-scout-f23"],
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
              # count is the number LEFT, and every one left is out
              # of reach for a reason this project chose -- a feature
              # printed above level 10 names powers the ETL does not
              # import (`MAX_POWER_LEVEL`).,
-             "six rows are `defect=` -- all of them 'one of the following "
-             "powers' with no list",
+             "TWO rows are `defect=` -- down from six. Both print 'one "
+             "of the following powers' with no list, and both sit above "
+             "the level this project imports, so the list genuinely is "
+             "not there to recover. `cf:ranger-scout-f16`'s was, and it "
+             "plays. Named rather than counted, so a different row "
+             "drifting into `defect=` cannot pass as one of these",
              f"{refused}")
 
     # -- the four out_of_combat rows, and why not `narrative=` ------------
@@ -45269,15 +45273,21 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(len(refused) == 4 and "cf:ranger-hunter-f1" in refused,
+    out.that(refused == ["cf:ranger-hunter-f1", "cf:ranger-hunter-f24",
+                         "cf:ranger-hunter-f25"],
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
              # count is the number LEFT, and every one left is out
              # of reach for a reason this project chose -- a feature
              # printed above level 10 names powers the ETL does not
              # import (`MAX_POWER_LEVEL`).,
-             "seven rows are `defect=`, and `-f1` is the sharpest: *you "
-             "gain the following three powers* and then no list at all",
+             "THREE rows are `defect=` -- down from seven. The aspect "
+             "list the fourth was missing is printed on the page and is "
+             "recovered, so `cf:ranger-hunter-f19` plays; these three are "
+             "left, and `-f1` is the sharpest: *you gain the following "
+             "three powers* and then no list at all. Named rather than "
+             "counted, so a different row drifting into `defect=` cannot "
+             "pass as one of these",
              f"{refused}")
 
 
@@ -46016,6 +46026,136 @@ def the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers(
              f"{len(bare)}: {bare}")
 
 
+def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
+        out: Result) -> None:
+    """`#1268` again, on the ranger: *"you gain one additional X"*.
+
+    Eight rows across the two ranger chassis print exactly that and
+    carried `chargen.power_choice()`. The extra pick is granted by a
+    **different row**, at a level the character has to reach, so
+    `OPTION_PICKS` -- a count per fork -- cannot say it: the number is a
+    property of the hand, not of the fork. `chargen.EXTRA_PICKS` names
+    the granting row beside the fork it adds to and `_build_options`
+    counts the holders.
+
+    **And the aspects' own list was missing underneath them**, which is
+    the half that makes this more than bookkeeping. Both chassis print a
+    level-1 feature reading *"you gain two of the following powers of
+    your choice"* followed by eight stance powers, and both rows carried
+    `defect=` saying the spec *"lists nothing, so there is no set to
+    choose from"*. The spec does not; the page lists eight. `defect=`
+    **refuses** a row, so a 1st-level ranger of either chassis had no
+    aspect at all and the four rows granting "one additional" had
+    nothing to add to.
+
+    The two lists are **not the same list** -- five shared, three apiece
+    of their own -- so this asserts each chassis takes only from its own,
+    which one shared entry would break silently.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine import Build as BuildState
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.dsl import REGISTRY, usable
+
+    def dealt(chassis: str, level: int, seed: int = 4):  # noqa: ANN202
+        world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(seed))
+        eid = chargen.spawn(world, chargen.Character(
+            "ranger", level, [], chassis=chassis), (4, 6))
+        return world, eid
+
+    def took(world: object, eid: int, fork: str) -> list[str]:
+        state = world.get(eid, BuildState)
+        assert state is not None
+        head = f"option:{fork}:"
+        return sorted(c[len(head):] for c in state.choices
+                      if c.startswith(head))
+
+    #: chassis, the fork, and the printed ladder of how many it deals.
+    LADDERS = (
+        ("hunter", "cf:ranger-hunter-f20", {1: 2, 4: 3, 8: 4}),
+        ("scout", "cf:ranger-scout-f17", {1: 2, 4: 3, 8: 4}),
+        ("hunter", "cf:ranger-hunter-f19", {1: 2, 7: 3}),
+        ("scout", "cf:ranger-scout-f16", {1: 2, 7: 3}),
+    )
+    for chassis, fork, ladder in LADDERS:
+        got = {}
+        for level in ladder:
+            world, eid = dealt(chassis, level)
+            got[level] = len(took(world, eid, fork))
+        out.that(got == ladder,
+                 f"`{fork}` deals the printed number at each level -- the "
+                 "extra picks come from rows the character holds, so the "
+                 "count rises only when the granting row does",
+                 f"{got} against {ladder}")
+        # The level BELOW each rung still has the earlier count, which is
+        # what says the rung is doing the work rather than the level.
+        below = {}
+        for level in sorted(ladder)[1:]:
+            world, eid = dealt(chassis, level - 1)
+            below[level - 1] = len(took(world, eid, fork))
+        out.that(all(below[k] < ladder[min(j for j in ladder if j > k)]
+                     for k in below),
+                 f"and one level BELOW each rung `{fork}` still deals the "
+                 "earlier number -- without this the ladder would pass on "
+                 "a fork that simply deals four to everybody",
+                 f"{below}")
+
+    # -- each chassis draws from its own list, not the other's ----------
+    for chassis, fork, other in (
+            ("hunter", "cf:ranger-hunter-f19", "cf:ranger-scout-f16"),
+            ("scout", "cf:ranger-scout-f16", "cf:ranger-hunter-f19")):
+        mine = set(chargen.BUILD_OPTIONS[fork])
+        theirs = set(chargen.BUILD_OPTIONS[other])
+        world, eid = dealt(chassis, 10)
+        drawn = set(took(world, eid, fork))
+        out.that(drawn <= mine,
+                 f"a {chassis} takes aspects only from its own eight -- the "
+                 "two printed lists share five and differ in three each, so "
+                 "one shared entry would hand over a power this page does "
+                 "not print",
+                 f"{sorted(drawn - mine)}")
+        out.that(len(mine - theirs) == 3 and len(mine & theirs) == 5,
+                 "and the two lists really do differ, without which the "
+                 "check above is about one list and proves nothing",
+                 f"{len(mine & theirs)} shared, {len(mine - theirs)} mine")
+
+    # -- the base rows play, where `defect=` refused them ---------------
+    for chassis, fork in (("hunter", "cf:ranger-hunter-f19"),
+                          ("scout", "cf:ranger-scout-f16")):
+        world, eid = dealt(chassis, 1)
+        ok, why = usable(world, eid, REGISTRY[fork])
+        out.that(ok,
+                 f"`{fork}` is usable, where `defect=` refused it and left "
+                 "a 1st-level ranger with no aspect at all",
+                 f"{ok}, {why!r}")
+
+    # -- the cap, which is not a formality -------------------------------
+    # A ranger holding both knack rows picks four of five; one more rung
+    # would ask `rng.sample` for six of five and raise.
+    big = chargen.deal_build_options(
+        Random(11), "cf:ranger-hunter-f20", extra=99)
+    out.that(len(big) == len(chargen.BUILD_OPTIONS["cf:ranger-hunter-f20"]),
+             "an extra count beyond the list is capped at the list rather "
+             "than raising inside `rng.sample`",
+             f"{len(big)} of {len(chargen.BUILD_OPTIONS['cf:ranger-hunter-f20'])}")
+
+    # -- and every extra-pick entry names a fork that exists ------------
+    orphan = sorted(f for f in chargen.EXTRA_PICKS.values()
+                    if f not in chargen.BUILD_OPTIONS)
+    out.that(not orphan,
+             "every `EXTRA_PICKS` entry adds to a fork that has options -- "
+             "an entry naming a fork with none adds a pick to nothing and "
+             "would be silent",
+             f"{orphan}")
+    missing = sorted(a for a in chargen.EXTRA_PICKS if a not in REGISTRY)
+    out.that(not missing,
+             "and every granting row is declared, so the hand can hold it",
+             f"{missing}")
+
+
 def three_more_facilities_the_class_work_asked_for(out: Result) -> None:
     """`OPTION_PICKS`, `call_companion`'s associate arm, and nine gains.
 
@@ -46212,21 +46352,47 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
              "classes' powers too, so this is what says it did not stray",
              f"{wrong[:4] or 'none'}")
 
-    # **And each option is printed at the level the feature is.** The
-    # second half of the same question, and the one that catches a section
-    # boundary read one banner too far.
+    # **And each option is printed at the level the feature is, OR at
+    # level 0.** The second half of the same question, and the one that
+    # catches a section boundary read one banner too far.
+    #
+    # **Level 0 is a real second answer and not a loosening.** A power at
+    # level 0 is one the draw can never reach -- `loadout` picks from a
+    # class's levelled pool -- so it exists only to be *granted*, which
+    # is precisely what these features do. The ranger's aspects of the
+    # wild are the case: eight at-will utilities at level 0, printed
+    # under a level-1 feature. Reading that as a boundary error would
+    # have sent the next reader looking for a parsing bug in a list that
+    # is exactly right.
+    #
+    # It stays strict in the direction that matters: an option at some
+    # OTHER level is still wrong, which is what a section read one banner
+    # too far produces.
     off = []
     for parent in picks:
         want = levels.level_of(parent)
         for o in chargen.BUILD_OPTIONS[parent]:
             row = g.execute("select level from power where ref = ?",
                             (o,)).fetchone()
-            if row and row[0] != want:
+            if row and row[0] not in (want, 0):
                 off.append((parent, o, want, row[0]))
     out.that(not off,
-             "and printed at the FEATURE'S OWN level, which is what a "
-             "section boundary read one banner too far would break",
+             "and printed at the FEATURE'S OWN level or at level 0, which "
+             "is what a section boundary read one banner too far would "
+             "break. Level 0 means a power the draw cannot reach, so the "
+             "feature granting it is the only way to have it",
              f"{off[:4] or 'none'}")
+    granted = sorted(
+        p for p in picks
+        if all((g.execute("select level from power where ref = ?",
+                          (o,)).fetchone() or (None,))[0] == 0
+               for o in chargen.BUILD_OPTIONS[p]))
+    out.that(granted == ["cf:ranger-hunter-f19", "cf:ranger-scout-f16"],
+             "and exactly two forks draw entirely from level 0 -- the two "
+             "ranger aspect lists. Named, so the allowance above cannot "
+             "quietly widen to cover a fork whose options really did come "
+             "from the wrong section",
+             f"{granted}")
 
     # -- the pact summons ------------------------------------------------
     subs = sorted(r for r in REGISTRY
@@ -46641,17 +46807,23 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
                    if "chargen.power_choice()" in (p.unfinished or ()))
     rows_ = [r for r in still if r.startswith("cf:")]
     feats = [r for r in still if not r.startswith("cf:")]
-    out.that(len(rows_) == 22 and len(feats) == 4,
-             "and 22 chassis rows plus 4 feats still carry the "
-             "symbol -- down from 31 and 4, because `combat_engine.levels` "
-             "now states the level every gain happens at and nine more "
-             "rows became `EXTRA_GAINS` entries. What is left says *one "
-             "additional <family>* and names a family the data does not "
-             "record, or is printed above the level this project imports. "
-             "`#1269` has the split. Both counts named, because quoting "
-             "one as the other is how a reader concludes the feats were "
-             "done too",
+    out.that(len(rows_) == 14 and len(feats) == 4,
+             "and 14 chassis rows plus 4 feats still carry the "
+             "symbol -- down from 31 and 4, then 22 and 4. The eight that "
+             "just went are the ranger's: *one additional knack* and *one "
+             "additional aspect* name a fork the character already has, "
+             "so `chargen.EXTRA_PICKS` adds a pick to it rather than a "
+             "facility inventing a family. What is left names a family "
+             "the data does not record, or is printed above the level "
+             "this project imports. `#1269` has the split. Both counts "
+             "named, because quoting one as the other is how a reader "
+             "concludes the feats were done too",
              f"{len(rows_)} rows, {len(feats)} feats: {feats}")
+    out.that(not [r for r in rows_ if r.startswith("cf:ranger-")],
+             "and no ranger row waits on it at all, which is the half a "
+             "count cannot say: eight going while eight others arrived "
+             "would read identically",
+             f"{[r for r in rows_ if r.startswith('cf:ranger-')]}")
 
     out.that(not [r for r, p in REGISTRY.items()
                   if "Powers.per_encounter(extra=)" in (p.unfinished or ())],
@@ -78858,6 +79030,11 @@ DRIVERS = {
         the_hexblades_pact_forks_deal_one_option_without_knowing_which,
         "the hexblade's pact forks deal one option each, and it is the"
         " one its pact prescribes (#642, #1264)",
+    ),
+    "extra_picks": (
+        a_later_row_adds_one_more_pick_of_an_earlier_rows_fork,
+        "a later row adds one more pick of an earlier row's fork, and the"
+        " aspect lists the import dropped are back (#1268)",
     ),
     "pact_weapon": (
         the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers,

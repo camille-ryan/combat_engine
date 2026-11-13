@@ -557,7 +557,6 @@ def _pick(ref: str, what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.MARTIAL],
-        todo=("chargen.power_choice()",),
     )
     def row(c: Cast) -> None:
         pass
@@ -752,8 +751,15 @@ def _printed_pick(ref: str, options: tuple[str, ...], what: str) -> Any:
         keywords=[Keyword.MARTIAL],
     )
     def row(c: Cast) -> None:
-        c.grant_row(c.chosen_option(ref) or options[0], on=c.me,
-                    until=When.ENCOUNTER)
+        # **Every option the build took, not the first of them.** A
+        # fork that deals one answers a single-entry tuple, so this is
+        # the same behaviour there -- and `cf:ranger-hunter-f19` and its
+        # scout twin deal TWO, with more rungs adding a third and a
+        # fourth, so granting `[0]` alone would hand over one aspect and
+        # silently drop the rest. `chargen.OPTION_PICKS` and
+        # `chargen.EXTRA_PICKS` decide how many.
+        for took in c.chosen_options(ref) or options[:1]:
+            c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
     row.__name__ = "scout_pick_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
@@ -790,7 +796,16 @@ def _defective(ref: str, n: str) -> Any:
     return row
 
 
-scout_defect_16 = _defective("cf:ranger-scout-f16", "two")
+scout_pick_16 = _printed_pick(
+    "cf:ranger-scout-f16",
+    ("p13589", "p13590", "p13593", "p13594",
+     "p13596", "p13620", "p13621", "p13622"),
+    "The aspects of the wild: eight printed, two taken at 1st level and "
+    "one more at each of `cf:ranger-scout-f7` and `cf:ranger-scout-f11`. "
+    "**Not the hunter's eight** -- the two pages share five and print "
+    "three apiece of their own, so one shared list would hand a scout "
+    "three powers its page does not print. This carried `defect=` saying "
+    "the spec lists nothing; the page lists all eight. `#1268`.")
 scout_pick_18 = _printed_pick(
     "cf:ranger-scout-f18",
     ('p13623', 'p13624', 'p13625'),

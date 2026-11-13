@@ -4178,6 +4178,41 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
         "p13598",
         "p13599",
     ),
+    # **The two aspect lists, and they are not the same list.** Both
+    # chassis print a level-1 feature reading *"you gain two of the
+    # following powers of your choice"* and then eight stance powers --
+    # and the two sets overlap in five and differ in three each, so one
+    # shared entry would hand a hunter three powers its page does not
+    # print. Recovered the way `_printed_pick` describes: the section is
+    # bounded by the printed banner and the options are this class's
+    # already-imported power names found inside it.
+    #
+    # Both rows carried `defect=` saying the spec "lists nothing, so
+    # there is no set to choose from". The spec lists nothing; the page
+    # lists eight. `#1268`'s mistake, twice more, and worse here than
+    # there: `defect=` refuses the row, so a level-1 ranger of either
+    # chassis had **no aspect at all** and four later rows printing "one
+    # additional aspect" had nothing to add to.
+    "cf:ranger-hunter-f19": (
+        "p13589",
+        "p13590",
+        "p13591",
+        "p13592",
+        "p13593",
+        "p13594",
+        "p13595",
+        "p13596",
+    ),
+    "cf:ranger-scout-f16": (
+        "p13589",
+        "p13590",
+        "p13593",
+        "p13594",
+        "p13596",
+        "p13620",
+        "p13621",
+        "p13622",
+    ),
     "cf:ranger-hunter-f22": ('p13607', 'p13609'),
     "cf:ranger-hunter-f23": (
         "p13610",
@@ -4451,6 +4486,45 @@ OPTION_PICKS: dict[str, int] = {
     "cf:druid-sentinel-f13": 2,
     "cf:ranger-hunter-f20": 2,
     "cf:ranger-scout-f17": 2,
+    # *"You gain **two** of the following powers of your choice."* The
+    # aspect lists, one per ranger chassis -- see `BUILD_OPTIONS`.
+    "cf:ranger-hunter-f19": 2,
+    "cf:ranger-scout-f16": 2,
+}
+
+
+#: A row whose whole printed content is *"you gain one additional X"*,
+#: beside the fork it takes that extra pick from.
+#:
+#: `OPTION_PICKS` is a count per fork and cannot say this: the extra pick
+#: is granted by a **different row**, at a level the character has to
+#: reach, so the number is a property of the hand rather than of the
+#: fork. A ranger picks two knacks at 1st, a third at 4th and a fourth at
+#: 8th, and the rows granting the third and the fourth are ordinary
+#: class features that may or may not be held.
+#:
+#: Read off the printed text, which names the fork in so many words --
+#: one of them says *"chosen from the options given at level 1"*, which
+#: is the same fork spelled out. Both ranger chassis print the same
+#: ladder and neither shares a fork with the other, so there are four
+#: entries and not two.
+#:
+#: `_build_options` counts the holders and hands the total to
+#: `deal_build_options`; a character without the granting row is
+#: unaffected, which is what makes this safe to apply to every fork.
+EXTRA_PICKS: dict[str, str] = {
+    # The knacks: two at 1st, a third at 4th, a fourth at 8th.
+    "cf:ranger-hunter-f4": "cf:ranger-hunter-f20",
+    "cf:ranger-hunter-f9": "cf:ranger-hunter-f20",
+    "cf:ranger-scout-f5": "cf:ranger-scout-f17",
+    "cf:ranger-scout-f8": "cf:ranger-scout-f17",
+    # The aspects: two at 1st, a third at 7th, a fourth at 17th. Each
+    # chassis adds to its own fork, because the two printed lists are
+    # not the same list -- see `BUILD_OPTIONS`.
+    "cf:ranger-hunter-f7": "cf:ranger-hunter-f19",
+    "cf:ranger-hunter-f13": "cf:ranger-hunter-f19",
+    "cf:ranger-scout-f7": "cf:ranger-scout-f16",
+    "cf:ranger-scout-f11": "cf:ranger-scout-f16",
 }
 
 
@@ -4623,10 +4697,19 @@ def _build_options(taken: list[str], rng: Random | None = None,
     roll. Omitting it keeps the old answer, which is what the two callers
     that have no seed do.
     """
+    held = set(taken)
     return {
         f"option:{ref}:{took}"
         for ref in taken if ref in BUILD_OPTIONS
-        for took in deal_build_options(rng, ref, leg)
+        for took in deal_build_options(
+            rng, ref, leg,
+            # Every *held* row that grants one more pick of this fork.
+            # Counted from the hand rather than from the level, because
+            # a row the character does not have grants nothing -- and a
+            # level is not the same question, as `cf:ranger-hunter-f9`'s
+            # own text shows by naming the fork instead of a level.
+            extra=sum(1 for adder, fork in EXTRA_PICKS.items()
+                      if fork == ref and adder in held))
     }
 
 
@@ -4647,8 +4730,8 @@ def deal_build_option(rng: Random | None, ref: str) -> str:
     return deal_build_options(rng, ref)[0]
 
 
-def deal_build_options(rng: Random | None, ref: str,
-                       leg: str = "") -> tuple[str, ...]:
+def deal_build_options(rng: Random | None, ref: str, leg: str = "", *,
+                       extra: int = 0) -> tuple[str, ...]:
     """Every option this character took for `ref`, which is usually one.
 
     `OPTION_PICKS` says how many the card deals; absent means one, so the
@@ -4685,7 +4768,10 @@ def deal_build_options(rng: Random | None, ref: str,
         options = [o for o in options if OPTION_PACT[o] == leg]
         if not options:
             return ()
-    pick = min(OPTION_PICKS.get(ref, 1), len(options))
+    # **Capped at the list**, which is not a formality: a ranger holding
+    # both knack rows picks four of five, and one more rung would ask for
+    # six of five and raise inside `rng.sample`.
+    pick = min(OPTION_PICKS.get(ref, 1) + extra, len(options))
     if rng is None:
         return tuple(options[:pick])
     return tuple(sorted(rng.sample(options, pick)))
