@@ -126,8 +126,17 @@ def attempt(
         vs = Defense.FORT if _mods(world, who, "grab_vs_fort", ctx) > 0 else SKILLS[picked]
         base = printed if printed else defence(world, who, vs, ctx)
         dc = base + _mods(world, who, "grab_defence", ctx)
+        # **`purpose="escape"`, which is what makes the check knowable as
+        # part of this action.** `cf:rogue-thief-f18` pays *"on an
+        # Acrobatics check or an Athletics check as part of the escape
+        # action"* and nothing could say which action a check belonged
+        # to, so the row kept its marker rather than grant the skills
+        # outright -- which would have rolled twice on every climb.
+        # `skills.check` has taken `purpose` all along and four callers
+        # pass one. `#1276`.
         won = bool(check(
-            world, eid, picked, dc=dc, bonus=bonus + _mods(world, eid, "escape", ctx)
+            world, eid, picked, dc=dc, purpose="escape",
+            bonus=bonus + _mods(world, eid, "escape", ctx)
         ))
 
     if won:

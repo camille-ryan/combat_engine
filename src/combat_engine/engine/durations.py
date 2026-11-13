@@ -1209,6 +1209,27 @@ class Effects:
         }
         bonus = eff.save_mod + (holder.total("save", ctx) if holder else 0)
         roll = self.world.rng.d20()
+        # **"Roll twice and use either result", read at the one site a
+        # throw's d20 is rolled** -- the mirror of `skills.check`'s read
+        # for a *check*, and a different field because it is a different
+        # roll in a different module. `Powers.saves_twice` is written by
+        # `Cast.save_twice`; `cf:rogue-thief-f18` is the printed caller
+        # and had no reader, which is the half of its pair that
+        # `c.roll_twice` could never have satisfied.
+        #
+        # Matched against `ctx["conditions"]`, which this context already
+        # carries, so *"against an effect that immobilizes, restrains, or
+        # slows you"* needs no new vocabulary. `"*"` is every throw.
+        #
+        # The better of the two, for the reason `skills.check` gives: a
+        # headless run has to pick and the offer carries no cost. The
+        # number that counted is what rides `SavingThrow.natural`, so a
+        # reader asking what was rolled gets the answer that was used.
+        from .components import Powers as _Powers
+
+        _twice = getattr(self.world.get(saver, _Powers), "saves_twice", set())
+        if _twice and ("*" in _twice or _twice & set(ctx["conditions"])):
+            roll = max(roll, self.world.rng.d20(), key=lambda r: r.total)
         saved = roll.total + bonus >= 10
         # Read back. The outcome is announced first so a listener can
         # change it -- "the target automatically fails the saving throw" is

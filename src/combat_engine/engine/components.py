@@ -1512,7 +1512,39 @@ class Powers:
     #: headless run has to pick and the offer is pure benefit, so there is
     #: nothing to weigh -- the same reading `c.may` gets for an offer with
     #: no cost. #642.
+    #: **Scoped entries, since `#1276`.** A plain `"stealth"` is every
+    #: Stealth check; `"acrobatics@escape"` is an Acrobatics check made
+    #: as part of the escape action and nothing else.
+    #:
+    #: `cf:rogue-thief-f18` is why, and it is the printed distinction
+    #: rather than a convenience: it pays *"as part of the escape
+    #: action"* only, so granting the skills outright would roll twice on
+    #: every climb -- which its own docstring refused to do, correctly,
+    #: and kept the marker for. `cf:rogue-thief-f20` beside it prints no
+    #: action test and stays unscoped.
+    #:
+    #: One set rather than two, keyed `skill@purpose`, because
+    #: `skills.check` already takes a `purpose` and the read is then one
+    #: membership test against each spelling.
     rolls_twice: set[str] = field(default_factory=set)
+    #: Saving throws this creature rolls twice, by **condition** -- or
+    #: `"*"` for every throw.
+    #:
+    #: A different field from `rolls_twice` above because it is a
+    #: different roll read in a different module: a check's d20 comes out
+    #: of `skills.check` and a throw's out of `durations.Clock.save`.
+    #: `cf:rogue-thief-f18` names both halves and carried **two** symbols
+    #: for exactly that reason -- a row waiting on one would have
+    #: reported ready with half a facility.
+    #:
+    #: Matched against `Effect.conditions`, which the save context
+    #: already carries for the eighteen rows that narrow a save bonus the
+    #: same way. So *"against an effect that immobilizes, restrains, or
+    #: slows you"* is three entries and needs no new vocabulary.
+    #:
+    #: A set and not a count, for the reason above it: rolling twice does
+    #: not compose.
+    saves_twice: set[str] = field(default_factory=set)
     #: Keywords a named row carries **for this creature only**, by ref.
     #:
     #: "Your `p1448` power is considered an arcane attack power", "your

@@ -14129,6 +14129,142 @@ def hexblade_summon_boost(out: Result) -> None:
              " otherwise have each boosting the other's")
 
 
+def thief_slippery_rolls(out: Result) -> None:
+    """Roll twice on an escape check, and on three saves -- and only those.
+
+    `cf:rogue-thief-f18`: *"whenever you make an Acrobatics check or an
+    Athletics check as part of the escape action or make a saving throw
+    against an effect that immobilizes, restrains, or slows you, you can
+    roll twice and use either result."*
+
+    **Two readers in two modules, which is why the row carried two
+    symbols.** A check's d20 comes out of `skills.check` and a throw's
+    out of `durations.Clock.save`. One symbol would have reported this
+    row ready the day `c.roll_twice` landed for
+    `cf:rogue-thief-f20` -- half a facility.
+
+    **The controls are the assertions that matter**, because the failure
+    mode here is paying too widely and that is invisible from the
+    thief's side: `c.roll_twice("acrobatics")` unscoped would roll twice
+    on every climb, which the row's own docstring refused to do and kept
+    the marker for.
+
+    Measured statistically rather than on one roll, because "roll twice
+    and keep the better" moves a *distribution*: a single d20 cannot
+    tell the two apart. The arithmetic -- the mean of one d20 is 10.5
+    and of the better of two is 13.825 -- so a run of rolls separates
+    them decisively and a seeded single roll proves nothing.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.escape import attempt
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.skills import check
+
+    ref = "cf:rogue-thief-f18"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+        return
+
+    TRIES = 400
+
+    world, me, _ = _board(seed=1)
+    REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+    known = world.need(me, Powers)
+
+    out.that(known.rolls_twice >= {"acrobatics@escape", "athletics@escape"},
+             "the check half is stored SCOPED to the escape action, not"
+             " against the bare skill",
+             f"it holds {sorted(known.rolls_twice)}")
+    out.that("acrobatics" not in known.rolls_twice,
+             "and the bare skill is NOT stored -- an unscoped entry would"
+             " roll twice on every climb, which is what the marker was"
+             " protecting against")
+    out.that(known.saves_twice >= {"immobilized", "restrained", "slowed"},
+             "the save half holds the three printed conditions, in"
+             " `types.Condition`'s own spellings",
+             f"it holds {sorted(known.saves_twice)}")
+
+    def mean_natural(purpose: str, skill: str = "acrobatics") -> float:
+        world_, me_, _ = _board(seed=1)
+        REGISTRY[ref].body(Cast(world=world_, me=me_, ref=ref))
+        total = 0
+        for _ in range(TRIES):
+            total += check(world_, me_, skill, dc=0, purpose=purpose).natural
+        return total / TRIES
+
+    escaping = mean_natural("escape")
+    climbing = mean_natural("")
+    # The better of two d20s averages 13.825 and one averages 10.5. A
+    # midpoint of 12.0 separates them with room for sampling noise at
+    # SAMPLE rolls, and the two arms are measured on their own board so
+    # the second does not inherit the first's rng.
+    out.that(escaping > 12.0,
+             f"an Acrobatics check made as part of an escape rolls twice"
+             f" -- mean natural {escaping:.2f} over SAMPLE rolls, against"
+             " 10.5 for one d20 and 13.825 for the better of two")
+    out.that(climbing < 12.0,
+             f"and the same check with no purpose rolls ONCE -- mean"
+             f" natural {climbing:.2f}. The control, and the whole reason"
+             " the entry is scoped")
+
+    # **And the real escape action passes it.** Everything above calls
+    # `skills.check` with the purpose by hand, which measures the row and
+    # the reader and not the wiring -- and the wiring is the half that did
+    # not exist: `escape.attempt` was the one caller of the four that
+    # passed no purpose. Without this leg a plant removing it would leave
+    # every assertion above green.
+    world2, me2, _ = _board(seed=1)
+    REGISTRY[ref].body(Cast(world=world2, me=me2, ref=ref))
+    foe2 = sorted(enemies(world2, me2))[0]
+    Cast(world=world2, me=foe2, ref="drivers:grabber").grab(on=me2)
+    purposes: list[str] = []
+    world2.bus.on(SkillCheck,
+                  lambda ev: purposes.append(getattr(ev, "purpose", "")))
+    attempt(world2, me2)
+    out.that("escape" in purposes,
+             "a real escape attempt announces its check with"
+             f" `purpose=\"escape\"` ({purposes}) -- which is what makes"
+             " the scoped entry reachable at all",
+             f"the checks it announced carried {purposes}")
+
+    # ---- the save half, measured the same way through a real throw.
+    def mean_save(condition: str) -> float:
+        # `world.effects` is the live `Effects`, which is what owns `save`
+        # -- two other rules here reach it the same way. Building a second
+        # one would roll against a board nothing else can see.
+        from combat_engine.engine.events import SavingThrow
+
+        world_, me_, _ = _board(seed=1)
+        REGISTRY[ref].body(Cast(world=world_, me=me_, ref=ref))
+        c_ = Cast(world=world_, me=me_, ref="drivers:thief")
+        seen: list[int] = []
+        world_.bus.on(SavingThrow, lambda ev: seen.append(ev.natural))
+        for _ in range(TRIES):
+            eff = c_.condition(condition, on=me_, until=When.SAVE_ENDS)
+            if eff is None:
+                return -1.0
+            world_.effects.save(eff)
+            c_.end_effect(eff)
+        return sum(seen) / len(seen) if seen else -1.0
+
+    slowed = mean_save("slowed")
+    dazed = mean_save("dazed")
+    if slowed < 0 or dazed < 0:
+        out.skip("the board would not take a save-ends condition")
+        return
+    out.that(slowed > 12.0,
+             f"a saving throw against being slowed rolls twice -- mean"
+             f" natural {slowed:.2f} over SAMPLE throws")
+    out.that(dazed < 12.0,
+             f"and a throw against a condition the card does not name"
+             f" rolls ONCE ({dazed:.2f}) -- the second control")
+
+
 def pull_what_you_hold(out: Result) -> None:
     """Dragging a grabbed creature is a **granted action**, not a flag on
     the grab.
@@ -84452,6 +84588,9 @@ DRIVERS = {
     "pull_what_you_hold": (
         pull_what_you_hold,
         "dragging a grabbed creature is a granted action, offered live"),
+    "thief_slippery_rolls": (
+        thief_slippery_rolls,
+        "roll twice on an escape check and three saves, and only those"),
     "hexblade_summon_boost": (
         hexblade_summon_boost,
         "the +3 lands on the creature p13649 summoned and nothing else"),

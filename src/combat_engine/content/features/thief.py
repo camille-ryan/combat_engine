@@ -612,7 +612,6 @@ thief_another_trick_15 = _another_trick("cf:rogue-thief-f15")
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("c.roll_twice(check=)", "c.roll_twice(save=)"),
 )
 def thief_slippery(c: Cast) -> None:
     """"Whenever you make an Acrobatics check or an Athletics check as part
@@ -620,23 +619,38 @@ def thief_slippery(c: Cast) -> None:
     immobilizes, restrains, or slows you, you can roll twice and use either
     result."
 
-    Two readers and therefore two symbols, and **`c.roll_twice` satisfies
-    neither** -- which is worth saying now that the verb exists.
+    **Written, and the two symbols were right to be two.** Both readers
+    now exist and they are in different modules, which is the whole
+    argument for having named them separately: a single symbol would have
+    reported this row ready the day the first one landed, which is
+    exactly what happened when `c.roll_twice` arrived for
+    `cf:rogue-thief-f20`.
 
-    `c.roll_twice` grants a second d20 on a **named skill**, and this card
-    pays on Acrobatics and Athletics *as part of the escape action* only.
-    Granting the skills outright would be wider than the card: a thief
-    would roll twice on every climb. So the check half still needs the
-    facility to know which **action** a check belongs to, and the symbol
-    stays.
+    **The check half is scoped to the action, not to the skill.** This
+    docstring used to say the facility was missing and it was right:
+    `c.roll_twice("acrobatics")` would roll twice on every climb, where
+    the card pays *"as part of the escape action"* only. What was
+    missing was small -- `skills.check` has taken a `purpose` all along
+    and four callers passed one; `escape.attempt` did not. It does now,
+    and `Powers.rolls_twice` holds the scoped spelling
+    `acrobatics@escape`, which `skills.check` tests alongside the plain
+    one. So `cf:rogue-thief-f20` beside it is unscoped and unchanged.
 
-    The save half is a different roll entirely, in a different file, so it
-    keeps its own symbol. A row waiting on one of the two would report
-    ready with half of it built.
+    **The save half is `c.save_twice`**, a sibling verb rather than a
+    keyword on `c.roll_twice`, because a throw's d20 comes out of
+    `durations.Clock.save` and a check's out of `skills.check`. It is
+    keyed by **condition** and matched against `Effect.conditions`,
+    which the save context already carried for the eighteen rows that
+    narrow a save bonus the same way -- so the printed three conditions
+    are three arguments and no new vocabulary.
 
-    `cf:rogue-thief-f20` beside it is the caller `c.roll_twice` was built
-    for: same sentence, no action test.
+    The three spellings are `types.Condition`'s own.
+    `drivers.thief_slippery_rolls` measures both halves and both
+    controls: an Acrobatics check that is *not* an escape rolls once,
+    and a save against something else rolls once.
     """
+    c.roll_twice("acrobatics", "athletics", purpose="escape", on=c.me)
+    c.save_twice("immobilized", "restrained", "slowed", on=c.me)
 
 
 @power(

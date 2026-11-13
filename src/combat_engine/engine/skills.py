@@ -354,8 +354,16 @@ def check(
     # second event: `SkillCheck` below carries the number that counted, so
     # a reader asking what was rolled gets the answer that was used.
     from .components import Powers as _Powers
+    #
+    # **Two spellings, since `#1276`.** A plain `"stealth"` is every
+    # Stealth check and `"acrobatics@escape"` is one made as part of the
+    # escape action -- `cf:rogue-thief-f18` prints the second shape and
+    # refused to approximate it with the first, which would have rolled
+    # twice on every climb. `purpose` was already a parameter here and
+    # already reaches `modifier`; `escape.attempt` passes it now.
     _known = world.get(eid, _Powers)
-    if _known is not None and skill in _known.rolls_twice:
+    _wanted = {skill, f"{skill}@{purpose}"} if purpose else {skill}
+    if _known is not None and _wanted & _known.rolls_twice:
         natural = max(natural, world.rng.d20().total)
     announced = SkillCheck(
         actor=eid,

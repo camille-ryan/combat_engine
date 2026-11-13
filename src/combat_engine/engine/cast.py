@@ -5189,7 +5189,49 @@ class Cast:
             until=until, kind=self.ref,
         )
 
-    def roll_twice(self, *skills: str, on: int | None = None) -> int:
+    def save_twice(self, *conditions: str, on: int | None = None) -> int:
+        """"Roll twice and use either result" on a **saving throw**.
+
+        `cf:rogue-thief-f18` prints *"or make a saving throw against an
+        effect that immobilizes, restrains, or slows you, you can roll
+        twice and use either result"*, and that row's second symbol,
+        `c.roll_twice(save=)`, is what this is.
+
+        **A sibling of `c.roll_twice` and not a keyword on it**, because
+        a check and a throw are different rolls read in different
+        modules: `skills.check` rolls the one and
+        `durations.Clock.save` the other. The row carried **two**
+        symbols for that reason, which is the convention working -- a
+        single symbol would have reported the row ready when half of it
+        landed.
+
+        Keyed by **condition**, matched against `Effect.conditions`,
+        which the save context already carries for the eighteen rows
+        that narrow a save bonus the same way. So the printed three
+        conditions are three arguments and need no new vocabulary.
+        `"*"` is every throw, for a card that names none.
+
+        A set, so it does not compose: two features each granting it
+        against being slowed still roll twice. Same reading as
+        `c.roll_twice`, and the same reason -- that is a property of the
+        printed sentences.
+
+        Returns how many were newly set, so a caller can tell a grant
+        from a no-op. Defaults to the caster. `#1276`.
+        """
+        from .components import Powers as _Powers
+
+        who = on if on is not None else self.me
+        powers = self.world.get(who, _Powers)
+        if powers is None:
+            return 0
+        wanted = {c.strip().lower() for c in conditions if c.strip()}
+        fresh = wanted - powers.saves_twice
+        powers.saves_twice |= wanted
+        return len(fresh)
+
+    def roll_twice(self, *skills: str, purpose: str = "",
+                   on: int | None = None) -> int:
         """"Whenever you make a Stealth check, you can roll twice and use
         either result." Returns how many skills were set.
 
@@ -5218,7 +5260,15 @@ class Cast:
         `c.roll_twice(save=)`. Naming the two halves separately is what
         stops the row reporting ready on half a facility.
 
-        Defaults to the caster. #642.
+        **`purpose=` scopes it to one action, since `#1276`.** A card
+        that says *"as part of the escape action"* is narrower than the
+        skill: granting Acrobatics outright would roll twice on every
+        climb, which is why `cf:rogue-thief-f18` kept its marker rather
+        than approximate it. The entry is stored `skill@purpose` and
+        `skills.check` tests both spellings -- it has taken a `purpose`
+        all along, and `escape.attempt` passes `"escape"` now.
+
+        Defaults to the caster. #642, #1276.
         """
         from .components import Powers as _Powers
 
@@ -5226,7 +5276,8 @@ class Cast:
         powers = self.world.get(who, _Powers)
         if powers is None:
             return 0
-        wanted = {s.strip().lower() for s in skills if s.strip()}
+        tail = f"@{purpose.strip().lower()}" if purpose.strip() else ""
+        wanted = {s.strip().lower() + tail for s in skills if s.strip()}
         fresh = wanted - powers.rolls_twice
         powers.rolls_twice |= wanted
         if fresh:
