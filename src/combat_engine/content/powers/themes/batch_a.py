@@ -152,10 +152,37 @@ def p12400(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=PSIONIC,
-    todo=("c.hear_from(square)",),
+    out_of_combat=True,
 )
 def p12401(c: Cast) -> None:
-    """Hearing from a square you do not occupy.
+    """Hearing from a square you do not occupy, which no fight measures.
+
+    **`out_of_combat=True` rather than a symbol, and the sibling next door
+    is why the two cards differ.** `p12407` lends a *sight* origin and was
+    written for `#1283`, because sight gates targeting -- `c.can_see` is
+    read by 67 content rows and a lent square changes what may be aimed
+    at. Hearing gates nothing: `query.can_hear` composes
+    `Condition.DEAFENED` and `query.sealed` and has **no distance test at
+    all**, deliberately, and its own docstring says so -- *"the row
+    supplies the range from its own target line rather than this guessing
+    one"*. All four content callers use it as a filter over `c.allies()`.
+
+    So relocating where the listening happens cannot change a combat
+    outcome in this engine, and a `Senses.hearing_from` field would be
+    state nothing reads -- a row that fires and does nothing, which is
+    worse than one that says it has nothing to say. Six of this card's
+    eight sibling cantrips carry the same marker for the same kind of
+    reason.
+
+    It is a falsifiable claim rather than a shrug: `audit`'s AWAKE census
+    (`#633`) gives every `out_of_combat=True` row a board and reds if it
+    does anything. If hearing ever grows a distance model, this row goes
+    red and says so.
+
+    **The old symbol was `c.hear_from(square)` and its reasoning stands**
+    -- it was re-aimed off `c.can_hear()` precisely because one symbol was
+    standing for two needs, which is right. What changed is the judgement
+    that the need is not a combat one. `#1293`.
 
     **Re-aimed off `c.can_hear()`, which has landed and is not this.** That
     verb asks *whether a creature can hear another* -- the "one ally who can
@@ -169,10 +196,10 @@ def p12401(c: Cast) -> None:
     `c.can_hear` landed, `todo.py` reported this row ready, because a marker
     cannot go red correctly for two different gaps.
 
-    What this one wants is an origin for a sense, which the engine has a
-    precedent for and not a facility: `Cast.cast_from` lends a *power's*
-    origin and `dsl.measured_from` reads it, so the shape is known. Nothing
-    relocates a sense."""
+    The precedent it named is a facility now -- `components.Senses` holds
+    `sight_from` and its docstring says a third sense gets a third field --
+    so this is a decision about the card and not about what the engine can
+    express."""
 
 
 @power(
