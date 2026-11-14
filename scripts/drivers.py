@@ -4834,7 +4834,7 @@ def rider_on_an_offered_aiming(out: Result) -> None:
 
     def hit(ref: str, branch: int):  # noqa: ANN202
         ev = Hit(attacker=me, target=foe, power=ref, critical=False)
-        ev.branch = branch  # ty: ignore[unresolved-attribute]
+        ev.branch = branch  # ty: ignore[missing-attribute]
         return ev
 
     row = get(ranged)
@@ -6281,8 +6281,8 @@ def a_lengthened_move_says_how_much_of_the_extra_was_spent(out: Result) -> None:
     foe3 = next(iter(sorted(enemies(world3, me3))), 0)
     here = world3.need(me3, Position).square
     walked = Moved(actor=me3, from_=here, to=here)
-    walked.kind_ = "walk"  # ty: ignore[unresolved-attribute]
-    walked.stretched_ = 1  # ty: ignore[unresolved-attribute]
+    walked.kind_ = "walk"  # ty: ignore[missing-attribute]
+    walked.stretched_ = 1  # ty: ignore[missing-attribute]
     world3.bus.emit(walked)
     out.that(not has_combat_advantage(world3, foe3, me3),
              "a WALK stretched a square past its print pays nothing: the"
@@ -6310,7 +6310,7 @@ def a_lengthened_move_says_how_much_of_the_extra_was_spent(out: Result) -> None:
                   if isinstance(e, Moved) and e.actor == me]
         if not blinks:
             return -1
-        return blinks[0].stretched_  # ty: ignore[unresolved-attribute]
+        return blinks[0].stretched_  # ty: ignore[missing-attribute]
 
     out.that(blinked(far=True) == 1,
              "a printed 3-square teleport that lands 4 away reports one"
@@ -9390,7 +9390,7 @@ def resistance_taken_off_the_target(out: Result) -> None:
             held.immune.add(PICK)
         c = Cast(world=world, me=me, ref="p16259", targets=[foe])
         c.target = foe
-        c.choose = lambda *a, **k: PICK   # ty: ignore[invalid-assignment]
+        c.choose = lambda *a, **k: PICK
         c.strike = lambda **kw: True      # ty: ignore[invalid-assignment]
         c.damage = lambda *a, **k: None   # ty: ignore[invalid-assignment]
         REGISTRY["p16259"].body(c)
@@ -11421,7 +11421,12 @@ def creature_or_object(out: Result) -> None:
 
     row = REGISTRY["p465"]
 
-    def pool(**kw: object) -> list[int]:
+    def pool(**kw: Any) -> list[int]:
+        # `Any` and not `object`: this forwards keywords straight into
+        # `Target`, so `object` claims every field is opaque and `ty`
+        # reports one incorrect argument per field -- 44 from this line
+        # alone. A shim that does not interpret its keywords has nothing
+        # narrower to say about them.
         return candidates(world, me, replace(row, target=Target(**kw)))
 
     plain = pool(side="any", count=1)
@@ -19888,7 +19893,7 @@ def a_printed_region_reaches_the_floor(out: Result) -> None:
         seen.append(burn is not None)
         original(zone, dice, dtype, burn)
 
-    paid.zones._burns = watched            # ty: ignore[invalid-assignment]
+    paid.zones._burns = watched
     # **Through `Cast.zone`, not through `zones.create`.** The first draft
     # called `create` directly for both arms and read `[False, False]` --
     # correctly, because `create` is where the callback *arrives* and
@@ -24698,7 +24703,7 @@ def a_retype_can_name_one_row_and_one_victim(out: Result) -> None:
 
     def asked(*, ref: str, undead: bool, printed: DamageType):  # noqa: ANN202
         rolling = Cast(world=world, me=me, ref=ref)
-        rolling.is_kind = (lambda *a, **k: undead)  # ty: ignore[invalid-assignment]
+        rolling.is_kind = (lambda *a, **k: undead)
         return rolling._retyped(None, printed)
 
     out.that(asked(ref="p1458", undead=True, printed=DamageType.FIRE)
@@ -25225,7 +25230,7 @@ def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:
         # feat, so `c.feat` has to be answered here -- which the first draft
         # missed, and is why all three variants read the same.
         c.feat = (lambda ref: ref == "f1099" and held)  # ty: ignore[invalid-assignment]
-        c.is_kind = (lambda *a, **k: undead)  # ty: ignore[invalid-assignment]
+        c.is_kind = (lambda *a, **k: undead)
         answer(world, say_yes)
         REGISTRY["p836"].body(c)
         return laid_by(world, foe, "p836")
@@ -25335,7 +25340,7 @@ def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:
         c.targets = [foe]
         c.strike = lambda **kw: True   # ty: ignore[invalid-assignment]
         c.feat = (lambda ref: ref == "f1098" and held)  # ty: ignore[invalid-assignment]
-        c.is_kind = (lambda *a, **k: undead)  # ty: ignore[invalid-assignment]
+        c.is_kind = (lambda *a, **k: undead)
         # **The burn the card is about has to be on the board.** `c.save`
         # finds no save-ends effect on a fresh holder and returns without
         # rolling or logging -- correctly -- so a rule that did not lay one
@@ -25344,7 +25349,7 @@ def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:
         c.ongoing(2, _DamageType.NECROTIC, on=me, until=_When.SAVE_ENDS)
         answer(world, say_yes)
         printed: list[int] = []
-        c.temp_hp = (lambda *a, **k: printed.append(1))  # ty: ignore[invalid-assignment]
+        c.temp_hp = (lambda *a, **k: printed.append(1))
         cursor = len(world.bus.since(0))
         REGISTRY["p833"].body(c)
         after = world.bus.since(cursor)
@@ -35478,7 +35483,7 @@ def reroll_after_the_roll(out: Result) -> None:
     def price_of(got: object) -> int | None:
         if not prices:
             return None
-        return prices[0](got.total)  # ty: ignore[call-non-callable, unresolved-attribute]
+        return prices[0](got.total)  # ty: ignore[not-callable, missing-attribute]
 
     world.bus.on(DamageRolled, note_announced)
 
@@ -37164,7 +37169,7 @@ def a_tome_lends_a_card_and_charges_for_it(out: Result) -> None:
         # Shadowing a bound method is a diagnostic however the stand-in is
         # annotated -- the attribute's type carries `self`. Suppressed the
         # way the other four recorder swaps in this file are.
-        world.decide = watching  # ty: ignore[invalid-assignment]
+        world.decide = watching
         return world, me, known, asked
 
     # -- 1. the definition, checked in both directions ---------------------
@@ -45436,7 +45441,7 @@ def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
             w, who, _ = _posed("cf:rogue-thief-f0", 1)
             gear = w.need(who, Gear)
             gear.weapons = [weapon]
-            gear.stowed = []
+            gear.stowed = set()
             ctx = {"power": "mba"}
             in_hand = _weapon_attack(w, who, ctx) is not None
             c = Cast(world=w, me=who, ref=ref)
@@ -45463,7 +45468,7 @@ def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
     #: These are `action=NONE` encounter traits, so `usable` answers "that
     #: has been used" for all 26 otherwise -- the first draft of this read
     #: `1 usable` and looked like the defect had taken the chassis down.
-    why = {r: usable(world, me, get(r), spent_ok=True)[1] for r in rows}
+    why = {r: usable(world, me, must(get(r), r), spent_ok=True)[1] for r in rows}
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r, reason in why.items() if reason == DEFECT)
     out.that(len(refused) == 2,
@@ -45589,7 +45594,7 @@ def the_slayers_three_masteries_each_answer_their_own_weapon(
         world, me, _ = _posed("cf:fighter-slayer-f1", 1)
         gear = world.need(me, Gear)
         gear.weapons = [weapon]
-        gear.stowed = []
+        gear.stowed = set()
         c = Cast(world=world, me=me, ref=ref)
         REGISTRY[ref].body(c)
         victim = next(f for f in c.enemies() if c.adjacent(f))
@@ -45645,7 +45650,7 @@ def the_slayers_three_masteries_each_answer_their_own_weapon(
     world, me, _ = _posed("cf:fighter-slayer-f1", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
-                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+                     if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
     out.that(refused == ["cf:fighter-slayer-f10", "cf:fighter-slayer-f13"],
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
@@ -45752,7 +45757,7 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
         world, me, _ = _posed("cf:assassin-executioner-f0", 1)
         gear = world.need(me, Gear)
         gear.weapons = [weapon]
-        gear.stowed = []
+        gear.stowed = set()
         c = Cast(world=world, me=me, ref="cf:assassin-executioner-f1")
         REGISTRY["cf:assassin-executioner-f1"].body(c)
         victim = next(f for f in c.enemies() if c.adjacent(f))
@@ -45880,7 +45885,7 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
     world, me, _ = _posed("cf:assassin-executioner-f0", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
-                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+                     if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
     out.that(refused == ["cf:assassin-executioner-f17",
                          "cf:assassin-executioner-f20"],
              "two rows are `defect=` and it is exactly those two, each "
@@ -45986,7 +45991,7 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
         world, me, _ = _posed("cf:fighter-knight-f0", 1)
         gear = world.need(me, Gear)
         gear.weapons = [weapon]
-        gear.stowed = []
+        gear.stowed = set()
         c = Cast(world=world, me=me, ref=ref)
         REGISTRY[ref].body(c)
         victim = next(f for f in c.enemies() if c.adjacent(f))
@@ -46082,7 +46087,7 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
     world, me, _ = _posed("cf:fighter-knight-f0", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
-                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+                     if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
     out.that(refused == ["cf:fighter-knight-f15", "cf:fighter-knight-f18"],
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
@@ -46291,7 +46296,7 @@ def the_blackguards_four_vice_parents_never_disagree(out: Result) -> None:
     world, me, _ = _posed("cf:paladin-blackguard-f1", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
-                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+                     if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
     out.that(refused == ["cf:paladin-blackguard-f19s0",
                          "cf:paladin-blackguard-f19s1"],
              "two rows are `defect=` and they are BOTH of `-f19`'s options "
@@ -46399,7 +46404,7 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
         world, me, _ = _posed("cf:ranger-scout-f1", 1)
         gear = world.need(me, Gear)
         gear.weapons = [chargen.LONGSWORD] + ([off] if off is not None else [])
-        gear.stowed = []
+        gear.stowed = set()
         n0 = len(list(world.effects.of(me)))
         REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
         return [e.label for e in list(world.effects.of(me))[n0:]]
@@ -46414,7 +46419,7 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
         world, me, _ = _posed("cf:ranger-scout-f1", 1)
         gear = world.need(me, Gear)
         gear.weapons = [chargen.LONGSWORD] + ([off] if off is not None else [])
-        gear.stowed = []
+        gear.stowed = set()
         reads[name] = _off_hand(Cast(world=world, me=me, ref="probe"))
     out.that(reads == {"light blade": "light blade", "axe": "axe",
                        "nothing": ""},
@@ -46456,7 +46461,7 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
     world, me, _ = _posed("cf:ranger-scout-f1", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
-                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+                     if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
     out.that(refused == ["cf:ranger-scout-f22", "cf:ranger-scout-f23"],
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
@@ -46725,7 +46730,7 @@ def the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally(
     world, me, _ = _posed("cf:paladin-cavalier-f1", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
-                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+                     if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
     out.that(len(refused) == 7
              and "cf:paladin-cavalier-f14s0" in refused
              and "cf:paladin-cavalier-f17" in refused,
@@ -46852,7 +46857,7 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
         world, me, _ = _posed("cf:ranger-hunter-f0", 1)
         gear = world.need(me, Gear)
         gear.weapons = [shooter]
-        gear.stowed = []
+        gear.stowed = set()
         c = Cast(world=world, me=me, ref=ref)
         REGISTRY[ref].body(c)
         victim = next(f for f in c.enemies() if c.adjacent(f))
@@ -46884,7 +46889,7 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
     world, me, _ = _posed("cf:ranger-hunter-f0", 1)
     gear = world.get(me, Gear)
     gear.weapons = [replace(chargen.LONGBOW, group="bow")]
-    gear.stowed = []
+    gear.stowed = set()
     before = must(gear.ranged, "a ranged weapon").ranged
     emitted = len(world.bus.log)
     REGISTRY["cf:ranger-hunter-f17"].body(
@@ -46911,7 +46916,7 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
     world, me, _ = _posed("cf:ranger-hunter-f0", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
-                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+                     if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
     out.that(refused == ["cf:ranger-hunter-f1", "cf:ranger-hunter-f24",
                          "cf:ranger-hunter-f25"],
              # `#1268` moved 51 chassis rows out of `defect=`: the
@@ -47076,7 +47081,7 @@ def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
         world, me, _ = _posed("cf:druid-sentinel-f2", 1)
         gear = world.need(me, Gear)
         gear.weapons = [weapon]
-        gear.stowed = []
+        gear.stowed = set()
         REGISTRY["cf:druid-sentinel-f0s1"].body(
             Cast(world=world, me=me, ref="cf:druid-sentinel-f0s1"))
         dice[name] = must(world.need(me, Gear).main,
@@ -47138,7 +47143,7 @@ def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
     world, me, _ = _posed("cf:druid-sentinel-f2", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
-                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+                     if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
     out.that(len(refused) == 6,
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
@@ -47386,7 +47391,7 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
     world, me, _ = _posed("cf:warlock-hexblade-f0", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
-                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+                     if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
     out.that(len(refused) == 17,
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
@@ -47903,7 +47908,7 @@ def the_poison_recipes_and_the_spellbook_are_both_dealt(out: Result) -> None:
                 knows: list[str], rng: object,
                 _real: object = real,
                 _into: list[list[str]] = seen) -> list[str]:
-            out_ = _real(gear, powers, held, knows, rng)  # ty: ignore[call-non-callable]
+            out_ = _real(gear, powers, held, knows, rng)  # ty: ignore[not-callable]
             _into.append(list(out_))
             return out_
 
@@ -56218,8 +56223,8 @@ def the_dm_reports_which_phase_it_is_in(out: Result) -> None:
                     phases=lambda p, c: heard.append((p, c))).react(
             bt.Playing(scene=scene), [], [])
     finally:
-        llm.chat = was_chat      # ty: ignore[invalid-assignment]
-        llm.stream = was_stream  # ty: ignore[invalid-assignment]
+        llm.chat = was_chat
+        llm.stream = was_stream
 
     out.that(len(asked) == 2 and asked[0] == asked[1],
              "the streamed and the unstreamed call are handed the **same**"
@@ -73013,7 +73018,7 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
     try:
         run_mod.step(camp, built, record=False)
     finally:
-        run_mod.rally = was    # ty: ignore[invalid-assignment]
+        run_mod.rally = was
     out.that(
         reached == [1],
         "`run.step` reaches the pass once for a real fight, rather than it "
@@ -76741,7 +76746,7 @@ def a_weapon_clause_reaches_every_power(out: Result) -> None:
         # well it matches. #305's rule -- an inline ignore says which write
         # and why, where a baseline entry is a count somebody has to go and
         # look up.
-        c._clause_keys = lambda: ["probe:row", "w:probe"]  # ty: ignore[invalid-assignment]
+        c._clause_keys = lambda: ["probe:row", "w:probe"]
         c.variant = variant
         return c
 
@@ -76864,8 +76869,8 @@ def a_party_wears_the_same_kit_all_day(out: Result) -> None:
         board that somehow fielded nobody would raise an `AttributeError`
         five lines from the thing being tested. One accessor instead.
         """
-        for eid, _ in world.each(Ident):          # ty: ignore[unresolved-attribute]
-            got = world.get(eid, Ident)           # ty: ignore[unresolved-attribute]
+        for eid, _ in world.each(Ident):          # ty: ignore[missing-attribute]
+            got = world.get(eid, Ident)           # ty: ignore[missing-attribute]
             if got is not None and got.ref == "c:fighter":
                 return eid
         raise AssertionError("no fighter was fielded")
@@ -79248,7 +79253,7 @@ def the_fixture_challenge_can_run_beats(out: Result) -> None:
     try:
         narrated = through_challenge_scene(Narrator(scripted=False))
     finally:
-        ch.resolve = _real_resolve  # ty: ignore[invalid-assignment]
+        ch.resolve = _real_resolve
     automatic = through_challenge_scene(beat_mod.Director(scripted=True))
     out.that(any(ln.kind == "dm" for ln in narrated),
              "the setup landed: the narrated path ran beats at all. Without"
@@ -79381,7 +79386,7 @@ def the_fixture_challenge_can_run_beats(out: Result) -> None:
         beat_mod.Director(roles=llm_mod.ROLES).react(bare_play, [], [])
         asked_without = seen_dm[-1] if seen_dm else ""
     finally:
-        llm_mod.chat = _real_chat  # ty: ignore[invalid-assignment]
+        llm_mod.chat = _real_chat
 
     phrasings = [a.what for a in opts if a.what]
     out.that(bool(phrasings) and len(opts) > 1,
@@ -80300,7 +80305,7 @@ def a_tie_goes_to_ending_the_turn(out: Result) -> None:
 
     end = Action(kind="end", cost=ActionType.NONE)
     free = Action(kind="power", cost=ActionType.FREE, ref="i1363p1")
-    pol.score = lambda *a, **k: 0.0  # ty: ignore[invalid-assignment]
+    pol.score = lambda *a, **k: 0.0
 
     picked = [pol.act(world, enc, actor, [free, end]).kind,
               pol.act(world, enc, actor, [end, free]).kind]
