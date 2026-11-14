@@ -30474,6 +30474,101 @@ def a_granted_slide_of_somebody_else(out: Result) -> None:
     )
 
 
+def equipment_becomes_part_of_the_form(out: Result) -> None:
+    """"You cannot hold or carry any object. Your equipment becomes part of
+    this form."
+
+    `p13860` carried `c.form(keeps_gear=)` for this, and **the symbol had
+    already been retired on the sibling that shared it**: `p14192` prints
+    the same sentence, settled it, and removed the marker -- *"`c.form`
+    needs no parameter, because the two things the card takes away are each
+    sayable today"*. `p13860`'s own note pointed at `p14192` as the place
+    the symbol lived, which was true when written and had since been
+    answered.
+
+    What has combat meaning is the **item powers of what is carried**, and
+    the arms below are the two halves of that one sentence:
+
+    * an item's own rows are forbidden while the shape lasts, which is
+      `c.forbid` and not a spend, so they come back with it;
+    * a **Property** is not a power -- `action=NONE` -- and is left alone,
+      which is the arm a wider implementation fails. The card's exception
+      names powers.
+
+    The rest is inventory bookkeeping with no combat consequence, which
+    `p5032` and `f1857` settled for this identical paragraph. #1306.
+    """
+    from combat_engine.engine.components import Movement, Powers
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.types import ActionType
+
+    world, me, _ = _board("p13860")
+    known = world.need(me, Powers)
+    if "p13860" not in known.known:
+        known.known.append("p13860")
+
+    mine = [
+        ref for ref in sorted(known.known)
+        if (row := REGISTRY.get(ref)) is not None and row.cls == "item"
+    ]
+    powers = [
+        ref for ref in mine
+        if REGISTRY[ref].action is not ActionType.NONE
+    ]
+    props = [ref for ref in mine if REGISTRY[ref].action is ActionType.NONE]
+    if not powers or not props:
+        out.skip(
+            "this board carries no item with both a power and a property,"
+            " so the exception cannot be told from the rule on it"
+        )
+        return
+
+    before = set(known.forbidden)
+    out.that(
+        use(world, me, "p13860", targets=[me]),
+        "p13860 can be used, which every arm below is measured after",
+        "the row refused itself",
+    )
+    took = set(known.forbidden) - before
+    out.that(
+        took and all(ref in took for ref in powers),
+        "every item POWER the creature carries is forbidden while it is a"
+        " bat -- forbidden, not spent, so it comes back with the shape",
+        f"item powers {powers}; newly forbidden {sorted(took)}",
+    )
+    out.that(
+        not (took & set(props)),
+        "and no PROPERTY is, because a property is not a power -- the"
+        " card's exception names powers, and a wider reading would take"
+        " away a weapon's standing bonus too",
+        f"properties {props}; of those forbidden {sorted(took & set(props))}",
+    )
+    # **And the creature's OWN powers are untouched**, which neither arm
+    # above asks: a plant forbidding every non-property row the character
+    # holds -- its class powers included -- passed both of them. The
+    # printed sentence is about equipment.
+    ours = [
+        ref for ref in sorted(known.known)
+        if (row := REGISTRY.get(ref)) is not None
+        and row.cls not in ("item", "")
+        and row.action is not ActionType.NONE
+    ]
+    out.that(
+        ours and not (took & set(ours)),
+        "while the creature's own class powers are left alone -- the"
+        " sentence is about equipment, not about everything it can do",
+        f"own powers {ours[:6]} ({len(ours)});"
+        f" of those forbidden {sorted(took & set(ours))}",
+    )
+    mv = world.get(me, Movement)
+    out.that(
+        mv is not None and mv.modes.get("fly") == 8,
+        "and the shape itself is a flying bat, which is the half that was"
+        " already written",
+        f"modes {mv.modes if mv is not None else None}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -87299,6 +87394,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "bat_form": (
+        equipment_becomes_part_of_the_form,
+        "a polymorph that takes away item powers and leaves properties",
     ),
     "granted_slide": (
         a_granted_slide_of_somebody_else,
