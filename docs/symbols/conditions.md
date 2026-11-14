@@ -50,7 +50,7 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - The grab **anybody** may try, as opposed to one a row applies.
 - `c.latch(self, label: 'str', *, on: 'int | None' = None, per_turn: 'bool' = False) -> 'None'`
   - Spend the payout for this window.
-- `c.leash(self, radius: 'int', *, to: 'int | None' = None, square: 'tuple[int, int] | None' = None, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
+- `c.leash(self, radius: 'int', *, to: 'int | None' = None, square: 'tuple[int, int] | None' = None, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>, anchors: 'Iterable[int] | None' = None) -> 'Effect | None'`
   - Tether a creature: it may not get further than `radius` from
 - `c.link(self, a: 'Square', b: 'Square', *, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None) -> 'Effect | None'`
   - Two squares a mover crosses between in one step.

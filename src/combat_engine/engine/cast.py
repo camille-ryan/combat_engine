@@ -12057,6 +12057,7 @@ class Cast:
         square: tuple[int, int] | None = None,
         on: int | None = None,
         until: When = When.SAVE_ENDS,
+        anchors: Iterable[int] | None = None,
     ) -> Effect | None:
         """Tether a creature: it may not get further than `radius` from
         something.
@@ -12085,17 +12086,19 @@ class Cast:
         who = self._who(on)
         if who is None:
             return None
-        if to is None and square is None:
+        tied = frozenset(anchors or ())
+        if to is None and square is None and not tied:
             at = self.world.get(who, Position)
             if at is None:
                 return None
             square = at.square
         held = self.world.get(who, Leash) or self.world.add(who, Leash())
-        before = (held.radius, held.to, held.square)
+        before = (held.radius, held.to, held.square, held.anchors)
         held.radius, held.to, held.square = radius, to, square
+        held.anchors = tied
 
         def undo() -> None:
-            held.radius, held.to, held.square = before
+            (held.radius, held.to, held.square, held.anchors) = before
 
         return self.world.effects.apply(
             who, self.me, until,

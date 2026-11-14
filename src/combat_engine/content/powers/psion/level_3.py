@@ -151,7 +151,6 @@ def p13317(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_IMPLEMENT, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
-    dropped=("c.leash(anchors=)",),
 )
 def p13318(c: Cast) -> None:
     """"Moves more than 2 squares" is measured from where it stood when its
@@ -181,11 +180,21 @@ def p13318(c: Cast) -> None:
     afterwards. Each secondary target is leashed at 1 to the primary, which
     is the printed sentence exactly.
 
-    The *primary*'s end of it is what stays dropped, and it is one
-    parameter: the card says it may not leave the side of **one or more**
-    secondary targets, so the anchor is a set and `c.leash` takes a single
-    `to=`. Leashing it to whichever secondary happened to be hit first
-    would be a tighter cage than the card prints."""
+    **The primary's end of it is written now, and it was one parameter.**
+    The card says it may not leave the side of **one or more** secondary
+    targets, so the anchor is a set where `c.leash` took a single `to=`.
+    `c.leash(anchors=)` takes the set and `query.leash_of` answers every
+    live anchor square, so `movement.reachable` keeps a square that is
+    within 1 of **any** of them -- one anchor being a set of one, so the
+    fourteen rows printing a single tether are untouched.
+
+    A dead anchor drops out of the set rather than cutting the leash, which
+    is the difference from the single-anchor case: the others still hold it,
+    and the whole set being gone is the same thing as that one dying.
+
+    Laid only when a secondary was actually hit. An empty set would fall
+    through to `c.leash`'s no-anchor branch and pin the primary to its own
+    square, which is the opposite of what the clause does. `#1297`."""
     spent = augment(c, 1, 2)
     victim = c.target
     if not c.strike():
@@ -221,10 +230,24 @@ def p13318(c: Cast) -> None:
         # asked of that line rather than reassembled by hand.
         secondary = Attack(INT, vs=REF)
         bonus = secondary.bonus_for(c.world, c.me, c.ref, c.branch)
+        bound: list[int] = []
         for other in c.within(1, of=victim, side="enemy"):
             if other != victim and c.attack(bonus, REF, on=other).hit:
                 c.flat(5 + c.int_mod, on=other)
                 c.leash(1, to=victim, on=other, until=When.EONT)
+                bound.append(other)
+        # **The primary's end of the tether, and it takes the whole set.**
+        # The card says it may not leave the side of *one or more* of the
+        # secondary targets, so being beside **any** of them satisfies it --
+        # `c.leash(anchors=)` since `#1297`. Leashing to whichever was hit
+        # first is a tighter cage than the card prints, which is what this
+        # row's marker said and why it waited.
+        #
+        # Only when something was actually bound: no secondary hit means no
+        # anchor, and a leash with an empty set would pin the primary to its
+        # own square -- `c.leash`'s own fallback when nothing is named.
+        if bound:
+            c.leash(1, anchors=bound, on=victim, until=When.EONT)
     began: dict[str, object] = {}
 
     def began_turn(ev: TurnStart) -> None:

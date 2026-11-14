@@ -260,6 +260,17 @@ class Leash:
     radius: int = 0
     to: int | None = None
     square: tuple[int, int] | None = None
+    #: **Several anchors, any one of which satisfies the tether.**
+    #: `p13318`'s primary target *"may not leave the side of one or more"*
+    #: of the secondary ones, so the anchor is a **set** and being near any
+    #: of them is enough. `to` is the single-anchor spelling and stays --
+    #: fourteen rows print one anchor and none of them should grow a set --
+    #: so `query.leash_of` resolves whichever is given.
+    #:
+    #: Leashing to whichever secondary happened to be hit first would be a
+    #: tighter cage than the card prints, which is what this row's marker
+    #: said and why it was right to wait. #1297.
+    anchors: frozenset[int] = frozenset()
     #: **The same restriction pointed the other way**: a creature this
     #: creature may not get *closer* to. "The target cannot move closer to
     #: the X (save ends)" is printed on seven rows and none of them could be

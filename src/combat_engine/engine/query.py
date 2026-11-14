@@ -3329,7 +3329,9 @@ def granted_amount(
     return max(laid) if laid else default
 
 
-def leash_of(world: World, eid: int) -> tuple[tuple[int, int], int] | None:
+def leash_of(
+        world: World, eid: int,
+) -> tuple[frozenset[tuple[int, int]], int] | None:
     """Where this creature is tethered and how far it may stray, or None.
 
     Resolves a creature anchor to that creature's **current** square, which
@@ -3343,12 +3345,26 @@ def leash_of(world: World, eid: int) -> tuple[tuple[int, int], int] | None:
     tie = world.get(eid, Leash)
     if tie is None or tie.radius <= 0:
         return None
+    if tie.anchors:
+        # **Any one of them satisfies the tether**, which is `p13318`'s
+        # printed "one or more". A dead or departed anchor drops out of the
+        # set rather than cutting the leash, because the others still hold
+        # it -- where a single dead anchor cuts it outright, below. The
+        # whole set being gone is the same case as that one.
+        live = {
+            at.square
+            for who in sorted(tie.anchors)
+            if alive(world, who)
+            and (at := world.get(who, Position)) is not None
+        }
+        return (frozenset(live), tie.radius) if live else None
     if tie.to is not None:
         if not alive(world, tie.to):
             return None
         at = world.get(tie.to, Position)
-        return (at.square, tie.radius) if at is not None else None
-    return (tie.square, tie.radius) if tie.square is not None else None
+        return (frozenset({at.square}), tie.radius) if at is not None else None
+    return ((frozenset({tie.square}), tie.radius)
+            if tie.square is not None else None)
 
 
 def kept_away_from(world: World, eid: int) -> tuple[Square, int] | None:

@@ -1190,11 +1190,16 @@ def reachable(
 
     tie = leash_of(world, eid)
     if tie is not None:
+        # **Within the radius of ANY anchor.** `leash_of` answers a set
+        # since `#1297`: one anchor is a set of one, so every
+        # single-anchor row is unchanged, and `p13318`'s primary target is
+        # tethered to *"one or more"* secondaries rather than to whichever
+        # was hit first -- which would be a tighter cage than it prints.
         held, radius = tie
         paths = {
             sq: path
             for sq, path in paths.items()
-            if grid_distance(sq, held) <= radius
+            if any(grid_distance(sq, one) <= radius for one in held)
         }
     # **And the same filter reversed**, which is "cannot move closer to the
     # X (save ends)" -- seven rows, and none of them could be written. Here

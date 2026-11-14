@@ -84564,7 +84564,155 @@ def a_heavy_blade_lengthens_a_printed_range(out: Result) -> None:
              f"{reach_of(world, me, REGISTRY['p12305']).size}")
 
 
+def a_tether_to_one_or_more_anchors(out: Result) -> None:
+    """`c.leash(anchors=)`: beside **any** of them is enough (#1297).
+
+    `p13318`'s Augment 2 leashes each secondary target to the primary, and
+    the primary *"may not leave the side of one or more"* of the
+    secondaries. `c.leash` took a single `to=`, so the primary's end was
+    the dropped clause -- and the row's marker was right to wait rather
+    than leash it to whichever secondary happened to be hit first, which is
+    a tighter cage than the card prints.
+
+    **The arm that matters is the one a single anchor cannot show**: two
+    anchors far apart, and the creature free to stand beside either. A
+    `to=`-shaped reading would allow one of those squares and forbid the
+    other, and a rule using one anchor could not tell the two
+    implementations apart.
+    """
+    import audit
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.movement import reachable
+    from combat_engine.engine.query import enemies, leash_of
+
+    world, me, _ = audit.board("p13318", 1)
+    foes = [e for e in enemies(world, me) if world.get(e, Health)]
+    out.that(len(foes) >= 3, "the board fields three creatures", f"{len(foes)}")
+    if len(foes) < 3:
+        return
+    walker, east, west = foes[0], foes[1], foes[2]
+    here = sorted(world.need(me, Position).squares)[0]
+    # **The anchors are off the walker's lane, which the first draft got
+    # wrong.** With them in a row the walker had to step THROUGH an anchor
+    # to reach the square beyond it, so the main arm failed on a blocked
+    # path rather than on the tether -- a board fault reading as a code
+    # fault. Two squares apart vertically, walker between them.
+    world.need(walker, Position).square = (here[0] + 6, here[1])
+    world.need(east, Position).square = (here[0] + 6, here[1] - 2)
+    world.need(west, Position).square = (here[0] + 6, here[1] + 2)
+
+    c = Cast(world=world, me=me, ref="drivers:tether")
+    eff = c.leash(1, anchors=[east, west], on=walker, until=When.EONT)
+    out.that(eff is not None, "the tether is a hold, so it can end")
+
+    tie = leash_of(world, walker)
+    out.that(tie is not None and len(tie[0]) == 2,
+             "`query.leash_of` answers BOTH anchor squares -- a single"
+             " square could not say \"one or more\"",
+             f"{sorted(tie[0]) if tie else None}")
+
+    got = reachable(world, walker, 6)
+    beside_east = (here[0] + 6, here[1] - 1)
+    beside_west = (here[0] + 6, here[1] + 1)
+    far = (here[0] + 10, here[1])
+    out.that(beside_east in got and beside_west in got,
+             "THE arm: it may stand beside EITHER anchor. A single-anchor"
+             " reading allows one of these squares and forbids the other,"
+             " and one anchor could not tell the two apart",
+             f"east={beside_east in got} west={beside_west in got}")
+    out.that(far not in got,
+             "PLANT: and not five squares from both -- the tether still"
+             " binds, so this is not simply an unleashed creature",
+             f"{far in got}")
+
+    # -- a dead anchor drops out; the others still hold -------------------
+    world.need(east, Health).hp = -99
+    tie = leash_of(world, walker)
+    out.that(tie is not None and len(tie[0]) == 1,
+             "PLANT: a dead anchor drops OUT of the set and the leash"
+             " stands on the rest -- where a single dead anchor cuts it"
+             " outright, which is the difference the set makes",
+             f"{sorted(tie[0]) if tie else None}")
+    out.that(beside_east not in reachable(world, walker, 6),
+             "so the square beside the dead one is no longer allowed")
+
+    # -- and one anchor is a set of one, so nothing else moved -----------
+    world2, me2, _ = audit.board("p13318", 1)
+    foes2 = [e for e in enemies(world2, me2) if world2.get(e, Health)]
+    lone, post = foes2[0], foes2[1]
+    here2 = sorted(world2.need(me2, Position).squares)[0]
+    world2.need(lone, Position).square = (here2[0] + 6, here2[1])
+    world2.need(post, Position).square = (here2[0] + 7, here2[1])
+    Cast(world=world2, me=me2, ref="drivers:tether").leash(
+        1, to=post, on=lone, until=When.EONT)
+    single = leash_of(world2, lone)
+    out.that(single is not None and len(single[0]) == 1,
+             "PLANT: and a plain `to=` is a set of ONE, so the fourteen"
+             " rows printing a single tether read exactly as before",
+             f"{sorted(single[0]) if single else None}")
+
+    # -- and the ROW uses the set, which the verb's arms cannot show -----
+    #
+    # **Added because a plant passed.** Leashing the row to `bound[0]`
+    # instead of the whole set reddened nothing above: every arm so far
+    # calls `c.leash` directly, so they prove the verb and say nothing
+    # about this row's use of it. "A driver rule must run the row's body --
+    # the verb is not the row."
+    from combat_engine.engine.components import Leash
+    from combat_engine.engine.dsl import REGISTRY
+
+    world3, me3, _ = audit.board("p13318", 1)
+    foes3 = [e for e in enemies(world3, me3) if world3.get(e, Health)]
+    out.that(len(foes3) >= 3, "the second board fields three creatures too")
+    if len(foes3) < 3:
+        return
+    prime = foes3[0]
+    at = sorted(world3.need(prime, Position).squares)[0]
+    # **Both crowded ADJACENT to the primary**, which the first draft got
+    # wrong: it stacked them in a column, so the second stood 2 squares
+    # out and was never a secondary target at all -- the set came back
+    # with one member and the assertion read as a failure on working code.
+    # The secondary attack is "each enemy within 1 of the primary".
+    for other, where in zip(foes3[1:3],
+                            ((at[0] - 1, at[1]), (at[0], at[1] - 1)),
+                            strict=True):
+        world3.need(other, Position).square = where
+    c3 = Cast(world=world3, me=me3, ref="p13318", targets=[prime])
+    c3.target = prime
+    c3.strike = lambda **kw: True       # ty: ignore[invalid-assignment]
+    c3.attack = lambda *a, **k: _Hit()  # ty: ignore[invalid-assignment]
+    # **`c.augment`, which is what the row reads.** `content.powers.augment`
+    # returns `c.augment` directly for a row that declares `augments=` --
+    # `dsl.use` has already spent the points by the time a body runs -- so
+    # setting any other attribute leaves the body on its unaugmented path.
+    c3.augment = 2
+    REGISTRY["p13318"].body(c3)
+    tied = world3.get(prime, Leash)
+    out.that(tied is not None and len(tied.anchors) >= 2,
+             "PLANT: the ROW leashes its primary to the whole set of"
+             " secondaries it bound, not to the first of them -- every arm"
+             " above calls the verb directly and none of them could see"
+             " this",
+             f"anchors={sorted(tied.anchors) if tied else None}"
+             f" to={tied.to if tied else None}")
+
+
+class _Hit:
+    """A hit, for a rule that forces every secondary attack to land."""
+
+    hit = True
+    critical = False
+    total = 99
+
+
 DRIVERS = {
+    "many_anchors": (
+        a_tether_to_one_or_more_anchors,
+        "`c.leash(anchors=)` holds a creature beside ANY of its anchors,"
+        " and a plain `to=` is a set of one (#1297)",
+    ),
     "heavy_blade_range": (
         a_heavy_blade_lengthens_a_printed_range,
         "`p12305` is Ranged 5, or 10 while wielding a heavy blade (#1295)",
