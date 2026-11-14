@@ -4513,7 +4513,7 @@ def m6109a2(c: Cast) -> None:
         relation=Relation.GRABBED_BY,
     ),
     attack=Attack(vs=FORT, printed=13),
-    dropped=("c.waive(cannot_act)", "Effect.drop_cost(by=)"),
+    dropped=("c.waive(cannot_act)",),
 )
 def m6109a3(c: Cast) -> None:
     """**Removed from play already has a spelling.** It is
@@ -4523,15 +4523,19 @@ def m6109a3(c: Cast) -> None:
     somebody build a second one. The burn rides on the same hold, so it
     stops when the hold does.
 
-    Two clauses are dropped, and the first is the one that matters in play:
+    **One clause is dropped now and it is the one that matters in play:**
     the card lets the swallowed creature act and hit this creature back,
     where `Condition.REMOVED` is `cannot_act` and `cannot_move`. `c.waive`
     is the verb that relaxes part of what a condition costs and it takes
     four words -- `attack`, `halve_speed`, `grants_ca`, `speed_cap` --
-    raising a `KeyError` on anything else, deliberately. And "the m6109 can
-    end the effect as a free action" is not `drop_cost`: `actions._dropping`
-    offers a droppable effect to the creature it is **on**, which here is
-    the victim, so declaring it would hand the prisoner its own release.
+    raising a `KeyError` on anything else, deliberately.
+
+    *"It can end the effect as a free action"* lands. It is `drop_cost`
+    after all, with the half that was missing: `actions._dropping` offers a
+    droppable effect to the creature it is **on**, which here is the
+    victim, so this had to name the payer. `c.endable(by=)` is `#1304`, and
+    `p13861` is the other row that waited on it -- a domination whose minor
+    action belongs to the caster.
 
     The target line -- "one creature grabbed by it" -- is `Target.relation`
     now; it was a body filter, so the row was offered against any enemy in
@@ -4554,6 +4558,10 @@ def m6109a3(c: Cast) -> None:
 
     inside.subs.append(c.world.bus.on(Dropped, let_go, owner=me))
     inside.on_end.append(lambda: _put_beside(c, victim, me))
+    # The hold sits on the victim and this creature is the one the card
+    # lets end it, so the payer is named rather than inferred. No `when=`:
+    # the printed line puts no condition on it.
+    c.endable(inside, ActionType.FREE, by=me)
 
 
 @power(

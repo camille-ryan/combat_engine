@@ -1718,9 +1718,25 @@ def _dropping(world: World, encounter: Encounter, actor: int) -> list[Action]:
         held = world.effects.live.get(conj.effect or -1)
         if held is not None and held not in mine:
             mine.append(held)
+    # **And an effect whose printed line names THIS creature as the one who
+    # may end it**, wherever it sits. The conjuration branch above is the
+    # same argument special-cased -- `#296`'s "the only creature the printed
+    # line can mean" -- and `Effect.drop_by` is it made general: `p13861`'s
+    # domination sits on the prisoner and is ended by the caster, and
+    # `m6109a3`'s swallowing sits on the swallowed creature and is ended by
+    # the monster. #1304.
+    for held in world.effects.live.values():
+        if held.drop_by == actor and held not in mine:
+            mine.append(held)
     out: list[Action] = []
     for eff in sorted(mine, key=lambda e: e.id):
         if eff.drop_cost is None or not encounter.can_spend(actor, eff.drop_cost):
+            continue
+        # **The condition gates the offer, not the payout.** `Effects.drop`
+        # ends the effect before `drop_then` runs, so a payout that refused
+        # itself for distance would have ended the thing for nothing. See
+        # `Effect.drop_when`.
+        if eff.drop_when is not None and not eff.drop_when(world, actor):
             continue
         out.append(
             Action(kind="drop", cost=eff.drop_cost, subject=eff.id, ref=eff.label)

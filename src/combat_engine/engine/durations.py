@@ -144,6 +144,30 @@ class Effect:
     #: be an `on_end`: those fire for the clock and the saving throw too,
     #: and a payout owed for choosing is not owed for waiting.
     drop_then: Callable[[], None] | None = None
+    #: **Who may pay to end it**, when the printed line names somebody other
+    #: than whoever it sits on. `-1` is that default and is what every row
+    #: in the tree but two means.
+    #:
+    #: Two name a different creature. `p13861` dominates an enemy and the
+    #: minor action that ends it is the **caster's**; `m6109a3` swallows a
+    #: creature and *"the effect ends when the monster ends the effect as a
+    #: free action"*, where the hold sits on the swallowed target. Offered
+    #: as it sits, the first hands the prisoner its own release.
+    #:
+    #: `actions._dropping` already had this shape for one case and `#296` is
+    #: the argument: a conjuration's effect is held by the conjuration,
+    #: which has no turn, so it is offered to whoever conjured it -- "the
+    #: only creature the printed line can mean". This is that, generalised.
+    #: #1304.
+    drop_by: int = -1
+    #: **A condition on offering the drop**, asked of whoever would pay.
+    #:
+    #: Not a condition on the payout, and the difference is load-bearing:
+    #: `Effects.drop` ends the effect *before* `drop_then` runs, so a payout
+    #: that refused itself for distance would have ended the domination for
+    #: nothing. `p13861`'s *"while adjacent to the target"* has to gate the
+    #: offer. #1304.
+    drop_when: Callable[[Any, int], bool] | None = None
     ended: bool = False
     #: Lifted but not ended -- everything it installed is off the creature and
     #: the effect is still standing, still clocked, still owed its saving
@@ -430,6 +454,8 @@ class Effects:
         on_resume: Iterable[Callable[[], None]] = (),
         sustain_cost: ActionType | None = None,
         drop_cost: ActionType | None = None,
+        drop_by: int = -1,
+        drop_when: Callable[[Any, int], bool] | None = None,
         reshape: Callable[[Any], Any] | None = None,
         reshape_when: Callable[[dict[str, Any]], bool] | None = None,
         retarget: Any = None,
@@ -515,6 +541,8 @@ class Effects:
             sustained=self.world.round,
             sustain_cost=sustain_cost,
             drop_cost=drop_cost,
+            drop_by=drop_by,
+            drop_when=drop_when,
             reshape=reshape,
             reshape_when=reshape_when,
             retarget=retarget,

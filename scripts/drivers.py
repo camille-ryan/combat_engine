@@ -30193,6 +30193,152 @@ def the_wild_magic_clause(out: Result) -> None:
     )
 
 
+def a_drop_somebody_else_pays_for(out: Result) -> None:
+    """"You can use a minor action ... Doing so ends the domination."
+
+    `actions._dropping` offers a droppable effect to whoever it sits **on**,
+    which `c.endable`'s docstring states as the design and which is right
+    for nearly every row. Two rows name somebody else, and declaring either
+    without `Effect.drop_by` hands the prisoner its own release:
+
+    * `p13861` dominates an enemy and the minor action that ends it -- with
+      a healing surge and necrotic damage as the price -- is the **caster's**.
+    * `m6109a3` swallows a creature and ends that itself as a free action,
+      while the hold sits on the swallowed creature.
+
+    **The adjacency gates the OFFER and not the payout**, which is the
+    second half of the gap and the easier one to get wrong: `Effects.drop`
+    ends the effect before `drop_then` runs, so a payout refusing itself for
+    distance would have ended the domination for nothing on the one turn it
+    refused.
+
+    The negative arms are the rule: that the victim is offered nothing, and
+    that the caster is offered nothing from across the board. An
+    implementation offering it to the holder passes every positive arm.
+    #1304.
+    """
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import adjacent, enemies
+
+    def dominated(*, beside: bool):  # noqa: ANN202
+        """A caster holding a domination, standing near the victim or not."""
+        world, me, _ = _board("p13861")
+        foe = sorted(enemies(world, me))[0]
+        if not use(world, me, "p13861", targets=[foe]):
+            return None
+        spot = world.need(foe, Position).square
+        world.need(me, Position).square = (
+            (spot[0] + 1, spot[1]) if beside else (spot[0] + 12, spot[1] + 12)
+        )
+        return world, me, foe
+
+    near = dominated(beside=True)
+    if near is None:
+        out.skip("p13861 could not be used on this board, so no domination"
+                 " exists to be ended")
+        return
+    world, me, foe = near
+    enc = world.encounter
+    mine = [a for a in legal(world, enc, me) if a.kind == "drop"]
+    theirs = [a for a in legal(world, enc, foe) if a.kind == "drop"]
+    out.that(
+        mine and not theirs,
+        "the caster is offered the minor action that ends its own"
+        " domination, and the DOMINATED creature is offered nothing --"
+        " which is what it would have got by default",
+        f"caster {[a.ref for a in mine]}; victim {[a.ref for a in theirs]}",
+    )
+
+    far = dominated(beside=False)
+    if far is None:
+        out.skip("the second board could not pose the domination")
+    else:
+        w2, me2, foe2 = far
+        out.that(
+            not adjacent(w2, me2, foe2)
+            and not [a for a in legal(w2, w2.encounter, me2) if a.kind == "drop"],
+            'and not offered at all from across the board, because "while'
+            ' adjacent to the target" gates the offer rather than the payout',
+            f"adjacent {adjacent(w2, me2, foe2)};"
+            f" offered {[a.ref for a in legal(w2, w2.encounter, me2) if a.kind == 'drop']}",
+        )
+
+    # ------------------------------------------------------- the payout
+    hurt: list[int] = []
+    world.bus.on(
+        DamageApplied,
+        lambda ev: hurt.append(ev.amount) if ev.target == foe else None,
+    )
+    health = world.get(me, Health)
+    # **One surge spent first**, which the arm needs rather than wants:
+    # "gain a healing surge" regains a SPENT one, so a caster at its
+    # maximum gains nothing and correctly so. Read 4 -> 4 before this and
+    # looked like the payout not firing.
+    if health is not None and health.surges >= getattr(health, "max_surges", 0):
+        health.surges -= 1
+    surges_before = health.surges if health is not None else 0
+    held = [e for e in world.effects.live.values() if e.by == "p13861"]
+    perform(world, enc, me, mine[0])
+    surges_after = health.surges if health is not None else 0
+    out.that(
+        surges_after == surges_before + 1,
+        "performing it gains the caster a healing surge, which is half the"
+        " price the card pays out",
+        f"surges {surges_before} -> {surges_after}",
+    )
+    out.that(
+        hurt and hurt[-1] > 0,
+        "and deals the target necrotic damage for its value",
+        f"damage dealt to the victim: {hurt}",
+    )
+    out.that(
+        held and all(e.ended for e in held),
+        "and ends the domination, which is what the trade buys",
+        f"effects laid by the row: {[(e.id, e.ended) for e in held]}",
+    )
+
+    # ---------------------------------------------- the monster's version
+    world3, beast, _ = _board("m6109a3")
+    foes3 = sorted(enemies(world3, beast))
+    if not foes3:
+        out.skip("m6109a3's board has nobody to swallow")
+        return
+    swallowed = foes3[0]
+    # **Grabbed first, which its own target line requires** -- "one
+    # creature grabbed by it", a `Target.relation` since `#656`. Without
+    # this the row has nobody to aim at and the arm skipped rather than
+    # asked, which is a question not posed rather than an answer.
+    grabber = Cast(world=world3, me=beast, ref="drivers:grab")
+    grabber.grab(on=swallowed)
+    beside = world3.need(beast, Position).square
+    world3.need(swallowed, Position).square = (beside[0] + 1, beside[1])
+    use(world3, beast, "m6109a3", targets=[swallowed])
+    swallowing = [e for e in world3.effects.live.values() if e.by == "m6109a3"]
+    if not swallowing:
+        out.skip("m6109a3 did not land on this board, so nothing was"
+                 " swallowed to be let go")
+    else:
+        beast_drops = [
+            a for a in legal(world3, world3.encounter, beast)
+            if a.kind == "drop"
+        ]
+        victim_drops = [
+            a for a in legal(world3, world3.encounter, swallowed)
+            if a.kind == "drop"
+        ]
+        out.that(
+            beast_drops and not victim_drops,
+            "m6109a3's swallowing is ended by the creature that swallowed,"
+            " not by the one inside it -- the same gap, the other way up",
+            f"monster {[a.ref for a in beast_drops]};"
+            f" swallowed {[a.ref for a in victim_drops]}",
+        )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -87018,6 +87164,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "drop_by": (
+        a_drop_somebody_else_pays_for,
+        "an effect ended by a creature other than the one it sits on",
     ),
     "wild_magic": (
         the_wild_magic_clause,

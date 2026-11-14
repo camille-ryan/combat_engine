@@ -107,7 +107,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Destroy a zone or a conjuration, and unwind what it was holding.
 - `c.end_effect(self, effect: 'Effect | None' = None, *, on: 'int | None' = None, against: 'str' = '', save_ends: 'bool' = False, carrying: 'Condition | None' = None, why: 'str' = '') -> 'Effect | None'`
   - Take a live effect off early, before its duration runs out.
-- `c.endable(self, effect: 'Effect | None', cost: 'ActionType' = <ActionType.MINOR: 'minor'>, *, then: 'Callable[[], None] | None' = None) -> 'Effect | None'`
+- `c.endable(self, effect: 'Effect | None', cost: 'ActionType' = <ActionType.MINOR: 'minor'>, *, then: 'Callable[[], None] | None' = None, by: 'int | None' = None, when: 'Callable[[Any, int], bool] | None' = None) -> 'Effect | None'`
   - Let whoever holds this effect end it deliberately, for an action.
 - `c.extend_effect(self, effect: 'Effect', *, until: 'When', clock: 'int | None' = None) -> 'bool'`
   - Push a standing effect's clock on. False if it already runs that

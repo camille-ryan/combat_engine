@@ -2098,6 +2098,8 @@ class Cast:
         cost: ActionType = ActionType.MINOR,
         *,
         then: Callable[[], None] | None = None,
+        by: int | None = None,
+        when: Callable[[Any, int], bool] | None = None,
     ) -> Effect | None:
         """Let whoever holds this effect end it deliberately, for an action.
 
@@ -2117,10 +2119,29 @@ class Cast:
         It runs for the deliberate drop and for nothing else -- not for
         the clock and not for a saving throw -- because a payout owed for
         choosing is not owed for waiting.
+
+        **`by=` is the creature the printed line actually names**, for the
+        two rows where that is not the holder: `p13861`'s domination is
+        ended by the *caster's* minor action, and `m6109a3`'s swallowing by
+        the monster's free action while the hold sits on the swallowed
+        creature. Without it, declaring either hands the prisoner its own
+        release. The paragraph above stays true of everything else, which is
+        why `by=None` changes nothing.
+
+        **`when=` gates the offer, not the payout**, and that is not a
+        convenience: `Effects.drop` ends the effect before `then` runs, so a
+        payout refusing itself for distance would have ended the domination
+        for nothing. *"While adjacent to the target"* is a condition on
+        being offered the trade at all. Handed the world and the payer.
+        #1304.
         """
         if effect is not None:
             effect.drop_cost = cost
             effect.drop_then = then
+            if by is not None:
+                effect.drop_by = by
+            if when is not None:
+                effect.drop_when = when
         return effect
 
     def invisible(
