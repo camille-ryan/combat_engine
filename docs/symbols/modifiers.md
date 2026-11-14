@@ -114,6 +114,10 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Cannot be seen -- by one creature, or by everybody.
 - `c.no_advantage(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None, gains: 'bool' = False) -> 'Effect | None'`
   - "You do not grant combat advantage to any of your enemies."
+- `c.no_conceal(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, total: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - "The target does not benefit from concealment." Concealment only.
+- `c.no_conceal_in(self, zone: 'int', *, side: 'str' = 'any', total: 'bool' = False) -> 'None'`
+  - "Creatures do not benefit from concealment while within the zone."
 - `c.no_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "The target does not benefit from cover or concealment."
 - `c.no_invisibility(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`

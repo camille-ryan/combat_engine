@@ -323,15 +323,33 @@ def p11678(c: Cast) -> None:
     reach=CloseBlast(5),
     target=NO_TARGET,
     keywords=[*DIVINE, Keyword.ZONE],
-    dropped=('c.no_cover_in()',),
 )
 def p11679(c: Cast) -> None:
-    """The lit ground is real; what it denies is not. Concealment is not a
-    state this engine holds -- cover is worked out from two positions at the
-    moment of an attack -- so the second sentence is noted.
-    """
-    c.zone(c.area(), until=When.ENCOUNTER)
-    c.note(f"{c.ref}: concealment is denied to whoever stands in the zone")
+    """Both sentences land, and the old note had the mechanic backwards.
+
+    It read *"concealment is not a state this engine holds -- cover is
+    worked out from two positions at the moment of an attack"*. Concealment
+    is held, by `c.conceal`, `query.concealment_of`, `Grid.light` and
+    `query.light_concealment`, and `resolve` reads it on its own line
+    beside cover. The marker said `c.no_cover_in()`, which is the wrong
+    half: `c.no_cover` waives cover **and** concealment, so it would have
+    stripped cover from every creature in a zone of light.
+
+    `c.no_conceal_in` is the right one -- `#1301` -- and the two arguments
+    are both printed. `side="any"` because the card says *"Creatures"* and
+    not "you and your allies", which is what the three positive
+    zone-bounded grants say and why their default is the other way round.
+    `total=True` because the card names *"concealment or total
+    concealment"*, so the waiver has to be large enough to cancel the
+    larger one.
+
+    Being bright light, it also cancels the concealment of standing in a
+    badly lit square -- `resolve.situational_attack` folds
+    `light_concealment` into the same waiver, so that falls out of one read
+    rather than needing a second clause."""
+    zone = c.zone(c.area(), until=When.ENCOUNTER)
+    if zone is not None:
+        c.no_conceal_in(zone, side="any", total=True)
 
 
 @power(

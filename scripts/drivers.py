@@ -29891,6 +29891,158 @@ def climbing_a_surface(out: Result) -> None:
         )
 
 
+def concealment_denied_without_cover(out: Result) -> None:
+    """"Creatures do not benefit from concealment while within the zone."
+
+    `p11679` is a zone of bright light and carried `c.no_cover_in()` with a
+    note saying *"concealment is not a state this engine holds"*. Both were
+    wrong: concealment is held by `c.conceal`, `query.concealment_of`,
+    `Grid.light` and `query.light_concealment`, and the marker named the
+    wrong half of the mechanic.
+
+    Four combinations exist and only three had a verb:
+
+        cover AND concealment   c.ignore_cover    c.no_cover
+        concealment ONLY        c.ignore_cover(   -- nothing --
+                                  concealment_only=)
+
+    So the arm that matters is the **negative** one: `c.no_cover` would
+    have made every positive assertion here pass while also stripping
+    cover from everyone in a zone of light, which no printed line says.
+
+    **The attacker has to be chosen, not taken.** The board arms its caster
+    with `ignore_cover`, so `cover_waived` reads 5 before anything is laid
+    and both waivers look identical whatever the code does -- the numbers
+    this rule measures are pre-set unless it picks a creature carrying
+    neither. #1301.
+    """
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Position
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import (
+        concealment_waived,
+        cover_waived,
+        creatures,
+    )
+
+    world, caster, _ = _board("p11679")
+
+    def clean(world, *, avoid=()):  # noqa: ANN001, ANN202
+        """A creature carrying no cover or concealment waiver of its own."""
+        for eid in sorted(creatures(world)):
+            if eid in avoid:
+                continue
+            mods = world.get(eid, Mods)
+            carried = {m.what for m in mods.items} if mods else set()
+            if not carried & {"ignore_cover", "no_cover",
+                              "ignore_concealment", "no_concealment"}:
+                return eid
+        return None
+
+    looker = clean(world)
+    seen = clean(world, avoid=(looker,))
+    if looker is None or seen is None:
+        out.skip("this board has no two creatures free of a cover waiver,"
+                 " so the waivers cannot be told apart on it")
+        return
+
+    before = (concealment_waived(world, looker, seen),
+              cover_waived(world, looker, seen))
+    c = Cast(world=world, me=looker, ref="drivers:no-conceal")
+    c.no_conceal(on=seen, total=True, until=When.ENCOUNTER)
+    after = (concealment_waived(world, looker, seen),
+             cover_waived(world, looker, seen))
+    out.that(
+        after[0] > before[0],
+        "c.no_conceal raises the concealment waiver",
+        f"concealment waived {before[0]} -> {after[0]}",
+    )
+    out.that(
+        after[1] == before[1],
+        "and leaves the COVER waiver exactly where it was, which is the"
+        " arm c.no_cover would have failed",
+        f"cover waived {before[1]} -> {after[1]}",
+    )
+
+    # ------------------------------------------------- partial vs total
+    world, caster, _ = _board("p11679")
+    looker = clean(world)
+    seen = clean(world, avoid=(looker,))
+    c = Cast(world=world, me=looker, ref="drivers:no-conceal")
+    c.no_conceal(on=seen, until=When.ENCOUNTER)          # the 2 form
+    partial = concealment_waived(world, looker, seen)
+    world2, _, _ = _board("p11679")
+    looker2 = clean(world2)
+    seen2 = clean(world2, avoid=(looker2,))
+    c2 = Cast(world=world2, me=looker2, ref="drivers:no-conceal")
+    c2.no_conceal(on=seen2, total=True, until=When.ENCOUNTER)
+    whole = concealment_waived(world2, looker2, seen2)
+    out.that(
+        whole > partial,
+        "total=True waives more than the default, so a card printing"
+        ' "concealment or total concealment" is not written as the partial'
+        " one",
+        f"partial {partial}, total {whole}",
+    )
+
+    # --------------------------------------------------------- the zone
+    world, caster, _ = _board("p11679")
+    used = use(world, caster, "p11679", targets=[])
+    zones = dict(world.zones.all())
+    mine = [z for z in zones if "p11679" in str(zones[z].label or "")]
+    zone = mine[0] if mine else (sorted(zones)[-1] if zones else None)
+
+    def waived_on(world, eid) -> int:  # noqa: ANN001
+        mods = world.get(eid, Mods)
+        return mods.total("no_concealment", {}) if mods else 0
+
+    inside = sorted(world.zones.occupants(zone)) if zone is not None else []
+    outside = [
+        eid for eid in sorted(creatures(world))
+        if zone is not None and eid not in inside
+    ]
+    out.that(
+        used and zone is not None and inside
+        and all(waived_on(world, eid) for eid in inside),
+        "p11679 denies concealment to everyone standing in the zone it"
+        " lays, the caster's own side included -- its card says"
+        ' "Creatures"',
+        f"zone {zone}, occupants {inside},"
+        f" waivers {[waived_on(world, eid) for eid in inside]}",
+    )
+    out.that(
+        outside and not any(waived_on(world, eid) for eid in outside),
+        "and to nobody outside it, which is what makes it a zone rather"
+        " than a blessing on the board",
+        f"outside {outside},"
+        f" waivers {[waived_on(world, eid) for eid in outside]}",
+    )
+
+    # **And it is given back on leaving**, which is the half a row laying
+    # the modifier directly would get wrong.
+    if inside:
+        walker = inside[0]
+        where = world.need(walker, Position)
+        was = waived_on(world, walker)
+        here = where.square
+        far = (here[0] + 20, here[1] + 20)
+        movement.place(world, walker, far)
+        # **`zones.refresh()` is what notices.** Membership is recomputed
+        # there and the enter/exit events come out of it, so a probe that
+        # moves a creature and reads the modifier straight away sees the
+        # old answer -- which is what the first version of this arm did,
+        # and it read as the facility failing to give the bonus back.
+        world.zones.refresh()
+        out.that(
+            was and not waived_on(world, walker),
+            "and taken back when the creature walks out, which `c.bonus`"
+            " laid by hand would not do",
+            f"waiver {was} inside, {waived_on(world, walker)} outside",
+        )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -86716,6 +86868,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "no_concealment": (
+        concealment_denied_without_cover,
+        "a zone that denies concealment and leaves cover standing",
     ),
     "climbing": (
         climbing_a_surface,

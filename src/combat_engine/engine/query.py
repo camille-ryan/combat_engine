@@ -2881,7 +2881,19 @@ def concealment_waived(
         if mine is not None and mine.items
         else 0
     )
-    return max(cover_waived(world, attacker, target, ctx), narrow)
+    # **And the target-side half of that narrow sentence**, which was the
+    # one empty cell of the four: `no_cover` is target-side and waives both,
+    # `ignore_concealment` is concealment-only and attacker-side, and
+    # "creatures do not benefit from concealment while within the zone" is
+    # neither. Read here and **not** in `cover_waived`, which is what keeps
+    # a zone of light from stripping cover as well. #1301.
+    theirs = world.get(target, Mods)
+    denied = (
+        theirs.total("no_concealment", ctx)
+        if theirs is not None and theirs.items
+        else 0
+    )
+    return max(cover_waived(world, attacker, target, ctx), narrow, denied)
 
 
 def kind_waived(

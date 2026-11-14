@@ -220,8 +220,18 @@ MANOEUVRE_GRANTED_ATTACK = "manoeuvre:granted-attack"
 #: introduced this refusal said so in as many words before shipping the
 #: thing it warned about. The pre-push wide sweep is what caught it, which
 #: is the whole argument for paying for one.
+#: `ignore_concealment` and `no_concealment` are the concealment-only pair
+#: and are read by `query.concealment_waived`, on the line **after** the
+#: cover waiver in the same gather -- so the same moment, before the roll.
+#:
+#: Added here with no `once=` caller in the tree, deliberately: this set is
+#: what decides when a one-shot modifier is spent, and the paragraph above
+#: is the record of what leaving a key out costs -- four rows raised
+#: because `no_cover` was missed. A key read during an attack belongs here
+#: whether or not a row has yet asked for it once. #1301.
 _SPENT_ON_ATTACK = frozenset({
     "attack", "range", "reach", "ignore_cover", "no_cover",
+    "ignore_concealment", "no_concealment",
 })
 
 
@@ -9212,6 +9222,51 @@ class Cast:
             kind="ignore cover", when=when,
         )
 
+    def no_conceal(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+        total: bool = False,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"The target does not benefit from concealment." Concealment only.
+
+        **The one empty cell of four**, which is why this is not
+        `c.no_cover` with an argument. The two waivers are nested rather
+        than parallel -- `query.concealment_waived` answers everything
+        `cover_waived` does plus the narrow attacker-side sentence -- and
+        written out:
+
+            cover AND concealment    c.ignore_cover     c.no_cover
+            concealment ONLY         c.ignore_cover(    this
+                                       concealment_only=)
+
+        So the attacker-side narrow waiver existed and the target-side one
+        did not. `p11679` is a zone of bright light and needs it: writing
+        that row with `c.no_cover` would strip **cover** from every
+        creature standing in it, which no printed line says and which
+        `m5426a0`'s note calls a bigger rule than the card, from the other
+        direction.
+
+        Named for the `c.conceal` family rather than the `c.no_cover` one,
+        which is the correction `#1301` is about -- the row's marker said
+        `c.no_cover_in()` and the mechanic it wanted is concealment.
+
+        `total=True` is worth 5 and cancels total concealment with it, for
+        the card that says *"concealment or total concealment"*; the
+        default 2 leaves total concealment standing, which is the same
+        partial/superior distinction `c.no_cover(partial=)` draws.
+
+        Read **only** by `concealment_waived`, so cover is untouched by
+        construction rather than by argument. #1301.
+        """
+        return self.bonus(
+            "no_concealment", 5 if total else 2,
+            on=on if on is not None else self.me, until=until,
+            kind="ignore concealment", when=when,
+        )
+
     def no_advantage(
         self,
         *,
@@ -15365,6 +15420,31 @@ class Cast:
             lambda who: self.bonus(
                 "cover", 2, on=who, until=When.ENCOUNTER, kind="cover",
                 when=when,
+            ),
+            side,
+        )
+
+    def no_conceal_in(
+        self, zone: int, *, side: str = "any", total: bool = False
+    ) -> None:
+        """"Creatures do not benefit from concealment while within the zone."
+
+        The negative of `c.conceal_in` below, and the fourth of the
+        zone-bounded grants. Hung on the geometry through `_while_inside`
+        like the other three: taken on entering, given back on leaving.
+
+        **`side="any"` by default**, which is the opposite of its three
+        siblings and is the printed word: those grant a benefit and so say
+        *"you and your allies"*, and `p11679`'s line says *"Creatures"* --
+        a zone of light does not pick sides. A card that does can still
+        pass one.
+
+        See `c.no_conceal` for why this is not `c.no_cover_in`. #1301.
+        """
+        self._while_inside(
+            zone,
+            lambda who: self.no_conceal(
+                on=who, until=When.ENCOUNTER, total=total,
             ),
             side,
         )

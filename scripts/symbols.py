@@ -375,7 +375,13 @@ CATEGORIES: dict[str, dict] = {
                 # move or a condition. Both landed with `#1253`'s wave and
                 # neither was placed, which is what this gate is for.
                 "hides_with_cover", "counts_as_nearest",
-                "no_advantage", "no_cover", "no_invisibility",
+                "no_advantage",
+                # `no_conceal` and `no_conceal_in` sit beside `no_cover`
+                # and are deliberately NOT it: that waives cover and
+                # concealment together, these waive concealment alone.
+                # The row whose marker conflated the two is why. #1301.
+                "no_conceal", "no_conceal_in",
+                "no_cover", "no_invisibility",
                 "no_invisibility_in", "unhide",
             ]),
             # Not cover either: a relation between two creatures, where one
