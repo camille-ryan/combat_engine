@@ -52,6 +52,19 @@ from .wire import Wire
 RANK = {"minion": "minion", "elite": "elite", "solo": "solo"}
 
 
+
+def _not_a_pc(world: Any, eid: int) -> bool:
+    """Is this creature on the board and not on the party's side?
+
+    **One lookup.** This was two `world.get(e, Side)` calls in one
+    comprehension -- a truthiness guard and then `.team` on a second
+    call -- so the guard could not narrow the read and the store was
+    asked twice per creature to answer one question. `#1278`.
+    """
+    side = world.get(eid, Side)
+    return side is not None and side.team is not Team.PC
+
+
 def state(session: Session, seq: int = 0) -> dto.EncounterStateDTO:
     session.wire.refresh(session.world)
     world, wire = session.world, session.wire
@@ -489,8 +502,7 @@ def _notes(session: Session, action: Action, p) -> list[str]:  # noqa: ANN001
         if e != actor
         and alive(session.world, e)
         and adjacent(session.world, actor, e)
-        and session.world.get(e, Side)
-        and session.world.get(e, Side).team is not Team.PC
+        and _not_a_pc(session.world, e)
     ]
     if not close:
         return []

@@ -934,14 +934,22 @@ def discover() -> int:
     return 0
 
 
+#: `_power_owners`'s memo. **A module-level dict rather than an attribute
+#: hung on the function object**, which is what this was: `hasattr(fn,
+#: "_c")` then `fn._c = ...`. That works and nothing can see it -- `ty`
+#: reported two diagnostics, and a reader looking for the cache has to
+#: know the trick. `#1278`.
+_POWER_OWNERS: dict[str, str] = {}
+
+
 def _power_owners() -> dict[str, str]:
     from combat_engine.db import game
 
-    if not hasattr(_power_owners, "_c"):
-        _power_owners._c = {
-            r["ref"]: (r["class"] or "").lower()
-            for r in game().execute('SELECT ref, "class" FROM power')}
-    return _power_owners._c
+    if not _POWER_OWNERS:
+        _POWER_OWNERS.update(
+            (r["ref"], (r["class"] or "").lower())
+            for r in game().execute('SELECT ref, "class" FROM power'))
+    return _POWER_OWNERS
 
 
 def main() -> int:

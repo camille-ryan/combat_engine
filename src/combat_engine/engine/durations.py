@@ -257,6 +257,23 @@ class Effect:
     #: `ty` was right to object -- an optional attribute no class declares
     #: cannot be checked, renamed or found by a reader. #834, #1007.
     keeps_mark: bool = False
+    #: **Which row's doing this effect is**, by ref -- so `audit._claimed`
+    #: and this file's credit assertions read an owner rather than
+    #: guessing it from the label. `c.credit` is what sets it, and
+    #: `Effects.lay` fills it in from the label's first word otherwise.
+    #:
+    #: Declared here for the reason `keeps_mark` above records about
+    #: itself: it was written onto an `Effect` that did not carry it, so
+    #: `ty` could not check it and a reader could not find it.
+    #:
+    #: `repr=False`, and that matters more here than on an event:
+    #: `str(effect)` is what `SavingThrow.against` carries, so a field
+    #: inside the repr would change every save label in the log and in
+    #: the save format. The flag keeps it out of both. `#1278`.
+    by: str = field(default="", repr=False)
+    #: The weapon the blow that laid this came through, by ref; `""` for
+    #: an effect that came through none.
+    weapon: str = field(default="", repr=False)
 
     @property
     def rolls_the_save(self) -> int:
@@ -287,7 +304,7 @@ def _with_weapon(ev: object, eff: object) -> object:
     a `c.condition` from a `Cast` actually takes -- measured, `[''] wanted
     w3612`, with the effect itself carrying the ref correctly. #653.
     """
-    ev.weapon = getattr(eff, "weapon", "")  # ty: ignore[unresolved-attribute]
+    ev.weapon = eff.weapon
     return ev
 
 

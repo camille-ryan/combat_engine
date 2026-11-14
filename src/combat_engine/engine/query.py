@@ -586,11 +586,17 @@ def familiar_of(world: World, eid: int) -> int | None:
     fallback cannot pick the wrong body: a class that keeps a familiar keeps
     no spirit and no beast.
     """
+    # **`need`, which also retires two suppressions.** `world.having`
+    # yields the entities that carry the component, so `get` straight
+    # after can only be it -- and the `ty: ignore` on each of these lines
+    # was papering over exactly that. `need` raises namefully if the
+    # store ever disagrees with its own index.
     mine = [
         e for e in world.having(Companion)
-        if world.get(e, Companion).owner == eid  # ty: ignore[unresolved-attribute]
+        if world.need(e, Companion).owner == eid
     ]
-    named = [e for e in mine if world.get(e, Companion).kind == "familiar"]  # ty: ignore[unresolved-attribute]
+    named = [e for e in mine
+             if world.need(e, Companion).kind == "familiar"]
     if named:
         return named[0]
     return mine[0] if mine else None
@@ -3269,7 +3275,7 @@ def leash_of(world: World, eid: int) -> tuple[tuple[int, int], int] | None:
     return (tie.square, tie.radius) if tie.square is not None else None
 
 
-def kept_away_from(world: World, eid: int) -> tuple[int, int] | None:
+def kept_away_from(world: World, eid: int) -> tuple[Square, int] | None:
     """The square this creature may not get closer to, and how close it is.
 
     `(anchor_square, distance_now)`, so the caller's test is
@@ -3283,6 +3289,14 @@ def kept_away_from(world: World, eid: int) -> tuple[int, int] | None:
     when this creature has no position to measure from -- the same three
     waivers `leash_of` makes, and a dead anchor cuts the restriction rather
     than measuring against a corpse. #728.
+
+    **The return type said `tuple[int, int]` and that was wrong.** The
+    first element is a `Square` -- itself a `tuple[int, int]` -- so the
+    pair is `tuple[Square, int]`, and the declared type described a pair
+    of ints. Nothing broke at runtime, because `movement.ranged_paths`
+    unpacks it as `anchor, now` and uses `anchor` as a square; but a
+    reader going by the signature would pass the wrong thing to
+    `grid_distance`. `#1278`.
     """
     from .components import Leash, Position
     from .grid import distance as grid_distance

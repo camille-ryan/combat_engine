@@ -208,7 +208,10 @@ def main() -> int:
 
     for eid in creatures(world):
         ident = world.get(eid, Ident)
-        health = world.get(eid, Health)
+        # `need`: every creature the grid yields has `Health`, so a `None`
+        # here is a broken board rather than a branch -- and the f-string
+        # below would raise on it anyway.
+        health = world.need(eid, Health)
         state = "dead" if not alive(world, eid) else f"{health.hp}/{health.max_hp}"
         print(f"  {ident!s:<10} {state}")
     return 0

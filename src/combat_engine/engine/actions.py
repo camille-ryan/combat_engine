@@ -859,7 +859,9 @@ def _instinctives(world: World, encounter: Encounter, actor: int) -> list[Action
         if not encounter.can_spend(actor, cost):
             continue
         for eid in sorted(world.having(Companion)):
-            mine = world.get(eid, Companion)
+            # `need`: `world.having(Companion)` yielded this entity, so
+            # the component is there by the store's own index.
+            mine = world.need(eid, Companion)
             if mine.owner != actor or not alive(world, eid):
                 continue
             p = get(mine.ref)

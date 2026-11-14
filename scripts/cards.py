@@ -367,11 +367,16 @@ def _card_range(spec: str) -> tuple[str, int] | None:
     # way round. That is the correct call and worth recording.
     if _EITHER.search(spec):
         return None
-    hits = [
-        (pattern.search(spec).start(), kind, pattern.search(spec))
-        for kind, pattern in _RANGES
-        if pattern.search(spec)
-    ]
+    # **One search per pattern, not three.** This called
+    # `pattern.search(spec)` three times for every pattern -- once in the
+    # guard and twice in the value -- so the guard's narrowing could not
+    # reach either `.start()` or the match itself, and the work was done
+    # three times over.
+    hits = []
+    for kind, pattern in _RANGES:
+        found = pattern.search(spec)
+        if found is not None:
+            hits.append((found.start(), kind, found))
     if not hits:
         return None
     kinds = {kind for _at, kind, _m in hits}

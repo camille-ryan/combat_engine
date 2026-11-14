@@ -39,6 +39,28 @@ class World:
         #: Which edition's monster maths a fight runs on. Swap for TO_MM3 to
         #: rescale Monster Manual 1 and 2 damage; see `monster_math.py`.
         self.monster_math = AS_PRINTED
+        #: **How many fights are left in the day, including this one.**
+        #: `policy/doctrine.py` reads it to decide how freely to spend a
+        #: daily power -- a character with three fights to come has
+        #: reason to hold back and one in the last has none.
+        #:
+        #: `0` rather than a count, and that keeps the behaviour it had
+        #: while stamped: `doctrine` reads it as
+        #: `int(getattr(world, "fights_left", DAY) or DAY)`, so a zero
+        #: falls through to `DAY` exactly as an absent attribute did.
+        #: The only writer is `fight.py --fights`.
+        #:
+        #: Declared here because it was set with `setattr` on the world
+        #: and declared nowhere, so `ty` could not see it and a reader of
+        #: `World` could not either. It sits beside `scaling` and
+        #: `monster_math` above, which `fight.py`'s own comment already
+        #: said it belongs with. `#1278`.
+        self.fights_left = 0
+        #: Which encounter paradigm built this board -- a word, for the
+        #: log to be able to say. Set by `fight.py` off
+        #: `story.field_encounter`'s own `paradigm`, and read by nothing
+        #: in the engine.
+        self.paradigm = ""
         #: Where this fight is happening -- "aquatic", "underground". Words
         #: rather than a type, because the engine never needs to know what
         #: any of them mean: a row asks `c.terrain("aquatic")`.

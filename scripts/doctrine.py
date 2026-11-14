@@ -178,14 +178,23 @@ def rounds_table(level: int, seed: int) -> None:
 
     world, enc = fight.build(seed, level, "full")
     enc.start()
-    pcs = [e for e in creatures(world)
-           if (world.get(e, Ident).ref if world.get(e, Ident) else "").startswith("c:")]
-    mons = [f for f in creatures(world)
-            if (world.get(f, Ident).ref if world.get(f, Ident) else "").startswith("m")]
+    # **One lookup each, and `Ident` is read once rather than twice.**
+    # This called `world.get(e, Ident)` in both halves of a conditional
+    # expression, so the narrowing from the guard could not reach the
+    # attribute -- and it asked the store twice per creature to answer
+    # one question.
+    def named(eid: int) -> str:
+        who = world.get(eid, Ident)
+        return who.ref if who is not None else ""
+
+    pcs = [e for e in creatures(world) if named(e).startswith("c:")]
+    mons = [f for f in creatures(world) if named(f).startswith("m")]
     if not pcs or not mons:
         print("  no board to measure")
         return
-    sq = world.get(pcs[0], Position).square
+    # `need`: `pcs[0]` is a creature the grid just yielded, so it has a
+    # `Position` by construction and a `None` here is a broken board.
+    sq = world.need(pcs[0], Position).square
     print(f"\nrounds of damage denied, level {level}, seed {seed}")
     print(f"  {'monster':<22} {'where':<9} {'pot':>5} {'immob':>6} {'save':>6} "
           f"{'stun':>5} {'daze':>5} {'weak':>5} {'prone':>6}  attacks with")

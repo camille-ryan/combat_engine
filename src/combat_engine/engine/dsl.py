@@ -1263,10 +1263,22 @@ class Damage:
         # prints** -- "acid, cold, fire, lightning, and poison damage", not
         # four "and"s. `cards.py` compares this string against the printed
         # line, and two of the 88 rows name five types.
-        kinds = [
-            k.value for k in (self.dtypes or (self.dtype,))
-            if k is not DamageType.UNTYPED
-        ]
+        # **`dtype` is itself `DamageType | Sequence[DamageType]`**, so a
+        # one-tuple of it can hold a sequence and `k.value` is only
+        # meaningful once it is known which. Flattened rather than
+        # asserted, because both shapes are declared and both occur.
+        #
+        # `isinstance(one, DamageType)` and NOT `isinstance(one,
+        # Sequence)`: `DamageType` is a `StrEnum`, so every member is a
+        # `str` and therefore a `Sequence` -- the obvious test is true for
+        # the single case too and would flatten a type into its letters.
+        one = self.dtype
+        listed: tuple[DamageType, ...] = (
+            tuple(self.dtypes) if self.dtypes
+            else (one,) if isinstance(one, DamageType)
+            else tuple(one)
+        )
+        kinds = [k.value for k in listed if k is not DamageType.UNTYPED]
         if not kinds:
             kind = ""
         elif len(kinds) == 1:
@@ -3179,7 +3191,8 @@ def measured_from(world: World, actor: int, r: Range) -> int:
         # row an **empty area** -- so the page lit nothing up and the power
         # could not be aimed anywhere at all. Falling back to the caster
         # makes it merely out of reach, which is the honest answer.
-        if world.get(eid, Companion).owner == actor and world.get(eid, Position):
+        if (world.need(eid, Companion).owner == actor
+                and world.get(eid, Position)):
             return eid
     return actor
 
@@ -3208,7 +3221,8 @@ def origins(world: World, actor: int, r: Range) -> list[int]:
     mine = [
         eid
         for eid in world.having(Companion)
-        if world.get(eid, Companion).owner == actor and world.get(eid, Position)
+        if (world.need(eid, Companion).owner == actor
+            and world.get(eid, Position))
     ]
     return mine or [actor]
 
@@ -3225,7 +3239,8 @@ def roller(world: World, actor: int, by: str) -> int:
     from .components import Companion, Position
 
     for eid in world.having(Companion):
-        if world.get(eid, Companion).owner == actor and world.get(eid, Position):
+        if (world.need(eid, Companion).owner == actor
+                and world.get(eid, Position)):
             return eid
     return actor
 

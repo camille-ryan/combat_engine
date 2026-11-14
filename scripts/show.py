@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections.abc import Sequence
 
 from combat_engine import chargen
 from combat_engine.content import loader
@@ -115,9 +116,15 @@ def main() -> int:
         field = str(broke).rsplit("attribute ", 1)[-1].strip("'\"")
         print(f"  this row needs its trigger: the body reads "
               f"`c.trigger.{field}`, and nothing fired it")
-        event = declared.on.event
+        # **`Power.on` is a `Trigger` OR a sequence of them**, so the
+        # attribute read only means anything once it is known which. A
+        # row declaring several triggers is the case that made this
+        # unreadable; the first is the one this message is about.
+        on = declared.on
+        first = on[0] if isinstance(on, Sequence) else on
+        event = first.event
         print(f"  it is declared on {getattr(event, '__name__', event)} "
-              f"-- {declared.on.text or 'no printed text'}")
+              f"-- {first.text or 'no printed text'}")
         print("  not a fault in the row: `c.trigger` is None unless the "
               "trigger is what used the row. #435")
         return 1

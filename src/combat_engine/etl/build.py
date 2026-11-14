@@ -1395,6 +1395,18 @@ class Report:
         return "\n".join(lines)
 
 
+
+def _grp(found: re.Match[str] | None, n: int) -> str:
+    """Group `n` of a match, or `""` for no match.
+
+    **`(a or b).group(n) if (a or b) else ""` cannot be narrowed.** The
+    guard and the call are the same expression written twice, so a
+    checker sees `Match[str] | None` at the call -- and a reader sees the
+    `or` evaluated twice. Two sites in this file did it. `#1278`.
+    """
+    return found.group(n) if found is not None else ""
+
+
 def connect() -> sqlite3.Connection:
     if not SOURCE.exists():
         raise SystemExit(
@@ -3437,13 +3449,12 @@ def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
                 (eff.group(1).strip() if eff else ""),
                 (use.group(1).strip() if use else ""),
                 (req.group(1).strip() if req else ""),
-                ((band or dc).group(1).strip().lower() if (band or dc) else ""),
+                (_grp(band or dc, 1).strip().lower()),
                 (band.group(2).lower() if band else ""),
                 int(dc.group(2)) if dc else None,
                 int(lvl.group(1)) if lvl else None,
                 int(flat_atk.group(1)) if flat_atk and not lvl else None,
-                ((lvl or flat_atk).group(2).strip().lower()
-                 if (lvl or flat_atk) else ""),
+                (_grp(lvl or flat_atk, 2).strip().lower()),
                 # `1d10+3`, not `1d10 + 3`: a reader splitting on
                 # whitespace must not be handed three tokens. `#1128`.
                 (dmg.group(1).replace(" ", "") if dmg else ""),

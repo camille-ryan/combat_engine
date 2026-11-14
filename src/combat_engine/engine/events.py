@@ -733,6 +733,14 @@ class DamageRolled(Decision):
     #: which is what "this weapon deals fire instead" means; set this to
     #: say "and", not "instead".
     dtypes: tuple[DamageType, ...] = ()
+    #: The damage context this blow was settled against, so a listener
+    #: can read back the keys the modifiers were gated on.
+    #: `resolve.deal_damage` stamps it and declared it nowhere;
+    #: `repr=False` for the reason the `Swung` mixin above gives --
+    #: `replay`'s fixtures record `str(event)` and `Event.wire` drops a
+    #: field the repr does not carry. `#1278`.
+    ctx: dict[str, Any] = field(default_factory=dict, repr=False,
+                                kw_only=True)
 
     def types(self) -> tuple[DamageType, ...]:
         """Every type this blow is, whether it is one or several."""
