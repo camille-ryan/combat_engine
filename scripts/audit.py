@@ -202,10 +202,6 @@ KNOWN_SILENT = {
     # So SILENT is a statement about the board. Posing it properly is board
     # work -- a pass that uses a class at-will *before* provoking, which is
     # #816's neighbourhood -- and not a fault in this row.
-    "f1788": ("pays only while an enemy carries a shroud and the caster is "
-              "bloodied in the same instant; the board never uses p9400 "
-              "before it wounds the caster. Proven to lay damage+4 when a "
-              "shroud is posed by hand"),
     # **Both of these were green for the wrong reason until #364**, which is
     # the only interesting thing about them. Each prints a condition on the
     # *ally* it heals or helps, and `candidates` used to put the caster in
@@ -665,6 +661,27 @@ KNOWN_SILENT = {
     # `c.feat`, and here the reader is the predicate beside it. #553 is why
     # that guard exists and it is right; this is the case it does not fit.
     # `drivers.miss_bladespell` proves both arms and plants the gate.
+    # **Five entries deleted here on 2026-11-13, and a note so the next
+    # reader does not re-add them.** `cf:ranger-hunter-f20`,
+    # `cf:ranger-scout-f17`, `cf:wizard-arcanist-f0`,
+    # `cf:wizard-arcanist-f0s4` and `f1788` were all reported OUTGROWN by
+    # the first wide sweep in 28 commits: every one does something on the
+    # board its excuse said it could not reach.
+    #
+    # Each argument had become false rather than merely unlucky. Two said
+    # *"the board's ranger holds all five knacks already"* -- it does not;
+    # one said the board carries no save-ends effect of the caster's own
+    # -- it does; one said the wizard holds no encounter attack to pay
+    # with; and `f1788`'s said the board never lands a shroud before the
+    # caster is bloodied.
+    #
+    # **Checked against the oscillation trap before deleting**, which
+    # `scripts/CLAUDE.md` is explicit about: a healed row is not always a
+    # fixed row, and three entries have been deleted on a Monday and
+    # restored on a Wednesday because the hand had moved. All five fire
+    # in the wide sweep and in three separate narrow runs. If any comes
+    # back, it belongs here with the oscillation named rather than as a
+    # bare allowance.
     # **A trait the board's fighter cannot have.**
     # `cf:fighter-weaponmaster-f3s2` is gated on `on_leg("brawling")` and
     # every modifier it lays is further gated on a manoeuvre -- a grab
@@ -781,10 +798,6 @@ KNOWN_SILENT = {
     "cf:druid-protector-f2": "grants the attunements it dealt; they are"
                              " level 0, so the board's druid holds them"
                              " already",
-    "cf:ranger-hunter-f20": "grants the knacks it dealt; the board's"
-                            " ranger holds all five already",
-    "cf:ranger-scout-f17": "grants the knacks it dealt; the board's"
-                           " ranger holds all five already",
     "cf:druid-sentinel-f13": "grants the options it dealt; the board's"
                              " druid holds them already",
     # The pact weapon's six options have no body at all: the weapon is
@@ -1035,10 +1048,6 @@ KNOWN_SILENT = {
     # the database's own `-fN` spelling. A stale key here is silent in the
     # worst way: the row reappears in the SILENT list and the excuse that
     # was argued for it is still sitting in the file, unread.
-    "cf:wizard-arcanist-f0": (
-        "penalises a save against one of the caster's own save-ends effects; "
-        "the board carries none of them"
-    ),
     # Escaping a grab, on a board where nothing is holding the caster.
     # Grabbing it in `board()` is not the answer -- `Condition.GRABBED`
     # cannot move, which would make every movement row on every other
@@ -1620,9 +1629,6 @@ KNOWN_SILENT = {
     # failed escape provokes is offered **synchronously inside `attempt`**,
     # so it rolled its own attack against that 1 and missed automatically
     # every time. The outcome is arranged with a negative bonus now. #754.
-    "cf:wizard-arcanist-f0s4": "the board's wizard holds no encounter attack "
-                               "power to pay with. Driven on a chargen "
-                               "wizard: it borrows one and expends another",
     # `i2127p1` is **right to be silent at a +1**, and says so itself --
     # "half of a +1 is nothing, which is what the card says at heroic." Its
     # whole body is `extra = c.enhancement // 2; if extra: c.shift(extra)`.
