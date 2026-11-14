@@ -309,7 +309,8 @@ def object_defences(size: Size) -> Defenses:
 
 def put(world: World, square: Square, *, kind: str = "object",
         hp: int = 0, size: Size = Size.MEDIUM, fastened: bool = False,
-        solid: bool = True, by: int = 0, ref: str = "") -> int:
+        solid: bool = True, by: int = 0, ref: str = "",
+        weight: int = 0) -> int:
     """Stand something in the room that no power put there. #988.
 
     A crate, a statue, a barricade. `Scenery` has been declared and
@@ -335,6 +336,15 @@ def put(world: World, square: Square, *, kind: str = "object",
     with no side and `None` is discarded, so a crate left standing cannot
     stop a fight ending.
 
+    **`weight` is in pounds and is the caller's too, for the same reason**:
+    no printed table gives what a crate weighs, and PHB p223 says outright
+    that *"you don't need to calculate the weight ... unless it's likely to
+    matter"*. Two rows make it matter -- *"an object that weighs 400 pounds
+    or less"* and *"one object you can lift"* -- and `query.lift_limit` is
+    the printed threshold they read against (Strength x 20). `0` is **not
+    recorded**, never weightless, so a row may not treat an unweighted
+    thing as liftable. `#1307`.
+
     `hp` is the caller's, not a curve: the printed DCs for breaking a thing
     are **flat rather than by level** -- 16 for a wooden door at every tier
     -- so there is no level maths to apply here and inventing one would be
@@ -344,7 +354,7 @@ def put(world: World, square: Square, *, kind: str = "object",
     bits: list[object] = [
         Ident(ref=ref or f"scenery:{kind}"),
         Position(square=square, size=size),
-        Scenery(kind=kind, fastened=fastened, by=by),
+        Scenery(kind=kind, fastened=fastened, by=by, weight=weight),
         # **The printed defences, so the thing can be attacked at
         # all.** Five rows carried `Scenery.defences` and each said
         # the same: aiming at an object was written and there was

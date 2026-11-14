@@ -76,6 +76,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Is this creature in the middle of a charge?
 - `query.distance_between(world: 'World', a: 'int', b: 'int') -> 'int'`
   - (no docstring)
+- `query.drag_limit(world: 'World', eid: 'int') -> 'int'`
+  - The most weight this creature can push or drag along the ground.
 - `query.has_running_start(world: 'World', eid: 'int') -> 'bool'`
   - Does this creature's next jump get the running-start divisor?
 - `query.hindering_at(world: 'World', square: 'Square') -> 'bool'`
@@ -84,6 +86,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - The square this creature may not get closer to, and how close it is.
 - `query.leash_of(world: 'World', eid: 'int') -> 'tuple[frozenset[tuple[int, int]], int] | None'`
   - Where this creature is tethered and how far it may stray, or None.
+- `query.lift_limit(world: 'World', eid: 'int') -> 'int'`
+  - The most weight, in pounds, this creature can lift off the ground.
 - `query.line_of_effect(world: 'World', a: 'int', b: 'int') -> 'bool'`
   - (no docstring)
 - `query.line_of_sight(world: 'World', watcher: 'int', who: 'int') -> 'bool'`

@@ -929,6 +929,12 @@ READERS: dict[str, list[str]] = {
         # stands in it -- "is this fight underwater". A section of its own
         # would hold one entry. #1209.
         "adjacent", "charging", "distance_between", "has_running_start",
+        # `lift_limit` and `drag_limit` are here and not under a section of
+        # their own: they are PHB p223's one rule in two of its three
+        # numbers, and the question they answer is about *weight* rather
+        # than distance -- but a section holding two entries is what the
+        # `terrain` note above already declined. #1307.
+        "drag_limit", "lift_limit",
         "hindering_at", "kept_away_from", "leash_of", "line_of_effect",
         "line_of_sight", "sight_squares",
         "moved_this_action", "moving_as", "on_the_ground", "prefers_range",

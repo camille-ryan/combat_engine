@@ -710,6 +710,18 @@ class Scenery:
     nothing constructed a `Scenery` at all, so the invariant was never
     tested. `content.terrain.put` is the writer, and `hp` is the opt-in.
 
+    **`weight` is in pounds and `0` means not recorded.** Two rows need it:
+    *"an object that weighs 400 pounds or less"* and *"one object you can
+    lift"*. The thresholds are both printed -- the first on its own card,
+    the second as PHB p223's Strength x 20 -- and `query.lift_limit` reads
+    that. What is **not** printed is what a crate weighs: the same page
+    says *"you don't need to calculate the weight ... unless it's likely to
+    matter"*, so an object's weight is a DM call in print and a design
+    decision here. So it lands empty, the same bargain `Grid.porous`,
+    `Grid.light` and `Grid.climb_dc` strike: the reader lands with the
+    model and costs nothing until a scene fills it. `0` is *unknown*
+    rather than weightless, which is why no row may read it as liftable.
+
     Not a `Conjuration`, which is a power's own doing and dies with the
     effect holding it up; not a `Trap`, which attacks. Scenery is what was
     already in the room, and the rows that want it are the ones whose target
@@ -724,6 +736,10 @@ class Scenery:
     """
 
     kind: str = "object"
+    #: Pounds, `0` meaning **not recorded** -- see the note above. Read
+    #: against `query.lift_limit` for *"one object you can lift"* and
+    #: against a printed number for *"400 pounds or less"*. #1307.
+    weight: int = 0
     fastened: bool = False
     by: int = 0
 

@@ -38,9 +38,9 @@ PSIONIC = [Keyword.PSIONIC]
     usage=DAILY,
     action=STANDARD,
     reach=Ranged(10),
-    target=Target("ally", 1, objects=True, loose=True),
+    target=Target("ally", 1, objects=True, loose=True, max_weight=400),
     keywords=PSIONIC,
-    dropped=("Target.any_of(side=)", "Scenery.weight"),
+    dropped=("Target.any_of(side=)",),
 )
 def p11273(c: Cast) -> None:
     """Held aloft: the immobilisation is refreshed each time the hold is
@@ -59,9 +59,17 @@ def p11273(c: Cast) -> None:
     `side` before any filter runs: `Target.any_of` tests clauses per
     alternative and its own note declines to put a *side* inside that
     predicate, so `Target.any_of(side=)` is the gap and `m4766a3` already
-    names it. And *"400 pounds or less"* has nothing to compare against --
-    `Scenery` carries no weight, which `p11358` waits on for the same
-    sentence in different words.
+    names it.
+
+    **"400 pounds or less" is declared now**, as `max_weight=400` -- a
+    printed number on this card, where `p11358`'s *"you can lift"* is a
+    printed *phrase* and becomes `liftable=True`, read against
+    `query.lift_limit`. Two fields for the two shapes.
+
+    **No object is offered today and that is correct**, not a gap:
+    `Scenery.weight` is `0` meaning *not recorded* and an unweighed thing
+    passes neither clause. What a crate should weigh is the `question` on
+    `#1307`.
     """
     victim = c.target
     if victim is None:

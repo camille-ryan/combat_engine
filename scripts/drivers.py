@@ -30569,6 +30569,129 @@ def equipment_becomes_part_of_the_form(out: Result) -> None:
     )
 
 
+def what_a_creature_can_lift(out: Result) -> None:
+    """PHB p223's three carrying numbers, read off the score.
+
+    Two rows wait on a weight: *"an object that weighs 400 pounds or less"*
+    and *"one object you can lift"*. The second phrase is printed and
+    exact --
+
+    > *"Multiply your Strength score by 10 ... This amount of weight is
+    > considered a normal load. Double that number (Strength x 20). That's
+    > the maximum weight you can lift off the ground ... Five times your
+    > normal load (Strength x 50) is the most weight you can push or
+    > drag."*
+
+    -- so `query.lift_limit` is the **heavy** load, because that is the
+    number the page attaches to *"you can lift"*.
+
+    **Asserted at a fixed score against the numbers the page implies**,
+    not against `score * 20` recomputed here: an arm that does its own
+    arithmetic passes against any implementation using the same wrong
+    input. Strength 18 is the worked case -- 180 normal, 360 lifted, 900
+    dragged -- and the mistake it catches is reading the **modifier**
+    instead of the score, which would answer 80.
+
+    What no page gives is what a crate weighs, and `Scenery.weight` lands
+    empty for that reason -- a `question` is filed on it. So these two
+    numbers are the half that is certain. #1307.
+    """
+    from combat_engine.engine.components import Stats
+    from combat_engine.engine.query import drag_limit, lift_limit
+    from combat_engine.engine.types import Ability
+
+    world, me, _ = _board()
+    stats = world.get(me, Stats)
+    if stats is None:
+        out.skip("this board's creature carries no Stats to read a score off")
+        return
+    stats.scores[Ability.STR] = 18
+    got = (lift_limit(world, me), drag_limit(world, me))
+    out.that(
+        got == (360, 900),
+        "at Strength 18 a creature lifts 360 pounds and drags 900, which is"
+        " the printed doubling and the printed five-fold of a 180 load",
+        f"lift/drag {got}, wanted (360, 900)",
+    )
+    out.that(
+        lift_limit(world, me) // 2 == 180,
+        "and the normal load is half the lifted one, so the three numbers"
+        " stay one rule rather than three constants",
+        f"normal load {lift_limit(world, me) // 2}",
+    )
+    stats.scores[Ability.STR] = 8
+    weak = lift_limit(world, me)
+    out.that(
+        weak == 160,
+        "a weaker creature lifts less, so the number is read off the score"
+        " each time rather than settled once",
+        f"at Strength 8: {weak}, wanted 160",
+    )
+
+    # **`Scenery.weight` lands empty and must read as unknown, not light.**
+    from combat_engine.engine.components import Position, Scenery
+
+    out.that(
+        Scenery().weight == 0,
+        "scenery carries no weight by default, which is `unknown` and not"
+        " `weightless` -- no row may treat a 0 as liftable",
+        f"default weight {Scenery().weight}",
+    )
+
+    # ------------------------------------- the two target-line clauses
+    # **Through the two real rows**, not a Target built here: the clauses
+    # are header data and what matters is that p11358 and p11273 carry
+    # them, which a hand-made Target would not have told us.
+    from combat_engine.content import terrain
+    from combat_engine.engine.dsl import candidates, get
+
+    world2, me2, _ = _board("p11358")
+    heavy = world2.get(me2, Stats)
+    if heavy is not None:
+        heavy.scores[Ability.STR] = 14          # lifts 280
+    here = world2.need(me2, Position).square
+    light_one = terrain.put(
+        world2, (here[0] + 2, here[1]), kind="object", weight=200)
+    heavy_one = terrain.put(
+        world2, (here[0] + 3, here[1]), kind="object", weight=600)
+    unweighed = terrain.put(world2, (here[0] + 4, here[1]), kind="object")
+    # **Between the two thresholds, which is the only way to tell them
+    # apart.** 350lb is over this creature's 280 and under the printed 400,
+    # so a `liftable` clause must refuse it and a `max_weight=400` one must
+    # allow it. With only a 200 and a 600 on the board, a plant swapping
+    # the aimer's strength for the printed cap stayed green.
+    middling = terrain.put(
+        world2, (here[0] + 5, here[1]), kind="object", weight=350)
+
+    liftable = candidates(world2, me2, get("p11358"))
+    capped = candidates(world2, me2, get("p11273"))
+    out.that(
+        light_one in liftable and heavy_one not in liftable,
+        'a "you can lift" line offers a 200lb object to a Strength 14'
+        " creature (280lb limit) and not a 600lb one",
+        f"liftable pool has the 200lb: {light_one in liftable};"
+        f" the 600lb: {heavy_one in liftable}",
+    )
+    out.that(
+        light_one in capped and heavy_one not in capped
+        and middling in capped and middling not in liftable,
+        'and a printed "400 pounds or less" line caps at its own number'
+        " rather than at the aimer's strength -- the 350lb is inside the"
+        " printed cap and outside this creature's 280lb lift",
+        f"capped has 200/350/600: {light_one in capped}/{middling in capped}"
+        f"/{heavy_one in capped};"
+        f" liftable has the 350lb: {middling in liftable}",
+    )
+    out.that(
+        unweighed not in liftable and unweighed not in capped,
+        "while an UNWEIGHED object is offered by neither -- the arm that"
+        " matters, because a 0 read as light offers every statue in the"
+        " room",
+        f"unweighed in liftable: {unweighed in liftable};"
+        f" in capped: {unweighed in capped}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -87394,6 +87517,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "lifting": (
+        what_a_creature_can_lift,
+        "the printed carrying, lifting and dragging numbers",
     ),
     "bat_form": (
         equipment_becomes_part_of_the_form,

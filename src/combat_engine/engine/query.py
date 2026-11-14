@@ -2261,6 +2261,52 @@ def hidden_from(world: World, eid: int) -> set[int]:
     }
 
 
+def lift_limit(world: World, eid: int) -> int:
+    """The most weight, in pounds, this creature can lift off the ground.
+
+    PHB p223, *Carrying, Lifting, and Dragging*, verbatim:
+
+    > *"Multiply your Strength score by 10. That's the weight, in pounds,
+    > that you can carry around without penalty. This amount of weight is
+    > considered a normal load. Double that number (Strength x 20). That's
+    > the maximum weight you can lift off the ground."*
+
+    So this is the **heavy** load and not the normal one, because *"you can
+    lift"* is the printed phrase two rows use and the page attaches it to
+    the doubled number. The normal load is `lift_limit // 2` and nothing
+    asks for it yet.
+
+    Off the **score**, not the modifier, which is the one thing to get
+    wrong here: Strength 18 lifts 360 pounds and not 80.
+
+    `drag_limit` below is the third number on the same page. #1307.
+    """
+    from .components import Stats
+    from .types import Ability
+
+    stats = world.get(eid, Stats)
+    return 0 if stats is None else max(0, stats.score(Ability.STR) * 20)
+
+
+def drag_limit(world: World, eid: int) -> int:
+    """The most weight this creature can push or drag along the ground.
+
+    *"Five times your normal load (Strength x 50) is the most weight you
+    can push or drag along the ground."* Same page as `lift_limit`, and
+    kept beside it so the two cannot drift: a row asking to shove a statue
+    aside wants this one and a row asking to pick it up wants that one.
+
+    No row in the tree reads this yet. It is here because the page gives
+    the three numbers as one rule and splitting them across two changes is
+    how one of them ends up derived from memory. #1307.
+    """
+    from .components import Stats
+    from .types import Ability
+
+    stats = world.get(eid, Stats)
+    return 0 if stats is None else max(0, stats.score(Ability.STR) * 50)
+
+
 def granted_actions(world: World, eid: int) -> dict[tuple[str, str], int]:
     """Things this creature may do for a different action than usual.
 

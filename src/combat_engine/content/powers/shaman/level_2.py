@@ -176,9 +176,8 @@ def p9748(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(20),
-    target=Target("ally", 1, objects=True),
+    target=Target("ally", 1, objects=True, liftable=True),
     keywords=[*PRIMAL, Keyword.SPIRIT],
-    dropped=("Scenery.weight",),
     requires=spirit_present,
     requires_text="your spirit companion must be present",
 )
@@ -194,11 +193,22 @@ def p11358(c: Cast) -> None:
     the six that the targeting half finishes and the four attack rows are
     not. #1216.
 
-    **Dropped: "you can lift".** There is no weight on an object --
-    `Scenery` carries `kind`, `fastened` and `by`, and nothing else -- so
-    the clause has nothing to compare against. `max_size` is **not** it:
-    the card says liftable, not Medium, and a printed size is a different
+    **"You can lift" is declared now**, as `liftable=True`, and the phrase
+    is settled in print: PHB p223 makes the most a creature can lift off
+    the ground Strength x 20, which `query.lift_limit` reads per aimer.
+    That is why it is a flag and not a number -- the ceiling depends on who
+    is aiming, unlike `p11273`'s printed 400.
+
+    `max_size` is still **not** it, which the old note had right: the card
+    says liftable, not Medium, and a printed size is a different
     restriction that would read as though this one were honoured.
+
+    **No object is offered today, and that is the correct answer rather
+    than a gap.** `Scenery.weight` defaults to `0` meaning *not recorded*,
+    and an unweighed thing passes neither weight clause -- a crate nobody
+    has weighed must not read as a feather. `terrain.put(weight=)` is how a
+    scene records one; none does yet, and what a crate *should* weigh is
+    the `question` filed on `#1307`. `#1307`.
     """
     mate = c.target
     if mate is None or not beside_spirit(c, mate):

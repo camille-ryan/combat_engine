@@ -592,6 +592,25 @@ class Target:
     #: because they are two restrictions on one pool and not two pools.
     max_size: Size | None = None
     loose: bool = False
+    #: **The two weight clauses an object target line prints**, beside
+    #: `max_size` and `loose` and for the same reason: they are further
+    #: restrictions on one pool, not pools of their own.
+    #:
+    #: `max_weight` is a printed number -- `p11273`'s *"an object that
+    #: weighs 400 pounds or less"*. `liftable` is the printed *phrase* --
+    #: `p11358`'s *"one object you can lift"* -- which PHB p223 settles as
+    #: Strength x 20, read per aimer by `query.lift_limit`. Two fields
+    #: because one is a constant on the card and the other depends on who
+    #: is doing the aiming.
+    #:
+    #: **An object with no weight recorded passes neither**, which is the
+    #: whole reason `Scenery.weight` defaults to `0` meaning *unknown*: a
+    #: crate nobody has weighed must not read as a feather. So both rows
+    #: offer no object until a scene records one, which is correct
+    #: behaviour rather than a gap -- the alternative is offering every
+    #: statue in the room as liftable. #1307.
+    max_weight: int = 0
+    liftable: bool = False
     #: **"One creature **or** object"** -- the pool is the `side`'s
     #: creatures *plus* the scenery, which six rows print and none could
     #: say. `p465` ("one creature or object"), `p13128` ("one creature or
@@ -3756,6 +3775,15 @@ def candidates(
         or aim.carrying
         or aim.max_size is not None
         or aim.loose
+        # **The guard's own warning, paid.** `max_weight` and `liftable`
+        # were tested in the predicate and not named here, so `p11273`
+        # honoured its 400lb cap -- it carries `loose=True`, which is on
+        # this list -- and `p11358` offered a 600lb statue as liftable,
+        # because `liftable=True` was the only clause on its target line
+        # and nothing switched the predicate on. Caught by the driver on
+        # its first run, which is what this comment says happens. #1307.
+        or aim.max_weight
+        or aim.liftable
         or aim.any_of
         or aim.on_the_ground is not None
         or aim.sheltered_from
@@ -4251,6 +4279,23 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         # `scenery()`.
         if thing is not None and (thing.fastened or thing.by):
             return False
+    if aim.max_weight or aim.liftable:
+        from .components import Scenery
+
+        # A creature has no `Scenery` and so is never weighed -- the clause
+        # is about objects and passes for anything else, which is `loose`'s
+        # reading above and the pool's.
+        thing = world.get(target, Scenery)
+        if thing is not None:
+            if thing.weight <= 0:
+                return False          # unweighed is unknown, never light
+            if aim.max_weight and thing.weight > aim.max_weight:
+                return False
+            if aim.liftable:
+                from .query import lift_limit
+
+                if thing.weight > lift_limit(world, actor):
+                    return False
     if aim.sheltered_from:
         from .query import sheltered_from
 
