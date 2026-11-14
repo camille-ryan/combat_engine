@@ -3359,6 +3359,41 @@ EXTRA_GAINS: dict[str, tuple[tuple[Usage, int, int], ...]] = {
     "cf:paladin-blackguard-f12": ((Usage.DAILY, 9, 9),),
 }
 
+#: **A gain whose pool is a CEILING rather than a rung.** *(usage, the
+#: level the gain happens at, the highest level it may come from)*.
+#:
+#: The sibling of `EXTRA_GAINS` above, and the difference is one printed
+#: word. That table is *"you gain a new power **at** 6th level"*; these
+#: three cards read *"you gain a new c4 attack power of your level **or
+#: lower**"*, which is a maximum. Written as an `EXTRA_GAINS` entry they
+#: would deal **nothing**: `deal` filters `p.level == at` and no power
+#: above `etl.MAX_POWER_LEVEL` is imported, so a 15th-level gain finds an
+#: empty pool -- the same silent no-op `#1112` was.
+#:
+#: All three rows carried `chargen.power_choice()`, whose note said an
+#: entry *"would be a guess about when the gain happens"*. That was true
+#: while `class_feature` had no level; `combat_engine.levels` carries it
+#: now (`#1261`) and every one of these three is a **verified** entry
+#: there, so the level is read.
+#:
+#: **`usage=None` for all three, and it is measured rather than assumed.**
+#: Counted off `compendium.sqlite` for all four affected classes:
+#:
+#:     L13 17 23 27   Attack / Encounter only
+#:     L15 19 25 29   Attack / Daily only
+#:     L16 22         Utility only
+#:
+#: So the pool answers for itself at every level these cards name -- the
+#: identical argument the nine heroic `EXTRA_GAINS` entries make, and the
+#: reason none of them had to guess a slot either.
+#:
+#: `drivers.paragon_gains_and_swaps` is the gate. `#1276`.
+CEILING_GAINS: dict[str, tuple[tuple[Usage | None, int, int], ...]] = {
+    "cf:paladin-blackguard-f15": ((None, 15, 15),),
+    "cf:paladin-blackguard-f16": ((None, 16, 16),),
+    "cf:warlock-binder-f16": ((None, 16, 16),),
+}
+
 #: Utility powers are gained on their own levels and are not attack powers, so
 #: they are drawn without regard to usage -- a utility may be at-will,
 #: encounter or daily, and the level is what says it is a utility. These were
@@ -3503,15 +3538,31 @@ def loadout(
     # bard and the ardent are the two.
     out += sorted(p.ref for p in mine if _is_class_heal(p) and p.ref not in out)
 
-    def deal(at: int, usage: Usage | None, count: int) -> list[str]:
+    def deal(at: int, usage: Usage | None, count: int,
+             ceiling: bool = False) -> list[str]:
         """`count` rows printed at level `at`, on this build's leg if it can be.
 
         `usage` of None means "whatever is printed here", which is what a utility
         level wants: a utility may be at-will, encounter or daily and the level is
         what makes it a utility.
+
+        **`ceiling` makes `at` a maximum rather than a match**, which is
+        what *"a new attack power of your level or lower"* prints --
+        three class features say it and `CEILING_GAINS` is where they
+        live. The default stays an exact match because every caller that
+        shipped before it is a **rung**: `ATTACK_GAINS` says a daily is
+        gained *at* 5th, and drawing one at or below 5th would hand a
+        5th-level character a second 1st-level daily instead.
+
+        `p.level > 0` either way, and only the ceiling branch needed it:
+        level 0 is this tree's spelling for a class feature and for a
+        monster's ability, so an unbounded `<=` would deal those as
+        powers. The exact branch was never at risk because no rung is 0.
         """
         here = [p for p in mine
-                if p.level == at and (usage is None or p.usage is usage)]
+                if (p.level <= at if ceiling else p.level == at)
+                and p.level > 0
+                and (usage is None or p.usage is usage)]
         # **"of the same level as or lower in level than the class power you
         # would have gained"** -- the third of the four printed clauses, and
         # the one a level-equality filter silently drops. At level 10 a
@@ -3557,6 +3608,12 @@ def loadout(
         for usage, when, from_level in EXTRA_GAINS.get(ref, ()):
             if when <= level:
                 out += deal(from_level, usage, 1)
+        # **And the gains whose pool is a ceiling.** Same arrangement,
+        # one printed word apart -- *"of your level or lower"* rather
+        # than *"at 6th level"*. See `CEILING_GAINS`.
+        for usage, when, upto in CEILING_GAINS.get(ref, ()):
+            if when <= level:
+                out += deal(upto, usage, 1, ceiling=True)
     for at in UTILITY_GAINS:
         if at <= level:
             out += deal(at, None, 1)
@@ -5527,10 +5584,32 @@ def _stock_vials(gear: Gear | None, powers: Powers | None,
 #: class's encounter attack powers at or below a level -- 20, 38 and 58
 #: of them. There is nothing to transcribe. The pool is a query and the
 #: ceiling is the only thing the card adds to it.
+#: **Seven rungs, not three, and the four added are paragon and epic.**
+#: `-f17`, `-f19`, `-f22` and `-f23` print the identical sentence with
+#: ceilings of 13, 17, 23 and 27, and all four carried
+#: `chargen.spellbook(encounter_as_daily=)` -- naming this table, which
+#: already did the whole of what they ask. The purest case in this
+#: chassis work of a marker naming a facility that exists.
+#:
+#: **They are not inert, which is why they are worth adding rather than
+#: deferring to `#484`.** The ceiling is *"of 13th level or lower"*, and
+#: `_spellbook_picks` queries `level<=cap`, so a cap of 13 draws from the
+#: heroic wizard encounter attacks that **are** imported. A paragon
+#: bladesinger therefore gets two real powers per rung today, where a
+#: card reading *"a 15th-level poison"* exactly could not -- which is the
+#: line between these four and the executioner's four.
+#:
+#: The pool is distinct across the whole book (*"two NEW powers"*), so
+#: seven rungs take fourteen different rows and the later ones are the
+#: first to run short. `drivers.bladesinger_book` measures that.
 SPELLBOOK: dict[str, int] = {
     "cf:wizard-bladesinger-f2": 1,
     "cf:wizard-bladesinger-f11": 3,
     "cf:wizard-bladesinger-f14": 7,
+    "cf:wizard-bladesinger-f17": 13,
+    "cf:wizard-bladesinger-f19": 17,
+    "cf:wizard-bladesinger-f22": 23,
+    "cf:wizard-bladesinger-f23": 27,
 }
 
 
@@ -5801,7 +5880,18 @@ def power_swap(powers: list[str], feats: list[str], *,
     from combat_engine.engine.dsl import REGISTRY
 
     out = list(powers)
-    for ref in feats:
+    # **Class features trade too, and only feats were read.** Ten class
+    # features print *"you can gain a new attack power of your level or
+    # lower. If you do so, this new power must replace one of the daily
+    # attack powers you already have from your class"* -- the same
+    # exchange, declared the same way, on a row that arrives in `powers`
+    # rather than in `feats`. They carried `chargen.power_swap(daily)`
+    # and `power_swap(encounter)` for it, which named this facility while
+    # this loop could not see them. `#1276`.
+    #
+    # Scoped to `cf:` rather than all of `powers`, so an ordinary power
+    # growing a `swap=` header later does not silently start trading.
+    for ref in (*feats, *(p for p in powers if p.startswith("cf:"))):
         trade = getattr(REGISTRY.get(ref), "swap", None)
         if trade is None:
             continue
@@ -5823,13 +5913,22 @@ def power_swap(powers: list[str], feats: list[str], *,
             continue
         # **The incoming half.** Same level as the one that went, same
         # usage, this character's class, and not already in hand.
+        # **`want` is the level of the one that went for `#1114`'s four,
+        # and a CEILING for the ten class features.** Those print *"of
+        # your level or lower"*, so the incoming is drawn from
+        # everything up to the character's own level rather than matched
+        # to the card going back -- see `Swap.ceiling`. Without it a
+        # paragon blackguard trades its 1st-level daily for another
+        # 1st-level daily, which is not what the sentence says.
         want = REGISTRY[gone].level
+        top = (level or want) if trade.ceiling else want
         offer = [
             p
             for p, row in REGISTRY.items()
             if p not in out
             and getattr(row, "cls", "") == cls
-            and row.level == want
+            and (row.level <= top if trade.ceiling else row.level == want)
+            and row.level > 0
             and row.level <= (level or want)
             and (trade.usage is None or row.usage is trade.usage)
             and (row.attack is None) is trade.utility

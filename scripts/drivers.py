@@ -14265,6 +14265,202 @@ def thief_slippery_rolls(out: Result) -> None:
              f" rolls ONCE ({dazed:.2f}) -- the second control")
 
 
+def paragon_gains_and_swaps(out: Result) -> None:
+    """Thirteen paragon chassis rows, and the printed word that split them.
+
+    Twenty-one class-feature rows carried a `chargen` symbol and every
+    one is a paragon or epic **draw**. Thirteen of them turned on one
+    word -- *"of your level **or lower**"* against *"at 6th level"* --
+    and eight are genuinely outside the import.
+
+    **Reading the ceiling as a rung is what kept them marked.** Written
+    as a `chargen.EXTRA_GAINS` entry a 15th-level gain deals **nothing**:
+    `deal` filters `p.level == at` and `etl.build.MAX_POWER_LEVEL` is 10.
+    So three docstrings concluded *"their pool was never imported and an
+    entry would deal nothing"*, which is true of that table and false of
+    the card -- *or lower* reaches the whole heroic ladder.
+    `chargen.CEILING_GAINS` is the second table and `Swap.ceiling` the
+    same word on the swap side.
+
+    Measured here rather than argued. Five readings:
+
+    * a paragon blackguard's hand **grows** at 15th and again at 16th,
+      which is the `CEILING_GAINS` gain landing;
+    * the binder's does at 16th;
+    * every gain is a power of the right class at or below the ceiling,
+      and **never a class feature** -- `p.level > 0` in `deal`'s ceiling
+      branch, because level 0 is this tree's spelling for a feature and
+      an unbounded `<=` would have dealt those as powers;
+    * a swap row **does not** grow the hand: *"this new power must
+      replace one of the daily attack powers you already have"*, so the
+      count is unchanged and the lowest daily is the one that went;
+    * and the swap is read off a **class feature**, which is the half
+      `chargen.power_swap` could not see: it iterated feats only, and a
+      class feature arrives in `powers`.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY
+
+    def hand(cls: str, chassis: str, level: int) -> list[str]:
+        build = next(b for b in chargen.BUILDS[cls] if True)
+        return chargen.loadout(cls, level=level, build=build,
+                               who_chassis=chassis)
+
+    def powers_of(refs: list[str]) -> list[str]:
+        return [r for r in refs if not r.startswith("cf:")
+                and REGISTRY.get(r) is not None]
+
+    # -- the ceiling gains -------------------------------------------------
+    black = {lvl: len(powers_of(hand("paladin", "blackguard", lvl)))
+             for lvl in (14, 15, 16)}
+    out.that(black[15] > black[14],
+             "a blackguard's hand grows at 15th -- `cf:...-f15`'s"
+             f" `CEILING_GAINS` gain lands ({black[14]} -> {black[15]})")
+    out.that(black[16] > black[15],
+             "and again at 16th, which is the utility one"
+             f" ({black[15]} -> {black[16]})")
+    binder = {lvl: len(powers_of(hand("warlock", "binder", lvl)))
+              for lvl in (15, 16)}
+    out.that(binder[16] > binder[15],
+             "and the binder's at 16th, the same printed sentence on"
+             f" another chassis ({binder[15]} -> {binder[16]})")
+
+    # **The ceiling branch adds no level-0 row, measured as a DELTA.**
+    #
+    # A delta and not a total, because **level 0 is a legitimate power
+    # level here**: 402 rows in `game.db` have it -- 81 of them paladin
+    # -- and a dealt blackguard holds twelve for reasons that have
+    # nothing to do with this branch. The first draft asserted the total
+    # was zero, read 12, and looked like the floor failing.
+    #
+    # **And the floor is DEFENSIVE rather than load-bearing, which the
+    # plant found and this says out loud.** Removing `p.level > 0` from
+    # `deal`'s ceiling branch leaves this assertion green: 81 level-0
+    # paladin rows become eligible and `_best_of` ranks every one of
+    # them below a real power, so the draw is unchanged. The floor is
+    # kept anyway -- a ranking change would otherwise deal a class
+    # feature as a power, silently -- but no board here exercises it and
+    # claiming otherwise would be the thing `scripts/CLAUDE.md` forbids.
+    def zeros(level: int) -> int:
+        return sum(1 for r in hand("paladin", "blackguard", level)
+                   if not r.startswith("cf:")
+                   and (row := REGISTRY.get(r)) is not None
+                   and row.level == 0)
+
+    out.that(zeros(16) == zeros(14),
+             "and the two ceiling gains add no level-0 row -- the branch"
+             " carries its own floor, where an unbounded `<=` would deal"
+             f" every class feature as a power ({zeros(14)} at 14th,"
+             f" {zeros(16)} at 16th)")
+
+    # -- the table says what the cards say ---------------------------------
+    import combat_engine.levels as levels
+
+    off = [(ref, when, levels.level_of(ref))
+           for ref, entries in chargen.CEILING_GAINS.items()
+           for _usage, when, _upto in entries
+           if levels.level_of(ref) != when]
+    out.that(not off,
+             "every `CEILING_GAINS` entry happens at the level"
+             " `combat_engine.levels` read off the printed page -- not a"
+             " number invented here",
+             f"{off}")
+
+    # -- the swap: the hand does NOT grow, and the lowest daily goes -------
+    #
+    # Read through `power_swap` directly, with a hand built by hand: a
+    # dealt paragon hand differs in more than the swap, so a count
+    # either side of it would attribute whatever else moved.
+    dailies = sorted(
+        (r for r, p in REGISTRY.items()
+         if p.cls == "paladin" and p.usage.value == "daily"
+         and p.attack is not None and 0 < p.level <= 9
+         and not p.unfinished),
+        key=lambda r: (REGISTRY[r].level, r))
+    if len(dailies) < 4:
+        out.skip(f"only {len(dailies)} paladin dailies to trade")
+        return
+    held = dailies[:3]
+    swapper = "cf:paladin-blackguard-f18"
+    out.that(REGISTRY[swapper].swap is not None,
+             f"{swapper} declares a `swap=` header at all")
+    rec: set[str] = set()
+    after = chargen.power_swap([*held, swapper], [],
+                               cls="paladin", level=19, record=rec)
+    kept = [r for r in after if not r.startswith("cf:")]
+    out.that(len(kept) == len(held) - 1,
+             "the swap takes exactly ONE card back -- it trades a daily"
+             f" rather than adding one ({len(held)} -> {len(kept)})",
+             f"{held} -> {kept}")
+    out.that(held[0] not in kept,
+             "and the one that went is the LOWEST qualifying daily, which"
+             f" is the printed *usually your lowest-level* ({held[0]})",
+             f"kept {kept}")
+
+    # **The incoming card is RECORDED, not put in the hand**, and that is
+    # `power_swap`'s own design rather than an omission: a row whose whole
+    # effect is a header field has an empty body, and no row in this tree
+    # is drawable with one. So the header takes a card back, the record
+    # becomes a `BuildState.choices` entry, and the row's **body** hands
+    # the replacement over through `c.chosen_options`.
+    #
+    # This rule asserted `set(kept) - set(held)` instead -- "something
+    # came in" -- and it read empty, which looked like the draw failing
+    # and was the mechanism working. The hand is one card shorter by
+    # design and the body makes up the difference.
+    came = sorted(r for r in rec if r.startswith(f"option:{swapper}:"))
+    out.that(len(came) == 1,
+             "and something came IN -- `Swap.pool = \"class\"` draws the"
+             " replacement from the class list and RECORDS it, which is"
+             " what the row's body then grants",
+             f"recorded: {came}")
+    got = came[0].rsplit(":", 1)[-1] if came else ""
+    out.that(got and REGISTRY.get(got) is not None
+             and 0 < REGISTRY[got].level <= 19,
+             "and it is drawn at the CHARACTER's level or lower, which is"
+             " what `Swap.ceiling` says -- not matched to the level of the"
+             " card going back",
+             f"{got} is level"
+             f" {REGISTRY[got].level if REGISTRY.get(got) else '?'}")
+    out.that(got and got not in held,
+             "and it is not a card the character already held -- a trade"
+             f" for something in hand is not a trade ({got})")
+    out.that(len(kept) + len(came) == len(held),
+             "so the two halves come to NET ZERO: one card back out of"
+             " the hand, one recorded for the body to grant. Neither"
+             " half alone is the printed sentence -- a removal without a"
+             " grant leaves a blackguard a daily down, and a grant"
+             f" without a removal leaves it one up ({len(kept)} + "
+             f"{len(came)} = {len(held)})")
+
+    # **The control that can tell a ceiling from a same-level draw.**
+    #
+    # Nothing above distinguishes them, and the plant proved it: forcing
+    # `row.level == want` leaves every assertion green. The paladin's
+    # dailies sit at levels 1, 5 and 9 with 9, 13 and 16 rows each, so a
+    # same-level draw always finds a spare and the ceiling never shows.
+    #
+    # So the pose holds **every** level-1 daily. A same-level draw then
+    # has nothing left to offer and `power_swap` puts the card back --
+    # its own documented behaviour, *"nothing to draw is not a reason to
+    # lose the power as well"*. A ceiling draw reaches level 5 and 9.
+    ones = [r for r in dailies if REGISTRY[r].level == 1]
+    rec2: set[str] = set()
+    chargen.power_swap([*ones, swapper], [], cls="paladin", level=19,
+                       record=rec2)
+    came2 = sorted(r for r in rec2 if r.startswith(f"option:{swapper}:"))
+    got2 = came2[0].rsplit(":", 1)[-1] if came2 else ""
+    out.that(got2 and REGISTRY.get(got2) is not None
+             and REGISTRY[got2].level > 1,
+             "holding EVERY level-1 daily, the replacement comes from a"
+             " HIGHER level -- which only a ceiling draw can do, and is"
+             " the one reading that tells `Swap.ceiling` apart from"
+             " `#1114`'s *of the same level*",
+             f"recorded {came2}, level"
+             f" {REGISTRY[got2].level if REGISTRY.get(got2) else '?'}")
+
+
 def pull_what_you_hold(out: Result) -> None:
     """Dragging a grabbed creature is a **granted action**, not a flag on
     the grab.
@@ -47319,9 +47515,52 @@ def the_poison_recipes_and_the_spellbook_are_both_dealt(out: Result) -> None:
                     in (p.unfinished or ()))
     out.that(not (set(chargen.SPELLBOOK) & set(marked)),
              "and no rung `chargen.SPELLBOOK` deals still carries the "
-             "symbol -- the row names its three refs in its own source "
-             "and the table names them here, so the two cannot drift",
+             "symbol -- the row reads the table in its own source and the "
+             "table names them here, so the two cannot drift",
              f"{sorted(set(chargen.SPELLBOOK) & set(marked))}")
+    out.that(not marked,
+             "and NO rung carries it at all, which is the stronger claim "
+             "the four paragon rungs made true: their ceilings are *or "
+             "lower*, so they draw from the heroic pool that is imported",
+             f"{marked}")
+
+    # -- the four paragon rungs, which is the half that was marked -------
+    #
+    # **The four were marked on a misreading, not on the import.** The
+    # docstring read *"their ceilings are 13th, 17th, 23rd and 27th
+    # level, and those powers are not in the database to be drawn"* --
+    # but the card says *"of 13th level **or lower**"* and
+    # `_spellbook_picks` queries `level<=cap`, so each draws from a pool
+    # LARGER than the heroic rungs'. Measured here rather than argued.
+    PARAGON = {15: 8, 19: 10, 25: 12, 29: 14}
+    grew = {}
+    for level in PARAGON:
+        world, eid = dealt("wizard", "bladesinger", level, seed=9)
+        known = world.get(eid, Powers)
+        assert known is not None
+        grew[level] = sorted(known.as_daily)
+    out.that({k: len(v) for k, v in grew.items()} == PARAGON,
+             "a paragon bladesinger writes two more per rung -- 8 at 15th, "
+             "10 at 19th, 12 at 25th, 14 at 29th, which is seven rungs of "
+             "two and not three",
+             f"{ {k: len(v) for k, v in grew.items()} }")
+    out.that(all(len(set(v)) == len(v) for v in grew.values()),
+             "still DISTINCT across all seven rungs -- fourteen different "
+             "rows, and the later rungs are the first that could run short",
+             f"{ {k: len(set(v)) for k, v in grew.items()} }")
+    stray_book = []
+    for level, refs in grew.items():
+        for r in refs:
+            row = g.execute(
+                "select class, level, usage, kind from power where ref = ?",
+                (r,)).fetchone()
+            if row is None or (row[0] or "").lower() != "wizard" \
+                    or row[2] != "encounter" or row[3] != "Attack":
+                stray_book.append((level, r, row and tuple(row)))
+    out.that(not stray_book,
+             "and every one is still a wizard encounter ATTACK power -- the "
+             "ceiling rose, the kind did not",
+             f"{stray_book[:3] or 'none'}")
 
 
 def a_short_rest_spends_surges_and_the_song_pays_per_surge(out: Result) -> None:
@@ -84588,6 +84827,10 @@ DRIVERS = {
     "pull_what_you_hold": (
         pull_what_you_hold,
         "dragging a grabbed creature is a granted action, offered live"),
+    "paragon_gains_and_swaps": (
+        paragon_gains_and_swaps,
+        "thirteen paragon chassis draws, and the ceiling-versus-rung"
+        " word that kept them marked"),
     "thief_slippery_rolls": (
         thief_slippery_rolls,
         "roll twice on an escape check and three saves, and only those"),

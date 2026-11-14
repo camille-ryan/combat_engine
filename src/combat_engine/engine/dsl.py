@@ -1312,6 +1312,24 @@ class Swap:
     #: the skill-power list, which needs a prerequisite check per row.
     #: Naming the pool leaves room for those without implying they work.
     pool: str = ""
+    #: Is the **incoming** power drawn at the character's level or lower,
+    #: rather than at the level of the one going back?
+    #:
+    #: `#1114`'s four feats print *"of the same level"*, which is what
+    #: `chargen.power_swap` does by default. Ten **class features** print
+    #: something different -- *"you can gain a new attack power of your
+    #: level or lower. If you do so, this new power must replace one of
+    #: the daily attack powers you already have from your class"* -- and
+    #: that is a ceiling, not a match.
+    #:
+    #: The distinction is load-bearing rather than cosmetic. A paragon
+    #: blackguard's lowest daily is 1st level, so the default would trade
+    #: it for another **1st-level** daily; the printed clause lets it take
+    #: the best its level allows. With the import at `MAX_POWER_LEVEL`
+    #: that is a heroic row either way, but the *clause* is honoured
+    #: exactly and the pool grows on its own when the ceiling moves.
+    #: `#1276`.
+    ceiling: bool = False
 
 
 @dataclass

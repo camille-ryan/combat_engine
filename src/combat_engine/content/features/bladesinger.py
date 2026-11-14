@@ -145,30 +145,40 @@ def _spellbook_slots(ref: str, ceiling: str, what: str) -> Callable[[Cast], None
       bladesinger carries holds them and the row is the pointer that says
       so. `out_of_combat=True`, because owning a power is not a thing that
       happens in a fight.
-    * **encounter-as-daily** -- dealt for the three rungs inside the
-      levels this project imports, and still marked for the four above
-      them. Both halves of the sentence have a writer now:
-      `chargen.SPELLBOOK` draws two wizard encounter attack powers at or
-      below the card's own ceiling, and `Powers.as_daily` is what makes
-      them function as dailies -- a fact about the creature, where
-      `Power.usage` is a fact about the card.
+    * **encounter-as-daily** -- all seven, since `#1276`. Both halves of
+      the sentence have a writer: `chargen.SPELLBOOK` draws two wizard
+      encounter attack powers at or below the card's own ceiling, and
+      `Powers.as_daily` is what makes them function as dailies -- a fact
+      about the creature, where `Power.usage` is a fact about the card.
 
       The direction is why the second half could not be skipped: an
       encounter power used as a daily is **weaker**, so dealing the
       powers without it would hand the character something stronger than
       its own card prints, and nothing would have reported it.
 
-      The four above `MAX_POWER_LEVEL` keep the symbol: their ceilings
-      are 13th, 17th, 23rd and 27th level, and those powers are not in
-      the database to be drawn.
+      **The four above `MAX_POWER_LEVEL` are dealt too, and this
+      docstring said the opposite.** It read *"their ceilings are 13th,
+      17th, 23rd and 27th level, and those powers are not in the database
+      to be drawn"* -- which misreads the card. The ceiling is *"of 13th
+      level **or lower**"*, and `_spellbook_picks` queries `level<=cap`,
+      so the pool is every imported wizard encounter attack up to the
+      cap and is **larger** than the heroic rungs' pools, not empty.
+
+      That is the line between these four and the executioner's four,
+      which really are blocked on the import: *"a 15th-level assassin
+      poison"* names a level exactly, so nothing at or below it will do.
+      Deferred on `#484` there, and nothing to defer here.
     """
     utility = what == "utility"
-    # The three rungs `chargen.SPELLBOOK` deals. Named here rather than
-    # imported so a reader of this row sees which three without leaving
-    # the file -- and asserted against the table by `drivers.spellbook`,
-    # so the two cannot drift apart.
-    dealt = ref in ("cf:wizard-bladesinger-f2", "cf:wizard-bladesinger-f11",
-                    "cf:wizard-bladesinger-f14")
+    # **Read off the table rather than listed.** This was a hard-coded
+    # tuple of the three rungs then dealt, which is the shape that goes
+    # stale the moment the table grows -- and it did: four more rungs
+    # landed and the literal would have kept marking them unfinished.
+    # `drivers.spellbook` asserts the two agree, so a list here was a
+    # second copy of a fact with a gate already on it.
+    from combat_engine.chargen import SPELLBOOK as _BOOK
+
+    dealt = ref in _BOOK
 
     @power(
         ref,
@@ -179,9 +189,17 @@ def _spellbook_slots(ref: str, ceiling: str, what: str) -> Callable[[Cast], None
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.ARCANE],
-        out_of_combat=utility,
+        # **All twelve, not only the utilities.** A row whose whole
+        # printed effect is *"you add two powers to your spellbook"* has
+        # nothing to do on a board whichever kind the two are: the draw
+        # happens in `chargen` and the body is a pointer. This was
+        # `utility` alone, which was fine while the encounter rows were
+        # `todo=` and so never audited -- unmarking the last four made
+        # them fire and do nothing, and the sweep reported four **newly
+        # silent** rows for a change that finished them. `#1276`.
+        out_of_combat=True,
         todo=() if utility or dealt
-        else ("chargen.spellbook(encounter_as_daily=)",),
+        else ("etl.MAX_POWER_LEVEL(paragon)",),
     )
     def row(c: Cast) -> None:
         pass

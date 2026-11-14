@@ -52,6 +52,8 @@ from combat_engine.engine import (
     Cast,
     DamageType,
     Keyword,
+    Swap,
+    Usage,
     When,
     get,
     power,
@@ -401,14 +403,35 @@ def _pact_parent(ref: str, what: str, *, replaces: bool = False) -> Any:
     narrows the fork to the character's leg, so a binder is dealt its own
     pact's option. See `features/hexblade.py`'s `_pact_parent`.
 
-    `replaces=True` keeps the one symbol that is still true for the five
-    later forks, whose text also says the new power **replaces** the one
-    gained earlier: a grant without the replacement leaves a binder a
-    power up on print.
+    **`replaces=True`'s symbol was re-pointed, and it had named the
+    wrong component.** It said `chargen.power_swap(encounter)`, i.e.
+    that chargen could not trade an encounter power for another. It can:
+    `chargen.power_swap` has done gain-and-replace since `#1114`, and
+    `#1276` taught it to read a `swap=` header off a class feature in
+    hand rather than off feats only.
+
+    The real gap is one layer down and is a **scope** fact. Measured for
+    all four forks: each prints *"you gain an encounter attack power
+    associated with your pact. This new power replaces the encounter
+    attack power you gained at 1st/3rd/7th/13th level"*, and the
+    incoming power is a warlock encounter attack at the fork's own level
+    -- 13th, 17th, 23rd, 27th. `etl.build.MAX_POWER_LEVEL` is **10**, so
+    `game.db` holds nothing above it and all twelve of these forks'
+    options grant nothing.
+
+    **So the replacement must not happen, and the current body is right
+    to do nothing.** Replacing a working heroic power with a grant that
+    cannot land would take a card away and give none back -- strictly
+    worse than print, where doing nothing is merely incomplete. That is
+    the direction this file's own note is about, pointed the other way.
+
+    Deferred on `#484`, which holds the three import ceilings and is
+    parked behind the *Heroic tier fully imported* milestone. The symbol
+    names the ceiling so `todo.py` reports these ready the day it moves.
     """
     marks = []
     if replaces:
-        marks.append("chargen.power_swap(encounter)")
+        marks.append("etl.MAX_POWER_LEVEL(paragon)")
 
     @power(
         ref,
@@ -441,10 +464,12 @@ def _pact_parent(ref: str, what: str, *, replaces: bool = False) -> Any:
         "has the measurement: the three options are distinguishable from "
         "each other by keyword and not identifiable as pacts, which is a "
         "weaker position than the hexblade's and the same conclusion.\n\n"
-        + ("The printed *replaces the power you gained earlier* is the "
-           "second symbol: a grant without the replacement leaves a binder "
-           "a power up on print, which is the wrong direction to land half "
-           "of.\n\n" if replaces else "")
+        + ("The printed *replaces the power you gained earlier* waits on "
+           "the **import** and not on chargen: the incoming power is a "
+           "warlock encounter attack at this fork's own level, which is "
+           "above `etl.build.MAX_POWER_LEVEL`. The helper above has the "
+           "measurement and the reason the replacement must not happen "
+           "without it. `#484`.\n\n" if replaces else "")
         + "`#1264`."
     )
     return row
@@ -526,22 +551,35 @@ def _pick(ref: str, what: str, *, swap: bool = False,
           gained: bool = False) -> Any:
     """One of the nine "a `c7` power of your choice" rows.
 
-    `gained=True` is the two whose own text states the level the gain
-    happens at -- *"a 1st-level"*, *"a 2nd-level"* -- so they carry a
-    `chargen.EXTRA_GAINS` entry and no marker. The other seven say *"of
-    your level or lower"* and name no level, and `class_feature` carries
-    none (`#1261`), so an entry for them would be a guess about **when**
-    the gain happens rather than about what it draws from.
+    **All nine are written, and the level was the whole of what was
+    missing.** This said the two with `gained=True` state their own
+    level -- *"a 1st-level"*, *"a 2nd-level"* -- and that the other
+    seven *"name no level, and `class_feature` carries none (`#1261`),
+    so an entry for them would be a guess"*. The first clause is still
+    true and the second is not: `combat_engine.levels` carries the
+    printed level for every one of them, verified, so nothing is
+    guessed.
 
-    That is the whole difference between a row on this chassis that is
-    finished and one that is not, and it is a property of the printed
-    sentence rather than of the mechanism.
+    Three shapes for three printed sentences:
+
+    * `gained=True` -- *"you gain a 1st-level power"*, an exact rung, so
+      `chargen.EXTRA_GAINS`.
+    * neither -- *"a new `c7` utility power of your level **or
+      lower**"*, a maximum, so `chargen.CEILING_GAINS`. Written as an
+      `EXTRA_GAINS` entry it would deal **nothing**, the printed level
+      being above `etl.build.MAX_POWER_LEVEL` and `deal` filtering
+      `p.level == at`.
+    * `swap=True` -- *"this new power must replace one of the daily
+      attack powers you already have"*, so a `swap=Swap(...)` header.
+      `chargen.power_swap` takes the lowest qualifying card back, which
+      is the printed *"usually your lowest-level"*, and
+      `Swap.ceiling` is the *"or lower"* on what comes in.
+
+    So the distinction the old note drew -- finished versus not -- was
+    really between three printed sentences, and the mechanism for each
+    existed or was one field short. `#1276`.
     """
     marks: tuple[str, ...] = ()
-    if swap:
-        marks = ("chargen.power_swap(daily)",)
-    elif not gained:
-        marks = ("chargen.power_choice()",)
 
     @power(
         ref,
@@ -553,30 +591,38 @@ def _pick(ref: str, what: str, *, swap: bool = False,
         target=NO_TARGET,
         keywords=[Keyword.ARCANE],
         todo=marks,
-        out_of_combat=gained,
+        swap=(Swap(level=1, usage=Usage.DAILY, pool="class", ceiling=True)
+              if swap else None),
+        out_of_combat=not swap,
     )
     def row(c: Cast) -> None:
-        pass
+        # Only the swap rows have anything to do: `power_swap` RECORDS
+        # the incoming card rather than putting it in the hand, so the
+        # header takes one back and the body hands the replacement over.
+        # A pure gain is a slot in the hand the dealer builds and has no
+        # body at all -- which is what `out_of_combat` says above.
+        for took in c.chosen_options(c.ref):
+            c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
     row.__name__ = "binder_pick_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         f"{what}\n\n"
-        + ("`chargen.power_swap(daily)` and not `power_choice()`, which is "
-           "`cf:paladin-blackguard-f18`'s distinction: these **trade** a "
-           "daily rather than adding one, and a draw that added without "
-           "replacing leaves a binder a daily up on print."
+        + ("**A `swap=Swap(...)` header**: these **trade** a daily rather "
+           "than adding one, and a draw that added without replacing "
+           "leaves a binder a daily up on print. `chargen.power_swap` "
+           "takes the lowest qualifying card back and `Swap.ceiling` is "
+           "the printed *of your level or lower* on what comes in."
            if swap else
-           "**Finished.** The card states the level the gain happens at, "
-           "so `chargen.EXTRA_GAINS` carries it: `loadout` deals the "
-           "extra power to a character holding this row and to nobody "
-           "else, which is `#1112`'s mechanism. `out_of_combat=True` "
-           "because the whole row is a draw -- a fight has no use for it "
-           "and the sweep credits it as silent on a board as claimed."
+           "**A `chargen.EXTRA_GAINS` entry.** The card states the level "
+           "the gain happens at, so the entry is read: `loadout` deals "
+           "the extra power to a character holding this row and to "
+           "nobody else, which is `#1112`'s mechanism."
            if gained else
-           "`chargen.power_choice()`'s gap -- and specifically the "
-           "**level** half of it: this card says *of your level or lower* "
-           "and names no level for the gain itself, which `#1261` is "
-           "about. The two rows beside it that do name one are finished.")
+           "**A `chargen.CEILING_GAINS` entry**, because this card's "
+           "pool is a maximum and not a rung -- *of your level or "
+           "lower*. An `EXTRA_GAINS` entry here would have dealt "
+           "nothing, the printed level being above "
+           "`etl.build.MAX_POWER_LEVEL`.")
     )
     return row
 

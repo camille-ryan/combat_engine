@@ -50,6 +50,8 @@ from combat_engine.engine import (
     Cast,
     DamageType,
     Keyword,
+    Swap,
+    Usage,
     When,
     power,
 )
@@ -593,19 +595,31 @@ blackguard_extra_use_14 = _extra_use("cf:paladin-blackguard-f14")
 def _power_pick(ref: str, what: str, *, gained: bool = False) -> Any:
     """One of the six "you gain a new c4 attack or utility power" rows.
 
-    `gained=True` for the four whose gain is now a
-    `chargen.EXTRA_GAINS` entry. The card is a **gain** and not a pick
-    from a named list, so no body can make it -- it is a slot in the hand
-    the dealer builds. What was missing was the LEVEL the gain happens
-    at, which `class_feature` carries none of; `combat_engine.levels`
-    carries it now (`#1261`), so the entry is read rather than guessed.
+    All six are a `chargen` table entry now. The card is a **gain** and
+    not a pick from a named list, so no body can make it -- it is a slot
+    in the hand the dealer builds. What was missing was the LEVEL the
+    gain happens at, which `class_feature` carries none of;
+    `combat_engine.levels` carries it now (`#1261`), so every entry is
+    read rather than guessed.
 
-    `out_of_combat=True` with it, because the whole row is a draw and has
-    nothing to do on a board -- the same call `cf:warlock-binder-f6` and
-    `cf:assassin-executioner-f6` already made.
+    `out_of_combat=True` on all six, because the whole row is a draw and
+    has nothing to do on a board.
 
-    The other two are printed above the level this project imports, so
-    their pool was never imported and an entry would deal nothing.
+    **Two tables, one printed word apart.** Four are `EXTRA_GAINS` --
+    *"you gain a new power **at** 6th level"*, an exact rung. Two are
+    `CEILING_GAINS` -- *"a new `c4` attack power of your level **or
+    lower**"*, a maximum.
+
+    **And reading them as one table is why the last two were marked.**
+    This docstring said they were *"printed above the level this project
+    imports, so their pool was never imported and an entry would deal
+    nothing"*. The first clause is true and the conclusion does not
+    follow: *"or lower"* reaches every imported row beneath the ceiling,
+    so the pool is the whole heroic ladder rather than empty. As an
+    `EXTRA_GAINS` entry it really would have dealt nothing --
+    `deal` filters `p.level == at` -- which is the silent no-op `#1112`
+    was, and is why the second table exists instead of a fourth tuple
+    field.
     """
 
     @power(
@@ -617,8 +631,7 @@ def _power_pick(ref: str, what: str, *, gained: bool = False) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.DIVINE],
-        todo=() if gained else ("chargen.power_choice()",),
-        out_of_combat=gained,
+        out_of_combat=True,
     )
     def row(c: Cast) -> None:
         pass
@@ -632,9 +645,11 @@ def _power_pick(ref: str, what: str, *, gained: bool = False) -> Any:
            "exactly one more power, which is the check `#1112` exists for "
            "-- a wrong level deals nothing and says nothing."
            if gained else
-           "`chargen.power_choice()`'s gap, and specifically the pool: "
-           "this card is printed above the level this project imports, so "
-           "there are no rows for the gain to draw from. `#1269`.")
+           "**Written as a `chargen.CEILING_GAINS` entry**, because this "
+           "card's pool is a maximum and not a rung: *of your level or "
+           "lower*. Same keying and the same A/B; the difference is that "
+           "an `EXTRA_GAINS` entry here would have dealt nothing, the "
+           "printed level being above `etl.MAX_POWER_LEVEL`.")
     )
     return row
 
@@ -660,12 +675,36 @@ blackguard_pick_16 = _power_pick(
 def _power_swap(ref: str, what: str) -> Any:
     """One of the three rows whose new power **replaces** a daily.
 
-    A different symbol from `_power_pick`'s, and the distinction is the
+    A different header from `_power_pick`'s, and the distinction is the
     point: those add a power, these **trade** one -- *"this new power must
     replace one of the daily attack powers you already have"*. A draw that
     added without replacing would leave a blackguard a daily up on print,
-    which is the wrong direction to land half of, so the swap is the gap
-    and not the draw.
+    which is the wrong direction to land half of.
+
+    **Written, and the facility the symbol named already existed.**
+    `chargen.power_swap` has done gain-and-replace since `#1114` -- it
+    takes the lowest qualifying card back, which is the printed
+    *"usually your lowest-level daily attack power"*, and `Swap.pool =
+    "class"` draws the incoming one from the class list. Two things were
+    missing and both were small:
+
+    * it iterated **feats only**, and a class feature arrives in
+      `powers`. Now it reads a `swap=` off the `cf:` rows in hand too.
+    * the incoming draw matched the **outgoing card's level**, which is
+      `#1114`'s printed *"of the same level"* and not this card's *"of
+      your level or lower"*. `Swap.ceiling` is that one word: without
+      it a paragon blackguard trades its 1st-level daily for another
+      1st-level daily.
+
+    `level=1` is the floor on what may go back, which is the card's
+    *"one of the daily attack powers you already have"* -- any of them,
+    so the floor is the bottom of the ladder rather than a rung.
+
+    **The pool is as large as the import allows and the clause is exact.**
+    Nothing above `etl.MAX_POWER_LEVEL` is imported, so *"or lower"*
+    reaches the heroic dailies today and grows on its own when `#484`
+    moves the ceiling. That is an ETL scope fact, deferred there, and not
+    a gap in this row -- which is why no marker is left naming one.
     """
 
     @power(
@@ -677,19 +716,27 @@ def _power_swap(ref: str, what: str) -> Any:
         reach=PERSONAL,
         target=NO_TARGET,
         keywords=[Keyword.DIVINE],
-        todo=("chargen.power_swap(daily)",),
+        swap=Swap(level=1, usage=Usage.DAILY, pool="class", ceiling=True),
     )
     def row(c: Cast) -> None:
-        pass
+        # **`power_swap` RECORDS the incoming card, it does not put it in
+        # the hand**, and its own docstring says why: a row whose whole
+        # effect is a header field has an empty body, and no row in this
+        # tree is drawable with one. So the header takes the card back
+        # and the body hands the replacement over -- the same two halves
+        # `#1114`'s four feats already have, and the same
+        # `c.chosen_options` read the pact parents use.
+        for took in c.chosen_options(c.ref):
+            c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
     row.__name__ = "blackguard_swap_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         f"{what}\n\n"
-        "The helper above has the argument for why this is its own symbol "
-        "and not `chargen.power_choice()`. `cf:wizard-witch-f3`'s "
-        "`turns.extended_rest(swap=)` is a different thing again -- that "
-        "one swaps a *prepared* power at a rest, where this is a "
-        "permanent trade at a level."
+        "The helper above has the argument for why this is a `swap=` "
+        "header and not a `chargen.power_choice()` entry. "
+        "`cf:wizard-witch-f3`'s `turns.extended_rest(swap=)` is a "
+        "different thing again -- that one swaps a *prepared* power at a "
+        "rest, where this is a permanent trade at a level."
     )
     return row
 

@@ -647,9 +647,32 @@ def _poison_rung(ref: str, what: str, *,
     both of its power blocks written and unmarked. Nothing was missing
     but the dealing.
 
-    `marks` is for the four rungs above the levels this project imports:
-    their recipes are 15th and 25th level and those poisons are not in
-    the database to be chosen.
+    **`marks` is for the four rungs above the import ceiling, and the
+    symbol now names the right component.** It said
+    `chargen.poison_recipes(above_level_10)`, which reads as a gap in
+    the dealer; the dealer is fine and the pool is absent. Measured,
+    the same way the 1st-level six were found -- asking
+    `compendium.sqlite`'s `Item` table for entries whose text says the
+    printed phrase:
+
+        L1    6 items    all 6 in `game.db`, both blocks each written
+        L15   7 items    0 in `game.db`
+        L25   5 items    0 in `game.db`
+
+    The L1 query reproduces the existing six exactly, which is what
+    makes the other two counts trustworthy rather than a guess.
+    `etl.item.MAX_ITEM_LEVEL` is **10**, so all twelve paragon poisons
+    are outside the import -- a scope fact deferred on `#484`, not a
+    gap in chargen and not a defect in the compendium, which has every
+    page.
+
+    **The `poison` table is a red herring here and was once written
+    into this helper as the answer.** Its 19 rows are fully imported at
+    levels 5 to 25 -- so a reader checking "are paragon poisons in the
+    database" against *that* table gets yes, and is wrong: these cards
+    want the `Consumable` **items**, which are a different printed set
+    and ceilinged separately. Said at length because the two tables
+    have already been confused once in this file.
     """
 
     @power(
@@ -669,10 +692,12 @@ def _poison_rung(ref: str, what: str, *,
     row.__name__ = "executioner_poison_" + ref.rsplit("-f", 1)[-1]
     row.__doc__ = (
         f"{what}\n\n"
-        "One of seven rows on this ladder and they share one symbol -- the "
-        "helper above has the argument. `turns.extended_rest` is where the "
-        "preparing would live and `i293` is the kit the card requires; the "
-        "19-row `poison` table is the content, already imported."
+        "One of seven rows on this ladder -- the helper above has the "
+        "argument. The three heroic rungs are dealt; the four paragon "
+        "ones wait on `etl.item.MAX_ITEM_LEVEL`, which is 10, and their "
+        "poisons are `Consumable` items at 15th and 25th level. Not the "
+        "19-row `poison` table, which is a different printed set and is "
+        "fully imported -- see the helper."
     )
     return row
 
@@ -688,19 +713,19 @@ executioner_poison_13 = _poison_rung(
 executioner_poison_16 = _poison_rung(
     "cf:assassin-executioner-f16",
     "A 15th-level recipe, and one vial may be up to 15th level.",
-    marks=("chargen.poison_recipes(above_level_10)",))
+    marks=("etl.MAX_ITEM_LEVEL(paragon)",))
 executioner_poison_19 = _poison_rung(
     "cf:assassin-executioner-f19",
     "Another 15th-level recipe; two vials may be 15th level.",
-    marks=("chargen.poison_recipes(above_level_10)",))
+    marks=("etl.MAX_ITEM_LEVEL(paragon)",))
 executioner_poison_22 = _poison_rung(
     "cf:assassin-executioner-f22",
     "A 25th-level recipe; one vial up to 25th and two up to 15th.",
-    marks=("chargen.poison_recipes(above_level_10)",))
+    marks=("etl.MAX_ITEM_LEVEL(paragon)",))
 executioner_poison_23 = _poison_rung(
     "cf:assassin-executioner-f23",
     "Another 25th-level recipe; two vials up to 25th and one up to 15th.",
-    marks=("chargen.poison_recipes(above_level_10)",))
+    marks=("etl.MAX_ITEM_LEVEL(paragon)",))
 
 
 # -- the three utility picks -------------------------------------------------
