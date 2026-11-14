@@ -46511,10 +46511,12 @@ def the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally(
     from audit import board as _posed
     from combat_engine import chargen
     from combat_engine.content.features.cavalier import VIRTUE, VIRTUES
+    from combat_engine.engine.actions import legal
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Build, Health, Powers
     from combat_engine.engine.dsl import REGISTRY, get, usable
     from combat_engine.engine.events import SurgeSpent
+    from combat_engine.engine.turns import Encounter
 
     rows = sorted(r for r in REGISTRY if r.startswith("cf:paladin-cavalier-"))
     out.that(len(rows) == 34,
@@ -46625,6 +46627,17 @@ def the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally(
     # -- f4s0 and f4s1: both work and both are invisible to the sweep ----
     world, me, _ = _posed("cf:paladin-cavalier-f1", 1)
     health = world.get(me, Health)
+    # **The latch is released first, and without that this cannot pass.**
+    # The row is guarded by `c.once_per_board` -- it has to be, since a
+    # trait arms every encounter and an unguarded `max_surges += 1`
+    # climbs once a fight -- and `audit.board` has already armed it, so
+    # the latch is claimed and a second run skips the grant entirely.
+    # Both readings came back unchanged and looked exactly like a clause
+    # that does nothing. `world.latches` is where the verb stores it.
+    # The key is `(self.ref, *key)` and the body calls
+    # `c.once_per_board(me)`, so the entity is part of it -- discarding
+    # the ref alone matches nothing and leaves the latch claimed.
+    world.latches.discard(("cf:paladin-cavalier-f4s0", me))
     was_max, was_now = health.max_surges, health.surges
     emitted = len(world.bus.log)
     REGISTRY["cf:paladin-cavalier-f4s0"].body(
@@ -46636,13 +46649,54 @@ def the_cavaliers_virtue_agrees_and_its_temp_hp_goes_to_the_ally(
              "`Health` keeps the two separately",
              f"max {was_max}->{health.max_surges}, "
              f"now {was_now}->{health.surges}")
-    out.that(len(world.bus.log) == emitted,
-             "and it emits nothing, which is why `audit` reports the row "
-             "SILENT. Asserted so the day somebody adds an event this rule "
-             "reds and the known-silence gets revisited rather than "
-             "quietly outliving its reason -- `#1262` is the same hole "
-             "under `c.initiative`, which `-f4s1` sits in",
-             f"{len(world.bus.log) - emitted} event(s)")
+    # **It emits now, and this assertion asked to be told.** It read
+    # `== emitted` with the note *"asserted so the day somebody adds an
+    # event this rule reds and the known-silence gets revisited rather
+    # than quietly outliving its reason"*. That day came: the row's
+    # second-wind half landed -- `c.grant_action("second_wind", MINOR)`
+    # plus the watch that redirects it -- so the body lays effects and
+    # `audit` reports it fires. It left `audited.json`'s `silent_refs`
+    # in the same sweep, with `-f4` and `-f4s1`.
+    #
+    # So the claim is inverted rather than deleted: the row is **not**
+    # silent, and a regression to a body that only moves two integers
+    # would red here.
+    fired = len(world.bus.log) - emitted
+    out.that(fired > 0,
+             "and it EMITS -- the second-wind half lays a granted action "
+             "and a watch, so the row is no longer the silent sheet edit "
+             "this assertion was written against. It asked to be told the "
+             "day that changed",
+             f"{fired} event(s)")
+
+    # **And the emission is the printed clause, not merely an emission.**
+    # `fired > 0` passes on either half: deleting
+    # `c.grant_action("second_wind", MINOR)` leaves the watch, which also
+    # emits. Measured by a plant. So the reading is the menu.
+    #
+    # **The board's own grant is ended first**, and without that the
+    # delta is invisible: `audit.board` armed the row, so a MINOR second
+    # wind is already on the menu before the body runs and both readings
+    # say `['MINOR', 'STANDARD']`.
+    world2, me2, _ = _posed("cf:paladin-cavalier-f1", 1)
+    for eff in list(world2.effects.of(me2)):
+        if (eff.label or "").startswith("cf:paladin-cavalier-f4s0"):
+            world2.effects.end(eff, "drivers:before-the-grant")
+    world2.latches.discard(("cf:paladin-cavalier-f4s0", me2))
+    enc2 = world2.encounter or Encounter(world2)
+    costs = sorted({a.cost.name for a in legal(world2, enc2, me2)
+                    if a.kind == "second_wind"})
+    REGISTRY["cf:paladin-cavalier-f4s0"].body(
+        Cast(world=world2, me=me2, ref="cf:paladin-cavalier-f4s0"))
+    after2 = sorted({a.cost.name for a in legal(world2, enc2, me2)
+                     if a.kind == "second_wind"})
+    out.that(costs == ["STANDARD"] and after2 == ["MINOR", "STANDARD"],
+             "specifically, a second wind at MINOR cost joins the menu "
+             "beside the printed standard one -- which is the clause, and "
+             "needed no engine work: `second_wind` has been in "
+             "`actions.GRANTABLE` with a reader the whole time, where the "
+             "marker said the facility was missing",
+             f"{costs} -> {after2}")
 
     # -- p12660: three chassis, two answers -------------------------------
     was_scored = chargen.SCORED_CHOICES
@@ -48172,13 +48226,43 @@ def a_waived_bonus_feat_reaches_the_build_and_not_only_the_fight(
     # **The proficiency is the half that proves the build saw it.** A
     # shield cannot be dealt at arming time, so a character carrying one
     # is evidence the permission arrived during chargen and nowhere else.
-    shields = {k: v[2] for k, v in seen.items() if v[0] == "f162"}
-    out.that(shields and all(n >= 1 for n in shields.values()),
+    #
+    # **Not `all`, and the four seeds could not say which.** This read
+    # `all(n >= 1)` over the four seeds above and failed on seed 3: that
+    # character holds the feat, `armour_opened` grants the permission,
+    # and the gear ranking took a second weapon instead. A permission is
+    # not an obligation, so `all` was asserting something neither the
+    # card nor `chargen._shield_for` claims.
+    #
+    # Measured over twenty seeds: of the twelve that chose `f162`, **ten
+    # carry a shield and two do not**; of the eight that chose `f172`,
+    # **none** does. So the pair of readings is "the permission is taken
+    # at least sometimes" and "the other feat never opens it" -- and the
+    # second is the sharp one, because a shield appearing without the
+    # proficiency would mean the permission was never what did it.
+    wide = []
+    for seed in range(1, 21):
+        w = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(seed))
+        who = chargen.spawn(w, chargen.Character(
+            "assassin", 5, [], chassis="executioner"), (4, 6))
+        st, gr = w.get(who, BuildState), w.get(who, Gear)
+        assert st is not None and gr is not None
+        took = [c[len(head):] for c in st.choices if c.startswith(head)]
+        wide.append((took[0] if took else "", gr.shield))
+    with_prof = [n for f, n in wide if f == "f162"]
+    without = [n for f, n in wide if f == "f172"]
+    out.that(with_prof and any(n >= 1 for n in with_prof),
              "and a character that chose the shield proficiency carries a "
              "LIGHT SHIELD -- which can only have been dealt during "
              "chargen, so it is the one reading that says the build saw "
              "the feat at all",
-             f"{shields}")
+             f"{sum(1 for n in with_prof if n)} of {len(with_prof)} carry one")
+    out.that(without and not any(without),
+             "while a character that chose the OTHER feat never carries "
+             "one -- the control, and the reading that says the "
+             "proficiency is what opened it rather than the gear ranking "
+             "reaching for a shield on its own",
+             f"{sum(1 for n in without if n)} of {len(without)} carry one")
     out.that(chargen.armour_opened(["f162"])[1] == 1,
              "which needs the feat to declare its `proficiency=`: with the "
              "header empty `armour_opened` answered nothing and the feat "
@@ -62791,12 +62875,29 @@ def an_alchemical_attack_is_told_apart_from_an_ordinary_one(out: Result) -> None
                  "what the window reads, not merely filed in "
                  "`dsl.basic_options`",
                  f"seed {seed}: {without} -> {with_feat}, added {added}")
-        out.that(without == ["mba"],
-                 "and without the feat the window offers the melee basic "
-                 "and nothing else -- the control, since an option beside "
-                 "the basic is indistinguishable from one replacing it "
-                 "unless the bare case is checked",
-                 f"seed {seed}: {without}")
+        # **The claim is "beside, not instead of", and the absolute form
+        # was order-dependent.** This read `without == ["mba"]`, which is
+        # true run alone and false after any rule that poses an
+        # `audit.board` of its own -- measured: green alone and after
+        # `waived_feat` or `carried_consumable`, red after
+        # `berserker_fury`, `cavalier_virtue`, `witch_coven` or
+        # `deepened_number`, where `without` comes back `[]`. Those four
+        # call `audit.board`; the other two spawn through `chargen`.
+        # `CLAUDE.md` names the hazard: 156 rules reach `audit.board`
+        # directly and 8 of 21 failures in one session were order.
+        #
+        # So the reading is a **delta**: nothing the bare window offered
+        # is lost, and what arrives is exactly the flask. That is the
+        # printed sentence -- the feat adds an option, it does not
+        # replace the basic -- and it holds whatever the board's own
+        # provocation has done to the menu.
+        out.that(set(without) <= set(with_feat),
+                 "and the feat takes NOTHING away -- the option arrives "
+                 "beside the melee basic rather than instead of it, "
+                 "which is the half an added-set reading cannot see on "
+                 "its own",
+                 f"seed {seed}: {without} -> {with_feat}, "
+                 f"lost {sorted(set(without) - set(with_feat))}")
 
 
 def a_carried_consumable_is_offered_and_spent_by_using_it(out: Result) -> None:
