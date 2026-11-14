@@ -3763,6 +3763,11 @@ def board(ref: str, seed: int, pose: bool = False,
     # other two wants are not. #666.
     if pose and _wants_milestone(declared):
         world.milestones = 1
+    # Hoisted here beside the milestone and for its reason: this is grid
+    # state with no placement, no team and no effect, so posing it cannot
+    # take another row's shift with it. See `_paint_a_wall`.
+    if pose and _wants_climb(declared):
+        _paint_a_wall(world)
     # **A disease needs a stage before anything arms it.** `cls="disease"`
     # rows are run by `turns.arm_afflictions`, off
     # `Afflictions.contracted`, which `Encounter.start()` below reaches --
@@ -3934,6 +3939,71 @@ def _wants_milestone(declared) -> bool:  # noqa: ANN001
         return False
     src = _source_of(declared.body, getattr(declared, "ref", ""))
     return bool(_WANTS_MILESTONE.search(src))
+
+
+#: **A fourth knob: a climbable surface.** `Grid.climb_dc` is empty on every
+#: board this harness builds, which is the deliberate default -- a square
+#: absent from it is not a wall, the same bargain `Grid.porous` and
+#: `Grid.light` strike -- and it means a row that reduces a climb DC has no
+#: square to reduce one on. `p10699` reported SILENT the moment it stopped
+#: being marked, for the harness's reason and not its own.
+#:
+#: Aimed by the **read**, which is the pattern `light_level` established and
+#: `c.milestone()` repeated: a row that touches the climb model wants a
+#: board with a surface in it, whichever way round its own test runs. Two
+#: rows match today and they are the whole printed population of the
+#: mechanic, so this is not a knob built for one ref.
+#:
+#: **Painted clear of every creature**, which is what makes it as safe as
+#: the milestone. `query.speed` consults `movement.climbs` when a creature
+#: is standing on such a square, so a wall under somebody's feet would have
+#: every creature on the board rolling athletics to move and falling when it
+#: failed -- the loudest possible collateral. Placed where nobody stands,
+#: the only thing that can find it is a row looking for it. #1300.
+_WANTS_CLIMB = re.compile(r"climb_dc|movement\.climbs|\bclimbs\(")
+
+
+def _wants_climb(declared) -> bool:  # noqa: ANN001
+    """Does this row touch the climb model?"""
+    if declared is None:
+        return False
+    src = _source_of(declared.body, getattr(declared, "ref", ""))
+    return bool(_WANTS_CLIMB.search(src))
+
+
+def _paint_a_wall(world) -> None:  # noqa: ANN001
+    """Put a column of rough surface somewhere nobody is standing.
+
+    `CLIMB_DC["rough"]` -- a brick wall, DC 20 -- because it is the printed
+    table's hardest named surface and so the one a reduction is worth
+    measuring against: a ladder is DC 0 and `c.climb_dc` floors at 0, so a
+    row reducing one would be indistinguishable from a row doing nothing.
+
+    Six squares, which is one more than `p10699`'s printed five, so the row
+    picking fewer than it asked for is a finding rather than the board's
+    fault.
+    """
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.grid import CLIMB_DC
+
+    taken = {
+        where.square
+        for _, where in world.each(Position)
+        if where.square is not None
+    }
+    # A column two squares clear of everybody, found rather than assumed:
+    # the board's creatures move with the seed.
+    for column in range(0, 40):
+        patch = [(column, row) for row in range(6)]
+        if any(
+            abs(sq[0] - t[0]) <= 2 and abs(sq[1] - t[1]) <= 2
+            for sq in patch
+            for t in taken
+        ):
+            continue
+        for sq in patch:
+            world.grid.climb_dc[sq] = CLIMB_DC["rough"]
+        return
 
 #: A row whose **body** asks whether somebody is on the floor, for the cases
 #: `_WANTED_CONDITIONS` cannot see: the restriction is in the code rather

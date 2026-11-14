@@ -288,23 +288,71 @@ def p10607(c: Cast) -> None:
     target=SELF,
     keywords=MARTIAL_WEAPON,
     requires=_has_ranged,
-    todo=("Grid.climb_dc",),
 )
 def p10699(c: Cast) -> None:
     """Five squares of wall become easier to climb, by twice Dexterity.
 
-    **Re-pointed, and half the old reason was wrong.** It read "the engine
-    holds no DCs and rolls no checks": `c.check(skill, dc)` and
-    `c.ability_check(ability, dc)` both roll against a DC and have for
-    some time.
+    The marker was re-pointed twice and the second pointing was right: a
+    **climb DC painted on a square**. `Grid` held terrain, cover and light
+    and nothing about how hard a surface is to go up, so there was no
+    number to reduce and no square to reduce it on. `Grid.climb_dc` is
+    that number and `movement.climbs` is what rolls against it. `#1300`.
 
-    What is missing is the half that was right, and it is narrower: a
-    **climb DC painted on a square**. `Grid` holds terrain, cover and
-    light, and nothing about how hard a surface is to go up -- so there is
-    no number for this to reduce and no square to reduce it on.
+    "Choose 5 contiguous squares of a vertical surface within your weapon
+    range that you can see" is three narrowings and each is asked:
+    `query.sight_squares` for what can be seen, the weapon's own range for
+    how far, and `Grid.climb_dc` for what is a vertical surface at all --
+    `c.climb_dc` quietly ignores a square that is not one, which is why
+    the count it returns is worth reading back.
 
-    `todo=` rather than `out_of_combat=True`, because going up a wall is a
-    fight thing: this is unwritten, not inert."""
+    Contiguity is taken along the surface rather than checked after the
+    fact: the squares are walked outward from the nearest one, so five
+    squares of two different walls cannot be picked. A surface shorter
+    than five squares gives fewer, which the printed line does not forbid
+    and the engine should not invent a rule about."""
+    from combat_engine.engine.grid import distance
+    from combat_engine.engine.query import sight_squares
+
+    bow = c.world.need(c.me, Gear).ranged
+    if bow is None or bow.ranged is None:
+        return
+    # **The long range**, which is what "within your weapon range" names: a
+    # printed "range 15/30" reaches 30, and the short number is only where
+    # the attack penalty starts. Nothing is being attacked here.
+    far = bow.ranged[1]
+    eyes = sight_squares(c.world, c.me)
+    grid = c.world.grid
+    surface = [
+        sq
+        for sq in grid.climb_dc
+        if any(distance(src, sq) <= far and grid.line_of_effect(src, sq)
+               for src in eyes)
+    ]
+    if not surface:
+        return
+    # Nearest first, then outward **along the surface**, so the five are
+    # contiguous by construction rather than filtered for it afterwards.
+    # Four-way, because a wall that turns a corner diagonally is two walls.
+    start = min(surface, key=lambda sq: min(distance(src, sq) for src in eyes))
+    reachable = set(surface)
+    picked: list[tuple[int, int]] = []
+    queue = [start]
+    while queue and len(picked) < 5:
+        here = queue.pop(0)
+        if here not in reachable:
+            continue
+        reachable.discard(here)
+        picked.append(here)
+        x, y = here
+        queue.extend(
+            sq for sq in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+            if sq in reachable
+        )
+    moved = c.climb_dc(-2 * c.dex_mod, picked, until=When.ENCOUNTER)
+    c.note(
+        f"{c.ref}: {moved} square(s) of surface are {2 * c.dex_mod} easier to"
+        " climb until the end of the encounter"
+    )
 
 
 @power(

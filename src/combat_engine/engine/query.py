@@ -1035,6 +1035,22 @@ def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
         swum = swims(world, eid)
         if swum is not None:
             return swum
+    # **And climbing, which answers the same way for the same reason.** PHB
+    # p183 gives Climb and Swim the same shape on the same page, so the same
+    # three-way answer applies: `None` is "not a climb", a number is the
+    # printed budget and 0 is a failed check that a speed bonus must not buy
+    # past.
+    #
+    # Gated on the square being a climbable surface before the import, which
+    # is the cheap test `swims` makes of the terrain -- `Grid.climb_dc` is
+    # empty on every board today, so the ordinary path stays one dict lookup
+    # on the hottest read in the engine. #1300.
+    if world.grid.climb_dc:
+        from .movement import climbs
+
+        climbed = climbs(world, eid)
+        if climbed is not None:
+            return climbed
     base = mv.speed
     mods = world.get(eid, Mods)
     if mods is not None:

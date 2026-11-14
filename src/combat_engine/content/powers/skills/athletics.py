@@ -63,21 +63,29 @@ _ESCAPING = "you make an escape attempt using athletics"
 _MELEE_MISSED = "your melee attack misses its target"
 
 
-def _failed_a_swim(world: World, me: int, ev: SkillCheck) -> bool:
-    """Failed an athletics check by five or more while swimming.
+def _failed_a_swim_or_climb(world: World, me: int, ev: SkillCheck) -> bool:
+    """Failed an athletics check by five or more swimming **or climbing**.
 
     The margin is readable here because a free action answers in
     `Window.AFTER` and `Bus.emit` runs the resolve callback first, so
     `total` and `success` are settled rather than half-totalled.
 
     `purpose` is the plain attribute `skills.check` stamps on, and
-    `movement.swim` is the one caller that passes it -- so this is narrowed
-    to the printed circumstance instead of firing on every failed check.
+    `movement.swims` and `movement.climbs` are the two callers that pass
+    one -- so this is narrowed to the printed circumstance instead of
+    firing on every failed check.
+
+    **Both purposes now.** The card says "swimming or climbing" and this
+    asked only about swimming, because nothing climbed; `#1300` built the
+    climb check and `"climb"` is the purpose it stamps. The five-or-more
+    band is exactly the one the page makes fatal in both skills -- a swim
+    that far short sinks and a climb that far short falls -- which is what
+    this row is for.
     """
     return (
         ev.actor == me
         and ev.skill == SKILL
-        and getattr(ev, "purpose", "") == "swim"
+        and getattr(ev, "purpose", "") in ("swim", "climb")
         and not ev.success
         and ev.dc - ev.total >= 5
     )
@@ -108,8 +116,7 @@ def _escaping_with_athletics(world: World, me: int, ev: SkillCheck) -> bool:
     reach=PERSONAL,
     target=SELF,
     trigger=_FAILED_BADLY,
-    on=Trigger(SkillCheck, _failed_a_swim, _FAILED_BADLY),
-    dropped=("Grid.climb_dc",),
+    on=Trigger(SkillCheck, _failed_a_swim_or_climb, _FAILED_BADLY),
 )
 def p13690(c: Cast) -> None:
     """Pulls the failure up to exactly four short of the DC.
@@ -119,10 +126,17 @@ def p13690(c: Cast) -> None:
     on, and `skills.check` builds its result from the event after the bus
     has finished with it.
 
-    The climbing half is dropped rather than approximated. Nothing in the
-    engine rolls an athletics check to climb, because no square carries a
-    climb DC to roll against -- `p10699` waits on the same thing -- so
-    there is no check of that sort for this row to rescue.
+    **The climbing half works now.** It used to be dropped rather than
+    approximated, correctly: nothing in the engine rolled an athletics
+    check to climb because no square carried a climb DC to roll against.
+    `Grid.climb_dc` is that number and `movement.climbs` rolls against it,
+    stamping `purpose="climb"`, so the trigger asks about both printed
+    circumstances. `#1300`.
+
+    Worth knowing why the rescue lands in time: `movement.climbs` only
+    drops the creature when the check came up five or more short, and this
+    row answers in `Window.AFTER` on the same event -- so by the time the
+    fall is decided the boost has already moved `total`.
     """
     ev = c.trigger
     c.boost_check(ev.dc - 4 - ev.total)

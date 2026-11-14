@@ -241,6 +241,18 @@ class Grid:
     #: board today: the reader lands with the model and costs nothing until
     #: something fills it. Same bargain `light` above strikes.
     porous: dict[Square, str] = field(default_factory=dict)
+    #: Squares that are a **climbable surface**, and the Athletics DC of the
+    #: surface. `movement.climbs` rolls against it and `c.climb_dc` moves it.
+    #:
+    #: A square absent is not climbable, which is every square on every board
+    #: today -- the same bargain `porous` above and `light` strike, and the
+    #: reason this costs nothing until a board fills it.
+    #:
+    #: The number is the surface's own DC with no creature in it: the +5 for
+    #: bracing between two surfaces is geometry asked at the moment of the
+    #: climb, and `c.climb_dc` is how a row moves the surface itself. See
+    #: `CLIMB_DC` for the printed values. #1300.
+    climb_dc: dict[Square, int] = field(default_factory=dict)
     #: Squares held shut by a lock, and the DC to pick it. Opening a lock is
     #: a **standard action adjacent to the lock** by the printed rules, and
     #: `actions._picking` is what offers it; half of `f3447` is a `+4` to
@@ -529,6 +541,37 @@ def blast(origin: frozenset[Square] | set[Square], size: int, aim: Square) -> fr
         return places[aim]
     nearest = min(places, key=lambda c: (distance(c, aim), c))
     return places[nearest]
+
+
+#: The printed Climb table -- PHB p183, *Athletics (Strength)*, all four
+#: named surfaces.
+#:
+#: Read off the page with `pypdf` rather than quoted from an issue, which is
+#: this repo's rule about rules tables and was worth following here: the
+#: compendium's own `skill_use` row for athletics/climb carries the entire
+#: rest of the entry -- the action, both failure bands, the +5 brace -- and
+#: for the DC says only *"See the Climb table"*. The table is not imported.
+#:
+#: The two `+5` rows of the printed table are **modifiers, not surfaces**
+#: ("Slippery surface +5", "Unusually smooth surface +5"), so they are
+#: `CLIMB_HARDER` below rather than entries here. Conflating them would put
+#: a DC of 5 on a surface the page gives no base DC to at all.
+CLIMB_DC: dict[str, int] = {
+    "ladder": 0,
+    "rope": 10,
+    "uneven": 15,
+    "rough": 20,
+}
+
+#: What a slippery or unusually smooth surface adds, from the same table.
+#: Printed as `+5` each, and the page does not say they do not stack.
+CLIMB_HARDER = 5
+
+#: What bracing between two surfaces is worth, from the same entry: *"If you
+#: can brace yourself between two surfaces, you get a +5 bonus to your
+#: check."* A bonus to the roll, not a change to the surface, which is why it
+#: is not folded into `Grid.climb_dc`.
+CLIMB_BRACED = 5
 
 
 def wall(squares: list[Square]) -> frozenset[Square]:

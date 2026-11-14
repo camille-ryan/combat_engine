@@ -322,6 +322,14 @@ class Movement:
     #: a swim speed ever sets them -- the page exempts the rest. #949.
     swim_round: int = -1
     swim_squares: int = 0
+    #: The same pair for climbing, and for the same reason -- PHB p183 gives
+    #: the two skills the same shape on the same page, and Camille's "the
+    #: check determines the speed for the round" applies word for word.
+    #: `movement.climbs` owns both. Only a creature **without** a climb speed
+    #: ever sets them: *"creatures that have a climb speed ... do not make
+    #: Athletics checks to climb"*. #1300.
+    climb_round: int = -1
+    climb_squares: int = 0
     #: Kinds of difficult terrain this creature crosses for nothing, by the
     #: label `Grid.difficult` gives them. `"*"` is all of it.
     ignores: set[str] = field(default_factory=set)

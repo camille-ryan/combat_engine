@@ -18413,6 +18413,75 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             )
         return changed
 
+    def climb_dc(
+        self,
+        change: int,
+        squares: Iterable[Square],
+        *,
+        until: When | None = When.ENCOUNTER,
+    ) -> int:
+        """Move the Athletics DC of climbing those squares. Returns how many.
+
+        *"The DC for climbing these squares is reduced by twice your
+        Dexterity modifier until the end of the encounter"* is `p10699`,
+        which is the whole printed population, so `change` is negative in
+        the only caller -- and it is a signed number rather than a
+        `reduce_by` because nothing about the surface makes the other
+        direction harder to mean.
+
+        **Only squares that are already a climbable surface.** A square
+        absent from `Grid.climb_dc` is not a wall, so putting a DC on it
+        would make one up; the printed line says *"choose 5 contiguous
+        squares of a vertical surface"*, which is a narrowing of what is
+        there rather than a creation. The return count is what lets a row
+        see it picked fewer than it asked for.
+
+        Floored at 0, which is the printed table's own floor -- a ladder is
+        DC 0 and there is no entry below it.
+
+        **On `on_end` the applied delta comes back off, and that is not
+        what `c.weapon_range(until=)` does.** That one records the previous
+        value and snaps back to it, which is right for a *replacement* -- a
+        weapon's range becomes 10/20 and then stops being 10/20. This is a
+        signed change to a number the scene owns, and the two differ
+        whenever something else moves the same square while the hold runs:
+        snapping back to the remembered DC would throw that other change
+        away.
+
+        Adding `-change` back would be the obvious alternative and is wrong
+        for the opposite reason: the floor above means the applied change is
+        not always the asked-for one. A DC of 4 reduced by 6 lands at 0, and
+        adding 6 would leave it at 6 where it started at 4. So what is
+        recorded is what was **actually applied**, per square, which is
+        exact under the floor and leaves a concurrent change standing.
+
+        Found by a plant that refused to go red: with a single effect and no
+        floor reached, snapping back and adding back give the same answer,
+        so the first version of this could not be told from the wrong one.
+        `until=None` makes the change permanent. #1300.
+        """
+        held = self.world.grid.climb_dc
+        applied: dict[Square, int] = {}
+        for square in squares:
+            if square not in held:
+                continue
+            was = held[square]
+            held[square] = max(0, was + change)
+            applied[square] = held[square] - was
+        if until is not None and applied:
+
+            def undo() -> None:
+                now = self.world.grid.climb_dc
+                for square, delta in applied.items():
+                    if square in now:
+                        now[square] = max(0, now[square] - delta)
+
+            self.world.effects.apply(
+                self.me, self.me, until, label=f"{self.ref} climb",
+                on_end=[undo], by=self.ref,
+            )
+        return len(applied)
+
     def weapon_group(
         self,
         becomes: str,

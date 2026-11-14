@@ -29603,6 +29603,294 @@ def denied_the_opening(out: Result) -> None:
     )
 
 
+def climbing_a_surface(out: Result) -> None:
+    """PHB p183's Climb entry: a check against the surface, and both bands.
+
+    Two rows carried `Grid.climb_dc` and the gap was a layer below it --
+    nothing climbed. `p13690` said so in its own docstring, and `p10699`
+    had no body at all.
+
+    The printed table is read off the page rather than quoted, which this
+    repo's rules-table rule asks for and which paid here: the compendium's
+    `skill_use` row for athletics/climb carries the whole rest of the
+    entry -- the action, both failure bands, the +5 brace -- and for the DC
+    says only *"See the Climb table"*, which is not imported.
+
+    `movement.swims` is the model, line for line, because p183 gives the
+    two skills the same shape. The one real difference is the failure: a bad
+    swim sinks, which Camille ruled unexpressible on a 2D plane, and a bad
+    climb **falls**, which is expressible -- so the band is honoured.
+
+    **The creature matters as much as the square**, which is what the first
+    probe of this got wrong: the default board's creature has a climb speed
+    of 3, and the page exempts those outright, so every arm read None for a
+    reason that had nothing to do with the code. The helper below strips the
+    mode and there is an arm asserting the exemption on purpose. #1300.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Movement, Position, Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Fell, SkillCheck
+    from combat_engine.engine.grid import CLIMB_BRACED, CLIMB_DC
+    from combat_engine.engine.movement import climbs
+    from combat_engine.engine.query import speed
+
+    def wall(dc: int, *, exempt: bool = False, row: bool = False):  # noqa: ANN202
+        """A creature standing on a surface of that DC, 3 squares up."""
+        world, me, _ = _board()
+        mv = world.need(me, Movement)
+        if not exempt:
+            mv.modes.pop("climb", None)
+        known = world.need(me, Powers)
+        if row and "p13690" not in known.known:
+            known.known.append("p13690")
+        if not row and "p13690" in known.known:
+            known.known.remove("p13690")
+        where = world.need(me, Position)
+        where.height = 3
+        world.grid.climb_dc[where.square] = dc
+        return world, me, where.square, mv
+
+    out.that(
+        CLIMB_DC == {"ladder": 0, "rope": 10, "uneven": 15, "rough": 20}
+        and CLIMB_BRACED == 5,
+        "the printed Climb table is the four surfaces the page names, and"
+        " the brace is worth 5",
+        f"table {CLIMB_DC}, brace {CLIMB_BRACED}",
+    )
+
+    # ------------------------------------------- a square with no DC is not one
+    world, me, square, _ = wall(20)
+    del world.grid.climb_dc[square]
+    out.that(
+        climbs(world, me) is None,
+        "a square that is not a climbable surface is not a climb at all --"
+        " None, which is a different answer from a failed check",
+        f"got {climbs(world, me)}",
+    )
+
+    # ------------------------------------------------------- the check happens
+    world, me, square, mv = wall(0)          # a ladder always passes
+    rolled: list[tuple[str, str, int]] = []
+    world.bus.on(SkillCheck, lambda ev: rolled.append(
+        (ev.skill, getattr(ev, "purpose", ""), ev.dc)))
+    budget = climbs(world, me)
+    out.that(
+        budget == mv.speed // 2 and rolled == [("athletics", "climb", 0)],
+        "climbing a ladder rolls ONE athletics check against the surface's"
+        " DC, stamped with the climb purpose, and pays half speed",
+        f"budget {budget} of a speed of {mv.speed}; checks {rolled}",
+    )
+    out.that(
+        climbs(world, me) == budget and len(rolled) == 1,
+        "and the answer is cached for the round rather than re-rolled,"
+        " which is Camille's ruling about the swim check",
+        f"second call {climbs(world, me)}; checks now {len(rolled)}",
+    )
+
+    # ------------------------------------------------- a climb speed is exempt
+    world, me, square, _ = wall(20, exempt=True)
+    out.that(
+        world.need(me, Movement).modes.get("climb")
+        and climbs(world, me) is None,
+        'a creature with a climb speed makes no check -- "creatures that'
+        ' have a climb speed ... do not make Athletics checks to climb"',
+        f"modes {world.need(me, Movement).modes}, got {climbs(world, me)}",
+    )
+
+    # -------------------------------------------------------- the two bands
+    world, me, square, _ = wall(40)          # unreachable, so it fails badly
+    fell: list[int] = []
+    world.bus.on(Fell, lambda ev: fell.append(ev.squares))
+    budget = climbs(world, me)
+    out.that(
+        budget == 0 and fell == [3],
+        "failing by five or more falls from the creature's own height, and"
+        " buys no movement",
+        f"budget {budget}, Fell {fell}",
+    )
+
+    # **The narrow band, reached through the row that makes it narrow.**
+    # `p13690` turns a fail-by-5-or-more into a fail-by-4, which is the
+    # printed difference between falling and staying put -- so it is the
+    # only way to pose the near-miss band on a board.
+    world, me, square, _ = wall(40, row=True)
+    saved: list[int] = []
+    checks: list[tuple[int, int]] = []
+    world.bus.on(Fell, lambda ev: saved.append(ev.squares))
+    world.bus.on(SkillCheck, lambda ev: checks.append((ev.dc, ev.total)))
+    budget = climbs(world, me)
+    out.that(
+        budget == 0 and not saved and checks and checks[0][0] - checks[0][1] == 4,
+        "and failing by four or less stays on the wall -- p13690 pulls the"
+        " failure to exactly four short and the fall does not happen",
+        f"budget {budget}, Fell {saved}, check {checks}",
+    )
+
+    # ----------------------------------------------------------- query.speed
+    world, me, square, mv = wall(0)
+    out.that(
+        speed(world, me) == mv.speed // 2,
+        "query.speed answers the climb budget, so a menu and a move read"
+        " the same number",
+        f"speed {speed(world, me)} against a land speed of {mv.speed}",
+    )
+
+    # ------------------------------------------------------------- the brace
+    world, me, square, _ = wall(20)
+    plain: list[int] = []
+    world.bus.on(SkillCheck, lambda ev: plain.append(ev.bonus))
+    climbs(world, me)
+    world, me, square, _ = wall(20)
+    x, y = square
+    world.grid.climb_dc[(x - 1, y)] = 20
+    world.grid.climb_dc[(x + 1, y)] = 20
+    braced: list[int] = []
+    world.bus.on(SkillCheck, lambda ev: braced.append(ev.bonus))
+    climbs(world, me)
+    # A delta, not an absolute: the creature brings its own athletics
+    # modifiers and the arm is about what the brace adds to them.
+    out.that(
+        plain and braced and braced[0] - plain[0] == CLIMB_BRACED,
+        "bracing between two surfaces is worth exactly the printed 5, and"
+        " two neighbours on the SAME side are one wall and worth nothing",
+        f"unbraced bonus {plain}, braced {braced}",
+    )
+    # **A corner, not two squares in a row.** The first version of this
+    # control put surfaces at `x-1` and `x-2`, and `x-2` is not a neighbour
+    # at all -- so a planted "any two neighbours count" implementation saw
+    # one neighbour, answered unbraced, and the control passed against the
+    # bug it exists to catch. A corner pair is two real neighbours that are
+    # not opposite each other, which is the case the printed word
+    # "between" excludes.
+    world, me, square, _ = wall(20)
+    x, y = square
+    world.grid.climb_dc[(x - 1, y)] = 20
+    world.grid.climb_dc[(x, y - 1)] = 20
+    corner: list[int] = []
+    world.bus.on(SkillCheck, lambda ev: corner.append(ev.bonus))
+    climbs(world, me)
+    out.that(
+        corner and plain and corner[0] == plain[0],
+        "-- and a corner is worth nothing, which a bare neighbour count"
+        " would have paid for",
+        f"unbraced {plain}, a corner {corner}",
+    )
+
+    # --------------------------------------------------- c.climb_dc, p10699's
+    world, me, square, _ = wall(20)
+    c = Cast(world=world, me=me, ref="drivers:climb-dc")
+    moved = c.climb_dc(-6, [square], until=When.ENCOUNTER)
+    lowered = world.grid.climb_dc[square]
+    for effect in list(world.effects.of(me)):
+        world.effects.end(effect, "drivers")
+    out.that(
+        moved == 1 and lowered == 14 and world.grid.climb_dc[square] == 20,
+        "c.climb_dc moves the surface's DC and puts it back when the"
+        " effect ends, rather than adding the change back on",
+        f"moved {moved}, dc while held {lowered},"
+        f" after {world.grid.climb_dc[square]}",
+    )
+    out.that(
+        c.climb_dc(-6, [(-99, -99)]) == 0,
+        "and it refuses a square that is not a surface, so a row cannot"
+        " invent a wall by reducing a DC on open floor",
+        f"returned {c.climb_dc(-6, [(-99, -99)])}",
+    )
+
+    # **What snapping back to a remembered number cannot do.** With one
+    # effect and no floor reached, restoring the old DC and adding the
+    # change back give the same answer -- a plant swapping one for the
+    # other stayed green. These two arms are the cases that tell them
+    # apart, and they pull in opposite directions, which is why the code
+    # records the delta it *applied* rather than either.
+    world, me, square, _ = wall(20)
+    c = Cast(world=world, me=me, ref="drivers:climb-dc")
+    c.climb_dc(-6, [square], until=When.ENCOUNTER)
+    world.grid.climb_dc[square] -= 4        # somebody else lowers it too
+    for effect in list(world.effects.of(me)):
+        world.effects.end(effect, "drivers")
+    out.that(
+        world.grid.climb_dc[square] == 16,
+        "a concurrent change to the same square survives the hold ending:"
+        " 20, less 6 by the row and 4 by something else, back to 16",
+        f"dc {world.grid.climb_dc[square]}, wanted 16",
+    )
+
+    world, me, square, _ = wall(4)          # the floor is reachable from 4
+    c = Cast(world=world, me=me, ref="drivers:climb-dc")
+    c.climb_dc(-6, [square], until=When.ENCOUNTER)
+    floored = world.grid.climb_dc[square]
+    for effect in list(world.effects.of(me)):
+        world.effects.end(effect, "drivers")
+    out.that(
+        floored == 0 and world.grid.climb_dc[square] == 4,
+        "and a DC that hit the floor comes back to 4 rather than 6 --"
+        " the change applied was 4, not the 6 asked for",
+        f"floored at {floored}, back to {world.grid.climb_dc[square]}",
+    )
+
+    # ------------------------------------------------- and p10699's own body
+    # **The row, not the verb.** Every arm above calls `c.climb_dc`
+    # directly, and a row that picked the wrong squares, picked six of
+    # them, or never called it at all would pass all of them.
+    world, ranger, _ = _board("p10699")
+    bow = world.need(ranger, Gear).ranged
+    wall = [(0, row) for row in range(6)]    # one more than it may pick
+    for sq in wall:
+        world.grid.climb_dc[sq] = 20
+    if bow is None:
+        out.skip("p10699's board armed no bow, so its Requirement refuses it")
+    else:
+        used = use(world, ranger, "p10699", targets=[ranger])
+        lowered = [sq for sq in wall if world.grid.climb_dc[sq] < 20]
+        # Read off a `Cast` rather than recomputed from the score: that is
+        # the number the row itself uses, so an arm deriving it by hand
+        # would be asserting against its own arithmetic.
+        want = 2 * Cast(world=world, me=ranger, ref="drivers:dex").dex_mod
+        out.that(
+            used and len(lowered) == 5,
+            "p10699 lowers exactly the five squares it prints, out of six"
+            " offered, and the five are contiguous",
+            f"used {used}; lowered {sorted(lowered)}",
+        )
+        out.that(
+            lowered and all(
+                world.grid.climb_dc[sq] == max(0, 20 - want) for sq in lowered
+            ),
+            "by twice its Dexterity modifier, which is the printed amount"
+            " and not a flat number",
+            f"twice dex is {want}; dcs"
+            f" {[world.grid.climb_dc[sq] for sq in sorted(lowered)]}",
+        )
+
+    # **Two walls, which is the only way "contiguous" can fail.** With one
+    # column of six, taking the first five in any order is contiguous by
+    # accident -- a plant dropping the walk entirely and slicing
+    # `surface[:5]` stayed green against the arm above. Two separated
+    # columns make the printed word do work.
+    world, ranger, _ = _board("p10699")
+    if world.need(ranger, Gear).ranged is None:
+        out.skip("p10699's second board armed no bow")
+    else:
+        left = [(0, row) for row in range(3)]
+        right = [(10, row) for row in range(3)]
+        for sq in (*left, *right):
+            world.grid.climb_dc[sq] = 20
+        use(world, ranger, "p10699", targets=[ranger])
+        touched = {
+            sq for sq in (*left, *right) if world.grid.climb_dc[sq] < 20
+        }
+        columns = {sq[0] for sq in touched}
+        out.that(
+            touched and len(columns) == 1,
+            "and with two separate walls offered it takes squares from ONE"
+            " of them, because the printed line says contiguous",
+            f"touched {sorted(touched)} across columns {sorted(columns)}",
+        )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -86428,6 +86716,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "climbing": (
+        climbing_a_surface,
+        "the printed Climb entry: a check against the surface, both bands",
     ),
     "denied_opening": (
         denied_the_opening,

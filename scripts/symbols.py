@@ -283,6 +283,11 @@ CATEGORIES: dict[str, dict] = {
                 # `grow` spreads a map feature into the clear ground
                 # beside it. It was under `size` with `contract` and
                 # `resize`, on its name rather than its meaning.
+                # `climb_dc` is here and not under movement: it changes
+                # what a square *is* -- how hard that surface is to go
+                # up -- rather than how any creature moves. `Grid.climb_dc`
+                # is scene state like `difficult` and `light`. #1300.
+                "climb_dc",
                 "floor", "grow", "scenery", "set_origin", "terraform",
                 "terrain",
                 "unlit",

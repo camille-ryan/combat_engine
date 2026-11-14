@@ -673,6 +673,95 @@ def swims(world: World, eid: int) -> int | None:
     return mv.swim_squares
 
 
+def climbs(world: World, eid: int) -> int | None:
+    """How far this creature may climb this round, or None if it is not.
+
+    PHB p183's Climb entry, which is the Swim entry's own page and the same
+    shape:
+
+    > *"**DC:** See the table... If you can brace yourself between two
+    > surfaces, you get a +5 bonus to your check. **Success:** You climb at
+    > one-half your speed. **Fail by 4 or Less:** You stay where you started
+    > and lose the rest of your move action, but you don't fall.
+    > **Fail by 5 or More:** You fall... **Climb Speed:** While climbing,
+    > creatures that have a climb speed... do not make Athletics checks to
+    > climb."*
+
+    So `None` means *this is not a climb* -- a square that is not a climbable
+    surface, or a creature with a climb speed, which the page exempts
+    outright. A number is the budget, and **0 is a failed check** rather than
+    an absent one, exactly as in `swims`: `query.speed` keeps the two apart
+    because a creature that cannot move is not one this rule is silent about.
+
+    **Cached per round**, which is Camille's ruling about the swim check --
+    *"Athletics check determines swim speed for the round. It's not per
+    square."* Quoted there about swimming; applied here because the page
+    gives both skills the same *"part of a move action"* line, and the cache
+    is what keeps a menu draw from rolling a fresh d20 per call.
+
+    **The difference from swimming is the failure**, and it is the one clause
+    that needed anything new: a bad swim sinks, which Camille ruled
+    unexpressible on a 2D plane, and a bad climb **falls**, which is
+    expressible today -- `falling.drop` exists, it has catch-hold, and
+    `Position.height` is where the creature was. So the printed band is
+    honoured rather than dropped.
+
+    What is **not** here is the page's *"Uses Movement"* clause -- counting
+    the climbed squares against the move and the extra square each costs.
+    That is integration with `reachable` and the move budget, and `swims`
+    draws its boundary in the same place. #1300.
+    """
+    from . import falling
+    from .components import Movement, Position
+    from .grid import CLIMB_BRACED
+    from .skills import check
+
+    where = world.get(eid, Position)
+    mv = world.get(eid, Movement)
+    if where is None or mv is None:
+        return None
+    dc = world.grid.climb_dc.get(where.square)
+    if dc is None:
+        return None                      # not a climbable surface
+    if mv.modes.get("climb"):
+        return None                      # the page exempts it from the check
+    if mv.climb_round == world.round:
+        return mv.climb_squares
+    braced = CLIMB_BRACED if _braced_between(world, where.square) else 0
+    got = check(world, eid, "athletics", dc, bonus=braced, purpose="climb")
+    mv.climb_round = world.round
+    # Half speed on a success, and the **land** speed halved: there is no
+    # climb speed to halve, which is the premise of this branch.
+    mv.climb_squares = max(0, mv.speed // 2) if got.success else 0
+    # **Fail by five or more and the creature falls**, which is the whole of
+    # the difference from `swims`. Asked off the margin rather than off
+    # `success`, because the page gives failure two bands and only the wider
+    # one falls -- a creature four short stays on the wall.
+    if not got.success and dc - got.total >= 5:
+        # No `by=`: that parameter is the **creature** that caused the fall,
+        # and a failed grip was caused by nobody. `squares` is left out too,
+        # so `drop` uses however far off the ground the creature is, which is
+        # the page's "you fall from your current height".
+        falling.drop(world, eid)
+    return mv.climb_squares
+
+
+def _braced_between(world: World, square: Square) -> bool:
+    """Is this surface square between two climbable ones?
+
+    *"If you can brace yourself between two surfaces, you get a +5 bonus"*,
+    read as the printed thing it describes: a chimney, so climbable squares
+    on **opposite** sides. Two neighbours on the same side are one surface
+    with a bend in it and buy nothing.
+    """
+    x, y = square
+    held = world.grid.climb_dc
+    return (
+        ((x - 1, y) in held and (x + 1, y) in held)
+        or ((x, y - 1) in held and (x, y + 1) in held)
+    )
+
+
 def mode_of(world: World, eid: int, mode: str | None) -> str:
     """Resolve the mode a creature is moving with, defaulting to its best.
 
