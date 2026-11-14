@@ -2401,7 +2401,6 @@ def i1184x1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, _by_class("sorcerer")), "you hit with a sorcerer power"
     ),
-    dropped=("c.resist(immunity=)",),
 )
 def i1184p1(c: Cast) -> None:
     """`c.resist` does remove: a **negative** amount is arithmetic rather
@@ -2436,12 +2435,25 @@ def i1184p1(c: Cast) -> None:
     foe = getattr(c.trigger, "target", None) or c.target
     if foe is None:
         return
+    # **The pool is resistances AND immunities, which is a second bug the
+    # immunity half exposed.** The card says *"choose a damage type. The
+    # triggering enemy loses resistance **or** immunity to that damage
+    # type"* -- so a foe that is *immune* to fire and resists nothing was
+    # not offerable at all, and the row returned early having done
+    # nothing. `c.immunities` is the reader beside `c.resistances`. #1284.
+    from combat_engine.engine.components import Defences as _Defences
+
     standing = c.resistances(on=foe)
-    if not standing:
+    held = c.world.get(foe, _Defences)
+    immune = sorted(held.immune, key=lambda t: t.value) if held else []
+    pool = list(dict.fromkeys([*standing, *immune]))
+    if not pool:
         return
-    pick = c.choose(list(standing), "which resistance the dagger takes away")
+    pick = c.choose(pool, "which resistance the dagger takes away")
     if pick is not None:
-        c.resist(-standing[pick], pick, on=foe, until=When.ENCOUNTER)
+        if standing.get(pick, 0):
+            c.resist(-standing[pick], pick, on=foe, until=When.ENCOUNTER)
+        c.lose_immunity(pick, on=foe, until=When.ENCOUNTER)
 
 
 @power(

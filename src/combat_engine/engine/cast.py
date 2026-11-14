@@ -7170,6 +7170,63 @@ class Cast:
             by=self.ref,
         )
 
+    def lose_immunity(
+        self, dtype: DamageType, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"The target loses any immunity to this power's damage type."
+
+        **The door onto `Defences.immune` that did not exist.** Two rows
+        print the sentence -- `p16259` and `i1184p1` -- and both carried
+        `c.resist(immunity=)`, whose premise was right and whose name was
+        wrong: `c.resist` moves a **number** in a dict, and an immunity is
+        membership of a set beside it. Nothing added to that set or took
+        anything out of it, so the immunity half of both cards went
+        unwritten while the resistance half shipped.
+
+        `resolve.damage` is the one reader -- a part every type of which is
+        in the set *"is simply not there"* -- so taking the type out is
+        honoured at the only place that asks, and there is no second site to
+        keep in step.
+
+        **Removal only, and the asymmetry is deliberate.** No printed row
+        this tree holds grants a damage immunity for a duration, and
+        `c.immune` next door is about conditions and keywords. Building the
+        granting half on the strength of symmetry would be deriving a rule
+        no page prints -- and `p16259`'s own docstring already argues the
+        narrower side: *"a row stronger than its printed line is worse than
+        an absent one"*.
+
+        **Different from `c.ignore_resistance(immunity=)`**, which is the
+        *attacker's* side: that one bypasses while this one takes the
+        property away, so anybody's blow of the type gets through, which is
+        what both cards say. Picking the wrong one narrows the clause to the
+        caster and reads as working.
+
+        Restores exactly what it moved, `c.resist`'s own arrangement: a
+        creature that was never immune is unchanged on expiry rather than
+        gaining an immunity it never had.
+
+        Theirs, so it follows `c.target`. #1284.
+        """
+        from .components import Defences
+
+        who = self._who(on)
+        if who is None:
+            return None
+        defences = self.world.get(who, Defences)
+        if defences is None or dtype not in defences.immune:
+            return None
+        defences.immune.discard(dtype)
+
+        def undo() -> None:
+            defences.immune.add(dtype)
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} immunity", on_end=[undo],
+            by=self.ref,
+        )
+
     def resistances(self, *, on: int | None = None) -> dict[DamageType, int]:
         """What the creature shrugs off, by type, right now.
 

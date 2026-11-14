@@ -705,7 +705,6 @@ def p16258(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
     requires=holding("w3752"),
     requires_text="you must use this power with your w3752",
-    dropped=("c.resist(immunity=)",),
 )
 def p16259(c: Cast) -> None:
     """"The target loses any resistance or immunity to this power's damage
@@ -781,6 +780,11 @@ def p16259(c: Cast) -> None:
         standing = c.resistances(on=foe).get(dtype, 0)
         if standing:
             c.resist(-standing, dtype, on=foe, until=When.EONT)
+        # **"or immunity", which had no door until `#1284`.** `c.resist`
+        # moves a number in a dict; an immunity is membership of the set
+        # beside it, and nothing took anything out of that set. Both halves
+        # of one printed sentence, so both are here.
+        c.lose_immunity(dtype, on=foe, until=When.EONT)
     ring = c.aura(1, until=When.EONT, on=c.me)
     _bites(c, ring, c.con_mod, dtype, until=When.EONT)
 

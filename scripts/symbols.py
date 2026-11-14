@@ -346,7 +346,8 @@ CATEGORIES: dict[str, dict] = {
                 "roll_twice", "save_twice",
             ]),
             ("resistance and vulnerability", [
-                "ignore_resistance", "resist", "resist_in", "resistances",
+                "ignore_resistance", "lose_immunity", "resist", "resist_in",
+                "resistances",
                 "vulnerabilities", "vulnerable", "vulnerable_in",
             ]),
             # **`expose`/`exposed` were in here and are about disease**, which

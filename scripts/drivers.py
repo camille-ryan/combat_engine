@@ -9415,34 +9415,69 @@ def resistance_taken_off_the_target(out: Result) -> None:
              " resistance into a vulnerability and beat the printed card",
              f"resist {PICK.value} = {held.resist.get(PICK, 0)}")
 
-    #: The symbol the two rows carry for the clause asserted just below.
-    #: **Named once, because this assertion pinned a marker in place.** It
-    #: was the literal `"Defences.immune"`, which is a *field that exists*
-    #: -- so `blocked._one` reported it ARRIVED the moment it stopped
-    #: asking `hasattr` (#1224), and the marker had to be re-pointed to say
-    #: what is really absent: no verb adds to or removes from
-    #: `Defences.immune`, where `c.resist` does exactly that for the dict
-    #: beside it, `undo` and all. `c.ignore_resistance(immunity=)` already
-    #: exists, so this is the missing half of a mirror.
-    #:
-    #: An authoring agent found all of that, could not act on it -- this is
-    #: `scripts/`, which is not an agent's to touch -- and referred it up
-    #: naming this line. A constant so the next rename is one edit here and
-    #: not a red run somebody has to trace back to a string.
-    IMMUNITY_OWED = "c.resist(immunity=)"
-
-    # The dropped half, asserted so the marker can be trusted.
+    # -- the immunity half, which used to be the DROPPED half -------------
+    #
+    # **These two assertions were the inverse until `#1284`.** They said an
+    # immune target keeps its immunity, and that the row still carries
+    # `c.resist(immunity=)` -- the pair that kept the marker honest while
+    # the clause was unwritten, and the pair that had to go red when it was
+    # written. That is the mechanism working: a marker cannot report its own
+    # staleness, so a rule asserts the gap and reds the day it closes.
+    #
+    # `Cast.lose_immunity` is the door. `c.resist` moves a number in a dict
+    # and an immunity is membership of the set beside it, which is why the
+    # symbol's premise was right and its name was wrong.
     held = run(0, immune=True)[2]
-    out.that(PICK in held.immune,
-             "an IMMUNE target keeps its immunity -- the half"
-             f" `{IMMUNITY_OWED}` is marked for, and the assertion that"
-             " makes that marker honest rather than merely old",
+    out.that(PICK not in held.immune,
+             "an IMMUNE target LOSES the immunity -- the printed sentence is"
+             " \"resistance or immunity\" and only the first half shipped"
+             " until now",
              f"immune={sorted(t.value for t in held.immune)}")
 
     row = REGISTRY["p16259"]
-    out.that(IMMUNITY_OWED in (row.unfinished or ()),
-             "and the row says so, rather than reporting finished",
+    out.that(not (row.unfinished or ()),
+             "and the row carries no marker at all now, rather than naming a"
+             " clause that plays",
              f"{row.unfinished}")
+
+    # A different type's immunity is untouched: the card names one type,
+    # the one the power is dealing. Without this the verb could discard the
+    # whole set and pass every assertion above.
+    # **BOTH types in the set, which the first draft got wrong.** It added
+    # only `OTHER` and then asked to remove `PICK`, so the guard --
+    # "not immune to this type, nothing to do" -- returned before the
+    # removal ran at all. The plant that clears the whole set therefore
+    # passed, and the assertion was measuring nothing. A plant has to
+    # target the case the assertion can actually reach.
+    world2, foe2, _ = run(0)
+    kept = world2.get(foe2, Defences)
+    assert kept is not None
+    kept.immune.update({PICK, OTHER})
+    c2 = Cast(world=world2, me=next(iter(world2.having(Defences))),
+              ref="drivers:immune")
+    c2.lose_immunity(PICK, on=foe2)
+    out.that(PICK not in kept.immune and OTHER in kept.immune,
+             "PLANT: taking one type out leaves another type's immunity"
+             " standing -- a verb that cleared the set would pass every"
+             " assertion above this one",
+             f"immune={sorted(t.value for t in kept.immune)}")
+
+    # And a creature that was never immune does not GAIN one when the hold
+    # ends, which is what restoring exactly what was moved means.
+    world3, foe3, _ = run(0)
+    kept3 = world3.get(foe3, Defences)
+    assert kept3 is not None
+    before3 = set(kept3.immune)
+    c3 = Cast(world=world3, me=next(iter(world3.having(Defences))),
+              ref="drivers:immune")
+    eff3 = c3.lose_immunity(PICK, on=foe3)
+    out.that(eff3 is None,
+             "PLANT: and asking to remove an immunity the creature does not"
+             " have lays NO effect -- an unconditional hold would put the"
+             " type INTO the set on expiry and invent an immunity",
+             f"effect={eff3}")
+    out.that(set(kept3.immune) == before3,
+             "leaving the set exactly as it was")
 
     # **Restored when the hold ends, which is what `c.resist`'s `undo`
     # exists for.** Ended through the effect the row itself laid rather
