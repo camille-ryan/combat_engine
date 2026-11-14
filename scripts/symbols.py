@@ -78,6 +78,7 @@ CATEGORIES: dict[str, dict] = {
                 "attack_with", "attacks_defence", "autohit", "basic",
                 "becomes_burst",
                 "cast_from", "coup_de_grace", "crit", "crit_becomes",
+                "line_of_sight_from",
                 "disarm",
                 "flurry_of_blows", "grant_attack", "hit", "hit_becomes",
                 "landed", "oversized",
@@ -905,6 +906,7 @@ READERS: dict[str, list[str]] = {
         # would hold one entry. #1209.
         "adjacent", "charging", "distance_between", "has_running_start",
         "hindering_at", "kept_away_from", "leash_of", "line_of_effect",
+        "line_of_sight", "sight_squares",
         "moved_this_action", "moving_as", "on_the_ground", "prefers_range",
         "ran_this_action", "range_profile",
         "sealed", "speed", "squares", "telepathy_of", "terrain",

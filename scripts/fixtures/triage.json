@@ -4603,13 +4603,13 @@
     "why": "NARROWS the 2026-10-12 mis-marked verdict, which is right that the lighting model exists -- c.light lays a carried light_radius, query.light_level reads it, c.unlit already takes square=. What m4589a3 needs is a light that SITS ON A SQUARE: 'targets one object or unoccupied square; the target sheds bright light'. Grid.light is dict[Square, str], is read in two places in query.py and written by NOTHING in the tree, and it records darkness (absent means BRIGHT), so it has no duration semantics to expire. Zone can darken (no_light, obscured) and cannot light. So this is a stationary light source with a duration, not a kwarg."
   },
   "c.line_of_sight_from()": {
-    "at": "2026-10-12",
-    "by": "slice3",
+    "at": "2026-11-14",
+    "by": "1282",
     "found": "c.cast_from (Relation.CASTS_FROM), dsl.measured_from",
-    "refused_rows": 1,
+    "refused_rows": 0,
     "rows": 1,
-    "verdict": "mis-marked",
-    "why": "measured_from traces line of sight and effect from a lender's square for ranged, area_burst and wall ranges while the lender is on the board and in sight, and cast_from holds that for a duration -- so 'nothing can move where it looks from' is no longer true."
+    "verdict": "real",
+    "why": "CORRECTED from mis-marked, which was wrong on both clauses. Relation.CASTS_FROM holds an ENTITY and dsl.measured_from answers one, so neither can hold the square p12407 names -- and the card names a square it can see, not a creature standing in one. Second, measured_from has exactly one caller and only for ranged, area_burst and wall ranges, so it moves where an attack is MEASURED from, never what a creature can see: query.line_of_effect traces from squares(watcher) and c.can_see called it directly. The row's own docstring stated both of these and this entry had not read it -- which is why triage is a ranker and not a gate. Written for #1282 as components.Senses.sight_from, query.sight_squares, query.line_of_sight and Cast.line_of_sight_from."
   },
   "c.lose_hp()": {
     "at": "2026-10-13",

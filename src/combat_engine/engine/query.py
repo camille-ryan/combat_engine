@@ -249,6 +249,35 @@ def squares(world: World, eid: int) -> frozenset[Square]:
     return pos.squares if pos else frozenset()
 
 
+def sight_squares(world: World, eid: int) -> frozenset[Square]:
+    """Where this creature's line of sight is traced **from**.
+
+    Its own squares, unless something lent it one: *"you can determine your
+    line of sight from that square"* is `p12407`'s whole printed Effect and
+    there was nothing that could hold a square-valued sight origin --
+    `dsl.measured_from` answers an entity and is read only for ranged and
+    area ranges, so it moves where an attack is measured from rather than
+    what the creature can see.
+
+    **A frozenset of one, to match `squares`.** Every reader here walks a
+    set of squares because a creature can occupy several, and answering a
+    bare `Square` would have made this the one origin reader with a
+    different shape -- which is how a caller comes to handle the ordinary
+    case and not the lent one.
+
+    Sight, deliberately, and not line of **effect**. The card says line of
+    sight; what a power can reach is a different question and `squares` is
+    still what answers it, so lending an eye does not lend a firing
+    position. #1282.
+    """
+    from .components import Senses
+
+    lent = world.get(eid, Senses)
+    if lent is not None and lent.sight_from is not None:
+        return frozenset({lent.sight_from})
+    return squares(world, eid)
+
+
 def team(world: World, eid: int) -> Team | None:
     side = world.get(eid, Side)
     return side.team if side else None
@@ -3180,6 +3209,33 @@ def line_of_effect(world: World, a: int, b: int) -> bool:
         world.grid.line_of_effect(src, dst)
         for src in squares(world, a)
         for dst in squares(world, b)
+    )
+
+
+def line_of_sight(world: World, watcher: int, who: int) -> bool:
+    """`line_of_effect` traced from wherever the watcher is **looking** from.
+
+    The same geometry and one different origin: `sight_squares` for the
+    watcher, its own `squares` for the thing looked at. With nothing lent
+    the two readers answer the same set, so this is `line_of_effect`
+    exactly -- which is the property that lets `c.can_see` come through here
+    without re-judging a single existing row.
+
+    **Asymmetric on purpose.** A lent eye is the watcher's, so only the
+    watcher's end moves; a creature does not become visible from a square
+    somebody else borrowed.
+
+    `sealed` is still asked of both, unchanged from `line_of_effect`. The
+    card lends a line of sight and says nothing about being shut inside
+    something, so this stays where it was rather than guessing: see
+    `root CLAUDE.md` on never deriving what the page does not print. #1282.
+    """
+    if sealed(world, watcher) or sealed(world, who):
+        return False
+    return any(
+        world.grid.line_of_effect(src, dst)
+        for src in sight_squares(world, watcher)
+        for dst in squares(world, who)
     )
 
 

@@ -48,7 +48,7 @@ from .query import (
     distance_between,
     enemies,
     is_,
-    line_of_effect,
+    line_of_sight,
     squares,
 )
 from .resolve import AttackResult, attack, deal_damage, heal, settle, temp_hp
@@ -936,13 +936,19 @@ class Cast:
         docstring says it exists "so the sight and the combat advantage can
         never disagree"; the verb a body reaches for was walking straight
         past it.
+        **And traced from wherever this creature is looking from**, which
+        is its own square unless a row lent it another -- `p12407` prints
+        *"you can determine your line of sight from that square"*.
+        `query.line_of_sight` is `line_of_effect` with the watcher's origin
+        swapped, and with nothing lent the two are the same call, so this
+        re-judges no existing row. See `c.line_of_sight_from`. #1282.
         """
         from .query import unseen_by
 
         other = self._who(to)
         return (
             other is not None
-            and line_of_effect(self.world, self.me, other)
+            and line_of_sight(self.world, self.me, other)
             and not unseen_by(self.world, self.me, other)
         )
 
@@ -14983,6 +14989,54 @@ class Cast:
         return True
 
     # -- borrowing somebody else's square ------------------------------------
+
+    def line_of_sight_from(
+        self, square: Square, *, on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """"Until the end of your next turn, you can determine your line of
+        sight from that square."
+
+        `c.cast_from` is the sibling and lends a **creature's** square for
+        ranged and area *attacks*; this lends a bare square for **sight**.
+        `p12407` carried a marker for exactly the difference and was right
+        to: `Relation.CASTS_FROM` holds an entity so there was nowhere to
+        put a square, and `dsl.measured_from` is read only for ranged, area
+        and wall ranges -- it moves where an attack is measured from, never
+        what the creature can see.
+
+        Written onto `Senses.sight_from`, read by `query.sight_squares`,
+        and reaching the one sight question content asks -- `c.can_see`,
+        through `query.line_of_sight`. One origin, one reader, one caller,
+        so the lent eye and the sight answer cannot disagree. That is the
+        shape `dsl.keywords_of` exists for: a grant honoured at every site
+        but one is this component's commonest bug.
+
+        **It does not lend a firing position.** `query.squares` still
+        answers what a power may reach, so an attack is aimed from the
+        creature's own square however far its eye has gone. The card says
+        line of sight and nothing else.
+
+        `When.EONT` by default, which is the printed duration. Cleared on
+        expiry rather than overwritten, so a second cantrip during the
+        first does not leave the earlier square behind.
+
+        Yours, so it defaults to the **caster**. #1282.
+        """
+        from .components import Senses
+
+        who = on if on is not None else self.me
+        lent = self.world.get(who, Senses) or self.world.add(who, Senses())
+        before = lent.sight_from
+        lent.sight_from = square
+
+        def undo() -> None:
+            lent.sight_from = before
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} sight", on_end=[undo],
+            by=self.ref,
+        )
 
     def cast_from(
         self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER

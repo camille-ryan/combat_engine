@@ -86,6 +86,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Where this creature is tethered and how far it may stray, or None.
 - `query.line_of_effect(world: 'World', a: 'int', b: 'int') -> 'bool'`
   - (no docstring)
+- `query.line_of_sight(world: 'World', watcher: 'int', who: 'int') -> 'bool'`
+  - `line_of_effect` traced from wherever the watcher is **looking** from.
 - `query.moved_this_action(world: 'World', eid: 'int') -> 'int'`
   - How many squares this creature entered during its current move action.
 - `query.moving_as(world: 'World', eid: 'int', mode: 'str') -> 'bool'`
@@ -100,6 +102,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - What this creature can reach with: melee, ranged, hybrid, or none.
 - `query.sealed(world: 'World', eid: 'int') -> 'bool'`
   - Is this creature inside something, out of reach in both directions?
+- `query.sight_squares(world: 'World', eid: 'int') -> 'frozenset[Square]'`
+  - Where this creature's line of sight is traced **from**.
 - `query.speed(world: 'World', eid: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`
   - How far this creature moves, for the kind of move it is making.
 - `query.squares(world: 'World', eid: 'int') -> 'frozenset[Square]'`

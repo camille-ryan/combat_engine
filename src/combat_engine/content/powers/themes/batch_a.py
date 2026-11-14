@@ -259,25 +259,54 @@ def p12406(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=PSIONIC,
-    todo=("c.line_of_sight_from()",),
 )
 def p12407(c: Cast) -> None:
     """Seeing round a corner really does change what a fight allows, so this
     is not the narrative half of anything.
 
-    **`c.cast_from` is the near miss and it is two things away.** That verb
-    lends an origin, but `Relation.CASTS_FROM` holds an *entity* and
-    `dsl.measured_from` returns one, so there is nowhere to put the square
-    this card names -- and the card names a square it can see, not a
-    creature standing in one. Second, `measured_from` is consulted only for
-    `ranged`, `area_burst` and `wall` ranges, so it moves where an attack is
-    measured from and not what the creature can *see*:
-    `query.line_of_effect(world, a, b)` and `c.can_see(to)` both trace from
-    the looker's own `Position` and neither consults the relation.
+    **The gap the marker named is written.** It was a square-valued sight
+    origin that the sight readers honour: `Relation.CASTS_FROM` holds an
+    *entity* and `dsl.measured_from` answers one, so `c.cast_from` had
+    nowhere to put the square this card names -- and `measured_from` is read
+    only for `ranged`, `area_burst` and `wall` ranges, so it moves where an
+    attack is measured from rather than what the creature can *see*.
 
-    So the gap is a square-valued sight origin that those two readers
-    honour, which is why the marker stays rather than being written off
-    `c.cast_from`."""
+    `Senses.sight_from` holds it, `query.sight_squares` reads it and
+    `c.can_see` traces through `query.line_of_sight`. #1282.
+
+    **The square is chosen, not guessed.** *"Choose one square you can see
+    that is within 5 squares of you"* is a selection, so `c.choose` makes
+    it from the squares that pass both printed tests -- within 5, and
+    visible. A headless run has to pick one and the furthest is the only
+    choice with a reason behind it: a cantrip whose whole point is seeing
+    somewhere else gains nothing from lending itself a square it already
+    stands in.
+
+    The range is **5**, which is this card's own number -- `p12401` beside
+    it prints 10 for hearing and the two are not interchangeable."""
+    from combat_engine.engine.grid import between as _between
+    from combat_engine.engine.grid import spread as _spread
+    from combat_engine.engine.query import squares as _squares
+
+    here = _squares(c.world, c.me)
+    if not here:
+        return
+    mine = next(iter(here))
+    reach = [
+        sq for sq in _spread(here, 5)
+        if sq not in here
+        and c.world.grid.inside(sq)
+        and c.world.grid.line_of_effect(mine, sq)
+    ]
+    if not reach:
+        return
+    # **`grid.between`, not a hand-rolled distance.** This game measures
+    # diagonally -- `grid.distance` is Chebyshev -- so a Manhattan sum
+    # prices a diagonal square at twice its real reach and ranked a square
+    # the card does not allow. `drivers.lent_eye` caught it on the first
+    # run; `_spread(here, 5)` was already the right pool.
+    pick = max(reach, key=lambda sq: (_between(here, frozenset({sq})), sq))
+    c.line_of_sight_from(pick)
 
 
 @power(
@@ -505,7 +534,15 @@ def p14227(c: Cast) -> None:
     `c.on_sustain` is the payout half -- without it the row would hold the
     caster up and never honour the three squares."""
     held = c.hover(0, until=When.SUSTAIN, sustain=MOVE)
-    c.on_sustain(held, lambda: c.rise(3, on=c.me))
+    # **A named function, not a lambda.** `c.rise` answers an `int` and
+    # `on_sustain` declares `() -> None`, so the lambda was a type error
+    # standing inside a working row -- harmless at runtime and exactly the
+    # "would the code run at all" question `types.py` is for. It surfaced
+    # the moment this file became a changed file.
+    def _rise_again() -> None:
+        c.rise(3, on=c.me)
+
+    c.on_sustain(held, _rise_again)
 
 
 def _mine(world: World, me: int, ev: Event) -> bool:

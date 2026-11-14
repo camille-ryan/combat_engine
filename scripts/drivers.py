@@ -83761,7 +83761,148 @@ def damage_in_flight_is_spared_and_the_amount_is_announced(out: Result) -> None:
              f"by hand: {by_hand}")
 
 
+def a_lent_square_moves_sight_and_not_the_firing_position(out: Result) -> None:
+    """`c.line_of_sight_from` lends an eye and nothing else (#1282).
+
+    `p12407` prints *"Choose one square you can see that is within 5 squares
+    of you. Until the end of your next turn, you can determine your line of
+    sight from that square."* Nothing could hold a square-valued sight
+    origin: `Relation.CASTS_FROM` holds an **entity** and `dsl.measured_from`
+    answers one, so `c.cast_from` had nowhere to put it -- and
+    `measured_from` is read only for ranged, area and wall ranges, so it
+    moves where an attack is *measured* from rather than what the creature
+    can **see**.
+
+    The arm that matters is the one a bare field cannot pass: a foe the
+    caster genuinely **cannot** see from its own square, behind a wall,
+    becoming visible from the lent square. Everything else here is a
+    control.
+
+    Two controls, and both are load-bearing in opposite directions. With
+    nothing lent, `line_of_sight` must answer exactly what `line_of_effect`
+    answers for **every** pair on the board -- otherwise this change
+    re-judges rows it never meant to touch. And with a square lent, the
+    *firing position* must not move: the card says line of sight and a row
+    that borrowed a shooting position from it would be strictly more
+    generous than print.
+    """
+    import audit
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Senses
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.grid import between as _between
+    from combat_engine.engine.query import (
+        line_of_effect,
+        line_of_sight,
+        sight_squares,
+        squares,
+    )
+
+    world, me, _ = audit.board("p12407", 1)
+    here = sorted(squares(world, me))[0]
+
+    # -- the control that protects every existing row -----------------------
+    #
+    # Before anything is lent: the new reader and the old one must agree on
+    # every ordered pair the board holds. 20-odd creatures, so this is a
+    # real census rather than a spot check.
+    pairs = [(a, b) for a in sorted(world.having(Position))
+             for b in sorted(world.having(Position)) if a != b]
+    disagree = [(a, b) for a, b in pairs
+                if line_of_sight(world, a, b) != line_of_effect(world, a, b)]
+    out.that(len(pairs) > 20 and not disagree,
+             "with nothing lent, `line_of_sight` answers exactly what"
+             " `line_of_effect` answers for every pair on the board -- so"
+             " routing `c.can_see` through it re-judges no row that exists",
+             f"{len(pairs)} pair(s), {len(disagree)} disagree: {disagree[:4]}")
+
+    # -- a foe the caster cannot see, and a square from which it can --------
+    #
+    # Built rather than hoped for: a wall two squares east, the foe three.
+    blind = (here[0] + 3, here[1])
+    wall = {(here[0] + 1, here[1] + dy) for dy in (-1, 0, 1)}
+    world.grid.blocking |= wall
+    foe = next((e for e in sorted(world.having(Position)) if e != me), None)
+    out.that(foe is not None, "the board has another creature to look at")
+    if foe is None:
+        return
+    world.need(foe, Position).square = blind
+    out.that(not line_of_sight(world, me, foe),
+             "the wall really blocks: the caster cannot see the foe from its"
+             " own square, which is the premise every arm below rests on")
+
+    # A square past the wall, on the far side, within the printed 5.
+    past = (here[0] + 2, here[1] + 2)
+    c = Cast(world=world, me=me, ref="drivers:eye")
+    eff = c.line_of_sight_from(past)
+    out.that(eff is not None, "lending a square answers an `Effect`, so the"
+                              " duration is a thing the engine can end")
+    out.that(sight_squares(world, me) == frozenset({past}),
+             "`query.sight_squares` answers the lent square and not the"
+             " creature's own -- one reader, so the lent eye and the sight"
+             " answer cannot disagree",
+             f"{sorted(sight_squares(world, me))}")
+    out.that(line_of_sight(world, me, foe),
+             "and the foe is now visible, traced from the lent square."
+             " THE arm: a field nobody reads would pass every other"
+             " assertion here")
+    out.that(c.can_see(foe),
+             "and `c.can_see` says so too, which is the one sight question"
+             " content asks -- 67 rows call it and none of them would have"
+             " seen a reader added only to `query`")
+
+    # -- and it is not a firing position ------------------------------------
+    out.that(squares(world, me) == frozenset({here}),
+             "`query.squares` still answers the creature's own square, so"
+             " what a power may REACH has not moved. The card says line of"
+             " sight; lending a shooting position would be more generous"
+             " than print",
+             f"{sorted(squares(world, me))}")
+    out.that(not line_of_effect(world, me, foe),
+             "PLANT: and line of EFFECT to the foe is still blocked -- the"
+             " wall stops a power even while the eye sees past it")
+
+    # -- the duration gives the square back ---------------------------------
+    world.effects.end(must(eff, "the lent-sight effect"))
+    out.that(sight_squares(world, me) == frozenset({here}),
+             "when the effect ends the creature looks out of its own eyes"
+             " again -- restored to what was there, not cleared, so a second"
+             " cantrip inside the first leaves no square behind",
+             f"{sorted(sight_squares(world, me))}")
+    out.that(not line_of_sight(world, me, foe),
+             "and the foe is hidden again, which is what makes the arm above"
+             " a measurement of the lent square rather than of the wall")
+
+    # -- the row itself picks a legal square --------------------------------
+    world2, me2, _ = audit.board("p12407", 1)
+    mine2 = squares(world2, me2)
+    REGISTRY["p12407"].body(Cast(world=world2, me=me2, ref="p12407"))
+    lent = world2.get(me2, Senses)
+    got = lent.sight_from if lent is not None else None
+    out.that(got is not None, "the row lends a square when it runs")
+    if got is None:
+        return
+    # **The game's own metric.** This measures diagonally, so a Manhattan
+    # sum prices a diagonal square at twice its reach -- the first run of
+    # this rule failed on a legal square 5 away that Manhattan called 10,
+    # and the fault was in both this line and the row's ranking key.
+    reach = _between(mine2, frozenset({got}))
+    out.that(reach <= 5 and got not in mine2,
+             "PLANT: and the square it chooses is within the printed 5 and"
+             " is NOT one of its own -- a cantrip whose whole point is"
+             " seeing somewhere else gains nothing from its own square,"
+             " and 5 is this card's number where `p12401` prints 10",
+             f"{got} is {reach} away from {sorted(mine2)}")
+    out.that(world2.grid.inside(got),
+             "and on the board, which `spread` alone does not promise")
+
+
 DRIVERS = {
+    "lent_eye": (
+        a_lent_square_moves_sight_and_not_the_firing_position,
+        "`c.line_of_sight_from` moves what a creature can see and not what"
+        " it can reach (#1282)",
+    ),
     "spare_damage": (
         damage_in_flight_is_spared_and_the_amount_is_announced,
         "a pending blow is reduced and `DamageSpared` carries what came off"

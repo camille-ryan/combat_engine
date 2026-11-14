@@ -78,6 +78,41 @@ class Position:
 
 
 @dataclass
+class Senses:
+    """Where a creature's senses are taken from, when not its own square.
+
+    **`query.can_hear`'s docstring recorded that this did not exist** --
+    *"There is no `Senses` component; what there is: `Condition.DEAFENED`
+    ... and `query.sealed`"* -- and composed itself out of the pieces. It
+    was right to, and two wild-talent cantrips print something that cannot
+    be composed that way: *"Choose one square you can see that is within 5
+    squares of you. Until the end of your next turn, you can determine your
+    line of sight from that square."*
+
+    `c.cast_from` is the near miss and it is two things away, which is what
+    `p12407` carried its marker for. `Relation.CASTS_FROM` holds an
+    **entity** and `dsl.measured_from` answers one, so there is nowhere to
+    put a square -- and the card names a square it can see, not a creature
+    standing in one. Second, `measured_from` has exactly one caller and only
+    for `ranged`, `area_burst` and `wall` ranges, so it moves where an
+    attack is *measured* from rather than what the creature can **see**.
+
+    **Named fields and not a dict keyed by a sense.** A string key invites a
+    misspelling that reads as "no lent square" rather than raising, which is
+    the all-False gate that hides vocabulary drift. Two senses are two
+    fields, and a third gets a third.
+
+    `None` is the ordinary case and means "its own square", so every reader
+    falls back without asking whether the component is there. #1282.
+    """
+
+    #: The square this creature's line of **sight** is traced from.
+    #: `query.sight_squares` is the only reader and `c.can_see` the only
+    #: caller, so the lent origin and the sight answer cannot disagree.
+    sight_from: Square | None = None
+
+
+@dataclass
 class Side:
     team: Team
 
