@@ -14500,6 +14500,112 @@ def paragon_gains_and_swaps(out: Result) -> None:
                  f"recorded {sorted(rec3)}")
 
 
+def scope_boundary(out: Result) -> None:
+    """Every unfinished chassis row is above the README's level ceiling.
+
+    **The project's scope is a stated number and nothing reconciled it
+    against the code.** `README.md`: *"Currently, the scope of this
+    project is up to level 10 for PCs, and level 13 for monsters."*
+    `etl.build.MAX_POWER_LEVEL` is 10 and its docstring cites the README
+    for it; `etl.item.MAX_ITEM_LEVEL` is 10 and cites nothing.
+
+    So this rule is the seam between the two, and it exists because
+    "classes are complete" is a claim about a boundary rather than about
+    a count. Four readings:
+
+    * the three ceilings say what the README says, so a constant cannot
+      drift away from the document that authorises it;
+    * **every** class-feature row still carrying an unfinished symbol is
+      gained ABOVE the character ceiling -- which is the whole claim,
+      and it reds the day somebody marks an in-scope row;
+    * none of them is dealt to any character the project builds, over
+      all 26 classes, all 107 legs and levels 1 to 10. Asserted
+      separately from the level test, because a row's printed level and
+      what the dealer actually hands out are different facts and
+      `#1247` is what happens when they disagree.
+
+      **It sees parents and not sub-options**, which is measured rather
+      than assumed: an `sN` row is granted by its parent's *body* at
+      arming time and never enters `loadout`'s hand, so planting a
+      marker on `cf:fighter-weaponmaster-f3s2` reds the level test and
+      leaves this one green. All eight rows in question today are
+      parents, so it bites where it is needed -- but the level test is
+      the one that covers everything, and this is the weaker of the two
+      rather than a second opinion;
+    * and every symbol they carry names an **ETL** ceiling rather than a
+      facility, because the gap is the import's scope and a symbol
+      naming `chargen` or a verb would send the next reader to build
+      something that already works.
+
+    What this does NOT claim: that the rows are finished, or that the
+    tier is. `#484` holds the ceiling question and `#1279` the drift.
+    The claim is that the boundary is where the README puts it and that
+    nothing a player can reach is behind it.
+    """
+    import re
+
+    import combat_engine.content  # noqa: F401
+    import combat_engine.levels as levels
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.etl import item as etl_item
+    from combat_engine.etl.build import MAX_MONSTER_LEVEL, MAX_POWER_LEVEL
+
+    readme = (ROOT / "README.md").read_text()
+    said = re.search(r"up to level (\d+) for PCs, and level (\d+) for "
+                     r"monsters", readme)
+    if said is None:
+        out.skip("README states no level scope in the expected words")
+        return
+    pcs, monsters = int(said.group(1)), int(said.group(2))
+    ceilings = (MAX_POWER_LEVEL, etl_item.MAX_ITEM_LEVEL,
+                MAX_MONSTER_LEVEL)
+    out.that(ceilings == (pcs, pcs, monsters),
+             "the three import ceilings say what the README says -- PCs to"
+             f" {pcs}, monsters to {monsters}",
+             f"power {MAX_POWER_LEVEL}, item {etl_item.MAX_ITEM_LEVEL},"
+             f" monster {MAX_MONSTER_LEVEL} against README {pcs}/{monsters}")
+
+    marked = sorted(r for r, p in REGISTRY.items()
+                    if r.startswith("cf:") and p.unfinished)
+    below = [(r, levels.level_of(r)) for r in marked
+             if (levels.level_of(r) or 0) <= pcs]
+    out.that(not below,
+             "EVERY class-feature row still carrying an unfinished symbol"
+             f" is gained above level {pcs} -- so no row a player can be"
+             f" dealt is unfinished ({len(marked)} marked, {len(below)} of"
+             " them in scope)",
+             f"in scope and marked: {below}")
+
+    # **Asked of the dealer, not derived from the level.** A row's
+    # printed level and what `loadout` actually hands out are different
+    # facts, and `#1247` is the case where they disagreed: `cf:wizard-mage`
+    # declares its ladder at printed levels and `ladder_row`'s test was
+    # `p.level == 0`, so a level-10 mage came out with zero features.
+    dealt = []
+    for cls, legs in chargen.BUILDS.items():
+        for leg in legs:
+            for lvl in range(1, pcs + 1):
+                got = set(chargen.loadout(cls, level=lvl, build=leg))
+                for ref in got & set(marked):
+                    dealt.append((cls, leg.name, lvl, ref))
+    out.that(not dealt,
+             "and none of them is dealt to any character this project"
+             f" builds -- {len(chargen.BUILDS)} classes,"
+             f" {sum(len(v) for v in chargen.BUILDS.values())} legs,"
+             f" levels 1 to {pcs} ({len(dealt)} hits)",
+             f"{dealt[:4]}")
+
+    wrong = sorted({sym for r in marked for sym in REGISTRY[r].unfinished
+                    if not sym.startswith("etl.")})
+    out.that(not wrong,
+             "and every symbol they wait on names an ETL ceiling, not a"
+             " facility -- the gap is the import's scope, and a symbol"
+             " naming a verb would send the next reader to build"
+             " something that already works",
+             f"{wrong}")
+
+
 def pull_what_you_hold(out: Result) -> None:
     """Dragging a grabbed creature is a **granted action**, not a flag on
     the grab.
@@ -84913,6 +85019,9 @@ DRIVERS = {
     "pull_what_you_hold": (
         pull_what_you_hold,
         "dragging a grabbed creature is a granted action, offered live"),
+    "scope_boundary": (
+        scope_boundary,
+        "every unfinished chassis row is above the README's level ceiling"),
     "paragon_gains_and_swaps": (
         paragon_gains_and_swaps,
         "thirteen paragon chassis draws, and the ceiling-versus-rung"
