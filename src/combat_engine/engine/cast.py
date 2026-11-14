@@ -19706,12 +19706,18 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
     ) -> Effect | None:
         """Two squares a mover crosses between in one step.
 
-        **Movement only.** `Grid.links` is read by `movement.reachable` and
-        by nothing else, so a creature can walk from one end to the other
-        and nothing measures a melee reach, a burst or a line of effect
-        through it -- which is exactly what the one printed rift that says
-        "for movement only" asks for, and only half of what a row saying
-        "and for making melee attacks" would need.
+        **Movement and melee, which is the printed pair.** This said
+        "movement only ... `Grid.links` is read by `movement.reachable` and
+        by nothing else", and that is no longer true: `query.adjacent`
+        reads links too, so a melee reach is measured through a link. Its
+        docstring records the melee half having been *"silently dropped"*
+        and closes it. `p13887` carried a marker for that half and is
+        written now.
+
+        **Not a burst and not a line of effect.** Those go through
+        `dsl.spread` and `grid.line_of_effect`, neither of which consults
+        links, and no printed rift asks them to -- so this is still half of
+        what "adjacent for all purposes" would mean, and deliberately.
         """
         links = self.world.grid.links
         if a == b:

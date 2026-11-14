@@ -555,13 +555,27 @@ def _apart(a: tuple[int, int], b: tuple[int, int]) -> int:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.TELEPORTATION],
-    dropped=("query.distance_between(links=)",),
 )
 def p13887(c: Cast) -> None:
-    """`c.link` is read by `movement.reachable` and by nothing else, so the
-    two squares are one step apart for anything that walks and no melee
-    reach, burst or line of effect is measured through them. That is the
-    movement half of the printed line; the melee half is the marker.
+    """*"Until the end of your next turn, the two squares are considered to
+    be adjacent to each other for the purpose of movement or making melee
+    attacks."*
+
+    **Both halves are written, and this row's marker was stale.** It said
+    `c.link` is read by `movement.reachable` *"and by nothing else, so ...
+    no melee reach is measured through them"*. That was true when written
+    and `query.adjacent` reads links now -- its own docstring records the
+    melee half having been *"silently dropped"* and closes it, for the
+    cost of one `dict.get` on a mapping that is empty in every fight where
+    nobody has made a link.
+
+    So the printed sentence is covered end to end: `movement.reachable`
+    walks it and `query.adjacent` measures melee through it. `c.link`'s own
+    docstring still carries the old claim and is corrected with this.
+
+    Not a burst or a line of effect, which the card does not mention: those
+    go through `grid.line_of_effect` and `dsl.spread`, neither of which
+    consults links, and widening them would be a rule no page prints.
 
     The options are ordered furthest-first, because a headless fight takes
     the first of them and two squares picked by grid order would be

@@ -84346,7 +84346,76 @@ def a_stance_doubles_a_thrown_range_and_gives_it_back(out: Result) -> None:
              f"dagger={after['w:dagger'].thrown} sling={after['w:sling'].ranged}")
 
 
+def a_rift_is_adjacent_for_melee_and_not_for_a_burst(out: Result) -> None:
+    """`p13887`'s two squares are one step apart both ways (#1292).
+
+    The card: *"the two squares are considered to be adjacent to each other
+    for the purpose of movement or making melee attacks."* `c.link` wrote
+    `Grid.links`, `movement.reachable` read it, and for a while nothing
+    else did -- so the melee half was silently dropped and the row carried
+    a marker saying so. `query.adjacent` reads links now.
+
+    **Both halves asserted, and the third thing asserted absent.** The card
+    names movement and melee; it does not name a burst or a line of effect,
+    and neither `dsl.spread` nor `grid.line_of_effect` consults links. A
+    reading that made the rift adjacent "for all purposes" would be a rule
+    no page prints, so the negative is the arm that keeps this honest.
+    """
+    import audit
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.movement import reachable
+    from combat_engine.engine.query import adjacent, enemies, line_of_effect
+
+    world, me, _ = audit.board("p13887", 1)
+    here = sorted(world.need(me, Position).squares)[0]
+    # Far enough apart that nothing is adjacent by geometry, and a wall
+    # between them so the negative arm is about the link and not the gap.
+    far = (here[0] + 9, here[1])
+    foe = next(e for e in enemies(world, me) if world.get(e, Health))
+    world.need(foe, Position).square = far
+    world.grid.blocking |= {(here[0] + 5, here[1] + dy) for dy in (-1, 0, 1)}
+
+    out.that(not adjacent(world, me, foe),
+             "the two are not adjacent to begin with -- nine squares apart,"
+             " which is the premise every arm below rests on")
+    out.that(not line_of_effect(world, me, foe),
+             "and a wall stands between them, so the burst arm below is"
+             " about the link rather than about open ground")
+
+    c = Cast(world=world, me=me, ref="drivers:rift")
+    eff = c.link(here, far, until=When.EONT)
+    out.that(eff is not None, "the rift is a hold, so it can end")
+
+    out.that(adjacent(world, me, foe),
+             "THE arm: with the rift open the two ARE adjacent, so a melee"
+             " reach measures through it. This is the half `p13887` carried"
+             " a marker for and `query.adjacent` closes",
+             f"{adjacent(world, me, foe)}")
+    out.that(far in reachable(world, me, 1),
+             "and one step of movement crosses it, which is the half that"
+             " always worked",
+             f"{far in reachable(world, me, 1)}")
+
+    out.that(not line_of_effect(world, me, foe),
+             "PLANT: and line of EFFECT is still blocked -- the card names"
+             " movement and melee and not a burst, and widening"
+             " `grid.line_of_effect` would be a rule no page prints")
+
+    world.effects.end(must(eff, "the rift"))
+    out.that(not adjacent(world, me, foe),
+             "PLANT: and when the rift closes they are nine squares apart"
+             " again -- a link that outlived its hold would leave two"
+             " squares joined for the rest of the fight")
+
+
 DRIVERS = {
+    "rift_adjacent": (
+        a_rift_is_adjacent_for_melee_and_not_for_a_burst,
+        "`p13887`'s rift is adjacent for movement AND melee, and not for a"
+        " burst (#1292)",
+    ),
     "thrown_doubled": (
         a_stance_doubles_a_thrown_range_and_gives_it_back,
         "`p10744` doubles both thresholds per weapon and the stance gives"
