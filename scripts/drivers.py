@@ -24348,8 +24348,32 @@ def once_spend_moments(out: Result) -> None:
         return world, pc, mon
 
     def total(world: World, who: int, key: str) -> int:
+        """What THIS rule laid under `key`, by label -- not the total.
+
+        **The board pre-sets the number and that is what went wrong.**
+        This read `mods.total(key, ...)`, and the dealt PC on seed 7
+        carries a racial `+2` to Bluff off `r65`, so the check-bonus
+        readings came out 4 and 2 where the rule expected 2 and 0. Both
+        assertions failed on a mechanism that is correct: the one-shot
+        really did survive the swing (4 -> 4) and really was spent by the
+        check (4 -> 2), with the racial left standing.
+
+        Worse than a wrong number: the message says *"which is the bug"*
+        -- it names the historical bug the rule guards against -- so a
+        reader of the red run concludes a live defect. One did. `#1279`
+        carried that reading until it was measured.
+
+        So the reading is by **label**, which is what
+        `content/CLAUDE.md` requires of an assertion on a dealt board and
+        is immune to whatever the draw happens to supply.
+        """
         mods = world.get(who, Mods)
-        return mods.total(key, {"target": who, "attacker": who}) if mods else 0
+        if mods is None:
+            return 0
+        ctx = {"target": who, "attacker": who}
+        return sum(m.amount() for m in mods.items
+                   if m.what == key and m.label == "drivers:once"
+                   and m.applies(ctx))
 
     def swing(world: World, who: int, at: int) -> None:
         """An attack roll, announced directly.
@@ -24382,9 +24406,10 @@ def once_spend_moments(out: Result) -> None:
     swing(world, pc, mon)
     survived = total(world, pc, "skill:bluff")
     out.that(before == 2 and survived == 2,
-             "a one-shot CHECK bonus survives an attack roll, which is the"
-             " bug: every key the four named branches missed was handed to"
-             f" the swing instead ({before} -> {survived})")
+             "a one-shot CHECK bonus survives an attack roll -- the"
+             " historical bug being that every key the four named"
+             " branches missed was handed to the swing instead"
+             f" ({before} -> {survived})")
 
     c.check("bluff", 10)
     spent = total(world, pc, "skill:bluff")
@@ -44633,14 +44658,22 @@ def a_chassis_whose_fork_is_a_build_option_deals_one_of_it(out: Result) -> None:
              "all six of the printed rows are declared",
              f"{len(witch)}: {sorted(witch)}")
     owed = {r: v for r, v in witch.items() if v}
-    out.that(owed == {"cf:wizard-witch-f3": ["turns.extended_rest(swap=)"]},
-             "and ONE clause is still owed, down from three: the two "
-             "skill-training grants land through "
-             "`chargen.FEATURE_TRAINS` -- training is settled before the "
-             "first initiative is rolled, so the verb those two asked "
-             "for could not have been the answer -- and the rest-time "
-             "power swap is what is left. Named exactly, so a row "
-             "quietly acquiring another marker reds here",
+    # **Nothing is owed now, from three.** Two were the skill-training
+    # grants, which land through `chargen.FEATURE_TRAINS` -- training is
+    # settled before the first initiative is rolled, so the verb those
+    # two asked for could never have been the answer. The third was
+    # `cf:wizard-witch-f3`'s rest-time power swap, and it is written:
+    # the row watches `ExtendedRested` and calls
+    # `c.prepare(new, instead_of=old)`, with `drivers.witch_confer`
+    # measuring it and `audit` reporting it fires.
+    #
+    # Named as an emptiness rather than deleted, so a row quietly
+    # acquiring a marker reds here.
+    out.that(owed == {},
+             "and NOTHING is owed now, from three -- two skill-training "
+             "grants that `chargen.FEATURE_TRAINS` settles before a "
+             "fight starts, and the rest-time power swap, which watches "
+             "`ExtendedRested` and swaps",
              f"{owed}")
 
 
@@ -44709,11 +44742,40 @@ def the_berserkers_fury_starts_on_a_primal_attack_and_costs_the_aura(
 
     # -- the fury, armed by hand on a board that has the aura up ----------
     def enter(power: str) -> dict[str, object]:
+        """Pose the fury's trigger on a board that has already armed it.
+
+        **The body must NOT be re-run here, and running it is what made
+        both arms of this rule identical.** `audit.board` arms the trait,
+        so the watch is already laid and `c.once_per_board(me)` is
+        already claimed -- and the body's *second* call therefore takes
+        its other door:
+
+            if not c.once_per_board(me):
+                # Picked off the action menu: the "alternatively" door.
+                ...
+                elif not _enter_fury(c, dice):
+
+        The dealt berserker is bloodied on this board, so that door
+        enters the fury **outright, before any trigger**. Measured: the
+        fury reads False after the board's own entry is ended and True
+        again the moment `REGISTRY[F0].body(c)` runs. So the negative arm
+        -- *a martial attack starts nothing* -- was asserting a fury that
+        a re-run had already started, and the positive arm passed for the
+        wrong reason.
+
+        Instead: end what the board's own provocation entered, leaving
+        the watch in place, and let the emitted `AttackDeclared` be the
+        only trigger. With that, and the engine untouched, `p4809` starts
+        the fury and ends the aura while `p15848` does neither -- which
+        is what this rule always meant to say. `#1279`.
+        """
         world, me, _ = _posed(F0, 1)
+        c = Cast(world=world, me=me, ref=F0)
+        for eff in list(world.effects.of(me)):
+            if eff.label == FURY or eff.label.startswith(F0 + " "):
+                world.effects.end(eff, "drivers:before-the-trigger")
         setup = Cast(world=world, me=me, ref="audit:setup")
         setup.effect(AURA, until=When.ENCOUNTER, on=me)
-        c = Cast(world=world, me=me, ref=F0)
-        REGISTRY[F0].body(c)
         was = c.lingers_label(AURA, on=me)
         world.bus.emit(AttackDeclared(attacker=me, target=me,
                                       power=power, vs=AC))
