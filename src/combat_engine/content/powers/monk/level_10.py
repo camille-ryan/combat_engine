@@ -245,7 +245,7 @@ def p7469(c: Cast) -> None:
     ev = c.trigger
     if ev is None:
         return
-    ev.amount = max(0, ev.amount - (10 + c.wis_mod))
+    c.spare_damage(10 + c.wis_mod, ev=ev)
 
 
 @power(

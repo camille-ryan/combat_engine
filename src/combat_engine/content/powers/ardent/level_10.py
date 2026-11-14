@@ -151,7 +151,7 @@ def p11121(c: Cast) -> None:
     ev = c.trigger
     if ev is None or not c.first:
         return
-    ev.amount = max(0, ev.amount - c.level)
+    c.spare_damage(c.level, ev=ev)
 
 
 @power(

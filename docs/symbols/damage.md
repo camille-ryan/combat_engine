@@ -45,6 +45,8 @@ Points off and points back on, and the dice behind them.
   - "All damage dice rolled for the triggering attack are considered
 - `c.sneak_damage(self) -> 'str'`
   - The dice the rogue's once-a-round rider pays out, as an expression.
+- `c.spare_damage(self, amount: 'int' = 0, *, ev: 'Any' = None) -> 'int'`
+  - Take `amount` off the damage this row is interrupting, and say so.
 - `c.w(self, count: 'int' = 1, *, hand: 'str' = 'main', ranged: 'bool | None' = None) -> 'str'`
   - `count`[W]: the wielded weapon's damage dice, that many times.
 

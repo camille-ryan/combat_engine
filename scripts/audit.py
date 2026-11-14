@@ -1657,8 +1657,16 @@ DID_SOMETHING = {
     "UsesRaised", "RollsTwice",
     "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
     "ItemConsumed", "ItemDestroyed", "ItemRestored",
-    "CompanionDestroyed", "RowStored",
+    "CompanionDestroyed", "RowStored", "DamageSpared",
 }  # fmt: skip
+# `DamageSpared` is the eighteenth, and the shortest argument of the lot:
+# it is `Cushioned` one event over. Seven rows print *"reduce the damage by
+# N"*, write the number onto the `DamageRolled` they are interrupting --
+# which works, the engine applies the smaller figure -- and announced a
+# `c.note`. All seven read as inert. It carries `by`, `actor`, `target`,
+# `amount` and `left`, so it is attributable, which is the only test this
+# set applies. #1281.
+#
 # `RowStored` is the seventeenth, admitted on `UseRestored`'s argument
 # like the three above it. `c.store_row` has existed since `#720` and
 # six content files call it; for most the storing is a *gate* set up

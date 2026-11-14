@@ -9640,6 +9640,47 @@ class Cast:
             by=self.ref,
         )
 
+    def spare_damage(self, amount: int = 0, *, ev: Any = None) -> int:
+        """Take `amount` off the damage this row is interrupting, and say so.
+
+        *"Reduce the damage by 5 + your Charisma modifier"* is a printed
+        sentence on seven rows and there was no verb for it. `c.absorb`
+        takes **all** of it and deals it to somebody else, which is a
+        different card; these shave a number off and leave the rest to
+        land on the original target.
+
+        So all seven wrote `ev.amount -= spared` by hand and announced a
+        `c.note`. That is correct -- the engine applies the smaller number
+        -- and invisible: the row's own audit slice held one `Note` and it
+        read as inert. The same gap `Cast.cushion` closed for a softened
+        fall, which is why this reads like it. #1281.
+
+        `amount <= 0` means **all of it**, `cushion`'s convention and for
+        `cushion`'s reason: *"reduce the damage to 0"* and *"reduce the
+        damage by N"* are two printings of one clause, and a caller should
+        not have to read the pending number to say the first one.
+
+        Answers what was actually spared, which is never more than was
+        coming -- the number the card's own note wants to print, and not
+        the number asked for. Cancelling the attack as well is a separate
+        clause and stays the caller's (`p12619` prints both).
+        """
+        from .events import DamageSpared
+
+        ev = ev if ev is not None else self.trigger
+        coming = max(0, getattr(ev, "amount", 0)) if ev is not None else 0
+        if ev is None or coming <= 0:
+            return 0
+        whole = amount <= 0
+        spared = coming if whole else min(coming, amount)
+        ev.amount = coming - spared
+        self.world.bus.emit(
+            DamageSpared(actor=self.me, by=self.ref,
+                         target=getattr(ev, "target", self.me),
+                         amount=spared, left=ev.amount, all_of_it=whole)
+        )
+        return spared
+
     def absorb(self, ev: Any = None, *, on: int | None = None) -> int:
         """Take damage somebody else was about to suffer.
 

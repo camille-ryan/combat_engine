@@ -503,6 +503,38 @@ class Cushioned(Event):
 
 
 @dataclass
+class DamageSpared(Event):
+    """Damage in flight was reduced, and by which row.
+
+    `Cushioned` one event over, and for the identical reason. A row whose
+    whole printed Effect is *"reduce the damage by N"* writes `amount` on
+    the `DamageRolled` it is interrupting; the engine then applies the
+    smaller number, so the row is working, and nothing recorded that it
+    did. **Seven rows were silent on exactly that**: `p1328`, `p1441`,
+    `p7469`, `p11121`, `p12619`, `p12680` and `p9987`. 80 rows mutate a
+    pending damage amount and these seven are the ones that do nothing
+    else, which is the `Cushioned` population precisely. #1281.
+
+    `amount` is what came off; `left` is what is still coming, so a
+    listener can tell "softened" from "stopped" without re-reading the
+    event it answered. `all_of_it` is the same flag `Cushioned` carries and
+    is **not** `left == 0`: `p12619` zeroes the damage *and* cancels the
+    attack, where `p1328` zeroes only the number.
+
+    `by` is the reducing ref, which is what makes the kind admissible to
+    `audit.DID_SOMETHING` -- attributable is the only test that set
+    applies.
+    """
+
+    actor: int
+    by: str
+    target: int
+    amount: int
+    left: int
+    all_of_it: bool = False
+
+
+@dataclass
 class OpportunityWindow(Decision):
     """`actor` may take an opportunity action against `provoker`.
 

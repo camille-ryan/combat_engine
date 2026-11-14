@@ -630,8 +630,7 @@ def p12680(c: Cast) -> None:
     ev = c.trigger
     if ev is None:
         return
-    spared = ev.amount - ev.amount // 2
-    ev.amount -= spared
+    spared = c.spare_damage(ev.amount - ev.amount // 2, ev=ev)
     c.note(f"{c.ref}: {spared} damage turned aside")
 
 

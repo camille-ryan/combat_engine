@@ -106,7 +106,7 @@ CATEGORIES: dict[str, dict] = {
                 "halve", "high_crit",
                 "maximise", "no_miss_damage", "ongoing", "quarry_damage",
                 "set_damage_faces",
-                "reduce", "sneak_damage", "w",
+                "reduce", "sneak_damage", "spare_damage", "w",
             ]),
             ("undoing it", [
                 "half_healing", "heal", "regen_suppressed",

@@ -134,8 +134,7 @@ def p1328(c: Cast) -> None:
     ev = c.trigger
     if ev is None:
         return
-    spared = getattr(ev, "amount", 0)
-    ev.amount = 0
+    spared = c.spare_damage(ev=ev)
     c.note(f"p1328: {spared} damage comes to nothing")
 
 

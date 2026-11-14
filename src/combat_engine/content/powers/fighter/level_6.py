@@ -94,6 +94,5 @@ def p1441(c: Cast) -> None:
     ev = c.trigger
     if ev is None:
         return
-    spared = min(getattr(ev, "amount", 0), 5 + c.con_mod)
-    ev.amount -= spared
+    spared = c.spare_damage(5 + c.con_mod, ev=ev)
     c.note(f"p1441: {spared} damage turned aside")

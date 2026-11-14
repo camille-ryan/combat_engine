@@ -211,8 +211,9 @@ def p12619(c: Cast) -> None:
     ev = c.trigger
     if ev is None:
         return
-    spared = getattr(ev, "amount", 0)
-    ev.amount = 0
+    spared = c.spare_damage(ev=ev)
+    # The cancel is a second printed clause and stays here: `c.spare_damage`
+    # only moves the number.
     ev.cancel(c.ref)
     c.note(f"{c.ref}: {spared} damage turned aside")
 
@@ -469,6 +470,5 @@ def p9987(c: Cast) -> None:
     ev = c.trigger
     if ev is None:
         return
-    spared = min(getattr(ev, "amount", 0), 5 + c.cha_mod)
-    ev.amount -= spared
+    spared = c.spare_damage(5 + c.cha_mod, ev=ev)
     c.note(f"{c.ref}: {spared} damage turned aside")

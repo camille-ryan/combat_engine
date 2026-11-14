@@ -83632,7 +83632,141 @@ def the_word_answers_a_drop_as_a_reaction(out: Result) -> None:
              " `when=`, which `arm_trigger` asks **before** it spends")
 
 
+def damage_in_flight_is_spared_and_the_amount_is_announced(out: Result) -> None:
+    """`c.spare_damage` takes a number off a pending blow and says so (#1281).
+
+    Seven rows print *"reduce the damage by N"* and all seven wrote
+    `ev.amount -= spared` by hand, announcing nothing but a `c.note`. They
+    worked -- the engine applies the smaller number -- and every one read as
+    inert, because an audit asks what a row *announced*. The fix is an event,
+    which is `audit.py`'s own rule and `Cushioned`'s precedent.
+
+    So this measures both halves, and the second is the one a `c.note` could
+    never have satisfied: the pending number really moves, **and**
+    `DamageSpared` carries what came off and what is left.
+
+    The cap is asserted because the printed figure and the pending figure are
+    different numbers and the card's own note prints the smaller: *"reduce the
+    damage by 5 + your Charisma modifier"* against a 3-point blow spares 3,
+    not 8, and a row reporting 8 would be announcing damage that was never
+    coming.
+    """
+    import audit
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import DamageRolled, DamageSpared
+    from combat_engine.engine.types import DamageType
+
+    def spare(asked: int, coming: int = 20) -> tuple[int, int, list]:
+        """Fire one reduction on a fresh board and report what happened."""
+        world, me, _ = audit.board("p1441", 1)
+        said: list = []
+        world.bus.on(DamageSpared, said.append)
+        ev = DamageRolled(source=me, target=me, amount=coming,
+                          dtype=DamageType.UNTYPED, detail="")
+        c = Cast(world=world, me=me, ref="drivers:spare", trigger=ev)
+        got = c.spare_damage(asked, ev=ev)
+        return got, ev.amount, said
+
+    # -- the ordinary printing: a number off a bigger blow ------------------
+    got, left, said = spare(5)
+    out.that(got == 5 and left == 15,
+             "`c.spare_damage(5)` takes 5 off a 20-point blow and leaves 15 --"
+             " the pending number really moves, which is the half a `c.note`"
+             " already did correctly",
+             f"spared {got}, left {left}")
+    out.that(len(said) == 1,
+             "and announces exactly one `DamageSpared` -- one call, one event,"
+             " because a row credited twice is a row whose ledger is wrong",
+             f"{len(said)} event(s)")
+    one = said[0]
+    out.that(one.amount == 5 and one.left == 15,
+             "which carries BOTH numbers: what came off and what is still"
+             " coming. Without `left` a listener cannot tell a softened blow"
+             " from a stopped one and has to re-read the event it answered",
+             f"amount={one.amount} left={one.left}")
+    out.that(one.by == "drivers:spare",
+             "and names the reducing row, which is the only test"
+             " `audit.DID_SOMETHING` applies to a kind before admitting it",
+             f"by={one.by!r}")
+    out.that(not one.all_of_it,
+             "and does NOT claim it took the whole blow, because it did not")
+
+    # -- the other printing: all of it, asked for without reading the number -
+    got, left, said = spare(0)
+    out.that(got == 20 and left == 0,
+             "`amount <= 0` means the whole blow -- `cushion`'s convention,"
+             " so a row printing \"reduce the damage to 0\" need not read the"
+             " pending number to say it",
+             f"spared {got}, left {left}")
+    out.that(said and said[0].all_of_it,
+             "and `all_of_it` says so. It is not `left == 0`: `p12619` zeroes"
+             " the damage AND cancels the attack where `p1328` zeroes only the"
+             " number, and the two are different cards")
+
+    # **The case that tells the two apart, and the sentence above was
+    # unfalsifiable without it.** Every arm so far has `all_of_it` and
+    # `left == 0` agreeing, so a body computing the flag as `left == 0`
+    # would pass all of them -- the plant for it did not go red, which is
+    # the finding that put this arm here. Asking for exactly what is coming
+    # spares the lot and leaves nothing, and the flag must still be False:
+    # the caller named a number, so this is "reduce the damage by N" that
+    # happened to cover it, not "reduce the damage to 0".
+    got, left, said = spare(20, coming=20)
+    out.that(got == 20 and left == 0 and said and not said[0].all_of_it,
+             "a number that happens to cover the whole blow leaves nothing"
+             " and is still NOT `all_of_it` -- the flag is about which"
+             " clause was printed, not about what is left",
+             f"spared {got}, left {left},"
+             f" all_of_it={said[0].all_of_it if said else None}")
+
+    # -- the cap, which is the printed figure against a smaller blow ---------
+    got, left, said = spare(8, coming=3)
+    out.that(got == 3 and left == 0,
+             "8 asked against a 3-point blow spares 3 -- the answer is what"
+             " was actually turned aside, not what the card prints, because"
+             " the row's own note shows this number to a reader",
+             f"spared {got}, left {left}")
+
+    # -- nothing coming is nothing spared, and nothing announced ------------
+    got, left, said = spare(5, coming=0)
+    out.that(got == 0 and not said,
+             "PLANT: a blow of 0 spares 0 and announces NOTHING -- an event"
+             " on every call would make `audit` credit a row whose clause did"
+             " not fire, which is the borrowed-evidence fault this kind was"
+             " admitted to avoid",
+             f"spared {got}, {len(said)} event(s)")
+
+    # -- and the seven rows reach it -----------------------------------------
+    #
+    # By source rather than by firing them: each is an immediate interrupt on
+    # somebody else's damage roll and `audit` already fires all seven. What a
+    # census can say that an audit cannot is that none of them went back to
+    # mutating the number by hand -- which would work, and be invisible again.
+    import inspect
+
+    from combat_engine.engine.dsl import REGISTRY
+
+    SEVEN = ("p1328", "p1441", "p7469", "p11121", "p12619", "p12680", "p9987")
+    here = [r for r in SEVEN if r in REGISTRY]
+    out.that(len(here) == 7, f"all seven rows are declared ({len(here)})")
+    by_hand = [
+        r for r in here
+        if "amount" in (src := inspect.getsource(REGISTRY[r].body))
+        and "spare_damage" not in src
+    ]
+    out.that(not by_hand,
+             "and not one of them still writes the pending amount by hand."
+             " A row that does is correct and silent, which is the whole of"
+             " `#1281` -- so this is the census that keeps it closed",
+             f"by hand: {by_hand}")
+
+
 DRIVERS = {
+    "spare_damage": (
+        damage_in_flight_is_spared_and_the_amount_is_announced,
+        "a pending blow is reduced and `DamageSpared` carries what came off"
+        " and what is left (#1281)",
+    ),
     "offer_trait": (
         a_trait_can_put_itself_on_the_action_menu,
         "a trait offers itself on the menu at a second price, and ENCOUNTER"
