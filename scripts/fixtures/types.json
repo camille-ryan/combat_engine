@@ -11,17 +11,7 @@
   "scripts/cards.py": {},
   "scripts/chargen.py": {},
   "scripts/doctrine.py": {},
-  "scripts/drivers.py": {
-    "invalid-argument-type|Argument is incorrect": 1,
-    "invalid-argument-type|Argument to bound method `Cast.reroll_ones` is incorrect": 1,
-    "invalid-argument-type|Argument to bound method `Cast.transfer` is incorrect": 1,
-    "invalid-argument-type|Argument to bound method `list.append` is incorrect": 1,
-    "invalid-argument-type|Argument to function `keywords_of` is incorrect": 1,
-    "invalid-argument-type|Argument to function `place` is incorrect": 1,
-    "invalid-argument-type|Argument to function `usable` is incorrect": 3,
-    "not-iterable|Object of type `None` is not iterable": 1,
-    "unknown-argument|Argument `actor` does not match any known parameter": 1
-  },
+  "scripts/drivers.py": {},
   "scripts/expect.py": {
     "not-iterable|Object of type `list[str] | None | list[Divergent] | list[str | Divergent]` may not be iterable": 1,
     "unsupported-operator|Unsupported `*` operation": 1
@@ -33,9 +23,7 @@
   "scripts/legs.py": {
     "invalid-argument-type|Argument to function `dump` is incorrect": 1
   },
-  "scripts/lint.py": {
-    "invalid-assignment|Not enough values to unpack": 1
-  },
+  "scripts/lint.py": {},
   "scripts/show.py": {},
   "scripts/vocab.py": {
     "invalid-argument-type|Argument to function `signature` is incorrect": 1
@@ -72,11 +60,7 @@
     "invalid-argument-type|Argument to function `reach_of` is incorrect": 1,
     "invalid-argument-type|Argument to function `spend_surge` is incorrect": 1,
     "invalid-argument-type|Argument to function `surge_value` is incorrect": 1,
-    "invalid-assignment|Object of type `<class 'Hit'> | <class 'Miss'>` is not assignable to `str`": 1,
-    "invalid-assignment|Object of type `Literal[False]` is not assignable to attribute `passive` on type `Companion | None`": 1,
-    "invalid-assignment|Object of type `Literal[True]` is not assignable to attribute `passive` on type `Companion | None`": 1,
-    "invalid-assignment|Object of type `None` is not assignable to attribute `stowed` on type `Companion | None`": 1,
-    "invalid-assignment|Object of type `Position | None` is not assignable to attribute `stowed` on type `Companion | None`": 1
+    "invalid-assignment|Object of type `<class 'Hit'> | <class 'Miss'>` is not assignable to `str`": 1
   },
   "src/combat_engine/engine/components.py": {},
   "src/combat_engine/engine/dsl.py": {
@@ -84,7 +68,6 @@
     "unsupported-operator|Unsupported `-` operation": 1
   },
   "src/combat_engine/engine/durations.py": {
-    "invalid-argument-type|Argument to bound method `Bus.emit` is incorrect": 2,
     "not-subscriptable|Cannot subscript object of type `None` with no `__getitem__` method": 1
   },
   "src/combat_engine/engine/ecs.py": {},
@@ -96,25 +79,12 @@
   "src/combat_engine/engine/monster_math.py": {
     "invalid-argument-type|Argument is incorrect": 3
   },
-  "src/combat_engine/engine/movement.py": {
-    "invalid-argument-type|Argument to function `distance` is incorrect": 1
-  },
+  "src/combat_engine/engine/movement.py": {},
   "src/combat_engine/engine/query.py": {},
   "src/combat_engine/engine/relations.py": {},
   "src/combat_engine/engine/resolve.py": {
-    "invalid-assignment|Object of type `AttackResult` is not assignable to attribute `result` on type `Hit | Miss`": 2,
     "invalid-assignment|Object of type `Defense` is not assignable to attribute `vs` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `bool` is not assignable to attribute `action_point` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `bool` is not assignable to attribute `charge` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `bool` is not assignable to attribute `opportunity` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `dict[str, int | str | tuple[int, ...]]` is not assignable to attribute `ctx` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `int` is not assignable to attribute `branch` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `int` is not assignable to attribute `granted_by` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `str` is not assignable to attribute `ammo` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `str` is not assignable to attribute `as_` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `str` is not assignable to attribute `granted_via` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `str` is not assignable to attribute `hand` on type `Hit | Miss`": 2,
-    "invalid-assignment|Object of type `tuple[int, ...] & ~AlwaysFalsy` is not assignable to attribute `among` on type `Hit | Miss`": 2
+    "invalid-assignment|Object of type `str` is not assignable to attribute `hand` on type `Hit | Miss`": 2
   },
   "src/combat_engine/engine/triggers.py": {},
   "src/combat_engine/etl/build.py": {
