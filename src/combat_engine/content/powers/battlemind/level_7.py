@@ -78,7 +78,6 @@ from . import PSIONIC_WEAPON, shift_beside
     #: point. #1298.
     instead_of_basic="opportunity",
     basic_at=(1,),
-    dropped=("c.no_advantage(gains=)",),
 )
 def p11169(c: Cast) -> None:
     """Augment 2 is a close burst against each enemy at 2[W], which is a
@@ -92,14 +91,18 @@ def p11169(c: Cast) -> None:
     missing was the scope, because the base card gives no such permission
     and an unscoped declaration would hand it over free.
 
-    And "the target cannot gain combat advantage" is
-    printed on every form. Re-aimed to name where that belongs rather than
-    a verb nobody will write: `c.no_advantage` is the same sentence from
-    the other side -- it stops a creature *granting* advantage -- and what
-    is missing is the attacker's half of it, a creature that cannot gain
-    advantage however the board looks."""
+    And "the target cannot gain combat advantage" is printed on every form
+    and is laid on every form. That clause named `c.no_advantage(gains=)`,
+    and the re-aiming was right: the plain verb stops a creature
+    *granting* advantage and what was missing was the attacker's half --
+    a creature that cannot gain one however the board looks. `#1299` built
+    it, and `on=c.target` is obligatory there rather than defaulted, which
+    is the one thing to get wrong here."""
+    victim = c.target
     if c.strike():
         c.damage(c.w(2) if c.augment == 2 else c.w(), c.con_mod)
+        if victim is not None:
+            c.no_advantage(gains=True, on=victim, until=When.EONT)
 
 
 @power(

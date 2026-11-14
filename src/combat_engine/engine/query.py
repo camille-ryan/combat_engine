@@ -2087,8 +2087,25 @@ def flankers(world: World, eid: int) -> list[int]:
     return [
         o
         for o in allies(world, eid, companions=True)
-        if world.get(o, Companion) is None or can_flank(world, o)
+        if (world.get(o, Companion) is None or can_flank(world, o))
+        # **"Cannot flank with its allies", from the far side.** A creature
+        # under that clause is no use holding the other half of a flank
+        # either, so it drops out of everybody's list of partners -- not
+        # only out of its own attacks. `c.cannot_flank` lays it. #1299.
+        and not _barred_from_flanking(world, o)
     ]
+
+
+def _barred_from_flanking(world: World, eid: int) -> bool:
+    """Is this creature under a printed "cannot flank" clause?
+
+    Read with an empty context on purpose, and `c.cannot_flank` takes no
+    `when=` to match: this is asked about one creature with no pair in
+    hand, so a gate wanting `attacker` and `target` could never be
+    satisfied here. See that verb. #1299.
+    """
+    mods = world.get(eid, Mods)
+    return mods is not None and mods.items and mods.total("cannot_flank", {}) > 0
 
 
 def flanked_by(world: World, target: int, attacker: int) -> bool:
@@ -2098,6 +2115,10 @@ def flanked_by(world: World, target: int, attacker: int) -> bool:
     right square is furniture, and the printed rule says so.
     """
     if not adjacent(world, attacker, target) or not can_act(world, attacker):
+        return False
+    # The near side of the same clause. `flankers` drops a barred ally out
+    # of the partner list; this is the barred creature's own swing. #1299.
+    if _barred_from_flanking(world, attacker):
         return False
     space = squares(world, target)
     for mate in flankers(world, attacker):
@@ -2163,6 +2184,22 @@ def _has_combat_advantage(
     ca_ctx = {"attacker": attacker, "target": target, "power": power}
     denied = world.get(target, Mods)
     if denied is not None and denied.items and denied.total("no_advantage", ca_ctx) > 0:
+        return False
+    # **And the same suppression from the attacker's side**, which none of
+    # the routes below can say: every one of them asks about the *target*,
+    # so "this creature grants combat advantage" is sayable and "this
+    # creature may not benefit from one" was not. Three rows print the
+    # blanket form -- "the target cannot gain combat advantage" -- and all
+    # three had to fake it or drop it. `p5033` is the worked case: it laid a
+    # -2 attack penalty gated on `ctx["advantage"]`, cancelling the bonus
+    # arithmetically, and its own docstring named the hole that leaves -- a
+    # row of the enemy's that *reads* advantage still saw it.
+    #
+    # Asked here, above every route, for the reason `no_advantage` is:
+    # the sentence is unconditional. #1299.
+    blocked = world.get(attacker, Mods)
+    if blocked is not None and blocked.items \
+            and blocked.total("no_ca_gained", ca_ctx) > 0:
         return False
     if grants_ca(world, target):
         return True

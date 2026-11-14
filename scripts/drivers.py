@@ -29468,6 +29468,141 @@ def a_basic_attack_scoped_to_one_form(out: Result) -> None:
     )
 
 
+def denied_the_opening(out: Result) -> None:
+    """"The target cannot gain combat advantage" -- the attacker's side.
+
+    Every route in `query._has_combat_advantage` asks about the **target**,
+    so "this creature grants an opening" was sayable and "this creature may
+    not benefit from one" was not. Three rows print the blanket form and
+    each faked or dropped it, none of them marked:
+
+    * `p5033` laid a -2 attack penalty gated on `ctx["advantage"]`, which
+      is the right arithmetic and the wrong fact -- its own docstring named
+      the hole, and the rows that gate on combat advantage read the fact.
+    * `p12937` said in prose that two clauses were dropped and declared no
+      marker.
+    * `p10162` narrated both halves in a `c.note`, which makes the audit
+      see the row working.
+
+    The two negative arms are what separate the three senses the eleven
+    printed denials carry. Asserting only that the blanket form suppresses
+    would pass against an implementation that collapsed it with
+    `no_advantage` -- which lives on the *target* and protects a different
+    creature -- and against one that treated it as covering flanking, which
+    it does not: flanking is read for a Target narrowing and a Requirement
+    as well as for the opening.
+
+    **The flank needs two of the ATTACKER's allies**, which is the geometry
+    this rule got wrong first time round: `flanked_by(world, me, foe)` asks
+    `flankers(world, foe)`, so standing my own ally opposite the foe
+    produces no flank and every arm read False for a reason that had
+    nothing to do with the clause. #1299.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import (
+        can_act,
+        flanked_by,
+        flankers,
+        has_combat_advantage,
+    )
+
+    def flanked_board():  # noqa: ANN202
+        """Me, with two enemies either side -- which is a flank on me."""
+        world, me, _ = _board()
+        foes = [f for f in _enemies_of(world, me) if can_act(world, f)]
+        if len(foes) < 2:
+            return None
+        spot = world.need(me, Position).square
+        world.need(foes[0], Position).square = (spot[0] - 1, spot[1])
+        world.need(foes[1], Position).square = (spot[0] + 1, spot[1])
+        return world, me, foes[0], foes[1]
+
+    first = flanked_board()
+    if first is None:
+        out.skip("this board has fewer than two enemies able to act, so no"
+                 " flank can be posed on it")
+        return
+    world, me, foe, mate = first
+    out.that(
+        flanked_by(world, me, foe) and has_combat_advantage(world, foe, me),
+        "two enemies either side of a creature flank it, and a flanked"
+        " creature grants combat advantage -- the state every arm below is"
+        " measured against",
+        f"flanked {flanked_by(world, me, foe)};"
+        f" advantage {has_combat_advantage(world, foe, me)}",
+    )
+
+    # ----------------------------------------------- the blanket denial
+    c = Cast(world=world, me=me, ref="drivers:no-ca-gained")
+    c.no_advantage(gains=True, on=foe, until=When.EONT)
+    out.that(
+        not has_combat_advantage(world, foe, me),
+        "`c.no_advantage(gains=True)` denies the opening outright, where a"
+        " -2 penalty only cancelled its arithmetic",
+        f"advantage {has_combat_advantage(world, foe, me)}",
+    )
+    out.that(
+        flanked_by(world, me, foe),
+        "and it does NOT stop the flank -- the creature is still flanking,"
+        ' which "one creature you\'re flanking" and "you must be flanked"'
+        " both read",
+        f"flanked {flanked_by(world, me, foe)}",
+    )
+    out.that(
+        has_combat_advantage(world, mate, me),
+        "and it is laid on one creature and does not travel: the other"
+        " flanker's opening is untouched",
+        f"the second flanker's advantage {has_combat_advantage(world, mate, me)}",
+    )
+
+    # --------------------------------------------------- cannot flank
+    second = flanked_board()
+    if second is None:
+        out.skip("the second board lost its pair of enemies")
+        return
+    world2, me2, foe2, mate2 = second
+    was_flanked = flanked_by(world2, me2, foe2)
+    # `flankers` answers with a creature's allies and never itself, so the
+    # question is whether the barred creature stops being the OTHER one's
+    # partner -- not whether it is its own.
+    was_partner = foe2 in flankers(world2, mate2)
+
+    c2 = Cast(world=world2, me=me2, ref="drivers:cannot-flank")
+    c2.cannot_flank(on=foe2, until=When.EONT)
+
+    out.that(
+        was_flanked and not flanked_by(world2, me2, foe2),
+        "`c.cannot_flank` stops the creature flanking, which denying the"
+        " opening alone did not",
+        f"flanked before {was_flanked}, after {flanked_by(world2, me2, foe2)}",
+    )
+    out.that(
+        was_partner and foe2 not in flankers(world2, mate2),
+        "and it drops out of the other flanker's partner list too, so it is"
+        " no use holding the far side for somebody else either",
+        f"a partner of the second flanker before {was_partner},"
+        f" after {foe2 in flankers(world2, mate2)}",
+    )
+    # **The barred creature only.** Two earlier drafts of this arm also
+    # claimed the other flanker loses its flank, on the reasoning that the
+    # barred one was its only partner. It is not: this board stands a third
+    # enemy where it can hold the far side, so `flanked_by(me2, mate2)` is
+    # still True and correctly -- the clause is about one creature, which
+    # is the whole point of the arm above. The first draft hid that behind
+    # an `or` and passed; the second asserted it and went red for a reason
+    # that was the assertion's, not the engine's.
+    out.that(
+        not has_combat_advantage(world2, foe2, me2),
+        "so the barred creature has no opening either, which is the"
+        " clause's printed consequence and not a second rule",
+        f"barred creature's advantage {has_combat_advantage(world2, foe2, me2)};"
+        f" the other flanker still flanking {flanked_by(world2, me2, mate2)}"
+        " -- which is right, this board gives it another partner",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -86293,6 +86428,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "denied_opening": (
+        denied_the_opening,
+        "the attacker's side of combat advantage, and of flanking",
     ),
     "basic_scoped": (
         a_basic_attack_scoped_to_one_form,

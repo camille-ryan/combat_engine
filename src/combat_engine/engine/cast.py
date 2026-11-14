@@ -9218,6 +9218,7 @@ class Cast:
         on: int | None = None,
         until: When = When.EONT,
         when: Callable[[dict[str, Any]], bool] | None = None,
+        gains: bool = False,
     ) -> Effect | None:
         """"You do not grant combat advantage to any of your enemies."
 
@@ -9234,10 +9235,77 @@ class Cast:
 
         `when` is handed `attacker` and `target`, for the narrower printing:
         "you don't grant combat advantage to *those* creatures".
+
+        **`gains=True` is the same sentence from the other side**, and it is
+        a different clause rather than a convenience: this verb stops a
+        creature *granting* the opening, and three rows print *"the target
+        cannot gain combat advantage"* -- it may not benefit from one
+        however the board looks, whoever it swings at. Those two are
+        independent, and a creature can carry both.
+
+        Counted off the specs, eleven rows print a denial and they are three
+        different clauses, which is why only three take this flag:
+
+            cannot gain CA, full stop      3   this flag
+            cannot gain CA *against X*     5   `no_advantage` on X itself
+            cannot gain CA *by flanking*   3   `c.cannot_be_flanked` on X
+
+        The middle group is the one worth knowing about, because it looks
+        like this flag and is not: `query.has_combat_advantage` reads
+        `no_advantage` off the **target**, so laying the plain form on the
+        creature being protected already says "nobody gains an opening
+        against you". Four rows do exactly that and are right.
+
+        **`on=` is required with it.** Every row printing the blanket form
+        says *"the target"*, never "you", so the caster default this verb
+        otherwise has would be wrong in all three and silently -- a
+        creature denying itself combat advantage is a line no card prints.
+        #1299.
         """
+        if gains:
+            if on is None:
+                raise ValueError(
+                    f"{self.ref}: c.no_advantage(gains=True) needs on=, because"
+                    " every row printing it says 'the target'"
+                )
+            return self.bonus(
+                "no_ca_gained", 1, on=on, until=until, kind="untyped",
+                when=when,
+            )
         return self.bonus(
             "no_advantage", 1, on=on if on is not None else self.me,
             until=until, kind="untyped", when=when,
+        )
+
+    def cannot_flank(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """"The target cannot flank with its allies."
+
+        **Not covered by `c.no_advantage(gains=True)` beside it**, which was
+        the tempting read: flanking's only *printed* payout is combat
+        advantage, so a creature denied the advantage looks denied the
+        flank. It is not, because flanking is read for three other things --
+        "one creature you're flanking" narrows a Target line, "you must be
+        flanked" is a Requirement, and two rows pick out the foes they
+        flank. A creature barred from flanking fails all of those and one
+        barred only from the advantage satisfies them.
+
+        So this lays its own key, read in `query.flanked_by` for the
+        attacker and in `query.flankers` for the ally holding the far side.
+
+        **No `when=`, deliberately.** `flankers` is asked about one creature
+        with no pair in hand, so a gate wanting `attacker` and `target`
+        would be silently false there forever -- which is the exact fault
+        `c.cannot_be_flanked`'s docstring records against itself. Adding one
+        means giving `flankers` a context first. #1299.
+        """
+        return self.bonus(
+            "cannot_flank", 1, on=on if on is not None else self.me,
+            until=until, kind="untyped",
         )
 
     def maximise(

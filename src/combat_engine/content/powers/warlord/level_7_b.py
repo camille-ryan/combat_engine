@@ -185,6 +185,11 @@ def p10129(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*MARTIAL_WEAPON, Keyword.FEAR],
     attack=Attack(STR, vs=WILL),
+    #: "Cannot mark your allies" is the half still only narrated. A mark is
+    #: a relation laid by whatever marks; nothing bars a creature from
+    #: laying one, and there is no veto for this to hang on. The combat
+    #: advantage half of the same sentence lands -- see the body. #1299.
+    dropped=("c.cannot_mark(on=)",),
 )
 def p10162(c: Cast) -> None:
     """Clearing the target's marks is the Effect line and lands either way.
@@ -192,6 +197,19 @@ def p10162(c: Cast) -> None:
     A mark is a relation, so the hold carrying it is the thing to end: the
     condition and the relation come off together and whatever laid it is
     none of this row's business.
+
+    **"Cannot gain combat advantage against your allies" is laid now**, and
+    it is the narrow printing rather than the blanket one: the target keeps
+    its openings against everybody else. `c.no_advantage(gains=)` takes a
+    `when` handed `attacker` and `target`, so the victim set is asked at
+    the moment of the swing -- which is what the clause needs, since an
+    ally may be dealt in or dropped inside the duration.
+
+    This row used to narrate both halves in a `c.note` instead. That is
+    worse than a marker: the note makes the audit see the row doing
+    something, so nothing counted the gap. The *other* half -- "cannot mark
+    your allies" -- is still only narrated, and now carries a marker for
+    it. `#1299`.
     """
     foe = c.target
     if c.strike():
@@ -202,10 +220,18 @@ def p10162(c: Cast) -> None:
         for held in list(c.world.effects.of(friend)):
             if any(k is Relation.MARKED_BY and s == foe for k, s, _ in held.relations):
                 c.world.effects.end(held, c.ref)
+    # **Asked live, not frozen here.** `c.allies()` at cast time would be
+    # the party as it stood when the blow landed, and the duration outlives
+    # that -- a summoned ally inside it would be unprotected and a dropped
+    # one still counted. The closure reads the world each time the gate is
+    # asked, which is what the clause says.
+    c.no_advantage(
+        gains=True, on=foe, until=When.EONT,
+        when=lambda ctx: ctx.get("target") in set(c.allies()),
+    )
     c.note(
-        f"{c.ref}: until the end of your next turn {foe} could not mark your allies nor "
-        "gain combat advantage against them -- a mark has no veto to hang on and combat "
-        "advantage is computed rather than held"
+        f"{c.ref}: until the end of your next turn {foe} could not mark your allies "
+        "-- a mark has no veto to hang on"
     )
 
 

@@ -643,15 +643,35 @@ def p12936(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p12937(c: Cast) -> None:
-    """Two of the four printed clauses are dropped: nothing bars a creature from
-    *gaining* combat advantage, and `c.cannot_be_flanked` is about being flanked
-    rather than flanking. The aftereffect rides on the hold's `on_end`."""
+    """All four printed clauses land, and two of them could not be said before.
+
+    This note read "two of the four printed clauses are dropped" while the
+    header declared **no marker at all**, so the row reported finished and
+    `todo.py` had nothing to count. Both halves of that are fixed: the
+    clauses are written and there is nothing left to mark.
+
+    What they needed were the two sides nothing could express.
+    `c.no_advantage(gains=True)` is "cannot gain combat advantage" -- the
+    plain verb is about *granting* it, which is a different creature's
+    problem. `c.cannot_flank` is "cannot flank with its allies", and it is
+    genuinely not the first clause over again: flanking's only printed
+    payout is the advantage, so denying the advantage looks like denying
+    the flank, but "one creature you're flanking" narrows a Target line and
+    "you must be flanked" is a Requirement, and a creature barred only from
+    the advantage still satisfies both.
+
+    The aftereffect rides on the hold's `on_end`. `#1299`."""
     victim = c.target
     if victim is None:
         return
     if c.strike():
         c.damage(c.w(), c.cha_mod)
     hold = c.grants_advantage(until=When.SAVE_ENDS, to="team")
+    # The two the hold's own duration has to carry: both run while the
+    # effect does, so they take `When.SAVE_ENDS` beside it rather than the
+    # end-of-turn default.
+    c.no_advantage(gains=True, on=victim, until=When.SAVE_ENDS)
+    c.cannot_flank(on=victim, until=When.SAVE_ENDS)
     if hold is not None:
         hold.on_end.append(lambda: c.flat(10, dtype=DamageType.PSYCHIC, on=victim))
 

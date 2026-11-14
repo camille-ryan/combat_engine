@@ -112,7 +112,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You take no penalty to attack rolls for attacking at long range."
 - `c.invisible(self, *, to: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.SONT: "start of source's next turn">) -> 'Effect | None'`
   - Cannot be seen -- by one creature, or by everybody.
-- `c.no_advantage(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+- `c.no_advantage(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None, gains: 'bool' = False) -> 'Effect | None'`
   - "You do not grant combat advantage to any of your enemies."
 - `c.no_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "The target does not benefit from cover or concealment."
@@ -138,6 +138,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Bar a creature from attacking -- everything, or one creature.
 - `c.cannot_be_flanked(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "Enemies can't gain combat advantage by flanking it."
+- `c.cannot_flank(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+  - "The target cannot flank with its allies."
 - `c.counts_as(self, satisfies: 'str', *, holding: 'str | None' = None, kind: 'str | None' = None, keyword: 'Keyword | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You can use a warhammer with any power that requires a light blade."
 - `c.counts_as_keyword(self, ref: 'str', keyword: 'Keyword', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

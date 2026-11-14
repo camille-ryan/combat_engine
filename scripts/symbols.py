@@ -380,7 +380,13 @@ CATEGORIES: dict[str, dict] = {
                 "guard", "guarding", "is_guarded",
             ]),
             ("refusals", [
-                "cannot_attack", "cannot_be_flanked", "counts_as",
+                "cannot_attack", "cannot_be_flanked",
+                # Beside `cannot_be_flanked` and not folded into it:
+                # that one is about being flanked and this is about
+                # flanking, which are different creatures' clauses
+                # and read at different ends. #1299.
+                "cannot_flank",
+                "counts_as",
                 "forgo_second_wind", "refuses_forced_attack",
                 "shares_feat_bonus",
                 "counts_as_keyword", "forbid", "forgo_second_wind_heal",

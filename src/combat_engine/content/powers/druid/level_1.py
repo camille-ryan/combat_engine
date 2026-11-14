@@ -248,13 +248,18 @@ def p2666(c: Cast) -> None:
     attack=Attack(WIS, vs=WILL),
 )
 def p5033(c: Cast) -> None:
-    """Two halves, and the first can only be said as arithmetic.
+    """Two halves, and the first is said outright now.
 
-    Combat advantage is worked out inside `resolve.attack` and nothing on a
-    creature suppresses it, so "can't gain combat advantage" is written as a
-    penalty cancelling exactly the bonus it would have given, gated on
-    `ctx["advantage"]` -- the same fact the roll used. A row of the enemy's
-    that *reads* advantage still sees it; see the report.
+    It used to be arithmetic: a -2 attack penalty gated on
+    `ctx["advantage"]`, cancelling exactly the bonus the opening would have
+    given. That got the number right and the *fact* wrong, which this
+    docstring said in as many words -- "a row of the enemy's that reads
+    advantage still sees it". Eight rows gate on combat advantage and a
+    creature under this clause satisfied every one of them.
+
+    `c.no_advantage(gains=True)` is the clause itself, read above every
+    route in `query.has_combat_advantage`, so the opening does not exist
+    rather than costing 2. `#1299`.
 
     The second half reads `PowerUsed` rather than an attack event: the
     printed line is about an attack that leaves somebody out, and only
@@ -265,10 +270,7 @@ def p5033(c: Cast) -> None:
     victim = c.target
     if victim is None:
         return
-    c.penalty(
-        "attack", 2, on=victim, until=When.EONT,
-        when=lambda ctx: bool(ctx.get("advantage")),
-    )
+    c.no_advantage(gains=True, on=victim, until=When.EONT)
     near = sorted(
         c.allies(), key=lambda a: (distance_between(c.world, victim, a), a)
     )
