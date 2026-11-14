@@ -92,7 +92,13 @@ AREA_OR_CLOSE = ("close_burst", "close_blast", "area_burst", "wall")
 #: `Cast.terrain` already reads and `World.terrain` already holds -- and it
 #: is in the same set because it answers the same printed shape: a size the
 #: range takes instead, decided by something other than the caster's choice.
-OTHER_WHEN = frozenset({"bloodied", "grabbing", "aquatic"})
+#: `"heavy_blade"` is the fourth, and it is the extension point this
+#: vocabulary's own error message describes: *"A new one is a line in
+#: `OTHER_WHEN` plus a branch in `_other_holds`."* `p12305` prints *"if you
+#: are wielding a heavy blade, the range is 10 squares"* and carried a
+#: marker naming a whole new `Range` field -- `by_grip` -- where the state
+#: switch already existed and wanted one word. #1295.
+OTHER_WHEN = frozenset({"bloodied", "grabbing", "aquatic", "heavy_blade"})
 
 
 def switched(world: World, actor: int, r: Range) -> Range:
@@ -121,10 +127,10 @@ def switched(world: World, actor: int, r: Range) -> Range:
 def _other_holds(world: World, actor: int, state: str) -> bool:
     """Is the state that switches a range's size in force for this creature?
 
-    Both readings are about the **caster**, which is what all four cards
-    say: "while *it* has a creature grabbed", "5 while *bloodied*". A
-    version of this asking about the target would be a different mechanism
-    and no card in the corpus prints one.
+    Every reading is about the **caster**, which is what each card says:
+    "while *it* has a creature grabbed", "5 while *bloodied*", "if *you*
+    are wielding a heavy blade". A version asking about the target would be
+    a different mechanism and no card in the corpus prints one.
     """
     if state == "bloodied":
         from .components import Health
@@ -135,6 +141,14 @@ def _other_holds(world: World, actor: int, state: str) -> bool:
         from .types import Relation
 
         return bool(world.relations.targets(Relation.GRABBED_BY, actor))
+    if state == "heavy_blade":
+        # **The printed weapon group, asked of what is in hand.**
+        # `query.holding` matches a group, a property, a category or the
+        # weapon's own slug, so the printed words are the test and no
+        # second vocabulary is minted. Of the caster, like the other three.
+        from .query import holding
+
+        return holding(world, actor, "heavy blade")
     if state == "aquatic":
         # **The encounter, not the creature.** `Cast.terrain`'s own note
         # records that `World.terrain` is empty today (#539), so this reads

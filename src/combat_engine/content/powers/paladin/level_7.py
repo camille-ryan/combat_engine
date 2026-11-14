@@ -92,11 +92,10 @@ def p10251(c: Cast) -> None:
     cls="paladin",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(5),
+    reach=Ranged(5, other_size=10, other_when="heavy_blade"),
     target=ONE_CREATURE,
     keywords=[*DIVINE_WEAPON, Keyword.RADIANT],
     attack=Attack(STR, vs=REF),
-    dropped=("dsl.Range.by_grip",),
 )
 def p12305(c: Cast) -> None:
     """The Special line lengthens the range to 10 for a heavy blade.

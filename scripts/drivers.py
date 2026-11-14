@@ -84493,7 +84493,82 @@ def a_printed_pair_must_stand_together(out: Result) -> None:
              f" a2={REGISTRY['p8239'].target_of(2).adjacent_to_each_other}")
 
 
+def a_heavy_blade_lengthens_a_printed_range(out: Result) -> None:
+    """`p12305` is Ranged 5, or 10 with a heavy blade (#1295).
+
+    **The facility existed and the marker named a new one.** The row
+    carried `dsl.Range.by_grip` -- a whole new `Range` field -- where
+    `Range.other_size` + `other_when` already say "this size instead, while
+    a state holds", with a closed `OTHER_WHEN` vocabulary and
+    `_other_holds` as its reader. That vocabulary's own error message
+    describes the extension: *"A new one is a line in `OTHER_WHEN` plus a
+    branch in `_other_holds`."* So this was one word, not a field.
+
+    **Asked through `reach_of`, not `switched`.** `switched` is the
+    function that applies the swap and testing it directly would prove the
+    branch and not the plumbing -- `reach_of` is what `candidates` calls,
+    so it is the answer a target pool actually sees. `switched`'s own
+    docstring is about a grant honoured at one site and missed at the next.
+
+    The negative is the arm that matters: a paladin holding something else
+    must still be at 5, or the row is simply Ranged 10 and the Special line
+    is decoration.
+    """
+    import audit
+    from combat_engine.engine.components import Gear, Weapon
+    from combat_engine.engine.dsl import REGISTRY, reach_of
+    from combat_engine.engine.query import holding
+
+    BLADE = Weapon(ref="w:longsword", slug="longsword",
+                   group="heavy blade", damage="1d8")
+    MACE = Weapon(ref="w:mace", slug="mace", group="mace", damage="1d8")
+
+    def reach_with(*held: Weapon) -> int:
+        world, me, _ = audit.board("p12305", 1)
+        gear = world.need(me, Gear)
+        gear.weapons = list(held)
+        gear.stowed = set()
+        return reach_of(world, me, REGISTRY["p12305"]).size
+
+    out.that(reach_with(MACE) == 5,
+             "a paladin holding no heavy blade is at the printed Ranged 5",
+             f"{reach_with(MACE)}")
+    out.that(reach_with(BLADE) == 10,
+             "THE arm: holding a heavy blade it is 10, which is the Special"
+             " line -- and asked through `reach_of`, so this is the number"
+             " a target pool sees rather than the branch in isolation",
+             f"{reach_with(BLADE)}")
+    out.that(reach_with(MACE, BLADE) == 10,
+             "and a blade in the other hand counts too -- `query.holding`"
+             " asks what is in hand, not which hand")
+
+    # -- the state reads the printed group and not a near neighbour --------
+    LIGHT = Weapon(ref="w:dagger", slug="dagger", group="light blade",
+                   damage="1d4")
+    out.that(reach_with(LIGHT) == 5,
+             "PLANT: and a LIGHT blade leaves it at 5 -- the card names one"
+             " printed group and a test matching on the word 'blade' would"
+             " lengthen the wrong one",
+             f"{reach_with(LIGHT)}")
+
+    world, me, _ = audit.board("p12305", 1)
+    gear = world.need(me, Gear)
+    gear.weapons = [BLADE]
+    gear.stowed = {BLADE.ref}
+    out.that(not holding(world, me, "heavy blade"),
+             "a STOWED blade is not held, which is the premise below")
+    out.that(reach_of(world, me, REGISTRY["p12305"]).size == 5,
+             "PLANT: so a blade in the pack leaves the range at 5 -- the"
+             " card says wielding, and reading `Gear.weapons` without the"
+             " stowed set would count a sheathed sword",
+             f"{reach_of(world, me, REGISTRY['p12305']).size}")
+
+
 DRIVERS = {
+    "heavy_blade_range": (
+        a_heavy_blade_lengthens_a_printed_range,
+        "`p12305` is Ranged 5, or 10 while wielding a heavy blade (#1295)",
+    ),
     "printed_pair": (
         a_printed_pair_must_stand_together,
         "a printed pair must stand together, and the unconstrained line is"
