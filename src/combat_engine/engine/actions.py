@@ -1277,22 +1277,55 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # deliberately: widening it to accept an exclusion list would let a
     # word count as read because it appears in a list of words being
     # *skipped*, which is the bug this gate exists to catch.
+    #
+    # **Two literal constructions, not one `kind=what`.**
+    # `drivers.kinds_named` asserts that **exactly one**
+    # `Action(kind=...)` in this file takes an expression rather than a
+    # constant -- `_manoeuvres`, off a granted word -- because that is a
+    # blind spot in the grep it derives the action vocabulary from, and a
+    # second one would not be covered by the union it builds. The first
+    # draft of this used the loop variable and made it two, which the rule
+    # caught on the next full run. Written out, both kinds are greppable
+    # constants and the vocabulary stays derivable from the code.
+    #
+    # **Two gates to satisfy, and they pull in opposite directions.**
+    #
+    # `drivers.granted_words` greps this file for `what == "<word>"` or
+    # `what in (...)` to prove every member of `GRANTABLE` is consulted --
+    # so each word needs an explicit comparison, and a `what not in (...)`
+    # guard is invisible to it. `drivers.kinds_named` greps for
+    # `Action(kind=...)` and asserts **exactly one** construction takes an
+    # expression rather than a constant, because a non-constant kind is a
+    # blind spot in the vocabulary it derives -- so each kind needs a
+    # literal.
+    #
+    # Written out per word satisfies both, and three earlier drafts each
+    # failed one of them: a loop over a tuple of words hid the read, a
+    # `not in` guard hid half of it, and `kind=what` made a second blind
+    # spot. The gates caught all three. #1305, #1309.
     for (what, cost) in _granted(world, actor):
-        if what in ("slide_grabbed", "slide_subject"):
-            if not encounter.can_spend(actor, cost):
-                continue
-            bond = (
-                Relation.GRABBED_BY if what == "slide_grabbed"
-                else Relation.SUBJECT_OF
-            )
-            spot = world.get(actor, Position)
-            if spot is None:
-                continue
-            for victim in sorted(world.relations.targets(bond, actor)):
-                for dest in sorted(forced_squares(
-                        world, victim, spot.square, Forced.SLIDE)):
+        if what == "slide_grabbed":
+            bond = Relation.GRABBED_BY
+        elif what == "slide_subject":
+            bond = Relation.SUBJECT_OF
+        else:
+            continue
+        if not encounter.can_spend(actor, cost):
+            continue
+        spot = world.get(actor, Position)
+        if spot is None:
+            continue
+        for victim in sorted(world.relations.targets(bond, actor)):
+            for dest in sorted(forced_squares(
+                    world, victim, spot.square, Forced.SLIDE)):
+                if bond is Relation.GRABBED_BY:
                     out.append(Action(
-                        kind=what, cost=cost, ref=what,
+                        kind="slide_grabbed", cost=cost, ref="slide_grabbed",
+                        targets=(victim,), dest=dest, path=(dest,),
+                    ))
+                else:
+                    out.append(Action(
+                        kind="slide_subject", cost=cost, ref="slide_subject",
                         targets=(victim,), dest=dest, path=(dest,),
                     ))
     return out

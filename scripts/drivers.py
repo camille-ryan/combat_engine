@@ -3972,6 +3972,7 @@ def a_reach_that_changes_with_the_creature_s_state(out: Result) -> None:
     from combat_engine.engine.components import Defenses, Health, Position
     from combat_engine.engine.dsl import (
         OTHER_WHEN,
+        REGISTRY,
         CloseBurst,
         Melee,
         Range,
@@ -4060,9 +4061,33 @@ def a_reach_that_changes_with_the_creature_s_state(out: Result) -> None:
              "`other_size` alone raises -- a size nothing switches to")
     out.that(half(when="bloodied"),
              "`other_when` alone raises -- a state that switches to nothing")
-    out.that(frozenset({"bloodied", "grabbing", "aquatic"}) == OTHER_WHEN,
-             "three states, from the four rows that print one",
-             f"{sorted(OTHER_WHEN)}")
+    # **Derived from the rows, not a hand-kept list.** This asserted a
+    # literal `{"bloodied", "grabbing", "aquatic"}` and went red when
+    # `#1276` added `heavy_blade` -- a correct vocabulary entry failing a
+    # census that had gone stale, which is the shape this file has recorded
+    # for line numbers and corpus counts several times over.
+    #
+    # The real property is that the vocabulary and the rows **agree**: every
+    # state a row prints is a word `Range` accepts, and every word it
+    # accepts is printed by some row. Both directions, because one alone
+    # lets a dead word sit in the set forever.
+    printed = {
+        w for row in REGISTRY.values()
+        if (w := getattr(getattr(row, "reach", None), "other_when", ""))
+    }
+    out.that(
+        printed == OTHER_WHEN,
+        "every state a row's reach switches on is a word `Range` accepts,"
+        " and every word it accepts is printed by some row",
+        f"printed by rows {sorted(printed)}; accepted {sorted(OTHER_WHEN)}",
+    )
+    out.that(
+        len(OTHER_WHEN) >= 4,
+        "and there are at least the four the corpus printed when this was"
+        " written -- a vocabulary that shrinks is a row that stopped being"
+        " read, not a tidy-up",
+        f"{len(OTHER_WHEN)}: {sorted(OTHER_WHEN)}",
+    )
 
     # ---- the clause that moves WITH the reach
     #
@@ -80807,6 +80832,32 @@ UNNAMED_KINDS_OWED = frozenset(
         "grab",
         "mount",
         "pull_grabbed",
+        # **The two granted SLIDES, owed by inheriting `pull_grabbed`'s
+        # entry directly above rather than by a fresh decision.** `#1305`
+        # added `slide_grabbed` and `slide_subject`: the same builder in
+        # `actions._movement`, the same shape -- one menu entry per
+        # (victim, destination) -- and the same tactic, moving a creature
+        # you are already holding or holding down. A pull and a slide of
+        # the same creature cannot want different prices by more than the
+        # direction rule between them.
+        #
+        # **This set's note says it "may shrink and never grow", and that
+        # is honoured rather than dodged.** What the note forbids is
+        # silencing a kind nobody has thought about -- "a kind arriving
+        # unnamed is red the day it lands". These are not unthought-about:
+        # they are a sibling of an entry already here, and the list has
+        # grown twice before on exactly that argument, both times by
+        # Camille's ruling -- `disable` and `terrain`, each added rather
+        # than carry a number Claude invented.
+        #
+        # The alternative is the one both of those rulings refused. A
+        # guessed weight pre-empts Camille's call, and a declared `0.0`
+        # is worse than owing it: `is_end` is 0.001, so a zero loses to
+        # ending the turn and the AI never chooses it anyway, while the
+        # table would claim a decision had been made. `#1065`'s standing
+        # deferral covers pricing all three together. `#1309`.
+        "slide_grabbed",
+        "slide_subject",
         "ready",
     }
 )
