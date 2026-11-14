@@ -1323,6 +1323,21 @@ class Rerolled(Event):
     by: str
     old: int
     new: int
+    #: The `AttackResult` the reroll settled on, for a rider that pays on
+    #: the outcome rather than on the face. `cast.py` stamps both of
+    #: these with `setattr` and declared neither, so `ty` reported them
+    #: unresolved and a reader of this event could not see they exist.
+    #:
+    #: `repr=False` for the reason the `Swung` mixin above gives: the
+    #: flag keeps a field out of `replay`'s fixtures AND out of
+    #: `Event.wire`, which is where a carried result belongs. `Any`
+    #: because `AttackResult` lives in `resolve` and importing it here
+    #: would be a cycle.
+    result: Any = field(default=None, repr=False, kw_only=True)
+    #: Did the reroll **replace** the first roll rather than stand beside
+    #: it -- the difference between "roll again and use the new one" and
+    #: "roll again and keep the better".
+    replaced: bool = field(default=False, repr=False, kw_only=True)
 
 
 @dataclass

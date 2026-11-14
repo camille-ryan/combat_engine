@@ -6745,8 +6745,13 @@ class Cast:
         # with the victim as a positional.
         if who is None or who not in self.grabbing():
             return False
-        return self.attack(self.str_, Defense.FORT, on=who,
-                           as_="move_grabbed")
+        # `bool(...)` and not the result itself: `self.attack` answers an
+        # `AttackResult` and this signature promises a `bool`. It read
+        # correctly only through `AttackResult.__bool__`, which returns
+        # `hit` -- so truthiness was right and `is True` would not have
+        # been. `ty` caught the mismatch. `#1278`.
+        return bool(self.attack(self.str_, Defense.FORT, on=who,
+                                as_="move_grabbed"))
 
     def aid_attack(self, enemy: int, ally: int, *, until: When = When.EONT) -> Effect | None:
         """"That ally gains a +2 bonus to its next attack roll against the
@@ -9937,7 +9942,7 @@ class Cast:
         mine = [
             eid
             for eid in self.world.having(Companion)
-            if self.world.get(eid, Companion).owner == owner
+            if self.world.need(eid, Companion).owner == owner
         ]
         if not mine:
             return None
@@ -10392,7 +10397,7 @@ class Cast:
         return [
             eid
             for eid in self.world.having(Companion)
-            if self.world.get(eid, Companion).owner == owner
+            if self.world.need(eid, Companion).owner == owner
         ]
 
     def familiar(self, *, of: int | None = None) -> int | None:
@@ -10440,7 +10445,8 @@ class Cast:
         from .components import Companion
 
         mine = self.companions(of=of)
-        named = [e for e in mine if self.world.get(e, Companion).kind == "beast"]
+        named = [e for e in mine
+                 if self.world.need(e, Companion).kind == "beast"]
         found = named[0] if named else (mine[0] if mine else None)
         if found is None or not category:
             return found
@@ -10519,7 +10525,11 @@ class Cast:
         who = self.familiar(of=of)
         if who is None:
             return False
-        mine = self.world.get(who, Companion)
+        # `need`, not `get`: `who` is already known non-None above and a
+        # creature named as a companion has the component by
+        # construction, so a `None` here is a broken board rather than a
+        # branch -- and `mine.passive` would raise on it anyway.
+        mine = self.world.need(who, Companion)
         want = mode == "passive"
         if mine.passive == want:
             return False
@@ -11286,7 +11296,15 @@ class Cast:
                  f"{ref or keyword or lacking or (usages[0].value if usages else '')}"
                  f"{'' if not kept else 'all but ' + ','.join(kept)}")
         if kept:
-            undo.append(lambda: [known.only_attacks.discard(r) for r in kept])
+            # **`k=known` captures the narrowing.** `known` is guarded
+            # against `None` twenty lines up, but this reads it inside a
+            # lambda that runs later -- so a checker widens it back to
+            # `Powers | None`, correctly, since nothing proves the name
+            # is not rebound in between. Binding it as a default pins the
+            # narrowed value at definition time, which is also what this
+            # closure means.
+            undo.append(
+                lambda k=known: [k.only_attacks.discard(r) for r in kept])
         if ref:
             undo.append(lambda: known.forbidden.discard(ref))
             # **`ran_out` says *why*, and only `grant_row`'s counter sets
@@ -19831,7 +19849,16 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         conj = self.world.get(thing, Conjuration)
         if zone is None and conj is None:
             return False
-        name = zone.label if zone is not None else conj.ref
+        # Spelled out rather than a conditional expression: the guard
+        # above returns when BOTH are None, which leaves `conj` non-None
+        # in the else arm -- true, and not something a checker can
+        # follow from two separate names.
+        if zone is not None:
+            name = zone.label
+        elif conj is not None:
+            name = conj.ref
+        else:
+            return False
         maker = self.made_by(thing)
         why = f"{self.ref} dispelled it"
         for eff in list(self.world.effects.live.values()):

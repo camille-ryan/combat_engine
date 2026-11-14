@@ -52,6 +52,7 @@ import inspect
 import os
 import re
 import traceback
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
@@ -2397,7 +2398,7 @@ def _put_in_hand(world, caster: int, ref: str) -> bool:  # noqa: ANN001
     return True
 
 
-def _train(gear: object, held: object) -> None:
+def _train(gear: Any, held: Any) -> None:
     """Count the handed-over weapon as one this character is trained with.
 
     `Gear.trained` withholds a weapon's proficiency bonus from a creature not
@@ -2778,6 +2779,73 @@ def _deal_party_unscored(choices: Any, seed: int) -> dict:
     return here
 
 
+@dataclass
+class _Marks:
+    """What `board` recorded about one board, for the verdict to read.
+
+    **These were three attributes stamped onto the `World` itself**, which
+    cost two things. `ty` reported six unresolved attributes -- the
+    engine's `World` declares none of them and never will, because they
+    are an instrument's bookkeeping and not a fact about a fight. And a
+    reader of `World` could not see them at all.
+
+    Kept in a `WeakKeyDictionary` rather than a dict keyed on
+    `id(world)`, which is the trap `content/CLAUDE.md` records at length:
+    CPython hands a collected object's address to the next allocation, so
+    an `id`-keyed store reads another board's marks as its own -- measured
+    there at 3 collisions in 45 boards in a single call. A weak key
+    cannot do that: the entry goes when the board does.
+    """
+
+    #: The effects standing before any trait was armed.
+    setup: set[Any] = field(default_factory=set)
+    #: The effects standing after arming, before the provocation.
+    armed: set[Any] = field(default_factory=set)
+    #: Where in the bus log the fight proper begins.
+    cursor: int = 0
+
+
+#: One entry per live board. See `_Marks`.
+MARKS: weakref.WeakKeyDictionary[Any, _Marks] = weakref.WeakKeyDictionary()
+
+
+def _make_marks(world: Any) -> _Marks:
+    """This board's marks, **made** -- for `board` to fill in.
+
+    `_make_marks` and not `_mark`: this module already has a `_mark()`
+    taking no arguments, and the first version of this shadowed it --
+    `TypeError: _mark() takes 0 positional arguments but 1 was given`,
+    at import of the first board.
+    """
+    got = MARKS.get(world)
+    if got is None:
+        got = _Marks()
+        MARKS[world] = got
+    return got
+
+
+def _marks(world: Any) -> _Marks:
+    """This board's marks, **read** -- and a loud failure without them.
+
+    Separate from `_mark` above on purpose. These three were attributes
+    stamped on the `World`, so a verdict that somehow reached a board
+    `board()` had not prepared raised `AttributeError` -- loudly, naming
+    the attribute. A single make-on-first-ask accessor would have turned
+    that into an empty set and a cursor of 0, which is a verdict reading
+    nothing and reporting it as a pass: the shape `scripts/CLAUDE.md`
+    names as a check that cannot fail.
+
+    So the write path makes the entry and the read path insists on one.
+    """
+    got = MARKS.get(world)
+    if got is None:
+        raise AssertionError(
+            "this board was never marked by `board()`, so the verdict "
+            "would be read against an empty setup and a cursor of 0"
+        )
+    return got
+
+
 def board(ref: str, seed: int, pose: bool = False,
           arm: str = "", element: bool = False,
           terrain: str = "") -> tuple[World, int, set[str]]:
@@ -2808,7 +2876,14 @@ def board(ref: str, seed: int, pose: bool = False,
         # and `ty` refuses the narrower type. Nothing here mutates it, so
         # immutability bought nothing worth a diagnostic.
         world.terrain = {terrain}
-    declared = get(ref)
+    # **`REGISTRY[ref]`, not `get(ref)`.** `get` answers `Power | None`
+    # and this function reads `declared.cls` and `declared.reach` in nine
+    # places without a guard -- so a ref the registry does not hold used
+    # to die on `AttributeError: 'NoneType' object has no attribute
+    # 'cls'`, naming neither the ref nor the caller. Every caller walks
+    # `REGISTRY` for its work list, so a miss is a caller bug and a
+    # `KeyError` naming the ref is the right failure.
+    declared = REGISTRY[ref]
     named: list[str] = []
     # Set before the branch, because the stage is put on the board well
     # after it and a monster row never reaches the `else` that computes
@@ -3407,7 +3482,7 @@ def board(ref: str, seed: int, pose: bool = False,
     from combat_engine.engine.query import creatures as _everyone
 
     spawned = {
-        e: world.get(e, Position).square
+        e: world.need(e, Position).square
         for e in _everyone(world)
         if world.get(e, Position) is not None
     }
@@ -3631,8 +3706,13 @@ def board(ref: str, seed: int, pose: bool = False,
     # invocation stopped being the expended one and the row that hands a
     # channelled use back reported silent while being correct.
     if _wants_expended(ref):
-        mine = world.get(caster, Powers)
-        for other in (mine.known if mine else []):
+        # `need`, and the guard that was here said the same thing less
+        # clearly: `mine.known if mine else []` kept the loop empty for a
+        # casterless board, and then the body read `mine.basic` and
+        # `mine.used` anyway. A board whose caster has no `Powers` is a
+        # broken pose, so say so where it happens.
+        mine = world.need(caster, Powers)
+        for other in mine.known:
             spec = get(other)
             if other in (ref, mine.basic) or spec is None or spec.usage is Usage.AT_WILL:
                 continue
@@ -3692,7 +3772,7 @@ def board(ref: str, seed: int, pose: bool = False,
         caught = (world.get(caster, Afflictions)
                   or world.add(caster, Afflictions()))
         caught.contracted[ref] = 1 + (seed % _worst_stage(ref))
-    world.setup_effects = set(world.effects.live)
+    _make_marks(world).setup = set(world.effects.live)
     Encounter(world).start()
     # And again once every trait on the board is armed. Two snapshots,
     # because the two branches need different baselines: an ordinary row is
@@ -3709,7 +3789,7 @@ def board(ref: str, seed: int, pose: bool = False,
         if world.get(e, Position) is not None:
             place(world, e, was)
 
-    world.armed_effects = set(world.effects.live)
+    _make_marks(world).armed = set(world.effects.live)
     armed = {e.kind for e in world.bus.log[mark:]} - START_NOISE
     world.turn = caster
     # Where the fight begins, which is **before** the opening initiative
@@ -3725,7 +3805,7 @@ def board(ref: str, seed: int, pose: bool = False,
     # followed its own use -- credited from the later cursor, or every row
     # in the tree would inherit the opening round's damage and conditions
     # and nothing could ever report SILENT again.
-    world.fight_cursor = mark
+    _make_marks(world).cursor = mark
     # **The class the board dealt, for the one pass that needs to know.**
     # `Character.powers` is non-empty here by design -- the board hands the
     # caster the row under test, the refs it names and its class features,
@@ -8273,7 +8353,7 @@ def audit(ref: str) -> Result:
             # -- the board burns a dummy -- so a row that installed nothing
             # at all still counted as having done something, and the silent
             # check could never fire through this branch.
-            had = set(world.effects.live) if not (trait or triggered) else world.armed_effects
+            had = set(world.effects.live) if not (trait or triggered) else _marks(world).armed
             if trait:
                 out.fired += 1
                 # **Its own arming, not the whole of setup.** This was
@@ -8287,17 +8367,17 @@ def audit(ref: str) -> Result:
                 # The same depth-bounded slice the triggered branch uses,
                 # from this trait's own `use()`. `dsl.use` emits `PowerUsed`
                 # while arming, so there is a mark to find.
-                own_now = _its_own_slice(world, ref, world.fight_cursor)
+                own_now = _its_own_slice(world, ref, _marks(world).cursor)
                 mine_now = {e.kind for e in own_now} if own_now is not None else set()
                 nested_now = _used_inside(own_now)
                 dealt_now = _dealt_by(world, (ref, *nested_now),
-                                      world.fight_cursor)
+                                      _marks(world).cursor)
                 out.events |= (mine_now - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt_now else set()
-                ) | _claimed(world, ref, world.fight_cursor,
+                ) | _claimed(world, ref, _marks(world).cursor,
                              nested_now, own=own_now) | _own_unbinding(
                     own_now if own_now is not None
-                    else world.bus.log[world.fight_cursor:]
+                    else world.bus.log[_marks(world).cursor:]
                 )
                 # A trait's effect was installed by arming, so it is measured
                 # against the board before that.
@@ -8328,7 +8408,7 @@ def audit(ref: str) -> Result:
                     i for i, e in world.effects.live.items()
                     if _its_own(str(getattr(e, "by", "") or ""), ref)
                 }
-                if mine_eff - world.setup_effects:
+                if mine_eff - _marks(world).setup:
                     out.events.add("ConditionApplied")
                 continue
             if triggered:
@@ -8336,7 +8416,7 @@ def audit(ref: str) -> Result:
                 # is armed inside `Encounter.start()` and the opening
                 # `InitiativeRolled` is announced there, so a row that
                 # answers one has already fired by the time this line runs.
-                cursor = world.fight_cursor
+                cursor = _marks(world).cursor
                 if not _provoke(world, caster, ref, cursor, shot=shot):
                     continue
                 out.fired += 1
