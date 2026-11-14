@@ -282,7 +282,7 @@ def phasing(out: Result) -> None:
     # identical with and without the mode and the comparison proves nothing.
     # The driver's own control caught that, which is why it is written down
     # rather than quietly dropped.
-    taken = footprint(there.square, world.get(foe, Position).size)
+    taken = footprint(there.square, world.need(foe, Position).size)
     out.that(
         _clear(world, caster, taken),
         "phasing waives occupancy on the way past -- the first printed half",
@@ -738,7 +738,7 @@ def suspension(out: Result) -> None:
     vital.hp = max(1, vital.max_hp - 20)   # room to heal into
 
     def hp() -> int:
-        return world.get(caster, Health).hp
+        return world.need(caster, Health).hp
 
     heals = c.regeneration(5, until=When.ENCOUNTER, on=caster)
     was = hp()
@@ -2293,11 +2293,11 @@ def cover_granters(out: Result) -> None:
         return
 
     # Line them up: the foe four west, an ally two west, directly between.
-    here = world.get(me, Position).square
-    world.get(foe, Position).square = (here[0] - 4, here[1])
-    world.get(mates[0], Position).square = (here[0] - 2, here[1])
+    here = world.need(me, Position).square
+    world.need(foe, Position).square = (here[0] - 4, here[1])
+    world.need(mates[0], Position).square = (here[0] - 2, here[1])
     for spare in mates[1:]:
-        world.get(spare, Position).square = (here[0] + 6, here[1] + 6)
+        world.need(spare, Position).square = (here[0] + 6, here[1] + 6)
 
     out.that(cover_between(world, foe, me, ranged=True) is not Cover.NONE,
              "a body between the shooter and the target is cover")
@@ -2313,7 +2313,7 @@ def cover_granters(out: Result) -> None:
     # `clear()` above arranges, so 13 assertions and 3 plants passed while
     # the reader returned nobody on any board with redundant cover. #651.
     # Stand it aside: the control, and the whole difference from "every ally".
-    world.get(mates[0], Position).square = (here[0] + 5, here[1] + 5)
+    world.need(mates[0], Position).square = (here[0] + 5, here[1] + 5)
     out.that(granters(world, foe, me) == [],
              "an ally standing clear grants nothing -- the control, which a"
              " helper returning every ally on the board fails")
@@ -2339,17 +2339,17 @@ def cover_granters(out: Result) -> None:
     if len(foes) < 2:
         return
     shot_at, blocker = foes[0], foes[1]
-    world.get(shot_at, Position).square = (here[0] - 4, here[1])
-    world.get(blocker, Position).square = (here[0] - 2, here[1])
+    world.need(shot_at, Position).square = (here[0] - 4, here[1])
+    world.need(blocker, Position).square = (here[0] - 2, here[1])
     # **Clear everybody else off the line.** Leaving the board's other
     # creatures where it put them made four of them load-bearing at once and
     # the assertion read as a broken helper. A control has to be arranged
     # before it says anything -- the same mistake `conceal_in`'s rule
     # records making.
     for spare in foes[2:]:
-        world.get(spare, Position).square = (here[0] + 7, here[1] - 6)
+        world.need(spare, Position).square = (here[0] + 7, here[1] - 6)
     for mate in mates:
-        world.get(mate, Position).square = (here[0] + 5, here[1] + 5)
+        world.need(mate, Position).square = (here[0] + 5, here[1] + 5)
     out.that(granters(world, me, shot_at) == [blocker],
              "the target's own ally is what shelters it from me"
              f" -- {granters(world, me, shot_at)}")
@@ -2397,7 +2397,7 @@ def cover_granters(out: Result) -> None:
     # rule, so 13 assertions and 3 plants passed while the reader returned
     # nobody on any board with redundant cover. #651.
     if len(foes) >= 3:
-        world.get(foes[2], Position).square = (here[0] - 3, here[1])
+        world.need(foes[2], Position).square = (here[0] - 3, here[1])
         both = granters(world, me, shot_at)
         out.that(cover_between(world, me, shot_at, ranged=True) is not Cover.NONE,
                  "two bodies in the line is still cover")
@@ -2405,7 +2405,7 @@ def cover_granters(out: Result) -> None:
                  "and BOTH are named -- each would shelter the target by"
                  " itself, so each is granting it. A by-removal reading"
                  f" returns nobody here, which was the bug ({both})")
-        world.get(foes[2], Position).square = (here[0] + 7, here[1] - 6)
+        world.need(foes[2], Position).square = (here[0] + 7, here[1] - 6)
     else:
         out.skip("the board deals fewer than three enemies, so the"
                  " redundancy arrangement could not be posed")
@@ -5479,9 +5479,9 @@ def narrowed_cover(out: Result) -> None:
 
         # Stand the ally inside the aura, which is the caster's own square
         # outward -- `_board` does not promise where it put anybody.
-        w4.get(friend, Position).square = w4.get(me4, Position).square
-        w4.get(friend, Position).square = (
-            w4.get(me4, Position).square[0] + 1, w4.get(me4, Position).square[1]
+        w4.need(friend, Position).square = w4.need(me4, Position).square
+        w4.need(friend, Position).square = (
+            w4.need(me4, Position).square[0] + 1, w4.need(me4, Position).square[1]
         )
         start = {k: hits4(r, friend) for k, r in shapes.items()}
 
@@ -7214,15 +7214,15 @@ def one_die_forgone_buys_one_clause(out: Result) -> None:
         if here is not None:
             beside = (here.square[0] + 1, here.square[1])
             world.grid.lift(foe)
-            world.get(foe, Position).square = beside
+            world.need(foe, Position).square = beside
             world.grid.place(foe, frozenset({beside}))
-        before = world.get(foe, Health).hp
-        stood = world.get(foe, Position).square
+        before = world.need(foe, Health).hp
+        stood = world.need(foe, Position).square
         pay_extra(Cast(world=world, me=me, ref=rider), rider, dice, on=foe)
         return {
-            "dealt": before - world.get(foe, Health).hp,
+            "dealt": before - world.need(foe, Health).hp,
             "slowed": is_(world, foe, Condition.SLOWED),
-            "moved": world.get(foe, Position).square != stood,
+            "moved": world.need(foe, Position).square != stood,
         }
 
     RIDER, DICE = "cf:ranger-f1", "1d6"
@@ -7395,7 +7395,7 @@ def the_mover_may_have_permission_the_occupant_does_not(out: Result) -> None:
         if len(foes) < 2 or not friends:
             continue
         small, big, friend = foes[0], foes[1], friends[0]
-        world.get(big, Position).size = Size.LARGE
+        world.need(big, Position).size = Size.LARGE
 
         out.that(may_enter(world, me, small),
                  f"{ref} may enter a small enemy's space -- the printed"
@@ -7420,7 +7420,7 @@ def the_mover_may_have_permission_the_occupant_does_not(out: Result) -> None:
             continue
         beside = (here.square[0] + 1, here.square[1])
         world.grid.lift(small)
-        world.get(small, Position).square = beside
+        world.need(small, Position).square = beside
         world.grid.place(small, frozenset({beside}))
         out.that(_clear(world, me, {beside}),
                  f"{ref}: `_clear` lets it stand in that square -- the"
@@ -7669,16 +7669,16 @@ def a_recharge_can_name_the_moment_it_waits_for(out: Result) -> None:
     check = summon_dropped("m4168")
     out.that(check(world, me, Dropped(actor=mine, source=me, dead=True)),
              "m4167a3 recharges when its own m4168 goes down")
-    world.get(mine, Companion).ref = "m9999"
+    world.need(mine, Companion).ref = "m9999"
     out.that(not check(world, me, Dropped(actor=mine, source=me, dead=True)),
              "and not when a summon of a DIFFERENT kind does -- a creature"
              " with two sorts of summon is not recharged by the wrong one")
-    world.get(mine, Companion).ref = "m4168"
-    world.get(mine, Companion).owner = me + 999
+    world.need(mine, Companion).ref = "m4168"
+    world.need(mine, Companion).owner = me + 999
     out.that(not check(world, me, Dropped(actor=mine, source=me, dead=True)),
              "nor when somebody ELSE's does -- an identical creature across"
              " the board must not recharge this one")
-    world.get(mine, Companion).owner = me
+    world.need(mine, Companion).owner = me
     out.that(not check(world, me, Dropped(actor=me, source=mine, dead=True)),
              "and reading `source` instead of `actor` would have recharged"
              " it whenever the KILLER happened to be a summon of mine,"
@@ -8174,10 +8174,10 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
         foes = [e for e in sorted(enemies(world, me)) if world.get(e, Health)]
         here = world.get(me, Position)
         victim, neighbour = foes[0], foes[2]
-        world.get(victim, Position).square = (here.square[0] + 3, here.square[1])
-        world.get(neighbour, Position).square = (here.square[0] + 4, here.square[1])
+        world.need(victim, Position).square = (here.square[0] + 3, here.square[1])
+        world.need(neighbour, Position).square = (here.square[0] + 4, here.square[1])
         for spare in (foes[1], *foes[3:]):
-            world.get(spare, Position).square = (here.square[0] + 15, here.square[1])
+            world.need(spare, Position).square = (here.square[0] + 15, here.square[1])
         for who in (victim, neighbour):
             hp = world.need(who, Health)
             hp.max_hp = max(hp.max_hp, 999)
@@ -8209,13 +8209,13 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
     # reads as inert while being correct.
     _w0, _me0, _use0, _v0, _n0 = pose("p1341", "f3427")
     REGISTRY["p1341"].body(_use0)
-    out.that(_w0.get(_v0, Health).hp > 0 and _w0.get(_n0, Health).hp > 0,
+    out.that(_w0.need(_v0, Health).hp > 0 and _w0.need(_n0, Health).hp > 0,
              "the poses survive the attack: `pose` gives the victim and the"
              " bystander a pool the caster cannot empty, so the riders"
              " below are asserted on a living target. Without this a"
              " stronger caster makes every clause here read as inert",
-             f"victim {_w0.get(_v0, Health).hp}, "
-             f"bystander {_w0.get(_n0, Health).hp}")
+             f"victim {_w0.need(_v0, Health).hp}, "
+             f"bystander {_w0.need(_n0, Health).hp}")
 
     # -- f3427: "you also knock the target prone" ------------------------
     for power in ("p1341", "p5919"):
@@ -8223,10 +8223,10 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
         REGISTRY[power].body(use)
         out.that(is_(world, victim, Condition.PRONE),
                  f"f3427 knocks {power}'s target prone", f"{power}")
-        out.that(world.get(me, Powers).charges.get(FELL) == 1,
+        out.that(world.need(me, Powers).charges.get(FELL) == 1,
                  f"and the boon is spent for it -- `c.spend_charge`'s False"
                  f" is the printed \"if you spend\" ({power})",
-                 f"{dict(world.get(me, Powers).charges)}")
+                 f"{dict(world.need(me, Powers).charges)}")
 
         world, me, use, victim, _ = pose(power, "")
         REGISTRY[power].body(use)
@@ -8235,9 +8235,9 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
                  f" control, and the only thing that separates this from"
                  f" the power having grown a clause",
                  f"{power}")
-        out.that(not world.get(me, Powers).charges.get(FELL),
+        out.that(not world.need(me, Powers).charges.get(FELL),
                  f"and nothing is spent ({power})",
-                 f"{dict(world.get(me, Powers).charges)}")
+                 f"{dict(world.need(me, Powers).charges)}")
 
     # -- the memo: one charge for a use, however many targets -----------
     world, me, use, first, second = pose("p5919", "f3427")
@@ -8252,9 +8252,9 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
              " honour the same answer -- asked per target the second would"
              " find the charge gone and silently get nothing",
              f"{seen}")
-    out.that(world.get(me, Powers).charges.get(FELL) == 1,
+    out.that(world.need(me, Powers).charges.get(FELL) == 1,
              "and it is one charge, not two",
-             f"{dict(world.get(me, Powers).charges)}")
+             f"{dict(world.need(me, Powers).charges)}")
 
     # -- f3423: "you gain insubstantial until the start of your next turn"
     for power in ("p1872", "p4070"):
@@ -8374,8 +8374,8 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
     # the clause would read as inert while being correct.
     standing = sorted(a for a in allies(world, me) if a != me)
     if standing:
-        spot = world.get(victim, Position).square
-        world.get(standing[0], Position).square = (spot[0], spot[1] + 1)
+        spot = world.need(victim, Position).square
+        world.need(standing[0], Position).square = (spot[0], spot[1] + 1)
     friends = sorted(a for a in use.within(1, of=victim, side="ally") if a != me)
     out.that(bool(friends),
              "an ally is standing beside p4069's target, or this proves"
@@ -8383,8 +8383,8 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
              f"{friends}")
     if friends:
         friend = friends[0]
-        stood = world.get(friend, Position).square
-        braced = (world.get(friend, Mods).total(Defense.AC, {})
+        stood = world.need(friend, Position).square
+        braced = (world.need(friend, Mods).total(Defense.AC, {})
                   if world.get(friend, Mods) else 0)
         # **Record who is asked, through the real decider hook.** Asserting
         # only that the ally stepped *or* braced was too weak to see this,
@@ -8402,8 +8402,8 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
             REGISTRY["p4069"].body(use)
         finally:
             world.decider = was
-        now = world.get(friend, Position).square
-        after = (world.get(friend, Mods).total(Defense.AC, {})
+        now = world.need(friend, Position).square
+        after = (world.need(friend, Mods).total(Defense.AC, {})
                  if world.get(friend, Mods) else 0)
         out.that(now != stood or after == braced + 2,
                  "f3417 lets the ally beside the target step or brace",
@@ -8418,12 +8418,12 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
     # f3429: "one ally within 5 makes a basic attack and deals extra thunder
     # damage equal to your Intelligence modifier" -- through p501.
     world, me, use, victim, _ = pose("p501", "f3429")
-    foes = {f: world.get(f, Health).hp for f in sorted(enemies(world, me))
+    foes = {f: world.need(f, Health).hp for f in sorted(enemies(world, me))
             if world.get(f, Health)}
     REGISTRY["p501"].body(use)
     moved = [f for f, hp in foes.items()
-             if world.get(f, Health).hp != hp and f != victim]
-    out.that(bool(moved) or world.get(victim, Health).hp < foes.get(victim, 0),
+             if world.need(f, Health).hp != hp and f != victim]
+    out.that(bool(moved) or world.need(victim, Health).hp < foes.get(victim, 0),
              "f3429 sends an ally's swing in through p501",
              f"changed: {moved}")
 
@@ -8442,11 +8442,11 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
              " was, right for a plain +2 and wrong here")
 
     world, me, use, victim, _ = pose("p501", "")
-    foes = {f: world.get(f, Health).hp for f in sorted(enemies(world, me))
+    foes = {f: world.need(f, Health).hp for f in sorted(enemies(world, me))
             if world.get(f, Health)}
     REGISTRY["p501"].body(use)
     out.that(not [f for f, hp in foes.items()
-                  if world.get(f, Health).hp != hp and f != victim],
+                  if world.need(f, Health).hp != hp and f != victim],
              "and without the feat no second creature is touched",
              "control")
 
@@ -8532,10 +8532,10 @@ def a_feat_lends_an_augment(out: Result) -> None:
         here = world.get(me, Position)
         # foes[1] is the undead one, and the clause deals necrotic.
         victim, neighbour = foes[0], foes[2]
-        world.get(victim, Position).square = (here.square[0] + 4, here.square[1])
-        world.get(neighbour, Position).square = (here.square[0] + 5, here.square[1])
+        world.need(victim, Position).square = (here.square[0] + 4, here.square[1])
+        world.need(neighbour, Position).square = (here.square[0] + 5, here.square[1])
         for spare in (foes[1], *foes[3:]):
-            world.get(spare, Position).square = (here.square[0] + 15, here.square[1])
+            world.need(spare, Position).square = (here.square[0] + 15, here.square[1])
         if lend:
             REGISTRY["f3170"].body(Cast(world=world, me=me, ref="f3170"))
         # The use as the dispatcher hands it over: this row reads its target
@@ -8545,27 +8545,27 @@ def a_feat_lends_an_augment(out: Result) -> None:
         use.trigger = DamageApplied(
             source=victim, target=friend, amount=DEALT,
             dtype=DamageType.FORCE, absorbed=0,
-            hp=world.get(friend, Health).hp,
+            hp=world.need(friend, Health).hp,
         )
         return world, me, use, victim, neighbour
 
     # --- the control, first, for `spent_on`'s reason above ---------------
     world, me, use, victim, neighbour = pose(lend=False)
-    was = world.get(neighbour, Health).hp
-    stood = world.get(victim, Health).hp
+    was = world.need(neighbour, Health).hp
+    stood = world.need(victim, Health).hp
     REGISTRY["p10440"].body(use)
     out.that(spent_on(me, "p10440") == 0,
              "without the feat nothing is lent and nothing is spent -- the"
              " control, and why this is not p10440 having grown a clause",
              f"spent {spent_on(me, 'p10440')}")
-    out.that(world.get(neighbour, Health).hp == was,
+    out.that(world.need(neighbour, Health).hp == was,
              "and the neighbour of the target is untouched",
-             f"{was} -> {world.get(neighbour, Health).hp}")
-    out.that(world.get(victim, Health).hp == stood - DEALT,
+             f"{was} -> {world.need(neighbour, Health).hp}")
+    out.that(world.need(victim, Health).hp == stood - DEALT,
              "while the row's printed effect still lands on the dealer, so"
              " the control is the feat being absent rather than the power"
              " being broken",
-             f"{stood} -> {world.get(victim, Health).hp}")
+             f"{stood} -> {world.need(victim, Health).hp}")
 
     # --- and with the feat ----------------------------------------------
     world, me, use, victim, neighbour = pose(lend=True)
@@ -8574,24 +8574,24 @@ def a_feat_lends_an_augment(out: Result) -> None:
              "the lend is filed against p10440 by ref, which is what"
              " `augment.lent` reads back",
              f"{sorted(getattr(known, 'lent_augments', {}))}")
-    before = world.get(neighbour, Health).hp
-    stood = world.get(victim, Health).hp
+    before = world.need(neighbour, Health).hp
+    stood = world.need(victim, Health).hp
     REGISTRY["p10440"].body(use)
     out.that(spent_on(me, "p10440") == 1,
              "the lent augment is offered and paid for at its printed cost,"
              " routed through `augment` so `spent_on` sees it while the use"
              " is still resolving",
              f"spent {spent_on(me, 'p10440')}")
-    out.that(world.get(neighbour, Health).hp == before - use.con_mod,
+    out.that(world.need(neighbour, Health).hp == before - use.con_mod,
              "the neighbour of the target takes Constitution modifier"
              " necrotic damage",
-             f"{before} -> {world.get(neighbour, Health).hp},"
+             f"{before} -> {world.need(neighbour, Health).hp},"
              f" con_mod {use.con_mod}")
-    out.that(world.get(victim, Health).hp == stood - DEALT,
+    out.that(world.need(victim, Health).hp == stood - DEALT,
              "and the TARGET takes the printed effect and nothing more --"
              " \"each enemy adjacent to the target\" excludes it, where"
              " `c.within(1, of=foe)` returns it at distance 0",
-             f"{stood} -> {world.get(victim, Health).hp},"
+             f"{stood} -> {world.need(victim, Health).hp},"
              f" printed {DEALT}")
 
 
@@ -9586,7 +9586,7 @@ def vulnerability_held_by_a_zone(out: Result) -> None:
     world, me, _ = _board()
     victim = next(e for e in enemies(world, me) if world.get(e, Health))
     here = world.get(me, Position)
-    world.get(victim, Position).square = here.square
+    world.need(victim, Position).square = here.square
     c = Cast(world=world, me=me, ref="drivers:vuln_in")
     zone = c.zone([here.square], label=c.ref, until=When.ENCOUNTER)
     c.vulnerable_in(zone, 5, side="enemy")
@@ -9621,7 +9621,7 @@ def vulnerability_held_by_a_zone(out: Result) -> None:
 
     world, me, _ = _board("p13747", 1)
     foe = next(e for e in enemies(world, me) if world.get(e, Health))
-    world.get(foe, Position).square = world.get(me, Position).square
+    world.need(foe, Position).square = world.need(me, Position).square
     c = Cast(world=world, me=me, ref="p13747", targets=[foe])
     c.target = foe
     # Only the Effect half is wanted; the attack is asserted elsewhere.
@@ -10505,7 +10505,7 @@ def leash(out: Result) -> None:
     world, caster, _ = _board()
     foe = sorted(enemies(world, caster))[0]
     c = Cast(world=world, me=caster, ref="drivers:leash")
-    here = world.get(caster, Position).square
+    here = world.need(caster, Position).square
     free = reachable(world, caster, speed(world, caster))
     out.that(len(free) > 8, "untethered, it has a wide choice of squares")
 
@@ -10834,7 +10834,7 @@ def conceal_in(out: Result) -> None:
     if friend is None:
         return
 
-    here = world.get(caster, Position).square
+    here = world.need(caster, Position).square
     patch = [(here[0] + 1, here[1]), (here[0] + 1, here[1] + 1)]
 
     # **Stand the ally well clear first.** The first version laid the zone on
@@ -10844,7 +10844,7 @@ def conceal_in(out: Result) -> None:
     # control that fails because the board was not arranged says nothing
     # about the verb.
     outside = (here[0] - 4, here[1] - 4)
-    world.get(friend, Position).square = outside
+    world.need(friend, Position).square = outside
 
     c = Cast(world=world, me=caster, ref="drivers:conceal")
     zone = c.zone(patch, until=When.ENCOUNTER)
@@ -10856,20 +10856,20 @@ def conceal_in(out: Result) -> None:
              " the entire difference from `c.conceal`")
 
     # Walk it in. The grant has to arrive on arrival, not at laying.
-    world.get(friend, Position).square = patch[0]
+    world.need(friend, Position).square = patch[0]
     world.zones.refresh()
     out.that(concealment_of(world, friend) is Cover.PARTIAL,
              "walking into the cloud conceals it, even though the zone was"
              " laid before it arrived")
 
     # And out again.
-    world.get(friend, Position).square = outside
+    world.need(friend, Position).square = outside
     world.zones.refresh()
     out.that(concealment_of(world, friend) is Cover.NONE,
              "leaving gives it back")
 
     # In again, then end the zone itself.
-    world.get(friend, Position).square = patch[0]
+    world.need(friend, Position).square = patch[0]
     world.zones.refresh()
     out.that(concealment_of(world, friend) is Cover.PARTIAL, "in again")
     world.zones.end(zone, "driver ended it")
@@ -11531,7 +11531,7 @@ def summoned_is_a_fact(out: Result) -> None:
     out.that(spirits, "the board carries a companion that is not a summon")
     for s_eid in spirits:
         out.that(not is_summoned(world, s_eid),
-                 f"a {world.get(s_eid, Companion).kind!r} companion is not a"
+                 f"a {world.need(s_eid, Companion).kind!r} companion is not a"
                  f" summoned creature -- `i3422p1` prints the two as"
                  f" alternatives, so a reading that counted both could not"
                  f" be what it means")
@@ -12633,11 +12633,11 @@ def compelled_walk(out: Result) -> None:
     place(world, foe, (12, 2))
     c = Cast(world=world, me=me, ref="drivers:compelled")
 
-    before = distance(world.get(me, Position).square,
-                      world.get(foe, Position).square)
+    before = distance(world.need(me, Position).square,
+                      world.need(foe, Position).square)
     c.walk_toward(foe, on=me)
-    after = distance(world.get(me, Position).square,
-                     world.get(foe, Position).square)
+    after = distance(world.need(me, Position).square,
+                     world.need(foe, Position).square)
     out.that(after < before,
              f"a compelled walk closes on its target ({before} -> {after})")
 
@@ -12656,7 +12656,7 @@ def compelled_walk(out: Result) -> None:
     world2.decide = contrary
     c2 = Cast(world=world2, me=me2, ref="drivers:compelled-rigged")
     c2.walk_toward(foe2, on=me2)
-    rigged = distance(world2.get(me2, Position).square, (12, 2))
+    rigged = distance(world2.need(me2, Position).square, (12, 2))
     out.that(rigged == after and "move" not in asked,
              "and a decider rigged to pick the farthest square changes"
              " nothing, because it is never asked -- the half that tells"
@@ -12840,7 +12840,7 @@ def event_provenance(out: Result) -> None:
     c = Cast(world=world, me=me, ref="drivers:ward2")
     c.bonus("temp_hp", 3, on=me, until=When.ENCOUNTER, kind="feat")
     c.temp_hp(5, on=me)
-    got = world.get(me, Health).temp
+    got = world.need(me, Health).temp
     out.that(got == 8,
              f"a +3 to temporary hit points makes a printed 5 arrive as {got}")
 
@@ -12953,7 +12953,7 @@ def healed_power(out: Result) -> None:
     c.watch(Healed, more, until=When.ENCOUNTER, window=Window.BEFORE,
             on=me, label="drivers:more")
     c.heal(5, on=me)
-    got = world.get(me, Health).hp - before
+    got = world.need(me, Health).hp - before
     out.that(got == 9,
              "and a rider keyed on that ref still adds before the hit"
              f" points go on -- 5 printed became {got}")
@@ -13036,7 +13036,7 @@ def reach_stretch(out: Result) -> None:
     from combat_engine.engine.query import enemies, squares
     foe = sorted(enemies(world, me))[0]
     here = sorted(squares(world, me))[0]
-    world.get(foe, Position).square = (here[0] + 2, here[1])
+    world.need(foe, Position).square = (here[0] + 2, here[1])
     declared = REGISTRY[by_weapon]
     c = Cast(world=world, me=me, ref="drivers:reach")
     before = _within_reach(world, me, declared, foe)
@@ -13251,7 +13251,7 @@ def unpreventable(out: Result) -> None:
         before = hp.hp
         Cast(world=world, me=me, ref="drivers:cost").flat(
             10, dtype=DamageType.FIRE, unpreventable=free, on=foe)
-        return before - world.get(foe, Health).hp
+        return before - world.need(foe, Health).hp
 
     plain = hurt(resist=4, free=False)
     out.that(plain == 6,
@@ -15251,7 +15251,7 @@ def zone_exempt(out: Result) -> None:
         foe = sorted(enemies(world, me))[0]
         here = sorted(squares(world, me))[0]
         far = (here[0] + 6, here[1])
-        world.get(foe, Position).square = far
+        world.need(foe, Position).square = far
         # Clear the line. A creature standing between gives PARTIAL cover of
         # its own, which reads in the same units as the zone's and hid the
         # result entirely in the first version of this rule.
@@ -16215,7 +16215,7 @@ def a_school_decides_which_creature_is_summoned(out: Result) -> None:
             )
         before = {eid for eid, _ in world.each(Ident)}
         REGISTRY["p13984"].body(Cast(world=world, me=me, ref="p13984"))
-        fresh = [world.get(eid, Ident).ref
+        fresh = [world.need(eid, Ident).ref
                  for eid, _ in world.each(Ident) if eid not in before]
         return next((r for r in fresh if r.startswith("x10_")), "")
 
@@ -18695,12 +18695,12 @@ def a_levitation_that_drifts(out: Result) -> None:
     squares = {}
     for across in (0, 1):
         world, me = posed("p16033")
-        start = world.get(me, Position).square
+        start = world.need(me, Position).square
         Cast(world=world, me=me, ref="drivers:drift").hover(
             4, across=across, on=me, until=When.EONT)
-        squares[across] = (start, world.get(me, Position).square,
+        squares[across] = (start, world.need(me, Position).square,
                            falling.height(world, me),
-                           world.get(me, Movement).using)
+                           world.need(me, Movement).using)
 
     (s0, e0, h0, u0) = squares[0]
     (s1, e1, h1, u1) = squares[1]
@@ -18727,23 +18727,23 @@ def a_levitation_that_drifts(out: Result) -> None:
     # branch is the only one the row's own body ever runs here, and a plant
     # that broke `across=` left the sustain assertion below green.
     world, me = posed("p16033")
-    start = world.get(me, Position).square
+    start = world.need(me, Position).square
     Cast(world=world, me=me, ref="drivers:drift").hover(
         across=1, on=me, until=When.EONT)
-    out.that(world.get(me, Position).square != start
+    out.that(world.need(me, Position).square != start
              and falling.height(world, me) == 0,
              "`across=` with no lift drifts one square and changes no"
              " altitude -- the sideways half of the printed `or`, on its own",
-             f"{start} -> {world.get(me, Position).square},"
+             f"{start} -> {world.need(me, Position).square},"
              f" height={falling.height(world, me)}")
 
     # -- through p16033's own body ---------------------------------------
     world, me = posed("p16033")
-    start = world.get(me, Position).square
+    start = world.need(me, Position).square
     use = Cast(world=world, me=me, ref="p16033")
     use.target = me
     REGISTRY["p16033"].body(use)
-    moved = world.get(me, Position).square
+    moved = world.need(me, Position).square
     out.that(falling.height(world, me) == 4 and start != moved,
              "p16033's own body lifts 4 and drifts one square, rather than"
              " the verb being right and the row not calling it",
@@ -18768,11 +18768,11 @@ def a_levitation_that_drifts(out: Result) -> None:
                  " not, which is #776")
         out.that(len(eff.on_sustain) == 1,
                  "with one thing to do each time it is paid")
-        before = world.get(me, Position).square
+        before = world.need(me, Position).square
         h_before = falling.height(world, me)
         for fn in list(eff.on_sustain):
             fn()
-        after = world.get(me, Position).square
+        after = world.need(me, Position).square
         h_after = falling.height(world, me)
         out.that((h_after > h_before) != (after != before),
                  "and paying it buys EITHER height OR one square sideways,"
@@ -19134,7 +19134,7 @@ def an_active_search_finds_a_trap(out: Result) -> None:
     # -- a check it cannot pass costs the minor and finds nothing --------
     world, enc, me, eid = board_with(60)
     acts.perform(world, enc, me, offered(world, enc, me)[0])
-    out.that(not world.get(eid, Trap).found,
+    out.that(not world.need(eid, Trap).found,
              "a search against a DC it cannot reach finds nothing -- a spent"
              " minor and no reveal, which is what makes looking a risk"
              " rather than a free answer",
@@ -21233,7 +21233,7 @@ def a_readied_attack_waits_for_reach_and_is_spent_either_way(out: Result) -> Non
     enc = Encounter(world)
     enc.start()
     foe = next(f for f in enemies(world, me) if alive(world, f))
-    mine = world.get(me, Position).square
+    mine = world.need(me, Position).square
 
     # Back the foe off first. On this board it starts **adjacent**, so a
     # walk-toward-me loop would exit immediately and test nothing while
@@ -21245,7 +21245,7 @@ def a_readied_attack_waits_for_reach_and_is_spent_either_way(out: Result) -> Non
         not _in_reach(world, me, foe),
         "the foe is backed out of reach before the hold is laid, so the"
         " in-reach check below is actually testing something",
-        f"foe at {world.get(foe, Position).square}, me at {mine}")
+        f"foe at {world.need(foe, Position).square}, me at {mine}")
 
     # Readying is legal only on the holder's own turn -- it costs a standard.
     for _ in range(20):
@@ -21316,7 +21316,7 @@ def a_readied_attack_waits_for_reach_and_is_spent_either_way(out: Result) -> Non
     if second is not None:
         for dx in range(2, 6):
             step(world, second, (mine[0] + dx, mine[1] + 1))
-        went = world.get(second, Position).square
+        went = world.need(second, Position).square
         out.that(not _in_reach(world, me, second),
                  "a second enemy can be backed out of reach, so the"
                  " one-payout control below is not vacuous",
@@ -21326,7 +21326,7 @@ def a_readied_attack_waits_for_reach_and_is_spent_either_way(out: Result) -> Non
                  "and walked back into reach -- the step really happened,"
                  " which is what a green `once` control depends on",
                  f"step returned {landed}, now at"
-                 f" {world.get(second, Position).square}")
+                 f" {world.need(second, Position).square}")
         out.that(len(seen) == before,
                  "a SECOND enemy entering reach draws nothing more -- one"
                  " readied action does not pay out down a line",
@@ -21369,7 +21369,7 @@ def a_readied_attack_waits_for_reach_and_is_spent_either_way(out: Result) -> Non
     enc2 = Encounter(world2)
     enc2.start()
     foe2 = next(f for f in enemies(world2, me2) if alive(world2, f))
-    mine2 = world2.get(me2, Position).square
+    mine2 = world2.need(me2, Position).square
     for dx in range(1, 5):
         step(world2, foe2, (mine2[0] + dx, mine2[1]))
     for _ in range(20):
@@ -22201,8 +22201,8 @@ def a_downed_character_can_be_fielded(out: Result) -> None:
     from combat_engine.engine.types import Condition
 
     world, me, _ = _board("f2743", 1)
-    floor = world.get(me, Health).dying_at
-    top = world.get(me, Health).max_hp
+    floor = world.need(me, Health).dying_at
+    top = world.need(me, Health).max_hp
     out.that(floor < 0 < top,
              "the creature has a negative dying threshold and a positive"
              " maximum, so all three bands below are reachable",
@@ -22219,9 +22219,9 @@ def a_downed_character_can_be_fielded(out: Result) -> None:
 
     # Band 1: up.
     w, m, verdict, seen = field(top + 10)
-    out.that(verdict == "" and w.get(m, Health).hp == top,
+    out.that(verdict == "" and w.need(m, Health).hp == top,
              "a total above the maximum fields the creature up, clamped",
-             f"verdict {verdict!r}, hp {w.get(m, Health).hp} of {top}")
+             f"verdict {verdict!r}, hp {w.need(m, Health).hp} of {top}")
     out.that(alive(w, m) and conscious(w, m) and can_act(w, m),
              "and it is alive, conscious and able to act",
              f"alive {alive(w, m)}, conscious {conscious(w, m)},"
@@ -22229,10 +22229,10 @@ def a_downed_character_can_be_fielded(out: Result) -> None:
 
     # Band 2: down but not out.
     w, m, verdict, seen = field(-1)
-    out.that(verdict == "dropped" and w.get(m, Health).hp == -1,
+    out.that(verdict == "dropped" and w.need(m, Health).hp == -1,
              "a negative total above the threshold fields the creature"
              " dropped, with the negative kept rather than clamped to 0",
-             f"verdict {verdict!r}, hp {w.get(m, Health).hp}")
+             f"verdict {verdict!r}, hp {w.need(m, Health).hp}")
     out.that(alive(w, m) and not conscious(w, m) and not can_act(w, m),
              "alive but unconscious and unable to act -- which is the"
              " combination the issue measured as all three True",
@@ -28043,8 +28043,8 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     if defs_ is not None:
         defs_.values[Defense.REF] = 1
 
-    here = world.get(caster, Position).square
-    world.get(mate, Position).square = (here[0] + 2, here[1])
+    here = world.need(caster, Position).square
+    world.need(mate, Position).square = (here[0] + 2, here[1])
 
     # Before the row runs, so no gate of its own can colour it.
     was = world.get(foe, Mods)
@@ -28078,7 +28078,7 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
         f"the row contributed {owed(mate)} at distance 2",
     )
 
-    world.get(mate, Position).square = (here[0] + 9, here[1])
+    world.need(mate, Position).square = (here[0] + 9, here[1])
     out.that(
         owed(mate) == 0,
         "and not to that same ally once it is outside the aura",
@@ -28312,10 +28312,10 @@ def a_granted_action_that_walks_a_zone(out: Result) -> None:
         f"belong(s) to somebody else",
     )
 
-    before = min(world.get(mine, Zone).squares)
+    before = min(world.need(mine, Zone).squares)
     pick = next(a for a in got if a.targets and a.targets[0] == mine)
     perform(world, enc, caster, pick)
-    after = min(world.get(mine, Zone).squares)
+    after = min(world.need(mine, Zone).squares)
     out.that(
         after != before,
         "performing it moves that zone",
@@ -28894,9 +28894,9 @@ def target_of_one_kind(out: Result) -> None:
 
     # Stand one ally close, and make it the caster's own kind.
     mate = allies_[0]
-    here = world.get(caster, Position).square
-    world.get(mate, Position).square = (here[0] + 1, here[1])
-    world.get(mate, Ident).ref = kind.ref
+    here = world.need(caster, Position).square
+    world.need(mate, Position).square = (here[0] + 1, here[1])
+    world.need(mate, Ident).ref = kind.ref
 
     same = Target(side="ally", count=4, ident=kind.ref)
     other = Target(side="ally", count=4, ident="m-nothing-of-this-kind")
@@ -28931,7 +28931,7 @@ def target_of_one_kind(out: Result) -> None:
         'ident="own" offers an ally of the caster\'s own block',
         f"offered {candidates(world, caster, _aimed(mine, own))}",
     )
-    world.get(mate, Ident).ref = "m-some-other-block"
+    world.need(mate, Ident).ref = "m-some-other-block"
     out.that(
         mate not in candidates(world, caster, _aimed(mine, own)),
         'and drops it the moment its block differs',
@@ -28980,7 +28980,7 @@ def target_of_one_kind(out: Result) -> None:
     )
 
     # The other way in: the block matches and the kind does not.
-    world.get(mate, Ident).ref = kind.ref
+    world.need(mate, Ident).ref = kind.ref
     other_way = Target(side="ally", count=4, ident="own", kind_or_ident=True,
                        kinds=frozenset({"no-such-type-word"}))
     out.that(
@@ -28990,7 +28990,7 @@ def target_of_one_kind(out: Result) -> None:
     )
 
     # Neither: still refused, or the union has become "anybody".
-    world.get(mate, Ident).ref = "m-some-other-block"
+    world.need(mate, Ident).ref = "m-some-other-block"
     out.that(
         mate not in candidates(world, caster, _aimed(mine, other_way)),
         "and refuses one that matches neither",
@@ -29156,8 +29156,8 @@ def a_lent_basic_attack(out: Result) -> None:
 
     # Stand the enemy next to the *ally*, which is the geometry the printed
     # clause is about -- not next to the caster.
-    spot = world.get(mate, Position).square
-    world.get(foe, Position).square = (spot[0] + 1, spot[1])
+    spot = world.need(mate, Position).square
+    world.need(foe, Position).square = (spot[0] + 1, spot[1])
 
     swings: list[tuple[int, int]] = []
     world.bus.on(AttackDeclared, lambda ev: swings.append((ev.attacker, ev.target)))
@@ -29399,9 +29399,9 @@ def mage_school_riders(out: Result) -> None:
         # new readers is that `c.push` *consults* the rider, and a test that
         # read `Mods` back would pass whether it did or not.
         def shoved(power: str, who: int = victim) -> int:
-            start = world.get(who, Position).square
+            start = world.need(who, Position).square
             Cast(world=world, me=caster, ref=power).push(1, on=who)
-            end = world.get(who, Position).square
+            end = world.need(who, Position).square
             from combat_engine.engine.grid import distance
             return distance(start, end)
 
@@ -30641,7 +30641,7 @@ def a_printed_weapon_property_a_feat_grants(out: Result) -> None:
 
         world, me, c = armed_with(ref, weapon)
         row.body(c)
-        held = world.get(me, Gear).weapons[0]
+        held = world.need(me, Gear).weapons[0]
         out.that(word in held.properties,
                  f"{ref}: the {weapon.group} in hand gains {word!r}",
                  f"{sorted(held.properties)}")
@@ -34987,7 +34987,7 @@ def a_weapon_is_re_filed(out: Result) -> None:
                  "and afterwards a crossbow-gated row takes it, which is"
                  " what `Weapon.group` is read for",
                  f"crossbow {after_new}")
-        kept = next(w for w in world.get(me, Gear).weapons
+        kept = next(w for w in world.need(me, Gear).weapons
                     if w.ref == "w3662")
         out.that("blowgun" in kept.properties,
                  "**and the old group is carried across as a property**,"
@@ -35003,7 +35003,7 @@ def a_weapon_is_re_filed(out: Result) -> None:
                  "and a row asking for the weapon by its own name still"
                  " finds it, which is the behaviour a player would notice",
                  f"blowgun {after_own}")
-        others = [w.group for w in world.get(me, Gear).weapons
+        others = [w.group for w in world.need(me, Gear).weapons
                   if w.ref != "w3662"]
         out.that("crossbow" not in others,
                  "and no other weapon the character carries was touched,"
@@ -35021,7 +35021,7 @@ def a_weapon_is_re_filed(out: Result) -> None:
                  " this is the field the card has to move",
                  f"group {arm.group!r}")
         REGISTRY["f1288"].body(Cast(world=world, me=me, ref="f1288"))
-        now = next(w for w in world.get(me, Gear).weapons
+        now = next(w for w in world.need(me, Gear).weapons
                    if w.ref == "w3663")
         out.that(now.is_light_blade,
                  "and it is afterwards, which is what `Cast.wielding` reads"
@@ -41875,7 +41875,7 @@ def a_disarmed_weapon_caught_in_a_free_hand(out: Result) -> None:
     world, me, victim = armed()
     Cast(world=world, me=me, ref="drivers:feet").disarm(
         on=victim, drops_at=me)
-    at_me = [world.get(e, Position).square for e, _i in floor(world)]
+    at_me = [world.need(e, Position).square for e, _i in floor(world)]
     out.that(bool(at_me) and at_me[0] == world.need(me, Position).square,
              "`drops_at=` puts it at the ATTACKER's feet, which this card"
              " prints",
@@ -41883,7 +41883,7 @@ def a_disarmed_weapon_caught_in_a_free_hand(out: Result) -> None:
 
     world, me, victim = armed()
     Cast(world=world, me=me, ref="drivers:theirs").disarm(on=victim)
-    theirs = [world.get(e, Position).square for e, _i in floor(world)]
+    theirs = [world.need(e, Position).square for e, _i in floor(world)]
     out.that(bool(theirs)
              and theirs[0] == world.need(victim, Position).square
              and theirs[0] != world.need(me, Position).square,
@@ -45051,8 +45051,8 @@ def the_protectors_circle_is_a_leg_the_base_druid_also_has(out: Result) -> None:
             world.bus.emit(SurgeSpent(actor=me, left=3, source=me, healed=7))
             return seen
         friend = next(a for a in c.allies())
-        x, y = world.get(me, Position).square
-        world.get(friend, Position).square = (x, y) if who == "in" else (x + 20, y + 20)
+        x, y = world.need(me, Position).square
+        world.need(friend, Position).square = (x, y) if who == "in" else (x + 20, y + 20)
         world.bus.emit(SurgeSpent(actor=friend, left=3, source=friend, healed=7))
         return seen
 
@@ -45207,7 +45207,7 @@ def the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand(
                          (chargen.MACE, "one-handed mace"),
                          (STAFF, "staff")):
         world, me, _ = posed("cf:wizard-bladesinger-f0", weapon)
-        got[what] = world.get(me, Gear).main.as_implement
+        got[what] = world.need(me, Gear).main.as_implement
     out.that(got == {"heavy blade": True, "light blade": True,
                      "one-handed mace": False, "staff": False},
              "`-f0` makes a light or heavy blade count as an implement and "
@@ -45821,11 +45821,11 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
     health.max_hp, health.hp = 50, 10
     world.bus.emit(Hit(attacker=me, target=victim, power="mba",
                        critical=False))
-    out.that(world.get(victim, Health).hp <= 0,
+    out.that(world.need(victim, Health).hp <= 0,
              "and the watch is wired: a real `Hit` on a creature inside the "
              "ceiling takes it down. Fired rather than armed, which is "
              "`cf:rogue-thief-f16`'s lesson",
-             f"hp {world.get(victim, Health).hp}")
+             f"hp {world.need(victim, Health).hp}")
 
     # -- f8: the fall ----------------------------------------------------
     world, me, _ = _posed("cf:assassin-executioner-f0", 1)
@@ -46058,7 +46058,7 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
         armed = any((e.label or "") == "cf:fighter-knight-f19"
                     for e in world.effects.of(me))
         world.bus.emit(SecondWind(actor=me, healed=5, cost=None))
-        return left - world.get(me, Health).surges, armed
+        return left - world.need(me, Health).surges, armed
 
     spent, armed = surges(3)
     out.that(armed,
@@ -46886,7 +46886,7 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
     emitted = len(world.bus.log)
     REGISTRY["cf:ranger-hunter-f17"].body(
         Cast(world=world, me=me, ref="cf:ranger-hunter-f17"))
-    after = world.get(me, Gear).ranged.ranged
+    after = world.need(me, Gear).ranged.ranged
     out.that(after == (before[0] + 10, before[1] + 10),
              "`-f17` adds 10 to BOTH the normal and the long range, which "
              "the card says twice. Written onto the creature's own copy of "
@@ -47076,7 +47076,7 @@ def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
         gear.stowed = []
         REGISTRY["cf:druid-sentinel-f0s1"].body(
             Cast(world=world, me=me, ref="cf:druid-sentinel-f0s1"))
-        dice[name] = world.get(me, Gear).main.damage
+        dice[name] = world.need(me, Gear).main.damage
     out.that(dice == {"one-handed mace": "1d10", "two-handed mace": "1d12",
                       "staff": "1d12", "a heavy blade": "1d8"},
              "`-f0s1` writes `d10` into a one-handed mace, `d12` into a "
@@ -48841,7 +48841,7 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
         held = world_.get(me_, Powers)
         assert held is not None
         REGISTRY[ref].body(Cast(world=world_, me=me_, ref=ref))
-        have = [w for w in want if w in world_.get(me_, Powers).all]
+        have = [w for w in want if w in world_.need(me_, Powers).all]
         out.that(len(have) == 4,
                  f"`{ref}` grants the FOUR powers its domain's section "
                  "prints, where the spec lists none",
@@ -49250,7 +49250,7 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
         for all three arms including the ungranted control.
         """
         w, who, _ = _posed("cf:rogue-thief-f0", 2)
-        w.get(who, Powers).rolls_twice.clear()
+        w.need(who, Powers).rolls_twice.clear()
         if grant:
             Cast(world=w, me=who, ref="probe").roll_twice(grant)
         rolls = [_check(w, who, "stealth", 0).natural for _ in range(400)]
@@ -49267,7 +49267,7 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
              f"one d20 {plain:.2f}, two {twice:.2f}, "
              f"a different skill granted {elsewhere:.2f}")
     world, me, _ = _posed("cf:rogue-thief-f0", 1)
-    world.get(me, Powers).rolls_twice.clear()
+    world.need(me, Powers).rolls_twice.clear()
     c = Cast(world=world, me=me, ref="probe")
     first, again = c.roll_twice("stealth"), c.roll_twice("stealth")
     out.that(first == 1 and again == 0,
@@ -57213,8 +57213,8 @@ def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
     Cast(world=world2, me=me2, ref="drivers:lend").loses_property(
         "heavy thrown", held=True, on=me2)
     left = sorted(
-        p for w in world2.get(me2, Gear).weapons
-        if w.ref not in world2.get(me2, Gear).stowed
+        p for w in world2.need(me2, Gear).weapons
+        if w.ref not in world2.need(me2, Gear).stowed
         for p in w.properties)
     out.that(left == own,
              "and taking off a property the weapon never had leaves its own"
@@ -58624,12 +58624,12 @@ def training_is_asked_and_can_be_lent(out: Result) -> None:
     if not holds:
         return
     world2.effects.end(holds[0], "drivers")
-    out.that(lent not in world2.get(me2, Skills).trained,
+    out.that(lent not in world2.need(me2, Skills).trained,
              "**and ending the hold takes the training back**, by"
              " subtracting rather than restoring a snapshot, so another"
              " grant laid in between would survive it",
              f"trained now holds {lent}:"
-             f" {lent in world2.get(me2, Skills).trained}")
+             f" {lent in world2.need(me2, Skills).trained}")
 
 
 def an_aura_deals_more_to_the_creature_its_owner_is_grabbing(out: Result) -> None:
@@ -76852,7 +76852,7 @@ def a_party_wears_the_same_kit_all_day(out: Result) -> None:
     def the_fighter(world: object) -> int:
         """The fighter's id, or an assertion rather than a `None` deref.
 
-        Four sites read `world.get(e, Ident).ref` directly and `get` is
+        Four sites read `world.need(e, Ident).ref` directly and `get` is
         `Ident | None`, so `ty` refused all four -- and a bare `.ref` on a
         board that somehow fielded nobody would raise an `AttributeError`
         five lines from the thing being tested. One accessor instead.
@@ -80921,14 +80921,14 @@ def restore_per_day(out: Result) -> None:
             break
     out.that(
         spent.restore_per_day(ref) is False
-        and world.get(victim, Powers).per_day["cf:artificer-f2"] == 2,
+        and world.need(victim, Powers).per_day["cf:artificer-f2"] == 2,
         "with a **target** holding two spent uses and the caster holding"
         " none, the restore is refused and the target's count is untouched"
         " -- `Cast._who(None)` is `self.target`, so a defaulted `on=` here"
         " would refill the victim's allowance, which is this tree's"
         " commonest single mistake",
         f"caster refused, victim still at"
-        f" {world.get(victim, Powers).per_day['cf:artificer-f2']}",
+        f" {world.need(victim, Powers).per_day['cf:artificer-f2']}",
     )
 
 
