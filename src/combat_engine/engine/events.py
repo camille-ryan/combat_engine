@@ -36,6 +36,62 @@ from .types import (
 
 
 @dataclass
+class Swung:
+    """Everything `resolve.attack` stamps onto an attack event.
+
+    **These were set with `setattr` and declared nowhere**, which cost
+    two things. A reader of `Hit` could not see that `ev.result` or
+    `ev.ctx` exist at all -- the contract lived only in `resolve`'s
+    comments, which say these ride *"in the attack context and on all
+    four attack events"* -- and `ty` reported 25 unresolved attributes
+    across `resolve.py`, `cast.py`, `audit.py` and `drivers.py`, every
+    one of them a real attribute it could not know about.
+
+    **Every field is `repr=False`, and that is the whole reason this is
+    safe rather than a schema change.** The flag governs two exits at
+    once, which `#1103` paid for: `replay`'s fixtures record `str(event)`
+    and `Event.wire` ends with `if not f.repr: out.pop(f.name)`. So a
+    declared-but-unrepr'd field stays out of the regression net AND out
+    of the page and the save format -- which is exactly where these
+    belong. `AttackResult.vs`'s own note says so: *"it stays off the wire
+    and out of a replay fixture."*
+
+    Proven rather than assumed: the fixtures verify 8 of 8 byte-identical
+    and `api`/`browser` are unchanged.
+
+    `result` is `Any` deliberately -- it holds an `AttackResult`, which
+    lives in `resolve` and importing it here would be a cycle. The
+    honest alternatives were a `TYPE_CHECKING` import or this; `Any` is
+    what the other carried-object fields in this file use.
+    """
+
+    #: The whole `AttackResult`, so a rider paying out inside the attack
+    #: reads the same answer the roll settled on.
+    result: Any = field(default=None, repr=False, kw_only=True)
+    #: Everybody this one attack is aimed at, for a burst or a blast.
+    among: tuple[int, ...] = field(default=(), repr=False, kw_only=True)
+    #: Which attack line of the row this is.
+    branch: int = field(default=0, repr=False, kw_only=True)
+    #: The named manoeuvre, `""` for an ordinary attack.
+    as_: str = field(default="", repr=False, kw_only=True)
+    #: Was this an opportunity attack.
+    opportunity: bool = field(default=False, repr=False, kw_only=True)
+    #: Was this a charge.
+    charge: bool = field(default=False, repr=False, kw_only=True)
+    #: Who granted the swing, `-1` for nobody.
+    granted_by: int = field(default=-1, repr=False, kw_only=True)
+    #: Which row granted it.
+    granted_via: str = field(default="", repr=False, kw_only=True)
+    #: Was an action point spent on it.
+    action_point: bool = field(default=False, repr=False, kw_only=True)
+    #: Which magic ammunition the shot came from.
+    ammo: str = field(default="", repr=False, kw_only=True)
+    #: The attack context the roll was settled against.
+    ctx: dict[str, Any] = field(default_factory=dict, repr=False,
+                                kw_only=True)
+
+
+@dataclass
 class Event:
     seq: int = field(default=-1, init=False, kw_only=True)
     depth: int = field(default=0, init=False, kw_only=True)
@@ -621,7 +677,7 @@ class PowerResolved(Event):
 
 
 @dataclass
-class AttackDeclared(Decision):
+class AttackDeclared(Swung, Decision):
     attacker: int
     target: int
     power: str
@@ -629,7 +685,7 @@ class AttackDeclared(Decision):
 
 
 @dataclass
-class AttackRolled(Event):
+class AttackRolled(Swung, Event):
     attacker: int
     target: int
     power: str
@@ -642,7 +698,7 @@ class AttackRolled(Event):
 
 
 @dataclass
-class Hit(Decision):
+class Hit(Swung, Decision):
     attacker: int
     target: int
     power: str
@@ -650,7 +706,7 @@ class Hit(Decision):
 
 
 @dataclass
-class Miss(Decision):
+class Miss(Swung, Decision):
     attacker: int
     target: int
     power: str
