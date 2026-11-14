@@ -30692,6 +30692,202 @@ def what_a_creature_can_lift(out: Result) -> None:
     )
 
 
+def the_marshals_two_choices(out: Result) -> None:
+    """One leader feature and a separate archer question, on Camille's ruling.
+
+    All four of the marshal's leader-ish features fired on every dealt
+    marshal -- `#1286`. Two of them print *"this class feature replaces your
+    cf:warlord-marshal-f3 class feature"* and the ref resolved, so a marshal
+    held a feature and both of its stated replacements; one granted heavy
+    shields while another took light shields away.
+
+    Asked on `#1296` whether that is one choice of four or two independent
+    ones, and answered:
+
+        Camille, #1296: "Do A."
+
+    -- *"two separate choices: one leader feature, plus archer yes or no"*.
+    So `chargen.BUILD_OPTIONS` carries three under
+    `cf:warlord-marshal-f3` and `("no", "yes")` under
+    `cf:warlord-marshal-f0`, and each row reads its own answer.
+
+    **Measured against the real dealer, not `audit.board`.** That board
+    fields *both* archer options on purpose -- its job is to let the row
+    under test be used at all -- so exclusivity is not askable on it. The
+    arms below call `chargen._build_options` with a seed, which is the path
+    a dealt character takes.
+
+    The fixed answer matters as much as the draw: `rng=None` gives the
+    original leader and not-an-archer, so `audit.board` and the resolver see
+    a marshal unchanged but for `-f2` no longer doubling up. #1296, #1286.
+    """
+    from random import Random
+
+    from combat_engine import chargen
+
+    FORK = "cf:warlord-marshal-f3"
+    ARCH = "cf:warlord-marshal-f0"
+    _RALLY_ROW = "p10887"
+    THREE = (
+        "cf:warlord-marshal-f3",
+        "cf:warlord-marshal-f1",
+        "cf:warlord-marshal-f2",
+    )
+
+    out.that(
+        chargen.BUILD_OPTIONS.get(FORK) == THREE
+        and chargen.BUILD_OPTIONS.get(ARCH) == ("plain", "archer"),
+        "the three leader features are one fork and the archer is a"
+        " separate choice, which is the shape Camille ruled for",
+        f"leader {chargen.BUILD_OPTIONS.get(FORK)};"
+        f" archer {chargen.BUILD_OPTIONS.get(ARCH)}",
+    )
+    out.that(
+        chargen.deal_build_option(None, FORK) == "cf:warlord-marshal-f3"
+        and chargen.deal_build_option(None, ARCH) == "plain",
+        "and the FIXED answer is the original leader and not an archer, so"
+        " a board with no stream sees a marshal as it always was",
+        f"fixed: {chargen.deal_build_option(None, FORK)!r},"
+        f" {chargen.deal_build_option(None, ARCH)!r}",
+    )
+
+    # ------------------------------------------- exactly one, every seed
+    hand = [*THREE, ARCH]
+    spread: dict[str, int] = {}
+    bad: list[str] = []
+    for seed in range(24):
+        keys = sorted(
+            k for k in chargen._build_options(hand, Random(seed))
+            if "warlord-marshal" in k
+        )
+        leaders = [k for k in keys if k.startswith(f"option:{FORK}:")]
+        archers = [k for k in keys if k.startswith(f"option:{ARCH}:")]
+        if len(leaders) != 1 or len(archers) != 1:
+            bad.append(f"seed {seed}: {keys}")
+        for k in leaders:
+            spread[k.rsplit(":", 1)[-1]] = spread.get(k.rsplit(":", 1)[-1], 0) + 1
+    out.that(
+        not bad,
+        "a dealt marshal records exactly ONE leader feature and exactly one"
+        " archer answer, over 24 seeds",
+        f"seeds that did not: {bad[:3]}",
+    )
+    out.that(
+        len(spread) == 3,
+        "and all three leader features are reachable -- a fork nobody can"
+        " draw the far end of is a default wearing a fork's clothes",
+        f"drawn over 24 seeds: {spread}",
+    )
+
+    # --------------------- one of three acts, each on its own evidence
+    # **Per feature, not a generic "something changed".** The three act on
+    # three different stores -- an `Initiative` component, `Powers.known`,
+    # a `skill:` modifier -- and a count across all of them read `-f1` and
+    # `-f3` as doing nothing. Each arm asks the thing its own card promises.
+    def state(which: str) -> dict[str, object]:
+        from combat_engine.engine.cast import Cast
+        from combat_engine.engine.components import (
+            Build,
+            Initiative,
+            Mods,
+            Powers,
+        )
+        from combat_engine.engine.dsl import REGISTRY
+
+        world, me, _ = _board("cf:warlord-marshal-f3")
+        build = world.get(me, Build)
+        if build is None:
+            return {}
+        build.choices = {
+            c for c in build.choices
+            if not c.startswith(f"option:{FORK}:")
+        } | {f"option:{FORK}:{which}"}
+        known = world.need(me, Powers)
+        for ref in THREE:
+            if ref not in known.known:
+                known.known.append(ref)
+        # **The board has already armed these once**, with its own recorded
+        # options -- all three leader ones, since `audit.board` fields
+        # whatever lets the row under test be used. So `-f1` may already
+        # have forbidden `p10887` before this arm forces a choice, and a
+        # forbid persists. Cleared so the measurement is about what the
+        # bodies do *now*; without it this arm passed three runs and failed
+        # the next two, which is the shape of a harness reading state it
+        # did not set.
+        known.forbidden.discard(_RALLY_ROW)
+        # **`rolled`, not `bonus`.** `Encounter.adjust_initiative` moves a
+        # number the d20 has already produced -- `Initiative.bonus` is read
+        # *before* the roll, which its own docstring says is why this
+        # cannot be a `c.bonus` -- so an arm watching `bonus` sees 0 and
+        # reads as the feature doing nothing.
+        was = getattr(world.get(me, Initiative), "rolled", 0)
+        # **The rows' own bodies, not `dsl.use`.** These are `action=NONE`
+        # traits that `Encounter._arm_traits` runs, and `use` refuses them
+        # -- an earlier version of this arm called it and read "nothing
+        # acts" whichever was chosen, which looks exactly like the fork
+        # failing.
+        for ref in THREE:
+            REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        mods = world.get(me, Mods)
+        carried = {m.what for m in mods.items} if mods else set()
+        return {
+            "initiative": getattr(world.get(me, Initiative), "rolled", 0) - was,
+            # **Not forbidden, rather than granted.** `c.grant_row` returns
+            # None when the ref is already in hand, and `p10887` is a real
+            # level-0 warlord row that `chargen.loadout` deals to every
+            # warlord -- `_RALLY`'s own comment says so. So the observable
+            # difference is the **else** branch: a marshal on another
+            # leader feature is relieved of a row it was only holding
+            # because the chassis dealt it. An arm watching for a grant
+            # read False with the feature chosen and working.
+            "rally": _RALLY_ROW not in known.forbidden,
+            "insight": "skill:insight" in carried,
+        }
+
+    # ------------------------------------------- and the archer clause
+    def archer(taken: str) -> bool:
+        """Does the bow swap land, with that archer answer recorded?"""
+        from combat_engine.engine.cast import Cast
+        from combat_engine.engine.components import Build
+        from combat_engine.engine.dsl import REGISTRY
+
+        world, me, _ = _board("cf:warlord-marshal-f0")
+        build = world.need(me, Build)
+        build.choices = {
+            c for c in build.choices
+            if not c.startswith(f"option:{ARCH}:")
+        } | {f"option:{ARCH}:{taken}"}
+        before = len(list(world.effects.of(me)))
+        REGISTRY[ARCH].body(Cast(world=world, me=me, ref=ARCH))
+        return len(list(world.effects.of(me))) > before
+
+    out.that(
+        archer("archer") and not archer("plain"),
+        "the archer's bow swap lands for a marshal that took it and for no"
+        " other -- laid unconditionally it would hand every warlord a"
+        " Strength-rolled bow",
+        f"archer {archer('archer')}, plain {archer('plain')}",
+    )
+
+    want = {
+        "cf:warlord-marshal-f3": "initiative",
+        "cf:warlord-marshal-f1": "rally",
+        "cf:warlord-marshal-f2": "insight",
+    }
+    for chosen, mine in want.items():
+        got = state(chosen)
+        if not got:
+            out.skip("no Build on this board, so a leader cannot be forced")
+            break
+        others = [v for k, v in want.items() if k != chosen]
+        out.that(
+            got.get(mine) and not any(got.get(o) for o in others),
+            f"with {chosen.rsplit('-', 1)[-1]} chosen, {mine} is what the"
+            " marshal gets and the other two leader features give nothing",
+            f"{chosen.rsplit('-', 1)[-1]}: {got}",
+        )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -87517,6 +87713,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "marshal_forks": (
+        the_marshals_two_choices,
+        "one leader feature and a separate archer choice, per Camille",
     ),
     "lifting": (
         what_a_creature_can_lift,

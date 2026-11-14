@@ -251,11 +251,37 @@ def warlord_senses(c: Cast) -> None:
 
     Hearing is not modelled, so the printed "see and hear" is read as sight.
 
-    It is printed as one of three mutually exclusive leader features and
-    `chargen.BUILDS["warlord"]` has a leg for only one of the three, so
-    there is nothing to gate this on; see `cf:warlord-marshal-f1`.
+    **One of three, chosen by a fork rather than by a leg.** Camille's
+    ruling on `#1296` was *"Do A"* -- two separate choices, one leader
+    feature plus archer yes or no -- so `chargen.BUILD_OPTIONS` carries the
+    three under `cf:warlord-marshal-f3`, the original, and each of them
+    reads the answer. All four used to fire on every dealt marshal, which
+    is `#1286`.
+
+    The leg deliberately no longer decides it: that coupling made the
+    leader feature a consequence of the presence choice, and a mapping for
+    the other five legs would have had to be invented.
+
+    This row's own note used to end *"`chargen.BUILDS["warlord"]` has a leg
+    for only one of the three, so there is nothing to gate this on"*. That
+    was true of the legs and is why the fork exists: it was the one of the
+    three that fired for **every** marshal, on top of whichever other one
+    the leg allowed.
     """
-    for who in c.within(10, side="ally"):
+    if c.chosen_option("cf:warlord-marshal-f3") != "cf:warlord-marshal-f2":
+        return
+    # **`side="team"`, and the warlord was missing its own bonus.** The card
+    # opens *"You and any ally within 10 squares of you"*, and `"ally"`
+    # excludes the caster by design -- `Cast._side`'s own note: *"a card
+    # that means you as well says 'you and each ally', and `team` is that
+    # pool"*. So the `who != c.me` guard below could never fire and the
+    # warlord got nothing from its own feature. `cf:warlord-marshal-f3`
+    # beside it has always been right, by naming `on=c.me` outright.
+    #
+    # The sight test still only applies to somebody else: a creature can
+    # always see itself, and asking `can_see` of the caster is what the
+    # dead guard was for.
+    for who in c.within(10, side="team"):
         if who != c.me and not c.can_see(who):
             continue
         c.bonus("skill:insight", 2, until=When.ENCOUNTER, on=who, kind="untyped")

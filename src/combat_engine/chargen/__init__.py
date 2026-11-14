@@ -4163,6 +4163,49 @@ def given_skills(cls: str, race: str = "") -> frozenset[str]:
 #: dealer to prove themselves on one kind before the other twelve proxies
 #: are switched over, because each switch changes what a character does.
 BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
+    # **The marshal's two independent choices, on Camille's ruling.** Asked
+    # on `#1296` -- three options, of which A was "two separate choices: one
+    # leader feature, plus archer yes or no" -- and answered:
+    #
+    #     Camille, #1296: "Do A."
+    #
+    # The page supports it: `cf:warlord-marshal-f1` and `-f2` each print
+    # *"this class feature replaces your cf:warlord-marshal-f3 class
+    # feature"*, so the three are one choice, while `-f0` never mentions
+    # any of them and takes away armour proficiencies instead -- a second,
+    # independent axis. Camille, earlier on the same thread: *"the original
+    # was combat leader, and splatbooks gave replacement options"*, which
+    # is why `-f3` is first and so is the fixed answer.
+    #
+    # **All four were firing on every dealt marshal**, which is `#1286`: a
+    # marshal held a feature and both of its stated replacements, one of
+    # them granting heavy shields while another took light shields away.
+    #
+    # **Deliberately NOT leg-keyed, and that is the ruling's content.**
+    # `-f1` was gated on `c.build("shielding")` and `-f3` yielded to the
+    # same leg, which made the leader feature a consequence of the presence
+    # choice. "Two separate choices" is the opposite, and a leg mapping
+    # would have had to invent one for each of the other five legs -- the
+    # page prints no such mapping. So the leg decides a presence and this
+    # fork decides a leader, which is what was asked and answered.
+    "cf:warlord-marshal-f3": (
+        "cf:warlord-marshal-f3",
+        "cf:warlord-marshal-f1",
+        "cf:warlord-marshal-f2",
+    ),
+    # The second axis. Plain words rather than refs because the question is
+    # about the row itself, and `"plain"` leads so the fixed answer -- the
+    # resolver's -- leaves a marshal as it is.
+    #
+    # **Named, not `("no", "yes")`, and the row asks `chosen_options`.**
+    # `audit.board` records *both* options for a row it is testing -- its
+    # job is to field whatever lets the row be used at all -- and
+    # `chosen_option` answers the first of the recorded set in sorted
+    # order, which was `"no"`. So the archer clause was silent on the one
+    # board that audits it. Asking whether `"archer"` is **among** the
+    # recorded options is exact on a real character, where exactly one is
+    # recorded, and lets the board pose the clause.
+    "cf:warlord-marshal-f0": ("plain", "archer"),
     # **The three forks that deal TWO.** `OPTION_PICKS` carries the
     # count; these are the sets it draws from. All three print *"you
     # gain two of the following"* and had no entry at all, so the

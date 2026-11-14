@@ -44,6 +44,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    Ability,
     ActionPointSpent,
     ActionType,
     Cast,
@@ -62,7 +63,7 @@ from combat_engine.engine.events import (
     PowerResolved,
     SurgeSpent,
 )
-from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.query import distance_between, holding, team
 
 from .builds import on_leg
 
@@ -870,90 +871,75 @@ def swordmage_aegis_shield_choice(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=MARTIAL,
-    todo=("chargen.armor_proficiency()", "chargen.second_fork()"),
+    dropped=("chargen.armor_proficiency()",),
 )
 def warlord_archer(c: Cast) -> None:
-    """Three clauses and none of them has a subject.
+    """The bow swap lands; the proficiency loss is the one clause left.
 
-    **`chargen.BUILDS` re-aimed to `chargen.second_fork()`, and the paragraph
-    below is why.** It already states that "adding legs does not supply it" --
-    so naming the thing that exists made this row red the moment legs were dealt,
-    against a symbol that was never the hold. What is wanted is a *second fork
-    per class*, which is a different shape from a longer list of legs.
+    **The gate was the hold and Camille settled it.** `#1296` asked whether
+    the marshal's four leader-ish features are one choice of four or two
+    independent ones, and the answer was:
 
-    Two are proficiency, which nothing models in either direction -- the
-    row drops two and adds one.
+        Camille, #1296: "Do A."
 
-    **`c.attacks_with(ability=)` is off the marker and the clause is still
-    not written.** The third sentence rewrites which ability a ranged basic
-    attack rolls, and `c.rolls_with("rba", Ability.STR, when=...)` says
-    exactly that -- `Attack.ability_for` reads the swap *before* the header,
-    `rba`'s body reads `c.attack_mod`, so the attack roll and the damage
-    roll both move, and the `(world, eid)` gate is what "with a bow" wants
-    (`query.holding(world, eid, "bow")`, a printed weapon group). The
-    sentence it refused on -- that the header fixes the ability where no
-    modifier can reach it -- is the problem `rolls_with` was built to
-    solve, so keeping the symbol named a gap that is not one.
+    -- two separate choices: one leader feature, plus archer yes or no. So
+    `chargen.BUILD_OPTIONS` carries `("plain", "archer")` under this row's
+    own ref, independent of the three-way leader fork under
+    `cf:warlord-marshal-f3`. `"plain"` leads, so the fixed answer leaves a
+    marshal exactly as it was and only a drawn character becomes an archer.
 
-    What stops the line being written is the gate, not the mechanism: the
-    swap belongs to whoever *chose* this feature, and laying it here
-    unconditionally would hand every warlord a Strength-rolled bow.
+    **`chosen_options`, plural, and that is not interchangeable with the
+    singular here.** `audit.board` records *both* options for the row it is
+    testing -- fielding whatever lets the row be used is its job -- and
+    `chosen_option` answers the first of the recorded set, so this clause
+    was silent on the one board that audits it. Asking whether `"archer"`
+    is **among** them is exact on a real character, which records exactly
+    one.
 
-    **The choice CAN be recorded, and the `defect=` that said otherwise
-    was reading a substitution fault.** That marker argued the card is
-    conditional on *"the Archer `c8` class feature"* and that
-    `class_feature` holds no non-marshal warlord row, so there was no ref
-    to key a fork on. The first half is the mistake: `c8` **is** this
-    class, and the printed phrase is the name of *this row's own
-    feature* -- the importer substituted the class ref for the second
-    word of it. So the sentence is self-referential, as every one of the
-    four leader features' is, and the ref to gate on is this row.
+    That is what the old `chargen.second_fork()` symbol named, and the row's
+    own note had already worked out where it would live: *"`BUILD_OPTIONS`
+    **is** a second fork per class and needs only a parent ref"*. The parent
+    ref is this row.
 
-    Camille, on the structure: *"the original was combat leader, and
-    splatbooks gave replacement options."* The page bears that out --
-    `cf:warlord-marshal-f3` is the original, and `-f1` and `-f2` each say
-    *"this class feature replaces your `cf:warlord-marshal-f3` class
-    feature"* with the ref resolved. Nothing acts on that, so all four
-    fire on every dealt marshal, which is `#1286`.
+    **The ability swap**, now that it has a subject:
+    `c.rolls_with("rba", Ability.STR, when=...)` is the printed sentence --
+    `Attack.ability_for` reads the swap *before* the header, so the attack
+    roll and the damage roll both move -- and the gate is
+    `query.holding(world, eid, "bow")`, a printed weapon group. The card
+    says *"with a bow"* and names no crossbow, so a crossbow is excluded;
+    the Requirement of the class's own ranged rows is the wider *"bow or
+    crossbow"* and this is not that sentence.
 
-    So this is `todo=` rather than `defect=` -- a facility will close it,
-    which is what makes a symbol right -- and the two symbols are the two
-    the original author named, both measured and both still absent:
+    **Military ranged weapons** are granted through `proficiency=`, which
+    `chargen.proficiency` already reads for weapons -- the half of the
+    armour pair that does work today.
 
-    * `chargen.armor_proficiency()`: `armour_opened` reads a feat's
-      armour **gains** and nothing reads a loss, so *"you lose
-      proficiency with chainmail and light shields"* cannot be said.
-    * `chargen.second_fork()`: the gate. `-f1` is gated on
-      `c.build("shielding")` -- a **leg** -- and `-f2`'s own docstring
-      records that the class's legs are spent on `-f4`'s six presence
-      options, so there is no leg left for a third leader feature or for
-      this one. `BUILD_OPTIONS` is the available second axis and taking
-      it is a design decision that changes every dealt warlord, so it is
-      Camille's rather than mine: `#1286`.
+    **Still dropped: the loss.** *"You lose proficiency with chainmail and
+    light shields."* `chargen.armour_opened` reads a row's `proficiency=`
+    as a set of **gains** and there is no opposite: a `forgoes=` header and
+    a subtraction at the three sites that derive armour. Writing the loss
+    as a negative gain is not available -- `armour_opened` returns a set of
+    category words and a shield ceiling, and both are maxima. `#1296`,
+    `#1287`.
 
-    Refused in play until both land, deliberately -- laying the swap
-    unconditionally would hand every marshal a Strength-rolled bow, which
-    the paragraph above already says. `#1287`.
-
-    The two old symbols each described a shape rather than the hold.
-    `chargen.second_fork()` was right that the class's six legs are spent
-    on `-f4`'s six presence options and that a seventh leg would make this
-    choice exclusive with a presence, which the page does not -- but
-    `chargen.BUILD_OPTIONS` **is** a second fork per class and needs only
-    a parent ref, which is the thing missing. And
-    `chargen.armor_proficiency()` is a real gap -- `armour_opened` reads a
-    feat's armour *gains* and nothing reads a **loss** -- but writing the
-    loss alone would take chainmail off every marshal, so it is not what
-    holds the row.
-
-    `todo=` and not `defect=`, which is the correction: the compendium
-    carries this feature in full -- the proficiency swap and the ability
-    swap are both printed and legible -- so what is absent is a facility
-    and a symbol is the right marker. It is the only class feature at
-    level 10 or below still carrying one, which is why
-    `drivers.scope_boundary` names it rather than counting.
+    `dropped=` and not `todo=`, which is the change the ruling bought: the
+    row **plays** now -- an archer marshal rolls Strength with its bow --
+    and one clause of it is missing, where before the whole row was refused
+    for want of a subject.
     """
-
+    if "archer" not in c.chosen_options("cf:warlord-marshal-f0"):
+        return
+    # **`on=c.me`, and this is the third verb in a day to need it.**
+    # `c.rolls_with` follows `c.target` through `Cast._who`, and a trait
+    # declares `target=NO_TARGET` -- so the bare call returned None before
+    # laying anything and the clause was silent while the row fired.
+    # `c.regain_surge` and `c.grant_action` both did the same thing, for
+    # the same documented reason: the printed lines of those shapes are
+    # about somebody else, and a trait is about its holder.
+    c.rolls_with(
+        "rba", Ability.STR, on=c.me,
+        when=lambda world, eid: holding(world, eid, "bow"),
+    )
 
 def _paying_ally(c: Cast, ev: ActionPointSpent) -> int | None:
     """The ally this feature answers for, or None.

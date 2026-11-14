@@ -50,7 +50,26 @@ from combat_engine.engine import (
     keywords=[Keyword.MARTIAL],
 )
 def warlord_initiative(c: Cast) -> None:
-    if c.build("shielding"):
+    """A +2 power bonus to initiative, for the warlord and its allies.
+
+    **One of three, chosen by a fork rather than by a leg.** Camille's
+    ruling on `#1296` was *"Do A"* -- two separate choices, one leader
+    feature plus archer yes or no -- so `chargen.BUILD_OPTIONS` carries the
+    three under `cf:warlord-marshal-f3`, the original, and each of them
+    reads the answer. All four used to fire on every dealt marshal, which
+    is `#1286`.
+
+    The leg deliberately no longer decides it: that coupling made the
+    leader feature a consequence of the presence choice, and a mapping for
+    the other five legs would have had to be invented.
+
+    This one is the fork's own key as well as one of its options, which is
+    what *"the original ... and splatbooks gave replacement options"*
+    means structurally: it is the default and it is what the other two
+    replace. So it is first in the list, and therefore the fixed answer
+    `audit.board` and the resolver get.
+    """
+    if c.chosen_option("cf:warlord-marshal-f3") != "cf:warlord-marshal-f3":
         return
     c.initiative(2, on=c.me)
     for ally in c.within(10, side="ally"):

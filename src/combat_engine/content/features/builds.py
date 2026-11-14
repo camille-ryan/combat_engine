@@ -268,21 +268,30 @@ def warlord_shield(c: Cast) -> None:
     """One of the three mutually exclusive leader features, and the only one
     whose content is a power rather than prose.
 
+    **One of three, chosen by a fork rather than by a leg.** Camille's
+    ruling on `#1296` was *"Do A"* -- two separate choices, one leader
+    feature plus archer yes or no -- so `chargen.BUILD_OPTIONS` carries the
+    three under `cf:warlord-marshal-f3`, the original, and each of them
+    reads the answer. All four used to fire on every dealt marshal, which
+    is `#1286`.
+
+    The leg deliberately no longer decides it: that coupling made the
+    leader feature a consequence of the presence choice, and a mapping for
+    the other five legs would have had to be invented.
+
     Its other half is proficiency with a shield. The warlord chassis already
     carries one -- `CLASSES["warlord"].shield` is a light shield -- so there
     is nothing for this to grant and nothing is invented; proficiency is not
     a thing the engine models either way.
 
-    No `requires=`: the row runs for every warlord, because enforcing the
-    exclusivity is the half that has to happen on the *other* legs. A
-    warlord that did not take this one loses the row it hands out, which it
-    was only holding because `loadout` deals a class every level 0 row it
-    has.
+    The row still runs for every warlord and still forbids the row it hands
+    out when it was not chosen -- `loadout` deals a class every level 0 row
+    it has, so a marshal on another leader feature is holding `p10887` and
+    has to be relieved of it. `c.forbid` follows `c.target` and a trait has
+    none, so `on=` is what makes that real; without it the row was taken
+    away from nobody.
     """
-    if c.build("shielding"):
+    if c.chosen_option("cf:warlord-marshal-f3") == "cf:warlord-marshal-f1":
         c.grant_row(_RALLY)
     else:
-        # `c.forbid` follows `c.target`, and a trait has none -- without
-        # `on=` this took the row away from nobody, so every warlord kept
-        # it whichever leg it was on and the exclusivity was never real.
         c.forbid(_RALLY, until=When.ENCOUNTER, on=c.me)
