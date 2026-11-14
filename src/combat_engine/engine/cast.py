@@ -18182,6 +18182,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         held: bool = False,
         mine: bool = False,
         on: int | None = None,
+        until: When | None = None,
     ) -> int:
         """Give that creature's weapons a printed range. Returns how many.
 
@@ -18220,6 +18221,21 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         Announced on `WeaponChanged` like its two siblings, and only when it
         changed something, so arming a trait twice says the same thing once.
+
+        **`until=` puts the old range back, which a STANCE needs and the
+        other three writers in this family still do not have.** All four
+        were written for a class feature or a weapon block -- permanent
+        things -- so none took a duration, and `p10744` is the first caller
+        that is neither: *"until the stance ends, you double the normal
+        range and the long range"*. Doubling and then never undoing it
+        leaves the rogue throwing twice as far for the rest of the day.
+
+        Restores exactly what it moved, `c.resist`'s arrangement: the
+        pre-call tuple per weapon ref, so overlapping holds unwind in any
+        order and a weapon the call did not touch is not written at all.
+        `None` is the old behaviour and stays the default -- a permanent
+        change is still permanent, and the three sibling verbs are
+        unchanged. #1291.
         """
         who = self._who(on)
         if who is None or (ranged is None and thrown is None):
@@ -18234,6 +18250,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         # twice and throw the first answer away. #842.
         changed = 0
         out: list[Any] = []
+        before: dict[str, dict[str, Any]] = {}
         for weapon in gear.weapons:
             if not ((group and weapon.group == group)
                     or (ref and weapon.ref == ref)
@@ -18253,8 +18270,32 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                     actor=who, weapon=weapon.ref,
                     field=named, what=f"{want[0]}/{want[1]}",
                 ))
+            if edits:
+                before[weapon.ref] = {
+                    name: getattr(weapon, name) for name in edits
+                }
             out.append(replace(weapon, **edits) if edits else weapon)
         gear.weapons = out
+
+        if until is not None and before:
+
+            def undo() -> None:
+                # Matched by **ref**, not by position: the hand can be
+                # rewritten while the hold runs -- `c.weapon_group` and
+                # `c.gains_property` both `replace` entries -- so an index
+                # would put the old range onto whatever now sits there.
+                held_now = self.world.get(who, Gear)
+                if held_now is None:
+                    return
+                held_now.weapons = [
+                    replace(w, **before[w.ref]) if w.ref in before else w
+                    for w in held_now.weapons
+                ]
+
+            self.world.effects.apply(
+                who, self.me, until, label=f"{self.ref} range",
+                on_end=[undo], by=self.ref,
+            )
         return changed
 
     def weapon_group(

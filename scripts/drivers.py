@@ -84278,7 +84278,80 @@ def the_last_two_pacts_field_their_own_creature(out: Result) -> None:
              " would answer the same one every time and still be legal")
 
 
+def a_stance_doubles_a_thrown_range_and_gives_it_back(out: Result) -> None:
+    """`p10744` doubles both thresholds, per weapon, and undoes it (#1291).
+
+    All four per-character weapon writers were built for a class feature
+    or a weapon block -- permanent things -- so none took a duration.
+    `p10744` is the first caller that is neither, and *"until the stance
+    ends"* is the whole difference: doubling and never undoing it leaves
+    the rogue throwing twice as far for the rest of the day.
+
+    **Both thresholds, and per weapon.** The verb sets one tuple for
+    everything it matches, so a 5/10 dagger and a 10/20 sling would come
+    out identical from a single blanket call -- each is doubled off its
+    own printed numbers instead. That is the assertion a one-weapon board
+    cannot make, so this puts two differently-ranged weapons in the hand.
+    """
+    import audit
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Weapon
+    from combat_engine.engine.dsl import REGISTRY
+
+    def board():  # noqa: ANN202
+        world, me, _ = audit.board("p10744", 1)
+        gear = world.need(me, Gear)
+        gear.weapons = [
+            Weapon(ref="w:dagger", slug="dagger", group="light blade",
+                   damage="1d4", thrown=(5, 10)),
+            Weapon(ref="w:sling", slug="sling", group="sling",
+                   damage="1d6", ranged=(10, 20)),
+            Weapon(ref="w:club", slug="club", group="mace", damage="1d6"),
+        ]
+        gear.stowed = set()
+        return world, me, gear
+
+    world, me, gear = board()
+    REGISTRY["p10744"].body(Cast(world=world, me=me, ref="p10744"))
+    by_ref = {w.ref: w for w in gear.weapons}
+    out.that(by_ref["w:dagger"].thrown == (10, 20),
+             "a 5/10 thrown weapon becomes 10/20 -- BOTH thresholds, which"
+             " is what a single added modifier could not say",
+             f"{by_ref['w:dagger'].thrown}")
+    out.that(by_ref["w:sling"].ranged == (20, 40),
+             "PLANT: and a 10/20 sling becomes 20/40 off ITS own numbers."
+             " One blanket call sets one tuple, so both weapons would come"
+             " out the same and this is the arm that catches it",
+             f"{by_ref['w:sling'].ranged}")
+    out.that(by_ref["w:club"].thrown is None
+             and by_ref["w:club"].ranged is None,
+             "PLANT: and a weapon that is neither thrown nor a sling is"
+             " untouched -- the card names two kinds and a blanket would"
+             " make a club throwable",
+             f"thrown={by_ref['w:club'].thrown} ranged={by_ref['w:club'].ranged}")
+
+    # -- and the stance gives it back --------------------------------------
+    held = [e for e in world.effects.of(me)
+            if (e.label or "").startswith("p10744")]
+    out.that(held, "the stance is a real hold, so there is something to end",
+             f"{[e.label for e in world.effects.of(me)]}")
+    for one in held:
+        world.effects.end(one)
+    after = {w.ref: w for w in world.need(me, Gear).weapons}
+    out.that(after["w:dagger"].thrown == (5, 10)
+             and after["w:sling"].ranged == (10, 20),
+             "PLANT: and when the stance ends both ranges are exactly what"
+             " they were -- a permanent write would leave the rogue"
+             " throwing twice as far all day, which is why `until=` exists",
+             f"dagger={after['w:dagger'].thrown} sling={after['w:sling'].ranged}")
+
+
 DRIVERS = {
+    "thrown_doubled": (
+        a_stance_doubles_a_thrown_range_and_gives_it_back,
+        "`p10744` doubles both thresholds per weapon and the stance gives"
+        " them back (#1291)",
+    ),
     "pact_creatures": (
         the_last_two_pacts_field_their_own_creature,
         "each of `p13649`'s nine pact options fields its own creature, and"

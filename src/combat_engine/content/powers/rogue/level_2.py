@@ -389,11 +389,54 @@ def p4475(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[*MARTIAL, Keyword.STANCE],
-    todo=("c.bonus(multiply=)",),
 )
 def p10744(c: Cast) -> None:
-    """The whole printed Effect is a **doubling**, and the `"range"` modifier
-    `dsl._stretched` and `resolve._long_range` both read is a number that is
-    added. Doubling a 5/10 weapon means +5 to one threshold and +10 to the
-    other, which one addend cannot be, and the weapon the stance applies to
-    is not known when the stance is taken."""
+    """*"Until the stance ends, whenever you make a ranged attack with a
+    thrown weapon or a sling, you double the normal range and the long
+    range."*
+
+    **The old marker named a multiplier and the gap was a duration.** It
+    said the `"range"` modifier is an addend and that doubling a 5/10
+    weapon means +5 to one threshold and +10 to the other, "which one
+    addend cannot be" -- true, and `c.weapon_range` does not add, it
+    **sets**, onto the character's own copies of its weapons. So the
+    doubling is arithmetic this row can do per weapon, exactly as
+    `cf:ranger-hunter-f17` adds 10 to a bow.
+
+    What was really missing is that this is a **stance**: all four weapon
+    writers were built for permanent things and none took `until=`, so
+    doubling and never undoing it would leave the rogue throwing twice as
+    far for the rest of the day. `c.weapon_range(until=)` is that, and
+    `#1291` carries it.
+
+    Per weapon rather than one blanket call, because the verb sets **one**
+    tuple for everything it matches -- a 5/10 dagger and a 10/20 sling
+    would come out the same -- so each is doubled off its own printed
+    numbers.
+
+    *"A thrown weapon or a sling"* is two tests, not one: `Weapon.thrown`
+    is the printed thrown pair and a sling is a **group** whose range is
+    `ranged`. Reading one and not the other would silently cover half the
+    card, which is the shape `#843`'s note on keeping `thrown` and `ranged`
+    separate is about.
+
+    The weapons are the ones in hand when the stance is taken. A weapon
+    drawn later is not doubled -- narrower than the printed "whenever",
+    and the safe direction: `m5808a0`'s rule is that a row stronger than
+    its line is worse than an absent one."""
+    from combat_engine.engine.components import Gear as _Gear
+
+    gear = c.world.get(c.me, _Gear)
+    if gear is None:
+        return
+    for weapon in list(gear.weapons):
+        if weapon.thrown:
+            c.weapon_range(
+                ref=weapon.ref, on=c.me, until=When.STANCE,
+                thrown=(weapon.thrown[0] * 2, weapon.thrown[1] * 2),
+            )
+        if weapon.group == "sling" and weapon.ranged:
+            c.weapon_range(
+                ref=weapon.ref, on=c.me, until=When.STANCE,
+                ranged=(weapon.ranged[0] * 2, weapon.ranged[1] * 2),
+            )
