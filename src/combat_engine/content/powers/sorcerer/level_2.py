@@ -394,14 +394,25 @@ def _sorcerer_attack(world: World, me: int, ev: PowerUsed) -> bool:
     """"You use a sorcerer power that works differently depending on whether
     the attack roll is odd or even."
 
-    The widest predicate that is true whenever the printed one is. Nothing
-    on a `Power` records that its body reads `AttackResult.parity`, so the
-    narrowing cannot be asked -- see the marker.
+    **The printed narrowing, asked rather than widened.** This used to
+    return true for every sorcerer attack power, because nothing on a
+    `Power` recorded that its outcome turns on parity -- so `p5845` was
+    offered on cards where the choice changes nothing and spent an
+    encounter power for it. `Power.reads_parity` is that record. `#1302`.
+
+    Still gated on `cls` as well, and not only on the flag: the printed
+    trigger says a *sorcerer* power, and a row of some other class could
+    grow the flag.
     """
     if ev.actor != me:
         return False
     p = get(ev.power)
-    return p is not None and p.cls == "sorcerer" and p.attack is not None
+    return (
+        p is not None
+        and p.cls == "sorcerer"
+        and p.attack is not None
+        and p.reads_parity
+    )
 
 
 @power(
@@ -415,8 +426,11 @@ def _sorcerer_attack(world: World, me: int, ev: PowerUsed) -> bool:
     keywords=[Keyword.ARCANE],
     trigger="you use a sorcerer power that works differently depending on "
     "whether the attack roll is odd or even",
-    on=Trigger(PowerUsed, _sorcerer_attack, "you use a sorcerer attack power"),
-    dropped=("dsl.Power.reads_parity",),
+    on=Trigger(
+        PowerUsed, _sorcerer_attack,
+        "you use a sorcerer attack power whose outcome turns on the roll's"
+        " parity",
+    ),
 )
 def p5845(c: Cast) -> None:
     """`PowerUsed` is announced above the body, which is the one window where

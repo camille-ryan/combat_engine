@@ -42,7 +42,7 @@ from combat_engine.engine import (
 from combat_engine.engine.events import MoveEnd
 from combat_engine.engine.query import distance_between
 
-from . import has_familiar
+from . import has_familiar, wild_even
 from .knives import dagger
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -247,21 +247,31 @@ def p3771(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.POISON],
     attack=Attack(CHA, vs=FORT),
+    reads_parity=True,
 )
 def p5279(c: Cast) -> None:
     """The hold is `until=When.SAVE_ENDS` **on the target**, so the target's
-    own saving throw is what takes the watch away with it."""
+    own saving throw is what takes the watch away with it.
+
+    **The Wild Magic clause widens the reach rather than adding a second
+    one**, which is the thing to get right here: the base sentence is *"any
+    enemy that starts its turn **adjacent** to the target"* and the even-roll
+    one is the same sentence at *"within 2 squares"*. Two watchers would
+    deal the damage twice to an adjacent enemy. So it is one watcher and one
+    radius, chosen before it is armed. See `wild_even`. `#1303`."""
     victim = c.target
-    if c.strike():
+    shot = c.strike()
+    if shot:
         c.damage("2d10", c.cha_mod, dtype=DamageType.POISON)
     if victim is None:
         return
     c.slide(c.cha_mod)
+    reach = 2 if wild_even(c, shot) else 1
 
     def reeks(ev: TurnStart) -> None:
         if ev.ghost or ev.actor == victim or ev.actor not in c.enemies():
             return
-        if distance_between(c.world, ev.actor, victim) <= 1:
+        if distance_between(c.world, ev.actor, victim) <= reach:
             c.damage("1d10", dtype=DamageType.POISON, on=ev.actor)
 
     c.watch(

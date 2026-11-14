@@ -52,6 +52,7 @@ from combat_engine.engine import (
     power,
 )
 
+from . import wild_even
 from .ground import beside
 from .knives import dagger
 
@@ -180,11 +181,24 @@ def p12466(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[*ARCANE_IMPLEMENT, Keyword.RADIANT, Keyword.ACID],
     attack=Attack(CHA, vs=REF),
+    reads_parity=True,
 )
 def p12467(c: Cast) -> None:
-    """The damage type is read off the die that was just rolled, which is
-    `AttackResult.natural` -- and it decides the Miss line too, so the roll
-    is kept rather than the hit alone.
+    """The damage type is read off the parity of the roll just made -- and it
+    decides the Miss line too, so the roll is kept rather than the hit alone.
+
+    **`reads_parity=True`, and this is the one row where the clause is
+    unconditional.** The other eight sorcerer rows printing a parity clause
+    gate it on the Wild Magic build or on an active familiar; this one
+    simply reads the roll, so it qualifies for `p5845` on every character
+    that holds it. `#1302`.
+
+    The claim that *"nothing in the engine is a familiar"* below is wrong
+    and is corrected rather than deleted: `query.familiar_active` and this
+    package's `has_familiar` both exist, and `p12470` beside it is written
+    against them now. What this row's Active Familiar rider waits on is
+    narrower -- 5 extra damage next to the familiar -- and it is still
+    unwritten here.
 
     The Active Familiar rider -- 5 extra damage next to the familiar -- is
     dropped: nothing in the engine is a familiar.
@@ -384,13 +398,26 @@ def p3035(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(CHA, vs=WILL),
+    reads_parity=True,
 )
 def p3162(c: Cast) -> None:
-    """The Wild Magic clause -- a slide instead of the push on an even roll
-    -- is dropped with the fork."""
-    if c.strike():
+    """The Wild Magic clause lands now: a slide by Dexterity **instead of**
+    the push, on an even roll.
+
+    It was dropped "with the fork", on the premise that the build was not
+    dealt. It is -- `chargen.BUILDS["sorcerer"]`'s first leg is `wild`, and
+    the missing thing was the class-feature row rather than the build. See
+    `wild_even`. `#1303`.
+
+    "Instead of pushing it" is an either/or and not an extra square, so the
+    push is in the else rather than both running."""
+    shot = c.strike()
+    if shot:
         c.damage("1d8", c.cha_mod, dtype=DamageType.PSYCHIC)
-        c.push(1)
+        if wild_even(c, shot):
+            c.slide(c.dex_mod)
+        else:
+            c.push(1)
 
 
 @power(

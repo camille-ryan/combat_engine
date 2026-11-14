@@ -1585,6 +1585,27 @@ class Power:
     #: powers of which only one may be used per fight, and `uses` alone is
     #: per row and cannot say so.
     group: str = ""
+    #: **Does this row's outcome turn on whether the attack roll was odd
+    #: or even?**
+    #:
+    #: `p5845` is the only reader and the only reason this exists: *"you
+    #: use a c128 power that works differently depending on whether the
+    #: attack roll is odd or even"*. Its predicate could not ask the
+    #: narrow question and so fired on **every** sorcerer attack power,
+    #: spending an encounter power on cards where the choice changes
+    #: nothing.
+    #:
+    #: Declared, not derived from whether the body mentions
+    #: `AttackResult.parity`: the header is data, and a source scan would
+    #: make a trigger depend on how a row happens to be written.
+    #:
+    #: **Set only where the clause actually fires.** Nine sorcerer rows
+    #: print one, in three shapes -- seven gated on the Wild Magic build,
+    #: one on an active familiar, one unconditional -- and flagging a row
+    #: whose clause is still dropped would offer `p5845` a choice that
+    #: changes nothing, which is the bug it is meant to fix rather than a
+    #: smaller version of it. #1302, #1303.
+    reads_parity: bool = False
     #: Set on the few rows whose printed text says they do not provoke,
     #: despite being ranged or area.
     no_provoke: bool = False
@@ -2243,6 +2264,9 @@ def power(
     #: all nine rows printing either line are augmentable, so leaving this
     #: off is a declaration about every form. #1298.
     basic_at: tuple[int, ...] = (),
+    #: Does the row's outcome turn on the roll's parity? See
+    #: `Power.reads_parity` -- `p5845` is the only reader. #1302.
+    reads_parity: bool = False,
     requires_alt: Callable[[World, int], bool] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
@@ -2499,6 +2523,7 @@ def power(
         basic=basic,
             instead_of_basic=instead_of_basic,
             basic_at=tuple(basic_at),
+            reads_parity=reads_parity,
             requires_alt=requires_alt,
             trigger=trigger,
             on=on,

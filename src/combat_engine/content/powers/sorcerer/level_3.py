@@ -38,6 +38,7 @@ from combat_engine.engine import (
     spread,
 )
 
+from . import wild_even
 from .ground import ringing
 from .knives import dagger
 
@@ -214,12 +215,30 @@ def p3013(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE],
     attack=Attack(CHA, vs=REF),
+    reads_parity=True,
 )
 def p3163(c: Cast) -> None:
-    """The Wild Magic clause -- stripping resistances on an even roll --
-    goes with the fork."""
-    if c.strike():
+    """The Wild Magic clause lands now: the target loses **all** resistances
+    until the end of your next turn, on an even roll.
+
+    Written as `c.resistances()` read back and each one negated with
+    `c.resist`, which is `p8240`'s idiom for the single-type version of the
+    same sentence -- its docstring names *"the target loses that
+    resistance"* as why `c.resistances` exists. There is no "strip
+    everything" verb and this is two lines, so one is not invented for it.
+
+    **Read at the moment of the hit**, which is the limit worth stating: a
+    resistance laid *after* this lands is not stripped. That is what the
+    printed sentence says literally -- it takes away what the target has --
+    and the alternative is a standing waiver, which is a different
+    mechanic. See `wild_even`. `#1303`."""
+    shot = c.strike()
+    if shot:
         c.damage("2d8", c.cha_mod, dtype=DamageType.FORCE)
+        if wild_even(c, shot):
+            for kind, amount in c.resistances().items():
+                if amount > 0:
+                    c.resist(-amount, kind, on=c.target, until=When.EONT)
 
 
 @power(
@@ -335,9 +354,15 @@ def p5270(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE],
     attack=Attack(CHA, vs=FORT),
+    reads_parity=True,
 )
 def p5271(c: Cast) -> None:
-    """The Wild Magic slide goes with the fork."""
-    if c.strike():
+    """The Wild Magic slide lands now -- by Dexterity, on an even roll, and
+    **as well as** the immobilisation rather than instead of it: the clause
+    adds a sentence where `p3162`'s replaces one. See `wild_even`. `#1303`."""
+    shot = c.strike()
+    if shot:
         c.damage("1d8", c.cha_mod, dtype=DamageType.FORCE)
         c.immobilized()
+        if wild_even(c, shot):
+            c.slide(c.dex_mod)

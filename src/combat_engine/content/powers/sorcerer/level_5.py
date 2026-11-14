@@ -52,6 +52,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.triggers import Trigger
 
+from . import has_familiar
 from .knives import dagger
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -72,9 +73,48 @@ _element: list[DamageType | None] = [None]
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE],
     attack=Attack(CHA, vs=REF),
+    reads_parity=True,
 )
 def p12470(c: Cast) -> None:
-    if c.strike():
+    """The Active Familiar clause lands, and the row had **no docstring and
+    no marker** while dropping it.
+
+    *"If you rolled an even number on the attack roll, you do not expend
+    this power if you choose to deal no damage."* Three conditions and a
+    choice, and the premise that blocked it was false: a sibling's note
+    says *"nothing in the engine is a familiar"*, but
+    `query.familiar_active` and this package's own `has_familiar` both
+    exist and answer exactly the printed requirement.
+
+    **Not `wild_even`**, which is the trap this row sits next to: the gate
+    here is the *familiar*, not the Wild Magic build, and the two clauses
+    look identical on the page. Reusing that helper would have made the
+    clause fire for a wild sorcerer with no familiar and not for a familiar
+    sorcerer on another leg -- both wrong, and silently.
+
+    The choice is offered before the damage, because taking it is what
+    keeps the power unexpended. `c.restore_use` and not `Powers.unuse`:
+    only the first is reachable from a body, and on a **daily** the two are
+    the same anyway -- one use to give back, so clearing it and decrementing
+    it land in the same place. A row with two uses would want the other.
+
+    `[False, True]` in that order, which is the tree's idiom for a yes/no
+    and is load-bearing here: a headless run takes the first, so the
+    default is to deal the damage. Keeping a daily by forgoing its damage
+    is a judgement a policy should make, not a freebie the engine takes.
+
+    The immobilisation lands either way: the Hit and the Miss line both
+    print it, and the Effect does not depend on the damage. `#1303`."""
+    shot = c.strike()
+    spare = (
+        has_familiar(c.world, c.me)
+        and shot is not None
+        and shot.parity == "even"
+        and c.choose([False, True], f"{c.ref}: deal no damage and keep it")
+    )
+    if spare:
+        c.restore_use(c.ref)
+    elif shot:
         c.damage("2d10", c.cha_mod, dtype=DamageType.FORCE)
     else:
         c.half_damage("2d10", c.cha_mod, dtype=DamageType.FORCE)

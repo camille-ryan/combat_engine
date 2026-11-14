@@ -49,6 +49,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import DamageRolled
 
+from . import wild_even
 from .ground import ringing
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -147,12 +148,55 @@ def p5259(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(CHA, vs=WILL),
+    reads_parity=True,
 )
 def p5260(c: Cast) -> None:
-    """The whole secondary chain is the Wild Magic clause and goes with the
-    fork; the primary is what every sorcerer gets."""
-    if c.strike():
-        c.damage("1d10", c.cha_mod, dtype=DamageType.PSYCHIC)
+    """The Wild Magic chain lands now: an even primary roll buys a secondary
+    attack, and an even secondary roll buys another, and so on.
+
+    **Three printed restrictions, all three asked.** The secondary is aimed
+    within 5 squares of *"the target last hit by this power"*, which is why
+    `hit` is tracked rather than reusing `c.target`; *"you can attack a
+    creature only once with a single use of this power"* is the `seen` set,
+    and it is what makes the chain terminate rather than a repeat count;
+    and the chain continues only while the roll keeps coming up even.
+
+    The secondary is its own attack line -- Charisma vs. Will again, but a
+    flat 1d6 with no ability modifier -- so its bonus is asked of that line
+    rather than reassembled by hand.
+
+    `seen` also bounds the loop against the pathological case the printed
+    rule leaves open: a creature may be attacked once, so the chain cannot
+    outlast the board. See `wild_even`. `#1303`."""
+    shot = c.strike()
+    if not shot:
+        return
+    c.damage("1d10", c.cha_mod, dtype=DamageType.PSYCHIC)
+    if not wild_even(c, shot):
+        return
+    hit = c.target
+    seen = {c.me}
+    if hit is not None:
+        seen.add(hit)
+    line = Attack(CHA, vs=WILL)
+    bonus = line.bonus_for(c.world, c.me, c.ref, c.branch)
+    while hit is not None:
+        nearby = [
+            foe for foe in c.within(5, of=hit, side="enemy")
+            if foe not in seen
+        ]
+        if not nearby:
+            return
+        victim = c.choose(nearby, f"{c.ref}: who the chain jumps to")
+        if victim is None:
+            return
+        seen.add(victim)
+        again = c.attack(bonus, WILL, on=victim)
+        if again.hit:
+            c.damage("1d6", dtype=DamageType.PSYCHIC, on=victim)
+            hit = victim
+        if not wild_even(c, again):
+            return
 
 
 @power(
@@ -185,13 +229,23 @@ def p5261(c: Cast) -> None:
     target=UpTo(2),
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(CHA, vs=WILL),
+    reads_parity=True,
 )
 def p5262(c: Cast) -> None:
-    """The Wild Magic clause -- a slide instead of the push -- goes with the
-    fork."""
-    if c.strike():
+    """The Wild Magic clause lands now: a slide **instead of** the push, on
+    an even roll.
+
+    The distance is unchanged -- the card says "you slide the target
+    instead of pushing it" and names no new number, so it is the same
+    Dexterity modifier either way, which `p3162`'s version of the sentence
+    does not do. See `wild_even`. `#1303`."""
+    shot = c.strike()
+    if shot:
         c.damage("1d10", c.cha_mod, dtype=DamageType.PSYCHIC)
-        c.push(c.dex_mod)
+        if wild_even(c, shot):
+            c.slide(c.dex_mod)
+        else:
+            c.push(c.dex_mod)
 
 
 @power(
@@ -221,14 +275,32 @@ def p5263(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.RADIANT],
     attack=Attack(CHA, vs=WILL),
+    reads_parity=True,
 )
 def p5264(c: Cast) -> None:
-    """The Wild Magic clause -- a save-ends penalty to attacks against you
-    -- goes with the fork."""
-    if c.strike():
+    """The Wild Magic clause lands now: a save-ends penalty to the target's
+    attacks **against you**, equal to your Dexterity modifier.
+
+    Gated on the attack context's `target` rather than laid flat, so it is
+    the printed narrowing and not a penalty to everything the creature
+    swings at -- the same shape `p13780` uses for the same sentence.
+
+    **On an even roll whether the attack hit or not.** The clause is
+    printed between the Hit and the Miss line, and it is about the roll
+    rather than about the hit: nothing in it depends on damage landing.
+    That is why `wild_even` asks nothing about hitting. See its note.
+    `#1303`."""
+    me = c.me
+    shot = c.strike()
+    if shot:
         c.damage("6d6", c.cha_mod, dtype=DamageType.RADIANT)
     else:
         c.half_damage("6d6", c.cha_mod, dtype=DamageType.RADIANT)
+    if wild_even(c, shot):
+        c.penalty(
+            "attack", c.dex_mod, on=c.target, until=When.SAVE_ENDS,
+            when=lambda ctx: ctx.get("target") == me,
+        )
 
 
 @power(

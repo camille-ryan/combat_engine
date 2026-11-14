@@ -30043,6 +30043,156 @@ def concealment_denied_without_cover(out: Result) -> None:
         )
 
 
+def the_wild_magic_clause(out: Result) -> None:
+    """"If you rolled an even number on the attack roll, ..."
+
+    Nine sorcerer rows print a parity clause. **Eight implemented none of
+    it and none of the eight carried a marker**, so they reported finished;
+    two said in prose that the clause "goes with the fork", meaning the
+    build was not dealt.
+
+    That premise was false. `cf:sorcerer-f0s3` is indeed absent from the
+    tree, but `chargen.BUILDS["sorcerer"]`'s first leg is named `wild`, so
+    `c.build("wild")` has always answered the gate -- a missing
+    class-feature row read as a missing build.
+
+    Three arms carry the weight:
+
+    * the clause fires on an even roll for a **wild** sorcerer and not for
+      another leg, which is the gate;
+    * `p5845`'s declaration carries into it -- an **odd** die declared even
+      still fires the clause, because `wild_even` reads
+      `AttackResult.parity` and not `natural % 2`. That is the integration
+      a per-row `% 2` would silently break;
+    * `p5845`'s own trigger no longer fires on an ordinary sorcerer attack,
+      which is what it did for every one of them before `Power.reads_parity`
+      existed.
+
+    #1302, #1303.
+    """
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.events import PowerUsed
+
+    WILD = ["p3162", "p3163", "p5260", "p5262", "p5264", "p5271", "p5279"]
+
+    world, caster, _ = _board("p5845")
+
+    # ----------------------------------------------- the flag's population
+    flagged = sorted(
+        ref for ref, row in REGISTRY.items()
+        if getattr(row, "reads_parity", False)
+    )
+    out.that(
+        flagged == sorted([*WILD, "p12467", "p12470"]),
+        "exactly the nine rows whose outcome turns on the roll's parity"
+        " carry the flag, and they are the whole printed population",
+        f"flagged {flagged}",
+    )
+    out.that(
+        all((row := get(ref)) is not None and row.cls == "sorcerer"
+            for ref in flagged),
+        "and all nine are sorcerer rows, which is what p5845's printed"
+        " trigger names",
+        f"classes {[getattr(get(r), 'cls', '?') for r in flagged]}",
+    )
+
+    # -------------------------------------------- p5845's trigger narrows
+    predicate = None
+    row = get("p5845")
+    triggers = row.on if isinstance(row.on, (list, tuple)) else [row.on]
+    for trig in triggers:
+        if trig is not None and getattr(trig, "event", None) is PowerUsed:
+            predicate = trig.when
+    if predicate is None:
+        out.skip("p5845 declares no PowerUsed trigger to ask")
+    else:
+        flagged_fires = predicate(
+            world, caster, PowerUsed(actor=caster, power="p3162", targets=()))
+        plain = next(
+            (ref for ref, r in REGISTRY.items()
+             if getattr(r, "cls", "") == "sorcerer" and r.attack is not None
+             and not getattr(r, "reads_parity", False)),
+            None,
+        )
+        plain_fires = plain is not None and predicate(
+            world, caster, PowerUsed(actor=caster, power=plain, targets=()))
+        out.that(
+            flagged_fires and not plain_fires,
+            "p5845 is offered on a row whose outcome turns on parity and"
+            " NOT on an ordinary sorcerer attack, which is what it did for"
+            " every one of them before",
+            f"on p3162 {flagged_fires}; on {plain} {plain_fires}",
+        )
+
+    # ------------------------------------------------------- the gate
+    def shoved(leg: str, parity: str) -> list[str]:
+        """How p3162 moves its target, for a sorcerer forced onto `leg`.
+
+        **`ForcedMove.how` and not a square count**, which is the whole
+        point: the printed clause is a slide *instead of* a push, so both
+        branches move the creature and only the KIND differs. Counting
+        squares would pass against a row that pushed by Dexterity.
+        """
+        from combat_engine.engine.cast import Cast
+        from combat_engine.engine.dsl import use
+        from combat_engine.engine.events import ForcedMove
+        from combat_engine.engine.query import enemies
+
+        w, me, _ = _board("p3162")
+        c = Cast(world=w, me=me, ref="drivers:wild")
+        # **`instead_of=`, which is the whole of this control.** The board
+        # deals this sorcerer the `wild` leg, so a bare `set_build("dragon")`
+        # ADDS a leg and leaves `wild` answering True -- the first draft of
+        # the non-wild arm read `['slide']` and looked like the gate being
+        # ignored. `on_build` is documented as choices plus what was laid
+        # minus what was displaced, and the displacement is what is wanted.
+        #
+        # Only for the control leg: `set_build("wild", instead_of="wild")`
+        # displaces and re-adds the same word, and the even arm then read
+        # `['push']` -- a second wrong answer from fixing the first one.
+        if leg != "wild":
+            c.set_build(leg, instead_of="wild")
+        c.treat_roll_as(parity)
+        how: list[str] = []
+        w.bus.on(ForcedMove, lambda ev: how.append(str(ev.how)))
+        foes = enemies(w, me)
+        use(w, me, "p3162", targets=foes[:1])
+        return how
+
+    on_even = shoved("wild", "even")
+    on_odd = shoved("wild", "odd")
+    other_leg = shoved("dragon", "even")
+    # **"push" not in the even list is the load-bearing half**, and the
+    # first version of this arm left it out: a plant that pushed *and then*
+    # slid satisfied every clause it did assert. The printed word is
+    # "instead of", so exactly one shove happens.
+    out.that(
+        on_even == ["slide"] and on_odd == ["push"],
+        "p3162 SLIDES on an even roll for a wild sorcerer and PUSHES on an"
+        " odd one -- exactly one shove either way, because the clause"
+        ' replaces the push rather than adding to it',
+        f"even {on_even}, odd {on_odd}",
+    )
+    out.that(
+        "slide" not in other_leg and "push" in other_leg,
+        "and a sorcerer on another leg pushes however the die lands -- the"
+        " clause is the build's, not the card's",
+        f"dragon leg, even roll: {other_leg}",
+    )
+
+    # **The declaration carries**, which is the integration worth a rule of
+    # its own: `c.treat_roll_as` is what `p5845` calls, so the clause has to
+    # read `AttackResult.parity` rather than the die. Both arms above force
+    # the parity against an unknown die, so a per-row `natural % 2` would
+    # have made them flap rather than fail -- this one says why they do not.
+    out.that(
+        "slide" in on_even,
+        "and the parity here is DECLARED, not rolled, so p5845 reaches the"
+        " clause -- a per-row `natural % 2` could not be steered",
+        f"declared even gave {on_even}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -86868,6 +87018,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "wild_magic": (
+        the_wild_magic_clause,
+        "the sorcerer's even-roll clause, its gate and its declaration",
     ),
     "no_concealment": (
         concealment_denied_without_cover,
