@@ -7,6 +7,8 @@ Things a creature spends, and the budget it spends them from.
 
 ## surges and hit points
 
+- `c.dailies_per_day(self, count: 'int', *, cls: 'str' = '', on: 'int | None' = None) -> 'int'`
+  - "Each day you can use only one bard attack power." Returns the
 - `c.death_save_failure(self, *, on: 'int | None' = None) -> 'int'`
   - Charge a failed death save as a price. Returns the new count.
 - `c.regain_surge(self, count: 'int' = 1, *, on: 'int | None' = None) -> 'int'`

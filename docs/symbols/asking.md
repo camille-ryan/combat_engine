@@ -98,6 +98,10 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - (no docstring)
 - `c.dex_mod`
   - (no docstring)
+- `c.gains_proficiency(self, *refs: 'str', on: 'int | None' = None) -> 'int'`
+  - "If you are not already proficient with these weapons, you gain
+- `c.improvised(self, *, one_handed: 'str' = '', two_handed: 'str' = '', proficiency: 'int' = 0, except_group: 'str' = '', on: 'int | None' = None) -> 'int'`
+  - "You treat all weapons you are not proficient with as improvised."
 - `c.int_`
   - (no docstring)
 - `c.int_mod`
@@ -112,6 +116,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - The modifier of `c.primary`. What the printed phrase means.
 - `c.score(self, a: 'Ability') -> 'int'`
   - The raw ability score -- 15, 18 -- not its modifier or bonus.
+- `c.shares_magic(self, weapon: 'Weapon', *, from_: 'Weapon', on: 'int | None' = None) -> 'bool'`
+  - "Your `cf:warlock-hexblade-f3` shares your implement's bonus,
 - `c.stats`
   - `self.me`'s abilities. **Assumes `me` is a creature**, and that
 - `c.str_`

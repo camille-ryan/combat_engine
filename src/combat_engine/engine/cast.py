@@ -17499,7 +17499,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
     def shares_magic(
         self, weapon: Weapon, *, from_: Weapon, on: int | None = None,
     ) -> bool:
-        """"Your pact weapon shares your implement's enhancement bonus,
+        """"Your `cf:warlock-hexblade-f3` shares your implement's bonus,
         critical hit effect, properties, and powers."
 
         `cf:warlock-hexblade-f3`, which carried `c.shares_enhancement()` --
@@ -17526,7 +17526,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
           weapon, which naming the item is exactly what says.
 
         The **properties** are the one genuinely separate field, unioned
-        rather than replaced: the pact weapon keeps its own printed grip
+        rather than replaced: the weapon keeps its own printed grip
         and reach and gains the implement's.
 
         **In place, which is the same argument `c.weapon_dice` makes.**

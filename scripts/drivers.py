@@ -14460,6 +14460,45 @@ def paragon_gains_and_swaps(out: Result) -> None:
              f"recorded {came2}, level"
              f" {REGISTRY[got2].level if REGISTRY.get(got2) else '?'}")
 
+    # **A level-0 trade still works, which the level-0 floor broke.**
+    # The floor belongs to the ceiling branch and the first version put
+    # it on both: `f2443` and `f2445` print *"of the same level"* and
+    # carry `Swap(level=0)` because their cards state no floor, so
+    # `row.level == want` with `want == 0` is a legitimate trade. With
+    # the floor on both branches the offer came back empty, the outgoing
+    # card was correctly put back, nothing was recorded, and each body
+    # found no option to grant -- both rows went **SILENT** having fired
+    # at the previous wide sweep.
+    #
+    # Nothing in this rule saw it. `audited.json`'s per-ref list did,
+    # which is the thing a count against zero cannot do: two rows
+    # breaking while five healed reads as an improvement on the
+    # headline. Asserted here so the next edit to that filter reds in
+    # seconds rather than in a 25-minute sweep.
+    for ref in ("f2443", "f2445"):
+        if ref not in REGISTRY or REGISTRY[ref].swap is None:
+            out.skip(f"{ref} declares no `swap=`")
+            continue
+        trade = REGISTRY[ref].swap
+        out.that(trade.level == 0,
+                 f"{ref} trades at a level-0 FLOOR -- its card states"
+                 " none, so 0 is that rather than a guess",
+                 f"level={trade.level}")
+    rec3: set[str] = set()
+    zero = [r for r, row in REGISTRY.items()
+            if row.cls == "wizard" and row.level == 0
+            and row.attack is None and not row.unfinished][:2]
+    if len(zero) < 2:
+        out.skip("no pair of level-0 wizard utilities to trade")
+    else:
+        chargen.power_swap([zero[0], "f2443"], ["f2443"], cls="wizard",
+                           level=1, record=rec3)
+        out.that(any(r.startswith("option:f2443:") for r in rec3),
+                 "and a level-0 utility really is traded for another --"
+                 " the same-level branch must NOT carry the ceiling"
+                 " branch's level-0 floor",
+                 f"recorded {sorted(rec3)}")
+
 
 def pull_what_you_hold(out: Result) -> None:
     """Dragging a grabbed creature is a **granted action**, not a flag on
@@ -46639,18 +46678,24 @@ def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
     # written"*, which is this gate doing exactly its job. It learned:
     # `call_companion` had no `associate` arm where `c.summon` has had one
     # since `#459`, and adding it is the whole fix.
-    out.that(companions == ["cf:druid-sentinel-f9s0",
-                            "cf:druid-sentinel-f9s2"],
-             "only `-f9`'s two still wait on the companion -- the three "
-             "`-f1` options are written. Those two are printed at 13th "
-             "level, above what this project imports, and each has a half "
-             "that plays, which is why they are `dropped=` rather than "
-             "`todo=`",
+    # **Nothing waits on it now, and the two that did were stale on
+    # their own premise rather than wrong about the engine.** This
+    # required exactly `-f9s0` and `-f9s2`, with the reason *"those two
+    # are printed at 13th level, above what this project imports"* --
+    # which is true of their LEVEL and says nothing about the clause.
+    # Each needed the companion to be on the board, `-f1s0` puts it
+    # there, and `c.companion()` finds it. `#1276`.
+    #
+    # Kept as an exact-set assertion rather than deleted: the symbol
+    # `chargen.companion_from_option()` still names something that does
+    # not exist -- chargen cannot deal a companion off a `BUILD_OPTIONS`
+    # answer -- so a row legitimately wanting it would land here and
+    # this reds rather than passing in silence.
+    out.that(companions == [],
+             "NOTHING waits on the companion symbol -- the three `-f1` "
+             "options put a beast on the board and the two `-f9` rows "
+             "that waited for one read it with `c.companion()`",
              f"{companions}")
-    out.that(all(not REGISTRY[r].todo for r in companions),
-             "and both are `dropped=` rather than `todo=`, which is what "
-             "tells a reader the rest of each row plays",
-             f"{ {r: bool(REGISTRY[r].todo) for r in companions} }")
     world, me, _ = _posed("cf:druid-sentinel-f2", 1)
     c = Cast(world=world, me=me, ref="probe")
     from combat_engine.engine.components import Ident as _Ident
@@ -46862,20 +46907,25 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
     # happily if nine *different* rows had drifted onto the symbol.
     blade = sorted(r for r, p in REGISTRY.items()
                    if "chargen.pact_blade()" in (p.unfinished or ()))
-    out.that(blade == ["cf:warlock-hexblade-f4"],
-             "`chargen.pact_blade()` is down to ONE row from 24. The 15 "
-             "power rows that waited on it declare their printed "
-             "Requirement instead, the weapon's six options are dealt, "
-             "and the parent has a narrower symbol naming what is really "
-             "left. This one is the extra use per encounter, which needs "
-             "the weapon to be an activatable power and not merely held. "
-             "Named rather than counted, so a different row drifting onto "
-             "the symbol cannot pass as this one",
+    # **Empty now, and the last one left by being re-marked rather than
+    # written.** This required exactly `cf:warlock-hexblade-f4`, *"the
+    # extra use per encounter, which needs the weapon to be an
+    # activatable power and not merely held"*. The verb was never the
+    # problem: `c.more_uses` writes `Powers.extra_uses` and `dsl.usable`
+    # reads it. What the row adds a use OF does not exist -- the
+    # hexblade gains one at-will and three dailies at 1st level and no
+    # encounter attack, and none of the 19 warlock level-1 encounter
+    # attacks belongs to the weapon feature. Searched four ways, so
+    # `-f4` carries `defect=` and no symbol: no symbol will ever close a
+    # gap in the source.
+    out.that(blade == [],
+             "`chargen.pact_blade()` holds NOTHING, from 24. The 15 power "
+             "rows that waited on it declare their printed Requirement "
+             "instead, the weapon's six options are dealt, and the last "
+             "chassis row moved to `defect=` -- the power it adds a use "
+             "of is not in the compendium, which is a gap no symbol can "
+             "close",
              f"{len(blade)}: {blade}")
-    out.that(not [r for r in blade if not r.startswith("cf:")],
-             "and nothing but a chassis row waits on it, which is the half "
-             "that says the 15 were finished rather than renamed",
-             f"{[r for r in blade if not r.startswith('cf:')]}")
     gone = sorted(r for r, p in REGISTRY.items()
                   if "chargen.pact_option_map()" in (p.unfinished or ()))
     out.that(not gone,
@@ -46885,39 +46935,46 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
              "whole time",
              f"{len(gone)}: {gone}")
 
-    # -- f4 carried three symbols and one of them has landed --------------
-    # It read `len(...) == 3` -- the level, the per-encounter ceiling and
-    # the pact weapon -- and `c.more_uses` was built for the ceiling, so
-    # the row correctly dropped to two and the assertion was asserting the
-    # gap rather than the row. Named rather than counted for that reason: a
-    # bare `== 2` would pass just as happily if the level were the thing
-    # that went, and the level is `#1261`, which nothing has closed.
+    # -- f4 carried three symbols and now carries none --------------------
+    # It read `== 3`, then `== 2`, then `== ["chargen.pact_blade()"]`,
+    # each time asserting the gap rather than the row -- the ceiling went
+    # when `c.more_uses` landed and the level when `combat_engine.levels`
+    # did. The third went a different way: the row is `defect=`, because
+    # what it adds a use of is absent from the compendium.
+    #
+    # **Both halves asserted, which is the point.** `defect=` cannot be
+    # combined with any other marker, so "no symbol" and "a defect" are
+    # two separate claims and a row with neither would look finished.
     waits = REGISTRY["cf:warlock-hexblade-f4"].unfinished
-    out.that(sorted(waits) == ["chargen.pact_blade()"],
-             "`-f4` waits on the pact weapon and nothing else. It carried "
-             "three symbols: the per-encounter ceiling went when "
-             "`c.more_uses` landed and the level went when "
-             "`combat_engine.levels` did, so this is the last of the "
-             "three. Named rather than counted, because a bare `== 1` "
-             "would pass just as happily if the wrong one had gone",
+    out.that(not waits,
+             "`-f4` waits on NO symbol -- all three it carried are gone, "
+             "the last by being re-marked rather than written",
              f"{sorted(waits)}")
+    out.that(bool(REGISTRY["cf:warlock-hexblade-f4"].defect),
+             "and it carries `defect=` instead, in plain words: the power "
+             "it adds a use of is not in the compendium, so no symbol "
+             "will ever close it and `todo.py` must not report it ready",
+             f"{REGISTRY['cf:warlock-hexblade-f4'].defect[:60]!r}")
 
     # -- the twenty-eight the import cannot supply ------------------------
     world, me, _ = _posed("cf:warlock-hexblade-f0", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
-    out.that(len(refused) == 16,
+    out.that(len(refused) == 17,
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
              # count is the number LEFT, and every one left is out
              # of reach for a reason this project chose -- a feature
              # printed above level 10 names powers the ETL does not
              # import (`MAX_POWER_LEVEL`).,
-             "twenty-eight rows are `defect=` -- nineteen summoned "
-             "creatures named with no stat block the summon can field, "
-             "nine 'one of the following powers' with no list. Nearly half "
-             "the chassis, which is the measurement worth having",
+             "SEVENTEEN hexblade rows are out of reach for a `defect=` "
+             "reason, up one from sixteen: `-f4` joined them when its "
+             "last symbol was re-marked, the power it adds a use of "
+             "being absent from the compendium rather than unbuilt. The "
+             "number in this message and the literal above it have "
+             "disagreed before -- the message said twenty-eight while "
+             "the assertion read sixteen -- so it is spelled out",
              f"{len(refused)}")
 
 
@@ -48315,14 +48372,28 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
     still = sorted(r for r, p in REGISTRY.items()
                    if "spec.granted_powers" in (p.unfinished or ())
                    and r.startswith("cf:cleric-warpriest-"))
-    out.that(still == ["cf:cleric-warpriest-f1s0", "cf:cleric-warpriest-f1s8"],
-             "and exactly TWO warpriest domains still wait on their list, "
-             "for the two reasons a count can fail to come out: one "
-             "section reads three powers where its siblings read four, and "
-             "the last runs to the end of the page and absorbs ninety-two. "
-             "Both refused rather than guessed at, and named, because a "
-             "count that does not come out is what this check exists to "
-             "keep visible",
+    # **Both are written now and the recovery was validated before it
+    # was trusted.** This required exactly `-f1s0` and `-f1s8` to still
+    # wait, *"for the two reasons a count can fail to come out: one
+    # section reads three powers where its siblings read four, and the
+    # last runs to the end of the page and absorbs ninety-two"*. Both
+    # descriptions were accurate about the first attempt.
+    #
+    # What fixed them was bounding each domain's section by its own
+    # printed heading and the next, and asking which of the class's
+    # already-imported power NAMES appear inside -- a method that
+    # reproduces 5 of 5 known answers before being used on the two
+    # unknown ones. `-f1s8` is last in print order, so its window is cut
+    # to its siblings' length rather than running to the page end.
+    #
+    # Still an exact-set assertion, because the thing worth gating is
+    # that a domain whose count does not come out is NAMED rather than
+    # guessed at. An empty set is the claim now.
+    out.that(still == [],
+             "and NO warpriest domain still waits on its list -- all nine "
+             "sections resolved, including the one whose count came out "
+             "short on the first pass and the one that ran to the end of "
+             "the page",
              f"{still}")
 
     out.that(granted == ["cf:druid-protector-f2", "cf:fighter-knight-f22",
@@ -48724,13 +48795,28 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
              "the three rows whose whole clause is a named-skill reroll are "
              "finished",
              f"{done}")
-    out.that(sorted(REGISTRY["cf:rogue-thief-f18"].unfinished)
-             == ["c.roll_twice(check=)", "c.roll_twice(save=)"],
-             "and `cf:rogue-thief-f18` keeps BOTH symbols, which is the "
-             "distinction worth gating: it pays on Acrobatics and Athletics "
-             "*as part of the escape action*, so granting the skills "
-             "outright would roll twice on every climb -- wider than the "
-             "card. Its save half is a different roll again",
+    # **`cf:rogue-thief-f18` is finished, and keeping BOTH symbols was
+    # the right call while it was not.** This asserted exactly that pair
+    # with the reason *"it pays on Acrobatics and Athletics as part of
+    # the escape action, so granting the skills outright would roll
+    # twice on every climb"* -- which was the correct refusal and is
+    # what `#1276` built rather than approximated.
+    #
+    # The two halves landed separately, which is the whole argument for
+    # having named two symbols: `Powers.rolls_twice` took a scoped
+    # `skill@purpose` spelling and `escape.attempt` started passing a
+    # `purpose`; `c.save_twice` is the other roll, read in
+    # `durations.Effects.save`. A single symbol would have reported this
+    # row ready the day `c.roll_twice` landed for `-f20`.
+    #
+    # Asserted as EMPTY rather than deleted, and that is deliberate: the
+    # claim worth gating is now *"neither half is owed"*, and
+    # `drivers.thief_slippery_rolls` is where the behaviour is measured.
+    out.that(not REGISTRY["cf:rogue-thief-f18"].unfinished,
+             "and `cf:rogue-thief-f18` owes NEITHER half any more -- the "
+             "check one is scoped to the escape action rather than to the "
+             "skill, and the save one is its own verb in its own module, "
+             "which is why it was right to name two symbols",
              f"{sorted(REGISTRY['cf:rogue-thief-f18'].unfinished)}")
 
     # -- EXTRA_GAINS: three entries, and why not thirty-four -------------

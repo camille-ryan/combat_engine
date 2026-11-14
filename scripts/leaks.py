@@ -2249,6 +2249,24 @@ CATEGORY_VOCABULARY = {
     "Divinity": "a divine class mechanic",
     "Domain": "a divine class mechanic",
     "Multiclass": "the multiclassing rule",
+    # **`Multiclass <X>` is 43 cells in the column and the second word is
+    # vocabulary in all of them** -- 25 are class words this tree writes
+    # into `cls=` several hundred times, 6 are `Weapon.group` words, and
+    # the rest are the rule's own qualifiers (`Daily`, `Encounter`,
+    # `Utility`). So the cell is the multiclassing rule plus a word the
+    # engine already speaks, not a title.
+    #
+    # Listed one at a time rather than by prefix, deliberately: a prefix
+    # rule would waive the whole family sight unseen, and **two of the 43
+    # are plausibly names** -- a deity and a creature kind rather than a
+    # class or a weapon. Naming either here is the thing this pass
+    # exists to catch, and the first draft of this very comment did it
+    # and went red. (`CLAUDE.md`: *"prose explaining the names rule is
+    # where I break it"*.) Three tracked files print the one entry
+    # below and all three are about `f3645`.
+    "Multiclass Barbarian": "the multiclassing rule plus a class word;"
+                            " `cls=\"barbarian\"` is written several"
+                            " hundred times in this tree",
     "Guild": "an ordinary word; no mechanism of its own here",
     "Tribal": "an ordinary word; no mechanism of its own here",
     "Elemental Companion": "descriptive: a companion with an element",

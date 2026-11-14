@@ -5927,8 +5927,27 @@ def power_swap(powers: list[str], feats: list[str], *,
             for p, row in REGISTRY.items()
             if p not in out
             and getattr(row, "cls", "") == cls
-            and (row.level <= top if trade.ceiling else row.level == want)
-            and row.level > 0
+            # **The level-0 floor belongs to the CEILING branch only, and
+            # applying it to both silently broke two working feats.**
+            # `f2443` and `f2445` print *"of the same level"* and trade at
+            # level 0 -- `Swap(level=0)`, because those cards state no
+            # floor -- so `row.level == want` with `want == 0` is a
+            # legitimate same-level trade. With the floor on both branches
+            # the offer came back empty, `power_swap` correctly put the
+            # outgoing card back, nothing was recorded, and each row's
+            # body found no option to grant: **SILENT**, where both had
+            # fired at the previous wide sweep.
+            #
+            # Caught by `audited.json`'s per-ref list, which is exactly
+            # what a count against zero cannot do -- two rows breaking
+            # while five others healed reads as an improvement on the
+            # headline. `#1276`.
+            # `0 < row.level <= top`, not `row.level <= top > 0`: the
+            # first draft of the fix chained the wrong operand and gated
+            # on the CEILING being positive, which lets a level-0 row
+            # through on any paragon trade.
+            and (0 < row.level <= top if trade.ceiling
+                 else row.level == want)
             and row.level <= (level or want)
             and (trade.usage is None or row.usage is trade.usage)
             and (row.attack is None) is trade.utility

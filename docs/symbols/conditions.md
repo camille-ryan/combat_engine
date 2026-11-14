@@ -56,6 +56,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Two squares a mover crosses between in one step.
 - `c.mark(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, by: 'int | None' = None, lapses: 'bool' = False, or_adjacent: 'bool' = False, keeps: 'bool' = False) -> 'Effect | None'`
   - Mark the target -- for you, or for somebody else.
+- `c.move_grabbed(self, *, on: 'int | None' = None) -> 'bool'`
+  - Drag a creature you have hold of. A Strength attack vs Fortitude.
 - `c.unlatch(self, label: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Hand the payout back, so it may be spent again this window.
 - `c.worsen(self, eff: 'Effect', cond: 'Condition') -> 'bool'`

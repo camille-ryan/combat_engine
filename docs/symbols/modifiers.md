@@ -58,8 +58,10 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Reroll each damage die that shows a 1 until it shows a different
 - `c.reroll_save(self, *, bonus: 'int' = 0, keep: 'str' = 'new', ev: 'Any' = None) -> 'bool'`
   - Roll the **triggering** saving throw again. Returns the new result.
-- `c.roll_twice(self, *skills: 'str', on: 'int | None' = None) -> 'int'`
+- `c.roll_twice(self, *skills: 'str', purpose: 'str' = '', on: 'int | None' = None) -> 'int'`
   - "Whenever you make a Stealth check, you can roll twice and use
+- `c.save_twice(self, *conditions: 'str', on: 'int | None' = None) -> 'int'`
+  - "Roll twice and use either result" on a **saving throw**.
 
 ## resistance and vulnerability
 
@@ -140,6 +142,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Your <row> is considered an arcane attack power."
 - `c.forbid(self, ref: 'str' = '', *, keyword: 'Keyword | None' = None, lacking: 'Keyword | None' = None, usage: 'Usage | Sequence[Usage] | None' = None, only: 'str | Sequence[str]' = (), attacks_only: 'bool' = False, ran_out: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - Take a row away for a while. "Loses the ability to use ..."
+- `c.forgo_second_wind(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You gain no benefit from using your second wind."
 - `c.forgo_second_wind_heal(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You can choose to regain no hit points" from your second wind.
 - `c.gains_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, mine: 'bool' = False, on: 'int | None' = None) -> 'int'`
@@ -158,6 +162,10 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "It cannot run." The walk is left alone.
 - `c.no_surges(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "The target cannot spend healing surges."
+- `c.refuses_forced_attack(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You cannot be forced to attack an ally under any circumstances."
+- `c.shares_feat_bonus(self, *refs: 'str', on: 'int | None' = None) -> 'None'`
+  - Select arena weapons: a feat bonus for one reaches the others.
 - `c.waive(self, condition: 'Condition', *what: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Switch off part of what a condition costs, without lifting it.
 

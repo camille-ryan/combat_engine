@@ -195,6 +195,7 @@ CATEGORIES: dict[str, dict] = {
             ("writers -- a condition under another name, or the generic", [
                 "bind", "cannot_approach", "command", "condition", "control",
                 "dominate", "grab", "grab_attempt", "latch", "leash", "link",
+                "move_grabbed",
                 "mark", "unlatch", "worsen",
             ]),
             ("readers", [
@@ -308,6 +309,7 @@ CATEGORIES: dict[str, dict] = {
             ("size", ["resize"]),
             ("ending, suspending, watching", [
                 "aftereffect", "arm_trigger", "cancel", "dispel", "end_effect",
+                "extend_effect",
                 "endable", "lingers_label", "on_attack", "on_sustain",
                 "suspend_when", "watch", "suspend_trait",
             ]),
@@ -340,7 +342,7 @@ CATEGORIES: dict[str, dict] = {
                 # either result" finds `reroll_ones` first and it is about
                 # damage dice; four class-feature rows filed a gap for
                 # this verb while two of those three sat here. #642.
-                "roll_twice",
+                "roll_twice", "save_twice",
             ]),
             ("resistance and vulnerability", [
                 "ignore_resistance", "resist", "resist_in", "resistances",
@@ -377,6 +379,8 @@ CATEGORIES: dict[str, dict] = {
             ]),
             ("refusals", [
                 "cannot_attack", "cannot_be_flanked", "counts_as",
+                "forgo_second_wind", "refuses_forced_attack",
+                "shares_feat_bonus",
                 "counts_as_keyword", "forbid", "forgo_second_wind_heal",
                 "no_run",
                 "gains_property", "loses_property",
@@ -421,6 +425,7 @@ CATEGORIES: dict[str, dict] = {
                 "dex_", "dex_mod", "int_", "int_mod", "level", "mod",
                 "primary", "primary_mod", "score", "stats", "str_", "str_mod",
                 "total", "total_defence", "weapon_dice", "weapon_group",
+                "gains_proficiency", "improvised", "shares_magic",
                 "weapon_of", "weapon_proficiency",
                 "weapon_range", "wearing", "wielding", "wis_", "wis_mod",
             ]),
@@ -497,6 +502,7 @@ CATEGORIES: dict[str, dict] = {
                 # way others spend a surge -- and not a state anything
                 # reads about. #1222.
                 "death_save_failure",
+                "dailies_per_day",
                 "regain_surge", "second_wind", "spend_surge",
                 "surge", "surge_value",
             ]),
@@ -618,6 +624,21 @@ CTX_KEYS: dict[str, str] = {
     "actor": "whoever is acting, on a ctx built from a non-attack event.",
     "advantage": "did the attack have combat advantage.",
     "ammo": "the ammunition used.",
+    "arena_alt": (
+        "the OTHER arena weapons, as context substitutions -- a tuple of "
+        "`{weapon, group}` dicts, empty for every creature that has not "
+        "selected a pair and for every swing with something else.\n\n"
+        "Not a key a gate reads. It is read by `Mod.applies`, which "
+        "re-asks a **failed** feat-kind gate on an attack or damage roll "
+        "with each substitution laid over the context -- which is how "
+        "`cf:fighter-weaponmaster-f3s0`'s printed *\"any of your feats "
+        "that grant feat bonuses to attack rolls or damage rolls with one "
+        "of your arena weapons apply to your other arena weapon as "
+        "well\"* reaches a `when=` predicate written inside another "
+        "feat's body. Nothing can reach into another row's predicate to "
+        "widen it, so the widening happens where the predicate is read.\n\n"
+        "Written by `resolve._arena_alts` off `Gear.arena`, into both the "
+        "attack context and the damage context. #1276."),
     "purpose": (
         "what the skill check was FOR. THREE callers say, and this "
         "listed one: `movement.walk` passes \"swim\", "
@@ -660,6 +681,22 @@ CTX_KEYS: dict[str, str] = {
         "its own `ref`, the way `Effect.by` does, and it is empty "
         "for the ordinary end-of-turn throw nobody granted."
     ),
+    "group": (
+        "the `Weapon.group` of the weapon this swing went through, `\"\"` "
+        "for a swing through no weapon -- which is every implement "
+        "power.\n\n"
+        "Both this and `weapon` below, because a card names one weapon as "
+        "often as a family. `hand` answers a DIFFERENT question -- which "
+        "of two **held** weapons swung -- so a trait requiring the off "
+        "hand to be empty never sees a swing stamped `\"off\"`, which is "
+        "`cf:fighter-weaponmaster-f3s2`'s worked case: it prints a bonus "
+        "to *unarmed* attacks and the group is how an unarmed swing is "
+        "told from an armed one.\n\n"
+        "Written by `resolve._group_of`, which looks it up on the "
+        "attacker rather than taking it from the call site -- "
+        "`Gear.weapons` holds per-character `replace(w)` copies, so it "
+        "reads whatever `c.improvised` or `c.weapon_group` has done to "
+        "the weapon. On the damage context too since #1276. #1276."),
     "hand": "which hand the weapon is in.",
     "how": "the kind of forced movement -- push, pull, slide.",
     "keywords": "the keywords of the row or effect being asked about.",
@@ -768,6 +805,17 @@ CTX_KEYS: dict[str, str] = {
     ),
     "source": "who laid the effect.",
     "target": "who it lands on. The commonest key in the tree.",
+    "weapon": (
+        "which weapon this swing went through, by ref, `\"\"` for a swing "
+        "through none. See `group` above for why both: a card names one "
+        "weapon as often as a family, the same reason `query.holding` "
+        "matches a ref and a group.\n\n"
+        "Written by `resolve.attack` off its own `weapon=` argument, "
+        "which `Cast.attack` fills from `_swung_weapon` -- and that "
+        "returns `\"\"` unless the **declared row** carries the weapon "
+        "keyword, so an implement power stamps nothing. On the damage "
+        "context too since #1276: `deal_damage` had taken the parameter "
+        "all along and never put it there. #1276."),
     "when_": (
         "where in the turn a saving throw was taken -- `\"end\"` for the "
         "ordinary one, `\"early\"` for one moved or granted at the start. "

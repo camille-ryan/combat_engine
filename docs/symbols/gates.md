@@ -19,6 +19,11 @@ applied (#591). `symbols.py` refuses a key that is not listed here.
 - `ctx['advantage']` -- did the attack have combat advantage.
 - `ctx['ammo']` -- the ammunition used.
 - `ctx['among']` -- the set a choice was made from.
+- `ctx['arena_alt']` -- the OTHER arena weapons, as context substitutions -- a tuple of `{weapon, group}` dicts, empty for every creature that has not selected a pair and for every swing with something else.
+
+Not a key a gate reads. It is read by `Mod.applies`, which re-asks a **failed** feat-kind gate on an attack or damage roll with each substitution laid over the context -- which is how `cf:fighter-weaponmaster-f3s0`'s printed *"any of your feats that grant feat bonuses to attack rolls or damage rolls with one of your arena weapons apply to your other arena weapon as well"* reaches a `when=` predicate written inside another feat's body. Nothing can reach into another row's predicate to widen it, so the widening happens where the predicate is read.
+
+Written by `resolve._arena_alts` off `Gear.arena`, into both the attack context and the damage context. #1276.
 - `ctx['as_']` -- the action it is being taken as.
 - `ctx['attacker']` -- who is swinging. `target` is who it lands on.
 - `ctx['branch']` -- which half of a melee-or-ranged row is in use.
@@ -37,6 +42,11 @@ Added for `arms.i468x1`, *"you do not provoke opportunity attacks for making ran
 - `ctx['gap']` -- what sort of hole a blocking square has -- "door", "cracked window". Read by `movement._may_squeeze` off `Grid.porous`, so a card naming one sort is a predicate on one mechanism rather than a second mechanism. #674.
 - `ctx['granted_by']` -- who handed this creature the attack, or -1.
 - `ctx['granted_via']` -- the ref of the row that handed it over -- an attack, or since #672 a **saving throw**. `Cast.save` writes it from its own `ref`, the way `Effect.by` does, and it is empty for the ordinary end-of-turn throw nobody granted.
+- `ctx['group']` -- the `Weapon.group` of the weapon this swing went through, `""` for a swing through no weapon -- which is every implement power.
+
+Both this and `weapon` below, because a card names one weapon as often as a family. `hand` answers a DIFFERENT question -- which of two **held** weapons swung -- so a trait requiring the off hand to be empty never sees a swing stamped `"off"`, which is `cf:fighter-weaponmaster-f3s2`'s worked case: it prints a bonus to *unarmed* attacks and the group is how an unarmed swing is told from an armed one.
+
+Written by `resolve._group_of`, which looks it up on the attacker rather than taking it from the call site -- `Gear.weapons` holds per-character `replace(w)` copies, so it reads whatever `c.improvised` or `c.weapon_group` has done to the weapon. On the damage context too since #1276. #1276.
 - `ctx['hand']` -- which hand the weapon is in.
 - `ctx['how']` -- the kind of forced movement -- push, pull, slide.
 - `ctx['keywords']` -- the keywords of the row or effect being asked about.
@@ -66,5 +76,8 @@ Empty for every caller that does not say, so a gate asking for a purpose is Fals
 - `ctx['skill']` -- the skill being checked, lowercased.
 - `ctx['source']` -- who laid the effect.
 - `ctx['target']` -- who it lands on. The commonest key in the tree.
+- `ctx['weapon']` -- which weapon this swing went through, by ref, `""` for a swing through none. See `group` above for why both: a card names one weapon as often as a family, the same reason `query.holding` matches a ref and a group.
+
+Written by `resolve.attack` off its own `weapon=` argument, which `Cast.attack` fills from `_swung_weapon` -- and that returns `""` unless the **declared row** carries the weapon keyword, so an implement power stamps nothing. On the damage context too since #1276: `deal_damage` had taken the parameter all along and never put it there. #1276.
 - `ctx['when_']` -- where in the turn a saving throw was taken -- `"end"` for the ordinary one, `"early"` for one moved or granted at the start. Written by `Effects.save` and `Cast.save`, which take it as a keyword. Named with the trailing underscore for `Event.kind`'s reason: a field called `when` shadows the property `wire()` puts in every replay envelope. #671.
 - `ctx['why']` -- the reason recorded for this.

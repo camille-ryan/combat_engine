@@ -107,6 +107,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Take a live effect off early, before its duration runs out.
 - `c.endable(self, effect: 'Effect | None', cost: 'ActionType' = <ActionType.MINOR: 'minor'>, *, then: 'Callable[[], None] | None' = None) -> 'Effect | None'`
   - Let whoever holds this effect end it deliberately, for an action.
+- `c.extend_effect(self, effect: 'Effect', *, until: 'When', clock: 'int | None' = None) -> 'bool'`
+  - Push a standing effect's clock on. False if it already runs that
 - `c.lingers_label(self, label: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Is a hold with this label standing on the creature?
 - `c.on_attack(self, fn: 'Callable[[Any], None]', *, by: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, once: 'bool' = False, once_per_round: 'bool' = False, label: 'str' = '') -> 'Effect'`
