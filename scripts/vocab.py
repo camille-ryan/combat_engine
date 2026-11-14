@@ -306,7 +306,12 @@ CONTEXT = {
     "charge": "is this use a charge?",
     "opportunity": "is this use an opportunity attack?",
     "branch": "which half of a melee-or-ranged row is being used.",
-    "augment": "how many power points this use was augmented by, or 0.",
+    "augment": "how many power points this use was augmented by, or 0 -- "
+               "set by `dsl.use` for a row that declares `augments=`.",
+    "augment_spend": "the same number when the *body* settled it instead, "
+                     "which is every row whose augments only move a die. "
+                     "`None` until `content.powers.augment.augment` asks. "
+                     "Read `c.augment_used` rather than either field.",
     "granted_by": "who handed this creature the basic attack, or -1.",
     "granted_via": "the ref of the row that handed it over, or empty.",
     "variant": "which variant of a substituted clause this use is -- `0` is "

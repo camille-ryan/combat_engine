@@ -510,7 +510,12 @@ CATEGORIES: dict[str, dict] = {
                 "surge", "surge_value",
             ]),
             ("power points and augments", [
-                "augment", "augmented", "lend_augment", "points",
+                # `augment` is the header's spend and `augment_spend` the
+                # body's -- two arrangements for one fact, which is why
+                # `augment_used` exists to answer it without a caller
+                # having to know which. See its docstring. #1298.
+                "augment", "augment_spend", "augment_used",
+                "augmented", "lend_augment", "points",
                 "points_spent", "regain_points", "spend_points",
                 "spend_shrouds", "transfer_points",
             ]),

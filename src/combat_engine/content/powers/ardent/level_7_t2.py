@@ -50,6 +50,14 @@ def _finding_hidden(ctx: dict[str, Any]) -> bool:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
+    #: *"You can use this power unaugmented as a melee basic attack."*
+    #: "As" and not "in place of", which 4e means differently -- see
+    #: `Power.basic`, which carries Camille's wording -- so this row **is**
+    #: a melee basic attack and collects a "with basic attacks" modifier.
+    #: `basic_at` is the printed word *unaugmented*: augment it and it is
+    #: an ordinary power again. #1298.
+    basic="melee",
+    basic_at=(0,),
 )
 def p13783(c: Cast) -> None:
     """`c.no_cover` sits on the creature being looked at, which is the end the

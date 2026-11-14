@@ -489,15 +489,43 @@ def p13032(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
+    augments=(Augment(1),),
+    #: *"When making an opportunity attack, you can use this power in place
+    #: of a melee basic attack."* "In place of", so it is the offer and not
+    #: the designation -- the row does not become a basic attack.
+    #:
+    #: **`basic_at=(1,)`, because the Special is Augment 1's entire
+    #: content.** The import marks each augment at the *end* of the block
+    #: before it, which p11104's own errata settles: it rewrites "the
+    #: Augment 1 section" to the Effect printed *after* that marker. So a
+    #: Special above the marker is base-card -- p11104 and p12959, both of
+    #: which say *unaugmented* or name no form -- and one below it, like
+    #: this, is the augment's. The two groups also differ exactly as that
+    #: reading predicts: the base-section ones have to say *unaugmented* to
+    #: exclude the augments, and these two say nothing because their
+    #: section already scopes them.
+    #:
+    #: So standing in costs a power point, which is why `Augment(1)` is
+    #: declared with no overrides: the form has to be payable. It rewrites
+    #: no header line, so `actions._aimings` leaves it out of the
+    #: ordinary menu -- otherwise it is the base card at the price of a
+    #: point. #1298.
+    instead_of_basic="opportunity",
+    basic_at=(1,),
 )
 def p2621(c: Cast) -> None:
     """Augment 2 blinds instead of penalising. The penalty is counted when the
     blow lands rather than recounted per roll -- a modifier holds a number,
     not a sum.
 
-    Augment 1 is not offered, and not because of anything here: the imported
-    card has no Hit line under its Augment 1 heading, only the Special that
-    belongs to the whole power, so there is no clause to write."""
+    **Augment 1 is offered now, and this note had its structure backwards.**
+    It read that the Special "belongs to the whole power", which is the one
+    reading the import does not support: the Special sits *below* the
+    Augment 1 marker, and p11104's errata proves the marker introduces what
+    follows it. So Augment 1's entire content is that Special -- no Hit
+    line, correctly, because the form buys a permission rather than an
+    effect. It is declared in the header and the body stays as it was,
+    asking only about Augment 2. #1298."""
     spent = augment(c, 2)
     victim = c.target
     if victim is None or not c.strike():

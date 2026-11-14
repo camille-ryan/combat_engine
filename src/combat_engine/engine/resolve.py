@@ -382,6 +382,7 @@ def attack(
     hand: str = "main",
     as_: str = "",
     weapon: str = "",
+    augment: int = 0,
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -551,7 +552,13 @@ def attack(
             # answer: the designated melee and ranged rows plus everything
             # that counts as one, and **not** the `instead` list, since a row
             # swung in place of a basic attack is not one. #522.
-            "basic": _is_basic(world, attacker, power),
+            # **At the form being swung.** Six rows print "you can use this
+            # power *unaugmented* as a ranged basic attack", so the
+            # designation -- which is the half that picks up a "with basic
+            # attacks" modifier -- is false for every augmented use of them.
+            # This read defaulted to the base form and so could not tell
+            # them apart. #1298.
+            "basic": _is_basic(world, attacker, power, augment),
             # **Is this the second roll, and whose doing?** Declared here,
             # with the defaults that say "no", because this is where the
             # attack context is built -- `lint.py` derives the legal key set
@@ -849,7 +856,9 @@ def spent_action_point(world: World, eid: int) -> bool:
     )
 
 
-def _is_basic(world: World, attacker: int, power: str) -> bool:
+def _is_basic(
+    world: World, attacker: int, power: str, augment: int = 0
+) -> bool:
     """Does this attack count as a basic attack for this creature?
 
     Off `dsl.basics_of`, which folds the designated melee and ranged rows
@@ -857,10 +866,16 @@ def _is_basic(world: World, attacker: int, power: str) -> bool:
     from `_is_ranged` beside it because this one is about the creature as
     well as the row: the same ref is a basic attack for the warlock who
     took the card and is not one for anybody else.
+
+    **And at the form being swung**, which is a third thing it is about.
+    Five rows print *"you can use this power unaugmented as a ... basic
+    attack"* and declare `basic_at=(0,)` for it, so an augmented use of one
+    of them is not a basic attack and must not collect a modifier that says
+    "with basic attacks". #1298.
     """
     from .dsl import basics_of
 
-    return bool(power and power in basics_of(world, attacker))
+    return bool(power and power in basics_of(world, attacker, "", augment))
 
 
 def _is_ranged(ref: str, branch: int = 0, world: World | None = None,

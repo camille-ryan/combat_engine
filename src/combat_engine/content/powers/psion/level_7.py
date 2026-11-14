@@ -380,7 +380,12 @@ def p8239(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
-    dropped=("dsl.Power.basic_for",),
+    #: *"You can use this power unaugmented as a ranged basic attack."*
+    #: "As", not "in place of" -- so the row **is** a ranged basic attack
+    #: and collects a "with basic attacks" modifier. `basic_at` is the
+    #: printed word *unaugmented*. #1298.
+    basic="ranged",
+    basic_at=(0,),
 )
 def p8240(c: Cast) -> None:
     """Augment 1 is offered now. It was left out on the claim that nothing
@@ -393,9 +398,14 @@ def p8240(c: Cast) -> None:
     Its vulnerability is a flat 5, not 5 + Charisma: that is Augment 2's
     line.
 
-    Dropped is the Special, which makes the *unaugmented* form a ranged
-    basic attack -- `dsl.Power.basic_for` is the header field p11169 named
-    for the same sentence."""
+    **The Special is declared now and the marker is gone.** It makes the
+    *unaugmented* form a ranged basic attack, and `dsl.Power.basic_for` --
+    the field this row and p11169 both named -- never existed. `Power.basic`
+    did, and what was genuinely missing was the *scope*: nine rows print one
+    of these two Special lines and every one of them is augmentable, so an
+    unscoped declaration would have made an augmented use collect every
+    "with basic attacks" modifier it should not have. `basic_at` is that
+    scope. #1298."""
     spent = augment(c, 1, 2)
     if c.strike():
         c.damage("2d8" if spent == 2 else "1d8", c.int_mod, dtype=DamageType.PSYCHIC)

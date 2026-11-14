@@ -29280,6 +29280,194 @@ def a_lent_basic_attack(out: Result) -> None:
     )
 
 
+def a_basic_attack_scoped_to_one_form(out: Result) -> None:
+    """"You can use this power unaugmented as a ranged basic attack."
+
+    Nine rows print a Special of that shape or the "in place of" one, and
+    **every one of them is augmentable**, so the declaration is worthless
+    unaugmented. Seven carried no marker at all and so reported finished
+    with the clause doing nothing; the two that were marked both named
+    `dsl.Power.basic_for`, a field that never existed, where
+    `Power.basic` and `Power.instead_of_basic` did.
+
+    Two directions matter and the controls below are what separate them:
+
+    * **"as" is not "in place of"**, which 4e means differently -- a row
+      that *counts as* a basic attack collects a "with basic attacks"
+      modifier and one swung *in place of* one does not. `basics_of`
+      answers the first and must refuse the second.
+    * **the scope**, since unscoped, an augmented use of `p8240` collects
+      that modifier and `p11169` stands in at the opportunity window for
+      free, where its card charges a power point.
+
+    The modifier arm is the load-bearing one: it asserts through a real
+    swing with a gated bonus rather than asking `_is_basic`, because the
+    spend reaches that read by two different routes -- `Cast.augment` for
+    a header-declared row and `augment_spend` for one whose body settles
+    it -- and five of the nine take the second. Reading the header field
+    alone saw 0 on every augmented use of them. #1298.
+    """
+    from combat_engine.engine import actions
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import PowerPoints
+    from combat_engine.engine.dsl import (
+        basic_form,
+        basic_options,
+        basics_of,
+        get,
+        use,
+    )
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies
+
+    # **The board first, which is also what loads `REGISTRY`.** The census
+    # below reads the header of nine rows, and `get` answers None for every
+    # one of them until content is imported -- so written the other way up
+    # this rule reported all nine undeclared, which is the same red a
+    # genuinely missing declaration gives. The convention `fortune_cards`
+    # and the other registry-reading rules follow.
+    world, psion, _ = _board("p8240")
+
+    # Every row printing either line, by the shape its card prints.
+    COUNTS_AS = {"p8228": "ranged", "p8240": "ranged", "p11270": "ranged",
+                 "p13780": "melee", "p13783": "melee"}
+    IN_PLACE_OF = {"p11104": ("charge", (0,)), "p12959": ("charge", ()),
+                   "p2621": ("opportunity", (1,)),
+                   "p11169": ("opportunity", (1,))}
+
+    missing = [
+        ref for ref, half in COUNTS_AS.items()
+        if (p := get(ref)) is None or p.basic != half or p.basic_at != (0,)
+    ]
+    out.that(
+        not missing,
+        f"all {len(COUNTS_AS)} rows printing \"use this power unaugmented as a"
+        " ... basic attack\" declare it, scoped to the base form",
+        f"not declared as printed: {missing}",
+    )
+    wrong = [
+        ref for ref, (window, at) in IN_PLACE_OF.items()
+        if (p := get(ref)) is None
+        or p.instead_of_basic != window or p.basic_at != at
+    ]
+    out.that(
+        not wrong,
+        f"and all {len(IN_PLACE_OF)} printing \"in place of\" declare their"
+        " window and their form",
+        f"not declared as printed: {wrong}",
+    )
+
+    # ---------------------------------------------------- the designation
+    out.that(
+        "p8240" in basics_of(world, psion, "ranged", 0)
+        and "p8240" not in basics_of(world, psion, "ranged", 1)
+        and "p8240" not in basics_of(world, psion, "ranged", 2),
+        "p8240 IS a ranged basic attack unaugmented and is not one at"
+        " either augment",
+        f"0:{'p8240' in basics_of(world, psion, 'ranged', 0)}"
+        f" 1:{'p8240' in basics_of(world, psion, 'ranged', 1)}"
+        f" 2:{'p8240' in basics_of(world, psion, 'ranged', 2)}",
+    )
+    out.that(
+        "p8240" in basic_options(world, psion, "ranged"),
+        "so it is offered where a ranged basic attack is granted",
+        f"offered: {basic_options(world, psion, 'ranged')}",
+    )
+
+    # **Through a real swing, with a printed-shape gate.** The body of this
+    # row settles its own augment, so this is the only arm that proves the
+    # spend reaches `ctx["basic"]` at all.
+    def gated(points: int) -> list[int]:
+        w, me, _ = _board("p8240")
+        pool = w.get(me, PowerPoints)
+        if pool is not None:
+            pool.points = points
+        foe = enemies(w, me)[0]
+        c = Cast(world=w, me=me, ref="drivers:basic-gate")
+        c.bonus("attack", 7, on=me, when=lambda ctx: bool(ctx.get("basic")))
+        seen: list[int] = []
+        w.bus.on(AttackRolled, lambda ev: seen.append(ev.total - ev.natural))
+        use(w, me, "p8240", targets=[foe])
+        return seen
+
+    bare, aug = gated(0), gated(2)
+    out.that(
+        bare and aug and bare[0] - aug[0] == 7,
+        'a "with basic attacks" bonus lands on the unaugmented swing and'
+        " not on the augmented one",
+        f"unaugmented {bare}, augmented {aug}; wanted a gap of exactly 7",
+    )
+
+    # ------------------------------------------- "in place of" is not "is"
+    world, bm, _ = _board("p11169")
+    pool = world.need(bm, PowerPoints)
+    pool.points = 2
+    out.that(
+        "p11169" not in basics_of(world, bm, "melee", 1)
+        and "p11169" not in basics_of(world, bm, "melee", 0),
+        "p11169 is swung IN PLACE OF a melee basic attack and so is never"
+        " one itself, at any form",
+        f"0:{'p11169' in basics_of(world, bm, 'melee', 0)}"
+        f" 1:{'p11169' in basics_of(world, bm, 'melee', 1)}",
+    )
+    out.that(
+        basic_form(world, bm, get("p11169")) == 1
+        and "p11169" in basic_options(world, bm, "opportunity"),
+        "and with a power point to spend it is offered at the opportunity"
+        " window, on its Augment 1 form",
+        f"form {basic_form(world, bm, get('p11169'))};"
+        f" offered {'p11169' in basic_options(world, bm, 'opportunity')}",
+    )
+    pool.points = 0
+    out.that(
+        basic_form(world, bm, get("p11169")) is None
+        and "p11169" not in basic_options(world, bm, "opportunity"),
+        "with none to spend it is not offered at all, which is the printed"
+        " restriction and not a refusal to explain",
+        f"form {basic_form(world, bm, get('p11169'))};"
+        f" offered {'p11169' in basic_options(world, bm, 'opportunity')}",
+    )
+
+    # ------------------------------------------- the swing spends the form
+    def spent(opportunity: bool, points: int = 2) -> tuple[bool, int]:
+        w, me, _ = _board("p11169")
+        p = w.need(me, PowerPoints)
+        p.points = points
+        foe = enemies(w, me)[0]
+        ok = use(w, me, "p11169", targets=[foe], opportunity=opportunity)
+        return ok, points - p.points
+
+    out.that(
+        spent(True) == (True, 1),
+        "an opportunity attack with p11169 spends the one point its"
+        " Augment 1 form costs",
+        f"got {spent(True)}, wanted (True, 1)",
+    )
+    out.that(
+        spent(False) == (True, 0),
+        "and an ordinary standard action with it spends nothing, because"
+        " that is the base card",
+        f"got {spent(False)}, wanted (True, 0)",
+    )
+    out.that(
+        spent(True, 0) == (False, 0),
+        "and with no point to spend the opportunity swing is refused"
+        " rather than taken free",
+        f"got {spent(True, 0)}, wanted (False, 0)",
+    )
+
+    # --------------------------------- a permission-only form is not a menu
+    world, bm, _ = _board("p11169")
+    world.need(bm, PowerPoints).points = 2
+    forms = sorted({a.augment for a in actions._aimings(world, bm, "p11169")})
+    out.that(
+        forms == [0, 2],
+        "the ordinary action menu offers p11169's base and burst forms and"
+        " NOT its Augment 1, which buys only the substitution",
+        f"forms offered: {forms}, wanted [0, 2]",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -86105,6 +86293,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "basic_scoped": (
+        a_basic_attack_scoped_to_one_form,
+        "a basic-attack Special that holds for one augment form only",
     ),
     "aura_penalty": (
         penalty_scoped_to_an_aura,

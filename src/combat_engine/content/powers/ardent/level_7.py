@@ -167,6 +167,18 @@ def p10288(c: Cast) -> None:
         Augment(1, charges=True),
         Augment(2),
     ),
+    #: *"When charging, you can use this power unaugmented in place of a
+    #: melee basic attack."* "In place of" and not "as", so the row is
+    #: **offered** where a charge hands out a swing and is not itself a
+    #: basic attack -- `basics_of` deliberately does not read this.
+    #:
+    #: `basic_at=(0,)` is the printed word *unaugmented*, and here the
+    #: errata settles it: it rewrites the **Augment 1** section to the
+    #: shift-then-charge Effect, so the Special that sits above that
+    #: heading belongs to the base card. Augment 1 charges by its own
+    #: `charges=True` instead. #1298.
+    instead_of_basic="charge",
+    basic_at=(0,),
 )
 def p11104(c: Cast) -> None:
     """Augment 2 sends one or two allies charging something else, paid a
@@ -358,6 +370,13 @@ def p12957(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
+    #: *"When charging, you can use this power in place of a melee basic
+    #: attack."* **No scope, and the absence is the declaration**: this is
+    #: the one row of the nine whose Special names no form -- it sits in
+    #: the base section like p11104's and, unlike it, does not say
+    #: *unaugmented*. So every form stands in, which is what `basic_at=()`
+    #: means. #1298.
+    instead_of_basic="charge",
 )
 def p12959(c: Cast) -> None:
     """Augment 1 pays the quickened ally hit points if its charge lands --

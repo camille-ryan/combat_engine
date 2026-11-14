@@ -25,7 +25,11 @@ Things a creature spends, and the budget it spends them from.
 ## power points and augments
 
 - `c.augment: int`
-  - how many power points this use was augmented by, or 0.
+  - how many power points this use was augmented by, or 0 -- set by `dsl.use` for a row that declares `augments=`.
+- `c.augment_spend: int | None`
+  - the same number when the *body* settled it instead, which is every row whose augments only move a die. `None` until `content.powers.augment.augment` asks. Read `c.augment_used` rather than either field.
+- `c.augment_used`
+  - How many power points this use was actually bought with.
 - `c.augmented(self, ref: 'str', *, of: 'int | None' = None) -> 'int'`
   - What bought the **latest** use of that row. 0 for an unaugmented one.
 - `c.lend_augment(self, ref: 'str', cost: 'int', clause: 'Callable[[Cast], None]', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

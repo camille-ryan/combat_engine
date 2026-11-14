@@ -739,6 +739,14 @@ def p12939(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
+    #: *"You can use this power unaugmented as a melee basic attack."*
+    #: "As" and not "in place of", which 4e means differently -- see
+    #: `Power.basic`, which carries Camille's wording -- so this row **is**
+    #: a melee basic attack and collects a "with basic attacks" modifier.
+    #: `basic_at` is the printed word *unaugmented*: augment it and it is
+    #: an ordinary power again. #1298.
+    basic="melee",
+    basic_at=(0,),
 )
 def p13780(c: Cast) -> None:
     """"Cannot shift" is `c.cannot_shift`, not `c.immobilized`: the target still walks.

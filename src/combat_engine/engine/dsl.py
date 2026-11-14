@@ -391,6 +391,30 @@ class Augment:
     #: header field it shadows.
     charges: bool | None = None
 
+    @property
+    def rewrites_nothing(self) -> bool:
+        """True when this form overrides no header line.
+
+        `p2621` and `p11169` are why. Both print an Augment 1 whose entire
+        content is the Special granting the opportunity-attack
+        substitution: no Hit line, no new reach, no new target. So the form
+        has to exist -- it costs a power point and it is what `Power.basic_at`
+        points at -- while being worth nothing on an ordinary standard
+        action, and `actions._aimings` skips it there so a policy cannot
+        buy it for nothing.
+
+        Reads the declaration and not the body, which is the limit worth
+        knowing: a form that rewrites no header line but *is* read by the
+        body would answer True here. Neither of the two does -- `p11169`
+        asks only `c.augment == 2` and `p2621` only `augment(c, 2)` -- and
+        a third row of that shape wants the body's own gate, not this.
+        #1298.
+        """
+        return all(
+            getattr(self, f) is None
+            for f in ("reach", "target", "attack", "damage", "charges")
+        )
+
 
 @dataclass(frozen=True)
 class Summon:
@@ -1499,6 +1523,27 @@ class Power:
     #: it must not pick up a basic-attack modifier. Only `basic_options`
     #: reads it, which is the offer and nothing else.
     instead_of_basic: str = ""
+    #: **Which augment spends the two declarations above hold for.** `()` is
+    #: every form, which is the great majority.
+    #:
+    #: Nine rows print one of those two lines and **every one of them is
+    #: augmentable**, so the scope is not an edge case -- it is the whole
+    #: population. Three printed shapes, counted off `power.spec`:
+    #:
+    #:     6 rows   "use this power unaugmented as a ... basic attack"
+    #:     2 rows   the Special is the entire content of Augment 1
+    #:     1 row    a Special in the base section, no form named
+    #:
+    #: So `(0,)` is "unaugmented", `(1,)` is "only when a point is spent",
+    #: and `()` is the third. Declaring it wrong is a board difference in
+    #: **both** directions: unscoped, an augmented use picks up every
+    #: "with basic attacks" modifier it should not have, and the two
+    #: Augment 1 rows would stand in at the opportunity window for free
+    #: when the card charges a power point for the privilege.
+    #:
+    #: `basic_form` resolves it against what the creature can actually pay,
+    #: and is the only thing that should read this directly. #1298.
+    basic_at: tuple[int, ...] = ()
     #: The second branch's Requirement. A dual row's printed one is usually
     #: the two joined by "or" -- "two melee weapons **or** a ranged weapon"
     #: is the melee branch's requirement and the ranged branch's, and
@@ -2194,6 +2239,10 @@ def power(
     thrown_by_hand: bool = False,
     basic: str = "",
     instead_of_basic: str = "",
+    #: Which augment spends the two above hold for. See `Power.basic_at`:
+    #: all nine rows printing either line are augmentable, so leaving this
+    #: off is a declaration about every form. #1298.
+    basic_at: tuple[int, ...] = (),
     requires_alt: Callable[[World, int], bool] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
@@ -2449,6 +2498,7 @@ def power(
         thrown_by_hand=thrown_by_hand,
         basic=basic,
             instead_of_basic=instead_of_basic,
+            basic_at=tuple(basic_at),
             requires_alt=requires_alt,
             trigger=trigger,
             on=on,
@@ -3384,7 +3434,34 @@ def aim_points(world: World, actor: int, p: Power, augment: int = 0,
     return []
 
 
-def basics_of(world: World, actor: int, window: str = "") -> tuple[str, ...]:
+def basic_form(world: World, actor: int, p: Power) -> int | None:
+    """Which form of this row stands in for a basic attack, or None.
+
+    `Power.basic_at` says which augment spends the row's `basic=` or
+    `instead_of_basic=` declaration holds for, and this resolves that
+    against what the creature can actually pay. `None` means the
+    declaration is real and **unreachable right now** -- a battlemind out
+    of power points cannot use its Augment 1 form as an opportunity
+    attack, which is the printed restriction and not an implementation
+    limit.
+
+    The cheapest reachable form, because the scope is a list of the forms
+    that carry the permission and spending more than the card asks for is
+    nobody's intent. In practice every one of the nine rows names exactly
+    one.
+
+    An empty scope answers 0: the base form, which costs nothing and is
+    what the great majority of rows mean. #1298.
+    """
+    if not p.basic_at:
+        return 0
+    can = affordable(world, actor, p)
+    return next((n for n in sorted(p.basic_at) if n in can), None)
+
+
+def basics_of(
+    world: World, actor: int, window: str = "", augment: int = 0
+) -> tuple[str, ...]:
     """Every ref that **is** a basic attack for this creature.
 
     The designated melee row (`Powers.basic`, which a monster points at one
@@ -3404,6 +3481,12 @@ def basics_of(world: World, actor: int, window: str = "") -> tuple[str, ...]:
     Scanned off `Powers.all` rather than read out of a second store, because
     the declaration is header data -- and a row the creature does not hold
     is not its basic attack however the card reads.
+
+    **`augment` is which form is being asked about**, because six rows print
+    *"you can use this power **unaugmented** as a ranged basic attack"* and
+    the designation is the half that picks up modifiers. Default 0, which is
+    the form every non-psionic row has and the only one those six name. See
+    `Power.basic_at`.
     """
     from .components import Powers
 
@@ -3420,8 +3503,12 @@ def basics_of(world: World, actor: int, window: str = "") -> tuple[str, ...]:
     )
     for ref in known.all:
         p = get(ref)
-        if p is not None and p.basic in want:
-            out.append(ref)
+        if p is None or p.basic not in want:
+            continue
+        # The declaration may be scoped to one form -- see `Power.basic_at`.
+        if p.basic_at and augment not in p.basic_at:
+            continue
+        out.append(ref)
     return tuple(dict.fromkeys(r for r in out if r))
 
 
@@ -3463,7 +3550,19 @@ def basic_options(world: World, actor: int, window: str, own: str = "") -> list[
     # `basics_of` returns the designated row as well, which `own` above
     # already covers; the dedupe at the end is what keeps it from appearing
     # twice.
-    designated = basics_of(world, actor, "ranged" if window == "ranged" else "melee")
+    # **At the form the row designates, not at the base.** `basics_of`
+    # defaults to augment 0, which is right for the six rows printing
+    # "unaugmented" and wrong for a scoped-elsewhere one; asking per row
+    # keeps the two cases from needing different code here. #1298.
+    half = "ranged" if window == "ranged" else "melee"
+    designated = tuple(
+        ref
+        for ref in known.all
+        if (row := get(ref)) is not None
+        and row.basic == half
+        and (spend := basic_form(world, actor, row)) is not None
+        and ref in basics_of(world, actor, half, spend)
+    )
     # **And the rows that declare the substitution in their own header.**
     # `Powers.instead` holds what somebody else *granted*; this is the row
     # whose card says it about itself, which a body cannot file in time --
@@ -3476,6 +3575,12 @@ def basic_options(world: World, actor: int, window: str, own: str = "") -> list[
     # first at-will among them was swung in place of the basic attack.
     # `drivers.lent_basic` caught it -- "returned True; declared []" -- which
     # is a rule written for a different fault in the same function.
+    # **And the scope, which is what makes the offer honest.** Eight of the
+    # nine rows declaring either line name a single form -- six the base
+    # ("unaugmented"), two the Augment 1 form -- so `basic_form` asks
+    # whether the creature can reach the form that carries the permission.
+    # `None` is a battlemind with no power points, whose card does not let
+    # it stand in at all. #1298.
     declared = [
         ref
         for ref in known.all
@@ -3483,6 +3588,7 @@ def basic_options(world: World, actor: int, window: str, own: str = "") -> list[
         and row.instead_of_basic
         and row.instead_of_basic in (window, "*")
         and not (window == "ranged" and row.instead_of_basic == "*")
+        and basic_form(world, actor, row) is not None
     ]
     for ref in dict.fromkeys(
         (*known.instead_of_basic(window), *declared, *designated)
@@ -4487,6 +4593,29 @@ def use(
     p = get(ref)
     if p is None:
         return False
+    # **A granted swing uses the form that stands in for the basic attack.**
+    # `basic_options` offered this row because one of its forms carries the
+    # permission, and for `p2621` and `p11169` that form is Augment 1 --
+    # the base card says nothing about the opportunity window at all. So
+    # swinging it at `augment=0` would take a swing the card does not
+    # license, and take it free.
+    #
+    # Resolved here rather than at the four call sites because `basic_options`
+    # returns refs and they swing refs: threading a form through the charge
+    # menu, `c.basic`, `c.charge_at` and `policy/` would put the same
+    # derivation in four places and give a fifth caller a way to forget it.
+    # Only when the caller asked for the base form, so an explicit
+    # `augment=` from a player is never overridden. #1298.
+    if (
+        augment == 0
+        and p.basic_at
+        and 0 not in p.basic_at
+        and (opportunity or charge or granted_by >= 0 or granted_via)
+    ):
+        picked = basic_form(world, actor, p)
+        if picked is None:
+            return False
+        augment = picked
     # A death throe answers the actor's own `Dropped`. It fires *because*
     # the creature has gone down, so the ordinary "can it act?" gate would
     # always refuse it -- which is why no row of that shape had ever fired.

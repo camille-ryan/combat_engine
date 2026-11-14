@@ -471,6 +471,19 @@ class Cast:
     #: asking `content.powers.augment.augment`, which is the older
     #: body-side arrangement for augments that only change the dice.
     augment: int = 0
+    #: **The same spend when the body settled it instead of the header.**
+    #: A row that declares `augments=` has its points taken by `dsl.use`
+    #: above targeting, so `augment` above is the answer. A row whose
+    #: augments only change a die or a rider declares none, and
+    #: `content.powers.augment.augment` asks and spends from inside the
+    #: body -- stamping the number here, because `augment` is the header's
+    #: field and overwriting it would make the two arrangements
+    #: indistinguishable.
+    #:
+    #: Set by that helper and nowhere else. Declared here rather than left
+    #: to `getattr`, which is how it was reached, so a reader can find it.
+    #: #1298.
+    augment_spend: int | None = None
     #: Which registered substitution this use picked. 0 is the card as
     #: printed, which is what every use has unless a feat has registered a
     #: `c.pre_empt` against this row *and* the menu entry for it was the one
@@ -4221,6 +4234,17 @@ class Cast:
             ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
             keep=keep, hand=hand, as_=as_,
+            # **Which form is being swung**, so `ctx["basic"]` can answer
+            # for a row whose Special says "unaugmented".
+            #
+            # `augment_used` and not `augment`: five of the nine rows that
+            # print such a Special declare no `augments=` at all -- their
+            # augments only move a die -- so the spend lives in
+            # `augment_spend`, set by the body before it strikes. Reading
+            # the header field alone saw 0 on every augmented use of them
+            # and would have called all five a basic attack whatever was
+            # paid. #1298.
+            augment=self.augment_used,
             # **Only when this row carries the weapon keyword.** The same
             # test `_swung_weapon` makes, asked once here instead of at
             # every payout, so a rider inside the attack inherits it and an
@@ -4238,6 +4262,26 @@ class Cast:
         # could not see the first of two. #810.
         self.swings.append(self.result)
         return self.result
+
+    @property
+    def augment_used(self) -> int:
+        """How many power points this use was actually bought with.
+
+        Two arrangements answer it and a reader must not have to know
+        which. A row declaring `augments=` in its header has the points
+        taken by `dsl.use` before targeting, and `augment` holds the
+        number. A row whose augments only move a die declares none, and
+        `content.powers.augment.augment` asks from inside the body and
+        stamps `augment_spend`.
+
+        `augment` wins when both are set, which is that helper's own rule:
+        it returns `c.augment` untouched for a header-declared row rather
+        than charging a second time.
+
+        0 for every non-psionic row in the tree, which is almost all of
+        them. #1298.
+        """
+        return self.augment or (self.augment_spend or 0)
 
     @property
     def landed(self) -> bool:

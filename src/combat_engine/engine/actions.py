@@ -997,6 +997,20 @@ def _aimings(world: World, actor: int, ref: str, *, cost: ActionType | None = No
     for spend in forms:
         if spend and not usable(world, actor, p, augment=spend)[0]:
             continue
+        # **A form that only buys a stand-in permission is not an ordinary
+        # action.** `p2621` and `p11169` print an Augment 1 whose whole
+        # content is "when making an opportunity attack, you can use this
+        # power in place of a melee basic attack": it rewrites no header
+        # line, so offered here it is the base card at the price of a power
+        # point, and a policy picking from what it is given would buy it.
+        #
+        # The opportunity window reaches it anyway -- `dsl.use` resolves
+        # the form from `basic_at` on a granted swing -- so nothing printed
+        # is lost by leaving it out of this menu. #1298.
+        if spend and spend in p.basic_at:
+            form = p.augment_at(spend)
+            if form is not None and form.rewrites_nothing:
+                continue
         for b in open_branches:
             # And each registered substitution, for the third time and the
             # same argument.

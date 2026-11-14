@@ -86,12 +86,21 @@ def p11269(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=REF),
+    #: *"You can use this power unaugmented as a ranged basic attack."*
+    #: "As" and not "in place of", which 4e means differently -- see
+    #: `Power.basic`, which carries Camille's wording -- so this row **is**
+    #: a ranged basic attack and collects a "with basic attacks" modifier.
+    #: `basic_at` is the printed word *unaugmented*: augment it and it is
+    #: an ordinary power again. #1298.
+    basic="ranged",
+    basic_at=(0,),
 )
 def p11270(c: Cast) -> None:
     """Both augments raise the dice and pull by Wisdom rather than 1 square.
 
-    The printed Special -- usable unaugmented as a ranged basic attack -- has
-    no header field to declare it, so it is not said here either.
+    The printed Special -- usable unaugmented as a ranged basic attack -- is
+    declared in the header: `basic="ranged"`, scoped by `basic_at=(0,)` to
+    the form the card names. #1298.
     """
     spent = augment(c)
     if c.strike():
@@ -462,11 +471,24 @@ def p8227(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
+    #: *"You can use this power unaugmented as a ranged basic attack."*
+    #: "As" and not "in place of", which 4e means differently -- see
+    #: `Power.basic`, which carries Camille's wording -- so this row **is**
+    #: a ranged basic attack and collects a "with basic attacks" modifier.
+    #: `basic_at` is the printed word *unaugmented*: augment it and it is
+    #: an ordinary power again. #1298.
+    basic="ranged",
+    basic_at=(0,),
 )
 def p8228(c: Cast) -> None:
     """Augment 1 is a penalty to Will equal to Charisma; Augment 2 raises the
-    dice and puts that penalty on every defence. The Special that makes the
-    unaugmented form a ranged basic attack still has no header field."""
+    dice and puts that penalty on every defence.
+
+    The Special that makes the unaugmented form a ranged basic attack is
+    declared now -- `basic="ranged"` with `basic_at=(0,)`, the printed word
+    being *unaugmented*. This said it "still has no header field", which was
+    true of the name the two marked rows reached for and not of `Power.basic`
+    beside it. #1298."""
     spent = augment(c)
     if c.strike():
         c.damage("2d10" if spent == 2 else "1d10", c.int_mod, dtype=DamageType.PSYCHIC)
