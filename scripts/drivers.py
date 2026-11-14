@@ -9435,7 +9435,7 @@ def resistance_taken_off_the_target(out: Result) -> None:
              f"immune={sorted(t.value for t in held.immune)}")
 
     row = REGISTRY["p16259"]
-    out.that(not (row.unfinished or ()),
+    out.that(not row.unfinished,
              "and the row carries no marker at all now, rather than naming a"
              " clause that plays",
              f"{row.unfinished}")
@@ -83932,7 +83932,107 @@ def a_lent_square_moves_sight_and_not_the_firing_position(out: Result) -> None:
              "and on the board, which `spread` alone does not promise")
 
 
+def a_denied_reaction_is_not_a_daze(out: Result) -> None:
+    """`c.no_immediate` stops the reaction and nothing else (#1285).
+
+    `p13855` prints *"the target cannot make opportunity attacks or take
+    immediate actions"*. The opportunity half was written -- cancel
+    `OpportunityWindow` before it opens -- and the immediate half had
+    nowhere to say it: `query.can_react` reads `Rules.no_reactions`, which
+    only daze, domination and stun write, and each of those carries a great
+    deal this card does not print. Three rows recorded that in their own
+    docstrings.
+
+    **The control is the assertion that matters and it is the negative
+    one.** A verb that quietly dazed the victim would satisfy every
+    assertion about the reaction, so this measures that the creature can
+    still *act*, is not granting combat advantage, and carries no condition
+    -- the three things a daze would have brought with it.
+    """
+    import audit
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import (
+        active,
+        can_act,
+        can_react,
+        enemies,
+        has_combat_advantage,
+    )
+
+    world, me, _ = audit.board("p13855", 1)
+    foe = next(e for e in enumerate(()) if False) if False else next(
+        e for e in enemies(world, me) if world.get(e, Health))
+
+    out.that(can_react(world, foe),
+             "the victim can spend an immediate action before anything is"
+             " laid -- the premise, and without it every arm below is"
+             " vacuously true")
+
+    # **Measured before and after on one board, not as absolutes.**
+    # `audit.board` has already marked this foe through `audit:setup`, so
+    # `has_combat_advantage` is True and `active` holds `marked` before
+    # anything here runs -- the first draft asserted both were absent and
+    # failed on a working verb. What the card is about is whether *this*
+    # call changes them, which is a delta.
+    advantage_before = has_combat_advantage(world, me, foe)
+    conditions_before = sorted(x.value for x in active(world, foe))
+
+    c = Cast(world=world, me=me, ref="drivers:deny")
+    eff = c.no_immediate(on=foe, until=When.EONT)
+    out.that(eff is not None,
+             "the denial is an `Effect`, so the duration is the engine's"
+             " and not a flag somebody has to clear")
+    out.that(not can_react(world, foe),
+             "and the victim cannot spend an immediate action. THE arm:"
+             " `query.can_react` is the one gate, two callers, both in"
+             " `turns.py`")
+
+    # -- the controls: everything a daze would have taken and this must not -
+    out.that(can_act(world, foe),
+             "PLANT: it can still ACT -- the card denies a reaction and says"
+             " nothing about the turn, where daze takes the action too."
+             " `query.can_act` does not read this key, deliberately",
+             f"can_act={can_act(world, foe)}")
+    out.that(has_combat_advantage(world, me, foe) == advantage_before,
+             "PLANT: and the combat advantage is exactly what it was -- daze"
+             " grants it and this card does not print that",
+             f"{advantage_before} -> {has_combat_advantage(world, me, foe)}")
+    out.that(sorted(x.value for x in active(world, foe)) == conditions_before,
+             "PLANT: and it lays no condition -- the denial is a modifier,"
+             " so there is nothing for a row watching `ConditionApplied` to"
+             " pay out on, and no save to end it early",
+             f"{conditions_before} -> "
+             f"{sorted(x.value for x in active(world, foe))}")
+
+    # -- it gives the reaction back -----------------------------------------
+    world.effects.end(must(eff, "the no-immediate hold"))
+    out.that(can_react(world, foe),
+             "when the hold ends the victim reacts again, which is what"
+             " `until=` means and what a bare flag would not have given")
+
+    # -- and the row lays it ------------------------------------------------
+    world2, me2, _ = audit.board("p13855", 1)
+    foe2 = next(e for e in enemies(world2, me2) if world2.get(e, Health))
+    c2 = Cast(world=world2, me=me2, ref="p13855", targets=[foe2])
+    c2.target = foe2
+    REGISTRY["p13855"].body(c2)
+    out.that(not can_react(world2, foe2),
+             "PLANT: and the row itself denies it, not merely the verb --"
+             " a verb nothing calls is the shape `#1281` was about",
+             f"can_react={can_react(world2, foe2)}")
+    out.that(can_act(world2, foe2),
+             "while the row leaves its victim able to take its turn")
+
+
 DRIVERS = {
+    "no_immediate": (
+        a_denied_reaction_is_not_a_daze,
+        "`c.no_immediate` denies the reaction and leaves the turn, the"
+        " advantage and the conditions alone (#1285)",
+    ),
     "lent_eye": (
         a_lent_square_moves_sight_and_not_the_firing_position,
         "`c.line_of_sight_from` moves what a creature can see and not what"

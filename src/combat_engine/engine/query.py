@@ -1882,7 +1882,27 @@ def can_react(world: World, eid: int, *, ignoring: Condition | None = None) -> b
 
     One condition, not a general waiver: a creature stunned a round ago
     still cannot answer, and should not.
+
+    **And a denial that is not a condition at all**, which is the second
+    term below. `Rules.no_reactions` is reachable only through daze,
+    domination and stun, and all three carry a great deal a card printing
+    *"the target cannot take immediate actions"* does not say -- losing
+    your action, granting combat advantage. `p13855`, `p5857` and `p12743`
+    each recorded that in their own docstrings and `p13855` kept a marker
+    for it, naming a **writer** rather than the flag: the flag existed, so
+    naming it made `todo.py` report ARRIVED and go red.
+
+    `Cast.no_immediate` is that writer and files an ordinary modifier, so
+    the duration and the stacking come from `Effects` rather than from a
+    new store. Read here because this is the one gate -- two callers, both
+    in `turns.py` -- so the denial cannot be honoured in one place and
+    missed in another. #1285.
     """
+    from .components import Mods
+
+    mods = world.get(eid, Mods)
+    if mods is not None and mods.total("no_reactions", {}) > 0:
+        return False
     return can_act(world, eid, ignoring=ignoring) and not any(
         rules(c).no_reactions for c in active(world, eid) if c is not ignoring
     )

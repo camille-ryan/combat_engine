@@ -33,7 +33,6 @@ from . import next_check
     reach=CloseBlast(5),
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM, Keyword.SHADOW],
-    dropped=("c.no_immediate()",),
 )
 def p13855(c: Cast) -> None:
     """Half of the first clause lands and half of it has no gate.
@@ -86,8 +85,12 @@ def p13855(c: Cast) -> None:
         c, 4, "skill:bluff", "skill:diplomacy",
         until=When.ENCOUNTER, against=victim,
     )
-    if c.first:
-        c.note(f"{c.ref}: immediate actions are also barred, and nothing gates those")
+    # **The other half of the same printed clause, written now.**
+    # `c.no_immediate` is the writer `Rules.no_reactions` never had: that
+    # flag was reachable only through daze, domination and stun, each of
+    # which carries a great deal this card does not print. The note that
+    # used to stand here said "nothing gates those", which was true. #1285.
+    c.no_immediate(on=victim, until=When.EONT)
 
 
 @power(

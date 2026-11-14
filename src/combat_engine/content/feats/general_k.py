@@ -1022,7 +1022,7 @@ def f1988(c: Cast) -> None:
 
 @power("f2029", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.no_immediate()",),
+       dropped=("c.no_immediate(attacks=)",),
        trigger="you hit a target with f2023b",
        on=Trigger(Hit, lambda w, me, ev: (
            ev.attacker == me and ev.power == "f2023b"
@@ -1044,8 +1044,25 @@ def f2029(c: Cast) -> None:
     a great deal this card does not print. Naming the field would report
     ARRIVED, so the symbol names the writer that is missing. This card
     says "immediate action *attacks*" where `p13855` says "take immediate
-    actions", which is narrower -- but the missing writer is the same one,
-    so the two share the symbol rather than minting a near-synonym.
+    actions", which is narrower.
+
+    **`c.no_immediate` is written now and this row still cannot use it**,
+    which is the whole of what is left. That verb denies the reaction
+    outright, through the one gate there is (`query.can_react`), and
+    `p13855` prints exactly that sentence. This card prints less. Calling
+    it here would stop the victim's immediate *interrupts and reactions of
+    every kind* where the card stops only its attacks -- a row stronger
+    than its printed line, which `m5808a0`'s note calls worse than an
+    absent one.
+
+    It was written that way for one commit and reverted on reading the two
+    cards side by side. So the symbol is re-pointed to the parameter that
+    would say it: telling an immediate *attack* from any other immediate
+    action needs something the engine does not record. `can_react` is
+    asked before the action is chosen, so the distinction is not available
+    where the denial lives, and `AttackDeclared` carries no "this swing is
+    an immediate action" flag -- the same reason the older
+    `c.cannot_attack(opportunity=)` pointing was wrong. #1285.
 
     `When.EONT` is "the duration of the power" -- `f2023b`'s hit line runs
     until the end of the holder's next turn. `AT_WILL` because a declared

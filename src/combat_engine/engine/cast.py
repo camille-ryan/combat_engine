@@ -8683,6 +8683,44 @@ class Cast:
 
         return attempt(self.world, who, bonus=bonus, skill=skill, auto=auto)
 
+    def no_immediate(
+        self, *, on: int | None = None, until: When = When.EONT,
+    ) -> Effect | None:
+        """"The target cannot take immediate actions."
+
+        **The writer `Rules.no_reactions` never had.** That flag is set by
+        `Condition.DAZED`, `DOMINATED` and `STUNNED` and by nothing else, so
+        there was no way to deny one creature its immediate actions without
+        also taking away its action or granting combat advantage -- neither
+        of which these cards print. `p13855` carried a marker naming this
+        verb rather than the field, precisely because the field exists and a
+        marker naming something present can never be satisfied.
+
+        Filed as an ordinary modifier, so the duration, the stacking and the
+        teardown are `Effects`' and nothing new stores anything.
+        `query.can_react` is the one gate -- two callers, both in
+        `turns.py` -- and reads the key beside the conditions.
+
+        **It denies the reaction and nothing else**, which is the whole
+        reason the card could not be written as a daze: `query.can_act`
+        does not read this key, so the creature still takes its turn and
+        grants no combat advantage. `drivers.no_immediate` asserts that
+        separately, because a verb that quietly dazed would pass every
+        assertion about the reaction.
+
+        Spelled after `c.no_provoke` and `c.no_basic`, the convention for a
+        denial in this tree. `c.immediate_actions` is **not** this: that one
+        makes an immediate action cheaper and twice a round, the opposite
+        question, and `p13855`'s docstring records rejecting it so the two
+        gaps would not share a symbol.
+
+        Theirs, so it follows `c.target`. #1285.
+        """
+        return self.bonus(
+            "no_reactions", 1, on=self._who(on), until=until,
+            kind=f"{self.ref} no immediate",
+        )
+
     def no_provoke(
         self, *, from_: int | None = None, on: int | None = None,
         until: When = When.EOTNT,
