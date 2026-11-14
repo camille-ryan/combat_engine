@@ -586,7 +586,7 @@ def i2659x1(c: Cast) -> None:
 
 
 @power("i467x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF)
 def i467x1(c: Cast) -> None:
     """Storage. Consumables are not carried as objects, so stowing one is a
     line about the pack rather than about the fight.
@@ -607,8 +607,15 @@ def i467x1(c: Cast) -> None:
     naming the wrong gap is worse than one naming a satisfied premise,
     and `#1233` carries the measurement either way.
 
-    The second sentence stands and is why `out_of_combat=True` is right:
-    stowing a thing is a line about the pack.
+    **The second sentence does not carry `out_of_combat=True`, which it
+    was being used to justify.** *"Stowing a thing is a line about the
+    pack"* is true about the flavour and false about the mechanics: the
+    stow is the state `i467p1` reads during a second wind, which happens
+    in a fight, so the row has something to say there. `audit` reported it
+    AWAKE on `RowStored` -- `by=entry_of("i467x1")`, at the row's own
+    depth, so the attribution is exact. Not the `ItemConsumed` case
+    `#1233` excused either: that event is the price of using a thing, this
+    one is the effect. #633.
     **Correction to the paragraph above, which over-claimed.** It said
     this pair is *"writable content work, not blocked on the engine"*,
     on the ground that `c.store_row` stores, `c.stored_row(of=)` reads

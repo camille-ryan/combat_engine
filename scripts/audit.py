@@ -5706,7 +5706,7 @@ def _its_own_slice(world, ref: str, cursor: int) -> list | None:  # noqa: ANN001
                 None,
             )
             if closed is not None:
-                return rest[:closed]
+                return _after_the_announcement(rest[:closed], mine)
             # No resolution announced -- a path that raised, or a row used
             # by something that does not go through `dsl.use`. The depth
             # rules are the fallback, exactly as before.
@@ -5718,8 +5718,53 @@ def _its_own_slice(world, ref: str, cursor: int) -> list | None:  # noqa: ANN001
                 if x.kind == "PowerUsed" and at <= mine:
                     break
                 out.append(x)
-            return out
+            return _after_the_announcement(out, mine)
     return None
+
+
+def _after_the_announcement(body: list, mine: int) -> list:
+    """Drop the run of events that answered the announcement itself.
+
+    **The thing `_its_own_slice` promised and did not do.** Its docstring
+    says *"between the two announcements only this row's body runs -- the
+    engine is synchronous -- so nothing of the provocation's can be in
+    here"*, and the second clause is false: a listener on `PowerUsed` runs
+    **inside** that emit, so whatever it does is logged after the
+    announcement and before the body has run at all.
+
+    Measured on `p13708`, a `Minor Action Personal` cleric utility whose
+    whole printed Effect is a Perception bonus and whose whole body is a
+    `c.note`. Its slice came back with two full walks in it -- `MoveStart`,
+    `Moved`, `MoveEnd`, eight `AdjacencyLost` -- by **creatures 7 and 8**,
+    every one at depth 1 where the row's own `PowerUsed` and its `Note`
+    both sit at depth 0. `Moved` is in `DID_SOMETHING`, so the row was
+    credited with somebody else's walk and reported AWAKE against a
+    correct `out_of_combat=True`. `p16418` and `p3466` are the same shape.
+
+    **The depth is the discriminator and it is exact, not a heuristic.**
+    `dsl.use` announces `PowerUsed`, and only once that emit returns does
+    the body run -- so the body's own events are at the *same* depth as the
+    announcement, which is the property the docstring above already turns
+    on, and a nested `use()` inside the body is at that same depth too
+    (#697). Anything strictly deeper than `mine` that arrives **before**
+    the body's first own-depth event therefore ran inside the emit, which
+    means a listener answered the announcement. Nothing of the row's can be
+    in that prefix.
+
+    A prefix only. Once the body has spoken at its own depth, everything
+    after it is kept exactly as before -- including the deeper events of
+    its own `c.damage` or its own nested use -- so this narrows the one
+    window it can prove is not the row's and leaves every other judgement
+    alone.
+
+    An empty list and not `None` when the whole slice is that prefix: the
+    row ran and did nothing, which is a different answer from "no mark
+    found, keep the window you had" and the two are the distinction
+    `_its_own_slice` returns `None` to preserve.
+    """
+    first = next((j for j, x in enumerate(body)
+                  if getattr(x, "depth", 0) <= mine), None)
+    return [] if first is None else body[first:]
 
 
 def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
@@ -8502,12 +8547,36 @@ def audit(ref: str) -> Result:
                 if getattr(e, "by", "") == ref
             }
             laid = bool(mine_eff - had)
+            # **The row's own slice, not the raw window, and this branch
+            # was the last one still reading the window wholesale.** Every
+            # other path here attributes -- `_payout`, the trait branch,
+            # `_claimed`, `_own_movement`, `_own_unbinding` -- and the
+            # comment above admits this one was deferred because
+            # narrowing it "would re-judge a great many rows". It does,
+            # and that is the point: six rows declaring
+            # `out_of_combat=True` were reported AWAKE off this line, and
+            # every one of them had a slice holding nothing but its own
+            # `Note`. `p15850`'s whole printed Effect is *"you ask a
+            # question and receive a vague notion of the future"* during
+            # an extended rest, and it was credited with `ActionGranted`,
+            # `DamageApplied` and `EffectExpired` -- the board's, not
+            # its. #216 and #690 arriving by the one route left open.
+            #
+            # `is not None`, not `or`, and the difference is load-bearing
+            # now in a way it was not before: an **empty** slice means the
+            # row ran and did nothing, where `None` means no mark was
+            # found. `or` collapses the two, so the row that ran and did
+            # nothing fell straight back to the whole window and was
+            # credited with everything in it -- which is the exact failure
+            # this change is about, reached by the shorter route.
+            # `_its_own_slice`'s own docstring is about keeping those two
+            # answers apart.
+            own = _its_own_slice(world, ref, cursor)
+            window = own if own is not None else world.bus.log[cursor:]
             out.events |= (
-                {e.kind for e in world.bus.log[cursor:]}
+                {e.kind for e in window}
                 - {"RelationCleared", "EffectApplied"}
-            ) | _own_unbinding(
-                _its_own_slice(world, ref, cursor) or world.bus.log[cursor:]
-            )
+            ) | _own_unbinding(window)
             if laid:
                 out.events |= {"ConditionApplied", "EffectApplied"}
         except Exception:  # the traceback is the finding

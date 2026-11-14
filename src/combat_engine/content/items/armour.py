@@ -1832,10 +1832,19 @@ def i533x1(c: Cast) -> None:
 
 
 @power("i540x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF)
 def i540x1(c: Cast) -> None:
     """One at-will or encounter martial power of the armour's level or
     lower, stored in the armour until `i540p1` spends it.
+
+    **No `out_of_combat=True`, and carrying one contradicted the paragraph
+    below it.** That marker claims the row has nothing to say in a fight;
+    this one arms at the start of one and writes the state `i540p1` spends
+    during it, and `audit` reported it AWAKE on `RowStored` -- correctly
+    attributed, `by="i540x1"`, at the row's own depth. A stow is not the
+    `ItemConsumed` case `#1233` excused: that event is the *price* of
+    using a thing out of combat, where this is the effect itself and the
+    other half of the card reads it. #633.
 
     **Settled when the Property arms, which is the start of the fight.**
     The card says the storing happens during a rest and there is no
