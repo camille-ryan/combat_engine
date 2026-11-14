@@ -870,9 +870,7 @@ def swordmage_aegis_shield_choice(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=MARTIAL,
-    defect="the Archer feature this row is conditional on is not in the"
-           " import -- no non-marshal warlord class feature exists, so"
-           " nothing can record the choice the card keys on",
+    todo=("chargen.armor_proficiency()", "chargen.second_fork()"),
 )
 def warlord_archer(c: Cast) -> None:
     """Three clauses and none of them has a subject.
@@ -901,13 +899,41 @@ def warlord_archer(c: Cast) -> None:
     swap belongs to whoever *chose* this feature, and laying it here
     unconditionally would hand every warlord a Strength-rolled bow.
 
-    **And the choice cannot be recorded, because the thing chosen is not
-    in the import.** This is the measurement that moved the marker from
-    two symbols to `defect=`: the card is conditional on *"the Archer
-    `c8` class feature"*, and `class_feature` holds **no non-marshal
-    warlord row at all** -- 13 rows, every one `cf:warlord-marshal-*`.
-    So there is no ref to key a fork on, no row to grant, and nothing for
-    a character to have chosen.
+    **The choice CAN be recorded, and the `defect=` that said otherwise
+    was reading a substitution fault.** That marker argued the card is
+    conditional on *"the Archer `c8` class feature"* and that
+    `class_feature` holds no non-marshal warlord row, so there was no ref
+    to key a fork on. The first half is the mistake: `c8` **is** this
+    class, and the printed phrase is the name of *this row's own
+    feature* -- the importer substituted the class ref for the second
+    word of it. So the sentence is self-referential, as every one of the
+    four leader features' is, and the ref to gate on is this row.
+
+    Camille, on the structure: *"the original was combat leader, and
+    splatbooks gave replacement options."* The page bears that out --
+    `cf:warlord-marshal-f3` is the original, and `-f1` and `-f2` each say
+    *"this class feature replaces your `cf:warlord-marshal-f3` class
+    feature"* with the ref resolved. Nothing acts on that, so all four
+    fire on every dealt marshal, which is `#1286`.
+
+    So this is `todo=` rather than `defect=` -- a facility will close it,
+    which is what makes a symbol right -- and the two symbols are the two
+    the original author named, both measured and both still absent:
+
+    * `chargen.armor_proficiency()`: `armour_opened` reads a feat's
+      armour **gains** and nothing reads a loss, so *"you lose
+      proficiency with chainmail and light shields"* cannot be said.
+    * `chargen.second_fork()`: the gate. `-f1` is gated on
+      `c.build("shielding")` -- a **leg** -- and `-f2`'s own docstring
+      records that the class's legs are spent on `-f4`'s six presence
+      options, so there is no leg left for a third leader feature or for
+      this one. `BUILD_OPTIONS` is the available second axis and taking
+      it is a design decision that changes every dealt warlord, so it is
+      Camille's rather than mine: `#1286`.
+
+    Refused in play until both land, deliberately -- laying the swap
+    unconditionally would hand every marshal a Strength-rolled bow, which
+    the paragraph above already says. `#1287`.
 
     The two old symbols each described a shape rather than the hold.
     `chargen.second_fork()` was right that the class's six legs are spent
@@ -920,12 +946,12 @@ def warlord_archer(c: Cast) -> None:
     loss alone would take chainmail off every marshal, so it is not what
     holds the row.
 
-    `defect=` and not `todo=`: no symbol will close this, because what is
-    absent is a compendium row rather than a facility. Plain words, which
-    is what that marker takes. It drops this row alone --
-    `dsl.entry_of` returns a `cf:` ref unchanged -- and the row is the
-    conditional consequence of a choice no character can make, so
-    dropping it costs a marshal nothing it could otherwise have had.
+    `todo=` and not `defect=`, which is the correction: the compendium
+    carries this feature in full -- the proficiency swap and the ability
+    swap are both printed and legible -- so what is absent is a facility
+    and a symbol is the right marker. It is the only class feature at
+    level 10 or below still carrying one, which is why
+    `drivers.scope_boundary` names it rather than counting.
     """
 
 

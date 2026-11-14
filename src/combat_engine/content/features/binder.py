@@ -718,11 +718,18 @@ for _i in range(9):
     _r = f"cf:warlock-binder-f21s{_i}"
     globals()["binder_defect_" + _r.rsplit("-f", 1)[-1].replace("s", "_")] = (
         _defective(_r, _AS_REF if _i in (2, 4, 6) else _NAMED))
-# and the two `-f12` options whose creature resolves to nothing at all
+# **And the last two `-f12` options, whose creatures do resolve.** They
+# were `defect=` on the two reasons above and both were wrong. `s2`'s spec
+# reads "summon a `p13680`", a **power**: the printed creature carries the
+# same name as that at-will and the scrub had no table preference, so it
+# took the power -- the creature is `x10_23`. `s3` prints four archon
+# grunts chosen on a d4 and all four are `Associate` rows, `x10_66` to
+# `x10_69`. `p13649` names both. So all nine of this fork are pointers
+# now. #1287.
 for _i in (2, 3):
     _r = f"cf:warlock-binder-f12s{_i}"
-    globals()["binder_defect_" + _r.rsplit("-f", 1)[-1].replace("s", "_")] = (
-        _defective(_r, _AS_REF if _i == 2 else _NAMED))
+    globals()["binder_summon_" + _r.rsplit("-f", 1)[-1].replace("s", "_")] = (
+        _summon_option(_r))
 
 #: The twelve later pact options, every one a printed power name with no
 #: ref. Four forks of three, and the pattern is what makes it worth a

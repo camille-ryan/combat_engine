@@ -615,6 +615,17 @@ KNOWN_SILENT = {
                            " chargen's and this row has no body",
     "cf:ranger-hunter-f19": "grants the aspects it dealt; the board hands"
                             " the character all eight before the body runs",
+    # **The three the hunter is given at 1st level**, and the board's
+    # reason once more rather than a new one: all three are level 0, so
+    # `loadout` hands over every level-0 power of the class before any
+    # body runs and `c.grant_row` has nothing to add. Measured on this
+    # row's own board -- all three are in `Powers.known` already.
+    # `drivers.hunter_three` proves the grant against a dealt hunter,
+    # which is what the board cannot show. It carried `defect=` until
+    # `#1287` on the ground that its spec lists no powers; the spec does
+    # not, the page does, and all three are imported.
+    "cf:ranger-hunter-f1": "grants the three it was given; they are level"
+                           " 0, so the board's ranger holds them already",
     "cf:ranger-scout-f16": "grants the aspects it dealt; the board hands"
                            " the character all eight before the body runs",
     # **The one rung of eleven that is silent, and for the board's

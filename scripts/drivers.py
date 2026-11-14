@@ -14610,6 +14610,11 @@ def scope_boundary(out: Result) -> None:
     from combat_engine.etl import item as etl_item
     from combat_engine.etl.build import MAX_MONSTER_LEVEL, MAX_POWER_LEVEL
 
+    #: The one class feature in scope still carrying a symbol. Named here
+    #: so the assertions below read it once rather than repeating a
+    #: literal three times -- and so retiring it is one edit.
+    ONE_IN_SCOPE = "cf:warlord-marshal-f0"
+
     readme = (ROOT / "README.md").read_text()
     said = re.search(r"up to level (\d+) for PCs, and level (\d+) for "
                      r"monsters", readme)
@@ -14629,11 +14634,25 @@ def scope_boundary(out: Result) -> None:
                     if r.startswith("cf:") and p.unfinished)
     below = [(r, levels.level_of(r)) for r in marked
              if (levels.level_of(r) or 0) <= pcs]
-    out.that(not below,
-             "EVERY class-feature row still carrying an unfinished symbol"
-             f" is gained above level {pcs} -- so no row a player can be"
-             f" dealt is unfinished ({len(marked)} marked, {len(below)} of"
-             " them in scope)",
+    # **One in scope, named rather than counted.** This asserted ZERO
+    # until `#1287`, and the zero was resting on a false marker:
+    # `cf:warlord-marshal-f0` carried `defect=` claiming the feature it is
+    # conditional on is absent from the import. It is not -- `c8` in its
+    # spec is this class, and the printed phrase is the name of the row's
+    # own feature, which the importer half-substituted. Correcting the
+    # marker to `todo=` revealed a row the wrong `defect=` had hidden.
+    #
+    # Named and not counted, which is the shape the ranger and hexblade
+    # censuses in this file already use and is the stronger one: a second
+    # row drifting into scope fails here, where a count of one would let
+    # it swap places with this one unseen.
+    out.that([r for r, _lv in below] == [ONE_IN_SCOPE],
+             "EXACTLY ONE class-feature row in scope still carries an"
+             f" unfinished symbol -- `{ONE_IN_SCOPE}`, which wants a"
+             " proficiency LOSS (`armour_opened` reads only gains) and a"
+             " second choice axis (its class's legs are spent on the six"
+             f" presence options). Every other marked row is above level"
+             f" {pcs} ({len(marked)} marked, {len(below)} in scope)",
              f"in scope and marked: {below}")
 
     # **Asked of the dealer, not derived from the level.** A row's
@@ -14648,15 +14667,23 @@ def scope_boundary(out: Result) -> None:
                 got = set(chargen.loadout(cls, level=lvl, build=leg))
                 for ref in got & set(marked):
                     dealt.append((cls, leg.name, lvl, ref))
-    out.that(not dealt,
-             "and none of them is dealt to any character this project"
-             f" builds -- {len(chargen.BUILDS)} classes,"
+    # **And the one in scope IS dealt**, which is the whole reason it
+    # matters: a marked row nobody holds costs nothing, and this one is a
+    # level-1 feature every marshal has. So the assertion is that nothing
+    # ELSE is -- the same named-not-counted shape as above.
+    others = sorted({ref for _c, _l, _lv, ref in dealt if ref != ONE_IN_SCOPE})
+    out.that(not others,
+             "and no OTHER marked row is dealt to any character this"
+             f" project builds -- {len(chargen.BUILDS)} classes,"
              f" {sum(len(v) for v in chargen.BUILDS.values())} legs,"
-             f" levels 1 to {pcs} ({len(dealt)} hits)",
-             f"{dealt[:4]}")
+             f" levels 1 to {pcs}. The one that is, is named above",
+             f"{others}")
 
+    # The in-scope row's two symbols are `chargen.` ones, which is the
+    # point of it being in scope at all: a facility will close it, where
+    # every out-of-scope row waits on an import ceiling.
     wrong = sorted({sym for r in marked for sym in REGISTRY[r].unfinished
-                    if not sym.startswith("etl.")})
+                    if not sym.startswith(("etl.", "chargen."))})
     out.that(not wrong,
              "and every symbol they wait on names an ETL ceiling, not a"
              " facility -- the gap is the import's scope, and a symbol"
@@ -26739,19 +26766,28 @@ def at_most_one_applies(out: Result) -> None:
 #: only entries here that are a gap rather than a reading**, and they are
 #: `#1178`: when movement grows a credit channel they come off this list.
 UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
-    # **The pact summon.** `p13649` reads which of fourteen options the
+    # **The pact summon.** `p13649` reads which of eighteen options the
     # character holds to decide WHICH creature it fields -- a summon it
     # makes either way -- so this is the first shape above: the gate picks
     # a value on a call the row makes regardless, and crediting an option
-    # would hand it the whole summon. The fourteen carry
+    # would hand it the whole summon. The eighteen carry
     # `implemented_in=("p13649",)`, which is what keeps them out of the
     # silent list. `#1268`.
+    #
+    # **Fourteen until `#1287`, and the last four were `defect=`.** `s2`'s
+    # spec reads "summon a `p13680`" -- a **power**, because the printed
+    # creature carries the same name as that at-will and the scrub had no
+    # table preference. The creature is `x10_23`. `s3` prints four archon
+    # grunts on a d4, `x10_66` to `x10_69`, every one an `Associate` row.
+    # So both forks are complete at nine options each.
     "p13649": (
         "cf:warlock-binder-f12s0", "cf:warlock-binder-f12s1",
+        "cf:warlock-binder-f12s2", "cf:warlock-binder-f12s3",
         "cf:warlock-binder-f12s4", "cf:warlock-binder-f12s5",
         "cf:warlock-binder-f12s6", "cf:warlock-binder-f12s7",
         "cf:warlock-binder-f12s8",
         "cf:warlock-hexblade-f7s0", "cf:warlock-hexblade-f7s1",
+        "cf:warlock-hexblade-f7s2", "cf:warlock-hexblade-f7s3",
         "cf:warlock-hexblade-f7s4", "cf:warlock-hexblade-f7s5",
         "cf:warlock-hexblade-f7s6", "cf:warlock-hexblade-f7s7",
         "cf:warlock-hexblade-f7s8",
@@ -46994,21 +47030,21 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
-    out.that(refused == ["cf:ranger-hunter-f1", "cf:ranger-hunter-f24",
-                         "cf:ranger-hunter-f25"],
+    out.that(refused == ["cf:ranger-hunter-f24", "cf:ranger-hunter-f25"],
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
              # count is the number LEFT, and every one left is out
              # of reach for a reason this project chose -- a feature
              # printed above level 10 names powers the ETL does not
              # import (`MAX_POWER_LEVEL`).,
-             "THREE rows are `defect=` -- down from seven. The aspect "
-             "list the fourth was missing is printed on the page and is "
-             "recovered, so `cf:ranger-hunter-f19` plays; these three are "
-             "left, and `-f1` is the sharpest: *you gain the following "
-             "three powers* and then no list at all. Named rather than "
-             "counted, so a different row drifting into `defect=` cannot "
-             "pass as one of these",
+             "TWO rows are `defect=` -- down from three at `#1287`, which "
+             "took `-f1` off the list. That one was called the sharpest "
+             "case here -- *you gain the following three powers* and then "
+             "no list -- and it was the spec that listed none; the page "
+             "prints all three cards straight after the sentence and "
+             "every one is imported. Named rather than counted, so a "
+             "different row drifting into `defect=` cannot pass as one "
+             "of these",
              f"{refused}")
 
 
@@ -47458,29 +47494,43 @@ def the_hexblades_pact_forks_deal_one_option_without_knowing_which(
              "`-f4` waits on NO symbol -- all three it carried are gone, "
              "the last by being re-marked rather than written",
              f"{sorted(waits)}")
-    out.that(bool(REGISTRY["cf:warlock-hexblade-f4"].defect),
-             "and it carries `defect=` instead, in plain words: the power "
-             "it adds a use of is not in the compendium, so no symbol "
-             "will ever close it and `todo.py` must not report it ready",
-             f"{REGISTRY['cf:warlock-hexblade-f4'].defect[:60]!r}")
+    # **Inverted at `#1287`, and this is the pair doing its job.** It
+    # asserted that `-f4` carries `defect=` -- the claim that kept that
+    # marker honest while the clause was unwritten, and the claim that had
+    # to go red the day it was written. The power it adds a use of does
+    # exist: six of them, one per pact weapon, each gated by its own
+    # printed Requirement. They are **level 0** with a bare
+    # `Warlock Attack` heading, so the four-way search the old marker
+    # recorded was looking for a level-1 power four times.
+    out.that(not REGISTRY["cf:warlock-hexblade-f4"].defect,
+             "and it carries NO `defect=` either -- the row is written. "
+             "Its marker claimed the power it adds a use of is absent; "
+             "there are six, one per pact blade, all level 0",
+             f"{REGISTRY['cf:warlock-hexblade-f4'].defect!r}")
+    out.that(bool(REGISTRY["cf:warlock-hexblade-f4"].body.__doc__),
+             "and it says in its own words which power each pact raises, "
+             "so the next reader does not re-derive the mapping")
 
     # -- the twenty-eight the import cannot supply ------------------------
     world, me, _ = _posed("cf:warlock-hexblade-f0", 1)
     DEFECT = "the compendium is missing what this row needs"
     refused = sorted(r for r in rows
                      if usable(world, me, must(get(r), r), spent_ok=True)[1] == DEFECT)
-    out.that(len(refused) == 17,
+    out.that(len(refused) == 14,
              # `#1268` moved 51 chassis rows out of `defect=`: the
              # compendium held what they were marked as missing. The
              # count is the number LEFT, and every one left is out
              # of reach for a reason this project chose -- a feature
              # printed above level 10 names powers the ETL does not
              # import (`MAX_POWER_LEVEL`).,
-             "SEVENTEEN hexblade rows are out of reach for a `defect=` "
-             "reason, up one from sixteen: `-f4` joined them when its "
-             "last symbol was re-marked, the power it adds a use of "
-             "being absent from the compendium rather than unbuilt. The "
-             "number in this message and the literal above it have "
+             "FOURTEEN hexblade rows are out of reach for a `defect=` "
+             "reason, down three from seventeen at `#1287`: `-f4` is "
+             "written (its power exists, six of them, all level 0), and "
+             "`-f7s2` and `-f7s3` are pointers into `p13649` now (one "
+             "spec named a POWER whose printed name the creature shares; "
+             "the other's four variants are all `Associate` rows). Every "
+             "one left is a `-f10` option, which is the 19th-level fork. "
+             "The number in this message and the literal above it have "
              "disagreed before -- the message said twenty-eight while "
              "the assertion read sixteen -- so it is spelled out",
              f"{len(refused)}")
@@ -47595,6 +47645,43 @@ def the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers(
                  "hand holds all six sets, so this gate is what makes five "
                  "of them inert",
                  f"{wrong}")
+
+    # -- `-f4` raises the uses of ITS OWN pact's encounter attack ---------
+    #
+    # **The row this makes writable, and `#1287`'s sharpest case.** It
+    # carried `defect=` saying the power it adds a use of does not exist,
+    # on a four-way search for a **level-1** encounter attack. All six
+    # pact encounter attacks are level **0** -- a bare `Warlock Attack`
+    # heading with no number -- so every one of those four searches was
+    # asking for the wrong thing. Camille found it: *"every pact weapon
+    # grants an at-will and an encounter."*
+    #
+    # Written out rather than read off `_PACT_ENCOUNTER`, for the reason
+    # `PACTS` above is written out: a rule that reads the constant under
+    # test agrees with it by construction.
+    ENCOUNTER = {"infernal": "p13681", "star": "p13723",
+                 "elemental": "p16259"}
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.components import Powers as _Pw
+
+    for leg, _want, _row in PACTS:
+        _held, eid, world = dealt("hexblade", leg)
+        REGISTRY["cf:warlock-hexblade-f4"].body(
+            _Cast(world=world, me=eid, ref="cf:warlock-hexblade-f4"))
+        raised = dict(world.need(eid, _Pw).extra_uses)
+        mine = ENCOUNTER[leg]
+        out.that(raised.get(mine, 0) == 1,
+                 f"`cf:warlock-hexblade-f4` gives the `{leg}` pact one more"
+                 f" use of `{mine}` -- the encounter attack that pact's own"
+                 f" blade grants",
+                 f"{raised}")
+        others = {r: n for r, n in raised.items()
+                  if r in set(ENCOUNTER.values()) and r != mine}
+        out.that(not others,
+                 "PLANT: and raises NO other pact's -- the hand holds all"
+                 " six sets, so a row reading the hand instead of the"
+                 " chosen option would raise every one of them",
+                 f"{others}")
 
     # -- the implement survives, which the first attempt destroyed -------
     for leg, _want, _row in PACTS:
@@ -48575,6 +48662,59 @@ def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
         # grew would otherwise only show up as a count nobody reads.
         ("wizard", "bladesinger", "cf:wizard-bladesinger-f1", {1: 3, 10: 3}),
     )
+    # -- `cf:ranger-hunter-f1`: three given, not a fork at all -----------
+    #
+    # **The one row in this family with no choice in it**, and it carried
+    # `defect=` until `#1287` for the same reason as the aspect lists: its
+    # spec is the whole of *"You gain the following three powers."* and the
+    # page prints the three cards straight after it. All three are
+    # imported.
+    #
+    # Asserted on a **dealt** hunter because `audit` cannot show it: the
+    # three are level 0, so the board hands over every level-0 power of the
+    # class before any body runs and `c.grant_row` has nothing to add --
+    # which is the `KNOWN_SILENT` entry's measured reason and is the same
+    # mechanism as the pact over-dealing in `#1286`.
+    # **Stripped from the hand first, because otherwise this measures the
+    # dealer and not the row.** The first draft asserted that a dealt
+    # hunter holds the three, and the plant -- granting one of three --
+    # passed: they are level-0 ranger powers, so `loadout` hands them over
+    # whatever the body does. The row's grant is only observable where the
+    # character does **not** already hold them, which is what the
+    # `KNOWN_SILENT` entry's own note says a dummy would fix.
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.components import Powers as _Powers
+
+    THREE = ("p13585", "p13586", "p13587")
+    world, eid = dealt("hunter", 1)
+    hand = set(world.need(eid, _Powers).known)
+    out.that("cf:ranger-hunter-f1" in hand,
+             "a dealt 1st-level hunter holds the feature, so the grant"
+             " below is this row's to make")
+
+    known = world.need(eid, _Powers)
+    for one in THREE:
+        while one in known.known:
+            known.known.remove(one)
+    out.that(not (set(THREE) & set(known.known)),
+             "with the three taken out of its hand, it holds none of them"
+             " -- the premise the next assertion rests on")
+    REGISTRY["cf:ranger-hunter-f1"].body(
+        _Cast(world=world, me=eid, ref="cf:ranger-hunter-f1"))
+    back = set(world.need(eid, _Powers).known)
+    out.that(set(THREE) <= back,
+             "PLANT: and running the row puts all THREE back -- the row"
+             " that used to be refused outright. Measured off an emptied"
+             " hand, so the dealer cannot answer for it",
+             f"{ {r: (r in back) for r in THREE} }")
+    scout_world, scout_eid = dealt("scout", 1)
+    scout_hand = set(scout_world.need(scout_eid, _Powers).known)
+    out.that("cf:ranger-hunter-f1" not in scout_hand,
+             "PLANT: and the OTHER chassis does not hold it -- a feature"
+             " granted to every ranger would pass the two assertions above"
+             " and be wrong about which chassis prints it",
+             f"scout holds it: {'cf:ranger-hunter-f1' in scout_hand}")
+
     for cls, chassis, fork, ladder in LADDERS:
         got = {}
         for level in ladder:
@@ -49006,10 +49146,13 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
     subs = sorted(r for r in REGISTRY
                   if re.match(r"^cf:warlock-(binder-f12|hexblade-f7)s\d$", r)
                   and "p13649" in (getattr(REGISTRY[r], "implemented_in", ()) or ()))
-    out.that(len(subs) == 14,
-             "fourteen pact-summon options are pointers into `p13649` -- "
-             "seven creatures on each of two chassis, which print the same "
-             "list",
+    out.that(len(subs) == 18,
+             "EIGHTEEN pact-summon options are pointers into `p13649` -- "
+             "nine creatures on each of two chassis, which print the same "
+             "list. Fourteen until `#1287`: the last two of each fork were "
+             "`defect=` on reasons that were both false -- one spec names a "
+             "POWER where the creature carries the same printed name, and "
+             "the other's four variants are all `Associate` rows",
              f"{len(subs)}")
 
     # **Each one really fields its own creature**, which is the assertion
@@ -49030,11 +49173,11 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
     missing = sorted(s for s, got in fielded.items() if len(got) != 1)
     out.that(not missing,
              "and each fields exactly one `associate` creature through "
-             "`p13649` -- all 14, because reading one would pass for a "
+             "`p13649` -- all 18, because reading one would pass for a "
              "body that summons the same creature whatever was chosen",
-             f"{missing or 'all 14 fielded'}")
-    out.that(len({tuple(v) for v in fielded.values()}) >= 7,
-             "and the fourteen name at least seven DIFFERENT creatures, "
+             f"{missing or 'all 18 fielded'}")
+    out.that(len({tuple(v) for v in fielded.values()}) >= 8,
+             "and the eighteen name at least eight DIFFERENT creatures, "
              "which is what says the choice is read rather than ignored",
              f"{len({tuple(v) for v in fielded.values()})} distinct")
 
@@ -84027,7 +84170,120 @@ def a_denied_reaction_is_not_a_daze(out: Result) -> None:
              "while the row leaves its victim able to take its turn")
 
 
+def the_last_two_pacts_field_their_own_creature(out: Result) -> None:
+    """`p13649`'s nine options each summon a different creature (#1287).
+
+    Seven resolved at `#1268` and the last two were `defect=` on reasons
+    that both turned out to be false.
+
+    * `-f12s2`/`-f7s2`'s spec reads *"summon a `p13680`"*, which is a
+      **power** -- the printed creature carries the same name as that
+      at-will and `sanitise.scrub` has no table preference, so it took the
+      power. The creature is `x10_23`, in the `Associate` table all along.
+    * `-f12s3`/`-f7s3` print four archon grunts chosen on a d4 -- *"1,
+      air; 2, earth; 3, fire; or 4, water"* -- and every one is an
+      `Associate` row, `x10_66` to `x10_69`.
+
+    **The assertion is which creature, not whether one appeared.**
+    `p13649` summons either way: its fallback is an inline block, so a
+    branch that never fired would still put *a* creature down and pass any
+    test that only counted bodies. That is the fault the whole rule exists
+    to catch, and `#1268`'s own note says the fallback is kept deliberately.
+
+    The d4 branch is asserted as a **set membership over several rolls**
+    rather than one value, because it is the one branch here that rolls.
+    """
+    import audit
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    OPTS = ("cf:warlock-binder-f12s0", "cf:warlock-binder-f12s1",
+            "cf:warlock-binder-f12s2", "cf:warlock-binder-f12s3",
+            "cf:warlock-binder-f12s4", "cf:warlock-binder-f12s5",
+            "cf:warlock-binder-f12s6", "cf:warlock-binder-f12s7",
+            "cf:warlock-binder-f12s8")
+
+    def fielded(opt: str, face: int = 0) -> str:
+        """The ref of the creature `p13649` puts down for `opt`.
+
+        `face` forces the d4, which is the only way to reach each of the
+        four archon grunts: `Rng.loaded` applies to a **d20** alone, and
+        `audit.board`'s seed does not reach `c.roll` -- eight seeds gave
+        the same face eight times, which is what the first draft of the
+        last assertion here mistook for the branch being fixed.
+        """
+        world, me, _ = audit.board("p13649", 1)
+        known = world.need(me, Powers)
+        for held in list(known.known):
+            if held.startswith(("cf:warlock-binder-f12s",
+                                "cf:warlock-hexblade-f7s")):
+                known.known.remove(held)
+        known.known.append(opt)
+        before = set(world.having(Position))
+        c = Cast(world=world, me=me, ref="p13649")
+        c.origin = sorted(world.need(me, Position).squares)[0]
+        if face:
+            c.roll = lambda _dice, _f=face: _f   # ty: ignore[invalid-assignment]
+        REGISTRY["p13649"].body(c)
+        made = sorted(set(world.having(Position)) - before)
+        if len(made) != 1:
+            return f"{len(made)} creatures"
+        return str(audit.ident_of(world, made[0])
+                   if hasattr(audit, "ident_of") else _ident(world, made[0]))
+
+    def _ident(world: object, eid: int) -> str:
+        from combat_engine.engine.components import Ident
+        got = world.get(eid, Ident)          # ty: ignore[missing-attribute]
+        return getattr(got, "ref", "") or getattr(got, "slug", "") or "?"
+
+    # -- every option fields exactly one creature --------------------------
+    got = {opt: fielded(opt) for opt in OPTS}
+    out.that(all("creatures" not in v for v in got.values()),
+             "each of the nine pact options puts exactly ONE creature down",
+             f"{ {k[-3:]: v for k, v in got.items()} }")
+
+    # -- and nine DIFFERENT ones, which is the arm that matters ------------
+    #
+    # `p13649` summons either way -- the fallback is an inline block -- so
+    # counting bodies passes on a branch that never fires. Nine distinct
+    # refs is what proves each branch was reached.
+    out.that(len(set(got.values())) == 9,
+             "PLANT: and nine DISTINCT creatures. `p13649`'s fallback is an"
+             " inline block, so an option whose branch never fires still"
+             " fields something -- only distinctness catches that",
+             f"{len(set(got.values()))} distinct: {sorted(set(got.values()))}")
+
+    # -- the two that were defective, named ---------------------------------
+    out.that(got["cf:warlock-binder-f12s2"] == "x10_23",
+             "`-f12s2` fields `x10_23` and not the power `p13680` its spec"
+             " names -- one printed name, two tables, and the scrub took the"
+             " wrong one",
+             f"{got['cf:warlock-binder-f12s2']}")
+
+    # **Each face forced, not sampled.** The card prints "1, air; 2,
+    # earth; 3, fire; or 4, water", so the mapping is four exact answers
+    # and the assertion can be exact too. A sampled version is what the
+    # first draft tried and it could not distinguish a read d4 from a
+    # fixed index -- `audit.board`'s seed does not reach `c.roll`.
+    PRINTED = ("x10_66", "x10_67", "x10_68", "x10_69")
+    by_face = {f: fielded("cf:warlock-binder-f12s3", f) for f in (1, 2, 3, 4)}
+    out.that(tuple(by_face[f] for f in (1, 2, 3, 4)) == PRINTED,
+             "and `-f12s3` fields air on a 1, earth on a 2, fire on a 3 and"
+             " water on a 4 -- the d4 the card prints, in its printed order,"
+             " so the roll indexes rather than merely picking something legal",
+             f"{by_face}")
+    out.that(len(set(by_face.values())) == 4,
+             "PLANT: four faces, four different creatures -- a fixed index"
+             " would answer the same one every time and still be legal")
+
+
 DRIVERS = {
+    "pact_creatures": (
+        the_last_two_pacts_field_their_own_creature,
+        "each of `p13649`'s nine pact options fields its own creature, and"
+        " the last two were defect= on false premises (#1287)",
+    ),
     "no_immediate": (
         a_denied_reaction_is_not_a_daze,
         "`c.no_immediate` denies the reaction and leaves the turn, the"

@@ -121,6 +121,7 @@ from combat_engine.engine import (
     SkillCheck,
     Square,
     Summon,
+    Summoned,
     SurgeSpent,
     Target,
     Trigger,
@@ -773,17 +774,27 @@ def i3380p1(c: Cast) -> None:
 @power("i580x1", level=2, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        defect=(
-           "the player's arcane defiling power is not in the"
-           " compendium: 0 Power or ClassFeature rows name it,"
-           " and the 2 Power rows whose names mention defiling"
-           " are paragon powers that consume it (#878)"
+           "the player-facing arcane defiling power this rides on is"
+           " absent from the compendium, measured: 0 power rows name"
+           " it and 0 power specs mention it, and no class_feature row"
+           " does either, while 9 feat specs and this item's own text"
+           " call for it by name -- so there is no entry to write the"
+           " feature from and no symbol that could ever close (#878)"
        ))
 def i580x1(c: Cast) -> None:
     """Re-aimed at the symbol `weapon.py` already uses for this feature:
     the whole property is a rider on a use of arcane defiling, which is
     not a declared row and announces nothing. `c.class_feature()` named
     a general reader nobody needs -- `cf:` refs exist and can be watched
-    once this particular feature is one."""
+    once this particular feature is one.
+
+    **And the marker's own claim is now measured rather than asserted.**
+    It used to say two paragon powers whose names mention defiling
+    consume this one; there are none. 47 compendium entries carry the word
+    in their printed name and they are 28 monsters, 10 paths and themes, 6
+    feats, 2 traps and this item -- not one power row and not one class
+    feature. The thing nine feats tell a character to use has no entry of
+    its own, which is the gap and is not one this engine can close."""
 
 
 # -- level 3 ----------------------------------------------------------------
@@ -1860,17 +1871,69 @@ def i3336p1(c: Cast) -> None:
                                       max_size=Size.TINY),
        requires=_something_tiny, requires_text="a Tiny beast within 5 squares",
        keywords=[Keyword.POLYMORPH],
-       defect="the card defers the statistics and the entry prints no block")
+       dropped=("c.transform(into=)",))
 def i3364p1(c: Cast) -> None:
-    """"Tiny" is the target line's own `max_size`, so the body does not
-    re-ask it. The size change and the mount relation are both sayable;
-    the printed "same statistics as a horse" is a stat block the spec
-    does not carry, so the beast keeps its own numbers."""
+    """**Re-pointed off `defect=`, and the old marker had the card
+    backwards.** It read *"the card defers the statistics and the entry
+    prints no block"*, which is the summoning diagnosis applied to a row
+    that summons nothing: the thing this changes is a creature **already
+    standing on the board**, chosen by the player, so there was never a
+    block for the entry to print and no `defect=` could ever close. Same
+    correction as `p14130`, for the same reason.
+
+    "Tiny" is the target line's own `max_size`, so the body does not
+    re-ask it. **"Nonhostile" stays `side="other"` rather than tightening
+    to `"ally"`**, which is the narrowing that looks right and is not:
+    `query.allies` leaves out anybody's companion by default, and a
+    familiar is the commonest Tiny creature on a board that is not
+    fighting you -- so the tighter side would bar the printed case while
+    reading like a fix. `_nonhostile_enough` reaches for allies because
+    its card is about a creature with an Intelligence score, which is a
+    different pool.
+
+    **The size change is the whole of the mount clause, which is why
+    nothing else is laid.** `query.may_ride` is the single legality test
+    and it is the printed size rule -- the mount must be larger than its
+    rider -- plus `rideable_by` for the cards that break it. Growing a
+    Tiny beast to Large passes it for a Medium or Small rider outright, so
+    "gains the mount keyword, and acts as a willing mount for you" needs
+    no verb: `actions._mounting` offers getting on **by default**, to
+    anybody beside a legal mount, and `c.rideable` is for relaxing the
+    size rule rather than for a pairing the rule already allows. Nothing
+    in this engine reads a mount keyword at all.
+
+    **`c.ride(on=beast)` was here and was wrong twice.** The card gives
+    permission, not a seat: mounting is a printed move action, so riding
+    from the body hands it over for free on top of the standard action
+    this row already costs. And the target may be five squares off, where
+    `c.ride` sets `Relation.RIDDEN_BY` across the gap -- a carried rider
+    is deliberately absent from the occupancy index, so that leaves the
+    character nowhere the grid can see.
+
+    "Until your next extended rest" is longer than any clock this engine
+    keeps, and the encounter ending takes the board with it either way --
+    `p13516`'s reading.
+
+    Dropped is the last clause: the target's statistics become a named
+    mount's. That is a whole stat block substituted for the creature's
+    own, on a creature that is not being killed, which is the one verb
+    `m5787a0` is waiting on. The beast keeps its own numbers until it
+    lands, and `c.resize` is deliberately not made to stand in for it --
+    growing is not restatting.
+
+    **It reports UNUSED, and that is the board rather than the row.**
+    `audit.board` puts nothing Tiny on the map -- the only sizes it
+    spawns are Medium and one Large piece of scenery -- so both the
+    `max_size` filter and `_something_tiny` are unsatisfiable there and
+    no seed or pose reaches them. Proved on a board with a Tiny ally
+    added by hand: the row fires, the beast ends Large, and
+    `query.may_ride` goes **False to True** across it, with the same
+    pairing left Tiny as the negative control staying False.
+    """
     beast = c.target
     if beast is None:
         return
     c.resize(Size.LARGE, on=beast, until=When.ENCOUNTER)
-    c.ride(on=beast)
 
 
 @power("i3367p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
@@ -2187,13 +2250,70 @@ def i2408p1(c: Cast) -> None:
 
 @power("i2714p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(5), target=NO_TARGET, keywords=[Keyword.SUMMONING],
-       defect="the card defers the statistics and the entry prints no block")
+       dropped=("c.transform(into=)",))
 def i2714p1(c: Cast) -> None:
-    """The summoned creature's own stat block is printed nowhere the spec
-    carries -- the entry names it and never prints it -- so it takes the
-    summon defaults; the saving throw that turns it hostile needs the
-    replacement block too."""
-    c.summon_inline(Summon())
+    """**Re-pointed off `defect=`, which was false about the source.** The
+    old marker read *"the card defers the statistics and the entry prints
+    no block"*; the block is `x10_18` and it is in `associate`, with its
+    size, its origin, its speed, `HP your bloodied value` and
+    `Defenses your defenses +2`. So nothing was deferred to a page that
+    never printed it, and `c.summon_inline(Summon())` -- a creature with
+    the engine's floor numbers -- was strictly worse than reading the row
+    that exists. `spawn_associate` is what reads it, and `of=` is required
+    because both of those lines derive from the summoner.
+
+    **"The creature lacks actions of its own" is the spawn, not a verb.**
+    `c.summon`'s own docstring says `loader.spawn` alone leaves an entity
+    outside the initiative order and then joins the encounter -- and
+    joining is the half this card does not want, because the character
+    spends its own actions to command it. So the summon is
+    `spawn_associate` directly, with no `join`, and nothing has to take a
+    turn away afterwards. Same argument and same shape as `p15885`.
+
+    **`Summoned` and the `Summon` component are both laid by hand, and the
+    second is the one that is easy to miss.** `c.summon` is the only path
+    that emits the event, so a row whose whole Effect is this would
+    otherwise leave no trace in the log -- and both of `Cast`'s summon
+    paths also `world.add(made, Summon(by=..., ref=...))`, which is the
+    *fact* `query.is_summoned` reads. Spawning past them records neither,
+    so the creature was summoned in the fiction and not in the data:
+    measured on the audit board, `query.is_summoned` answered **False**
+    for it, which silently excludes it from the four item rows printing
+    "a creature you summoned".
+
+    `c.cast_from` is the printed *"when it makes a check, you make the roll
+    using your game statistics, including any temporary bonuses or
+    penalties"* -- the reading `p15885` settled for the same sentence. The
+    team is `spawn_associate`'s default, which is the summoner's, and that
+    is the printed "ally to you and your allies".
+
+    What is dropped is the last clause: each round the character gives it
+    no commands it owes a saving throw at the end of its turn, and a
+    failure ends the summon and **replaces** it with a hostile `m5584`.
+    Both halves of the *question* already exist -- `Companion.commanded`
+    records the round an owner last spent an action on a summon, and
+    `c.save(bare=True)` rolls a throw against nothing -- so the gap is the
+    one verb `m5787a0` is already waiting on: swapping a creature on the
+    board for a different block, in place of killing it. Writing it as
+    `c.kill` plus a fresh spawn is not the same sentence; it would pay out
+    every rider hung on this summon dropping.
+    """
+    from combat_engine.content.loader import spawn_associate
+    from combat_engine.engine.components import Summon as SummonedFrom
+
+    me = c.me
+    here = query.squares(c.world, me)
+    free = [
+        sq
+        for sq in sorted(spread(here, 5) - here)
+        if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None
+    ]
+    if not free:
+        return
+    beast = spawn_associate(c.world, "x10_18", free[0], of=me)
+    c.world.add(beast, SummonedFrom(by=me, ref=c.ref))
+    c.world.bus.emit(Summoned(actor=me, summon=beast, ref=c.ref))
+    c.cast_from(me, on=beast, until=When.ENCOUNTER)
 
 
 @power("i2966x1", level=5, cls=ITEM, action=ActionType.NONE,

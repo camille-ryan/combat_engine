@@ -80,6 +80,7 @@ from combat_engine.engine import (
     Relation,
     SavingThrow,
     SkillCheck,
+    Summoned,
     Target,
     Trigger,
     TurnEnd,
@@ -1915,12 +1916,75 @@ def p16050(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL, Keyword.SUMMONING],
-    defect="the card defers the statistics and the entry prints no block",
+    dropped=("c.ignore_line_of_effect()",),
 )
 def p16089(c: Cast) -> None:
-    """`c.summon` wants a ref and the spec prints the summoned creature's
-    description in prose with no block and no id of its own."""
-    ...
+    """**Off `defect=`: the block is `x10_62` and it is in the table.** The
+    old marker said the card defers the statistics and the entry prints no
+    block, and both halves were wrong -- `associate` carries the whole line,
+    small elemental, hit points the summoner's bloodied value, defences the
+    summoner's, speed 6. `loader.spawn_associate` is handed the creature the
+    block derives from, which is why `of=` is required rather than defaulted.
+    Same correction as `p16026` and `p16476`.
+
+    **`spawn_associate` directly rather than `c.summon`**, and that is the
+    printed "it lacks actions of its own". `c.summon`'s own docstring says
+    the two halves are spawn *and* join the initiative order, and the join
+    is the half this card refuses: a creature with a turn of its own would
+    act, where this one only ever moves on actions its summoner spends. So
+    nothing has to take a turn away afterwards. Its own action lines stay
+    where they are printed, on the block, exactly as `x10_57`'s do.
+
+    `Summoned` is announced by hand because `c.summon` was the only path
+    that emitted it, and the summon is this row's entire Effect -- without
+    it the row leaves no trace in the log at all.
+
+    The square is searched rather than taken from `c.origin`: the printed
+    line is "an unoccupied square in range", and an aimed point may hold
+    somebody.
+
+    The drop cost and the dismissal are one hold, which is `p16026`'s
+    arrangement for the same two printed sentences. `c.flat(c.surge_value())`
+    is "or hit points equal to your healing surge value if you have no
+    surges left", the fallback when `c.spend_surge` comes back False, and
+    `c.endable` hangs the minor action on the same effect so dismissing the
+    creature also retires the clause about it falling. End of the encounter
+    is the duration.
+
+    **Not `c.dismiss_companion`.** `spawn_associate` gives the creature no
+    `Companion`, so `c.companion()` would answer with whatever companion the
+    character already had; the despawn names the entity this row made.
+
+    `dropped=` is the one clause missing: "you don't need line of effect to
+    it in order to command it". `query.line_of_effect` answers that question
+    and nothing sets it aside, and `c.ignore_line_of_effect()` is the symbol
+    `i3146p1` and `i660x1` already wait on for the same waiver. The rest of
+    that sentence -- "you share knowledge but not senses" -- wants nothing
+    laid, and `c.cast_from` in particular would be wrong: it lends the
+    summoner's square for line of sight and effect, which is the senses the
+    card withholds.
+    """
+    from combat_engine.content.loader import spawn_associate
+    from combat_engine.engine.query import squares as squares_of
+
+    me = c.me
+    here = squares_of(c.world, me)
+    free = [
+        sq
+        for sq in sorted(spread(here, 10) - here)
+        if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None
+    ]
+    if not free:
+        return
+    made = spawn_associate(c.world, "x10_62", free[0], of=me)
+    c.world.bus.emit(Summoned(actor=me, summon=made, ref=c.ref))
+
+    def fell(ev: Dropped) -> None:
+        if ev.actor == made and not c.spend_surge(on=me):
+            c.flat(c.surge_value(of=me), on=me)
+
+    watching = c.watch(Dropped, fell, until=When.ENCOUNTER)
+    c.endable(watching, MINOR, then=lambda: c.world.despawn(made))
 
 
 @power(

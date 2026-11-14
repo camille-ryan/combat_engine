@@ -725,6 +725,46 @@ def _printed_pick(ref: str, options: tuple[str, ...], what: str) -> Any:
     return row
 
 
+def _printed_all(ref: str, granted: tuple[str, ...], what: str) -> Any:
+    """A row printing *"you gain the following N powers"* -- all of them.
+
+    The sibling of `_printed_pick` above, and the difference is one printed
+    word: that one says *"one of the following"* and is a choice this tree
+    models as a fork; this one grants the lot and there is nothing to
+    choose. So no `chargen.BUILD_OPTIONS` entry and no `c.chosen_options`
+    read -- a fork with one legal answer per slot is a fork nobody picks,
+    and inventing one here would put a draw in front of a sentence that
+    does not have one.
+
+    Recovered the same way and with the same guard: the class page prints
+    the three cards immediately after the sentence, all three are already
+    imported, and the refs are **named here literally** rather than parsed
+    at run time, which is the hand-written-row rule and is what lets
+    `lint.py` see them. `#1287`.
+    """
+
+    @power(
+        ref,
+        level=0,
+        cls="ranger",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.MARTIAL],
+    )
+    def row(c: Cast) -> None:
+        for one in granted:
+            c.grant_row(one, on=c.me, until=When.ENCOUNTER)
+
+    row.__name__ = "hunter_all_" + ref.rsplit("-f", 1)[-1]
+    row.__doc__ = (
+        f'*"You gain the following {len(granted)} powers."* {what}\n\n'
+        f"All {len(granted)}, not a choice -- see `_printed_all`. `#1287`."
+    )
+    return row
+
+
 def _defective(ref: str, why: str) -> Any:
     """A row whose printed text names a list the import did not carry."""
 
@@ -751,10 +791,15 @@ _NO_LIST = ("the spec reads 'you gain {n} of the following powers of your "
             "choice' and then lists nothing, so there is no set to choose "
             "from")
 
-hunter_defect_1 = _defective(
+hunter_all_1 = _printed_all(
     "cf:ranger-hunter-f1",
-    "the spec reads 'you gain the following three powers' and then lists "
-    "none of them, so there is nothing to grant")
+    ("p13585", "p13586", "p13587"),
+    "The three the hunter gains at 1st level. This carried `defect=` "
+    "saying the spec lists none of them -- true of the **spec**, which "
+    "is the whole of \"You gain the following three powers.\", and false "
+    "of the source: the page prints all three cards immediately after "
+    "that sentence and every one is imported. `#1268`'s mistake a third "
+    "time, and `#1287` is the extractor half.")
 hunter_pick_19 = _printed_pick(
     "cf:ranger-hunter-f19",
     ("p13589", "p13590", "p13591", "p13592",

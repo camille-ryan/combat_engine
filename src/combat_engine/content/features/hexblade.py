@@ -515,6 +515,27 @@ def hexblade_pact_6(c: Cast) -> None:
 # -- another use, and the rest -----------------------------------------------
 
 
+#: The encounter attack each pact weapon grants, keyed by the **weapon**.
+#:
+#: Keyed by the blade and not by the option's index, deliberately:
+#: `chargen.PACT_BLADE` already maps option to blade, so joining on the
+#: blade means these two cannot drift. `_F6_POWERS` above is positional and
+#: its own note worries about exactly that.
+#:
+#: Read off each power's printed Requirement -- every one of the six says
+#: *"you must use this power with your &lt;blade&gt;"* and names a different
+#: blade, so the mapping is the cards' own and not a guess. Six blades, six
+#: powers, no collision and no gap.
+_PACT_ENCOUNTER = {
+    "w3740": "p13671",
+    "w3741": "p13681",
+    "w3742": "p13723",
+    "w3743": "p13747",
+    "w3744": "p13964",
+    "w3752": "p16259",
+}
+
+
 @power(
     "cf:warlock-hexblade-f4",
     level=0,
@@ -524,11 +545,6 @@ def hexblade_pact_6(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    defect="the power this adds a use of does not exist in the"
-           " compendium: the hexblade gains one at-will and three daily"
-           " attacks at 1st level and no encounter attack, and none of"
-           " the 19 warlock level-1 encounter attacks belongs to"
-           " `cf:warlock-hexblade-f3`",
 )
 def hexblade_another_use(c: Cast) -> None:
     """"You gain one more use per encounter of the `cf:warlock-hexblade-f3`
@@ -552,30 +568,41 @@ def hexblade_another_use(c: Cast) -> None:
     the spec reads as though the row named a feature, where the printed
     sentence names an encounter attack power *associated with* one.
 
-    **Searched four ways and it is not there:**
+    **The power exists, and this row carried `defect=` for a year of
+    commits because the search for it was keyed to the wrong level.**
+    Camille: *"every pact weapon grants an at-will and an encounter."*
+    She is right, and there are six pairs -- one per blade, each gated by
+    its own printed Requirement:
 
-    * the hexblade class page's level-1 section holds **one at-will**
-      (`p13634`) and **three dailies**, and no encounter attack --
-      counted off every `Warlock Attack N` block on the page;
-    * `-f1`, the *"power associated with your pact"* fork, grants five
-      **Utility** powers;
-    * of the **19** warlock level-1 Encounter attack powers in the
-      compendium, not one is named for a `-f3` option or shares a word
-      with one;
-    * and the six `-f3` options' printed names appear nowhere in
-      `Heroes of The Forgotten Kingdoms`, which is the book this page
-      comes from.
+        w3740 -> p13671    w3743 -> p13747
+        w3741 -> p13681    w3744 -> p13964
+        w3742 -> p13723    w3752 -> p16259
 
-    So the card points at content the compendium does not carry.
-    `defect=` and not a symbol: no facility will close it, and `todo.py`
-    would otherwise report this row ready the day somebody minted a name
-    for the thing. Plain words, which is what that marker takes.
+    The old marker said *"none of the 19 warlock level-1 encounter
+    attacks belongs to `cf:warlock-hexblade-f3`"*, and that was true and
+    beside the point: **all six of these are level 0.** Their heading is
+    a bare `Warlock Attack` with no number, so a census of level-1 rows
+    cannot see them, and the four-way search this docstring used to
+    record looked for a level-1 power four times. `#1287`.
 
-    `dsl.entry_of` returns a `cf:` ref unchanged, so this drops **this row
-    alone** -- checked rather than assumed. It is the row's only clause,
-    which is the `content/CLAUDE.md` test for `defect=`: *"only when
-    nothing survives"*. `#1276`.
+    So the row is the verb it always named. `_PACT_ENCOUNTER` joins on the
+    **blade** rather than on the option's index, because
+    `chargen.PACT_BLADE` already holds option-to-blade and joining on the
+    thing both halves agree about is what stops the two drifting --
+    `_F6_POWERS` above is positional and its own note worries about that.
+
+    One more use per encounter, still only once per turn: `c.more_uses`
+    writes `Powers.extra_uses` and `dsl.usable` reads it at the one site
+    that compares a spend against an allowance, where `Power.once_per_round`
+    is a **different field tested before the allowance** -- so raising the
+    count can never give two swings in one turn. `#1262`'s own note makes
+    that argument and `drivers.pact_weapon` asserts it.
     """
+    took = c.chosen_option("cf:warlock-hexblade-f3")
+    blade = PACT_BLADE.get(took, "") if took else ""
+    mine = _PACT_ENCOUNTER.get(blade, "")
+    if mine:
+        c.more_uses(mine)
 
 
 # -- the nineteen summoned creatures, and the nine lists --------------------
@@ -681,6 +708,14 @@ def _summon_option(ref: str) -> Any:
 _SUMMON_OPTIONS = (
     "cf:warlock-hexblade-f7s0",
     "cf:warlock-hexblade-f7s1",
+    # **`s2` and `s3` joined the seven, and their `defect=` was wrong.**
+    # `s2`'s spec reads "summon a `p13680`", which is a **power**: the
+    # printed creature carries the same name as that at-will and the scrub
+    # had no table preference, so it took the power. The creature is
+    # `x10_23`. `s3` prints four archon grunts on a d4 and every one is an
+    # `Associate` row -- `x10_66` to `x10_69`. `p13649` names both. #1287.
+    "cf:warlock-hexblade-f7s2",
+    "cf:warlock-hexblade-f7s3",
     "cf:warlock-hexblade-f7s4",
     "cf:warlock-hexblade-f7s5",
     "cf:warlock-hexblade-f7s6",
@@ -715,14 +750,17 @@ def _defective(ref: str, why: str) -> Any:
     return row
 
 
-#: `-f7`'s and `-f10`'s options, and what each names. The ones that
-#: resolved to a ref are marked so -- `defect=` is still right for those,
-#: because a creature summoned by `p13649` needs a stat block the summon
-#: can read and these refs are a power and five associates, not monsters.
+#: `-f10`'s nine options, and what each names. **`-f7`'s two have moved
+#: out**: their creatures do resolve, which is `#1287`, so they are
+#: pointers in `_SUMMON_OPTIONS` above.
+#:
+#: These nine keep the marker, and the reason is now the level rather than
+#: the ref: `-f10` is the 19th-level fork, above what this project imports,
+#: so nothing there is reachable either way. The "an associate and not a
+#: monster" wording is left as written -- `loader.spawn_associate` fields an
+#: associate perfectly well, so if this fork is ever brought into scope the
+#: three that name one are the easy three.
 _SUMMONS = {
-    "cf:warlock-hexblade-f7s2": "p13680, which is a POWER and not a creature",
-    "cf:warlock-hexblade-f7s3": "a creature named and not referenced, in "
-                                "four elemental variants chosen on a d4",
     "cf:warlock-hexblade-f10s0": "a creature named and not referenced",
     "cf:warlock-hexblade-f10s1": "a creature named and not referenced",
     "cf:warlock-hexblade-f10s2": "a creature named and not referenced",

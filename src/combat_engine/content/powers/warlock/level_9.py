@@ -267,11 +267,14 @@ def p13649(c: Cast) -> None:
     does not. The binder and the hexblade print the same seven creatures,
     so each branch names both refs. `#1268`.
 
-    **The inline default is kept as the fallback**, not removed: two of
-    the nine options on each chassis name a creature that resolves to no
-    `Associate` row at all, and those two keep their marker. A pact with
-    no recorded creature gets the generic summon it got before, which is
-    the printed *"the summoned creature uses your defences"* reading.
+    **The inline default is kept as the fallback**, not removed -- though
+    nothing on these two chassis reaches it any more. It read "two of the
+    nine options name a creature that resolves to no `Associate` row at
+    all", and that was the `defect=` premise `#1287` refuted: `-f12s2`'s
+    creature is `x10_23`, whose printed name collides with the at-will
+    `p13680` and lost the collision; `-f12s3`'s is one of four archon
+    grunts on a d4, `x10_66`-`x10_69`. All nine options on each chassis
+    name a creature now. The fallback stays for a pact added later.
 
     "Or hit points equal to your surge value if you have no surges left" is the
     fallback when `c.spend_surge` comes back False. Dropped: dismissing it as a
@@ -292,6 +295,19 @@ def p13649(c: Cast) -> None:
         beast = "x10_10"
     elif c.feat("cf:warlock-binder-f12s8") or c.feat("cf:warlock-hexblade-f7s8"):
         beast = "x10_19"
+    # **The last two pacts, and both were `defect=` on a false premise.**
+    # `-f12s2`/`-f7s2`'s spec reads "summon a `p13680`", which is a **power**
+    # -- the printed creature carries the same name as that at-will, and the
+    # scrub had no table preference, so it took the power. The creature is
+    # `x10_23`. `#1287` has the extractor half.
+    elif c.feat("cf:warlock-binder-f12s2") or c.feat("cf:warlock-hexblade-f7s2"):
+        beast = "x10_23"
+    # And `-f12s3`/`-f7s3` print four variants chosen on a d4 -- *"1, air; 2,
+    # earth; 3, fire; or 4, water"* -- which is the one branch here that
+    # rolls rather than reads. All four are `Associate` rows and all four
+    # import, so the roll picks a ref the same way the others name one.
+    elif c.feat("cf:warlock-binder-f12s3") or c.feat("cf:warlock-hexblade-f7s3"):
+        beast = ("x10_66", "x10_67", "x10_68", "x10_69")[c.roll(4) - 1]
     made = (c.summon(beast, at=c.origin, after=c.me) if beast
             else c.summon_inline(get(c.ref).summon, at=c.origin))
     if not made:

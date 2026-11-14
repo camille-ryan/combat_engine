@@ -16,14 +16,21 @@ Three judgements run through the file.
 * **"A nonminion enemy"** is `c.is_minion`, off the stat block's own
   column. Seven rows here print the same critical-hit sentence, so the
   clause is asked once inside `_crit_on_me` and not seven times.
-* **A figurine's beast** is printed as a stat block below the power, so
-  the summons here take `Summon`'s own defaults -- the summoner's
-  defences, a healing surge's worth of hit points -- and the numbers and
-  the attack line are missing. `dsl.Summon` can say all of it; what is
-  missing is the block, and the marker names where from:
-  `etl.item.inline_block()` where the entry does print one and
-  `etl.item._own_page` cuts it off, `spec.stat_block()` where the entry
-  prints none and no amount of ETL will produce one.
+* **A figurine's beast is a ref, and every one of them has one now.** This
+  bullet used to say the summons here take `Summon`'s own defaults -- the
+  summoner's defences, a healing surge's worth of hit points, no attack
+  line -- because the block was printed below the power and
+  `etl.item._own_page` cut it off. Two things ended that. `#601` taught the
+  ETL to cut past an item's second `<h1>`, which gave the inline blocks
+  real `monster` rows; and the entries that print **no** block were marked
+  `defect=` on the inference that the compendium therefore lacks the
+  creature, which was wrong three times. An entry that *defers* its
+  statistics defers them to a block printed somewhere else: `i1659p1`'s is
+  the standalone `m1808`, and `i1662p1`'s is an `associate` row, which is
+  a different table rather than a missing one. So `_conjured` for a
+  `monster` ref and `c.summon` -- which routes an `x10_` ref through
+  `loader.spawn_associate` -- for an associate, and no guessed numbers in
+  either.
 
 "When you use your second wind" is `SecondWind`, which `Cast.second_wind`
 emits from the one place a second wind is ever taken; `_on_second_wind`
@@ -70,6 +77,7 @@ from combat_engine.engine import (
     DamageApplied,
     DamageRolled,
     DamageType,
+    Dropped,
     Effect,
     Gear,
     Health,
@@ -101,6 +109,7 @@ from combat_engine.engine import (
     by_keyword,
     by_me,
     either,
+    footprint,
     get,
     power,
     spread,
@@ -341,18 +350,33 @@ def _steam(c: Cast, dice: str) -> None:
     c.watch(TurnStart, burn, until=When.ENCOUNTER)
 
 
-def _figurine(c: Cast, **kw: Any) -> int:
-    """The shared body of a figurine whose entry prints **no** stat block.
+def _associate_size(ref: str) -> Size:
+    """How much room an `associate` block will take up when it spawns.
 
-    `dsl.Summon`'s numbers come off the summoner -- its `defences` field is
-    an offset, not an absolute -- so this is only honest where the page
-    gives no numbers to be wrong about. Where it does, use `_conjured`.
+    Read from the column `loader.spawn_associate` reads and mapped through
+    the dictionary it maps through, so a square-is-free test cannot drift
+    from the placement it is testing for. The alternative was writing the
+    printed size into the row, which is a second copy of a fact the
+    database already holds.
+
+    **Needed because neither spawn path looks at size.**
+    `Cast._free_square_near` and the search a row writes itself both ask
+    `grid.occupant(sq)` about one square, and a Large creature covers
+    four. `grid.place` then refuses the squares already indexed to
+    somebody -- it never overwrites, by design -- so the creature ends up
+    *partly* unindexed: `Position` names a square the grid does not agree
+    it is standing in, and cover, blocking and occupancy all read the
+    wrong answer until it next moves. The tell is a `Note` reading
+    "placed on an occupied square", which is how this was found.
     """
-    made = c.summon_inline(Summon(**kw))
-    if made and c.may("spend a healing surge"):
-        c.spend_surge(on=c.me)
-        c.temp_hp(c.surge_value(), on=made)
-    return made
+    from combat_engine.content.loader import SIZES
+    from combat_engine.db import game
+
+    row = game().execute(
+        "SELECT size FROM associate WHERE ref = ?", (ref,)
+    ).fetchone()
+    word = ((row["size"] if row is not None else None) or "medium").lower()
+    return SIZES.get(word, Size.MEDIUM)
 
 
 def _beside_my_beast(world: World, me: int, ev: Any) -> bool:
@@ -385,10 +409,17 @@ def _conjured(c: Cast, ref: str, *, surge: bool = True) -> int:
     """A figurine whose entry prints the beast's whole stat block. #601.
 
     The block was unimportable until the ETL learned to cut past an item's
-    second `<h1>`, so these rows had no ref to name and used `_figurine` --
-    which hands `dsl.Summon` a hand-picked size and mode list and takes the
+    second `<h1>`, so these rows had no ref to name and shared a helper
+    that handed `dsl.Summon` a hand-picked size and mode list and took the
     rest from the summoner. Now the numbers are a real `monster` row and
     `loader.spawn` reads them, level term and all.
+
+    **That helper is gone, and `i1659p1` was its last caller.** The ref
+    it wanted is `m1808` -- printed as a standalone entry rather than
+    inside the item's own, which no amount of cutting past an `<h1>` would
+    have found. So every figurine in this slot now names a block, and a
+    guessed speed beside a real one is no longer a shape this file can
+    take.
 
     **`after=c.me` is the printed line.** Ten of the twelve blocks say
     "Initiative as conjurer" outright, which is a turn on the summoner's
@@ -2460,15 +2491,115 @@ def i1655x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    defect="the card defers the statistics and the entry prints no block",
+    dropped=("c.forbid(action=)", "c.lend_checks()"),
 )
 def i1662p1(c: Cast) -> None:
-    """The horse is an ally that carries you, so it is a summon and a
-    mount. Losing a surge when it drops is a clause about a creature that
-    is gone; nothing watches its death."""
-    made = c.summon_inline(Summon(speed=10))
-    if made:
-        c.ride(on=made)
+    """The mount is `x10_17`, an **associate** block, so it does not spawn
+    the way the figurines above it do.
+
+    **The `defect=` this replaces read the wrong table.** It said the
+    entry prints no block, and no `monster` row exists -- but the block is
+    in `associate`, which is the table `#459` built for the 88 printed
+    creatures whose numbers are a *rule for deriving* a stat line rather
+    than a stat line: this one's hit points are the summoner's bloodied
+    value and its defences are the summoner's, which is why
+    `loader.spawn_associate` requires `of=` and why `loader.spawn` would
+    raise on the ref. `Cast.summon` routes an `x10_` ref there itself and
+    has since `#459`, so the body says `c.summon` and gets the derived
+    numbers anyway.
+
+    **Through `c.summon` rather than `spawn_associate` directly**, which
+    is the opposite of what `batch_f`'s `p15885` does and for that row's
+    own stated reason: its card gives its creature no actions, so it must
+    *not* join the initiative order and `c.summon`'s `join` was the half
+    it did not want. This card's creature acts -- it has actions even
+    riderless -- so joining is the half this row does want, and with it
+    come the `Summon` component and the `Summoned` announcement that the
+    raw spawn leaves off. `after=c.me` is the mounted-combat rule: a mount
+    acts on its rider's count, not a rolled one of its own.
+
+    **Not `c.ride`, which the old body called.** The card says the
+    creature *appears in a space within 5 squares* and then what happens
+    *"while you are riding"* -- it does not put the rider astride, and
+    mounting is a printed action in its own right. `actions._mounting`
+    offers it whenever the pairing is adjacent and `query.may_ride` allows
+    it, which it does here -- the block is Large, so it clears the size
+    rule for any rider this item can reach. So riding on the item's own
+    activation would hand out a move action the card does not print.
+
+    The squares are offered nearest-first for that reason, and the
+    distance is measured to the nearest square of the **footprint** rather
+    than to its anchor: a Large creature's low corner can be two squares
+    off while its body is beside you, and ranking by the anchor put the
+    mount out of reach on the turn it arrived. Measured --
+    `actions.legal` offers no `mount` action on the anchor ranking and
+    does offer one on this.
+
+    The team is left to `spawn_associate`, which reads the summoner's
+    side: *"an ally to you and your allies"* with nothing to say.
+
+    Dropping to 0 hit points costs the summoner a surge, which is a cost
+    the card prints and a `Dropped` watch can see -- `once=True` because
+    the creature only falls the once.
+
+    `dropped=("c.forbid(action=)",)` is the riderless restriction:
+    *"the only actions it can take while riderless are move actions and
+    free actions"*. That is an action-category ban and there is no verb
+    for one -- `c.forbid` takes rows away by ref, keyword or usage, and
+    its own docstring draws the line: *"a creature barred from standard
+    actions may still use a minor-action encounter power"*, so the two are
+    not the same axis. `m5948a5` waits on the same symbol for *"cannot
+    take standard actions"*, so this reuses it rather than minting a
+    synonym. `c.cannot_attack` is the near miss and is refused on purpose:
+    it bars less than the card does, and it would bar it whether anybody
+    is riding or not.
+
+    `c.lend_checks()` is the second gap, and it gets its own symbol
+    because it is a different question: *"when it makes a check, you make
+    the roll using your game statistics, not including any temporary
+    bonuses or penalties"*. `spawn_associate` gives the creature
+    `Stats(level=..., scores={})` -- no ability scores at all -- so a
+    check it makes reads nothing, and the family that would answer this is
+    `c.lend_defences()` and `c.lend_passive(skill)` rather than anything
+    about actions. **`c.cast_from` is the near miss and is deliberately
+    not copied**: `batch_f`'s `p15885` writes it against this same printed
+    sentence, and it is the line-of-sight-and-effect origin, which is a
+    different clause of the summoning rules. A verb that nearly fits would
+    make this row green on the wrong half.
+
+    The one clause with no symbol is dismissal. *"It lasts until you
+    dismiss it as a minor action"* wants `c.dismiss_companion`, which
+    reads a `Companion` that `spawn_associate` does not give; the hold is
+    the encounter either way, so what is lost is the player's option to
+    end it early rather than a limit on how long it stays.
+    """
+    here = {c.here}
+    size = _associate_size("x10_17")
+    room = {
+        sq: footprint(sq, size) for sq in spread(here, 5) - here
+    }
+    free = sorted(
+        (
+            sq for sq, covered in room.items()
+            if all(
+                c.world.grid.passable(s) and c.world.grid.occupant(s) is None
+                for s in covered
+            )
+        ),
+        key=lambda sq: (min(_gap(s, c.here) for s in room[sq]), sq),
+    )
+    where = c.choose(free, f"{c.ref}: where it appears")
+    if where is None:
+        return
+    beast = c.summon("x10_17", at=where, after=c.me)
+    if not beast:
+        return
+
+    def fell(ev: Dropped) -> None:
+        if ev.actor == beast:
+            c.spend_surge(on=c.me)
+
+    c.watch(Dropped, fell, until=When.ENCOUNTER, once=True)
 
 
 @power("i1663p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -3546,36 +3677,48 @@ def i1154x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    defect="summons m1179c0, which the ETL marks defective: its a1 prints "
-           "no defence, so the entry drops and the creature this row puts "
-           "on the board cannot make the attack its card gives it (#1059)",
 )
 def i1179p1(c: Cast) -> None:
     """One of the two blocks printing a real level and role, so this is a
-    level-6 creature with 70 hit points rather than the surge-value beast
-    `_figurine` made of it. Its printed speed is 2 with a fly 6 -- the row
-    guessed a flat fly 10, five squares out and in the wrong field.
+    level-6 creature with 70 hit points rather than a surge-value beast
+    with a guessed speed.
 
-    **`defect=` on Camille's ruling, #1059, verbatim:**
+    **Camille's ruling stands and its premise failed.** #1059, verbatim:
 
     > *"if the conjuraiton is defective, the thing that summons it is also
     > defective and should be removed as a defect."*
 
-    That settles a contradiction between two tracked artefacts rather than
-    only this row. `monster.defect` marks `m1179c0` malformed; `#601`'s
-    last comment and `conjured.py`'s module docstring both read the same
-    blank defence line as importer boilerplate and call the row writable.
-    `#612` reversed that and its own driver says why -- *"knowing why a
-    line is junk does not make the row writable"*. The ruling keeps the
-    defect, so `#612`'s reading stands and the other two are the stale
-    ones.
+    That is still the rule, and it is conditional: the summoner is
+    defective *because* the conjuration is. The main session has since
+    read the page and the conjuration is not. `m1179c0a0` and `m1179c0a1`
+    are both written, neither carries a `defect=`, and
+    `loader.defective("m1179c0")` is therefore `""` -- the ruling's
+    antecedent is false here, so its consequent does not fire. What
+    remains is `monster.defect`, the ETL column that
+    `etl.build._malformed_attack` writes off the page before anybody looks
+    at it, and `conjured.py`'s module docstring records the look: the
+    `+9 vs ;` fragment with its doubled full stop is import junk rather
+    than a second attack line, and blank attack defences run 5-11x the
+    corpus rate in these imports (#360).
 
-    **Why the marker belongs here and not only on the conjuration.**
+    **It stays pointed at `m1179c0`, not at the second id for the same
+    block.** The creature is also imported standalone as `m1807`, and the
+    two `monster` rows are the same numbers -- level 6, skirmisher, 70 hit
+    points, AC 20 / Fort 17 / Ref 19 / Will 18, speed 2, initiative 9. The
+    difference is in the declared rows: `m1807a1` still carries the
+    `defect=` that `m1179c0a1` was written without, so `m1807` is not
+    `loader.usable` and `m1179c0` is the clean half of the pair. Naming it
+    also keeps this row on the convention every other figurine here
+    follows -- the block cut out of the item's own entry.
+
+    **Why the marker belonged here and not only on the conjuration**, kept
+    because it is the part that is still true of the mechanism:
     `loader.usable` consults the defect and `pick` stops offering a
-    defective creature -- but `loader.spawn` consults none of it, so a row
-    that names the ref directly put it on the board anyway. This is the
-    only declared thing that does: the printed summoner `m1179` is level
-    12 and out of tier, so it is not declared at all.
+    defective creature, but `loader.spawn` consults none of it, so a row
+    naming the ref directly puts the creature on the board whatever either
+    verdict says. This is the only declared thing that does -- the printed
+    summoner `m1179` is level 12 and out of tier, so it is not declared at
+    all.
     """
     _conjured(c, "m1179c0")
 
@@ -3619,10 +3762,31 @@ def i1592p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    defect="the card defers the statistics and the entry prints no block",
 )
 def i1659p1(c: Cast) -> None:
-    _figurine(c, speed=8)
+    """The block is `m1808`, and the entry deferring to it is not the same
+    thing as the compendium lacking it.
+
+    **The `defect=` this replaces was a conclusion, not a reading.** It
+    said *"the card defers the statistics and the entry prints no block"* --
+    the first half is what the card does and the second half was inferred
+    from `etl.item._own_page` finding nothing to cut. The creature is
+    printed as a stat block of its own, imported, declared, and
+    `loader.usable` says fit to field. The main session read the page and
+    named it; an authoring agent cannot, which is why this one sat marked.
+
+    So the body is `_conjured`, which reads a real `monster` row, rather
+    than the inline helper it used to call -- which handed `dsl.Summon` a
+    hand-picked speed and took the defences off the summoner. The guessed
+    speed was 8 against a printed 6, and the whole attack line was absent:
+    a level-6 soldier fielded with no way to soldier. This row was that
+    helper's last caller, so the helper is gone with it.
+
+    The free action is `_conjured`'s `surge=True` default: the card offers
+    the surge rather than spending it, so `c.may` asks before `c.temp_hp`
+    pays `c.surge_value()`.
+    """
+    _conjured(c, "m1808")
 
 
 @power(
