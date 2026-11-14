@@ -1255,6 +1255,46 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
                     kind="pull_grabbed", cost=pull,
                     targets=(victim,), dest=dest, path=(dest,),
                 ))
+    # **And the two granted SLIDES, which are the same shape and a
+    # different verb.** A pull must end nearer the puller; a slide names no
+    # direction, so the destinations are every square the victim could be
+    # forced to. `#1305` is why these are two words and not one:
+    # `f1255b`'s victim is the creature it has grabbed and `p1471`'s is the
+    # creature under its own effect, and those are different relations.
+    #
+    # `forced_squares` is asked with `Forced.SLIDE`, so the "must end
+    # nearer" filter the pull needs is not applied to either.
+    #
+    # **A positive `what in (...)`, which is not a style choice.**
+    # `drivers.granted_words` greps this file for `what == "<word>"` or
+    # `what in (...)` to prove each granted word is consulted, and it
+    # caught two earlier drafts of this: a loop over a tuple of words hid
+    # the read entirely, and `what not in (...)` is invisible to the same
+    # regex. Writing the test the way every other reader here writes it is
+    # both what the gate asks for and the clearer form.
+    #
+    # The gate not seeing `not in` is a real narrowness, left alone
+    # deliberately: widening it to accept an exclusion list would let a
+    # word count as read because it appears in a list of words being
+    # *skipped*, which is the bug this gate exists to catch.
+    for (what, cost) in _granted(world, actor):
+        if what in ("slide_grabbed", "slide_subject"):
+            if not encounter.can_spend(actor, cost):
+                continue
+            bond = (
+                Relation.GRABBED_BY if what == "slide_grabbed"
+                else Relation.SUBJECT_OF
+            )
+            spot = world.get(actor, Position)
+            if spot is None:
+                continue
+            for victim in sorted(world.relations.targets(bond, actor)):
+                for dest in sorted(forced_squares(
+                        world, victim, spot.square, Forced.SLIDE)):
+                    out.append(Action(
+                        kind=what, cost=cost, ref=what,
+                        targets=(victim,), dest=dest, path=(dest,),
+                    ))
     return out
 
 
@@ -1281,7 +1321,14 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
 GRANTABLE = frozenset({
     "aid_attack", "aid_defence", "command", "dismount", "escape",
     "instinctive", "mount", "move_zone", "pull_grabbed", "second_wind",
-    "shift", "stand",
+    "shift",
+    # **The two granted slides arrived with their reader**, which is the
+    # rule this set exists to enforce -- see `_movement` above. They are two
+    # words rather than one because the victim comes off a different
+    # relation in each: a grab for `f1255b`, `Relation.SUBJECT_OF` for
+    # `p1471`. #1305.
+    "slide_grabbed", "slide_subject",
+    "stand",
     # **`bull_rush` arrived with its reader**, which is the rule this set
     # exists to enforce. `general_l.f2607` prints "you can bull rush in
     # place of a melee basic attack", and the thing that consults it is
@@ -2947,6 +2994,35 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             forced(world, actor, victim, Forced.PULL, 1, to=action.dest)
             moved = True
         return moved
+
+    if action.kind in ("slide_grabbed", "slide_subject"):
+        # **No attack roll, which is the difference from the pull above.**
+        # That one is a printed manoeuvre -- *"you can move a creature you
+        # have grabbed"* -- and 4e makes a manoeuvre an attack. These two
+        # are a power's own granted clause: *"you can slide the target 1
+        # square as a minor action"* says nothing about rolling, and a roll
+        # here would be the opposite of `#1276`'s correction -- stricter
+        # than print rather than more generous.
+        #
+        # Through `forced` for the reason the pull gives: a direct
+        # `Position` write leaves `Grid.occupants` stale. `#1305`.
+        from .movement import forced
+        from .types import Forced
+
+        shifted = False
+        for victim in action.targets:
+            # **`power=action.ref` is the word**, and it is what lets the
+            # granting row see its own grant spent: `p1471`'s "once per
+            # round" has no per-round store to live in, so the row watches
+            # `ForcedMove` for this stamp and revokes the grant until its
+            # next turn. Without the stamp it would have to guess from
+            # geometry and would revoke on any other row's slide.
+            if forced(
+                world, actor, victim, Forced.SLIDE, 1,
+                to=action.dest, power=action.ref,
+            ):
+                shifted = True
+        return shifted
 
     if action.kind == "mount":
         # Through `Cast.ride`, not `relations.set`, so the one verb content

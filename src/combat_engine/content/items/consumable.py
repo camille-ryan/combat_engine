@@ -1845,7 +1845,7 @@ def _egg_rider(c: Cast, kinds: tuple[DamageType, ...], who: int) -> None:
 
 @power("i3569p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(5, 10), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("actions.granted_target",))
+       dropped=("c.on_prone_in(zone)",))
 def i3569p1(c: Cast) -> None:
     """Seven eggs on one card, asked of the decider the way `_element`
     asks for a damage type -- the choice *is* the variety.
@@ -1867,8 +1867,14 @@ def i3569p1(c: Cast) -> None:
     other earth walker on the board too."* `_EGGS` carries the going per
     variety.
 
-    Still dropped on the slide or pull the zone's owner may spend an action
-    on, which is a line in the action menu rather than a zone's property.
+    **Still dropped, and the symbol is corrected.** *"As an opportunity
+    action, you slide a creature that falls prone in the zone up to 2
+    squares"* is not a line in the action menu at all -- it is a trigger
+    with a slide as its payout, fired by a creature falling prone inside a
+    zone this creature owns. It carried `actions.granted_target` with three
+    other rows and `#1305` found that symbol to be four different gaps; a
+    granted word with a derivable victim, which is what landed there, does
+    nothing for this one.
     """
     kinds, dark, rough = c.choose(list(_EGGS), "the egg's element") or _EGGS[0]
     zone = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER,

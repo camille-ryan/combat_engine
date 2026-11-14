@@ -313,6 +313,24 @@ class Relation(StrEnum):
     #: Read in `dsl.measured_from`, so it decides what can be aimed at as
     #: well as where line of effect is traced from.
     CASTS_FROM = "casts_from"
+    #: **A creature under a lasting effect of the source's, where a later
+    #: clause has to find it again.**
+    #:
+    #: `p1471`'s Effect subjects a creature to a hold *and then* says "you
+    #: can slide the target 1 square as a minor action once per round".
+    #: That second sentence is a line in the action menu, so the menu has
+    #: to know who the target is -- and every relation above names a
+    #: *particular* condition: a grab, a mark, a curse, a quarry. None of
+    #: them is "the one my power is holding".
+    #:
+    #: Deliberately generic, which is the opposite of its neighbours'
+    #: design and is the right call for this one: the printed word is
+    #: "the target", and a row that needed `CURSED_BY` would say cursed.
+    #: What makes it safe is that nothing reads it except a granted word
+    #: that the laying row also hands out -- so it names a creature for
+    #: one row's own later clause rather than asserting anything about it.
+    #: #1305.
+    SUBJECT_OF = "subject_of"
 
 
 class Size(StrEnum):

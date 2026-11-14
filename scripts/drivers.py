@@ -30339,6 +30339,141 @@ def a_drop_somebody_else_pays_for(out: Result) -> None:
         )
 
 
+def a_granted_slide_of_somebody_else(out: Result) -> None:
+    """"You can slide the target 1 square as a minor action once per round."
+
+    Four rows carried `actions.granted_target` and one of their notes
+    called it *"one gap across four rows"*. It is four gaps: two want a
+    granted word whose victim comes off a relation, one wants a destination
+    filter on a `shift` of its own holder, and one wants an opportunity
+    action off a trigger. The marker is split; the two that share the
+    `pull_grabbed` template are built.
+
+    **`p1471` is the one with every timing clause**, and all four of its
+    printed sentences are arms here: the victim is found through
+    `Relation.SUBJECT_OF`, the grant does not exist until the caster's next
+    turn, it is gone once spent, and it is back the round after.
+
+    The negative arms are the ones worth having. A grant laid on the
+    **victim** rather than the caster leaves the caster's menu empty, which
+    is what `c.grant_action` does by default -- it follows `c.target`. And
+    a relation set by hand rather than on the hold would outlive the hold,
+    so the slide would still be offered against a creature that saved out.
+    #1305.
+    """
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Relation
+
+    world, me, _ = _board("p1471")
+    known = world.need(me, Powers)
+    # The dealer does not always field this daily, so it is lent -- the
+    # same thing `audit.board` does for a row it wants to exercise.
+    if "p1471" not in known.known:
+        known.known.append("p1471")
+    foes = sorted(enemies(world, me))
+    if not foes:
+        out.skip("p1471's board has no enemy to subject to anything")
+        return
+    victim = foes[0]
+    if not use(world, me, "p1471", targets=[victim]):
+        out.skip("p1471 refused itself on this board even when lent")
+        return
+    enc = world.encounter
+
+    def offered() -> list[object]:
+        return [a for a in legal(world, enc, me) if a.kind == "slide_subject"]
+
+    out.that(
+        victim in world.relations.targets(Relation.SUBJECT_OF, me),
+        "the row names its victim through a relation, so the action menu"
+        " can find the creature its later clause is about",
+        f"subjects of {me}: "
+        f"{sorted(world.relations.targets(Relation.SUBJECT_OF, me))}",
+    )
+    out.that(
+        not offered(),
+        'nothing is offered yet, because the card says "starting on your'
+        ' next turn"',
+        f"offered now: {len(offered())}",
+    )
+
+    world.bus.emit(TurnStart(actor=me, round=world.round))
+    first = offered()
+    out.that(
+        first,
+        "and on the caster's next turn the slide is offered, one entry per"
+        " destination -- which is pull_grabbed's shape since #888",
+        f"offered: {len(first)} destinations",
+    )
+
+    out.that(
+        perform(world, enc, me, first[0]),
+        "performing it slides the victim",
+        "perform returned False",
+    )
+    out.that(
+        not offered(),
+        'and then it is gone for the round, which is "once per round" --'
+        " a minor action is once a turn anyway, so this only shows itself"
+        " when an action point buys a second one",
+        f"offered again this round: {len(offered())}",
+    )
+    world.bus.emit(TurnStart(actor=me, round=world.round + 1))
+    out.that(
+        offered(),
+        "and back on the round after",
+        f"offered next round: {len(offered())}",
+    )
+
+    # ------------------------------------- the grant is the CASTER's
+    world2, me2, _ = _board("p1471")
+    k2 = world2.need(me2, Powers)
+    if "p1471" not in k2.known:
+        k2.known.append("p1471")
+    foes2 = sorted(enemies(world2, me2))
+    use(world2, me2, "p1471", targets=[foes2[0]])
+    world2.bus.emit(TurnStart(actor=me2, round=world2.round))
+    theirs = [
+        a for a in legal(world2, world2.encounter, foes2[0])
+        if a.kind == "slide_subject"
+    ]
+    out.that(
+        not theirs,
+        "and the VICTIM is offered nothing -- which is what it would have"
+        " got, because c.grant_action follows c.target by default",
+        f"offered to the victim: {len(theirs)}",
+    )
+
+    # ----------------------------------------- f1255b, the other half
+    world3, me3, _ = _board("f1255b")
+    k3 = world3.need(me3, Powers)
+    if "f1255b" not in k3.known:
+        k3.known.append("f1255b")
+    foes3 = sorted(enemies(world3, me3))
+    if not foes3 or not use(world3, me3, "f1255b", targets=[foes3[0]]):
+        out.skip("f1255b could not be used on its board, so the grabbed"
+                 " slide cannot be posed")
+        return
+    grabbed = [
+        a for a in legal(world3, world3.encounter, me3)
+        if a.kind == "slide_grabbed"
+    ]
+    pulls = [
+        a for a in legal(world3, world3.encounter, me3)
+        if a.kind == "pull_grabbed"
+    ]
+    out.that(
+        grabbed and not pulls,
+        "f1255b offers a SLIDE of the creature it has grabbed and not a"
+        " pull -- the card names no direction, and a pull must end nearer",
+        f"slides {len(grabbed)}, pulls {len(pulls)}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -87164,6 +87299,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "granted_slide": (
+        a_granted_slide_of_somebody_else,
+        "a granted action that moves a creature named by a relation",
     ),
     "drop_by": (
         a_drop_somebody_else_pays_for,

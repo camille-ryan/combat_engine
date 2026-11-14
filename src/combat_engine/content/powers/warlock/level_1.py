@@ -35,6 +35,7 @@ from combat_engine.engine import (
     ENCOUNTER,
     FORT,
     FREE,
+    MINOR,
     ONE_CREATURE,
     PERSONAL,
     REF,
@@ -44,8 +45,10 @@ from combat_engine.engine import (
     Attack,
     Cast,
     DamageType,
+    Effect,
     Keyword,
     Ranged,
+    Relation,
     Target,
     When,
     distance,
@@ -55,6 +58,7 @@ from combat_engine.engine.events import (
     AttackRolled,
     DamageApplied,
     Dropped,
+    ForcedMove,
     Moved,
     SavingThrow,
     SkillCheck,
@@ -312,30 +316,85 @@ def p1460(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.CHARM],
     attack=Attack(CHA, vs=WILL),
-    dropped=("actions.granted_target",),
 )
 def p1471(c: Cast) -> None:
-    """The Effect line is half written and half marked.
+    """The whole Effect line is written now, and its marker was one of four
+    different gaps sharing a symbol -- see `#1305`.
 
-    The hold itself is `c.effect`, a labelled save-ends effect and
-    nothing more -- the old note here said there was no such thing, and
-    there is. It matters on its own: the label is this row's ref, so
-    `c.suffering("p1471")` names who is under it and the target owes a
-    save every round until it is out.
+    The hold is `c.effect`, a labelled save-ends effect: the label is this
+    row's ref, so `c.suffering("p1471")` names who is under it and the
+    target owes a save every round until it is out.
 
-    What the hold is *for* is dropped. "You can slide the target 1
-    square as a minor action once per round" is a standing line in the
-    caster's action menu, and `c.grant_action` reads four words --
-    `shift`, `stand`, `escape`, `second_wind` -- none of which move
-    somebody else. `c.give` is charges rather than a per-round licence
-    and would have to invent a number of them.
-    """
+    **"You can slide the target 1 square as a minor action" is a line in
+    the caster's action menu**, so the menu has to know who the target is.
+    `Relation.SUBJECT_OF` is laid *on the hold* rather than set directly,
+    which is what makes it come off when the hold does -- a relation set by
+    hand outlives the effect and the grant would go on offering a slide of
+    a creature that saved out.
+
+    `slide_subject` is the granted word and `actions._movement` builds one
+    entry per destination, which is the same shape `pull_grabbed` has had
+    since `#888`: the victim comes off a relation and the square is the
+    caster's choice.
+
+    **Two timing clauses, and neither is free.** *"Starting on your next
+    turn"* is why the grant is not laid here -- it is laid at the caster's
+    next `TurnStart`. *"Once per round"* has no per-round store to live in,
+    so the grant is taken away when it is spent and put back at the start
+    of the caster's next turn; `actions.perform` stamps the word on the
+    `ForcedMove` so this watches for its own grant being used rather than
+    for any slide of the victim. A minor action is already once a turn, so
+    this only shows itself when an action point buys a second one -- which
+    is exactly the case the printed words are there for."""
+    victim = c.target
     if c.strike():
         c.damage("3d10", c.cha_mod, dtype=DamageType.PSYCHIC)
         c.slide(3)
     else:
         c.half_damage("3d10", c.cha_mod, dtype=DamageType.PSYCHIC)
-    c.effect(c.ref, until=When.SAVE_ENDS)
+    if victim is None:
+        return
+    hold = c.world.effects.apply(
+        victim, c.me, When.SAVE_ENDS, label=c.ref, by=c.ref,
+        relations=[(Relation.SUBJECT_OF, c.me, victim)],
+    )
+    if hold is None:
+        return
+    granted: list[Effect] = []
+
+    def offer() -> None:
+        if hold.ended or granted:
+            return
+        # **`on=c.me`, and this is the second verb in two rows to need
+        # it.** `c.grant_action` follows `c.target` -- its docstring says
+        # so, because the printed lines of that shape grant an action to
+        # somebody -- so the bare call handed the GRANT TO THE VICTIM and
+        # the caster's menu stayed empty. `When.ENCOUNTER` rather than
+        # `SAVE_ENDS`, because the clock belongs to the hold on the victim
+        # and this sits on the caster; the hold's `on_end` revokes it.
+        got = c.grant_action(
+            "slide_subject", MINOR, on=c.me, until=When.ENCOUNTER,
+        )
+        if got is not None:
+            granted.append(got)
+
+    def spent(ev: ForcedMove) -> None:
+        if ev.power != "slide_subject" or ev.source != c.me:
+            return
+        while granted:
+            c.world.effects.end(granted.pop(), "spent for the round")
+
+    def new_round(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != c.me:
+            return
+        offer()
+
+    hold.subs.append(c.world.bus.on(ForcedMove, spent, owner=c.me))
+    hold.subs.append(c.world.bus.on(TurnStart, new_round, owner=c.me))
+    hold.on_end.append(lambda: [
+        c.world.effects.end(granted.pop(), "the dream ended")
+        for _ in list(granted)
+    ])
 
 
 @power(

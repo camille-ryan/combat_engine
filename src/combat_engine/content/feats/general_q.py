@@ -2025,7 +2025,8 @@ _F3249 = ("p2104", "p4369", "p620")
 
 
 @power("f3249", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("actions.granted_target",))
+       reach=PERSONAL, target=SELF,
+       dropped=("actions.shift(must_end_adjacent=)",))
 def f3249(c: Cast) -> None:
     """**The spec carries the Associated Powers line now**, same as
     `f3218` and `f3230`, so the shift has something to ride on.
@@ -2052,9 +2053,21 @@ def f3249(c: Cast) -> None:
     greps `actions.py` for the `what == "<word>"` comparison that proves
     every member of `GRANTABLE` has a reader.
 
-    `actions.granted_target` is the symbol the three rows with the same
-    shape already carry -- `f1255b`, `i3569p1`, `p1471` -- and this is a
-    fourth. #1219."""
+    **The shared symbol is gone and this row's shape is not the others'.**
+    It carried `actions.granted_target` along with `f1255b`, `i3569p1` and
+    `p1471`, and `#1305` found that to be four different gaps. The other
+    three wanted a victim: two have one that is *derivable* -- off a grab,
+    off `Relation.SUBJECT_OF` -- and both are written now as granted words.
+
+    This row wants no victim at all. The `shift` it grants is of **its own
+    holder**, and what is missing is a filter on where that shift may
+    **end** -- "to a square adjacent to the enemy". The grant above is
+    laid and correct; it is simply wider than the card, because every
+    square within 1 is offered rather than only those beside the creature
+    just hit. Hence `actions.shift(must_end_adjacent=)`, which is a
+    narrowing of a reader rather than a new word.
+
+    #1219, #1305."""
     c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER,
             kind="feat")
 

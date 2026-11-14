@@ -770,39 +770,33 @@ _swap("f1255", "f1255b")
        attack=Attack(Ability.DEX, vs=REF),
        requires=_wielding("spiked chain"),
        requires_text="must be wielding a spiked chain",
-       dropped=("actions.granted_target",))
+       )
 def f1255b(c: Cast) -> None:
     """The grab lands on a hit and on a miss; only the damage differs.
     The sustained half is a named hold beside the grab rather than the
     grab itself, because only an effect carries a Sustain and its
     payout -- the same shape `p13793` uses.
 
-    Dropped: sliding the grabbed creature as a minor action.
+    **Sliding the grabbed creature as a minor action lands now**, and the
+    note under it had already worked out how: a word whose victim is
+    *derivable* needs none of the carrier's three slots, which is how
+    `pull_grabbed` works, "a slide rather than a pull, since a pull must
+    end nearer the grabber and the card names no direction". That is
+    exactly `slide_grabbed`, and the word and its reader landed together in
+    `actions.py` as `drivers.granted_words` requires. `#1305`.
 
-    **Still `actions.granted_target`, which is one gap across four rows**
-    -- this one, `f3249`, `i3569p1` and `p1471`. `p1471` prints the same
-    sentence word for word, so the symbol stays where the group is; it is
-    not this file's to move.
+    **The shared symbol was the thing to undo first.** It read
+    `actions.granted_target` and claimed "one gap across four rows" -- this
+    one, `f3249`, `i3569p1` and `p1471`. Reading the four cards, it is four
+    different gaps: two want a granted word with a derivable victim (this
+    row's off the grab, `p1471`'s off `Relation.SUBJECT_OF`), `f3249` wants
+    a *destination filter* on a `shift` of its own holder, and `i3569p1`
+    wants an opportunity action triggered by a creature falling prone in a
+    zone. Those last two are untouched by what landed and keep their own
+    markers.
 
-    **But the reason written under it was stale twice over and both
-    halves pointed the wrong way.** It said `c.grant_action` "understands
-    `shift` and `stand` and silently eats anything else, so writing it
-    there would look finished and do nothing". It **raises** now, naming
-    `GRANTABLE` -- that was #583 and it is fixed -- so the risk is not a
-    quiet no-op. And `GRANTABLE` holds twelve words, one of which is
-    `pull_grabbed`: a granted action that moves **somebody else**, offered
-    one entry per (victim, destination) with the victim read off
-    `Relation.GRABBED_BY` and the squares off `movement.forced_squares`.
-
-    So this is not structurally impossible, and `f3249`'s note is the one
-    that says where the line actually is: the carrier is a modifier keyed
-    `"<what> as <cost>"` and `query.granted_actions` hands back
-    `{(what, cost): how_far}`, three slots and none of them a place. A
-    word whose victim is *derivable* needs none of them -- which is how
-    `pull_grabbed` works and what this clause would want, a slide rather
-    than a pull, since a pull must end nearer the grabber and the card
-    names no direction. Word and reader land together in `actions.py`,
-    and `drivers.granted_words` is what proves the pair.
+    `on=c.me` on the grant is not optional: `c.grant_action` follows
+    `c.target`, so a bare call hands the licence to the grabbed creature.
     """
     victim = c.target
     if victim is None:
@@ -816,6 +810,17 @@ def f1255b(c: Cast) -> None:
     hold = c.effect(f"{c.ref} grab", until=When.SUSTAIN, on=victim,
                     sustain=MINOR)
     c.on_sustain(hold, lambda: c.damage(c.w(), on=victim))
+    # *"Until the target is no longer grabbed, you can slide the target 1
+    # square as a minor action."* Hung on this hold's own ending, which is
+    # what the printed duration says: the grab and the licence stop
+    # together.
+    licence = c.grant_action(
+        "slide_grabbed", MINOR, on=c.me, until=When.ENCOUNTER,
+    )
+    if licence is not None and hold is not None:
+        hold.on_end.append(
+            lambda: c.world.effects.end(licence, "the grab ended")
+        )
 
 
 @_trait("f1277", proficiency=("w3662",))
