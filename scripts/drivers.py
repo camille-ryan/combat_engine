@@ -197,7 +197,7 @@ def _board(ref: str = "m145a0", seed: int = 1):  # noqa: ANN202
         chargen.SCORED_CHOICES = was
 
 
-def _hardiest(world: object, me: int) -> int:
+def _hardiest(world: World, me: int) -> int:
     """The enemy with the most hit points, for a rule whose clause needs
     its target to survive the blow that triggers it.
 
@@ -1195,7 +1195,8 @@ def two_types(out: Result) -> None:
         and getattr(pw.summon, "damage", None) is not None
     ]
     multi = [pw for pw in summons
-             if must(pw.summon, "a summon block").damage.dtypes]
+             if must(must(pw.summon, "a summon block").damage,
+                     "a damage line").dtypes]
     out.that(
         not multi,
         f"no summon block prints two types yet, so its forwarding is untested "
@@ -4834,7 +4835,7 @@ def rider_on_an_offered_aiming(out: Result) -> None:
 
     def hit(ref: str, branch: int):  # noqa: ANN202
         ev = Hit(attacker=me, target=foe, power=ref, critical=False)
-        ev.branch = branch  # ty: ignore[missing-attribute]
+        ev.branch = branch
         return ev
 
     row = get(ranged)
@@ -6281,8 +6282,8 @@ def a_lengthened_move_says_how_much_of_the_extra_was_spent(out: Result) -> None:
     foe3 = next(iter(sorted(enemies(world3, me3))), 0)
     here = world3.need(me3, Position).square
     walked = Moved(actor=me3, from_=here, to=here)
-    walked.kind_ = "walk"  # ty: ignore[missing-attribute]
-    walked.stretched_ = 1  # ty: ignore[missing-attribute]
+    walked.kind_ = "walk"
+    walked.stretched_ = 1
     world3.bus.emit(walked)
     out.that(not has_combat_advantage(world3, foe3, me3),
              "a WALK stretched a square past its print pays nothing: the"
@@ -6310,7 +6311,7 @@ def a_lengthened_move_says_how_much_of_the_extra_was_spent(out: Result) -> None:
                   if isinstance(e, Moved) and e.actor == me]
         if not blinks:
             return -1
-        return blinks[0].stretched_  # ty: ignore[missing-attribute]
+        return blinks[0].stretched_
 
     out.that(blinked(far=True) == 1,
              "a printed 3-square teleport that lands 4 away reports one"
@@ -11110,10 +11111,12 @@ def reroll_as_another_skill(out: Result) -> None:
         world.bus.on(Rerolled, caught.append)
         world.bus.on(CheckSubstituted, caught.append)
 
+        done: set[int] = set()
+
         def after(ev: SkillCheck) -> None:
-            if getattr(ev, "_done", False):
+            if id(ev) in done:
                 return
-            ev._done = True
+            done.add(id(ev))
             seen["natural"] = ev.natural
             seen["total"] = ev.total
             c = Cast(world=world, me=me, ref="driver")
@@ -11226,10 +11229,18 @@ def reroll_as_another_skill(out: Result) -> None:
     world_s.bus.on(Rerolled, said_s.append)
     world_s.bus.on(CheckSubstituted, said_s.append)
 
+    # **The latch is a set of event identities, not a flag on the event.**
+    # `reroll_check` emits its own `SkillCheck` for the second roll, so an
+    # unguarded handler recurses; the guard was `ev._done = True`, which
+    # stamps a private attribute on an engine event from an instrument. The
+    # set is the same test -- "have I already handled this exact event" --
+    # without inventing a field `events.py` does not declare.
+    done_s: set[int] = set()
+
     def same(ev: SkillCheck) -> None:
-        if getattr(ev, "_done", False):
+        if id(ev) in done_s:
             return
-        ev._done = True
+        done_s.add(id(ev))
         c = Cast(world=world_s, me=me_s, ref="samer")
         c.trigger = ev
         c.reroll_check(keep="best", skill="bluff", ev=ev)
@@ -11258,10 +11269,12 @@ def reroll_as_another_skill(out: Result) -> None:
     world_b, me_b, _ = audit.board("p11552", 1)
     moved: dict[str, object] = {}
 
+    done_b: set[int] = set()
+
     def banked(ev: SkillCheck) -> None:
-        if getattr(ev, "_done", False):
+        if id(ev) in done_b:
             return
-        ev._done = True
+        done_b.add(id(ev))
         c = Cast(world=world_b, me=me_b, ref="banked")
         # **Not the check**, which is every watch handler's situation and
         # the whole point of this arm.
@@ -11300,10 +11313,12 @@ def reroll_as_another_skill(out: Result) -> None:
     world.bus.on(Rerolled, seen.append)
     world.bus.on(CheckSubstituted, seen.append)
 
+    done_p: set[int] = set()
+
     def plain(ev: SkillCheck) -> None:
-        if getattr(ev, "_done", False):
+        if id(ev) in done_p:
             return
-        ev._done = True
+        done_p.add(id(ev))
         c = Cast(world=world, me=me, ref="driver")
         c.trigger = ev
         c.reroll_check(keep="new", ev=ev)
@@ -11400,7 +11415,7 @@ def creature_or_object(out: Result) -> None:
     from combat_engine.engine.query import squares
     from combat_engine.engine.types import Size
 
-    def board() -> tuple[object, int, int, int, int]:
+    def board() -> tuple[World, int, int, int, int]:
         world, me, _ = audit.board("p465", 1)
         here = sorted(squares(world, me))[0]
         statue = put(world, (here[0] + 2, here[1]), kind="object", hp=0,
@@ -11550,7 +11565,8 @@ def summoned_is_a_fact(out: Result) -> None:
     # asked about the other's owner.
     rival = next((e for e in enemies(world, me)), None)
     out.that(rival is not None, "the board has a second creature to summon")
-    theirs = Cast(world=world, me=rival, ref="rival").summon("m145")
+    theirs = Cast(world=world, me=must(rival, "a second creature"),
+                  ref="rival").summon("m145")
     out.that(theirs not in (0, made), "which summons a different creature")
     out.that(is_summoned(world, theirs, rival),
              "recognised as the rival's own")
@@ -11666,7 +11682,7 @@ def rerolled(out: Result) -> None:
         hand.reroll_attack(keep="new")
 
     sub = world.bus.on(AttackRolled, again)
-    landed: list[object] = []
+    landed: list[Hit | Miss] = []
     world.bus.on(Hit, lambda ev: landed.append(ev))
     world.bus.on(Miss, lambda ev: landed.append(ev))
     _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:reroll")
@@ -12223,8 +12239,8 @@ def keyword_ban(out: Result) -> None:
     out.that("beast form" in (why or ""),
              "and the reason names the keyword, not a generic refusal")
 
-    bf = get("p16537")
-    out.that(bf is not None and Keyword.BEAST_FORM in bf.keywords,
+    bf = must(get("p16537"), "p16537")
+    out.that(Keyword.BEAST_FORM in bf.keywords,
              "p16537 carries the keyword")
     if "p16537" not in known.known:
         known.known.append("p16537")
@@ -12261,10 +12277,10 @@ def keyword_ban(out: Result) -> None:
     # at all, so banning one of them proves nothing -- the first version of
     # this rule banned WEAPON and went red, which is the plant test working
     # on the test rather than on the code. `p16537` carries BEAST_FORM.
-    banned = get("p16537")
+    banned = must(get("p16537"), "p16537")
     if "p16537" not in known.known:
         known.known.append("p16537")
-    out.that(banned is not None and Keyword.BEAST_FORM in banned.keywords,
+    out.that(Keyword.BEAST_FORM in banned.keywords,
              "p16537 carries the keyword about to be banned")
     ok, _ = usable(world, me, banned)
     out.that(ok, "and is usable before the ban")
@@ -14171,6 +14187,7 @@ def thief_slippery_rolls(out: Result) -> None:
     from combat_engine.engine.events import SkillCheck
     from combat_engine.engine.query import enemies
     from combat_engine.engine.skills import check
+    from combat_engine.engine.types import Condition
 
     ref = "cf:rogue-thief-f18"
     if ref not in REGISTRY:
@@ -14240,7 +14257,7 @@ def thief_slippery_rolls(out: Result) -> None:
              f"the checks it announced carried {purposes}")
 
     # ---- the save half, measured the same way through a real throw.
-    def mean_save(condition: str) -> float:
+    def mean_save(condition: Condition) -> float:
         # `world.effects` is the live `Effects`, which is what owns `save`
         # -- two other rules here reach it the same way. Building a second
         # one would roll against a board nothing else can see.
@@ -14259,8 +14276,8 @@ def thief_slippery_rolls(out: Result) -> None:
             c_.end_effect(eff)
         return sum(seen) / len(seen) if seen else -1.0
 
-    slowed = mean_save("slowed")
-    dazed = mean_save("dazed")
+    slowed = mean_save(Condition.SLOWED)
+    dazed = mean_save(Condition.DAZED)
     if slowed < 0 or dazed < 0:
         out.skip("the board would not take a save-ends condition")
         return
@@ -14486,7 +14503,7 @@ def paragon_gains_and_swaps(out: Result) -> None:
         if ref not in REGISTRY or REGISTRY[ref].swap is None:
             out.skip(f"{ref} declares no `swap=`")
             continue
-        trade = REGISTRY[ref].swap
+        trade = must(REGISTRY[ref].swap, f"{ref}'s `swap=`")
         out.that(trade.level == 0,
                  f"{ref} trades at a level-0 FLOOR -- its card states"
                  " none, so 0 is that rather than a guess",
@@ -20819,7 +20836,7 @@ def a_regions_damage_is_the_damage_it_prints(out: Result) -> None:
              " every count below is over a real population",
              f"{len(rows)} rows")
 
-    carried = [r for r in rows if (r["damage"] or "")]
+    carried = [r for r in rows if r["damage"]]
     out.that(len(carried) > 30,
              "and most of the rows that print damage now carry it -- 14"
              " before this landed, and the 14 were not the right 14",
@@ -20875,7 +20892,7 @@ def a_regions_damage_is_the_damage_it_prints(out: Result) -> None:
              f"flagged without the phrase: {says_tier[:5]}")
 
     # -- the type, where the page names one ------------------------------
-    typed = [r for r in carried if (r["damage_type"] or "")]
+    typed = [r for r in carried if r["damage_type"]]
     out.that(len(typed) > 10,
              "the printed damage type is kept, so a region that deals cold"
              " is not written as untyped",
@@ -23696,8 +23713,13 @@ def recharge_announced(out: Result) -> None:
             # bus: what is asserted is that a restore announces, not how the
             # bus routes to it.
             fields = getattr(trig.event, "__dataclass_fields__", {})
+            # `Any`, because which event class this is is decided by the
+            # row: the `actor` test below is exactly the check a declared
+            # type would be making, so a narrower annotation would have to
+            # be a lie about one branch or the other.
+            maker: Any = trig.event
             try:
-                made = trig.event(actor=holder) if "actor" in fields else trig.event()
+                made = maker(actor=holder) if "actor" in fields else maker()
                 world.encounter.triggers._recharge(made)
             except Exception:
                 # This event class wants more state than a bare build gives.
@@ -27814,9 +27836,8 @@ def every_trait_level_rider_is_listed(out: Result) -> None:
     con = db.game()
     bracketed = {
         ref for ref in riders
-        if ((con.execute("select category from feat where ref=?",
-                         (ref,)).fetchone() or {"category": ""})["category"]
-            or "")
+        if (con.execute("select category from feat where ref=?",
+                        (ref,)).fetchone() or {"category": ""})["category"]
     }
     out.that(bool(bracketed) and len(bracketed) < len(riders),
              f"the category filter does something -- all or nothing would"
@@ -28128,13 +28149,13 @@ def an_effects_keywords_come_from_the_row_that_laid_it(out: Result) -> None:
       transfer site is the one place `by` must not be `self.ref`.
     """
     from combat_engine.engine import Cast, DamageType, When
-    from combat_engine.engine.durations import keywords_of
+    from combat_engine.engine.durations import Effect, keywords_of
     from combat_engine.engine.query import allies
     from combat_engine.engine.types import Keyword
 
     world, caster, _ = _board()
 
-    def burn(ref: str, dtype: DamageType, who: int) -> object:
+    def burn(ref: str, dtype: DamageType, who: int) -> Effect | None:
         before = set(world.effects.live)
         Cast(world=world, me=who, ref=ref).ongoing(5, dtype, on=who)
         laid = [e for i, e in world.effects.live.items() if i not in before]
@@ -29725,9 +29746,9 @@ def shaman_spirits(out: Result) -> None:
         world, me, _ = _board(ref)
         held = world.get(me, Build)
         if held is None:
-            world.add(me, Build(choices=frozenset({leg})))
+            world.add(me, Build(choices={leg}))
         else:
-            held.choices = frozenset({leg})
+            held.choices = {leg}
         known = world.need(me, Powers)
         known.known = sorted(set(known.known) | every)
         known.forbidden = set()
@@ -29808,7 +29829,7 @@ def a_feats_clause_in_its_power(out: Result) -> None:
         for other in foes[2:]:
             world.add(other, Position(square=(x + 40, y)))
 
-        seen: list[int] = []
+        seen: list[int | None] = []
         real = Cast.grant_attack
 
         def record(self, who, *, on=None, **kw):  # noqa: ANN001, ANN003, ANN202
@@ -32649,10 +32670,10 @@ def an_elemental_affinity_is_offered_when_the_power_is_used(out: Result) -> None
         foe = chargen.spawn(world, chargen.Character(
             cls="fighter", level=1, build="", feats=[], powers=[]), (6, 5))
         build = world.need(me, Build)
-        build.choices = (
+        build.choices = {
             *(x for x in build.choices if x != "infernal"),
             "elemental", "element:fire",
-        )
+        }
         known = world.need(me, Powers)
         if VEHICLE not in known.known:
             known.known.append(VEHICLE)
@@ -32715,6 +32736,7 @@ def the_nearest_enemy_is_one_answer_and_a_card_widens_it(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.dsl import NEAREST_ENEMY, ONE_CREATURE, REGISTRY
     from combat_engine.engine.query import enemies, nearest_enemy, squares
+    from combat_engine.engine.types import Team
 
     # -- the floor: the reader answers at all, and with a LIST -----------
     world, me, _ = _posed("cf:ranger-f1", 1)
@@ -32817,10 +32839,12 @@ def the_nearest_enemy_is_one_answer_and_a_card_widens_it(out: Result) -> None:
             cls="fighter", level=1, build="", feats=[], powers=[]),
             (12, 4))
         near_friend = chargen.spawn(world, chargen.Character(
-            cls="rogue", level=1, build="", feats=[], powers=[], team="enemy"),
+            cls="rogue", level=1, build="", feats=[], powers=[],
+            team=Team.ENEMY),
             (13, 4))
         far_from_friend = chargen.spawn(world, chargen.Character(
-            cls="rogue", level=1, build="", feats=[], powers=[], team="enemy"),
+            cls="rogue", level=1, build="", feats=[], powers=[],
+            team=Team.ENEMY),
             (6, 4))
         # **And one enemy adjacent to the SHAMAN but not to the spirit**,
         # so the shaman's own nearest is that one. Without it the shaman is
@@ -32829,7 +32853,8 @@ def the_nearest_enemy_is_one_answer_and_a_card_widens_it(out: Result) -> None:
         # trivially true -- it would be guarding nothing, which the
         # `on=c.me` plant showed.
         chargen.spawn(world, chargen.Character(
-            cls="rogue", level=1, build="", feats=[], powers=[], team="enemy"),
+            cls="rogue", level=1, build="", feats=[], powers=[],
+            team=Team.ENEMY),
             (4, 3))
         # beside the shaman, and so beside `far_from_friend` at (6,4)
         Cast(world=world, me=sham, ref="drivers:spirit").call_companion(
@@ -32937,8 +32962,13 @@ def a_spirit_power_needs_the_spirit_present(out: Result) -> None:
     for ref in gated:
         if ref not in known.known:
             known.known.append(ref)
+    # **`drop`, not `remove`.** `World` has no `remove`, so this line
+    # would have raised the moment the board carried a companion -- and it
+    # never did, which is why 29 green assertions sat above a clearing
+    # step that cleared nothing. Found by `types.py`, not by a failure:
+    # a dead line in an instrument reads exactly like a working one.
     for eid in list(world.having(Companion)):
-        world.remove(eid, Companion)
+        world.drop(eid, Companion)
 
     # -- why the prereq is needed at all --------------------------------
     melee = next((r for r in gated
@@ -34503,7 +34533,7 @@ def a_prohibition_the_actor_consults(out: Result) -> None:
         out.that(after > before,
                  "a second wind restores hit points -- the control",
                  f"{before} -> {after}")
-        b2, a2 = wind(forgo=True)
+        b2, a2 = must(wind(forgo=True), "the forgone second wind")
         out.that(a2 == b2,
                  "and `c.forgo_second_wind_heal` leaves them exactly where"
                  " they were, which is the refusal the printed trade needs"
@@ -35117,6 +35147,7 @@ def every_swing_is_recorded(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health, Position, Powers
     from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import PowerResolved
     from combat_engine.engine.query import enemies
 
     RELIABLE_TWO_ARMS = "p10478"
@@ -35183,8 +35214,11 @@ def every_swing_is_recorded(out: Result) -> None:
         fresh = world.bus.log[before:]
         rolled = len([e for e in fresh if e.kind == "AttackRolled"
                       and getattr(e, "attacker", None) == me])
-        got = [e for e in fresh if e.kind == "PowerResolved"
-               and getattr(e, "power", "") == ref]
+        # `isinstance` rather than `.kind`, so `rolls` is readable: the
+        # string test narrows nothing and the attribute is declared on
+        # `PowerResolved` alone.
+        got = [e for e in fresh if isinstance(e, PowerResolved)
+               and e.power == ref]
         return rolled, (len(got[0].rolls) if got else -1)
 
     pair = rolls_and_swings(TWO_SWINGS, 1)
@@ -35669,7 +35703,7 @@ def dice_rerolled_where_the_card_prints_no_threshold(out: Result) -> None:
     # where the two reads diverge: a mean would also move for a dozen
     # unrelated reasons and would need thousands of rolls to separate
     # "inert" from "slightly weaker".
-    def picked(gate: object) -> tuple[int, int]:
+    def picked(gate: Callable[[dict[str, Any]], bool] | None) -> tuple[int, int]:
         world, me, _ = _board()
         c = Cast(world=world, me=me, ref="drivers:reroll")
         c.reroll_ones(below=2, pick=1, on=me, when=gate)
@@ -45178,6 +45212,7 @@ def the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand(
     from combat_engine.content.features.bladesinger import _one_handed_swing
     from combat_engine.engine import Gear
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Weapon
     from combat_engine.engine.dsl import REGISTRY
 
     rows = sorted(r for r in REGISTRY if r.startswith("cf:wizard-bladesinger-"))
@@ -45188,7 +45223,7 @@ def the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand(
              "and the chassis is dealable, beside the other four",
              f"{chargen.declared_chassis('wizard')}")
 
-    def posed(ref: str, weapon: object | None, *,
+    def posed(ref: str, weapon: Weapon | None, *,
               armour: str = "cloth", shield: bool = False) -> tuple:
         """The board, re-armed, and what the row laid.
 
@@ -45520,6 +45555,7 @@ def the_slayers_three_masteries_each_answer_their_own_weapon(
     from combat_engine import chargen
     from combat_engine.engine import Gear
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Weapon
     from combat_engine.engine.dsl import REGISTRY, get, usable
     from combat_engine.engine.events import Hit, PowerResolved
 
@@ -45577,7 +45613,7 @@ def the_slayers_three_masteries_each_answer_their_own_weapon(
     BLADE = replace(chargen.LONGSWORD, group="heavy blade",
                     properties=frozenset({"two-handed"}))
 
-    def credited(ref: str, weapon: object) -> list[str]:
+    def credited(ref: str, weapon: Weapon) -> list[str]:
         """Which events this row's own doing, firing `p12668` for real.
 
         **Four fields, because the three effects credit differently** and
@@ -45694,7 +45730,7 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
     from combat_engine.content.features.executioner import GUILDS
     from combat_engine.engine import Gear
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.components import Health, Powers, Weapon
     from combat_engine.engine.dsl import REGISTRY, get, usable
     from combat_engine.engine.events import Fell, Hit
 
@@ -45753,7 +45789,7 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
     CLUB = replace(chargen.MACE, group="mace", hands="two-handed",
                    properties=frozenset({"two-handed"}))
 
-    def extra(weapon: object, swings: int = 1) -> int:
+    def extra(weapon: Weapon, swings: int = 1) -> int:
         world, me, _ = _posed("cf:assassin-executioner-f0", 1)
         gear = world.need(me, Gear)
         gear.weapons = [weapon]
@@ -45804,7 +45840,7 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
     world, me, _ = _posed("cf:assassin-executioner-f0", 1)
     c = Cast(world=world, me=me, ref="cf:assassin-executioner-f7")
     victim = next(f for f in c.enemies() if c.adjacent(f))
-    health = world.get(victim, Health)
+    health = world.need(victim, Health)
     health.max_hp = 50
     ceiling = {}
     for left in (0, 1, 8, 10, 11, 25):
@@ -45824,7 +45860,7 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
     c = Cast(world=world, me=me, ref="cf:assassin-executioner-f7")
     REGISTRY["cf:assassin-executioner-f7"].body(c)
     victim = next(f for f in c.enemies() if c.adjacent(f))
-    health = world.get(victim, Health)
+    health = world.need(victim, Health)
     health.max_hp, health.hp = 50, 10
     world.bus.emit(Hit(attacker=me, target=victim, power="mba",
                        critical=False))
@@ -45836,7 +45872,7 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
 
     # -- f8: the fall ----------------------------------------------------
     world, me, _ = _posed("cf:assassin-executioner-f0", 1)
-    fell = Fell(actor=me, squares=2, from_=None, soften=0, prone=True)
+    fell = Fell(actor=me, squares=2, from_=0, soften=0, prone=True)
     c = Cast(world=world, me=me, ref="cf:assassin-executioner-f8",
              trigger=fell)
     REGISTRY["cf:assassin-executioner-f8"].body(c)
@@ -45920,9 +45956,10 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
     from combat_engine import chargen
     from combat_engine.engine import Gear
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Powers
+    from combat_engine.engine.components import Powers, Weapon
     from combat_engine.engine.dsl import REGISTRY, get, usable
     from combat_engine.engine.events import Hit, PowerResolved, SecondWind
+    from combat_engine.engine.types import ActionType
 
     rows = sorted(r for r in REGISTRY if r.startswith("cf:fighter-knight-"))
     out.that(len(rows) == 29,
@@ -45980,7 +46017,7 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
     STAFF = replace(chargen.LONGSWORD, group="staff")
     HAMMER = replace(chargen.LONGSWORD, group="hammer")
 
-    def credited(ref: str, weapon: object) -> list[str]:
+    def credited(ref: str, weapon: Weapon) -> list[str]:
         """Which events this row's own doing, firing `p12668` for real.
 
         Four fields, for `drivers.slayer_mastery`'s reason: a condition
@@ -46031,7 +46068,8 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
         REGISTRY["cf:fighter-knight-f17"].body(c)
         mark = len(list(world.effects.of(me)))
         if event is SecondWind:
-            world.bus.emit(SecondWind(actor=me, healed=5, cost=None))
+            world.bus.emit(SecondWind(actor=me, healed=5,
+                                      cost=ActionType.STANDARD))
         else:
             from combat_engine.engine.events import TotalDefence
             world.bus.emit(TotalDefence(actor=me, amount=2))
@@ -46064,7 +46102,8 @@ def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
         health.hp = max(1, health.max_hp // 4)
         armed = any((e.label or "") == "cf:fighter-knight-f19"
                     for e in world.effects.of(me))
-        world.bus.emit(SecondWind(actor=me, healed=5, cost=None))
+        world.bus.emit(SecondWind(actor=me, healed=5,
+                                  cost=ActionType.STANDARD))
         return left - world.need(me, Health).surges, armed
 
     spent, armed = surges(3)
@@ -46341,6 +46380,7 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
     from combat_engine import chargen
     from combat_engine.engine import Gear
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Weapon
     from combat_engine.engine.dsl import REGISTRY, get, usable
 
     rows = sorted(r for r in REGISTRY if r.startswith("cf:ranger-scout-"))
@@ -46391,7 +46431,7 @@ def the_scouts_off_hand_forks_read_the_hand_and_not_each_other(
     BLADE = replace(chargen.DAGGER, group="light blade")
     AXE = replace(chargen.MACE, group="axe")
 
-    def laid(ref: str, off: object | None) -> list[str]:
+    def laid(ref: str, off: Weapon | None) -> list[str]:
         """What the row lays, with a weapon in the OFF hand.
 
         `Gear.off` is `melee[1]` -- *"a ranger carrying a blade and a bow
@@ -46777,7 +46817,7 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
     from combat_engine import chargen
     from combat_engine.engine import Gear
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Powers
+    from combat_engine.engine.components import Powers, Weapon
     from combat_engine.engine.dsl import REGISTRY, get, usable
     from combat_engine.engine.events import Hit
 
@@ -46853,7 +46893,7 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
     BOW = replace(chargen.LONGBOW, group="bow")
     XBOW = replace(chargen.LONGBOW, group="crossbow")
 
-    def credited(ref: str, shooter: object) -> list[str]:
+    def credited(ref: str, shooter: Weapon) -> list[str]:
         world, me, _ = _posed("cf:ranger-hunter-f0", 1)
         gear = world.need(me, Gear)
         gear.weapons = [shooter]
@@ -46887,14 +46927,16 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
 
     # -- f17: the range written onto the hunter's own weapons ------------
     world, me, _ = _posed("cf:ranger-hunter-f0", 1)
-    gear = world.get(me, Gear)
+    gear = world.need(me, Gear)
     gear.weapons = [replace(chargen.LONGBOW, group="bow")]
     gear.stowed = set()
-    before = must(gear.ranged, "a ranged weapon").ranged
+    before = must(must(gear.ranged, "a ranged weapon").ranged,
+                  "a printed range pair")
     emitted = len(world.bus.log)
     REGISTRY["cf:ranger-hunter-f17"].body(
         Cast(world=world, me=me, ref="cf:ranger-hunter-f17"))
-    after = must(world.need(me, Gear).ranged, "a ranged weapon").ranged
+    after = must(must(world.need(me, Gear).ranged, "a ranged weapon").ranged,
+                 "a printed range pair")
     out.that(after == (before[0] + 10, before[1] + 10),
              "`-f17` adds 10 to BOTH the normal and the long range, which "
              "the card says twice. Written onto the creature's own copy of "
@@ -47858,6 +47900,8 @@ def the_poison_recipes_and_the_spellbook_are_both_dealt(out: Result) -> None:
     short rest giving everything back looks identical to one giving
     nothing back if only the spellbook is read.
     """
+    from random import Random
+
     import combat_engine.content  # noqa: F401
     from combat_engine import chargen, db
     from combat_engine.engine import Build as BuildState
@@ -47901,18 +47945,31 @@ def the_poison_recipes_and_the_spellbook_are_both_dealt(out: Result) -> None:
         seen: list[list[str]] = []
         real = chargen._stock_vials
 
-        # Both bound explicitly: the closure is consumed inside this
+        # **Both bound explicitly, through a factory rather than through
+        # default arguments.** The closure is consumed inside this
         # iteration, but a loop-captured accumulator is how a rule comes
-        # to record another level's answer.
-        def spy(gear: object, powers: object, held: set[str],
-                knows: list[str], rng: object,
-                _real: object = real,
-                _into: list[list[str]] = seen) -> list[str]:
-            out_ = _real(gear, powers, held, knows, rng)  # ty: ignore[not-callable]
-            _into.append(list(out_))
-            return out_
+        # to record another level's answer. A factory binds the same two
+        # things at the same moment and leaves the replacement's signature
+        # identical to what it replaces -- two extra defaulted parameters
+        # made it a different callable, which is exactly the shape of
+        # mismatch a monkeypatch must not have.
+        # No return annotation, deliberately: a `Callable[[...], ...]` has
+        # no parameter *names*, so it reads as positional-only and would
+        # not match the named-parameter function being replaced. The inner
+        # `def` is fully annotated, so the inferred type is exact and the
+        # assignment below is checked rather than waived.
+        def make_spy(_real: Callable[..., list[str]],  # noqa: ANN202
+                     _into: list[list[str]]):
+            def spy(gear: Gear | None, powers: Powers | None,
+                    held: set[str], knows: list[str],
+                    rng: Random) -> list[str]:
+                out_ = _real(gear, powers, held, knows, rng)
+                _into.append(list(out_))
+                return out_
 
-        chargen._stock_vials = spy
+            return spy
+
+        chargen._stock_vials = make_spy(real, seen)
         try:
             chargen.spawn(world, chargen.Character(
                 "assassin", level, [], chassis="executioner"), (4, 6))
@@ -48460,7 +48517,7 @@ def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
             cls, level, [], chassis=chassis), (4, 6))
         return world, eid
 
-    def took(world: object, eid: int, fork: str) -> list[str]:
+    def took(world: World, eid: int, fork: str) -> list[str]:
         state = world.get(eid, BuildState)
         assert state is not None
         head = f"option:{fork}:"
@@ -49214,7 +49271,7 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
     world, me, _ = _posed("cf:fighter-slayer-f1", 1)
     known = world.need(me, Powers)
     known.extra_uses.clear()
-    strike = get("p12668")
+    strike = must(get("p12668"), "p12668")
     known.used["p12668"] = 1
     before = usable(world, me, strike)
     c = Cast(world=world, me=me, ref="probe")
@@ -56725,17 +56782,17 @@ def one_row_answers_either_of_two_printed_occasions(out: Result) -> None:
              " one would make every assertion below about half a card",
              f"{[t.event.__name__ for t in REGISTRY[ROW].triggers]}")
 
-    def fired(world: object) -> int:
+    def fired(world: World) -> int:
         return sum(1 for e in world.bus.log
                    if isinstance(e, PowerUsed)
                    and getattr(e, "power", "") == ROW)
 
-    def attack_roll(world: object, me: int, foe: int) -> None:
+    def attack_roll(world: World, me: int, foe: int) -> None:
         world.bus.emit(AttackRolled(
             attacker=me, target=foe, power="mba", vs=Defense.AC,
             natural=4, bonus=5, total=9, defence=14, advantage=False))
 
-    def damage_roll(world: object, me: int, foe: int) -> None:
+    def damage_roll(world: World, me: int, foe: int) -> None:
         # `detail` is the roll's printed expression and is required; "2d6"
         # is a plain one and nothing in this row reads it.
         world.bus.emit(DamageRolled(
@@ -59049,8 +59106,14 @@ def a_zone_can_hold_a_condition_and_takes_it_back(out: Result) -> None:
              " would slow the caster")
 
     # -- walk out, which is the half a duration cannot do ---------------
-    far = (zone.squares and max(sorted(zone.squares))[0] + 3, 0)
-    spot = (far[0], 0)
+    # **A guard, not `zone.squares and ...`.** That spelling answers the
+    # frozenset itself when the zone is empty, so `place` would have been
+    # handed `(frozenset(), 0)` as a square -- which is the #882 shape
+    # this rule's own comment below is about.
+    if not zone.squares:
+        out.skip("the zone claimed no square to walk out of")
+        return
+    spot = (max(sorted(zone.squares))[0] + 3, 0)
     pos = world.get(victim, Position)
     if pos is None:
         return
@@ -62165,6 +62228,7 @@ def a_stowed_item_is_spent_by_the_row_that_stowed_it(out: Result) -> None:
     from combat_engine.engine.components import Gear, Powers
     from combat_engine.engine.dsl import NO_TARGET, REGISTRY, SELF
     from combat_engine.engine.events import ItemConsumed, SecondWind
+    from combat_engine.engine.types import ActionType
 
     out.that(len(_I465_COATINGS) >= 3 and "i469" in _I465_COATINGS,
              "`i465x1`'s stowable list holds the coatings, and `i469` -- "
@@ -62185,7 +62249,8 @@ def a_stowed_item_is_spent_by_the_row_that_stowed_it(out: Result) -> None:
         stowed = dict(kn.stored)
         n = len(w.bus.log)
         if by_trigger:
-            w.bus.emit(SecondWind(actor=who, healed=10, cost="standard"))
+            w.bus.emit(SecondWind(actor=who, healed=10,
+                                  cost=ActionType.STANDARD))
         else:
             # `targets=None`, so `dsl.use` resolves each row's declared
             # `Target` the way a fight does. **This said `targets=[who]`
@@ -62558,7 +62623,8 @@ def a_destroyed_item_takes_what_it_was_giving_with_it(out: Result) -> None:
     # -- worn=, on a row destroying its own item -------------------------
     world, me, _ = A.board("i476x1", 1)
     gear, powers = world.need(me, Gear), world.need(me, Powers)
-    magic = replace(magic_for("i3466", plus=0), powers=_blocks_of("i3466"))
+    magic = replace(must(magic_for("i3466", plus=0), "i3466's magic block"),
+                    powers=_blocks_of("i3466"))
     out.that(bool(magic.powers),
              "the globe's own blocks are known to `_blocks_of`, so there is "
              "something for `equip` to grant and `destroy` to take back",
@@ -62753,7 +62819,8 @@ def an_alchemical_attack_is_told_apart_from_an_ordinary_one(out: Result) -> None
         w, who, _ = A.board("i468x1", 1)
         reach = dsl.spread(occupies(w, who), 1)
         adj = [f for f in enemies(w, who)
-               if (w.get(f, Position) or Position()).squares & reach]
+               if (pos := w.get(f, Position)) is not None
+               and pos.squares & reach]
         if not adj:
             return []
         known = w.need(who, Powers)
@@ -80793,7 +80860,7 @@ def flat_from_attack(out: Result) -> None:
 
     world, me, _ = _board()
 
-    def paid(amount: int, **kw: bool) -> int:
+    def paid(amount: int, **kw: Any) -> int:
         health = world.need(me, Health)
         was = health.hp
         Cast(world=world, me=me, ref="drivers").flat(
@@ -82610,7 +82677,7 @@ def a_whirl_repeats_a_bladespell_once_a_day(out: Result) -> None:
     seen: list[tuple[int, str]] = []
     world.bus.on(PowerUsed, lambda ev: seen.append(
         (getattr(ev, "actor", -1), getattr(ev, "power", ""))))
-    world.bus.emit(PowerUsed(actor=me, power=spell, targets=(aimed,)))
+    world.bus.emit(PowerUsed(actor=me, power=spell, targets=[aimed]))
     repeats = [p for a, p in seen if a == me and p == spell][1:]
     out.that(len(repeats) == 1,
              f"the whirl repeats the power once -- one other adjacent enemy,"
@@ -82620,7 +82687,7 @@ def a_whirl_repeats_a_bladespell_once_a_day(out: Result) -> None:
              "and the day's allowance is spent")
 
     seen.clear()
-    world.bus.emit(PowerUsed(actor=me, power=spell, targets=(aimed,)))
+    world.bus.emit(PowerUsed(actor=me, power=spell, targets=[aimed]))
     again = [p for a, p in seen if a == me and p == spell][1:]
     out.that(not again,
              "PLANT: a second whirl the same day repeats nothing --"
@@ -82912,10 +82979,11 @@ def a_fort_rider_pays_only_on_a_hit(out: Result) -> None:
     from combat_engine.engine.dsl import use
     from combat_engine.engine.events import AttackRolled
     from combat_engine.engine.query import has_combat_advantage
+    from combat_engine.engine.types import Defense
 
     ref = "cf:cleric-warpriest-f8s3"
 
-    def pose(vs: object, hit: bool, melee: bool = True):  # noqa: ANN202
+    def pose(vs: Defense, hit: bool, melee: bool = True):  # noqa: ANN202
         world, me, _ = _board(ref, 1)
         use(world, me, ref, spend=False)
         victim = _hardiest(world, me)

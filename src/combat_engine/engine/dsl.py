@@ -3637,7 +3637,7 @@ def affordable(world: World, actor: int, p: Power) -> tuple[int, ...]:
     return tuple(n for n in p.augment_costs if n <= have)
 
 
-def keywords_of(world: Any, actor: int, p: Any) -> frozenset[Keyword]:
+def keywords_of(world: Any, actor: int | None, p: Any) -> frozenset[Keyword]:
     """Every keyword a row carries **for this creature**.
 
     The declared tuple plus whatever a feat granted. Read this, never
