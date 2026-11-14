@@ -333,10 +333,9 @@ def p13444(c: Cast) -> None:
     keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
     augments=(
-        Augment(1, target=UpTo(2)),
+        Augment(1, target=UpTo(2, adjacent_to_each_other=True)),
         Augment(2, target=UpTo(2)),
     ),
-    dropped=("dsl.Target.adjacent_to_each_other",),
 )
 def p8239(c: Cast) -> None:
     """Both augments are target lines, and a target line is read before the
@@ -344,11 +343,24 @@ def p8239(c: Cast) -> None:
     target declared, Augment 2's stronger hit -- 2[W] and immobilised
     rather than slowed -- is writable below, which it was not on its own.
 
-    The `dropped` clause is the *shape* of Augment 1's pair: "one creature
-    or two creatures adjacent to each other". `Target` caps a count and
-    filters a side and cannot say that the two chosen must stand together,
-    so Augment 1 is offered as any two, which is Augment 2's line at a
-    cheaper price."""
+    **Augment 1's pair must stand together, and until `#1294` it did not
+    have to.** The card prints *"one creature or two creatures adjacent to
+    each other"* for one power point and *"one or two creatures"* for two,
+    so without the constraint Augment 1 was Augment 2's target line at
+    half the price -- stronger than print, which is the error
+    `m5808a0`'s note calls worse than an absent clause.
+
+    `Target.adjacent_to_each_other` says it and `dsl.pick_targets` honours
+    it. That is a constraint **between** the two chosen rather than on
+    either, so `candidates` cannot express it: that pass filters one
+    creature at a time. The picker is also the one place the `count` slice
+    happens now -- it was four places, two here and two in the action
+    menu, and a pairwise rule applied at three of four is a rule nothing
+    consults at the fourth.
+
+    A single target stays legal, because the card says "one creature **or**
+    two": when no pair in the pool stands together the printed first half
+    applies rather than the row refusing."""
     spent = augment(c, 1, 2)
     if c.strike():
         c.damage("2d8" if spent == 2 else "1d8", c.int_mod, dtype=DamageType.FORCE)

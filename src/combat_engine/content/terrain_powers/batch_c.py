@@ -150,27 +150,28 @@ def x2_122(c: Cast) -> None:
 
 
 @power("x2_123", level=1, usage=Usage.AT_WILL, action=ActionType.STANDARD,
-       reach=Ranged(10), target=UpTo(2),
+       reach=Ranged(10), target=UpTo(2, adjacent_to_each_other=True),
        check=Check("athletics", "moderate"),
-       attack=Attack(level_plus=3, vs=Defense.REF),
-       dropped=("dsl.Target.adjacent_to_each_other",))
+       attack=Attack(level_plus=3, vs=Defense.REF))
 def x2_123(c: Cast) -> None:
     """Bring the top-heavy column down across one or two creatures.
 
     The printed target line is *"one or two creatures, which must be
     adjacent to each other; one of the creatures must also be adjacent to"*
-    the region -- two constraints, and `Target` can say neither. It caps a
-    count and filters a side; it cannot say that the two chosen must stand
-    together. `dsl.Target.adjacent_to_each_other` is the symbol
-    `p8239`'s Augment 1 already waits on for the same sentence, reused
-    rather than re-minted.
+    the region -- two constraints, and `Target` could say neither. The
+    first is declared now: `Target.adjacent_to_each_other`, honoured in
+    `dsl.pick_targets`, which `p8239`'s Augment 1 waits on for the same
+    printed sentence and which arrived with it. `#1294`.
 
     **The region half is implemented, and it narrows rather than widens.**
     Each target must stand within 1 square of the region, where the card
     requires that of only *one* of the two and lets the second be merely
     adjacent to the first. So this is stricter than print on that clause,
-    which is the safe direction to be wrong in, and the loose clause is the
-    one carrying the marker.
+    which is the safe direction to be wrong in -- and it carries no marker,
+    because the clause **is** implemented. What is narrower is which of the
+    two must be near the region, not whether the rule is read: a symbol
+    there would name a facility and the gap is a reading. Saying so here is
+    the whole of it.
 
     `Ranged(10)` is an aiming envelope and not a printed range -- the card
     prints none, the way `x2_125`'s does not -- and the region is the real

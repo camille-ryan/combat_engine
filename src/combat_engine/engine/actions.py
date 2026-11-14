@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .components import Budget, Build, Health, Mod, Movement, Position, Powers
-from .dsl import affordable, aim_points, candidates, get, usable
+from .dsl import affordable, aim_points, candidates, get, pick_targets, usable
 from .durations import When
 from .grid import Square, distance, spread
 from .query import alive, can_act, distance_between, enemies, is_
@@ -1052,7 +1052,8 @@ def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: Act
             elif aim_at.count == 1:
                 out.extend(act(targets=(t,), origin=origin) for t in hit)
             else:
-                out.append(act(targets=tuple(hit[: aim_at.count]), origin=origin))
+                out.append(act(targets=tuple(pick_targets(world, hit, aim_at)),
+                               origin=origin))
         return out
 
     if reach.kind == "close_blast":
@@ -1069,7 +1070,12 @@ def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: Act
         return [act(targets=(t,)) for t in pool]
     # "Up to N creatures": offer the whole pool, capped. A policy that wants a
     # subset asks for one; the interface lets the player click them.
-    return [act(targets=tuple(pool[: aim_at.count]))]
+    #
+    # **Through `pick_targets`, which is the one door.** A printed pair that
+    # must stand together -- "two creatures adjacent to each other" -- is a
+    # constraint between the chosen, so slicing here would honour it in
+    # `dsl` and not in the action menu. #1294.
+    return [act(targets=tuple(pick_targets(world, pool, aim_at)))]
 
 
 def _burst_origins(world: World, actor: int, p, augment: int = 0) -> list[Square]:  # noqa: ANN001

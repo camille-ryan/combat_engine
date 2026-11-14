@@ -84410,7 +84410,95 @@ def a_rift_is_adjacent_for_melee_and_not_for_a_burst(out: Result) -> None:
              " squares joined for the rest of the fight")
 
 
+def a_printed_pair_must_stand_together(out: Result) -> None:
+    """*"Two creatures adjacent to each other"* is now sayable (#1294).
+
+    `p8239` prints *"one creature or two creatures adjacent to each
+    other"* for one power point and *"one or two creatures"* for two. Until
+    now `Target` could cap a count and filter a side and say nothing about
+    the two chosen standing together -- so **Augment 1 was Augment 2's
+    target line at half the price**, which is stronger than print and the
+    error `m5808a0`'s note calls worse than an absent clause.
+
+    `Target.adjacent_to_each_other` says it and `dsl.pick_targets` honours
+    it. **One door**, which is the other half of this change: four places
+    sliced `pool[: count]` -- two in `dsl`, two in `actions` -- and a
+    pairwise rule applied at three of four is a rule nothing consults at
+    the fourth. That is `keywords_of`'s lesson about targeting.
+
+    The arms that matter are the two negatives: a pool whose creatures
+    stand apart must yield **one** target and not two, and Augment 2 on the
+    same board must still take both.
+    """
+    import audit
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import REGISTRY, Target, pick_targets
+    from combat_engine.engine.query import adjacent, enemies
+
+    world, me, _ = audit.board("p8239", 1)
+    foes = [e for e in enemies(world, me) if world.get(e, Health)]
+    out.that(len(foes) >= 3, "the board fields three creatures to choose from",
+             f"{len(foes)}")
+    if len(foes) < 3:
+        return
+    here = sorted(world.need(me, Position).squares)[0]
+
+    # Two standing together, one far away.
+    a, b, far = foes[0], foes[1], foes[2]
+    world.need(a, Position).square = (here[0] + 4, here[1])
+    world.need(b, Position).square = (here[0] + 5, here[1])
+    world.need(far, Position).square = (here[0] + 4, here[1] + 7)
+    out.that(adjacent(world, a, b) and not adjacent(world, a, far),
+             "two of them stand together and the third is well away --"
+             " the premise for both arms below")
+
+    PAIRED = Target("enemy", 2, adjacent_to_each_other=True)
+    PLAIN = Target("enemy", 2)
+
+    got = pick_targets(world, [a, far, b], PAIRED)
+    out.that(sorted(got) == sorted([a, b]),
+             "THE arm: asked for a pair that must stand together, the"
+             " picker skips the creature in between and takes the two that"
+             " do -- the pool order would have given the far one",
+             f"{got} against {[a, b]}")
+
+    out.that(pick_targets(world, [a, far, b], PLAIN) == [a, far],
+             "PLANT: and the UNCONSTRAINED line still takes the first two"
+             " in pool order, so Augment 2 is unchanged -- without this the"
+             " flag could be ignored and the arm above would still pass on"
+             " a board where the pair happens to come first",
+             f"{pick_targets(world, [a, far, b], PLAIN)}")
+
+    # -- nobody adjacent: the printed "one creature" half ------------------
+    world.need(b, Position).square = (here[0] + 4, here[1] - 7)
+    out.that(not adjacent(world, a, b),
+             "with the pair split up, no two of the three stand together")
+    lone = pick_targets(world, [a, far, b], PAIRED)
+    out.that(len(lone) == 1,
+             "PLANT: so the row takes ONE target, which is the printed"
+             ' "one creature **or** two" first half -- refusing outright'
+             " would lose a use the card allows",
+             f"{lone}")
+
+    # -- and the count is still a cap --------------------------------------
+    out.that(len(pick_targets(world, [a, far, b], PLAIN)) == 2,
+             "and a plain count of two never takes three, which is the"
+             " behaviour every other row in the tree depends on")
+    out.that(REGISTRY["p8239"].target_of(1).adjacent_to_each_other
+             and not REGISTRY["p8239"].target_of(2).adjacent_to_each_other,
+             "PLANT: and the row declares the pair on Augment 1 ONLY --"
+             " Augment 2 prints no such constraint and paying more must not"
+             " buy a narrower line",
+             f"a1={REGISTRY['p8239'].target_of(1).adjacent_to_each_other}"
+             f" a2={REGISTRY['p8239'].target_of(2).adjacent_to_each_other}")
+
+
 DRIVERS = {
+    "printed_pair": (
+        a_printed_pair_must_stand_together,
+        "a printed pair must stand together, and the unconstrained line is"
+        " unchanged (#1294)",
+    ),
     "rift_adjacent": (
         a_rift_is_adjacent_for_melee_and_not_for_a_burst,
         "`p13887`'s rift is adjacent for movement AND melee, and not for a"

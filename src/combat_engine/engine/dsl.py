@@ -806,6 +806,23 @@ class Target:
     #: bloodied and adjacent enemy -- and OR-ing those would widen pools no
     #: card widens. This field is only for the cards that print the word.
     any_of: tuple[Target, ...] = ()
+    #: *"One creature or two creatures adjacent to each other."* The two
+    #: chosen targets must stand together, which is a constraint **between**
+    #: them rather than on either -- so `candidates` cannot express it: that
+    #: pass filters one creature at a time and `count` then takes the first
+    #: N off the front.
+    #:
+    #: Honoured by `pick_targets` instead, which is the one place the
+    #: slicing happens now. `p8239` carried a marker for this and was
+    #: **stronger than print** without it: its Augment 1 was offered any
+    #: two creatures, which is Augment 2's line for one power point instead
+    #: of two.
+    #:
+    #: Only meaningful with `count == 2`, which is the only shape printed.
+    #: A larger count would want "all mutually adjacent", a different and
+    #: unprinted rule, so this refuses to guess at it -- see
+    #: `pick_targets`. #1294.
+    adjacent_to_each_other: bool = False
     #: "Targets enemies in the burst **touching the ground**", "affects only
     #: creatures **in contact with the ground**", and the row printing the
     #: negative -- "a **nonflying** creature's space".
@@ -924,8 +941,51 @@ YOU_AND_EACH_ALLY = Target("team", 99, everyone=True)
 NO_TARGET = Target("self", 0, label="None")
 
 
-def UpTo(n: int, side: str = "enemy") -> Target:
-    return Target(side, n)
+def UpTo(n: int, side: str = "enemy", *,
+         adjacent_to_each_other: bool = False) -> Target:
+    return Target(side, n, adjacent_to_each_other=adjacent_to_each_other)
+
+
+def pick_targets(world: World, pool: list[int], want: Target) -> list[int]:
+    """Take the targets a row actually gets from the pool it may choose from.
+
+    **One door, because the pairwise rule has to be honoured everywhere or
+    nowhere.** Four places sliced `pool[: want.count]` -- two here and two
+    in `actions.py` -- and a constraint applied at three of them is a rule
+    nothing consults at the fourth. That is `keywords_of`'s lesson stated
+    about targeting instead of keywords, and it is why this exists rather
+    than a filter repeated four times.
+
+    `everyone` takes the lot, which is a printed "each creature in the
+    burst" and is checked by the callers before they get here.
+
+    **`adjacent_to_each_other` is the one constraint between the chosen**:
+    *"one creature or two creatures adjacent to each other"*. `candidates`
+    filters one creature at a time, so it cannot say it. Here the pool is
+    searched for a pair that stands together, in pool order so the choice
+    stays deterministic, and a single target is always legal -- the card
+    offers "one creature **or** two", so one is the fallback rather than a
+    failure.
+
+    Refuses to guess above two: a printed line asking for three mutually
+    adjacent creatures does not exist in this tree, and "all pairwise
+    adjacent" and "a connected chain" are different rules. A count above 2
+    with the flag set takes the plain slice and leaves the rule unapplied
+    rather than inventing one -- which is visible, where a silent reading
+    would not be.
+    """
+    if want.everyone:
+        return pool
+    if not (want.adjacent_to_each_other and want.count == 2):
+        return pool[: want.count]
+    from .query import adjacent as _adjacent
+
+    for n, first in enumerate(pool):
+        for second in pool[n + 1:]:
+            if _adjacent(world, first, second):
+                return [first, second]
+    # No pair stands together, so the printed "one creature" half applies.
+    return pool[:1]
 
 
 # --------------------------------------------------------------------------
@@ -4837,8 +4897,6 @@ def _auto_targets(
             if len(hit) > len(best):
                 best, chosen = hit, aim
         if best:
-            return (best if want.everyone else best[: want.count]), chosen
+            return pick_targets(world, best, want), chosen
     pool = candidates(world, actor, p, origin, branch, augment, source)
-    if want.everyone:
-        return pool, origin
-    return pool[: want.count], origin
+    return pick_targets(world, pool, want), origin
