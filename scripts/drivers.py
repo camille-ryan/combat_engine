@@ -26715,11 +26715,60 @@ UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
     # calling `c.choose` where the row currently does not -- a behaviour
     # change dressed as attribution.
     "f2856": ("f651",),
-    # Early-outs: the clause runs when the feat is **not** held, and what
-    # it lays is the feature handing that feat row over.
-    "cf:ranger-f0s0": ("f127",),
-    "cf:ranger-f0s3": ("f172",),
-    "cf:ranger-f0s4": ("f171",),
+    # **Three entries deleted here on 2026-11-13**, and the deletion is
+    # the stale-waiver half of this gate working rather than a
+    # convenience. `cf:ranger-f0s0`, `-f0s3` and `-f0s4` each read
+    #
+    #     if c.feat("f127"):
+    #         return
+    #     c.grant_row("f127", ...)
+    #
+    # -- a **guard**, whose branch is nothing but `return`. The census
+    # now excludes that shape (see `guards` in `_gate_census`), because a
+    # branch that lays nothing has no attribution to lose and
+    # `c.credit(X)` would wrap an empty block. So these three were
+    # waiving a non-finding, and the entry read as "we looked and it is
+    # fine" where the truth is "there was nothing to look at".
+    #
+    # **Found by the check, not by reading.** Adding the exclusion made
+    # it report these three as *in `UNCREDITED_GATE` but no longer a
+    # finding*, which is the half `scripts/CLAUDE.md` says a stale waiver
+    # cannot otherwise be told from a check going blind. Read by hand
+    # afterwards -- all three are the identical guard -- so it is the
+    # first of those two and not the second.
+    # **Five entries added 2026-11-13**, each a read or a widening rather
+    # than a cause. Read one at a time; the shapes differ and the count
+    # is not the point.
+    #
+    # `_guild` extends the scout's feature to the **ranged** basic attack
+    # -- *"your `cf:ranger-scout-f0` class feature **also** applies to
+    # ..."*. What is laid is `c.rolls_with("rba", ...)`, the guild's own
+    # printed sentence; the gate asks whether the prerequisite is met,
+    # because an executioner holds that feature only by multiclassing.
+    # The same shape as the `on=somebody` exclusion above -- a
+    # precondition, not the cause.
+    "_guild": ("cf:ranger-scout-f0",),
+    # `c.feat("f3645")` decides whether a **multiclasser** pays a per-day
+    # charge to enter the fury. What follows is the fury itself, which
+    # belongs to `cf:barbarian-berserker-f0` for a real berserker and
+    # arguably to the feat for a multiclasser -- so the owner differs
+    # **by character** and a static block cannot be right for both.
+    # Crediting unconditionally would take every berserker's own fury off
+    # it. Same reasoning as `f2856` above.
+    "cf:barbarian-berserker-f0": ("f3645",),
+    # `treated = ("f2023b",) if c.feat("f2034") else ()` -- the feat
+    # widens which effects **qualify** for the orb's extension, and the
+    # effect being extended was laid by another row entirely. So there is
+    # nothing here the feat caused, and the value expression lays nothing
+    # at the call.
+    "cf:wizard-arcanist-f0c1": ("f2034",),
+    # Both of these choose **which creature** is summoned, not whether
+    # anything is: `pair = (...) if c.feat(...)`, and `c.summon` runs
+    # either way through `summon_inline`'s fallback. The power summons
+    # and the sub-option picks the species, so crediting the summon to
+    # the sub-option would take it off the row that made it.
+    "f3648b": ("cf:druid-protector-f3s0", "cf:druid-protector-f3s1"),
+    "p15858": ("cf:druid-protector-f3s0", "cf:druid-protector-f3s1"),
     # The feature is the printed trigger and build gate; the bonus is the
     # item's own sentence ("you **also** get a +1 item bonus"). The laying
     # call is inside a deferred `Bloodied` callback, so a block around the
@@ -26878,8 +26927,62 @@ def _gate_census() -> tuple[list[tuple[str, str, str]], list[str]]:
 
     unreadable: list[str] = []
 
+    def guards(fn: ast.FunctionDef) -> set[int]:
+        """Line numbers of `c.feat` calls that are a GUARD and lay nothing.
+
+        **A third exclusion, and it is a syntactic certainty rather than a
+        judgement.** The two above are about what the call means; this one
+        is about what its branch contains. `if c.feat(X): return` lays
+        nothing at all, so there is no attribution to lose and
+        `c.credit(X)` would wrap an empty block.
+
+        `cf:wizard-arcanist-f0` is the measured case:
+
+            if c.feat(ORB_CARD):
+                return
+            orb_imposition(c)
+
+        The gate exists to stop the penalty being applied twice when the
+        character holds the card as well as the feature -- a refusal, not
+        a clause. The census reported it as an uncredited gate on every
+        run, and crediting it would have been meaningless. Three
+        `UNCREDITED_GATE` entries were waiving the same shape.
+
+        Narrow on purpose: only an `If` whose body is nothing but
+        `return`/`pass`, with no `else`, and only when the test is the
+        call itself or its negation. A branch with any other statement in
+        it might lay something, and this must never guess in that
+        direction -- the one outcome worse than a false positive here is
+        a gate going unexamined. **Planted both ways**: giving one of
+        those guard branches a `c.bonus` call brings it straight back as
+        a finding, and removing a real `c.credit` block elsewhere still
+        reds.
+
+        **NOT extended to a value expression.** `treated = ("f2023b",) if
+        c.feat("f2034") else ()` in `cf:wizard-arcanist-f0c1` also lays
+        nothing at the call, but the tuple then widens a filter and what
+        the filter leads to may well deserve the credit. That one stays a
+        finding and is waived with its reason instead.
+        """
+        out: set[int] = set()
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.If):
+                continue
+            if any(not isinstance(b, ast.Return | ast.Pass)
+                   for b in node.body) or node.orelse:
+                continue
+            test = node.test
+            if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+                test = test.operand
+            if (isinstance(test, ast.Call)
+                    and isinstance(test.func, ast.Attribute)
+                    and test.func.attr == "feat"):
+                out.add(test.lineno)
+        return out
+
     def own_gates(path: pathlib.Path, fn: ast.FunctionDef) -> set[str]:
         gates: set[str] = set()
+        bare = guards(fn)
         for node in ast.walk(fn):
             if not (isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Attribute)
@@ -26887,6 +26990,8 @@ def _gate_census() -> tuple[list[tuple[str, str, str]], list[str]]:
                 continue
             if any(kw.arg == "on" for kw in node.keywords):
                 continue              # a question about another creature
+            if node.lineno in bare:
+                continue              # a guard that returns; lays nothing
             ref = resolve(path, node.args[0])
             if ref is None:
                 unreadable.append(
