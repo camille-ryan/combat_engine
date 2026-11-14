@@ -39005,13 +39005,21 @@ def a_weapon_the_build_chose(out: Result) -> None:
         ("f3181", ()),
         ("f3202", ()),
         ("f3142", ()),
-        # `Weapon.proficiency` left this tuple when `c.weapon_proficiency`
-        # landed (#839). The row's own note had said the field was "a
-        # column, not something a feature can raise", which stopped being
-        # true; `c.improvised()` is the one gap that remains, and a row
-        # naming two symbols for one clause cannot go green correctly for
-        # either.
-        ("cf:fighter-weaponmaster-f3s0", ("c.improvised()",)),
+        # **This tuple has emptied twice and is empty now.**
+        # `Weapon.proficiency` left it when `c.weapon_proficiency`
+        # landed (`#839`) -- the row's note had said the field was *"a
+        # column, not something a feature can raise"*, which stopped
+        # being true. `c.improvised()` left it when `#1276` found the
+        # same shape of error one layer along: that note said *"there is
+        # no improvised weapon at all"*, true of the `weapon` table and
+        # beside the point, because "improvised" is a **state of a
+        # weapon relative to a character** and `Gear.trained` /
+        # `Gear.bands` already record exactly that.
+        #
+        # Kept as an exact tuple rather than dropped from this list: the
+        # claim worth gating is that this row owes **nothing**, and a
+        # row drifting back onto a symbol should red here.
+        ("cf:fighter-weaponmaster-f3s0", ()),
     ):
         out.that(REGISTRY[ref].unfinished == want_marks,
                  f"{ref} waits on {want_marks or 'nothing'}",
@@ -45011,19 +45019,31 @@ def the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand(
     for ref in rows:
         if REGISTRY[ref].unfinished:
             owed.setdefault(sorted(REGISTRY[ref].unfinished)[0], []).append(ref)
-    out.that(sorted(owed) == ["Weapon.as_wand",
-                              "c.widen_to_adjacent(per_day=)",
-                              "chargen.power_choice(keyword=)",
-                              "chargen.spellbook(encounter_as_daily=)",
-                              "triggers.widen(Miss)"],
-             "and the eleven unfinished rows wait on FIVE symbols, seven of "
-             "them on one -- the spellbook gap is one gap seven times, and "
-             "seven symbols would make `blocked.py --group` unable to say "
-             "how much work it is",
+    # **Nothing is owed on this chassis any more.** This required five
+    # symbols with seven rows sharing one, and the argument for the
+    # sharing was right: the spellbook gap was one gap seven times, and
+    # minting seven symbols would have made `blocked.py --group` unable
+    # to price it.
+    #
+    # All five went. `Weapon.as_wand`, `c.widen_to_adjacent(per_day=)`,
+    # `chargen.power_choice(keyword=)` and `triggers.widen(Miss)` each
+    # turned out to name a facility that existed or was one field short
+    # -- the dominant finding of this chassis work. The shared one went
+    # last: `chargen.SPELLBOOK` already drew two wizard encounter attack
+    # powers at or below each card's ceiling, and the four paragon rungs
+    # that still carried it were marked on a misreading -- *"of 13th
+    # level **or lower**"* reaches the imported heroic pool, so their
+    # pools are larger than the heroic rungs' rather than empty.
+    #
+    # Kept as an exact-set assertion rather than deleted: the claim is
+    # now that this chassis owes nothing, and a row drifting onto a
+    # symbol should red here rather than pass in silence.
+    out.that(owed == {},
+             "and NO row on this chassis is unfinished -- it owed eleven "
+             "rows across five symbols, seven of them sharing the "
+             "spellbook one, and every symbol named something that "
+             "existed or was one field short",
              f"{ {k: len(v) for k, v in sorted(owed.items())} }")
-    out.that(len(owed.get("chargen.spellbook(encounter_as_daily=)", ())) == 7,
-             "the shared one is exactly those seven",
-             f"{sorted(owed.get('chargen.spellbook(encounter_as_daily=)', ()))}")
 
 
 def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
@@ -48246,15 +48266,27 @@ def three_more_facilities_the_class_work_asked_for(out: Result) -> None:
     # deals two except the one that prints three, which is the shape a
     # bare `== 2` could not say and a bare `> 1` would not catch.
     picks = sorted(chargen.OPTION_PICKS)
-    THREES = ("cf:wizard-bladesinger-f1", "cf:wizard-mage-f12")
+    # **FOUR print three now, not two.** The list has grown twice for the
+    # same ordinary reason: a fork whose spec said *"one of the
+    # following"* and listed nothing gets its options read off the class
+    # page, and some of those cards print *"three of the following"*.
+    # `cf:druid-protector-f2`'s attunements and
+    # `cf:wizard-bladesinger-f5`'s own fork are the two added.
+    #
+    # Named rather than counted, which is why it reddened instead of
+    # passing: a bare `== 2` with an exception count could not say WHICH,
+    # and a fork quietly moving from two to three is a character dealt a
+    # power its card does not give it.
+    THREES = ("cf:druid-protector-f2", "cf:wizard-bladesinger-f1",
+              "cf:wizard-bladesinger-f5", "cf:wizard-mage-f12")
     out.that(picks
              and all(chargen.OPTION_PICKS[r] == 2 for r in picks
                      if r not in THREES)
              and all(chargen.OPTION_PICKS.get(r) == 3 for r in THREES),
-             "every fork in `OPTION_PICKS` deals two except the two "
-             "cantrip rungs, which print three -- the only cards carrying "
-             "this table that do not say two, named so a third number "
-             "cannot arrive unremarked",
+             "every fork in `OPTION_PICKS` deals two except the FOUR "
+             "that print three -- the two cantrip rungs, the "
+             "attunements and the bladesinger's own fork. Named so a "
+             "number arriving cannot pass unremarked",
              f"{ {r.rsplit('-', 1)[-1]: chargen.OPTION_PICKS[r] for r in picks} }")
     bad, pairs = [], {}
     for ref in picks:
@@ -48277,8 +48309,24 @@ def three_more_facilities_the_class_work_asked_for(out: Result) -> None:
              f"{ {r.rsplit('-', 1)[-1]: n for r, n in pairs.items()} }")
 
     # **The rows read both**, which is the half a draw alone does not give.
+    #
+    # **Scoped to the forks whose options are sub-option ROWS**, and the
+    # exclusion is measured rather than convenient: this plants
+    # `option:<ref>:<ref>s2` and `<ref>s4` and expects the body to grant
+    # those two refs. `cf:assassin-executioner-f3`'s options are **item**
+    # refs -- `i710`, `i835` and four more, the six 1st-level assassin
+    # poisons -- so a planted `…f3s2` names no row, nothing is granted,
+    # and the assertion read `[]` for it. That is the plant not applying
+    # rather than the row failing.
+    #
+    # It is not left unchecked: `drivers.recipes_and_spellbook` asserts
+    # that fork end to end -- two recipes at 1st, three at 5th, four at
+    # 9th, and every prepared vial a recipe the character knows.
+    ITEM_FORKS = {"cf:assassin-executioner-f3"}
     granted = {}
     for ref in picks:
+        if ref in ITEM_FORKS:
+            continue
         world, me, _ = _board(ref, 1)
         from combat_engine.engine.components import Build, Powers
 
@@ -48502,17 +48550,29 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
              "the page",
              f"{still}")
 
+    # **NINE, and the ninth is `cf:wizard-bladesinger-f5`.** It read
+    # eight until that fork's printed list was recovered into
+    # `BUILD_OPTIONS`, which is the ordinary way this list grows: a
+    # chassis whose spec said *"one of the following"* and listed
+    # nothing gets its six options read off the class page, and all six
+    # are level-0 rows.
+    #
+    # Named rather than counted, which is the whole reason it reddened
+    # instead of passing: a bare `== 9` would be just as happy if one of
+    # the eight had drifted out while the bladesinger drifted in, and
+    # the thing this guards is that the level-0 allowance above does not
+    # quietly widen to a fork whose options came from the wrong section.
     out.that(granted == ["cf:druid-protector-f2", "cf:fighter-knight-f22",
                          "cf:fighter-slayer-f18", "cf:ranger-hunter-f19",
                          "cf:ranger-scout-f16", "cf:rogue-thief-f22",
-                         "cf:wizard-bladesinger-f1", "cf:wizard-mage-f12"],
-             "and exactly EIGHT recovered forks draw entirely from level "
+                         "cf:wizard-bladesinger-f1",
+                         "cf:wizard-bladesinger-f5", "cf:wizard-mage-f12"],
+             "and exactly NINE recovered forks draw entirely from level "
              "0 -- the two aspect lists, the two stance lists, the "
-             "tricks, the attunements and the two cantrip lists. Every one is a family a "
-             "character is GIVEN rather than drawing, which is why level "
-             "0 is the right answer and not a loosening. Named, so the "
-             "allowance above cannot quietly widen to cover a fork whose "
-             "options really did come from the wrong section",
+             "tricks, the attunements, the two cantrip lists and the "
+             "bladesinger's own fork. Every one is a family a character "
+             "is GIVEN rather than drawing, which is why level 0 is the "
+             "right answer and not a loosening",
              f"{granted}")
 
     # -- the pact summons ------------------------------------------------
@@ -48943,29 +49003,33 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
                    if "chargen.power_choice()" in (p.unfinished or ()))
     rows_ = [r for r in still if r.startswith("cf:")]
     feats = [r for r in still if not r.startswith("cf:")]
-    out.that(len(rows_) == 6 and len(feats) == 4,
-             "and 6 chassis rows plus 4 feats still carry the symbol -- "
-             "down from 31 and 4, through 22 and 14. The thirteen that "
-             "have gone all read *one additional <family>*, and every "
-             "one of those families turned out to be an existing fork's "
-             "own printed list: `chargen.EXTRA_PICKS` adds a pick to it "
-             "rather than a facility inventing a family from a keyword "
-             "that does not exist. What is left names a family the data "
-             "really does not record, or is printed above the level this "
-             "project imports. `#1269` has the split. Both counts named, "
-             "because quoting one as the other is how a reader concludes "
-             "the feats were done too",
+    # **No chassis row carries it now; four feats still do.** The count
+    # has run 31 and 4, then 22 and 14, then 6 and 4, and now 0 and 4.
+    # Every row that went read *one additional <family>*, and every one
+    # of those families turned out to be an existing fork's own printed
+    # list -- `chargen.EXTRA_PICKS` adds a pick to it rather than a
+    # facility inventing a family from a keyword that does not exist.
+    #
+    # The last three to go were `cf:paladin-blackguard-f15`, `-f16` and
+    # `cf:warlock-binder-f16`, and they went on one printed word:
+    # *"of your level **or lower**"* is a ceiling and not a rung, so
+    # `chargen.CEILING_GAINS` deals them where an `EXTRA_GAINS` entry
+    # would have dealt nothing. `#1276`.
+    #
+    # **Both counts named, because quoting one as the other is how a
+    # reader concludes the feats were done too.** They are not: a feat's
+    # family is a keyword the data does not record, which is a different
+    # gap from a chassis fork's printed list.
+    out.that(not rows_ and len(feats) == 4,
+             "and NO chassis row carries the symbol any more, while four "
+             "feats still do -- 0 and 4, down from 31 and 4 through 22 "
+             "and 14 and 6 and 4. `#1269` has the split",
              f"{len(rows_)} rows, {len(feats)} feats: {feats}")
-    left = sorted(rows_)
-    out.that(left == ["cf:druid-protector-f2", "cf:druid-protector-f3s0",
-                      "cf:druid-protector-f3s1",
-                      "cf:paladin-blackguard-f15",
-                      "cf:paladin-blackguard-f16", "cf:warlock-binder-f16"],
-             "and they are exactly these six, which is the half a count "
-             "cannot say: thirteen going while thirteen others arrived "
-             "would read identically. No ranger, fighter, rogue or "
-             "bladesinger row is among them",
-             f"{left}")
+    out.that(sorted(feats) == ["f3582", "f3588", "f3616", "f3646"],
+             "and they are exactly those four feats, which is the half a "
+             "count cannot say: four going while four others arrived "
+             "would read identically",
+             f"{sorted(feats)}")
 
     out.that(not [r for r, p in REGISTRY.items()
                   if "Powers.per_encounter(extra=)" in (p.unfinished or ())],
