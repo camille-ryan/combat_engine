@@ -38387,10 +38387,11 @@ def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
     from audit import board as _posed
     from combat_engine.engine import When
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Mods, Powers, Stats
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import AttackDeclared
     from combat_engine.engine.query import enemies
-    from combat_engine.engine.types import Condition, Defense
+    from combat_engine.engine.types import Ability, Condition, Defense
 
     # -- the staff: a defence bonus the item deepens ----------------------
     def staff(*, held: bool) -> tuple[int, int, int]:
@@ -38427,12 +38428,42 @@ def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
     # -- the orb: a save penalty the item deepens, and the ordering -------
     def orb(*, when: str) -> int:
         """The save penalty the control leg lays. `when` is item-first,
-        item-after, or never."""
+        item-after, or never.
+
+        **Three things the board supplies that this had to stop reading,
+        and each made the clause look broken when it is not.**
+
+        * The dealt wizard now holds `cf:wizard-arcanist-f0c1`, the orb
+          *card*, and the leg's body returns the moment it does -- on
+          purpose, because the card prints the same sentence and
+          `i1986p1` raises **the card** by ref, so a control arcanist
+          holding both would otherwise pay twice. Removed from the hand
+          here, since the assertion is about the leg's own clause.
+        * The leg is gated on `c.build("control")` and the board's wizard
+          is on another leg, so the whole clause was unreachable.
+        * The penalty is `c.wis_mod + c.amount_for(IMPOSITION_RAISE, 0)`
+          and the board's wizard has **Wisdom 10, modifier 0** -- so the
+          leg laid an effect carrying no modifier at all and `plain`
+          read 0. The Wisdom is raised here so every reading below is a
+          real number rather than a presence check.
+
+        The first two are the row being right; the third is this rule's
+        own trap, recorded in `CLAUDE.md` as *"`c.wis_mod` may be 0"*.
+        """
         world, me, _ = _posed("cf:wizard-arcanist-f0", 1)
+        kn = world.need(me, Powers)
+        while "cf:wizard-arcanist-f0c1" in kn.known:
+            kn.known.remove("cf:wizard-arcanist-f0c1")
+        # **`"war"` out as well as `"control"` in.** The body tests the
+        # war leg FIRST and returns, so a wizard carrying both words
+        # never reaches the clause -- adding `"control"` alone left every
+        # reading 0 and looked exactly like the leg laying nothing.
+        held = world.need(me, Build)
+        held.choices = (held.choices - {"war"}) | {"control"}
+        world.need(me, Stats).scores[Ability.WIS] = 18
         c = Cast(world=world, me=me, ref="cf:wizard-arcanist-f0")
         # The leg needs one of this caster's own save-ends effects to
-        # deepen, and the board carries none -- which is why the row is
-        # excused as quiet. Posed here.
+        # deepen, and the board carries none. Posed here.
         victim = sorted(enemies(world, me))[0]
         c.condition(Condition.SLOWED, on=victim, until=When.SAVE_ENDS)
         item = Cast(world=world, me=me, ref="i1986p1")
@@ -38464,13 +38495,15 @@ def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
     first = orb(when="first")
     after = orb(when="after")
     out.that(plain != 0,
-             "the control leg lays a save penalty when the caster has an"
-             " effect to deepen -- posed, because the audit board carries"
-             " none of them, which is why the row is excused as quiet",
+             "the control leg lays a save penalty worth the caster's"
+             " Wisdom modifier -- posed on every count the board does not"
+             " supply: the orb card out of the hand, the control leg"
+             " forced, and a Wisdom that is not 10",
              f"{plain}")
     out.that(first == plain - 2,
              "with the orb's power spent FIRST the penalty is 2 deeper,"
-             " which is the printed sentence",
+             " which is the printed sentence. A DIFFERENCE, because the"
+             " base is the caster's Wisdom and the draw sets that",
              f"{plain} -> {first}")
     out.that(after == plain,
              "and spent AFTER the leg it changes nothing -- the ordering"
@@ -38478,6 +38511,45 @@ def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
              " nothing reads. `i1986p1` is declared on `PowerUsed` for"
              " exactly this: `dsl.use` announces before it runs the body",
              f"{plain} -> {after}")
+
+    # **And the penalty is gated on the ONE effect it chose**, which the
+    # three readings above cannot see: they sum the modifier off the
+    # effect the leg laid, so deleting `when=this_one` entirely leaves
+    # them green. Planted and confirmed.
+    #
+    # The printed sentence is *"a penalty to its next saving throw
+    # against **that** effect"*, so a creature carrying two save-ends
+    # effects of the caster's must take the penalty on one of them and
+    # not the other. Posed with two, and read through `Mods.total` with
+    # each as `ctx["effect"]` -- which is the gate's own key.
+    def gated() -> tuple[int, int]:
+        world, me, _ = _posed("cf:wizard-arcanist-f0", 1)
+        kn = world.need(me, Powers)
+        while "cf:wizard-arcanist-f0c1" in kn.known:
+            kn.known.remove("cf:wizard-arcanist-f0c1")
+        held = world.need(me, Build)
+        held.choices = (held.choices - {"war"}) | {"control"}
+        world.need(me, Stats).scores[Ability.WIS] = 18
+        c = Cast(world=world, me=me, ref="cf:wizard-arcanist-f0")
+        victim = sorted(enemies(world, me))[0]
+        one = c.condition(Condition.SLOWED, on=victim, until=When.SAVE_ENDS)
+        two = c.condition(Condition.DAZED, on=victim, until=When.SAVE_ENDS)
+        REGISTRY["cf:wizard-arcanist-f0"].body(
+            Cast(world=world, me=me, ref="cf:wizard-arcanist-f0"))
+        mods = world.need(victim, Mods)
+        # `c.choose` takes the first option headlessly and the leg sorts
+        # by `eff.id`, so the chosen one is the earlier-laid `one`.
+        return (mods.total("save", {"effect": one}),
+                mods.total("save", {"effect": two}))
+
+    chosen, other = gated()
+    out.that(chosen != 0 and other == 0,
+             "and the penalty applies to the ONE effect the leg chose and"
+             " to no other save-ends effect on the same creature -- the"
+             " printed *that effect*, and the half the readings above"
+             " cannot see, since they sum the modifier rather than asking"
+             " its gate",
+             f"chosen {chosen}, the other {other}")
 
     # -- the markers -------------------------------------------------------
     out.that(not REGISTRY["i2633x1"].unfinished,
@@ -62803,15 +62875,61 @@ def a_carried_consumable_is_offered_and_spent_by_using_it(out: Result) -> None:
              "was ever dealt one",
              f"{len(hands)} hands, sizes "
              f"{sorted({len(h) for _, _, h in hands})}")
-    out.that(all(len(h) == chargen.DEALT_CONSUMABLES for _, _, h in hands),
-             f"and exactly {chargen.DEALT_CONSUMABLES} of them, which is the "
-             "supplied number",
-             f"{[(c, s, len(h)) for c, s, h in hands][:4]}")
-    out.that(all(len(set(h)) == len(h) for _, _, h in hands),
+    # **`gear.carried` holds TWO populations and these two claims are
+    # about one of them.** Both assertions read the whole list and both
+    # failed on the assassin: it carries **three** -- the ordinary two
+    # plus a poison vial from `_stock_vials`, which does
+    # `gear.carried.extend(made)` -- and on one seed two of those were
+    # the same ref.
+    #
+    # Neither is a fault. The executioner's ladder is *meant* to add
+    # vials, and `_stock_vials`' own docstring settles the duplicate:
+    # *"`rng.choice` per vial and not `sample`: the card says how many
+    # vials, not how many different ones, and two of the same poison is a
+    # legal and sometimes sensible preparation."* So a no-duplicates rule
+    # over the mixed list contradicts a printed reading.
+    #
+    # Measured through `_stock_consumables` on a fresh `Gear` instead,
+    # which is the population the two claims are about and isolates them
+    # from any ladder that also writes there. `#1279`.
+    from random import Random as _R
+
+    from combat_engine.engine.components import Gear as _Gear
+
+    # **Twelve draws cannot carry the no-duplicates claim**, which a
+    # plant found: switching `rng.sample` to `rng.choice` -- repeats
+    # allowed -- left it green. With a pool of about twenty and two taken,
+    # a repeat is a few percent a draw, so twelve draws miss it about half
+    # the time. The pool is drawn in memory and costs nothing, so the
+    # sample is every class and ten seeds; the same plant then reds. The
+    # count claim above needs one draw and is unaffected.
+    # **One spawn per class, ten rng seeds each.** The first version
+    # spawned a character per draw and cost 31s -- `chargen.spawn` is the
+    # expensive part and the draw itself is a `sample` over a pool. The
+    # pool depends on the class, so the spawn varies by class and only
+    # the stream varies within one.
+    drawn = []
+    for cls in classes:
+        world, me, _ = built(cls, 1)
+        known = world.get(me, Powers)
+        for seed in range(1, 11):
+            fresh = _Gear()
+            chargen._stock_consumables(
+                fresh, known, 1, _R(f"{seed}:{cls}:consumables"))
+            drawn.append((cls, seed, list(fresh.carried)))
+    out.that(all(len(h) == chargen.DEALT_CONSUMABLES for _, _, h in drawn),
+             f"and the ordinary draw is exactly {chargen.DEALT_CONSUMABLES} "
+             "of them, which is the supplied number -- measured through "
+             "`_stock_consumables` on a fresh `Gear`, because the "
+             "executioner's vials land in the same list and are not part "
+             "of this claim",
+             f"{[(c, s, len(h)) for c, s, h in drawn][:4]}")
+    out.that(all(len(set(h)) == len(h) for _, _, h in drawn),
              "and never two of a kind -- a block's budget is its printed "
              "usage, so a second copy of a daily potion is undrinkable "
-             "(#1238)",
-             f"{[(c, s, h) for c, s, h in hands if len(set(h)) != len(h)]}")
+             "(#1238). Vials are excluded deliberately: two of the same "
+             "poison is printed and `_stock_vials` says so",
+             f"{[(c, s, h) for c, s, h in drawn if len(set(h)) != len(h)]}")
 
     # -- the blocks are granted ------------------------------------------
     cls, seed, _ = hands[0]
