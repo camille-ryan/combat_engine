@@ -346,30 +346,41 @@ class Moved(Event):
     squares, `Moved` carried the squares and no word, so "one ally adjacent
     to you *before the teleport*" could be asked of neither -- the only
     event that knew where the creature came from did not know how it got
-    there. A plain attribute rather than a field for the reason
-    `AttackRolled.result` is one: it would otherwise reach the wire and
-    every replay fixture, none of which is a change in how a fight
-    resolves.
+    there.
+
+    **Both are declared fields now, and the note that said they could not
+    be was superseded rather than wrong.** It read: *"a plain annotation
+    in a dataclass IS a field, which is the one thing the docstring rules
+    out -- `Event.wire` is `asdict`, so it would reach the page and all
+    seven replay fixtures"*, and listed `TYPE_CHECKING` and `ClassVar` as
+    tried and failing.
+
+    That was true when written. `#1103` changed it: `Event.wire` now ends
+    `for f in fields(self): if not f.repr: out.pop(f.name)`, so **the
+    `repr=False` flag governs both exits at once** -- `replay`'s fixtures
+    record `str(event)` and the wire drops what the repr does not carry.
+    A `field(default=..., repr=False)` is therefore a declared, typed
+    attribute that reaches neither. The second objection goes with it:
+    `ty` demanded both as constructor arguments because they had no
+    defaults, and a `field(default=...)` has one.
+
+    Verified rather than argued: `fields(Moved)` carries both,
+    `str(Moved(...))` and `Moved(...).wire()` are byte-identical to
+    before, and all eight fixtures verify.
     """
 
     actor: int
     from_: Square
     to: Square
-
-    # **Neither is declarable here, and both forms were tried.** A plain
-    # annotation in a dataclass *is* a field, which is the one thing the
-    # docstring above rules out -- `Event.wire` is `asdict`, so it would
-    # reach the page and all seven replay fixtures. A `TYPE_CHECKING` block
-    # does not help: `ty` evaluates the class body statically and then
-    # demands both as constructor arguments. A `ClassVar` is worse again --
-    # it keeps them off `fields`, and then refuses the assignment that sets
-    # them.
-    #
-    # So the reads and writes carry a `ty` suppression for an unresolved
-    # attribute, the same one `drivers.py` uses in five places. Not a
-    # loosening: `types.py --bless` *refuses* to raise a baseline entry on
-    # purpose, so the growth was never blessable, and the alternative was a
-    # field this docstring exists to argue against.
+    #: How the creature got here: walk, shift, teleport, push, pull,
+    #: slide. `MoveEnd` carries the word and no squares and `Moved`
+    #: carried the squares and no word, so *"one ally adjacent to you
+    #: before the teleport"* could be asked of neither.
+    kind_: str = field(default="", repr=False)
+    #: How many squares beyond the printed distance were actually spent.
+    #: `0` on every ordinary move. See the docstring for `f2459`, which
+    #: is the row that needs it.
+    stretched_: int = field(default=0, repr=False)
 
 
 @dataclass
@@ -1149,6 +1160,15 @@ class ConditionApplied(Event):
     condition: Condition
     duration: str
     power: str = ""
+    #: The weapon the blow that laid this came through, by ref.
+    #: `durations._with_weapon` stamps it at both emit sites.
+    #:
+    #: `repr=False`, which is what makes this declarable at all: that
+    #: helper's note said *"declared as a field first and all seven
+    #: fixtures diverged"*, and it was right about a plain field.
+    #: `#1103` made the flag govern the wire too, so a `repr=False`
+    #: field reaches neither the fixtures nor the page. `#1278`.
+    weapon: str = field(default="", repr=False)
     #: The weapon the blow came through, by ref, or "" for none. `power`
     #: answers the keyword and the shape; three rows print *which weapon*
     #: -- "when you immobilize a target with a melee attack using this

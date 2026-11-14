@@ -290,13 +290,16 @@ class Effect:
         return f"e{self.id}[{', '.join(bits)}]"
 
 
-def _with_weapon(ev: object, eff: object) -> object:
+def _with_weapon(ev: ConditionApplied, eff: Effect) -> ConditionApplied:
     """Hang the weapon the hold came through on the announcement.
 
-    **An attribute, not a field**, for the reason `Effect.by` is one: a
-    field reaches the wire and every replay fixture, and which arm swung is
-    not a change in how a fight resolves. Declared as a field first and all
-    seven fixtures diverged.
+    **A declared field now, and the note that said it could not be was
+    superseded.** It read *"an attribute, not a field ... a field reaches
+    the wire and every replay fixture ... declared as a field first and
+    all seven fixtures diverged"* -- true of a plain field, and the
+    divergence was real. `#1103` made `repr=False` govern both exits, so
+    `ConditionApplied.weapon` is a typed field that reaches neither.
+    Fixtures verify 8 of 8. `#1278`.
 
     **Two emit sites, which is why this is a function.** `ConditionApplied`
     is announced when an effect is installed *and* when a suspended one

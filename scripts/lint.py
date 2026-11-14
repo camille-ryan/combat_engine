@@ -968,7 +968,8 @@ def _unknown_context_keys() -> list[tuple[str, str, str]]:
                 key = None
                 if (isinstance(inner, ast.Call)
                         and getattr(inner.func, "attr", None) == "get"
-                        and getattr(inner.func.value, "id", "") == "ctx"
+                        and getattr(getattr(inner.func, "value", None),
+                                    "id", "") == "ctx"
                         and inner.args
                         and isinstance(inner.args[0], ast.Constant)):
                     key = inner.args[0].value
@@ -983,7 +984,8 @@ def _unknown_context_keys() -> list[tuple[str, str, str]]:
                 near = difflib.get_close_matches(key, known, 1, 0.6)
                 rel = path.relative_to(ROOT)
                 out.append(
-                    (f"{rel}:{inner.lineno}", key, near[0] if near else "")
+                    (f"{rel}:{getattr(inner, 'lineno', 0)}", key,
+                     near[0] if near else "")
                 )
             continue
             # `skill:<name>` is a modifier key asked for by name, not a
@@ -1157,8 +1159,14 @@ def _unread_modifiers() -> list[tuple[str, str]]:
                 continue
             if not node.args or not isinstance(node.args[0], ast.Constant):
                 continue
+            # **Narrowed, not coerced.** `ast.Constant.value` is
+            # `str | bytes | complex | None`, so the declared `str` in
+            # this function's return type was a claim the code did not
+            # make. `str(value)` would have invented a key for
+            # `c.bonus(2, ...)`; skipping a non-string one is the honest
+            # reading, and no caller passes anything else. `#1278`.
             key = node.args[0].value
-            if key in UNREAD_MODIFIER_KEYS:
+            if isinstance(key, str) and key in UNREAD_MODIFIER_KEYS:
                 rel = path.relative_to(ROOT)
                 out.append((f"{rel}:{node.lineno}", key))
     return out
@@ -1669,7 +1677,9 @@ def _iterates_the_defence_enum() -> list[tuple[str, str]]:
                 iters.extend(node.args[:1])
             for each in iters:
                 if isinstance(each, ast.Name) and each.id == "Defense":
-                    out.append((f"{where}:{node.lineno}", "Defense"))
+                    out.append(
+                        (f"{where}:{getattr(node, 'lineno', 0)}",
+                         "Defense"))
     return out
 
 
@@ -3321,7 +3331,7 @@ def _event_attrs() -> list[tuple[str, str, str]]:
     def body_of(fn: ast.AST) -> list[ast.AST]:
         """This handler's own nodes, stopping at any nested callable."""
         out: list[ast.AST] = []
-        stack = list(fn.body)  # ty: ignore[unresolved-attribute]
+        stack = list(getattr(fn, "body", []))
         while stack:
             node = stack.pop()
             if isinstance(
@@ -3375,7 +3385,7 @@ def _effect_fields() -> set[str]:
     }
 
 
-def _effect_attrs() -> list[tuple[str, str]]:
+def _effect_attrs() -> list[tuple[str, str, str]]:
     """Reads of a field an `Effect` does not have.
 
     **`Effect.until` does not exist -- the duration field is `when`** -- and four
@@ -3514,11 +3524,18 @@ def _rows(
             if not isinstance(dec, ast.Call) or _decorator(dec) != "power":
                 continue
             if dec.args and isinstance(dec.args[0], ast.Constant):
+                # **Narrowed, not coerced.** `ast.Constant.value` is
+                # `str | bytes | complex | None` and the return type says
+                # `str`; a `@power(2, ...)` would otherwise be stringified
+                # into a ref no row declares. `#1278`.
+                ref = dec.args[0].value
+                if not isinstance(ref, str):
+                    continue
                 start = min(
                     [node.lineno] + [d.lineno for d in node.decorator_list]
                 )
                 out.append(
-                    (start, node.end_lineno or node.lineno, dec.args[0].value, node)
+                    (start, node.end_lineno or node.lineno, ref, node)
                 )
     return out
 

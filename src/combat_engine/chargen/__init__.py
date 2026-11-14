@@ -3308,7 +3308,13 @@ LADDER_SKIPS: dict[str, tuple[tuple[Usage, tuple[int, ...]], ...]] = {
 #: comes from the **1st-level** list, which is what the card means by *"of
 #: your choice"*. Measured by A/B-ing the entry: 28 refs either way, and
 #: the difference an empty set. #1112.
-EXTRA_GAINS: dict[str, tuple[tuple[Usage, int, int], ...]] = {
+#: **`Usage | None`, and the annotation said `Usage`.** Nine of the
+#: thirteen entries pass `None` on purpose -- the comments below say so in
+#: as many words, *"`usage=None` rather than a `Usage`"* -- so the declared
+#: type never matched the data it describes, and `deal`'s own parameter has
+#: been `Usage | None` all along. `CEILING_GAINS` beside it was written
+#: with the right type. `#1278`.
+EXTRA_GAINS: dict[str, tuple[tuple[Usage | None, int, int], ...]] = {
     "cf:sorcerer-elementalist-f1": ((Usage.AT_WILL, 9, 1),),
     # **Three more, and only three, because only three of the 39 rows on
     # `chargen.power_choice()` state their own level.** The rest read "a
@@ -7467,7 +7473,10 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # is added afterwards -- adding it above would have it counted as a
     # hand in use.
     if belt:
-        gear = world.get(eid, Gear)
+        # `need`: this is inside `spawn`, which put the `Gear` on a few
+        # lines up, so a `None` here is a broken build and the `+=` below
+        # would raise on it anyway.
+        gear = world.need(eid, Gear)
         gear.weapons += [replace(w) for w in belt]
         gear.stowed |= {w.ref for w in belt}
     # **Ordinary ammunition for whatever launcher it owns.** Camille's
@@ -7557,7 +7566,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     if race is not None and race.skills:
         from combat_engine.engine.components import Mod
 
-        mods = world.get(eid, Mods)
+        mods = world.need(eid, Mods)
         for skill, value in race.skills:
             mods.items.append(
                 Mod(what=f"skill:{skill}", value=value, kind="racial", label=race.ref)

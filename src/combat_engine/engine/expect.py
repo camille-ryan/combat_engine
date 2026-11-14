@@ -140,7 +140,12 @@ def dist(dice: str | int) -> dict[int, Fraction]:
 
 
 def mean(dice: str | int) -> Fraction:
-    return sum(v * p for v, p in dist(dice).items())
+    # **`start=Fraction(0)`, and not for the empty case.** `sum` defaults
+    # to the *int* `0`, so a checker reads the result as
+    # `Fraction | Literal[0]` and the declared `Fraction` is a narrowing
+    # it cannot make. The value is identical; the type is now true.
+    # `#1278`.
+    return sum((v * p for v, p in dist(dice).items()), Fraction(0))
 
 
 def most(dice: str | int) -> int:
@@ -154,7 +159,8 @@ def halved(dice: str | int, bonus: int) -> Fraction:
     Floored on each roll and not on the average, which is what the kernel does
     and is up to half a point away from halving the mean.
     """
-    return sum(p * ((v + bonus) // 2) for v, p in dist(dice).items())
+    return sum((p * ((v + bonus) // 2) for v, p in dist(dice).items()),
+               Fraction(0))
 
 
 def faces(need: int, crit_range: int = 0,
@@ -266,13 +272,24 @@ class Ledger(Cast):
         """
         from .events import Hit, Miss
 
+        # **One read of `self.result`, and it is asserted.** It is
+        # `AttackResult | None` and this was read three times -- in the
+        # guard and in both arms -- so no narrowing could reach either.
+        # The method only runs after a roll, so a `None` here is a caller
+        # bug rather than a branch.
+        got = self.result
+        if got is None:
+            raise AssertionError(
+                "announce() ran before anything was rolled, so there is "
+                "no outcome to announce"
+            )
         ev: Any = (
             Hit(attacker=self.me, target=who, power=self.ref,
-                critical=self.result.critical)
-            if self.result.hit
+                critical=got.critical)
+            if got.hit
             else Miss(attacker=self.me, target=who, power=self.ref)
         )
-        ev.result = self.result
+        ev.result = got
         ev.among = tuple(self.targets) or (who,)
         ev.branch = self.branch
         ev.opportunity = self.opportunity
@@ -537,8 +554,10 @@ def expected(world: Any, me: int, ref: str, target: int, *,
         if len(prefix) >= cap:
             return Fraction(0)
         return sum(
-            p * walk([*prefix, (hit, crit, nat)])
-            for p, hit, crit, nat in faces(rolled.need, rolled.crit_range, crits)
+            (p * walk([*prefix, (hit, crit, nat)])
+             for p, hit, crit, nat in faces(
+                 rolled.need, rolled.crit_range, crits)),
+            Fraction(0),
         )
 
     return walk([])

@@ -198,15 +198,17 @@ def step(
         world.bus.emit(EnterSquare(actor=eid, square=sq))
 
     moved = Moved(actor=eid, from_=from_, to=to)
-    # How the creature got here, as a plain attribute -- see `Moved`. Set on
-    # every emission, so `ev.kind_` is never missing.
+    # How the creature got here -- see `Moved`, which declares it with
+    # `repr=False` so it reaches neither the wire nor a replay fixture.
+    # Set on every emission, so `ev.kind_` is never missing.
     moved.kind_ = kind
     # And how many squares beyond its printed distance were spent getting
-    # here, the same way and for the reason `Moved`'s note gives: a field
-    # would reach the wire and every replay fixture, and this is not a
-    # change in how a fight resolves. `0` unless a caller lengthened the
-    # move *and* the decider spent what it was given. #572.
-    moved.stretched_ = stretched  # ty: ignore[unresolved-attribute]
+    # here. **Both are declared fields now**: `Moved`'s note used to say a
+    # field "would reach the wire and every replay fixture", which `#1103`
+    # made false -- `repr=False` keeps a field out of both. `0` unless a
+    # caller lengthened the move *and* the decider spent what it was
+    # given. #572, #1278.
+    moved.stretched_ = stretched
     world.bus.emit(moved)
 
     # A mount carries its rider. Set after the mount has arrived, so the
@@ -231,7 +233,7 @@ def step(
             # because `Moved`'s note promises the attribute is never missing,
             # and a `getattr(ev, "stretched_", 0)` reader would be reading the
             # default where there is a real answer.
-            carried.stretched_ = 0  # ty: ignore[unresolved-attribute]
+            carried.stretched_ = 0
             world.bus.emit(carried)
 
     # Whatever it stepped into, it now stands on the floor of. A square that

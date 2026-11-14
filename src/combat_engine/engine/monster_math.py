@@ -34,7 +34,7 @@ Nothing is converted unless asked for. The default is `AS_PRINTED`.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -90,9 +90,15 @@ class Table:
 
     name: str
     #: Average damage a standard attack should do at this level.
-    damage: object
+    #:
+    #: **`Callable[[int], float]`, not `object`.** Every value assigned is
+    #: a `lambda level: ...` and both are **called** -- `self.damage(level)`
+    #: -- so `object` made the call unreadable: `ty` reported "object of
+    #: type `object` is not callable" and a reader could not tell the field
+    #: held a curve rather than a number. `#1278`.
+    damage: Callable[[int], float]
     #: And a recharge or encounter attack.
-    limited: object
+    limited: Callable[[int], float]
     #: Attack bonus over level, by role. Reported, not yet applied.
     attack: dict[str, float] = field(default_factory=dict)
     #: Hit points as a multiple of a standard monster's, by rank.
