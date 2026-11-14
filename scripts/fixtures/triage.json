@@ -4604,12 +4604,12 @@
   },
   "c.line_of_sight_from()": {
     "at": "2026-11-14",
-    "by": "1282",
+    "by": "1283",
     "found": "c.cast_from (Relation.CASTS_FROM), dsl.measured_from",
     "refused_rows": 0,
     "rows": 1,
     "verdict": "real",
-    "why": "CORRECTED from mis-marked, which was wrong on both clauses. Relation.CASTS_FROM holds an ENTITY and dsl.measured_from answers one, so neither can hold the square p12407 names -- and the card names a square it can see, not a creature standing in one. Second, measured_from has exactly one caller and only for ranged, area_burst and wall ranges, so it moves where an attack is MEASURED from, never what a creature can see: query.line_of_effect traces from squares(watcher) and c.can_see called it directly. The row's own docstring stated both of these and this entry had not read it -- which is why triage is a ranker and not a gate. Written for #1282 as components.Senses.sight_from, query.sight_squares, query.line_of_sight and Cast.line_of_sight_from."
+    "why": "CORRECTED from mis-marked, which was wrong on both clauses. Relation.CASTS_FROM holds an ENTITY and dsl.measured_from answers one, so neither can hold the square p12407 names -- and the card names a square it can see, not a creature standing in one. Second, measured_from has exactly one caller and only for ranged, area_burst and wall ranges, so it moves where an attack is MEASURED from, never what a creature can see: query.line_of_effect traces from squares(watcher) and c.can_see called it directly. The row's own docstring stated both of these and this entry had not read it -- which is why triage is a ranker and not a gate. Written for #1283 as components.Senses.sight_from, query.sight_squares, query.line_of_sight and Cast.line_of_sight_from."
   },
   "c.lose_hp()": {
     "at": "2026-10-13",

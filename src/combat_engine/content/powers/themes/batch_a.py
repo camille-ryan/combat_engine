@@ -272,7 +272,7 @@ def p12407(c: Cast) -> None:
     attack is measured from rather than what the creature can *see*.
 
     `Senses.sight_from` holds it, `query.sight_squares` reads it and
-    `c.can_see` traces through `query.line_of_sight`. #1282.
+    `c.can_see` traces through `query.line_of_sight`. #1283.
 
     **The square is chosen, not guessed.** *"Choose one square you can see
     that is within 5 squares of you"* is a selection, so `c.choose` makes

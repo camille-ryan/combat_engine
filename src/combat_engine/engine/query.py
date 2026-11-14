@@ -268,7 +268,7 @@ def sight_squares(world: World, eid: int) -> frozenset[Square]:
     Sight, deliberately, and not line of **effect**. The card says line of
     sight; what a power can reach is a different question and `squares` is
     still what answers it, so lending an eye does not lend a firing
-    position. #1282.
+    position. #1283.
     """
     from .components import Senses
 
@@ -3228,7 +3228,7 @@ def line_of_sight(world: World, watcher: int, who: int) -> bool:
     `sealed` is still asked of both, unchanged from `line_of_effect`. The
     card lends a line of sight and says nothing about being shut inside
     something, so this stays where it was rather than guessing: see
-    `root CLAUDE.md` on never deriving what the page does not print. #1282.
+    `root CLAUDE.md` on never deriving what the page does not print. #1283.
     """
     if sealed(world, watcher) or sealed(world, who):
         return False

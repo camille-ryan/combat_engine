@@ -83762,7 +83762,7 @@ def damage_in_flight_is_spared_and_the_amount_is_announced(out: Result) -> None:
 
 
 def a_lent_square_moves_sight_and_not_the_firing_position(out: Result) -> None:
-    """`c.line_of_sight_from` lends an eye and nothing else (#1282).
+    """`c.line_of_sight_from` lends an eye and nothing else (#1283).
 
     `p12407` prints *"Choose one square you can see that is within 5 squares
     of you. Until the end of your next turn, you can determine your line of
@@ -83901,7 +83901,7 @@ DRIVERS = {
     "lent_eye": (
         a_lent_square_moves_sight_and_not_the_firing_position,
         "`c.line_of_sight_from` moves what a creature can see and not what"
-        " it can reach (#1282)",
+        " it can reach (#1283)",
     ),
     "spare_damage": (
         damage_in_flight_is_spared_and_the_amount_is_announced,

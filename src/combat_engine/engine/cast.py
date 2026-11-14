@@ -941,7 +941,7 @@ class Cast:
         *"you can determine your line of sight from that square"*.
         `query.line_of_sight` is `line_of_effect` with the watcher's origin
         swapped, and with nothing lent the two are the same call, so this
-        re-judges no existing row. See `c.line_of_sight_from`. #1282.
+        re-judges no existing row. See `c.line_of_sight_from`. #1283.
         """
         from .query import unseen_by
 
@@ -15021,7 +15021,7 @@ class Cast:
         expiry rather than overwritten, so a second cantrip during the
         first does not leave the earlier square behind.
 
-        Yours, so it defaults to the **caster**. #1282.
+        Yours, so it defaults to the **caster**. #1283.
         """
         from .components import Senses
 

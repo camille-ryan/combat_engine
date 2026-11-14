@@ -103,7 +103,7 @@ class Senses:
     fields, and a third gets a third.
 
     `None` is the ordinary case and means "its own square", so every reader
-    falls back without asking whether the component is there. #1282.
+    falls back without asking whether the component is there. #1283.
     """
 
     #: The square this creature's line of **sight** is traced from.
