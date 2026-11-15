@@ -274,6 +274,32 @@ class Decision(Event):
 class MoveStart(Decision):
     actor: int
     kind_: str  # "walk", "shift", "teleport", "push", "pull", "slide"
+    #: **Where the move ends**, known when it is announced rather than after
+    #: it. *"An enemy flanked by you moves out of the flanked position"* is
+    #: not "moves": a flanked enemy shuffling one square while still flanked
+    #: must not fire it, and the destination is the whole trigger.
+    #:
+    #: **The end of the move, not the next square**, which is the one design
+    #: question `#1323` left open and the emit sites settle. This is emitted
+    #: **once per move action** -- at the top of `walk`, `shift`, `teleport`
+    #: and the landing in `settle` -- and not by `step`, which runs per
+    #: square. So every site already knows its whole path and there is no
+    #: per-step reading to be ambiguous with. Had it been emitted per square,
+    #: an enemy walking *around* a flanker would fire a
+    #: "leaves the flank" trigger mid-path.
+    #:
+    #: **`None` means the destination is not knowable**, not "it did not
+    #: move". Forced movement goes through `ForcedMove` rather than these
+    #: four sites, so a row reading this must treat `None` as "do not fire"
+    #: rather than as a square.
+    #:
+    #: A field rather than an attribute, unlike `Moved.kind_` and
+    #: `Effect.by` -- both of those are bookkeeping about a thing that
+    #: already happened, where this is *read by a trigger to decide whether
+    #: to interrupt*, which is a change in how a fight resolves. The cost is
+    #: that it reaches the wire and the replay fixtures; measured with
+    #: `replay.py verify` rather than assumed.
+    to: Square | None = None
 
 
 @dataclass

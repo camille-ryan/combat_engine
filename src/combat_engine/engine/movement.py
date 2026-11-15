@@ -834,7 +834,12 @@ def walk(
     # interrupt" is a printed line on several rows, and the event was
     # emitted and thrown away -- the fourth time this session that a
     # cancellable event had no reader.
-    if world.bus.emit(MoveStart(actor=eid, kind_=kind)).cancelled:
+    # `path[-1]` and not the first step: this fires once for the whole
+    # move action, so the destination is where the creature is going to
+    # end up. An empty path has no destination rather than a false one.
+    if world.bus.emit(MoveStart(
+        actor=eid, kind_=kind, to=path[-1] if path else None,
+    )).cancelled:
         return 0
     spent = 0
     # Held past the end of the move, not just during it. "Requirement: the
@@ -936,7 +941,7 @@ def settle(world: World, eid: int) -> bool:
             if distance(sq, here) == radius and _clear(world, eid, footprint(sq, pos.size))
         )
         if ring:
-            world.bus.emit(MoveStart(actor=eid, kind_="land"))
+            world.bus.emit(MoveStart(actor=eid, kind_="land", to=ring[0]))
             step(world, eid, ring[0], kind="place", mode="walk")
             world.bus.emit(MoveEnd(actor=eid, at=ring[0]))
             return True
@@ -980,7 +985,12 @@ def shift(
 
     if not can_shift(world, eid):
         return False
-    if world.bus.emit(MoveStart(actor=eid, kind_="shift")).cancelled:
+    # The route is computed below, so the destination is spelled the
+    # same way here: an explicit `path` ends where it ends, and a bare
+    # `to` is its own destination.
+    if world.bus.emit(MoveStart(
+        actor=eid, kind_="shift", to=path[-1] if path else to,
+    )).cancelled:
         return False
     route = list(path) if path else [to]
     walked = mode_of(world, eid, mode)
@@ -1002,7 +1012,9 @@ def teleport(world: World, eid: int, to: Square, *, share: bool = False,
     # Reads the answer, like `walk` and `shift`. A row that stops movement
     # can then decide for itself whether a teleport counts, by looking at
     # `ev.kind_` -- which is a choice it cannot make if this is ignored.
-    if world.bus.emit(MoveStart(actor=eid, kind_="teleport")).cancelled:
+    if world.bus.emit(
+        MoveStart(actor=eid, kind_="teleport", to=to)
+    ).cancelled:
         return False
     moved = step(world, eid, to, kind="teleport", mode="walk", through=share,
                  stretched=stretched)
