@@ -834,10 +834,25 @@ def i2179x1(c: Cast) -> None:
 
 
 @power("i839x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF)
 def i839x1(c: Cast) -> None:
-    """Climbing. `movement.walk` charges no Athletics check in any mode, so
-    there is no roll in a fight for this to reach."""
+    """*"Gain a +2 item bonus to Athletics checks to climb."*
+
+    **This note said there was no roll to reach and there is one now.**
+    `#1300` built PHB p183's Climb entry -- `movement.climbs` rolls an
+    Athletics check against the surface's DC, stamping `purpose="climb"` --
+    so the old reason (*"`movement.walk` charges no Athletics check in any
+    mode"*) is spent. `lint.py` reds a row declaring itself inert whose
+    card names a check the tree now rolls, which is how this was found.
+
+    **+2 and not +4 or +6.** The card's higher tiers are *"Level 15"* and
+    *"Level 25"*, and `etl.item.MAX_ITEM_LEVEL` is 10, so the only printed
+    figure a character in scope can hold is the first. Writing the ladder
+    would be writing rows that cannot be dealt."""
+    c.bonus(
+        "skill:athletics", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+        when=lambda ctx: ctx.get("purpose") == "climb",
+    )
 
 
 @power("i839p1", level=5, cls=ITEM, usage=DAILY, action=FREE,

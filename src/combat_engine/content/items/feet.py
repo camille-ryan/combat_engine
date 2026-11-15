@@ -488,10 +488,28 @@ def i2509p1(c: Cast) -> None:
 
 
 @power("i2583x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF)
 def i2583x1(c: Cast) -> None:
-    """Climbing costs no check here -- `movement.walk` never rolls one --
-    so the whole printed property is out of combat."""
+    """*"You gain a +5 item bonus to Athletics checks for climbing."*
+
+    **This row's own note was true and stopped being true.** It read
+    *"climbing costs no check here -- `movement.walk` never rolls one -- so
+    the whole printed property is out of combat"*, and `#1300` built the
+    printed Climb entry: `movement.climbs` rolls an Athletics check against
+    the surface's DC and stamps `purpose="climb"` on it. So the bonus has
+    somewhere to land and `out_of_combat=True` is no longer the truth.
+
+    `lint.py` is what said so rather than a reading of mine -- it reds a
+    row declared complete-and-inert whose card names a check the tree now
+    rolls, and five rows went red the moment climbing landed.
+
+    Gated on the purpose and not on the skill, which is the printed
+    narrowing: *"for climbing"*, not every Athletics check. `waist.py`'s
+    swim bonus is the same shape and was built for the same reason."""
+    c.bonus(
+        "skill:athletics", 5, on=c.me, until=When.ENCOUNTER, kind="item",
+        when=lambda ctx: ctx.get("purpose") == "climb",
+    )
 
 
 @power("i2583p1", level=5, cls=ITEM, usage=ENCOUNTER, action=REACTION,

@@ -1119,12 +1119,29 @@ def f1006(c: Cast) -> None:
 
 
 @power("f1071", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF,
+       todo=("cast.TERRAIN_WORDS(ship)",))
 def f1071(c: Cast) -> None:
-    """A language and two skill bonuses. The climb speed is real, but
-    every clause of the row is gated on being aboard a ship, and
-    `c.terrain` knows no such place -- so the row is narrative entire
-    rather than one working clause and two checks."""
+    """A language and two skill bonuses, **every one of them aboard a ship**.
+
+    *"You gain a +2 bonus to Acrobatics and Athletics checks made while
+    aboard a ship. With a successful Athletics check, you can climb at your
+    normal speed (rather than half speed) while aboard a ship."*
+
+    **`todo=` rather than `out_of_combat=True`, and the marker is the
+    change.** The old reading was right that nothing here can fire and
+    wrong about why it may be declared inert: `#1300` made climbing a real
+    check, so `lint.py` correctly reds a row that names one and claims to
+    be complete. What actually holds this row is the **ship** --
+    `c.terrain` has a closed vocabulary and no word for a deck, which is
+    deliberate (`#544`: five keys were silently mis-spent because nothing
+    checked them).
+
+    So this is the one of the five `lint.py` found that is **not** writable
+    by having a climb check. The other four were waiting on the roll; this
+    one waits on somewhere to stand. Its climb clause is also not a bonus
+    but a **budget**: climbing at full speed rather than half, which is
+    `movement.climbs`' `mv.speed // 2` and would want a waiver there."""
 
 
 # -- the Associated Powers family, whose clauses are thrown away ------------

@@ -29856,6 +29856,50 @@ def climbing_a_surface(out: Result) -> None:
         f"floored at {floored}, back to {world.grid.climb_dc[square]}",
     )
 
+    # ------------------------------- and the rows this unblocked elsewhere
+    # **`lint.py` found these, not a reading of mine.** It reds a row
+    # declared `out_of_combat=True` whose card names a check the tree now
+    # rolls, and five went red the moment `purpose="climb"` existed. Two of
+    # them said so in their own notes -- *"`movement.walk` charges no
+    # Athletics check in any mode"* -- which was true when written.
+    #
+    # Asserted as a **delta against a non-climb check of the same skill**,
+    # which is the half that matters: a bonus laid ungated would read
+    # identically on the climb arm and differ here.
+    from combat_engine.engine.dsl import REGISTRY as _ROWS
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.skills import check as _check
+
+    def gated(ref: str, skill: str, purpose: str) -> int:
+        w, me, _ = _board()
+        w.need(me, Movement).modes.pop("climb", None)
+        _ROWS[ref].body(Cast(world=w, me=me, ref=ref))
+        seen: list[int] = []
+        w.bus.on(SkillCheck, lambda ev: seen.append(ev.bonus))
+        _check(w, me, skill, 15, purpose=purpose)
+        return seen[0] if seen else -999
+
+    for ref, printed in (("i2583x1", 5), ("i839x1", 2), ("f3756", 3)):
+        on, off = gated(ref, "athletics", "climb"), gated(ref, "athletics", "swim")
+        out.that(
+            on - off == printed,
+            f"{ref} pays its printed +{printed} on an Athletics check made"
+            " TO CLIMB and nothing on one made for anything else",
+            f"climb {on}, non-climb {off}, delta {on - off}",
+        )
+    # **The one of the five that is NOT purpose-gated**, and reading it the
+    # other way round is the likelier mistake: `f2246`'s climbing sentence
+    # is its *other* clause, and the +2 it does lay is to Acrobatics
+    # generally.
+    out.that(
+        gated("f2246", "acrobatics", "") - gated("i839x1", "acrobatics", "") == 2,
+        "f2246's +2 is to Acrobatics generally and is NOT narrowed to"
+        " climbing -- the clause that mentions climbing is the one it still"
+        " drops",
+        f"with {gated('f2246', 'acrobatics', '')},"
+        f" without {gated('i839x1', 'acrobatics', '')}",
+    )
+
     # ------------------------------------------------- and p10699's own body
     # **The row, not the verb.** Every arm above calls `c.climb_dc`
     # directly, and a row that picked the wrong squares, picked six of

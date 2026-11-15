@@ -1798,9 +1798,30 @@ def f3755(c: Cast) -> None:
 
 
 @power("f3756", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF,
+       dropped=("c.lend_check(purpose=)",))
 def f3756(c: Cast) -> None:
-    """Climbing bonuses, lent to an ally."""
+    """*"You gain a +3 feat bonus to Athletics checks to climb."*
+
+    **Written now, and `#1300` is why.** `movement.climbs` rolls an
+    Athletics check against a surface's DC and stamps `purpose="climb"`,
+    so the printed narrowing is sayable; before it there was no climb check
+    in a fight and `out_of_combat=True` was the truth. `lint.py` reds a row
+    that declares itself inert while naming a check the tree now rolls, and
+    that is what found this.
+
+    **Dropped: the half that lends the bonus on.** *"Whenever you make a
+    Dungeoneering check or an Athletics check to climb, one ally adjacent
+    to you gains a +2 feat bonus the next time he or she makes the same
+    sort of check."* Three things are missing at once and they are one
+    gap: a trigger on *having made* a check, a bonus laid on somebody else
+    keyed to the **same purpose**, and a "next time" that is spent by one
+    roll. `c.lend_passive` lends a passive score and `c.lend_checks` is
+    named by one other row; neither carries a purpose."""
+    c.bonus(
+        "skill:athletics", 3, on=c.me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: ctx.get("purpose") == "climb",
+    )
 
 
 @power("f3757", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

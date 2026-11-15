@@ -2415,9 +2415,30 @@ def f2241(c: Cast) -> None:
 
 
 @power("f2246", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF,
+       dropped=("c.skill_instead(purpose=)",))
 def f2246(c: Cast) -> None:
-    """Climbing walls and an Acrobatics bonus."""
+    """*"You also gain a +2 feat bonus to Acrobatics checks."*
+
+    That half is unconditional and lands. It had no reason to be inert even
+    before `#1300` -- the row was declared `out_of_combat=True` whole
+    because its *other* clause was about climbing, and `lint.py` reding the
+    row for the climb word is what made somebody read both.
+
+    **Dropped: the substitution.** *"You can use your Acrobatics skill in
+    place of your Athletics checks to climb."* That is a different mechanic
+    from a bonus -- the check is rolled against a **different skill's**
+    modifier, keyed to one purpose -- and nothing swaps one skill for
+    another. `skills.check` takes the skill by name from its caller, so the
+    swap belongs beside `c.rolls_with`, which does the same job for an
+    attack's ability.
+
+    The +2 is to Acrobatics generally, so it is **not** gated on the climb
+    purpose. Reading the card as narrowing it would be the commoner
+    mistake: the sentence that mentions climbing is the other one."""
+    c.bonus(
+        "skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
+    )
 
 
 @power("f2290", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
