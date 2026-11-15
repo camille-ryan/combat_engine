@@ -31370,6 +31370,155 @@ def a_creature_forbidden_to_mark(out: Result) -> None:
     )
 
 
+def alternatives_name_a_side(out: Result) -> None:
+    """"One ally, helpless enemy, or object" -- three pools in one target line.
+
+    `candidates` builds its pool from **one** `side` word, and `objects=True`
+    unions exactly one more because "creature or object" is the common shape.
+    Three pools, one of them a *narrowed* enemy, is not expressible that way,
+    so `#1313` made an alternative's own `side` the thing that is read: the
+    outer word builds the pool and each alternative narrows it.
+
+    **The outer `side` is still not tested in the predicate, and that
+    asymmetry is load-bearing.** Re-asking it there would reject every object
+    a row unioned in with `objects=True` -- `p11273`'s outer word is `"any"`
+    precisely so all three alternatives have something to narrow.
+
+    **The control is the six rows that already used `any_of`.** The field
+    they declare was being ignored, so reading it could have moved them. What
+    it moved is recorded below rather than assumed: their *pools* are
+    byte-identical, and on three of them `_stands_right` tightened -- see the
+    last arm, which is the finding this rule was written by.
+    """
+    from combat_engine.content import terrain
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, creatures, enemies
+    from combat_engine.engine.types import Condition
+
+    row = dsl.get("p11273")
+    world, me, _ = _board("p11273")
+    mates = sorted(a for a in allies(world, me) if a != me)
+    foes = sorted(enemies(world, me))
+    if not mates or len(foes) < 2:
+        out.skip("p11273's board wants an ally and two enemies to pose this")
+        return
+
+    pool = dsl.candidates(world, me, row)
+    out.that(
+        all(a in pool for a in mates),
+        "the ALLY alternative offers every ally -- the printed line's first"
+        " word, and the one the row was declared as before three pools"
+        " could be written",
+        f"allies {mates} against pool {sorted(pool)}",
+    )
+    out.that(
+        not any(f in pool for f in foes),
+        "while no enemy is offered yet: the enemy alternative is narrowed to"
+        " HELPLESS, so a healthy one is not one of the three ways in",
+        f"enemies in the pool: {[f for f in foes if f in pool]}",
+    )
+    Cast(world=world, me=me, ref="drivers:helpless").condition(
+        Condition.HELPLESS, on=foes[0], until=When.EONT)
+    after = dsl.candidates(world, me, row)
+    out.that(
+        foes[0] in after,
+        "and making one enemy helpless puts THAT enemy in the pool -- a"
+        " second side, narrowed, beside the first",
+        f"{foes[0]} still absent from {sorted(after)}",
+    )
+    out.that(
+        not any(f in after for f in foes[1:]),
+        "and only that one: the other enemies stay out, so the alternative"
+        " narrows rather than widening its side wholesale",
+        f"also offered: {[f for f in foes[1:] if f in after]}",
+    )
+
+    # ---- the third pool, which is not a creature at all
+    world2, me2, _ = _board("p11273")
+    here = world2.need(me2, Position).square
+    light = terrain.put(world2, (here[0] + 1, here[1]), kind="object",
+                        weight=300)
+    heavy = terrain.put(world2, (here[0] + 2, here[1]), kind="object",
+                        weight=600)
+    objects = dsl.candidates(world2, me2, row)
+    out.that(
+        light in objects and heavy not in objects,
+        "the OBJECT alternative offers a 300lb object and not a 600lb one,"
+        " so the printed cap travelled with the alternative it qualifies --"
+        ' "400 pounds or less" is written against the object and nothing'
+        " else, and an ally is not weighed",
+        f"300lb in pool: {light in objects}; 600lb: {heavy in objects}",
+    )
+
+    # ---- the six rows that already used any_of
+    SIX = ["p9328", "m5302a4", "m5373a3", "m5373a5", "m115879a2", "m6172a2"]
+    pools = {}
+    verdicts = {}
+    for ref in SIX:
+        w, actor, _ = _board(ref)
+        aim = dsl.get(ref).target
+        pools[ref] = sorted(dsl.candidates(w, actor, dsl.get(ref)))
+        verdicts[ref] = {
+            c: dsl._stands_right(w, actor, aim, c, ref)
+            for c in sorted(creatures(w))
+        }
+    # **The property, not a list of entity ids.** The first draft of this
+    # arm hard-coded the six pools and went red on ids alone -- the sizes
+    # matched and `p9328` read `[7]` against a recorded `[8]`, because
+    # `_board` numbers entities by how many boards the process has already
+    # built. A pool identity is not stable across a run; what is stable is
+    # the reason the test cannot bite.
+    mismatched = {
+        ref: [alt.side for alt in dsl.get(ref).target.any_of]
+        for ref in SIX
+        if any(alt.side != dsl.get(ref).target.side
+               for alt in dsl.get(ref).target.any_of)
+    }
+    out.that(
+        not mismatched,
+        "and the six rows that already used `any_of` each declare the SAME"
+        " side on every alternative as on their outer target -- which is"
+        " why reading a field that was being ignored could not move them."
+        " Measured either side of the change: their pools came out"
+        " byte-identical",
+        f"rows whose alternatives name another side: {mismatched}",
+    )
+    out.that(
+        any(pools[ref] for ref in SIX),
+        "and at least one of the six offers somebody, so the arm above is"
+        " not a no-op asserted over six empty pools",
+        f"every one of the six offers nobody: {pools}",
+    )
+    # **Three of the six moved in the predicate, and that is the finding.**
+    # Their pools are built from `side="enemy"`, so `candidates` never
+    # offered the caster -- but `_stands_right` never tested the outer side
+    # at all, so `use`'s explicit-target arm accepted it. The disjunction now
+    # asks the alternative's side and refuses. That is the exact
+    # disagreement this predicate's docstring says it exists to prevent
+    # (#381: candidates offered zero and `use` rolled the attack), one field
+    # over -- so the tightening is the fix and not a side effect, and it is
+    # asserted rather than left to be noticed.
+    out.that(
+        verdicts["m5373a3"].get(1) is False and verdicts["m5373a3"].get(2) is False,
+        "and on an enemy-only `any_of` row the CASTER and its ally are now"
+        " refused by the predicate as well as by the pool -- before, the"
+        " disjunction tested only the alternatives' clauses, which the"
+        " caster satisfied, so `use` with an explicit target connected where"
+        " `candidates` offered nothing",
+        f"caster: {verdicts['m5373a3'].get(1)};"
+        f" ally: {verdicts['m5373a3'].get(2)}",
+    )
+    out.that(
+        any(v is True for v in verdicts["m5373a3"].values()),
+        "while that row still accepts somebody, so the arm above is not"
+        " passing because the predicate now refuses everything",
+        "the predicate refuses every creature on the board",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -88221,6 +88370,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "alternatives_side": (
+        alternatives_name_a_side,
+        "a target line whose alternatives each name a side",
     ),
     "cannot_mark": (
         a_creature_forbidden_to_mark,

@@ -892,15 +892,25 @@ class Target:
     #: that `any_of` would not go green for the rows wanting the general
     #: thing. Both exist; neither is a spelling of the other.
     #:
-    #: **`side` is not part of an alternative.** `candidates` builds the
-    #: pool from the outer `side` before any of this runs, so two
-    #: alternatives cannot be on different sides -- which is exactly what
-    #: `m4766a3` prints ("an adjacent allied beast … or any creature with a
-    #: type word"), and why that row is **still** marked and now names a
-    #: narrower gap. Widening the outer side to `"any"` and testing the
-    #: side per alternative would work and has not been built, because one
+    #: **An alternative's `side` is read, and that is how two alternatives
+    #: sit on different sides.** The outer `side` builds the pool and an
+    #: alternative narrows it, so "one ally, helpless enemy, or object that
+    #: weighs 400 pounds or less" is `side="any", objects=True` with three
+    #: alternatives naming `ally`, `enemy` and `object`. `p11273`.
+    #:
+    #: This note used to say the opposite -- that `side` is not part of an
+    #: alternative and that widening it "has not been built, because one
     #: row is not the evidence for putting a pool test inside a predicate
-    #: that has never had one.
+    #: that has never had one". **Two rows were the evidence it asked
+    #: for**, and the second, `m4766a3`, prints alternatives on genuinely
+    #: different sides: "an adjacent allied natural beast … **or any
+    #: creature** with a type keyword". It stays marked for
+    #: `Target.ability_at_most`, which is a different gap.
+    #:
+    #: The pool test is not *inside* the predicate in the sense the old
+    #: note feared: `_pool_for` is the same function `candidates` builds
+    #: the outer pool with, so there is one definition of what `"ally"`
+    #: means rather than two. #1313.
     #:
     #: **Not a general "any of these filters".** Every *other* clause on a
     #: printed target line compounds -- a Medium and unheld object, a
@@ -3732,48 +3742,7 @@ def candidates(
         return []
     if aim.side == "self":
         return [actor]
-    pool = {
-        "enemy": enemies(world, actor),
-        # **The caster is not its own ally**, which is the printed word and
-        # is what `Cast._side` has always answered on the body path. This
-        # line said `[*allies(world, actor), actor]`, so the two halves of
-        # the engine disagreed about one word and the targeting half -- the
-        # one a player sees -- was the wrong one. A row printing "each ally
-        # in the burst shifts 1" moved the creature that is not a target,
-        # and because the row fired and emitted events the audit called it
-        # working. #364.
-        #
-        # A card that means you as well says "you and each ally", and that
-        # is `"team"` below. 185 rows declare it now; before this flip they
-        # could not, because `"team"` was absent from this dict and from
-        # `Target.__str__`, so they were declared `ally` and were correct
-        # only by the accident this line fixes.
-        "ally": allies(world, actor),
-        "any": creatures(world),
-        "other": [c for c in creatures(world) if c != actor],
-        # **`"other_ally"` is gone**, and its absence is the point. It
-        # existed to say "the printed line excludes you" at a time when
-        # `"ally"` did not; #364 made `"ally"` mean exactly that, so the two
-        # were the same list and one of them was a trap -- a second spelling
-        # of a settled question, which is what `vocab.py` warns near-synonyms
-        # cost. 73 declarations retired into `ONE_ALLY`/`EACH_ALLY`, and
-        # `_SIDES` no longer lists it so a row naming it raises at import
-        # rather than quietly working.
-        # **`"team"` was missing here entirely**, so a row declaring it
-        # raised `KeyError` at targeting and no row in the tree used it --
-        # which is why `_side`'s note that "a card meaning you as well says
-        # you and each ally, and `team` is that pool" described something
-        # unreachable. `Cast._side` has had it all along; this is the
-        # targeting half catching up. #364.
-        "team": [*allies(world, actor), actor],
-        # Not a creature at all, and not in any of the pools above: scenery
-        # has no `Side`, so every one of them is empty for it.
-        # `loose=` is passed here as well as tested in `_stands_right`, and
-        # that is not a duplicate: it decides *which scenery exists* for
-        # this pool, where the predicate decides whether one handed in is
-        # allowed. The second is the half that was missing.
-        "object": scenery(world, "object", loose=aim.loose),
-    }[aim.side]
+    pool = _pool_for(world, actor, aim.side, aim)
     if aim.objects and aim.side != "object":
         # **"One creature or object": the two pools, unioned here.** In the
         # pool and not in `_stands_right`, for the reason `any_of`'s note
@@ -4289,6 +4258,64 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
     return bool(candidates(world, actor, p, None, branch, augment))
 
 
+def _pool_for(world: World, actor: int, side: str, aim: Target) -> list[int]:
+    """The creatures (or scenery) a target line's `side` word names.
+
+    **One definition, two readers**, which is `_stands_right`'s own argument
+    one field over: `candidates` builds the outer pool from this, and an
+    **alternative** inside `any_of` tests membership of it. Two copies of
+    what `"ally"` means is the disagreement `#364` already paid for -- this
+    dict said `[*allies(world, actor), actor]` while `Cast._side` said the
+    caster is not its own ally, and the targeting half, the one a player
+    sees, was the wrong one.
+
+    `aim` is read only for `loose`, which decides *which scenery exists*
+    rather than whether a candidate is allowed -- see the `"object"` entry.
+    """
+    return {
+        "enemy": enemies(world, actor),
+        # **The caster is not its own ally**, which is the printed word and
+        # is what `Cast._side` has always answered on the body path. This
+        # line said `[*allies(world, actor), actor]`, so the two halves of
+        # the engine disagreed about one word and the targeting half -- the
+        # one a player sees -- was the wrong one. A row printing "each ally
+        # in the burst shifts 1" moved the creature that is not a target,
+        # and because the row fired and emitted events the audit called it
+        # working. #364.
+        #
+        # A card that means you as well says "you and each ally", and that
+        # is `"team"` below. 185 rows declare it now; before this flip they
+        # could not, because `"team"` was absent from this dict and from
+        # `Target.__str__`, so they were declared `ally` and were correct
+        # only by the accident this line fixes.
+        "ally": allies(world, actor),
+        "any": creatures(world),
+        "other": [c for c in creatures(world) if c != actor],
+        # **`"other_ally"` is gone**, and its absence is the point. It
+        # existed to say "the printed line excludes you" at a time when
+        # `"ally"` did not; #364 made `"ally"` mean exactly that, so the two
+        # were the same list and one of them was a trap -- a second spelling
+        # of a settled question, which is what `vocab.py` warns near-synonyms
+        # cost. 73 declarations retired into `ONE_ALLY`/`EACH_ALLY`, and
+        # `_SIDES` no longer lists it so a row naming it raises at import
+        # rather than quietly working.
+        # **`"team"` was missing here entirely**, so a row declaring it
+        # raised `KeyError` at targeting and no row in the tree used it --
+        # which is why `_side`'s note that "a card meaning you as well says
+        # you and each ally, and `team` is that pool" described something
+        # unreachable. `Cast._side` has had it all along; this is the
+        # targeting half catching up. #364.
+        "team": [*allies(world, actor), actor],
+        # Not a creature at all, and not in any of the pools above: scenery
+        # has no `Side`, so every one of them is empty for it.
+        # `loose=` is passed here as well as tested in `_stands_right`, and
+        # that is not a duplicate: it decides *which scenery exists* for
+        # this pool, where the predicate decides whether one handed in is
+        # allowed. The second is the half that was missing.
+        "object": scenery(world, "object", loose=aim.loose),
+    }[side]
+
+
 def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str = "") -> bool:
     """Does that creature stand to the caster the way the target line demands?
 
@@ -4308,13 +4335,41 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         # it -- the sickle row would otherwise finish something that is free.
         return False
     if aim.any_of and not any(
-        _stands_right(world, actor, alt, target, ref) for alt in aim.any_of
+        target in _pool_for(world, actor, alt.side, alt)
+        and _stands_right(world, actor, alt, target, ref)
+        for alt in aim.any_of
     ):
         # **The disjunction is asked first and the rest of this predicate is
         # still asked after it**, because that is what the cards print: "one
         # Medium or smaller creature that is bloodied or prone" is one
         # restriction compounding with a choice of two. An alternative that
         # also fails its own clauses is simply not one of the ways in.
+        #
+        # **An alternative's own `side` is tested here, and the outer one is
+        # not tested anywhere in this predicate.** That asymmetry is the
+        # whole design: the outer `side` *builds* the pool in `candidates`,
+        # so re-asking it here would reject every object a row unioned in
+        # with `objects=True`. An alternative can only **narrow** what the
+        # outer pool already holds, which is what the cards print -- "one
+        # ally, helpless enemy, or object" is `side="any", objects=True`
+        # with three alternatives that each name a side.
+        #
+        # **One field rather than a second spelling.** `Target.side`
+        # already existed on every alternative and was simply ignored, and
+        # the obvious fix -- a new `on_side=` so the old default could not
+        # bite -- would have been two names for one question, which is what
+        # `"other_ally"` cost before `#364` retired it. Reading the field
+        # that is already there is safe because **all six rows using
+        # `any_of` today declare the same side on every alternative as on
+        # the outer target** (`p9328` says `ally` three times, the five
+        # monster rows say `enemy`), so the test is a no-op for every one
+        # of them. Measured before the change, not assumed: a pool diff
+        # over all six is the control, and it is in
+        # `drivers.alternatives_name_a_side`.
+        #
+        # `alt` rather than `aim` is passed to `_pool_for` so an
+        # alternative naming `side="object"` gets its *own* `loose`, which
+        # is what decides which scenery exists at all. #1313.
         return False
     if aim.max_size is not None and _size_of(world, target).order > aim.max_size.order:
         return False
