@@ -1687,6 +1687,31 @@ class Power:
     #: inferred, so `scripts/audit.py` can tell "deliberately inert" from
     #: "written wrong", which is a distinction nothing else can draw.
     out_of_combat: bool = False
+    #: **The printed Trigger is a "Special:" clause BESIDE the action line,
+    #: not instead of it.** One row prints both and it is the whole of
+    #: `#1320`: `p16654` is an ordinary Daily standard action *and* -- "if
+    #: it has not been used for the day, this power automatically triggers
+    #: when you die".
+    #:
+    #: `actions._powers` refuses every row carrying a Trigger, and its own
+    #: comment explains why at length: a triggered row is offered by
+    #: `engine/triggers.py` when the thing happens, never from the list of
+    #: what a creature may do on its turn, and taking that branch away made
+    #: one brute cast the same row 22 times in a fight. That reading is
+    #: right for every row where the Trigger line *replaces* the action
+    #: line, which is all of them but this one.
+    #:
+    #: So this says the two doors are both real. Default False, so the 2,800
+    #: rows with a printed Trigger keep exactly today's behaviour and the
+    #: `#1215` fix is untouched.
+    #:
+    #: **Not a way to say "automatic".** The card's word is *automatically*
+    #: and nothing in this engine expresses a mandatory trigger -- the row
+    #: is offered when the trigger fires, the same as every other. The
+    #: convention is settled by `p16656`, the same race's sibling, which
+    #: prints "you die" and declares `Trigger(Died, about_me)` with no
+    #: marker and no note. #1320.
+    also_chosen: bool = False
     #: A creature this row puts on the board, defined here because the
     #: printed block gives it no compendium id. Header data, so the card
     #: can show what you are about to summon without running the body.
@@ -2351,6 +2376,7 @@ def power(
     group: str = "",
     no_provoke: bool = False,
     out_of_combat: bool = False,
+    also_chosen: bool = False,
     summon: Summon | None = None,
     todo: Iterable[str] = (),
     dropped: Iterable[str] = (),
@@ -2608,6 +2634,7 @@ def power(
             group=group,
             no_provoke=no_provoke,
             out_of_combat=out_of_combat,
+            also_chosen=also_chosen,
             summon=summon,
             todo=todo,
             dropped=dropped,

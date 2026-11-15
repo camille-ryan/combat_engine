@@ -31887,6 +31887,131 @@ def where_a_move_is_going(out: Result) -> None:
         )
 
 
+def a_power_that_fires_when_you_die(out: Result) -> None:
+    """"Special: if it has not been used for the day, this power
+    automatically triggers when you die."
+
+    One row prints it -- `p16654` -- and the marker it carried,
+    `c.on_death(ref)`, named a facility that already existed twice over:
+    `Trigger(Died, about_me)` is how `p16656` prints "you die" in the same
+    file, and `WINDOW_OF[ActionType.STANDARD]` was added in `#1215` because
+    two monster death throes needed it. `dsl.use` even derives `dying=True`
+    from a self-triggered event on a creature that is no longer alive, so
+    the can-act gate does not refuse a row for the reason it exists.
+
+    **What was genuinely missing is narrower: a row printed as BOTH a
+    chooseable action and a triggered one.** `actions._powers` refuses
+    every row carrying a Trigger -- deliberately, at length, and correctly
+    for every row where the Trigger line *replaces* the action line. This
+    row's *Special* clause sits beside its action line, and
+    `Power.also_chosen` is the one bit that says so.
+
+    So the two arms that matter are both doors being open at once. A fix
+    that only hooked the death would pass a firing test and silently take
+    away a printed standard action; a fix that only left it chooseable
+    passes nothing.
+    """
+    from combat_engine.engine import actions
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import Died, Dropped
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+
+    def hurt(world: object, foes: list[int]) -> list[int]:
+        return [
+            h.hp for h in (world.get(f, Health) for f in foes) if h is not None
+        ]
+
+    # ---- door one: still a standard action a creature may choose
+    world, me, _ = _board("p16654")
+    out.that(
+        "p16654" in (world.get(me, Powers).all if world.get(me, Powers) else []),
+        "the board deals this row to the creature under test, which every"
+        " arm below depends on",
+        "the caster does not know p16654",
+    )
+    enc = Encounter(world)
+    enc.start()
+    offered = [
+        a for a in actions.legal(world, enc, me, include_blocked=True)
+        if a.kind == "power" and a.ref == "p16654"
+    ]
+    out.that(
+        bool(offered) and all(a.cost is ActionType.STANDARD for a in offered),
+        "it is still offered as an ordinary STANDARD action despite"
+        " carrying a Trigger -- `actions._powers` refuses every other"
+        " triggered row, and `Power.also_chosen` is what exempts the one"
+        " card that prints both doors",
+        f"offered: {[(a.kind, a.cost, a.blocked) for a in offered]}",
+    )
+    # `include_blocked=True` because the board's initiative may not be on
+    # this creature: without it the entry is filtered by the action budget
+    # (`blocked='no action left'`) and reads exactly like a row that is not
+    # offered at all. That cost one wrong diagnosis.
+
+    # ---- door two: it fires itself when the holder dies
+    world2, me2, _ = _board("p16654")
+    foes2 = sorted(enemies(world2, me2))
+    health2 = world2.get(me2, Health)
+    if health2 is None or not foes2:
+        out.skip("p16654's board wants a caster with hit points and an enemy")
+        return
+    before2 = hurt(world2, foes2)
+    health2.hp = health2.dying_at
+    world2.bus.emit(Died(actor=me2))
+    after2 = hurt(world2, foes2)
+    out.that(
+        any(a != b for a, b in zip(before2, after2, strict=False)),
+        "and it fires ITSELF when the holder dies, with nobody choosing it"
+        " -- the close burst goes off and the enemies around the corpse"
+        " take the thunder damage",
+        f"enemy hit points before {before2}, after {after2}",
+    )
+
+    # ---- `Died`, not `Dropped`
+    world3, me3, _ = _board("p16654")
+    foes3 = sorted(enemies(world3, me3))
+    health3 = world3.get(me3, Health)
+    before3 = hurt(world3, foes3)
+    if health3 is not None:
+        health3.hp = health3.dying_at
+    world3.bus.emit(Dropped(actor=me3, dead=False))
+    out.that(
+        hurt(world3, foes3) == before3,
+        "and DROPPING to 0 does not fire it: the card says 'when you die'"
+        " and a character at 0 hit points is dying rather than dead."
+        " `Dropped` is emitted for both and carries `dead` to say which --"
+        " the two monster throes read it because their cards say 'drops to"
+        " 0 hit points', which is the other sentence",
+        f"a mere drop dealt damage: {before3} -> {hurt(world3, foes3)}",
+    )
+
+    # ---- "if it has not been used for the day"
+    world4, me4, _ = _board("p16654")
+    foes4 = sorted(enemies(world4, me4))
+    health4 = world4.get(me4, Health)
+    out.that(
+        use(world4, me4, "p16654"),
+        "the daily can be spent as an ordinary action first, which is what"
+        " the next arm needs",
+        "p16654 refused itself as an action",
+    )
+    spent = hurt(world4, foes4)
+    if health4 is not None:
+        health4.hp = health4.dying_at
+    world4.bus.emit(Died(actor=me4))
+    out.that(
+        hurt(world4, foes4) == spent,
+        'and a SPENT daily does not fire again on death -- "if it has not'
+        ' been used for the day" needs no new mechanism, because the'
+        " trigger goes through `dsl.use` and the ordinary usage check"
+        " refuses a spent row",
+        f"a spent daily fired anyway: {spent} -> {hurt(world4, foes4)}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -88738,6 +88863,11 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "death_throe": (
+        a_power_that_fires_when_you_die,
+        "a power that fires itself when its holder dies, and is still an"
+        " action",
     ),
     "move_destination": (
         where_a_move_is_going,

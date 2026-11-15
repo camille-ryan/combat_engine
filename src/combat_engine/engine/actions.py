@@ -172,7 +172,7 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
             continue
         if p.action is ActionType.NONE:
             continue  # a trait; armed at the start of the fight, never chosen
-        if p.trigger or p.triggers:
+        if (p.trigger or p.triggers) and not p.also_chosen:
             # **A printed Trigger means the row is not yours to choose.**
             # It is offered by `engine/triggers.py`, when the thing it names
             # happens, and never from the list of what a creature may do on
@@ -189,6 +189,14 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
             # shifts the moment its trigger was declared -- now with a
             # working trigger as well. The Trigger line is what disqualifies
             # it, not the absence of a machine-readable one.
+            #
+            # **Unless the row prints BOTH**, which `Power.also_chosen`
+            # says and exactly one row does: `p16654` is an ordinary Daily
+            # standard action whose *Special* line adds a second door --
+            # "if it has not been used for the day, this power
+            # automatically triggers when you die". For that row the
+            # Trigger line does not replace the action line, so refusing
+            # it here would take away the printed standard action. #1320.
             continue
         if p.out_of_combat:
             # Declared on rows that light a torch or mend a cloak. The field

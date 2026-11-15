@@ -49,6 +49,7 @@ from combat_engine.engine import (
     Condition,
     DamageRolled,
     DamageType,
+    Died,
     Dropped,
     EnterSquare,
     ForcedMove,
@@ -1570,19 +1571,49 @@ def p16475(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.THUNDER],
     attack=Attack((STR, CON, DEX), vs=REF, plus=2),
-    dropped=("c.on_death(ref)",),
+    trigger="if it has not been used for the day, when you die",
+    on=Trigger(Died, about_me, "you die"),
+    also_chosen=True,
 )
 def p16654(c: Cast) -> None:
     """Bloodied value is half the maximum. The Effect line lands once and
     last, so the burst is rolled against a caster who is still standing.
 
-    Re-aimed onto the names the rest of the tree uses: seven rows already
-    want `c.flat(unpreventable=)` for "cannot be reduced by any means",
-    and the attack line's choice of Strength, Constitution or Dexterity
-    is the racial build decision nothing records. The Special -- this
-    power firing by itself when you die -- needs a second hook, because
-    a row declaring `on=` runs only when the trigger fires and this one
-    is also an ordinary standard action."""
+    **The Special lands, and the marker it carried named the wrong thing.**
+    `c.on_death(ref)` asked for a verb that fires a power when its holder
+    dies, and that mechanism was already here twice over: `Trigger(Died,
+    about_me)` is how `p16656` -- this file's own sibling, the next race
+    along -- prints "you die", and `WINDOW_OF[ActionType.STANDARD]` exists
+    because two monster death throes needed it (`#1215`). `dsl.use` even
+    derives `dying=True` from a self-triggered event on a creature that is
+    no longer alive, specifically so the can-act gate does not refuse a
+    row for the reason it exists.
+
+    **What was genuinely missing is narrower: a row printed as BOTH.** The
+    old note had this exactly right -- *"a row declaring `on=` runs only
+    when the trigger fires and this one is also an ordinary standard
+    action"* -- and `actions._powers` is where that bites: it refuses every
+    row carrying a Trigger, deliberately and at length, because a triggered
+    row is the dispatcher's to offer. True of every such row but this one,
+    whose *Special* clause sits beside the action line rather than instead
+    of it. `Power.also_chosen` says so. `#1320`.
+
+    **`Died`, not `Dropped`.** The card says *"when you die"*, and a
+    character at 0 hit points is dying rather than dead -- `Dropped` is
+    emitted for both and carries `dead` to say which. The two monster
+    throes above read `Dropped` because their cards say *"drops to 0 hit
+    points"*, which is the other sentence.
+
+    *"If it has not been used for the day"* needs nothing: it is a Daily
+    and the ordinary usage check already refuses a spent one, which is why
+    the trigger goes through `dsl.use` rather than calling this body.
+
+    **Not modelled: "automatically".** Nothing here expresses a mandatory
+    trigger -- the row is offered when the trigger fires, like every other
+    triggered row -- and `p16656` sets the convention by printing the same
+    kind of line with no marker. Left unmarked rather than marked for the
+    same reason, and said here so the next reader does not have to
+    re-derive it."""
     health = c.world.get(c.me, Health)
     val = (health.max_hp // 2) if health else 0
     if c.strike():
