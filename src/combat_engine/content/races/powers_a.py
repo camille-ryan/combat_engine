@@ -82,6 +82,7 @@ from combat_engine.engine import (
     Ranged,
     Rerolled,
     SavingThrow,
+    Size,
     SkillCheck,
     Square,
     Target,
@@ -89,6 +90,7 @@ from combat_engine.engine import (
     TurnStart,
     UpTo,
     When,
+    World,
     both,
     by_me,
     by_melee,
@@ -1167,6 +1169,27 @@ def p15844(c: Cast) -> None:
         c.damage("2d6", on=who)
 
 
+def _beside_wood(world: World, eid: int) -> bool:
+    """"You must be adjacent to a Medium or larger tree or other wooden
+    object, such as a door or a table."
+
+    One material and three nouns. A door, a table and a tree share nothing
+    but the substance, so this is `Scenery.material` and not the noun --
+    `#1321`. The size half needed nothing: scenery carries a `Position` like
+    everybody else, so `min_size` reads it.
+
+    **Not `scenery(world, "tree")`, which is the other printed sentence.**
+    14 rows ask for a tree *specifically* -- "adjacent to a tree, treant, or
+    a plant of Large size or bigger" -- and a wooden door does not satisfy
+    those. All 14 are unmarked and already answered by the noun. This is the
+    one row in the corpus that asks the material.
+    """
+    from combat_engine.engine.query import scenery
+
+    return bool(scenery(world, within=1, of=eid, material="wood",
+                        min_size=Size.MEDIUM))
+
+
 @power(
     "p15831",
     level=6,
@@ -1176,12 +1199,33 @@ def p15844(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.HEALING],
-    dropped=("query.wooden_scenery()", "c.reappear(at=)"),
+    requires=_beside_wood,
+    requires_text="you must be adjacent to a Medium or larger wooden thing",
+    dropped=("c.reappear(at=)",),
 )
 def p15831(c: Cast) -> None:
-    """Coming back in the square you left is what `Condition.REMOVED`
-    already does; the alternative destination twenty squares off, and the
-    wooden object the Requirement names, have nothing to read."""
+    """The Requirement is asked; coming back where you left is not.
+
+    **"A Medium or larger tree or other wooden object" lands** --
+    `Scenery.material` and `query.scenery(material=, min_size=)`, `#1321`.
+    The marker it replaced, `query.wooden_scenery()`, asked for a reader of
+    its own; reading the corpus said the narrowing belongs on the one
+    function that already answers every other question about scenery, and
+    that the *noun* half was never missing.
+
+    **Nothing dresses a tree, so this Requirement cannot be met on a board
+    today**, and that is not this row's gap -- `scenery(world, "tree")` has
+    no caller anywhere, which makes 14 other rows' Requirements unmeetable
+    too. Filed separately. The reader is correct and the board will answer
+    it the day a scene puts a tree in the room.
+
+    Still dropped: *"at the start of your next turn you return to play in
+    the space you vacated"*. `Condition.REMOVED` takes the creature off and
+    puts it back, but nowhere does it remember the square, and the printed
+    third option -- appearing beside a wooden thing within 20 squares of the
+    starting position -- is a choice made on returning rather than a
+    destination computed now. `#1322`.
+    """
     c.surge(on=c.me)
     c.condition(Condition.REMOVED, until=When.SONT, on=c.me)
 

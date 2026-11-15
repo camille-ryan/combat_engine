@@ -762,6 +762,36 @@ class Scenery:
     #: Empty by default, so a `terrain.put(kind="object")` keeps matching
     #: on its noun exactly as before and nothing had to be migrated.
     category: str = ""
+    #: **What the thing is MADE OF**, which is a third question and not a
+    #: value of either field above. `p15831`'s Requirement -- *"you must be
+    #: adjacent to a Medium or larger tree or other wooden object, such as
+    #: a door or a table"* -- names one material and three nouns, and a
+    #: door, a table and a tree share nothing but the substance. #1321.
+    #:
+    #: **The noun half needed nothing**, which is what reading the corpus
+    #: settled. 61 rows name a tree or wood and they fall into three
+    #: groups:
+    #:
+    #: * **"adjacent to a tree, treant, or a plant of Large size or
+    #:   bigger"** -- 14 rows, all unmarked, all asking the **noun** and
+    #:   all already answered by `query.scenery(world, "tree")`. A wooden
+    #:   door does not satisfy them, so a material would be the wrong
+    #:   reader.
+    #: * **"difficult terrain that is the result of trees, underbrush,
+    #:   plants or natural growth"** -- forest walk, which is
+    #:   `Grid.difficult`'s label and a different field again: the *going*
+    #:   rather than the substance.
+    #: * **`p15831` alone** wants the material.
+    #:
+    #: So the answer to "one field or two" is that the tree half was never
+    #: missing. A tree is `kind="tree"`, `category="object"`,
+    #: `material="wood"`, and each of the three answers a different printed
+    #: sentence.
+    #:
+    #: Empty is **not recorded** rather than "no material", the same
+    #: bargain `weight` strikes: no row may read an unrecorded material as
+    #: anything.
+    material: str = ""
     #: Pounds, `0` meaning **not recorded** -- see the note above. Read
     #: against `query.lift_limit` for *"one object you can lift"* and
     #: against a printed number for *"400 pounds or less"*. #1307.

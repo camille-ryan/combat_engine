@@ -464,6 +464,8 @@ def scenery(
     within: int = 0,
     of: int | None = None,
     loose: bool = False,
+    material: str = "",
+    min_size: Size | None = None,
 ) -> list[int]:
     """What is standing on the map that is not a creature.
 
@@ -485,6 +487,19 @@ def scenery(
     `"fire"` as a category, and the narrowing a Requirement depends on is
     untouched.
 
+    **`material` and `min_size` are a separate narrowing each**, not more
+    values of `kind`, because `p15831`'s Requirement reads *"a Medium or
+    larger tree **or other wooden object**, such as a door or a table"* --
+    one material and three nouns, which share nothing but the substance.
+    They compound with `kind` rather than replacing it, so
+    `scenery(world, "tree")` is still the noun question that 14 unmarked
+    rows ask and `scenery(world, material="wood", min_size=Size.MEDIUM)` is
+    this one. #1321.
+
+    `min_size` reads `Position.size`, which scenery already carries --
+    `terrain.put(size=)` writes it and `object_defences` reads it off DMG
+    p65 -- so the size half of that Requirement needed nothing new.
+
     A module-level function as well as `c.scenery`, because a `requires=`
     gate is handed `(world, eid)` and no `Cast` -- the same split
     `moving_as` has.
@@ -493,6 +508,12 @@ def scenery(
     for eid, thing in sorted(world.each(Scenery)):
         if kind and kind not in (thing.kind, thing.category):
             continue
+        if material and thing.material != material:
+            continue
+        if min_size is not None:
+            where = world.get(eid, Position)
+            if where is None or where.size.order < min_size.order:
+                continue
         if loose and (thing.fastened or thing.by):
             continue
         if within and (of is None or distance_between(world, of, eid) > within):

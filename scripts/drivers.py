@@ -32235,6 +32235,93 @@ def a_module_thing_is_an_object(out: Result) -> None:
     )
 
 
+def a_wooden_thing_beside_you(out: Result) -> None:
+    """"You must be adjacent to a Medium or larger tree or other wooden
+    object, such as a door or a table."
+
+    One material and three nouns: a door, a table and a tree share nothing
+    but the substance, so `Scenery.material` is the reader and the noun is
+    not. `Scenery` had a `kind` -- the printed noun -- and a `category`
+    (`#1317`), and nothing recorded what a thing was made of.
+
+    **Reading the corpus is what settled the design question, and the answer
+    was that half of it was never missing.** `#1321` asked whether a tree
+    and a wooden object want one field or two, over "20 rows". There are
+    **61** rows naming a tree or wood, and they are three groups:
+
+    | | |
+    |---|---|
+    | 14 rows | the **noun** -- *"adjacent to a tree, treant, or a
+      plant of Large size or bigger"*. All unmarked, all already
+      answered by `query.scenery(world, "tree")`, and a wooden door
+      does **not** satisfy them |
+    | ~20 rows | forest walk -- *"difficult terrain that is the result
+      of trees, underbrush, plants or natural growth"* -- which is
+      `Grid.difficult`'s **label**: the going, not the substance |
+    | `p15831` | the only row that asks the material |
+
+    So three fields answer three printed sentences and none of them is a
+    spelling of another. A tree is `kind="tree"`, `category="object"`,
+    `material="wood"`.
+
+    **Each clause gets its own negative arm**, because a Requirement that
+    passes for the wrong reason is the failure mode here: a reader that
+    ignored the size would admit a small crate, one that ignored the
+    material would admit a stone idol, and one that ignored the distance
+    would admit a tree across the room. All three pass a positive-only
+    check.
+    """
+    from combat_engine.content import terrain
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import get, usable
+    from combat_engine.engine.types import Size
+
+    row = get("p15831")
+
+    def beside(**put: object) -> tuple[bool, str]:
+        world, me, _ = _board("p15831")
+        here = world.need(me, Position).square
+        if put:
+            away = int(put.pop("away", 1))
+            terrain.put(world, (here[0] + away, here[1]), **put)
+        return usable(world, me, row)
+
+    bare, why = beside()
+    out.that(
+        bare is False and "wooden" in why,
+        "with nothing beside the creature the Requirement refuses, naming"
+        " the printed line -- so the arms below are measured against a"
+        " refusal and not against a board that happens to pass",
+        f"refused: {bare}, reason {why!r}",
+    )
+    out.that(
+        beside(kind="door", material="wood")[0] is True,
+        "a Medium WOODEN door beside it satisfies the line -- the printed"
+        ' example, and a noun that is not "tree"',
+        "a wooden door did not satisfy it",
+    )
+    out.that(
+        beside(kind="idol", material="stone")[0] is False,
+        "while a Medium STONE thing does not: the material is read, and a"
+        " reader that only checked the size would admit this",
+        "a stone idol satisfied a wooden-object line",
+    )
+    out.that(
+        beside(kind="crate", material="wood", size=Size.SMALL)[0] is False,
+        "and a SMALL wooden crate does not: the size is read, and a reader"
+        ' that only checked the material would admit it. "Medium or larger"'
+        " is `Position.size`, which scenery already carried",
+        "a Small wooden crate satisfied a Medium-or-larger line",
+    )
+    out.that(
+        beside(kind="tree", material="wood", away=5)[0] is False,
+        "and a wooden tree FIVE squares away does not -- adjacency is read"
+        " too, which a reader asking only whether the room contains wood"
+        " would miss",
+        "a tree across the room satisfied an adjacency line",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -89086,6 +89173,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "wooden_thing": (
+        a_wooden_thing_beside_you,
+        "a Requirement naming a material rather than a noun",
     ),
     "module_thing_object": (
         a_module_thing_is_an_object,
