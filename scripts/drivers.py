@@ -32012,6 +32012,117 @@ def a_power_that_fires_when_you_die(out: Result) -> None:
     )
 
 
+def a_damage_type_chosen_at_creation(out: Result) -> None:
+    """"You also choose the power's damage type: acid, cold, fire, lightning,
+    or poison."
+
+    `p1448` prints the choice on the **power**, at character creation, and
+    `chargen.BUILD_OPTIONS` is the facility for exactly that sentence --
+    its own docstring quotes the shape. The row had been reading
+    `c.element`, which answers for a character whose *class* build bound an
+    element: somebody else's choice, giving `UNTYPED` to an r1 character
+    with no elemental build and a class's element to one with it, neither
+    of them necessarily among the five printed here.
+
+    **The arm that matters is the second recorded choice.** A row that
+    hard-codes `acid` passes every arm about acid, and `acid` is what the
+    fixed answer deals -- `_build_options` takes the first printed option
+    when it has no rng, which is this dict's documented behaviour. So the
+    rule overrides the recorded choice and asks again.
+
+    `#1325`. The marker this row carried, `c.race_option(damage_type=)`,
+    named a reader of "which sub-option within my race is current", which
+    is a different question the card does not ask -- and the near-namesake
+    `chargen.choices.race_options` is the documented triage trap in
+    `scripts/CLAUDE.md`.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine import events
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.types import DamageType
+
+    def dealt(ref: str, pick: str | None) -> list[object]:
+        world, me, _ = _board(ref)
+        held = world.get(me, Build)
+        if held is not None:
+            held.choices = {
+                c for c in held.choices if not c.startswith(f"option:{ref}:")
+            }
+            if pick is not None:
+                held.choices.add(f"option:{ref}:{pick}")
+        seen: list[object] = []
+        world.bus.on(
+            events.DamageRolled,
+            lambda ev: seen.append(getattr(ev, "dtype", None)),
+        )
+        use(world, me, ref)
+        return seen
+
+    out.that(
+        chargen.BUILD_OPTIONS.get("p1448")
+        == ("acid", "cold", "fire", "lightning", "poison"),
+        "the five printed damage types are declared against the POWER, in"
+        " the printed order -- not against the race, which is the noun this"
+        " row's marker and its old docstring were both aiming at",
+        f"declared: {chargen.BUILD_OPTIONS.get('p1448')}",
+    )
+
+    world, me, _ = _board("p1448")
+    held = world.get(me, Build)
+    out.that(
+        held is not None
+        and any(c.startswith("option:p1448:") for c in held.choices),
+        "a dealt character records a choice for it, which is what makes the"
+        " row readable at all -- `_build_options` keys on the hand, so a"
+        " plain power's entry is dealt the same way a feature's is",
+        f"choices mentioning the row: "
+        f"{[c for c in (held.choices if held else ()) if 'p1448' in c]}",
+    )
+    out.that(
+        Cast(world=world, me=me, ref="p1448").chosen_option("p1448") == "acid",
+        "and with no rng the dealer takes the FIRST printed option, so the"
+        " fixed answer is acid and is reproducible",
+        f"chosen: {Cast(world=world, me=me, ref='p1448').chosen_option('p1448')}",
+    )
+
+    acid = dealt("p1448", "acid")
+    out.that(
+        bool(acid) and all(d is DamageType.ACID for d in acid),
+        "the blast deals the recorded type",
+        f"types dealt: {acid}",
+    )
+    # **The arm a hard-coded `acid` cannot pass.** Everything above is
+    # consistent with the row ignoring the build entirely, because acid is
+    # also the fixed answer.
+    fire = dealt("p1448", "fire")
+    out.that(
+        bool(fire) and all(d is DamageType.FIRE for d in fire),
+        "and a character who chose FIRE deals fire -- the arm a row"
+        " hard-coding the first printed type passes every other arm of",
+        f"types dealt: {fire}",
+    )
+    out.that(
+        acid != fire,
+        "so the two recorded choices are distinguishable on the board,"
+        " which is the whole claim",
+        f"acid {acid} vs fire {fire}",
+    )
+    # And the fallback is one of the five, not UNTYPED. A character whose
+    # build recorded nothing used to get `c.element() or UNTYPED`, and
+    # untyped is not a type this card offers.
+    bare = dealt("p1448", None)
+    out.that(
+        bool(bare) and all(d is DamageType.ACID for d in bare),
+        "and with NOTHING recorded it falls back to the first printed type"
+        " rather than to untyped -- untyped is not one of the five the card"
+        " offers, and it is what the old `c.element` proxy returned for"
+        " every character with no elemental class build",
+        f"types dealt with no choice recorded: {bare}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -88863,6 +88974,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "chosen_damage_type": (
+        a_damage_type_chosen_at_creation,
+        "a damage type the character chose when the row was taken",
     ),
     "death_throe": (
         a_power_that_fires_when_you_die,

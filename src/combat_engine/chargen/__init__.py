@@ -4188,6 +4188,31 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # would have had to invent one for each of the other five legs -- the
     # page prints no such mapping. So the leg decides a presence and this
     # fork decides a leader, which is what was asked and answered.
+    # **A POWER's own printed choice, and the first non-feature entry.**
+    # `p1448`'s Special: *"When you create your character, choose Strength,
+    # Constitution, or Dexterity as the ability score you use when making
+    # attack rolls with this power. You also choose the power's damage
+    # type: acid, cold, fire, lightning, or poison."*
+    #
+    # **Keyed on the power and not on the race**, which is the correction
+    # `#1325` came to. The row carried `dropped=("c.race_option(damage_type=)",)`
+    # and its docstring argued the gap was that "a race has no leg the way
+    # a class does, so there is nowhere to record which option within the
+    # race was taken". But the card does not attach the choice to the race
+    # at all -- it attaches it to **this power**, at character creation,
+    # which is the exact sentence this dict's own docstring quotes as its
+    # purpose. No race modelling is needed and none is added.
+    #
+    # The five printed types, in the printed order, so the fixed answer --
+    # the first, with no rng -- is reproducible and is `acid`.
+    #
+    # **The ability half is NOT here, and cannot be**: this dict holds one
+    # tuple per ref, so two independent axes need two keys and there is no
+    # second ref to hang one on (the marshal's two axes are two different
+    # feature refs). `Attack((STR, CON, DEX))` resolves to whichever the
+    # creature is best at, which is a proxy for a recorded choice rather
+    # than the choice -- see the row's docstring.
+    "p1448": ("acid", "cold", "fire", "lightning", "poison"),
     "cf:warlord-marshal-f3": (
         "cf:warlord-marshal-f3",
         "cf:warlord-marshal-f1",

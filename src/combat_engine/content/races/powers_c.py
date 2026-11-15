@@ -173,26 +173,49 @@ def _vs_ac_or_ref(world: World, me: int, ev: Any) -> bool:
     reach=CloseBlast(3),
     target=EACH_OTHER,
     attack=Attack((STR, CON, DEX), vs=REF, plus=2),
-    dropped=("c.race_option(damage_type=)",),
 )
 def p1448(c: Cast) -> None:
-    """The card binds the attack ability and the damage type at character
-    creation, and a racial choice is recorded nowhere -- so the header
-    holds one ability, Constitution, which the damage line names anyway.
-    `c.element` answers for a character whose *class* build bound an
-    element and is the nearest standing reading of the second half.
+    """The damage type is the character's recorded choice, read off the
+    build.
 
-    **Correction: a racial choice is not "recorded nowhere".** `Build.race`
-    holds the ref, `Build.choices` emits `race:<ref>` unconditionally, and
-    `c.build("race:...")` reads it -- `chargen.meets` already answers 690
-    heroic feats off that field. What is missing is narrower: a race has no
-    **leg** the way a class does, so there is nowhere to record *which*
-    option within the race was taken. That is #235's modelling question
-    asked of a different noun, and #505 records why it should not be
-    answered twice.
+    *"You also choose the power's damage type: acid, cold, fire, lightning,
+    or poison."* `chargen.BUILD_OPTIONS["p1448"]` deals one and
+    `c.chosen_option` reads it back -- which is the facility that dict
+    exists for, and its docstring quotes this exact kind of sentence.
+
+    **The marker this carried, and the docstring that argued for it, were
+    both aiming at the wrong noun.** `c.race_option(damage_type=)` asked
+    for a reader of "which sub-option within my race is current", and the
+    old note below argued the blocker was that a race has no **leg** the
+    way a class does. The card attaches the choice to **this power**, at
+    character creation -- not to the race -- so no race modelling is
+    needed and `#235`'s question is not involved. `#1325`.
+
+    What the old note got right and is kept: a racial choice is not
+    "recorded nowhere". `Build.race` holds the ref, `Build.choices` emits
+    `race:<ref>` unconditionally, and `chargen.meets` already answers 690
+    heroic feats off that field.
+
+    **`c.element` was the proxy and is gone.** It answers for a character
+    whose *class* build bound an element, which for this row is somebody
+    else's choice: an r1 character with no elemental class build got
+    `UNTYPED` -- a damage type the card does not offer -- and one with an
+    elemental build got that element whether or not it is among the five
+    printed here.
+
+    **The ability half is still a proxy, deliberately and unmarked.**
+    `Attack((STR, CON, DEX))` resolves to whichever of the three the
+    creature is best at, which is a defensible reading and not the
+    recorded choice the card describes. It is not marked because
+    `BUILD_OPTIONS` holds one tuple per ref, so a second independent axis
+    needs a second key and this power has only one ref to offer -- see the
+    entry's own note. Recorded here rather than left to be rediscovered.
     """
     if c.strike():
-        c.damage("1d6", c.con_mod, dtype=c.element(on=c.me) or DamageType.UNTYPED)
+        c.damage(
+            "1d6", c.con_mod,
+            dtype=DamageType(c.chosen_option(c.ref) or "acid"),
+        )
 
 
 @power(
