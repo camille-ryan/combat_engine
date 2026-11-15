@@ -120,7 +120,7 @@ def switched(world: World, actor: int, r: Range) -> Range:
     already-switched size.
     """
     if r.other_when and _other_holds(world, actor, r.other_when):
-        return replace(r, size=r.other_size, other_size=0, other_when="")
+        r = replace(r, size=r.other_size, other_size=0, other_when="")
     return r
 
 
@@ -229,6 +229,34 @@ class Range:
     #: clause that never fires on a row that looks finished.
     other_when: str = ""
 
+    #: **Squares ADDED to whatever this range resolves to**, fixed and by
+    #: ability. Not a size -- which is the correction `#1315` turned on.
+    #:
+    #: Six augment reach overrides across four rows were written as a
+    #: replacing size -- `Augment(1, reach=Melee(2))` for a card printing
+    #: *"your reach increases by 1"* -- and **every one of them was
+    #: discarded**. `_reach_of`'s by-weapon melee branch answers
+    #: `(weapon reach) + GIVES[ref] + stretch` and never reads `size`, as
+    #: its own docstring says of the `stretch` it once threw away. All four
+    #: rows print *"Melee weapon"*, so all four took that branch.
+    #:
+    #: `p4313` is the row that works and shows why: it prints *"Melee
+    #: weapon +1 reach"*, the ETL recorded the +1 in `GIVES`, and the sum
+    #: above picks it up. `GIVES` is keyed by **ref**, so it can say what a
+    #: card grants and not what one of its augments grants -- which is the
+    #: gap these two fields fill.
+    #:
+    #: `grows_by` is the variable half and `p12422`'s Augment 2 is the only
+    #: card in the corpus printing one: *"your reach increases by a number
+    #: of squares equal to your Charisma modifier."* Censused across every
+    #: spec table; two other hits were false positives (`f2650` is
+    #: telepathy range, `f2706` is extra damage).
+    #:
+    #: Added at **both** of `_reach_of`'s return sites, because an increase
+    #: means the same thing to a fixed-number row and a by-weapon one.
+    grows: int = 0
+    grows_by: Ability | None = None
+
     def __post_init__(self) -> None:
         if self.other_when and self.other_when not in OTHER_WHEN:
             raise ValueError(
@@ -285,6 +313,7 @@ class Range:
 def Melee(
     n: int = 1, *, by_weapon: bool = False, from_: str = "",
     other_size: int = 0, other_when: str = "",
+    grows: int = 0, grows_by: Ability | None = None,
 ) -> Range:
     """`by_weapon` for a row the compendium does not list, which is `mba`.
 
@@ -294,7 +323,8 @@ def Melee(
     weapon's. `Ranged` has taken this argument all along for the same reason.
     """
     return Range("melee", n, by_weapon=by_weapon, from_=from_,
-                 other_size=other_size, other_when=other_when)
+                 other_size=other_size, other_when=other_when,
+                 grows=grows, grows_by=grows_by)
 
 
 def Ranged(
@@ -2784,6 +2814,26 @@ def _reach_of(
             world, actor, r.kind, {"power": ref, "range_kind": r.kind}
         )
     gear = world.get(actor, Gear)
+    # **What the range itself adds**, fixed and by ability, folded into
+    # `stretch` so it reaches **both** returns below. A reach increase means
+    # the same thing to a fixed-number row and a by-weapon one, and six
+    # augment overrides were silently discarded by being written as a
+    # replacing `size` that the by-weapon branch never reads. See
+    # `Range.grows`. #1315.
+    #
+    # Floored at the printed reach rather than allowed to shorten it: every
+    # one of the five cards says *"increases by"*, so a Charisma of 8 adds
+    # nothing instead of taking a square away.
+    if r.grows or r.grows_by is not None:
+        from .components import Stats
+        from .types import modifier
+
+        extra = r.grows
+        if r.grows_by is not None:
+            stats = world.get(actor, Stats)
+            if stats is not None:
+                extra += modifier(stats.score(r.grows_by))
+        stretch += max(0, extra)
     if r.kind == "melee":
         # **A reach weapon reaches, which nothing here used to say.**
         # `Weapon.reach` was filled by the ETL, carried on the component and

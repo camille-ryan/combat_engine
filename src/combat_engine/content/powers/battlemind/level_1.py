@@ -108,7 +108,7 @@ def p11156(c: Cast) -> None:
     keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(
-        Augment(1, reach=Melee(2)),
+        Augment(1, reach=Melee(1, grows=1)),
         Augment(2, reach=CloseBlast(3), target=EACH_ENEMY),
     ),
 )

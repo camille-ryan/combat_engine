@@ -8,6 +8,7 @@ from combat_engine.content.powers.augment import augment
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    CHA,
     CON,
     ONE_CREATURE,
     REF,
@@ -123,22 +124,46 @@ def p11164(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FORCE, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
-    augments=(Augment(1, reach=Melee(2)),),
-    dropped=("dsl.Range.by_ability",),
+    augments=(
+        Augment(1, reach=Melee(1, grows=1)),
+        Augment(2, reach=Melee(1, grows_by=CHA)),
+    ),
 )
 def p12422(c: Cast) -> None:
-    """Augment 1 is a square of extra reach for that attack, which is the
-    header and is declared there.
+    """Both augments are reach, and the difference between them is the whole
+    of what `#1315` was about.
 
-    Augment 2 is the `dropped` clause and its hold is not the augment
-    machinery: it lengthens the reach by *your Charisma modifier*, and a
-    `Range` holds a number that is read off the card before any creature
-    is in hand. Its stronger Hit line is not written alone, because half a
+    **Both are INCREASES, and writing them as sizes is why Augment 1 never
+    worked.** It was `Augment(1, reach=Melee(2))`, unmarked, and this row
+    prints *"Melee weapon"* -- so `_reach_of` takes its by-weapon branch,
+    which answers `(weapon reach) + GIVES[ref] + stretch` and **never
+    reads `size`**, exactly as its own docstring says of the `stretch` it
+    once discarded. Six such overrides across four rows were being thrown
+    away. `#1315`.
+
+    `p4313` is the row that does work and shows the shape: it prints
+    *"Melee weapon +1 reach"*, the ETL recorded the 1 in `GIVES`, and the
+    sum picks it up. `GIVES` is keyed by **ref**, so it can say what a card
+    grants and not what one of its augments grants -- which is the gap
+    `Range.grows` fills.
+
+    **Augment 2 is the only variable one in the corpus**, and `grows_by`
+    reads the modifier off the creature at `_reach_of`, which holds the
+    world and the actor. It adds rather than replaces, and cannot shorten
+    the printed reach: *"increases by"* is the printed word, so a Charisma
+    of 8 adds nothing instead of taking a square away.
+
+    Its stronger Hit line lands with it -- 2[W] and a three-square slide --
+    which the old note deliberately withheld on the ground that half a
     clause is worse than none. The slide is anchored on the caster's
-    square, which is what "to a square adjacent to you" means."""
+    square, which is what *"to a square adjacent to you"* means."""
+    spent = c.augment
     if c.strike():
-        c.damage(c.w(), c.con_mod, dtype=DamageType.FORCE)
-        c.slide(1, anchor=c.here)
+        c.damage(
+            c.w(2) if spent == 2 else c.w(), c.con_mod,
+            dtype=DamageType.FORCE,
+        )
+        c.slide(3 if spent == 2 else 1, anchor=c.here)
 
 
 @power(
@@ -152,7 +177,7 @@ def p12422(c: Cast) -> None:
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.TELEPORTATION, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(
-        Augment(1, reach=Melee(2)),
+        Augment(1, reach=Melee(1, grows=1)),
         Augment(2),
     ),
 )

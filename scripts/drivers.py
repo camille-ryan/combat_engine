@@ -30957,6 +30957,85 @@ def the_marshals_two_choices(out: Result) -> None:
         )
 
 
+def an_augments_reach_increase(out: Result) -> None:
+    """"Your reach increases by 1" -- and by an ability modifier.
+
+    **Six augment reach overrides across four rows were discarded**, and
+    all six were written as a replacing size: `Augment(1, reach=Melee(2))`
+    for a card printing *"your reach increases by 1 for this attack"*. All
+    four rows print *"Melee weapon"*, so `_reach_of` takes its by-weapon
+    branch -- `(weapon reach) + GIVES[ref] + stretch` -- which **never
+    reads `size`**, exactly as its own docstring says of the `stretch` it
+    once threw away. Five of the six carried no marker.
+
+    `p4313` is the row that works and shows the shape: it prints *"Melee
+    weapon +1 reach"* on its range line, the ETL recorded the 1 in
+    `GIVES`, and the sum picks it up. `GIVES` is keyed by **ref**, so it
+    can say what a card grants and not what one of its *augments* grants --
+    which is what `Range.grows` and `grows_by` are for. #1315.
+
+    **Measured by walking distances, not by reading the declared size.**
+    That is the whole point: `reach_of` answers the declared `Melee 1` at
+    every augment, and the resolved reach is 1, 2 and 1+Charisma. A probe
+    asserting on `Range.size` would have passed against the broken code,
+    and the first version of this one did.
+    """
+    from combat_engine.engine.components import Gear, Position, Stats
+    from combat_engine.engine.dsl import _within_reach, get
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Ability
+
+    def furthest(ref: str, score: int, aug: int) -> tuple[int, int]:
+        """The furthest square this row actually reaches, and the weapon's."""
+        from combat_engine.engine import movement
+
+        world, me, _ = _board(ref)
+        p = get(ref)
+        stats = world.get(me, Stats)
+        if stats is not None:
+            stats.scores[Ability.CHA] = score
+        foes = sorted(enemies(world, me))
+        if p is None or not foes:
+            return -1, -1
+        foe, here = foes[0], world.need(me, Position).square
+        best = 0
+        for d in range(1, 10):
+            movement.place(world, foe, (here[0] + d, here[1]))
+            if _within_reach(world, me, p, foe, 0, aug):
+                best = d
+        gear = world.get(me, Gear)
+        return best, (getattr(getattr(gear, "main", None), "reach", 1) or 1)
+
+    # ---- p12422: a fixed square, then a variable one
+    rows = []
+    for score, aug, add in (
+        (18, 0, 0), (18, 1, 1), (18, 2, 4),      # Charisma +4
+        (10, 2, 0),                               # +0 adds nothing
+        (8, 2, 0),                                # -1 does NOT shorten
+    ):
+        got, worn = furthest("p12422", score, aug)
+        rows.append((score, aug, got, worn + add))
+    out.that(
+        all(got == want for _, _, got, want in rows),
+        "p12422 reaches its weapon's reach, +1 on Augment 1, and +Charisma"
+        " on Augment 2 -- and a NEGATIVE modifier adds nothing rather than"
+        ' shortening it, because the card says "increases by"',
+        "; ".join(f"CHA {s} aug {a}: {g} wanted {w}" for s, a, g, w in rows),
+    )
+
+    # **The two siblings written the same wrong way**, which is what makes
+    # this a mechanism rather than one row's fix.
+    for ref in ("p11157", "p13039"):
+        base, worn = furthest(ref, 10, 0)
+        grown, _ = furthest(ref, 10, 1)
+        out.that(
+            base == worn and grown == worn + 1,
+            f"{ref}'s Augment 1 reaches one square further than its base,"
+            " which its card prints and a replacing size discarded",
+            f"base {base}, augment 1 {grown}, weapon {worn}",
+        )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -87808,6 +87887,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "reach_grows": (
+        an_augments_reach_increase,
+        "an augment that lengthens reach, fixed and by ability",
     ),
     "marshal_forks": (
         the_marshals_two_choices,
