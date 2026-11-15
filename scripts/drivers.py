@@ -32610,6 +32610,158 @@ def a_build_option_narrows_its_class_line(out: Result) -> None:
     )
 
 
+def hiding_with_any_cover(out: Result) -> None:
+    """"You can make Stealth checks to become hidden when you have any cover
+    or concealment."
+
+    The printed rule is that **becoming** hidden takes superior cover or
+    total concealment -- ordinary cover is what keeps you hidden once you
+    are. `actions._hiding` quotes both halves and gates on the degree,
+    comparing `cover_between` and `concealment_of` against
+    `Cover.SUPERIOR`. `p14032` lowers that to any cover for a round.
+
+    **The marker this row carried, `query.can_hide(world, eid)`, was
+    mis-aimed -- and its note was out of date rather than wrong when it was
+    written.** The note said *"nothing asks that question, so there is no
+    rule here to relax"*, and `#1250` made both clauses false: `_hiding` is
+    the question and `c.hides_with_cover` is the relaxation. So this is one
+    call, not a facility.
+
+    **No `after_moving=`, which the verb's own docstring warns about from
+    the other direction.** It records that leaving the argument out is how
+    the wider-than-print version gets written, because
+    `cf:rogue-scoundrel-f1s2`'s clause is conditional on ending a move 3
+    squares away. This card's is unconditional, so adding the condition
+    would be the invention.
+
+    **The floor is the arm that keeps this honest.** `_hiding` floors the
+    requirement at `Cover.PARTIAL`, deliberately -- no card prints "with no
+    cover at all", and a creature standing in the open may not vanish. A
+    looser implementation reads identically on every positive arm.
+    """
+    from combat_engine.engine import actions
+    from combat_engine.engine.actions import HIDE_COVER
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import (
+        concealment_of,
+        cover_between,
+        enemies,
+    )
+    from combat_engine.engine.resolve import _mods
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import Cover
+
+    def state(world: object, me: int) -> tuple[int, list[int], list[str]]:
+        """What `_hiding` ASKS and what it OFFERS, read off `_hiding`.
+
+        **`hideable` is the action's own target list, not a re-derivation
+        of it.** The first draft recomputed `_hiding`'s predicate here,
+        including its `max(Cover.PARTIAL, ...)` floor -- so a plant
+        deleting that floor from `_hiding` changed nothing this function
+        reported and the floor arm stayed green. A rule that recomputes the
+        thing it is testing cannot fail.
+
+        `need` is still derived, because it is not on the action; it is
+        reported for the message and the arms about it are backed by the
+        target list beside it.
+        """
+        need = max(Cover.PARTIAL,
+                   Cover.SUPERIOR - _mods(world, me, HIDE_COVER, {}))
+        acts = actions._hiding(world, Encounter(world), me)
+        hideable = sorted(
+            {e for a in acts for e in a.targets}
+        )
+        return int(need), hideable, [a.kind for a in acts]
+
+    # ---- with partial concealment: refused before, offered after
+    world, me, _ = _board("p14032")
+    Cast(world=world, me=me, ref="drivers:conceal").conceal(
+        on=me, until=When.ENCOUNTER)
+    out.that(
+        int(concealment_of(world, me)) == int(Cover.PARTIAL),
+        "the creature has PARTIAL concealment and nothing better, which is"
+        " the whole circumstance this card is about",
+        f"concealment is {int(concealment_of(world, me))},"
+        f" wanted {int(Cover.PARTIAL)}",
+    )
+    need, hideable, offered = state(world, me)
+    out.that(
+        need == int(Cover.SUPERIOR) and not hideable and not offered,
+        "and it cannot become hidden: the printed gate is SUPERIOR cover or"
+        " total concealment, so partial concealment is not enough and the"
+        " hide action is not offered at all",
+        f"need {need}, hideable {hideable}, offered {offered}",
+    )
+    out.that(
+        use(world, me, "p14032"),
+        "p14032 resolves",
+        "p14032 refused itself",
+    )
+    need, hideable, offered = state(world, me)
+    out.that(
+        need == int(Cover.PARTIAL) and hideable and offered == ["hide"],
+        "and afterwards ANY cover will do -- the requirement falls from"
+        " superior to partial, the enemies become hideable, and the hide"
+        " action is offered",
+        f"need {need}, hideable {hideable}, offered {offered}",
+    )
+
+    # ---- every creature it may hide from actually has cover from it
+    #
+    # **Not "no concealment means no hiding", which was this arm's first
+    # draft and was wrong.** The second board gives the creature no
+    # concealment and `cover_between` still reports partial cover from one
+    # enemy -- so "in the open" is not what an absent concealment means,
+    # and the arm reported a floor failure that was a real cover trace.
+    # What the floor actually claims is the two things below.
+    offered_against = hideable
+    out.that(
+        all(
+            cover_between(world, e, me) >= Cover.PARTIAL
+            or concealment_of(world, me) >= Cover.PARTIAL
+            for e in offered_against
+        ),
+        "every enemy it may now hide from genuinely has partial cover or"
+        " concealment between them -- the relaxation lowered the bar to"
+        " 'any' and not to 'none'",
+        f"offered against {offered_against} with no cover between",
+    )
+
+    # ---- the floor, tested as a floor: a SECOND relaxation cannot go lower
+    world2, me2, _ = _board("p14032")
+    use(world2, me2, "p14032")
+    Cast(world=world2, me=me2, ref="drivers:again").bonus(
+        HIDE_COVER, 3, on=me2, until=When.ENCOUNTER)
+    _need2, hideable2, _offered2 = state(world2, me2)
+    sheltered = [
+        e
+        for e in sorted(enemies(world2, me2))
+        if cover_between(world2, e, me2) >= Cover.PARTIAL
+        or concealment_of(world2, me2) >= Cover.PARTIAL
+    ]
+    out.that(
+        _mods(world2, me2, HIDE_COVER, {}) >= 6
+        and hideable2 == sheltered,
+        "and a SECOND relaxation on the same creature cannot take the"
+        " requirement below partial: two sources ask for 6 grades off a"
+        " 5-grade scale, and the creature is still offered the hide only"
+        " against the enemies it genuinely has cover from. Without the"
+        " floor it could vanish in the open, and no card prints 'with no"
+        " cover at all'",
+        f"the mod totals {_mods(world2, me2, HIDE_COVER, {})};"
+        f" offered against {hideable2}, and only {sheltered} shelter it",
+    )
+    out.that(
+        len(sheltered) < len(sorted(enemies(world2, me2))),
+        "and some enemy on that board shelters it and some does not, so the"
+        " arm above can tell 'only the sheltered ones' from 'everybody'",
+        f"{len(sheltered)} of {len(sorted(enemies(world2, me2)))} enemies"
+        " shelter it -- the arm above is vacuous if that is all of them",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -89461,6 +89613,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "hide_any_cover": (
+        hiding_with_any_cover,
+        "becoming hidden with any cover rather than superior",
     ),
     "narrowed_line": (
         a_build_option_narrows_its_class_line,

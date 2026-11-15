@@ -1308,12 +1308,47 @@ def p14016(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW],
-    todo=("query.can_hide(world, eid)",),
+    dropped=("c.hides_with_cover(ally=)",),
 )
 def p14032(c: Cast) -> None:
-    """The whole benefit is a permission -- when a Stealth check to go unseen
-    may be attempted, and what counts as cover for it. Nothing asks that
-    question, so there is no rule here to relax."""
+    """"You can make Stealth checks to become hidden when you have any cover
+    or concealment" -- and the rule it relaxes exists.
+
+    **The marker this carried was mis-aimed, and the note under it was out
+    of date rather than wrong when written.** It said *"nothing asks that
+    question, so there is no rule here to relax"*, and `query.can_hide` was
+    the symbol asked for. Both of those stopped being true with `#1250`:
+
+    * `actions._hiding` **is** the question. It quotes the printed rule --
+      *"you can make a Stealth check against an enemy only if you have
+      superior cover or total concealment"* -- and gates the hide action on
+      exactly that degree, comparing `query.cover_between` and
+      `concealment_of` against `Cover.SUPERIOR`.
+    * `c.hides_with_cover` **is** the relaxation, lowering that degree to
+      `Cover.PARTIAL` -- any cover at all -- for one creature.
+
+    So this half is one call. **No `after_moving=`, and that is this card
+    rather than an omission**: the verb's own docstring warns that leaving
+    it out is how the wider-than-print version gets written, because
+    `cf:rogue-scoundrel-f1s2`'s clause is conditional on ending a move 3
+    squares away. This card's is unconditional -- *"until the end of your
+    next turn, you can make Stealth checks to become hidden when you have
+    any cover or concealment"* -- so the condition would be an invention.
+
+    `When.EONT` is the printed duration.
+
+    **Still dropped: the ally half.** *"In addition, you can use cover from
+    your allies to become hidden or to remain hidden."* `_hiding` calls
+    `query.cover_between` with `ranged=False`, and that function counts
+    creature bodies **only for a ranged attack** -- so an ally's body can
+    never contribute cover to a hide check, and there is no knob that makes
+    it. `c.hides_with_cover`'s docstring records the same fact from the
+    other side, where it is load-bearing for a *different* card:
+    `cf:rogue-scoundrel-f1s2` prints *"except for cover provided by
+    intervening allies"* and gets that for free. This row wants the
+    opposite and `p14213` is the second claimant. #1331.
+    """
+    c.hides_with_cover(until=When.EONT)
 
 
 # -- r53 --------------------------------------------------------------------
