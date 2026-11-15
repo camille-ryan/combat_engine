@@ -1643,10 +1643,22 @@ def _as_objective(raw: Any, where: str,
     elif hp and kind not in THING_KINDS:
         problems.append(f"{where}: objective {kind!r} takes no hp")
         hp = 0
+    # **What the thing weighs, validated exactly as `hp` is.** Camille's
+    # ruling on `#1308` is that the scene states it -- so a module may, and
+    # a module that gets it wrong hears about it here rather than fielding
+    # a crate of -5 pounds. `0` is not recorded and is the default.
+    weight = raw.get("weight", 0)
+    if not isinstance(weight, int) or weight < 0:
+        problems.append(f"{where}: objective weight must be a whole number")
+        weight = 0
+    elif weight and kind not in THING_KINDS:
+        problems.append(f"{where}: objective {kind!r} takes no weight")
+        weight = 0
     return Objective(
         kind=kind, foes=foes, share=float(share), rounds=rounds,
         position=position, leaks=leaks, harder=harder, easier=easier,
         says=str(raw.get("says", "")).strip(), thing=thing, hp=hp,
+        weight=weight,
     )
 
 

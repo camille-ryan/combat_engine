@@ -179,6 +179,28 @@ class Objective:
     #: For the four `THING_KINDS`: how many hit points the fielded thing
     #: has, or `0` for `HP_PER_LEVEL * party level`. A printed figure wins.
     hp: int = 0
+    #: What the fielded thing **weighs**, in pounds, or `0` for not
+    #: recorded. Camille's ruling on `#1308`, asked as three options and
+    #: answered **A**: *"whoever writes a scene says it."*
+    #:
+    #: No printed table gives the weight of a crate, and PHB p223 says so
+    #: outright -- *"you don't need to calculate the weight your character
+    #: is hauling around unless it's likely to matter."* So it is the
+    #: module's figure, exactly as `hp` above is, and the alternative
+    #: considered and declined was a size-keyed table **this repo would
+    #: have invented**.
+    #:
+    #: `0` is *unknown* and never weightless: `Target.liftable` and
+    #: `Target.max_weight` offer no object that has not been weighed, so a
+    #: module that states nothing changes nothing. Two rows read it --
+    #: *"an object that weighs 400 pounds or less"* and *"one object you
+    #: can lift"*, the latter being Strength x 20 by `query.lift_limit`.
+    #:
+    #: The `carry` objective is the scene where it bites: a ward you are
+    #: meant to pick up and a crate you cannot lift are different
+    #: encounters, and until a module says which, both read as the second.
+    #: `#1307`, `#1308`.
+    weight: int = 0
     #: For `hold`: how many enemies may reach the position before the party
     #: has failed. Defaults to the party's own size at fielding time, which is
     #: the figure the source uses and the only one that scales with the table.
@@ -694,7 +716,14 @@ def field_thing(world: World, objective: Objective | None,
     if not free:
         return 0
     hp = objective.hp or max(1, HP_PER_LEVEL * max(1, party_level))
+    # **`weight` has no fallback, and that asymmetry with `hp` is the
+    # ruling.** An unstated `hp` gets `HP_PER_LEVEL * level` because a
+    # thing with no hit points cannot be attacked at all; an unstated
+    # weight stays `0`, which reads as *not recorded* rather than
+    # weightless, so no row offers the object. Camille on `#1308`: the
+    # scene says it, and nothing invents it.
     return put(world, free[len(free) // 2], kind=objective.thing, hp=hp,
+               weight=objective.weight,
                fastened=False, ref=f"objective:{objective.kind}")
 
 

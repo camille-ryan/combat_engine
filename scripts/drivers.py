@@ -30751,6 +30751,29 @@ def what_a_creature_can_lift(out: Result) -> None:
         f"/{heavy_one in capped};"
         f" liftable has the 350lb: {middling in liftable}",
     )
+    # ------------------------------- and where a weight comes from at all
+    # **Camille's ruling on `#1308`, asked as three options and answered
+    # "A": the scene says it.** No printed table gives what a crate weighs
+    # and PHB p223 declines to -- so `Objective.weight` is the module's
+    # figure, exactly as `Objective.hp` is, and the declined alternative
+    # was a size-keyed table this repo would have invented.
+    from combat_engine.story.objective import Objective, field_thing
+
+    world3, _me3, _ = _board()
+    stated = field_thing(
+        world3, Objective(kind="carry", thing="object", hp=20, weight=80), 5)
+    silent = field_thing(
+        world3, Objective(kind="carry", thing="object", hp=20), 5)
+    out.that(
+        getattr(world3.get(stated, Scenery), "weight", -1) == 80
+        and getattr(world3.get(silent, Scenery), "weight", -1) == 0,
+        "a module's stated weight reaches the thing on the floor, and an"
+        " unstated one stays 0 -- which is NOT RECORDED and gets no"
+        " fallback, unlike hp, because nothing may invent it",
+        f"stated {getattr(world3.get(stated, Scenery), 'weight', None)},"
+        f" unstated {getattr(world3.get(silent, Scenery), 'weight', None)}",
+    )
+
     out.that(
         unweighed not in liftable and unweighed not in capped,
         "while an UNWEIGHED object is offered by neither -- the arm that"
