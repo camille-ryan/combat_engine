@@ -32497,6 +32497,119 @@ def returning_to_the_square_you_left(out: Result) -> None:
     )
 
 
+def a_build_option_narrows_its_class_line(out: Result) -> None:
+    """"You lose proficiency with chainmail and light shields."
+
+    `cf:warlord-marshal-f0`'s archer option, and the only row in the corpus
+    printing *"lose proficiency with"*. **A narrowing of the class grant,
+    not a subtraction from the total**, which is Camille's ruling on
+    `#1310`:
+
+        "warlord armor proficiency is maybe the wrong approach. For
+        example, if you take this optionn, then later take a feat to gain
+        that armor proficiency, the option doesn't *remove* it again. It
+        just modifies the armor proficiency granted by the class."
+
+    **The arm that carries the rule is the feat winning it back.** A
+    subtraction and a narrowing are *identical* for an archer with no
+    feats -- both give shield 0 -- so every arm about the loss passes
+    either way. Only a character who re-acquires the proficiency tells
+    them apart, and under a subtraction that character stays at 0, which no
+    printed line says.
+
+    No chainmail feat exists in the corpus, so the re-acquisition is posed
+    with the three shield feats, which is Camille's example one proficiency
+    over: `f162` opens a light shield, `f3601` and `f3779` a heavy one.
+    """
+    from combat_engine.chargen import Character, class_line, spawn
+    from combat_engine.engine import Bus, Grid, World
+    from combat_engine.engine.components import Build, Gear
+    from combat_engine.engine.rng import Rng
+
+    def deal(seed: int, feats: tuple[str, ...] = ()) -> tuple:
+        world = World(Grid(24, 16), Rng(seed), Bus())
+        eid = spawn(
+            world, Character(cls="warlord", level=1, feats=list(feats)),
+            (2, 2),
+        )
+        gear, build = world.get(eid, Gear), world.get(eid, Build)
+        took = sorted(
+            c for c in (build.choices if build else ())
+            if "marshal-f0" in c
+        )
+        return gear.armour, gear.shield, took
+
+    line = class_line("warlord")
+    out.that(
+        line.armour == "chain" and line.shield == 1,
+        "the warlord's printed line grants chainmail and a light shield,"
+        " which is what the option takes away and what every arm below is"
+        " measured against",
+        f"the printed line is {line.armour!r}, shield {line.shield}",
+    )
+
+    # ---- find a seed that draws each option, rather than assuming one
+    #
+    # **And the `plain` control must be a seed whose marshal actually
+    # CARRIES a shield.** Seed 0 draws `plain` and lands `('chain', 0)`:
+    # `_shield_for` refuses a shield to a character whose hands are full,
+    # which is a pre-existing rule about the weapon drawn and has nothing
+    # to do with this option. Taking the first `plain` seed therefore made
+    # the control read `shield 0` and reported a narrowing that had not
+    # happened.
+    archer = plain = None
+    for seed in range(40):
+        got = deal(seed)
+        if any("archer" in c for c in got[2]) and archer is None:
+            archer = (seed, got)
+        if (any("plain" in c for c in got[2]) and plain is None
+                and got[1] == 1):
+            plain = (seed, got)
+        if archer and plain:
+            break
+    if archer is None or plain is None:
+        out.skip("no seed in 0..39 drew an archer and a shield-carrying plain"
+                 " marshal")
+        return
+
+    out.that(
+        plain[1][0] == "chain" and plain[1][1] == 1,
+        "a marshal that did NOT take the option keeps chainmail and its"
+        " light shield -- `plain` leads the option list, so the fixed"
+        " answer leaves a marshal exactly as it was",
+        f"seed {plain[0]} gave {plain[1]}",
+    )
+    out.that(
+        archer[1][0] == "hide" and archer[1][1] == 0,
+        "and an ARCHER marshal wears hide and carries no shield."
+        ' `ClassLine.armour` is the HEAVIEST word rather than a set, so'
+        ' taking chainmail away is spelled as "hide" -- `trains_in` then'
+        " answers yes to cloth, leather and hide and no to chain",
+        f"seed {archer[0]} gave {archer[1]}",
+    )
+
+    # ---- the arm a subtraction cannot pass
+    seed = archer[0]
+    light = deal(seed, ("f162",))
+    heavy = deal(seed, ("f3601",))
+    out.that(
+        light[1] == 1 and heavy[1] == 2,
+        "and a feat taken LATER wins the shield back -- Camille's own"
+        " example, one proficiency over. This is the only arm that tells a"
+        " narrowing from a subtraction: both give shield 0 to an archer"
+        " with no feats, and a subtraction leaves this character at 0 too",
+        f"with f162: shield {light[1]} (wanted 1);"
+        f" with f3601: shield {heavy[1]} (wanted 2)",
+    )
+    out.that(
+        light[0] == "hide" and heavy[0] == "hide",
+        "while the armour stays hide, because a shield feat opens no"
+        " armour -- so the arm above is the shield half moving and not the"
+        " narrowing collapsing altogether",
+        f"armour with f162 {light[0]!r}, with f3601 {heavy[0]!r}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -89348,6 +89461,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "narrowed_line": (
+        a_build_option_narrows_its_class_line,
+        "a build option that narrows its own class grant",
     ),
     "reappear_vacated": (
         returning_to_the_square_you_left,

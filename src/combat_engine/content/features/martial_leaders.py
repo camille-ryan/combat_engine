@@ -871,10 +871,49 @@ def swordmage_aegis_shield_choice(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=MARTIAL,
-    dropped=("chargen.armor_proficiency()",),
 )
 def warlord_archer(c: Cast) -> None:
-    """The bow swap lands; the proficiency loss is the one clause left.
+    """The bow swap and the proficiency loss both land.
+
+    **"You lose proficiency with chainmail and light shields" is a
+    narrowing of the CLASS GRANT, not a subtraction from the total**, and
+    that distinction is Camille's. Asked directly, 2026-11-15:
+
+        "warlord armor proficiency is maybe the wrong approach. For
+        example, if you take this optionn, then later take a feat to gain
+        that armor proficiency, the option doesn't *remove* it again. It
+        just modifies the armor proficiency granted by the class."
+
+    So `chargen.NARROWS_LINE` rewrites the warlord's own `ClassLine` for a
+    character that drew this option -- `armour="chain"` becomes `"hide"`
+    and `shield=1` becomes `0` -- and `spawn` applies it **before**
+    `armour_opened` widens from feats. Both widenings are monotonic
+    (`_heaviest`, `max`), so a feat taken later simply wins and nothing has
+    to special-case the re-acquisition. Measured:
+
+        archer, no feat    hide, shield 0
+        archer + f162      hide, shield 1     the light-shield feat wins
+        archer + f3601     hide, shield 2     the heavy-shield feat wins
+        plain  + f162      chain, shield 1
+
+    The subtraction this replaced would have left all three archer rows at
+    `shield 0`, which no printed line says. The marker named that
+    subtraction, which is why it is gone rather than re-aimed. `#1310`.
+
+    **`armour="hide"` and not a list, because `ClassLine.armour` is the
+    HEAVIEST word rather than a set.** `trains_in` then answers yes to
+    cloth, leather and hide and no to chain, which is the printed sentence
+    -- so taking chainmail off a warlord is spelled as the next word down.
+
+    **One thing this does NOT reach, and it is ordering rather than
+    plumbing.** `meets`'s `armour_prof` atom still reads the unnarrowed
+    line, so an archer marshal can satisfy a feat prerequisite reading
+    *"proficient with chainmail"*. `spawn` chooses feats forty lines
+    **before** it draws build options, so when that atom runs the option
+    does not exist yet, and `Character` carries no options field. Fixing it
+    means drawing options before feats, which moves the draw for every
+    character in the game. Filed rather than smuggled in.
+
 
     **The gate was the hold and Camille settled it.** `#1296` asked whether
     the marshal's four leader-ish features are one choice of four or two

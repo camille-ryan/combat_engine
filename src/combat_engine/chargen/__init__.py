@@ -3796,6 +3796,18 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
         from combat_engine.armour import trains_in
 
         opened, _shield = armour_opened(list(powers))
+        # **Not narrowed by a build option here, and the reason is
+        # ORDERING rather than plumbing.** `#1310` asks that this atom read
+        # the narrowed line, and it cannot: `spawn` chooses feats at
+        # `feats = who.feats or feats_for(...)` and draws build options
+        # forty lines **later**, so when this runs the archer option does
+        # not exist yet. `Character` carries no options field either.
+        #
+        # The consequence, stated rather than hidden: an archer marshal can
+        # satisfy a feat prerequisite reading *"proficient with
+        # chainmail"*, which its own option says it is not. Fixing it means
+        # drawing options before feats, which moves the draw for every
+        # character in the game -- so it is filed and not smuggled in here.
         best = _heaviest(" ".join([who.line.armour or "", *sorted(opened)]))
         return trains_in(best, str(node["armour_prof"]).lower())
     # `ClassLine.shield` is already 0, 1 or 2 -- see `Gear.shield`, which
@@ -3808,6 +3820,7 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
         except (TypeError, ValueError):
             return False
         _opened, opened_shield = armour_opened(list(powers))
+        # Unnarrowed, for the reason the atom above gives at length.
         return max(int(getattr(who.line, "shield", 0) or 0),
                    opened_shield) >= want
     if "weapon_prof" in node:
@@ -4162,6 +4175,56 @@ def given_skills(cls: str, race: str = "") -> frozenset[str]:
 #: Only the one family so far, deliberately. #758 asks for the key and the
 #: dealer to prove themselves on one kind before the other twelve proxies
 #: are switched over, because each switch changes what a character does.
+#: **What a build option takes off its own class line**, keyed by the whole
+#: `option:<parent>:<value>` string and giving the `ClassLine` fields to
+#: rewrite.
+#:
+#: `cf:warlord-marshal-f0`'s archer option is the only entry and the only
+#: row in the corpus printing *"you lose proficiency with"* -- chainmail
+#: and light shields. The warlord's printed line is `armour="chain"`,
+#: `shield=1`, and `ClassLine.armour` is the **heaviest** word rather than
+#: a list, so taking chainmail away is `armour="hide"`: `trains_in` then
+#: answers yes to cloth, leather and hide and no to chain, which is the
+#: printed sentence.
+#:
+#: **A narrowing of the CLASS GRANT, not a subtraction from the total**, and
+#: that distinction is the whole of `#1310`. Camille, asked directly,
+#: 2026-11-15:
+#:
+#:     "warlord armor proficiency is maybe the wrong approach. For example,
+#:     if you take this optionn, then later take a feat to gain that armor
+#:     proficiency, the option doesn't *remove* it again. It just modifies
+#:     the armor proficiency granted by the class."
+#:
+#: So this is applied to `line` **before** `armour_opened` widens it, and a
+#: feat taken later simply wins -- `_heaviest` and `max` are both
+#: monotonic, so nothing has to special-case the re-acquisition. The
+#: subtraction this replaced would have left an archer who took a chainmail
+#: feat at level 4 *still* unable to wear chainmail, which no printed line
+#: says.
+NARROWS_LINE: dict[str, dict[str, object]] = {
+    "option:cf:warlord-marshal-f0:archer": {"armour": "hide", "shield": 0},
+}
+
+
+def narrowed_line(line: ClassLine, took_options: Iterable[str]) -> ClassLine:
+    """The class line as this character's build options leave it. `#1310`.
+
+    Applied where `line` is read and **before** any feat widens it, which
+    is what makes a later feat granting the same proficiency win: both
+    widenings are monotonic (`_heaviest`, `max`), so a narrowed grant plus
+    a feat's grant is the feat's.
+
+    Returns the line unchanged when no option narrows it, which is every
+    character but a marshal who drew `"archer"` -- so this costs one dict
+    lookup per option held and changes nothing for anybody else.
+    """
+    fields: dict[str, object] = {}
+    for opt in sorted(took_options):
+        fields.update(NARROWS_LINE.get(opt, {}))
+    return replace(line, **fields) if fields else line
+
+
 BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # **The marshal's two independent choices, on Camille's ruling.** Asked
     # on `#1296` -- three options, of which A was "two separate choices: one
@@ -7374,6 +7437,10 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # nothing read it. The shield goes through `_shield_for` on a widened
     # line rather than past it, so a feat cannot hand a shield to a
     # character whose hands are full -- that rule stays in one place.
+    # **Narrowed first, widened after**, which is `#1310`'s whole content:
+    # a build option rewrites the class's own grant and a feat then widens
+    # from there, so a later feat granting the proficiency back wins.
+    line = narrowed_line(line, took_options)
     opened_armour, opened_shield = armour_opened([*feats, *waived])
     carried_shield = _shield_for(
         replace(line, shield=max(line.shield, opened_shield)), carried
