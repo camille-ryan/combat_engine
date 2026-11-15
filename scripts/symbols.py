@@ -140,6 +140,12 @@ CATEGORIES: dict[str, dict] = {
                 "charge", "charge_at", "charge_through", "dismount",
                 "flee", "hover", "jump", "move", "moving_as", "overrun",
                 "ride", "rise", "run_at", "running_start", "shift",
+                # Beside `teleport` because both put a creature in a
+                # square it is not next to, and apart from it because
+                # this one is a RETURN: it reads a square remembered
+                # across a removal from play, and falls back to the
+                # nearest unoccupied one. #1322.
+                "reappear",
                 "shift_as", "teleport", "teleport_as", "walk_toward",
             ]),
             ("forced -- somebody else moves it", [

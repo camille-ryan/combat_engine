@@ -1201,7 +1201,6 @@ def _beside_wood(world: World, eid: int) -> bool:
     keywords=[Keyword.HEALING],
     requires=_beside_wood,
     requires_text="you must be adjacent to a Medium or larger wooden thing",
-    dropped=("c.reappear(at=)",),
 )
 def p15831(c: Cast) -> None:
     """The Requirement is asked; coming back where you left is not.
@@ -1219,15 +1218,70 @@ def p15831(c: Cast) -> None:
     too. Filed separately. The reader is correct and the board will answer
     it the day a scene puts a tree in the room.
 
-    Still dropped: *"at the start of your next turn you return to play in
-    the space you vacated"*. `Condition.REMOVED` takes the creature off and
-    puts it back, but nowhere does it remember the square, and the printed
-    third option -- appearing beside a wooden thing within 20 squares of the
-    starting position -- is a choice made on returning rather than a
-    destination computed now. `#1322`.
+    **All three printed destinations land, and the division of labour is
+    the point.** *"You return to play in the space you vacated or the
+    nearest unoccupied space. Alternatively, you appear in an unoccupied
+    space adjacent to a tree or a wooden object within 20 squares of your
+    starting position."*
+
+    `c.reappear(at=)` owns the first two: the remembered square, and the
+    nearest unoccupied one when something has walked into it. The **third
+    is a different anchor rather than a different fallback**, so it is this
+    row's business -- the candidates are computed here, offered to the
+    decider, and whichever comes back is handed to the same verb. `#1322`
+    asked which side of the seam it belonged on; a verb that knew about
+    wooden objects would be a verb about one card.
+
+    **The square is read when the hold is laid**, which is the whole gap
+    `#1322` names: every return already written reappears *relative to
+    another creature* -- `m412a2`'s swallowed victim goes beside its
+    swallower -- and a position readable at the time needs nothing
+    remembered.
+
+    **"Within 20 squares of your starting position" bounds the search as
+    well as the candidates.** Passed to `c.reappear(within=, of=)`, so a
+    chosen square that something occupies falls back to a square that is
+    still inside the printed radius rather than to the nearest one
+    anywhere.
+
+    Hung on the hold's `on_end`, which is `m412a2`'s pattern and the reason
+    the verb does not lift the removal itself: the condition comes off when
+    its own hold ends, and a verb that ended it would have to be told
+    which hold.
     """
     c.surge(on=c.me)
-    c.condition(Condition.REMOVED, until=When.SONT, on=c.me)
+    vacated = c.world.need(c.me, Position).square
+    hold = c.condition(Condition.REMOVED, until=When.SONT, on=c.me)
+    if hold is None:
+        return
+
+    def back() -> None:
+        # The third printed option: an unoccupied square beside a wooden
+        # thing, within 20 of where it left. Offered, because the card says
+        # "alternatively" -- this is the returning creature's choice and
+        # not a fallback the verb could make.
+        from combat_engine.engine.grid import spread
+        from combat_engine.engine.query import scenery, squares
+
+        anchors = scenery(c.world, within=20, of=c.me, material="wood")
+        beside = sorted(
+            {
+                sq
+                for anchor in anchors
+                for sq in spread(squares(c.world, anchor), 1)
+                if c.world.grid.occupant(sq) is None
+            }
+        )
+        where = vacated
+        if beside:
+            picked = c.choose(
+                [vacated, *beside], f"{c.ref}: where you step back out"
+            )
+            if picked is not None:
+                where = picked
+        c.reappear(where, within=20, of=vacated)
+
+    hold.on_end.append(back)
 
 
 @power(

@@ -32322,6 +32322,153 @@ def a_wooden_thing_beside_you(out: Result) -> None:
     )
 
 
+def returning_to_the_square_you_left(out: Result) -> None:
+    """"You return to play in the space you vacated or the nearest unoccupied
+    space."
+
+    Every return already written reappears **relative to another creature**
+    -- `m412a2`'s swallowed victim goes beside its swallower through
+    `_put_beside` -- and a position readable at the time needs nothing
+    remembered. This card names the **vacated** square, which has to be
+    carried across the removal, and then fallen back from.
+
+    `c.reappear(at=)` is that: the square, the nearest-unoccupied fallback,
+    and a `within`/`of` bound for the third printed option's twenty
+    squares. The **choice** between the printed options stays the row's, so
+    `p15831` computes its wooden-anchor candidates, offers them, and hands
+    back one square.
+
+    **The fallback is asserted through the verb and not through the row,
+    and that is a finding rather than a shortcut.** `Condition.REMOVED`
+    does not free the creature's square -- measured: it stays
+    `grid.occupant`, stays targetable, stays a combatant -- so nothing can
+    walk into the vacated square while the creature is away and the row
+    cannot reach its own printed fallback. `#1329`. The verb's fallback is
+    correct and reachable; the row's path to it is blocked one layer down.
+    """
+    from combat_engine.content import terrain
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.types import Condition
+
+    def pose():  # noqa: ANN202
+        world, me, _ = _board("p15831")
+        here = world.need(me, Position).square
+        terrain.put(world, (here[0] + 1, here[1]), kind="door",
+                    material="wood")
+        return world, me, here
+
+    # ---- the verb: an exact return
+    world, me, here = pose()
+    away = (here[0] + 3, here[1] + 3)
+    movement.place(world, me, away)
+    cast = Cast(world=world, me=me, ref="drivers:reappear")
+    out.that(
+        cast.reappear(here) and world.need(me, Position).square == here,
+        "c.reappear puts the creature in the square it was handed -- the"
+        " vacated one, which is the half nothing could do: every return"
+        " already written reappears relative to another CREATURE, whose"
+        " position is readable at the time and needs no remembering",
+        f"asked for {here}, arrived at {world.need(me, Position).square}",
+    )
+
+    # ---- the verb: the nearest unoccupied square when it is taken
+    world, me, here = pose()
+    foe = sorted(enemies(world, me))[0]
+    movement.place(world, me, (here[0] + 3, here[1] + 3))
+    movement.place(world, foe, here)
+    cast = Cast(world=world, me=me, ref="drivers:reappear")
+    arrived = cast.reappear(here)
+    landed = world.need(me, Position).square
+    out.that(
+        arrived and landed != here,
+        "and when something has walked into that square it takes the"
+        " NEAREST unoccupied one instead -- the printed fallback, which is"
+        " in the card precisely because the square may be taken",
+        f"vacated {here} is held by {world.grid.occupant(here)};"
+        f" it arrived at {landed}",
+    )
+    out.that(
+        arrived and max(abs(landed[0] - here[0]), abs(landed[1] - here[1])) == 1,
+        "and NEAREST means nearest to the vacated square -- one ring out,"
+        " not nearest to wherever the creature happened to be, which is"
+        " nowhere",
+        f"it landed {max(abs(landed[0] - here[0]), abs(landed[1] - here[1]))}"
+        f" squares from {here}",
+    )
+
+    # ---- the bound, which is the third printed option's twenty squares
+    world, me, here = pose()
+    movement.place(world, me, (here[0] + 3, here[1] + 3))
+    cast = Cast(world=world, me=me, ref="drivers:reappear")
+    far = (here[0] + 1, here[1])          # the door's square, occupied
+    out.that(
+        cast.reappear(far, within=0, of=here) is True,
+        "a bounded return still works when the square is inside the bound",
+        "a return inside its own bound was refused",
+    )
+    world, me, here = pose()
+    movement.place(world, me, (here[0] + 3, here[1] + 3))
+    cast = Cast(world=world, me=me, ref="drivers:reappear")
+    out.that(
+        cast.reappear((here[0] + 9, here[1]), within=2, of=here) is True
+        and max(
+            abs(world.need(me, Position).square[0] - here[0]),
+            abs(world.need(me, Position).square[1] - here[1]),
+        ) <= 2,
+        "and `within`/`of` bounds the FALLBACK as well as the target, so a"
+        ' square outside "within 20 squares of your starting position"'
+        " falls back to one that is still inside it rather than to the"
+        " nearest square anywhere",
+        f"bounded to 2 of {here}, arrived at"
+        f" {world.need(me, Position).square}",
+    )
+
+    # ---- and the row drives it off the hold's ending
+    world, me, here = pose()
+    out.that(
+        use(world, me, "p15831"),
+        "p15831 can be used with a wooden door beside it",
+        "p15831 refused itself",
+    )
+    out.that(
+        is_(world, me, Condition.REMOVED),
+        "and it is removed from play",
+        "the creature was not removed",
+    )
+    # **Moved away by hand first, and that is what makes this arm bite.**
+    # A plant deleting the row's `hold.on_end.append(back)` stayed green
+    # without it: `Condition.REMOVED` does not free the creature's square
+    # (#1329), so it is still standing in `here` the whole time it is
+    # "away" and "it came back to the square it left" is true whether or
+    # not anything put it there. Displacing it isolates the row's own
+    # return.
+    stashed = (here[0] + 4, here[1] + 4)
+    movement.place(world, me, stashed)
+    out.that(
+        world.need(me, Position).square == stashed,
+        "the removed creature is displaced by hand, so the arm below"
+        " measures the row's return rather than a square that never"
+        " changed -- see #1329",
+        f"could not displace it; still at {world.need(me, Position).square}",
+    )
+    for hold in list(world.effects.of(me)):
+        if Condition.REMOVED in hold.conditions:
+            world.effects.end(hold, "drivers: the start of its next turn")
+    out.that(
+        not is_(world, me, Condition.REMOVED)
+        and world.need(me, Position).square == here,
+        "and when the hold ends it is back, in the square it left -- hung"
+        " on `on_end`, which is `m412a2`'s pattern and the reason the verb"
+        " does not lift the removal itself",
+        f"removed: {is_(world, me, Condition.REMOVED)};"
+        f" at {world.need(me, Position).square} against {here}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -89173,6 +89320,11 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "reappear_vacated": (
+        returning_to_the_square_you_left,
+        "a return to a remembered square, and its nearest-unoccupied"
+        " fallback",
     ),
     "wooden_thing": (
         a_wooden_thing_beside_you,

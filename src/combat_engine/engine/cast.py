@@ -9368,6 +9368,96 @@ class Cast:
             until=until, kind="untyped", when=when,
         )
 
+    def reappear(
+        self,
+        at: Square,
+        *,
+        who: int | None = None,
+        within: int = 0,
+        of: Square | None = None,
+    ) -> bool:
+        """Put a removed creature back **in a square it is not standing in**.
+
+        *"At the start of your next turn, you return to play in the space
+        you vacated or the nearest unoccupied space."* The square has to be
+        remembered across the removal, which is what makes this different
+        from every return already written: `m412a2` and `m6109a3` both
+        reappear **relative to another creature** -- `_put_beside` reads the
+        swallower's footprint -- and a position readable at the time needs
+        nothing remembered.
+
+        **The fallback is the printed sentence, not a convenience.** "Or the
+        nearest unoccupied space" is in the card because something may have
+        walked into the square while the creature was away, so an exact
+        return that silently failed would drop half the line. Nearest is by
+        `distance` from `at`, ties broken by sort order, and the whole
+        footprint has to fit -- a Large creature offered a square a Medium
+        one fits in simply does not arrive, which is `_put_beside`'s own
+        recorded lesson.
+
+        `within` and `of` are the **third** printed option's bound --
+        *"within 20 squares of your starting position"* -- and they bound
+        the fallback search as well as the target square. Without them the
+        search is the whole board.
+
+        **It does not lift the removal**, and that is the division of
+        labour: `Condition.REMOVED` comes off when its hold ends, and this
+        is called *from* that hold's `on_end`, which is the pattern
+        `m412a2` established. A verb that ended the condition itself would
+        have to be told which hold.
+
+        **The CHOICE between the printed options is the row's**, not this
+        verb's. `p15831` prints three -- the vacated square, the nearest
+        unoccupied one, and *"an unoccupied space adjacent to a tree or a
+        wooden object within 20 squares of your starting position"* -- and
+        the third is a different **anchor**, not a different fallback: the
+        row computes its candidates and hands them to the decider, then
+        calls this with the square that came back. `#1322` asked whether
+        that third option belonged in this verb; it does not, because a
+        verb that knew about wooden objects would be a verb about one card.
+
+        Returns whether the creature arrived.
+        """
+        from .grid import footprint
+        from .movement import place
+
+        subject = self._who(who) if who is not None else self.me
+        if subject is None:
+            return False
+        here = self.world.get(subject, Position)
+        size = here.size if here is not None else Size.MEDIUM
+
+        def fits(square: Square) -> bool:
+            return all(
+                self.world.grid.passable(part)
+                and self.world.grid.occupant(part) in (None, subject)
+                for part in footprint(square, size)
+            )
+
+        def bounded(square: Square) -> bool:
+            return not within or of is None or _distance(square, of) <= within
+
+        if bounded(at) and fits(at):
+            place(self.world, subject, at)
+            return True
+        # **Rings outward from the vacated square**, which is what
+        # "nearest" measures from -- not from the creature, which is
+        # nowhere. Expanding rather than scanning the whole board and
+        # sorting: the first ring holding anything holds the answer, and
+        # `movement.settle`'s landing search is written the same way for
+        # the same reason.
+        reach = max(self.world.grid.width, self.world.grid.height)
+        for radius in range(1, reach + 1):
+            ring = sorted(
+                sq
+                for sq in spread({at}, radius)
+                if _distance(sq, at) == radius and fits(sq) and bounded(sq)
+            )
+            if ring:
+                place(self.world, subject, ring[0])
+                return True
+        return False
+
     def cannot_mark(
         self,
         *,

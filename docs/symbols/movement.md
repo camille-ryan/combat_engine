@@ -27,6 +27,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Is this creature moving that way **right now**?
 - `c.overrun(self, to: 'Square | None' = None) -> 'list[int]'`
   - Trample: walk through whoever is in the way, and say who that was.
+- `c.reappear(self, at: 'Square', *, who: 'int | None' = None, within: 'int' = 0, of: 'Square | None' = None) -> 'bool'`
+  - Put a removed creature back **in a square it is not standing in**.
 - `c.ride(self, *, on: 'int | None' = None) -> 'bool'`
   - Get on. The mount carries you when it moves.
 - `c.rise(self, squares_: 'int', *, on: 'int | None' = None) -> 'int'`
