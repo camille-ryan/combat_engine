@@ -31519,6 +31519,374 @@ def alternatives_name_a_side(out: Result) -> None:
     )
 
 
+def where_a_move_is_going(out: Result) -> None:
+    """"An enemy flanked by you moves OUT OF the flanked position."
+
+    `MoveStart` said who was moving and how, never where to -- so a row
+    triggered on a move could not ask the one question this card is about.
+    *"Moves out of the flanked position"* is not *"moves"*: a flanked enemy
+    shuffling one square while still flanked must not fire an at-will
+    reaction that hands out combat advantage, and that distinction **is** the
+    trigger rather than a refinement of it.
+
+    **The shuffle is the arm that matters** and it is the one a
+    positive-only check cannot see: before `#1323` the row fired on every
+    move by a flanked enemy, so an assertion that it fires when the flank
+    breaks passed perfectly well against the broken version.
+
+    Why the obvious cheaper readings are not it, each checked rather than
+    asserted:
+
+    * `MoveEnd` gives the destination and fires **after** the move, where the
+      printed trigger is an immediate reaction that interrupts.
+    * comparing positions inside the handler reads the square the creature
+      has not left.
+    * `query.flanked_by` after the fact cannot tell a move that broke the
+      flank from one that never had it -- the flank is gone either way.
+
+    `#1323` settled one design question, and the emit sites settled it rather
+    than a judgement: `MoveStart` fires **once per move action** -- `walk`,
+    `shift`, `teleport` and the landing in `settle` -- and not in `step`,
+    which runs per square. So `to` is the end of the move, and an enemy
+    walking *around* a flanker cannot fire this mid-path.
+    """
+    from combat_engine.engine import movement
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import get, use
+    from combat_engine.engine.events import MoveEnd, MoveStart
+    from combat_engine.engine.query import allies, enemies, flanked_by
+    from combat_engine.engine.query import creatures as query_creatures
+
+    world, me, _ = _board("p14393")
+    mates = [a for a in sorted(allies(world, me)) if a != me]
+    foes = sorted(enemies(world, me))
+    if len(mates) < 2 or not foes:
+        out.skip("p14393 wants TWO allies and an enemy -- see the shuffle arm")
+        return
+
+    # **Two allies, on two different flanking lines, and that is what makes
+    # the negative arm posable at all.** A pair of Medium flankers flanks
+    # exactly ONE square -- measured, by scanning a 7x7 block around the
+    # foe and finding no second square -- so with one ally there is no
+    # "shuffles and stays flanked" move to test, and the arm would have to
+    # fall back to "moves to the square it already occupies", which is a
+    # degenerate case the broken version also passes.
+    #
+    # Me west of the foe, ally A east of it: that flanks (fx, fy). Ally B
+    # two squares north-east: the line from me through (fx, fy+1) comes out
+    # at (fx+1, fy+2), so me and B flank THAT square. The foe can then step
+    # from (fx, fy) to (fx, fy+1) and still be flanked by me.
+    foe, mate, second = foes[0], mates[0], mates[1]
+    fx, fy = world.need(foe, Position).square
+    movement.place(world, me, (fx - 1, fy))
+    movement.place(world, mate, (fx + 1, fy))
+    movement.place(world, second, (fx + 1, fy + 2))
+    out.that(
+        flanked_by(world, foe, me),
+        "the board poses a real flank -- me on one side, an ally on the"
+        " other, which every arm below is measured against",
+        "the hand-built flank is not a flank",
+    )
+
+    # ---- the question the event could not answer
+    out.that(
+        MoveStart(actor=foe, kind_="walk", to=(fx, fy + 3)).to == (fx, fy + 3),
+        "MoveStart carries where the move ends, which is the field this"
+        " whole rule is about -- it held the mover and the kind of move and"
+        " nothing else",
+        "MoveStart.to did not survive construction",
+    )
+
+    # ---- flanked HERE, not flanked THERE -- and the reverse
+    out.that(
+        not flanked_by(world, foe, me, at=(fx, fy + 3)),
+        "query.flanked_by(at=) answers about a square the creature is not"
+        " standing in yet, which is the only way to tell a move that breaks"
+        " the flank from one that does not -- by MoveEnd the flank is gone"
+        " either way",
+        "the flank survived a three-square move out of it",
+    )
+    out.that(
+        flanked_by(world, foe, me, at=(fx, fy)),
+        "and it still says yes about the square the creature IS in, so the"
+        " override is the target's space and not a different question",
+        "at= disagrees with the live read on the same square",
+    )
+    out.that(
+        flanked_by(world, foe, me, at=(fx, fy + 1)),
+        "and yes about the SHUFFLE square, which is what makes the negative"
+        " arm below a real test rather than a degenerate one -- a second"
+        " ally on a second flanking line is why such a square exists",
+        "the shuffle square is not flanked, so the next arm proves nothing",
+    )
+
+    # ---- the trigger: fires on a move out, not on a shuffle inside
+    row = get("p14393")
+    pred = row.on.when
+    out.that(
+        pred(world, me, MoveStart(actor=foe, kind_="walk", to=(fx, fy + 3))),
+        "so the trigger fires when the flanked enemy's move leaves the"
+        " flank",
+        "a move clean out of the flank did not fire the trigger",
+    )
+    out.that(
+        not pred(world, me, MoveStart(actor=foe, kind_="walk", to=(fx, fy + 1))),
+        "and does NOT fire for a move that keeps it flanked -- the arm the"
+        " broken version passed, because it fired on every move a flanked"
+        " enemy made",
+        "a move that kept the flank still fired the trigger",
+    )
+    out.that(
+        not pred(world, me, MoveStart(actor=foe, kind_="walk", to=None)),
+        "and does not fire on an unknowable destination: forced movement"
+        " goes through ForcedMove rather than these four sites, so None is"
+        ' "not knowable" and the printed trigger cannot be shown to be met',
+        "a destination-less move fired the trigger",
+    )
+    # **An enemy that was never flanked, moving to an unflanked square.**
+    # The arm exists because a plant *keeping* the destination test and
+    # dropping the "flanked by me now" one stayed green: with the foe
+    # flanked where it stands, `not flanked_by(at=to)` alone gives the same
+    # answer for every destination the other arms try. The printed trigger
+    # is "an enemy FLANKED BY YOU moves out of the flanked position", so a
+    # loose enemy wandering is not it -- and only this arm can tell.
+    loose = [f for f in foes if not flanked_by(world, f, me)]
+    if not loose:
+        out.skip("every enemy on p14393's board is flanked, so a loose one"
+                 " cannot be posed")
+    else:
+        out.that(
+            not pred(
+                world, me,
+                MoveStart(actor=loose[0], kind_="walk", to=(fx + 4, fy + 4)),
+            ),
+            "and an enemy that was NOT flanked moving to a square it is"
+            " also not flanked in does not fire it either -- both halves of"
+            ' "flanked by you MOVES OUT OF the flanked position" are read,'
+            " and a plant dropping the first one passed every other arm",
+            "a never-flanked enemy's move fired the trigger",
+        )
+
+    # ---- and the row pays out, through the trigger rather than beside it
+    leaving = MoveStart(actor=foe, kind_="walk", to=(fx, fy + 3))
+
+    def laid() -> list[str]:
+        return [
+            str(e.label)
+            for who in (foe, mate, second, me)
+            for e in world.effects.of(who)
+            if not e.ended and getattr(e, "by", "") == "p14393"
+        ]
+
+    before = laid()
+    out.that(
+        use(world, me, "p14393", trigger=leaving),
+        "and the row resolves when handed that trigger -- `trigger=` and"
+        " not a bare use, because the body reads `c.trigger.actor` to find"
+        " which enemy left the flank",
+        "p14393 refused itself",
+    )
+    # **Asserted on the effect this row laid, not on `has_combat_advantage`.**
+    # The first draft read the aggregate and it came out True **before** the
+    # row ran: the ally is flanking, and flanking grants combat advantage
+    # already, so the board pre-set the number being measured and the arm
+    # could not have failed. The row's own hold is the only observable that
+    # distinguishes it.
+    out.that(
+        not before and laid(),
+        "and an ally who was ALSO flanking is granted combat advantage"
+        " against that enemy -- read at the OLD position, which is what the"
+        " past tense says: at the destination there is no flank left to have"
+        " been part of",
+        f"effects laid by p14393: before={before}, after={laid()}",
+    )
+
+    # ---- the field as the EMITTERS fill it, not as a test constructs it
+    # Every arm above builds a `MoveStart` by hand, so a plant blanking
+    # `to` at the emit site stayed green: the rule tested the predicate and
+    # never the announcement. This walks for real and reads what the bus
+    # carried.
+    world5, me5, _ = _board("p14393")
+    start5 = world5.need(me5, Position).square
+    busy = {
+        sq
+        for other in query_creatures(world5)
+        if other != me5
+        for sq in (
+            world5.get(other, Position).squares
+            if world5.get(other, Position) is not None else ()
+        )
+    }
+    legs = [
+        (start5[0] + dx, start5[1] + dy)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+        if (start5[0] + dx, start5[1] + dy) not in busy
+        and world5.grid.inside((start5[0] + dx, start5[1] + dy))
+    ]
+    if not legs:
+        out.skip("nowhere clear beside p14393's caster to walk for real")
+    else:
+        announced: list[object] = []
+        world5.bus.on(MoveStart, lambda ev: announced.append(ev.to))
+        movement.walk(world5, me5, [legs[0]])
+        out.that(
+            announced and announced[0] == legs[0],
+            "and `movement.walk` ANNOUNCES that destination -- read off the"
+            " bus rather than from a hand-built event, because every arm"
+            " above constructs its own MoveStart and a plant blanking `to`"
+            " at the emit site passed all of them",
+            f"walked to {legs[0]}, announced {announced}",
+        )
+
+    # ---- the second claimant on the same field
+    # **A CLEAR two-square path, found rather than assumed, and that is
+    # the arm.** Its first draft shifted two squares east and read
+    # `shift() is False` as the refusal -- but the square east of this
+    # carrier is occupied, so the shift failed on its own and a plant
+    # deleting the `ev.cancel` stayed green. A False return only means
+    # "refused" when the move would otherwise have worked, which is what
+    # the control board below establishes.
+    world2, me2, _ = _board("i2654x1")
+    here = world2.need(me2, Position).square
+    held = {
+        sq
+        for other in query_creatures(world2)
+        if other != me2
+        for sq in (
+            world2.get(other, Position).squares
+            if world2.get(other, Position) is not None else ()
+        )
+    }
+    # **The control is built by TAKING THE TRAIT OFF, which is the only
+    # way to have one.** Two cheaper controls were tried and neither
+    # exists:
+    #
+    # * `_board("i2654x1")` **pre-installs the trait** -- the board carries
+    #   an `i2654x1 trigger` hold before anything in this rule runs -- so
+    #   every shift on it is already converted. The first draft read that
+    #   as its own doing.
+    # * posing it on another board fails the other way: `use` returns False
+    #   on `p14393`'s board, because the carrier there does not hold the
+    #   item.
+    #
+    # So the hold is ended to get a before, and `use` puts it back. And the
+    # destination is **one** square, found by making the move: a two-square
+    # lane with neither square held by a creature still failed on its
+    # second step, because `held` knows about creatures and not about
+    # whatever else blocks a square.
+    world2, me2, _ = _board("i2654x1")
+    here = world2.need(me2, Position).square
+    held = {
+        sq
+        for other in query_creatures(world2)
+        if other != me2
+        for sq in (
+            world2.get(other, Position).squares
+            if world2.get(other, Position) is not None else ()
+        )
+    }
+    for hold in list(world2.effects.of(me2)):
+        if not hold.ended and str(hold.label).startswith("i2654x1"):
+            world2.effects.end(hold, "drivers: the control")
+    reach = next(
+        (
+            sq
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            for sq in [(here[0] + dx, here[1] + dy)]
+            if sq not in held and world2.grid.inside(sq)
+        ),
+        None,
+    )
+    if reach is None:
+        out.skip("nowhere beside i2654x1's carrier to shift to")
+    else:
+        plain = movement.shift(world2, me2, reach)
+        out.that(
+            plain is True and world2.need(me2, Position).square == reach,
+            f"with the trait taken OFF, a plain shift to {reach} succeeds --"
+            " which is what makes the False return below mean REFUSED"
+            " rather than blocked, and a plant deleting the `ev.cancel`"
+            " passed until this control existed",
+            f"the control shift returned {plain}",
+        )
+        world6, me6, _ = _board("i2654x1")
+        out.that(
+            use(world6, me6, "i2654x1"),
+            "and the trait installs when used",
+            "i2654x1 refused itself",
+        )
+        # **The discriminator is whether a shift ever COMPLETES, not what
+        # `shift` returns.** A plant deleting the `ev.cancel` kept the
+        # return False: the handler teleports first, so by the time
+        # `movement.shift` walks its route the creature is no longer beside
+        # the destination and the step fails on its own. `MoveEnd` is the
+        # honest reader -- `shift` returns before emitting it when the move
+        # is refused, so its absence is the refusal and its presence is a
+        # shift that happened anyway.
+        done: list[str] = []
+        world6.bus.on(MoveEnd, lambda ev: done.append(ev.kind_))
+        shifted = movement.shift(world6, me6, reach)
+        at = world6.need(me6, Position).square
+        out.that(
+            shifted is False and "shift" not in done,
+            "i2654x1 refuses the shift outright -- no shift completes, which"
+            " is what `ev.cancel` buys. `shift`'s own return value cannot"
+            " say this: with the cancel deleted it is still False, because"
+            " the teleport has already moved the creature away from the"
+            " destination and the step then fails by itself",
+            f"shift returned {shifted}; MoveEnd kinds seen: {done}",
+        )
+        out.that(
+            at != here,
+            "and the creature has moved anyway, which is the teleport"
+            ' paying out "the number of squares you would have shifted"',
+            f"it did not move from {here}",
+        )
+
+    # **The walk control needs a clear square, and finding one is the
+    # arm.** Its first draft walked two squares east and covered 0 -- with
+    # the trait and without it, because the square east of this creature is
+    # occupied. A control that reads the same either way cannot tell the
+    # two implementations apart, so the direction is searched for and the
+    # arm skips out loud if the board offers none.
+    world3, me3, _ = _board("i2654x1")
+    start3 = world3.need(me3, Position).square
+    taken = {
+        sq
+        for other in query_creatures(world3)
+        if other != me3
+        for sq in (
+            world3.get(other, Position).squares
+            if world3.get(other, Position) is not None else ()
+        )
+    }
+    step1 = next(
+        (
+            (start3[0] + dx, start3[1] + dy)
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            if (start3[0] + dx, start3[1] + dy) not in taken
+            and world3.grid.inside((start3[0] + dx, start3[1] + dy))
+        ),
+        None,
+    )
+    if step1 is None:
+        out.skip("every square beside i2654x1's carrier is occupied")
+    else:
+        control = movement.walk(world3, me3, [step1])
+        world4, me4, _ = _board("i2654x1")
+        use(world4, me4, "i2654x1")
+        walked = movement.walk(world4, me4, [step1])
+        out.that(
+            control > 0 and walked == control,
+            "while an ordinary WALK is untouched -- the card says 'whenever"
+            " you shift', and a trait reading `kind_` wrongly would convert"
+            " every move in the game. Measured against the same walk on a"
+            " board WITHOUT the trait, so a blocked square cannot pass as a"
+            " cancelled move",
+            f"without the trait: {control} squares; with it: {walked}",
+        )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -88370,6 +88738,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "move_destination": (
+        where_a_move_is_going,
+        "where a move is going, asked when it is announced",
     ),
     "alternatives_side": (
         alternatives_name_a_side,

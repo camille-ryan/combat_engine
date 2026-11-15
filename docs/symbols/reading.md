@@ -178,7 +178,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - A defence as the attacker sees it: base, level, modifiers, conditions.
 - `query.difficulty(level: 'int', band: 'str') -> 'int | None'`
   - The printed DC for a named difficulty at a level. `None` if unknown.
-- `query.flanked_by(world: 'World', target: 'int', attacker: 'int') -> 'bool'`
+- `query.flanked_by(world: 'World', target: 'int', attacker: 'int', *, at: 'Square | None' = None) -> 'bool'`
   - Is `target` flanked by `attacker` and one of its allies?
 - `query.flankers(world: 'World', eid: 'int') -> 'list[int]'`
   - Who may hold the other side of a creature for `eid`.

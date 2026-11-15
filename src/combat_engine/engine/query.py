@@ -35,7 +35,7 @@ from .components import (
     Weapon,
 )
 from .conditions import rules, rules_for
-from .grid import Square, between, linked_spread, spread
+from .grid import Square, between, footprint, linked_spread, spread
 from .types import (
     DEFENCES,
     Condition,
@@ -2124,21 +2124,70 @@ def _barred_from_flanking(world: World, eid: int) -> bool:
     return mods is not None and mods.items and mods.total("cannot_flank", {}) > 0
 
 
-def flanked_by(world: World, target: int, attacker: int) -> bool:
+def _near(world: World, eid: int, space: frozenset[Square]) -> bool:
+    """Is that creature next to this *space*, rather than to a creature?
+
+    `adjacent` takes two entities and reads both their positions, which
+    cannot answer "would it be adjacent to the square it is moving to".
+    Same body, including the link read -- a link makes two squares adjacent
+    for melee, and `flanked_by` is a melee question.
+    """
+    mine = squares(world, eid)
+    if spread(mine, 1) & space:
+        return True
+    return bool(
+        world.grid.links and linked_spread(world.grid.links, mine, 1) & space
+    )
+
+
+def flanked_by(
+    world: World, target: int, attacker: int, *, at: Square | None = None
+) -> bool:
     """Is `target` flanked by `attacker` and one of its allies?
 
     Both flankers must be able to attack -- a stunned ally standing in the
     right square is furniture, and the printed rule says so.
+
+    **`at` asks the question about a square the creature is not standing
+    in yet**, which is what *"an enemy flanked by you **moves out of the
+    flanked position**"* needs: the trigger fires on `MoveStart`, so the
+    enemy is still in its old square and the only way to tell a move that
+    breaks the flank from one that does not is to ask about the
+    destination. `p14393`.
+
+    It overrides the **target's** space and nothing else: the flankers are
+    where they are, and a move by the flanked creature is the only thing
+    the printed line is about. Both the adjacency test and `Grid.flanks`
+    read the overridden space, which they must -- answering adjacency from
+    the old square and the flank from the new one would be a third
+    position nobody is in.
+
+    Written here rather than in the row for the reason a hand-rolled read
+    always wants: `world.grid.flanks(a, b, space)` over two nested square
+    loops, plus `can_act` on both flankers and the `#1299` bar, is this
+    function's whole body -- a copy in a content file is a second answer
+    to one question, and `i2654x1` is already a second claimant on the
+    event this serves.
     """
-    if not adjacent(world, attacker, target) or not can_act(world, attacker):
+    if at is not None:
+        # The target's own size, so a Large creature's destination is the
+        # four squares it would occupy. `Position.size` rather than a
+        # `size_of` helper, which `dsl` has and this module does not --
+        # one reader, written where it is read.
+        there = world.get(target, Position)
+        space = footprint(at, there.size) if there is not None else frozenset()
+    else:
+        space = squares(world, target)
+    if not _near(world, attacker, space) or not can_act(world, attacker):
         return False
     # The near side of the same clause. `flankers` drops a barred ally out
     # of the partner list; this is the barred creature's own swing. #1299.
     if _barred_from_flanking(world, attacker):
         return False
-    space = squares(world, target)
     for mate in flankers(world, attacker):
-        if mate == target or not can_act(world, mate) or not adjacent(world, mate, target):
+        if mate == target or not can_act(world, mate) or not _near(
+            world, mate, space
+        ):
             continue
         for a in squares(world, attacker):
             for b in squares(world, mate):

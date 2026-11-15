@@ -134,12 +134,30 @@ def _dominated_me(world: World, me: int, ev: RelationSet) -> bool:
 
 
 def _leaving_my_flank(world: World, me: int, ev: MoveStart) -> bool:
-    """An enemy I am flanking starts to move."""
+    """An enemy I am flanking moves **out of the flanked position**.
+
+    Three questions, and the third is the one that was unaskable. It is
+    flanked by me *now*, which is only readable in this window -- by
+    `MoveEnd` the flank is gone whether the move broke it or never had it --
+    and it will **not** be flanked by me where it is going.
+
+    `ev.to` is the move's destination, not its next square: `MoveStart` is
+    emitted once per move action, so an enemy walking *around* the flanker
+    does not fire this mid-path. `#1323`.
+
+    **`to=None` does not fire.** Forced movement comes through `ForcedMove`
+    rather than the four sites that emit this, so an absent destination is
+    "not knowable" and the printed trigger cannot be shown to be met.
+    """
     from combat_engine.engine.query import flanked_by, team
 
     if ev.actor == me or team(world, ev.actor) is team(world, me):
         return False
-    return flanked_by(world, ev.actor, me)
+    if ev.to is None:
+        return False
+    return flanked_by(world, ev.actor, me) and not flanked_by(
+        world, ev.actor, me, at=ev.to
+    )
 
 
 def _walks_within_3(world: World, me: int, ev: MoveStart) -> bool:
@@ -384,19 +402,37 @@ def p16042(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="an enemy flanked by you moves out of the flanked position",
-    on=Trigger(MoveStart, _leaving_my_flank, "an enemy you flank moves"),
-    dropped=("MoveStart.to",),
+    on=Trigger(
+        MoveStart, _leaving_my_flank,
+        "an enemy you flank moves out of the flanked position",
+    ),
 )
 def p14393(c: Cast) -> None:
     """`MoveStart` is the only window where the flank still exists to read,
-    and `query.flanked_by` is what reads it -- the marker this replaces
+    and `query.flanked_by` is what reads it -- the marker this once carried
     named a function that has never existed while that one always has, so
     "an ally who was **also** flanking" was approximated as "any adjacent
     ally" for nothing.
 
-    What is still not askable is whether the move *leaves* the flank:
-    `MoveStart` carries the mover and the kind of move and not where it is
-    going, so the row fires whenever a flanked enemy moves."""
+    **"Out of the flanked position" lands now**, and it is the whole
+    trigger rather than a refinement of it: a flanked enemy shuffling one
+    square while still flanked used to fire this, which is an at-will
+    reaction handing out combat advantage for a move that cost the flankers
+    nothing. `MoveStart` carried the mover and the kind of move and not
+    where it was going; `#1323` added the destination and
+    `query.flanked_by(at=)` asks the flank question about it.
+
+    The two reads are deliberately both here -- flanked now, not flanked
+    there -- because either alone is a different printed line. "An enemy
+    flanked by you moves" is the first; "an enemy moves into a position you
+    do not flank" is the second and is nobody's card.
+
+    **"Who was ALSO flanking" is read at the old position**, which is what
+    the past tense says: the body runs inside the `MoveStart` window, so
+    `flanked_by` with no `at=` still sees the flank that is being broken.
+    Reading it at the destination would find nobody, every time, since the
+    whole trigger is that the flank ends there.
+    """
     from combat_engine.engine.query import flanked_by
 
     foe = c.trigger.actor

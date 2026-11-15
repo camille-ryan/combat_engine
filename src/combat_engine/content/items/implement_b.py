@@ -175,6 +175,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Powers
 from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.grid import distance
 from combat_engine.engine.query import charging
 from combat_engine.engine.zones import Zone
 
@@ -4794,7 +4795,6 @@ def i2649p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("MoveStart.to",),
 )
 def i2654x1(c: Cast) -> None:
     """**Re-pointed: a trait can stop a shift, and the gap is one field.**
@@ -4843,7 +4843,47 @@ def i2654x1(c: Cast) -> None:
 
     `c.teleport` is then the payout and needs nothing added -- it already
     takes a count, and this card lets the carrier pick the arrival, which
-    is the decider's job and the default."""
+    is the decider's job and the default.
+
+    **Written. `#1323` landed `to`, and the shape is the one this note
+    predicted**: watch `MoveStart`, refuse the shift, teleport the same
+    distance.
+
+    Three things the printed words decide, none of them obvious from the
+    mechanism:
+
+    * *"you **can** instead"* is optional, so it goes through `c.may`
+      rather than firing on every shift. A trait that silently converted
+      every shift into a teleport would be a different card -- a teleport
+      does not provoke either, but it also crosses a wall, which the
+      carrier may not want.
+    * *"the number of squares you would have shifted"* is the distance of
+      the **announced** shift, measured from the mover's square to
+      `ev.to`. Not the creature's shift allowance, which is what a reader
+      reaching for `query.speed` would find and is a different number
+      whenever a row grants a longer shift than usual.
+    * the **arrival** is the carrier's to pick, so `c.teleport` is called
+      with a count and no `to=`. The card says how far, not where.
+
+    `window=Window.BEFORE`, because the refusal has to be in before
+    `movement.shift` reads the answer back.
+    """
+    def instead(ev: MoveStart) -> None:
+        if ev.actor != c.me or ev.kind_ != "shift" or ev.to is None:
+            return
+        here = c.world.get(c.me, Position)
+        if here is None:
+            return
+        far = distance(here.square, ev.to)
+        if far < 1 or not c.may("teleport instead of shifting"):
+            return
+        # Refused first, then paid. `movement.shift` reads `cancelled` back
+        # three lines after it emits, so a teleport laid before the refusal
+        # would move the creature and then let the shift move it again.
+        ev.cancel(f"{c.ref}: teleporting instead")
+        c.teleport(far)
+
+    c.watch(MoveStart, instead, until=When.ENCOUNTER, window=Window.BEFORE)
 
 
 @power(
