@@ -31058,6 +31058,34 @@ def an_augments_reach_increase(out: Result) -> None:
             f"base {base}, augment 1 {grown}, weapon {worn}",
         )
 
+    # ---- p13052: Camille's ruling, pinned
+    #
+    # **The one card whose range line prints a number at the base AND a
+    # different one under its augments**, so it is the only row that can
+    # tell "replace" from "stack" apart. Asked on `#1316` and answered:
+    #
+    #     Camille, #1316: "A. Replace "melee weapon + 1" with "melee
+    #     weapon + 3"."
+    #
+    # Pinned rather than written, because the row already did it: it
+    # declares `Melee(2)` at the base and `Melee(4)` for both augments,
+    # and `reach_of` returns the augment's override rather than summing.
+    # What was missing was anything asserting it, so the ruling could have
+    # drifted with no red run -- which is the whole reason a ruling is
+    # recorded as a measurement here. Stacking reads 5.
+    base52, worn52 = furthest("p13052", 10, 0)
+    pinned = [(aug, furthest("p13052", 10, aug)[0]) for aug in (1, 2)]
+    out.that(
+        base52 == worn52 + 1 and all(got == worn52 + 3 for _, got in pinned),
+        "p13052 reaches weapon + 1 at its base and weapon + 3 under BOTH"
+        " augments -- Camille's ruling on #1316, that the augmented range"
+        " line REPLACES the base rather than adding to it. Stacking would"
+        " reach weapon + 4, and this is the only card in the corpus that"
+        " prints two different numbers and can tell them apart",
+        f"weapon {worn52}; base {base52} wanted {worn52 + 1};"
+        f" augments {pinned} wanted {worn52 + 3}",
+    )
+
 
 def advantage_narrowed_to_one_hand(out: Result) -> None:
     """"Combat advantage for the next attack you make with an off-hand weapon."

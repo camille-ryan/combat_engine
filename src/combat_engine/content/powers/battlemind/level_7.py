@@ -270,15 +270,43 @@ def p13051(c: Cast) -> None:
     keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(
-        Augment(1, reach=Melee(4)),
-        Augment(2, reach=Melee(4)),
+        Augment(1, reach=Melee(1, grows=2)),
+        Augment(2, reach=Melee(1, grows=2)),
     ),
 )
 def p13052(c: Cast) -> None:
-    """The printed reach is weapon + 1 and both augments lengthen it to
-    weapon + 3, which is the header and measured before the body runs --
-    so both are declared there, and Augment 2's pull, which was the half
-    that could not stand alone, is written below."""
+    """Weapon + 1 at the base, weapon + 3 under either augment.
+
+    **Camille's ruling, asked on `#1316` and quoted:**
+
+        "A. Replace "melee weapon + 1" with "melee weapon + 3"."
+
+    This is the only card in the corpus whose range line prints a number at
+    the base *and* a different one under its augments, so it is the only
+    row that can tell *replace* from *stack* apart -- the three sibling
+    rows print theirs once and are the same either way. Replace, so the
+    augmented reach is weapon + 3 and not weapon + 4.
+
+    **`grows=2`, which is the arithmetic the ruling comes to and not the
+    number the card prints.** The ETL recorded the range line's `+1` in
+    `GIVES`, keyed by **ref**, so it is added under every augment as well
+    as at the base -- an augment that wanted to *reach* weapon + 3 must
+    therefore add 2 more. Writing `grows=3` would be the printed figure and
+    would reach weapon + 4, which is the reading Camille ruled against.
+
+    **This row was declared `Melee(4)` for both augments and reached
+    weapon + 1 under both**, which is the sixth instance of `#1315`'s bug
+    and was not among the five it found. `_reach_of` takes its by-weapon
+    branch for a card printing "Melee weapon" -- `(weapon reach) +
+    GIVES[ref] + stretch` -- and that branch **never reads `size`**, so a
+    replacing size is silently discarded. `dsl.reach_of` cheerfully
+    *reports* `Melee 4`, which is what makes it invisible: a probe reading
+    the declared range passes, and only walking the distances fails. The
+    rule that caught it says exactly that about its own first draft.
+
+    Augment 2's pull, which was the half that could not stand alone, is
+    written below.
+    """
     spent = augment(c, 1, 2)
     if c.strike():
         c.damage(c.w(), c.con_mod)
