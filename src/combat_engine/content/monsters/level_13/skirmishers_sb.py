@@ -860,6 +860,25 @@ def m115765a5(c: Cast) -> None:
 _POISON_WEAPON = [Keyword.POISON, Keyword.WEAPON]
 
 
+def _marking_a_foe(c: Cast) -> Callable[[dict[str, Any]], bool]:
+    """*"Cannot mark enemies"* -- asked of the marker and the creature it is
+    trying to mark, at the moment of the attempt.
+
+    `enemies` is read off the **marker**, not off this creature: the card
+    forbids the target from marking *its* enemies, and over a save-ends
+    duration the two are not interchangeable -- a dominated ally would read
+    the wrong side.
+    """
+    def gate(ctx: dict[str, Any]) -> bool:
+        marker = ctx.get("marker")
+        target = ctx.get("target")
+        if not isinstance(marker, int) or not isinstance(target, int):
+            return False
+        return target in enemies(c.world, marker)
+
+    return gate
+
+
 @power(
     "m115917a0",
     level=13,
@@ -870,15 +889,36 @@ _POISON_WEAPON = [Keyword.POISON, Keyword.WEAPON]
     keywords=_POISON_WEAPON,
     attack=Attack(vs=AC, printed=18),
     damage=Damage("2d8", 7),
-    dropped=("c.cannot_mark()",),
 )
 def m115917a0(c: Cast) -> None:
-    """The burn is exact. "Cannot mark enemies" has no lever: `c.mark` lays a
-    mark and nothing withholds the ability to lay one, and `c.forbid` takes a
-    *row* away rather than what a row does."""
+    """Both halves of the hit line, under **one** saving throw.
+
+    *"The target cannot mark enemies and takes ongoing 5 poison damage (save
+    ends both)"* -- so the burn and the bar are one effect, which is what
+    `c.bonus(onto=)` is for. Two save-ends holds would hand the victim two
+    saving throws against one printed sentence and let it shake off half of
+    a thing the book calls one. `c.condition(ongoing=)` has always said this
+    for a condition; `#1312` opened the same door for a modifier.
+
+    **"Enemies" is the *marker's* enemies, read when a mark is attempted.**
+    The gate is handed `marker` and `target`, so it asks about the pair at
+    that moment rather than about the board as it stood when the blow landed
+    -- which matters over a save-ends duration, and is the same reading
+    `p10162` takes of "your allies".
+
+    Nothing clears a mark the target already holds: this card prints no such
+    clause, where two of the four printing this sentence print one
+    explicitly. See `c.cannot_mark`.
+    """
     if c.strike():
         c.hit()
-        c.ongoing(5, DamageType.POISON)
+        burn = c.ongoing(5, DamageType.POISON, until=When.SAVE_ENDS)
+        if burn is None:
+            # No hold to pin to -- an immunity ate the burn. The bar is
+            # still printed, so it lands on its own save.
+            c.cannot_mark(until=When.SAVE_ENDS, when=_marking_a_foe(c))
+        else:
+            c.cannot_mark(onto=burn, when=_marking_a_foe(c))
 
 
 @power(

@@ -51,6 +51,9 @@ Written by `resolve._group_of`, which looks it up on the attacker rather than ta
 - `ctx['how']` -- the kind of forced movement -- push, pull, slide.
 - `ctx['keywords']` -- the keywords of the row or effect being asked about.
 - `ctx['label']` -- the label of the effect being asked about.
+- `ctx['marker']` -- the creature trying to lay a mark, on the context `Cast.mark` builds to ask whether it is allowed to. Beside `target`, which is the creature it is trying to mark.
+
+Two keys rather than one because all four printed lines forbidding a mark differ on *whom* it may not mark, and two of them scope it to a creature other than the caster -- `m115917a0` reads the marker's own enemies and `m4471a3` names the monster that hit it. A gate handed only the target could write neither. `Cast.cannot_mark` is the writer. #1312.
 - `ctx['mode']` -- the movement mode in use.
 - `ctx['move_kind']` -- how a creature moved -- `walk` `shift` `teleport` `push` `pull` `slide` `charge` `run`. Written by `Cast.does_not_provoke`'s window off `Moved.kind_`, and by `Cast._extra_every`. The event field keeps the trailing underscore because a field named `kind` shadows `Event.kind`.
 - `ctx['mover']` -- who is trying to enter a square. `movement.may_enter`.

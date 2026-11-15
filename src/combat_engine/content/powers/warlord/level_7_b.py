@@ -185,11 +185,6 @@ def p10129(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*MARTIAL_WEAPON, Keyword.FEAR],
     attack=Attack(STR, vs=WILL),
-    #: "Cannot mark your allies" is the half still only narrated. A mark is
-    #: a relation laid by whatever marks; nothing bars a creature from
-    #: laying one, and there is no veto for this to hang on. The combat
-    #: advantage half of the same sentence lands -- see the body. #1299.
-    dropped=("c.cannot_mark(on=)",),
 )
 def p10162(c: Cast) -> None:
     """Clearing the target's marks is the Effect line and lands either way.
@@ -205,11 +200,23 @@ def p10162(c: Cast) -> None:
     the moment of the swing -- which is what the clause needs, since an
     ally may be dealt in or dropped inside the duration.
 
+    **"Cannot mark your allies" lands too, and the row is finished.** A
+    mark is a `Relation.MARKED_BY` and nothing refused one until `#1312`
+    put a veto at the top of `c.mark` -- the same shape `#1299` gave the
+    combat-advantage denial, asked above every other test because the
+    sentence is unconditional about the creature forbidden to mark.
+
+    Both clauses gate on the **same live ally set**, read through one
+    closure rather than two: *"your allies"* is one phrase in one sentence,
+    and an ally dealt in or dropped inside the duration has to move both
+    halves together.
+
+    A mark already standing is not retracted -- see `c.cannot_mark`, which
+    carries the reading and the evidence for it.
+
     This row used to narrate both halves in a `c.note` instead. That is
     worse than a marker: the note makes the audit see the row doing
-    something, so nothing counted the gap. The *other* half -- "cannot mark
-    your allies" -- is still only narrated, and now carries a marker for
-    it. `#1299`.
+    something, so nothing counted the gap at all.
     """
     foe = c.target
     if c.strike():
@@ -225,14 +232,13 @@ def p10162(c: Cast) -> None:
     # that -- a summoned ally inside it would be unprotected and a dropped
     # one still counted. The closure reads the world each time the gate is
     # asked, which is what the clause says.
-    c.no_advantage(
-        gains=True, on=foe, until=When.EONT,
-        when=lambda ctx: ctx.get("target") in set(c.allies()),
-    )
-    c.note(
-        f"{c.ref}: until the end of your next turn {foe} could not mark your allies "
-        "-- a mark has no veto to hang on"
-    )
+    # One closure for one printed phrase: both clauses ask the same "your
+    # allies", live, so the two cannot drift as the party changes.
+    def mine(ctx: dict[str, object]) -> bool:
+        return ctx.get("target") in set(c.allies())
+
+    c.no_advantage(gains=True, on=foe, until=When.EONT, when=mine)
+    c.cannot_mark(on=foe, until=When.EONT, when=mine)
 
 
 @power(

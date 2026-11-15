@@ -2861,25 +2861,71 @@ def m4471a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=12),
-    dropped=("c.forbid(mark=)",),
 )
 def m4471a3(c: Cast) -> None:
-    """The penalty and its timing both land. "Cannot mark it again until it
-    saves" has no verb -- `c.forbid` removes one named row and nothing
-    blocks the bare mark action the way it would need to."""
+    """One printed sentence, one saving throw -- which is three clauses on
+    **one** hold.
+
+    *"The target takes a -2 penalty to attack rolls against m4471, or -4 if
+    the attack occurs when it is not the target's turn (save ends). If m4471
+    hits a creature that is marking him with this attack, the mark ends and
+    the target cannot mark m4471 until the target saves."*
+
+    **The -2 and the -4 are one printed penalty read at two moments**, and
+    this row used to lay them as two save-ends effects -- so the victim
+    rolled **two** saving throws against a line printing one, and could
+    shake off the off-turn half while the on-turn half stood. They are two
+    gated `Mod`s on a single hold now, which is what `c.bonus(onto=)` is
+    for. They share a label deliberately: penalties bucket by source, so if
+    the gates ever both answered true the worse would apply rather than the
+    two adding, which is the printed rule for one source.
+
+    **"Until the target saves" is that same save**, not a second one -- the
+    only save in the sentence is the one the penalty already owes, so the
+    bar is pinned to the same hold.
+
+    The mark ending is its own printed clause and stays a separate
+    statement; `c.cannot_mark`'s docstring records why that is not folded
+    into the bar. Both halves are read off the pre-existing mark, so the
+    order here matters: ask whether the victim is marking before curing it.
+
+    #1312.
+    """
     me = c.me
     if c.strike():
         victim = c.target
         if victim is not None:
-            c.penalty(
+            was_marking = c.marked(on=me, by=victim)
+            hold = c.penalty(
                 "attack", 2, on=victim, until=When.SAVE_ENDS,
                 when=lambda ctx: ctx.get("target") == me and c.world.turn == victim,
             )
-            c.penalty(
-                "attack", 4, on=victim, until=When.SAVE_ENDS,
-                when=lambda ctx: ctx.get("target") == me and c.world.turn != victim,
-            )
-            if c.marked(on=me, by=victim):
+            if hold is None:
+                # Nothing to hang the rest on -- an immunity ate the
+                # penalty. Each clause then stands on its own save, which
+                # is wrong by one saving throw and better than silence.
+                c.penalty(
+                    "attack", 4, on=victim, until=When.SAVE_ENDS,
+                    when=lambda ctx: ctx.get("target") == me
+                    and c.world.turn != victim,
+                )
+                if was_marking:
+                    c.cannot_mark(
+                        on=victim, until=When.SAVE_ENDS,
+                        when=lambda ctx: ctx.get("target") == me,
+                    )
+            else:
+                c.penalty(
+                    "attack", 4, on=victim, onto=hold,
+                    when=lambda ctx: ctx.get("target") == me
+                    and c.world.turn != victim,
+                )
+                if was_marking:
+                    c.cannot_mark(
+                        on=victim, onto=hold,
+                        when=lambda ctx: ctx.get("target") == me,
+                    )
+            if was_marking:
                 c.cure(Condition.MARKED, on=me)
 
 

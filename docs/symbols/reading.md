@@ -184,7 +184,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Who may hold the other side of a creature for `eid`.
 - `query.grants_ca(world: 'World', eid: 'int') -> 'bool'`
   - True when the creature grants combat advantage to everyone.
-- `query.has_combat_advantage(world: 'World', attacker: 'int', target: 'int', power: 'str' = '') -> 'bool'`
+- `query.has_combat_advantage(world: 'World', attacker: 'int', target: 'int', power: 'str' = '', hand: 'str' = '') -> 'bool'`
   - (no docstring)
 - `query.shield_bonus(world: 'World', eid: 'int') -> 'int'`
   - What this creature's shield adds to AC and Reflex. 0 for none.

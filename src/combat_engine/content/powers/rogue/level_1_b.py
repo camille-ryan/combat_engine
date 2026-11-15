@@ -65,7 +65,6 @@ from combat_engine.engine import (
     get,
     power,
 )
-from combat_engine.engine.events import RelationSet
 from combat_engine.engine.query import (
     can_act,
     creatures,
@@ -808,9 +807,27 @@ def p2254(c: Cast) -> None:
     requires_text="needs a light blade",
 )
 def p2503(c: Cast) -> None:
-    """A mark is a relation, so negating the ones the target has applied is
-    clearing them. "Cannot mark any targets" has no switch to throw, so it is
-    written as the relation being taken off again the moment it is set.
+    """Two printed clauses, and they are different mechanisms.
+
+    *"You negate any marks the target has applied. The target cannot mark
+    any targets until the end of your next turn."* The first is a sweep over
+    the relations standing now; the second is a bar on laying new ones.
+
+    **The second used to be written as the first, repeated**: a `RelationSet`
+    watch that cleared each mark the instant it was set. That is observably
+    not what the card says. The mark **landed** -- `RelationSet` fired, so
+    anything watching "you have been marked" saw it, and `query.marked_by`
+    answered yes for the width of the dispatch -- and was then taken off
+    again. "Cannot mark" means the relation never goes down, which is what
+    `c.cannot_mark` does: `#1312` put the veto at the top of `c.mark`, above
+    every other test, so the attempt returns `None` and lays nothing.
+
+    **No gate, and that is this card rather than an omission.** "Any
+    targets" is the blanket printing; the other three rows forbidding a mark
+    each name whom -- `c.cannot_mark`'s docstring has the four side by side.
+
+    The clearing clause stays a sweep, and stays here: two of the four cards
+    print it and two do not, so it belongs to the row.
     """
     victim = c.target
     if c.strike():
@@ -818,14 +835,7 @@ def p2503(c: Cast) -> None:
         if victim is not None:
             for marked in c.world.relations.targets(Relation.MARKED_BY, victim):
                 c.world.relations.clear(Relation.MARKED_BY, victim, marked, c.ref)
-
-            def undo(ev: RelationSet) -> None:
-                if ev.kind_ is Relation.MARKED_BY and ev.source == victim:
-                    c.world.relations.clear(
-                        Relation.MARKED_BY, victim, ev.target, c.ref
-                    )
-
-            c.watch(RelationSet, undo, until=When.EONT, label=f"{c.ref} no marks")
+            c.cannot_mark(on=victim, until=When.EONT)
     if c.first:
         c.shift(1)
 

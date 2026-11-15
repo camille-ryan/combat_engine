@@ -11,7 +11,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - How big a number this mechanic hands out, after anything raising it.
 - `c.attack_mod`
   - The modifier of whatever ability *this branch* attacks with.
-- `c.bonus(self, what: 'str | Defense', value: 'int', *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, kind: 'str' = 'untyped', when: 'Callable[[dict[str, Any]], bool] | None' = None, once: 'bool' = False, stacks: 'bool' = True, dice: 'str' = '', dtype: 'DamageType | Sequence[DamageType] | None' = None, label: 'str' = '') -> 'Effect | None'`
+- `c.bonus(self, what: 'str | Defense', value: 'int', *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, kind: 'str' = 'untyped', when: 'Callable[[dict[str, Any]], bool] | None' = None, once: 'bool' = False, stacks: 'bool' = True, dice: 'str' = '', dtype: 'DamageType | Sequence[DamageType] | None' = None, label: 'str' = '', onto: 'Effect | None' = None) -> 'Effect | None'`
   - A numeric modifier with a duration.
 - `c.boost_check(self, bonus: 'int', *, ev: 'Any' = None) -> 'bool'`
   - Add to the triggering skill check, after the die is already down.
@@ -144,6 +144,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Enemies can't gain combat advantage by flanking it."
 - `c.cannot_flank(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "The target cannot flank with its allies."
+- `c.cannot_mark(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None, onto: 'Effect | None' = None) -> 'Effect | None'`
+  - "The target cannot mark your allies."
 - `c.counts_as(self, satisfies: 'str', *, holding: 'str | None' = None, kind: 'str | None' = None, keyword: 'Keyword | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You can use a warhammer with any power that requires a light blade."
 - `c.counts_as_keyword(self, ref: 'str', keyword: 'Keyword', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

@@ -31189,6 +31189,187 @@ def a_target_line_with_a_floor_on_size(out: Result) -> None:
     )
 
 
+def a_creature_forbidden_to_mark(out: Result) -> None:
+    """"The target cannot mark your allies."
+
+    A mark is a `Relation.MARKED_BY` laid by `c.mark`, and nothing refused
+    one -- so the four rows printing this had written it as prose.
+    `p10162` narrated **both** of its clauses in a `c.note`, which is worse
+    than silence: the note makes the audit see the row working, which is how
+    it went unmarked until `#1299` wrote the first half. `#1312` is the
+    second.
+
+    Read at the top of `c.mark`, above every other test, which is the shape
+    `#1299` gave the combat-advantage denial and for the same reason -- an
+    unconditional sentence about the creature forbidden to act is asked
+    first, not folded into one of the later branches.
+
+    **Three negative arms, and they are the rule.** A veto laid too widely
+    is the easy mistake and passes a positive-only check: the forbidden
+    creature may still mark *other enemies*, an *unaffected* creature may
+    still mark the same ally, and a mark already standing is not retracted.
+
+    **The last of those is asked of the verb directly, and that is the
+    finding this rule was written by.** Asserting it through `p10162` went
+    red, and the row is right: its printed *Effect* line **clears the
+    target's marks on your allies** before the duration clause begins, so
+    a standing mark there ends because a second printed clause says it
+    does. Bisecting proved `c.cannot_mark` and `c.no_advantage` each
+    retract nothing on their own, which is the reading `c.cannot_mark`'s
+    docstring records -- none of the four cards printing this sentence says
+    anything about clearing a mark.
+
+    So the two questions are separated: the row's clearing clause is
+    asserted through the row, and the verb's silence about standing marks
+    is asserted through the verb. Collapsing them would have made a
+    *correct* row look like a broken verb, which is the trap in
+    [[assert-through-the-caller-not-the-helper]] pointed the other way --
+    the caller here prints an extra clause the helper must not grow.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Relation
+
+    def board():  # noqa: ANN202
+        world, me, _ = _board("p10162")
+        mates = [a for a in sorted(allies(world, me)) if a != me]
+        foes = sorted(enemies(world, me))
+        return (world, me, foes, mates) if mates and len(foes) >= 2 else None
+
+    first = board()
+    if first is None:
+        out.skip("p10162's board wants two enemies and an ally to pose this")
+        return
+
+    # ---- the baseline: marking works before the row is used
+    world, me, foes, mates = first
+    out.that(
+        Cast(world=world, me=foes[0], ref="drivers:mark").mark(
+            on=mates[0]) is not None,
+        "an enemy can mark the warlord's ally, which every arm below is"
+        " measured against",
+        "the baseline mark did not land",
+    )
+
+    world, me, foes, mates = board()
+    out.that(
+        use(world, me, "p10162", targets=[foes[0]]),
+        "p10162 can be used on this board",
+        "the row refused itself",
+    )
+    victim = Cast(world=world, me=foes[0], ref="drivers:mark")
+    out.that(
+        victim.mark(on=mates[0]) is None,
+        "and afterwards the named enemy cannot mark the warlord's ally",
+        "the forbidden creature still marked",
+    )
+    out.that(
+        victim.mark(on=foes[1]) is not None,
+        "while it CAN still mark another enemy -- the clause says 'your"
+        " allies', and a blanket veto passes every positive arm",
+        "the veto was laid too widely",
+    )
+    out.that(
+        Cast(world=world, me=foes[1], ref="drivers:mark").mark(
+            on=mates[0]) is not None,
+        "and an enemy the row never touched marks that same ally freely,"
+        " so the veto is on one creature rather than on the ally",
+        "an unaffected creature was stopped too",
+    )
+
+    # ---- p10162's OTHER printed clause: it clears the standing mark
+    world, me, foes, mates = board()
+    standing = Cast(world=world, me=foes[0], ref="drivers:mark").mark(
+        on=mates[0])
+    use(world, me, "p10162", targets=[foes[0]])
+    out.that(
+        standing is not None and standing.ended,
+        "p10162's Effect line clears a mark the target already holds on an"
+        " ally -- a separate printed clause from the duration, and the"
+        " reason the arm below asks the verb instead of the row",
+        f"the standing mark survived the Effect line: {standing}",
+    )
+
+    # ---- the verb alone retracts nothing
+    world, me, foes, mates = board()
+    standing = Cast(world=world, me=foes[0], ref="drivers:mark").mark(
+        on=mates[0])
+    Cast(world=world, me=me, ref="drivers:veto", target=foes[0]).cannot_mark(
+        on=foes[0], until=When.EONT)
+    out.that(
+        standing is not None and not standing.ended,
+        "while c.cannot_mark on its own leaves a standing mark alone -- it"
+        " forbids marking for a duration, and no card printing the sentence"
+        " says anything about clearing what is already there",
+        f"the verb retracted a standing mark: {standing}",
+    )
+
+    # ---- p2503: the blanket printing, and the relation never goes down
+    world, me, _ = _board("p2503")
+    foes = sorted(enemies(world, me))
+    if len(foes) < 2:
+        out.skip("p2503's board wants two enemies")
+    else:
+        use(world, me, "p2503", targets=[foes[0]])
+        thief = Cast(world=world, me=foes[0], ref="drivers:mark")
+        out.that(
+            thief.mark(on=me) is None and thief.mark(on=foes[1]) is None,
+            "p2503 prints 'cannot mark ANY targets', so its victim marks"
+            " nobody at all -- the one printing of the four that wants no"
+            " gate",
+            "p2503's victim still marked somebody",
+        )
+        out.that(
+            me not in world.relations.targets(Relation.MARKED_BY, foes[0]),
+            "and the relation never goes down -- this row used to clear"
+            " each mark the instant it was set, which fired RelationSet and"
+            " answered 'marked' for the width of the dispatch",
+            "the mark landed and was swept instead of being refused",
+        )
+
+    # ---- m115917a0: one printed sentence, ONE saving throw
+    world, me, _ = _board("m115917a0")
+    foes = sorted(enemies(world, me))
+    before = {e.id for e in world.effects.of(foes[0])}
+    use(world, me, "m115917a0", targets=[foes[0]])
+    laid = [
+        e for e in world.effects.of(foes[0])
+        if e.id not in before and not e.ended and e.when is When.SAVE_ENDS
+    ]
+    out.that(
+        len(laid) == 1,
+        "'cannot mark enemies and takes ongoing 5 poison damage (save ends"
+        " both)' lays ONE save-ends hold -- two would hand the victim two"
+        " saving throws against one printed sentence",
+        f"{len(laid)} save-ends holds: {[e.label for e in laid]}",
+    )
+    out.that(
+        bool(laid) and laid[0].ongoing is not None and len(laid[0].mods) == 1,
+        "and that one hold carries both halves: the burn and the bar",
+        f"hold contents: {[(e.ongoing, len(e.mods)) for e in laid]}",
+    )
+
+    # ---- m4471a3: the -2/-4 split is one hold too
+    world, me, _ = _board("m4471a3")
+    foes = sorted(enemies(world, me))
+    before = {e.id for e in world.effects.of(foes[0])}
+    use(world, me, "m4471a3", targets=[foes[0]])
+    laid = [
+        e for e in world.effects.of(foes[0])
+        if e.id not in before and not e.ended and e.when is When.SAVE_ENDS
+    ]
+    out.that(
+        len(laid) == 1 and len(laid[0].mods) >= 2,
+        "m4471a3's '-2, or -4 if it is not the target's turn (save ends)'"
+        " is one printed penalty read at two moments, so it is two gated"
+        " mods on ONE hold -- it used to be two save-ends effects, and the"
+        " victim could shake off the off-turn half alone",
+        f"{len(laid)} holds, mods {[len(e.mods) for e in laid]}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -88040,6 +88221,11 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "cannot_mark": (
+        a_creature_forbidden_to_mark,
+        "a creature forbidden to mark, whom it may still mark, and one"
+        " saving throw per printed sentence",
     ),
     "min_size": (
         a_target_line_with_a_floor_on_size,

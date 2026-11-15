@@ -397,6 +397,11 @@ CATEGORIES: dict[str, dict] = {
                 # flanking, which are different creatures' clauses
                 # and read at different ends. #1299.
                 "cannot_flank",
+                # And beside both for the same reason: `cannot_flank` is
+                # about joining a flank, this is about laying a mark, and
+                # a creature forbidden one is not forbidden the other.
+                # #1312.
+                "cannot_mark",
                 "counts_as",
                 "forgo_second_wind", "refuses_forced_attack",
                 "shares_feat_bonus",
@@ -649,6 +654,16 @@ CTX_KEYS: dict[str, str] = {
     "actor": "whoever is acting, on a ctx built from a non-attack event.",
     "advantage": "did the attack have combat advantage.",
     "ammo": "the ammunition used.",
+    "marker": (
+        "the creature trying to lay a mark, on the context `Cast.mark` "
+        "builds to ask whether it is allowed to. Beside `target`, which "
+        "is the creature it is trying to mark.\n\n"
+        "Two keys rather than one because all four printed lines "
+        "forbidding a mark differ on *whom* it may not mark, and two of "
+        "them scope it to a creature other than the caster -- "
+        "`m115917a0` reads the marker's own enemies and `m4471a3` names "
+        "the monster that hit it. A gate handed only the target could "
+        "write neither. `Cast.cannot_mark` is the writer. #1312."),
     "arena_alt": (
         "the OTHER arena weapons, as context substitutions -- a tuple of "
         "`{weapon, group}` dicts, empty for every creature that has not "

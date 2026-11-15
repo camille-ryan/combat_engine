@@ -8534,6 +8534,21 @@ class Cast:
         marker = self.me if by is None else by
         if marker == who:
             return None          # nothing is marked by itself
+        # **"The target cannot mark your allies."** Asked of the **marker**
+        # and before anything is laid, which is the same shape `#1299` gave
+        # the combat-advantage denial: the sentence is unconditional about
+        # the creature forbidden to mark, so it is asked above every other
+        # test rather than folded into one of them.
+        #
+        # A mark already standing is **not** retracted -- the printed lines
+        # forbid marking for a duration and none of the four says anything
+        # about clearing what is there. `c.cannot_mark`'s docstring carries
+        # the evidence for that reading. #1312.
+        stopped = self.world.get(marker, Mods)
+        if stopped is not None and stopped.items and stopped.total(
+            "cannot_mark", {"marker": marker, "target": who}
+        ) > 0:
+            return None
         # **`keeps=` holds the mark already there rather than laying a
         # second one**, which is what its card says and is also the only
         # safe reading. `p805` arms its lapse in a closure over the effect
@@ -9350,6 +9365,75 @@ class Cast:
             )
         return self.bonus(
             "no_advantage", 1, on=on if on is not None else self.me,
+            until=until, kind="untyped", when=when,
+        )
+
+    def cannot_mark(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+        onto: Effect | None = None,
+    ) -> Effect | None:
+        """"The target cannot mark your allies."
+
+        A mark is a `Relation.MARKED_BY` laid by `c.mark`, and nothing
+        refused one -- so the four rows printing this had written it as
+        prose. `p10162` narrated both its clauses in a `c.note`, which is
+        worse than silence: the note makes the audit see the row working,
+        which is how it went unmarked until `#1299` wrote the other half.
+
+        **`on=` is the creature that may not mark**, and all four printed
+        lines say *"the target"* -- so the caster default most verbs here
+        take would be wrong in all four. `c.no_advantage(gains=True)` ended
+        up **requiring** `on=` for that reason; this one defaults to
+        `c.target` instead, because a trait has no target and every caller
+        of this is a power that does.
+
+        **A mark already standing is not retracted, and the four cards are
+        what settles that.** Two of them print the clearing as a *separate
+        clause* -- `p2503` reads "you negate any marks the target has
+        applied. The target cannot mark any targets..." and `m4471a3` reads
+        "the mark ends and the target cannot mark m4471" -- and the other
+        two print no clearing at all. So retraction belongs to the row,
+        beside this call: folding it in here would make `p2503` and
+        `m4471a3` right by accident and `p10162`'s Hit line and
+        `m115917a0` wrong, ending a mark laid three rounds earlier that
+        nothing printed says ends.
+
+        This paragraph previously called both monster cards auras and said
+        none of the four clears a mark. Neither was true -- `m4471a3` is a
+        close burst that clears explicitly, `m115917a0` is a melee hit
+        line -- and the corrected reading is the stronger argument for the
+        same design.
+
+        `when` is handed `marker` and `target`, and all four printings
+        differ on exactly that, which is why it is a gate rather than four
+        verbs:
+
+        | | whom it may not mark |
+        |---|---|
+        | `p2503` | anybody -- no gate |
+        | `p10162` | the warlord's allies, asked live |
+        | `m115917a0` | its own enemies |
+        | `m4471a3` | the monster that hit it |
+
+        `onto` is passed through to `c.bonus(onto=)`, for `m115917a0`:
+        *"cannot mark enemies and takes ongoing 5 poison damage (save ends
+        both)"* is one hold and one saving throw.
+
+        Read at the top of `c.mark`, above every other test, for the reason
+        `#1299` gives about its own denial: an unconditional sentence is
+        asked first. #1312.
+        """
+        if onto is not None:
+            return self.bonus(
+                "cannot_mark", 1, on=on if on is not None else self.target,
+                kind="untyped", when=when, onto=onto,
+            )
+        return self.bonus(
+            "cannot_mark", 1, on=on if on is not None else self.target,
             until=until, kind="untyped", when=when,
         )
 
@@ -13027,8 +13111,24 @@ class Cast:
         dice: str = "",
         dtype: DamageType | Sequence[DamageType] | None = None,
         label: str = "",
+        onto: Effect | None = None,
     ) -> Effect | None:
         """A numeric modifier with a duration.
+
+        **`onto` hangs this on a hold that already stands instead of laying
+        a new one, and `until` is then that hold's.** "The target takes
+        ongoing 5 poison damage and a -2 penalty to Fortitude (save ends
+        both)" is **one** effect: two save-ends holds give the victim two
+        saving throws against one printed sentence. `c.condition(ongoing=)`
+        has always done this for a condition; this is the same door for a
+        mod, and `Effects.pin` carries the measurement -- 124 printed lines
+        over the 15 spec tables, answered three different hand-rolled ways
+        in content.
+
+        Returns the hold it was pinned to, so a body can keep asking about
+        the one effect. `until` and `once` are refused with it: the first
+        would claim a duration the hold does not have, and the second wants
+        an effect of its own to end.
 
         **`label` is for a body laying two PENALTIES from two different
         printed sources, and nothing else.** It defaults to this row's
@@ -13138,6 +13238,18 @@ class Cast:
                     f"rather than adds, `kind=` for a printed type."
                 )
             kind = self.ref
+        if onto is not None:
+            if until is not When.EONT:
+                raise ValueError(
+                    f"{self.ref}: c.bonus(onto=) takes the hold's own "
+                    f"duration, so until={until!r} would claim one it does "
+                    f"not have. Drop `until`, or lay a separate effect."
+                )
+            if once:
+                raise ValueError(
+                    f"{self.ref}: c.bonus(onto=, once=True) has no effect "
+                    f"of its own to spend. Lay it separately."
+                )
         rng = self.world.rng
         mod = Mod(
             what=key, value=value, kind=kind, when=when,
@@ -13145,6 +13257,12 @@ class Cast:
             roll=(lambda: rng.roll(dice).total) if dice else None,
             dtype=types,
         )
+        if onto is not None:
+            # Refused rather than ignored, which is the house rule for a
+            # parameter that cannot mean anything here: silently dropping
+            # `until` would read as a duration this clause does not have.
+            self.world.effects.pin(onto, who, mod)
+            return onto
         shown = f"+{dice}" if dice else f"{value:+d}"
         effect = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} {key}{shown}", mods=[(who, mod)],

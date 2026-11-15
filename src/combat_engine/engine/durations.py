@@ -780,6 +780,50 @@ class Effects:
         for fn in eff.on_suspend:
             fn()
 
+    def pin(self, eff: Effect, eid: int, mod: Mod) -> bool:
+        """Hang a modifier on a hold that is already standing. `worsen` for a
+        mod instead of a condition.
+
+        **"The target takes ongoing 5 poison damage and a -2 penalty to
+        Fortitude (save ends both)" is one effect**, for the reason `worsen`
+        above says and with the same consequence: two save-ends holds laid
+        side by side hand the victim two saving throws against one printed
+        sentence, and let it shake off half of a thing the book calls one.
+        `Cast.condition(ongoing=)` already does this for a condition and
+        there was no door for a mod.
+
+        Counted over all 15 spec tables: **124 printed lines** couple a burn
+        to something that is not a condition under one save, and content had
+        three hand-rolled answers to them -- `mods=[...]` passed straight
+        into `apply` from 85 sites in 58 files, a second modifier gated on
+        `not burn.ended`, and a local helper per monster file. `Mod` is
+        imported into five content modules to build the first of those.
+
+        Installs through the same path `apply` uses, so teardown is the one
+        in `_lift` and needs nothing new: the mod goes into `eff.mods`, which
+        is the list `_lift` walks. **That symmetry is the whole correctness
+        argument** -- the comment above `_install_state` records what a
+        second teardown path costs here.
+
+        Nothing is installed while the hold is **suspended**: a suspended
+        effect has had its mods lifted, so laying one now would leave a
+        modifier standing that `resume` would then install a second time.
+        It still joins `eff.mods`, so resuming picks it up.
+
+        Returns whether the modifier was installed now. False means the
+        hold is dead or suspended, not that nothing was recorded.
+        """
+        if eff.ended:
+            return False
+        eff.mods.append((eid, mod))
+        if eff.suspended:
+            return False
+        holder = self.world.get(eid, Mods)
+        if holder is None:
+            holder = self.world.add(eid, Mods())
+        holder.items.append(mod)
+        return True
+
     def suspend(self, eff: Effect, why: str = "suspended") -> bool:
         """Lift the effect without ending it. Returns whether anything moved.
 
