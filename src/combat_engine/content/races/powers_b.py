@@ -81,6 +81,7 @@ from combat_engine.engine import (
     RelationSet,
     SavingThrow,
     Size,
+    Target,
     Trigger,
     TurnEnd,
     TurnStart,
@@ -635,11 +636,20 @@ def p16459(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=Melee(1),
-    target=ONE_CREATURE,
-    dropped=("Target.min_size",),
+    target=Target("enemy", 1, min_size=Size.MEDIUM),
 )
 def p16462(c: Cast) -> None:
-    """Hidden from everyone *except* the target, so it is `c.invisible(to=)`
+    """*"Target: one adjacent Medium or larger enemy."*
+
+    **Only the target line was dropped; the body was written.**
+    `Target.max_size` had no sibling, so *"Medium or larger"* -- which 11
+    rows print -- could not be said at all. `#1319` added `min_size`
+    beside it, inclusive at both ends and compared on `Size.order`.
+
+    `Target("enemy", 1, ...)` rather than `ONE_CREATURE` with a filter: the
+    card says *enemy*, and the old declaration took any creature.
+
+    Hidden from everyone *except* the target, so it is `c.invisible(to=)`
     once per enemy rather than `c.hide`, which cannot leave one out.
 
     Both printed ends are written rather than left to the clock.

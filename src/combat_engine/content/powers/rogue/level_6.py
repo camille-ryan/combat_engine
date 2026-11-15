@@ -516,7 +516,6 @@ def p4487(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    dropped=("query.has_combat_advantage(hand=)",),
 )
 def p7399(c: Cast) -> None:
     """Combat advantage is a fact about a **pair** of creatures rather than a
@@ -525,10 +524,20 @@ def p7399(c: Cast) -> None:
     one. The ones not spent go out with the turn, which is the printed
     window.
 
-    "With an off-hand weapon" is the dropped half: `resolve.attack` puts
-    `hand` in the attack context, and `query.has_combat_advantage` is asked
-    with `{attacker, target}` and nothing else, so the narrowing has nowhere
-    to be read.
+    **"With an off-hand weapon" is written now.** `resolve.attack` has put
+    `hand` in the *attack* context since `#1276`, and
+    `query.has_combat_advantage` built its **own** context three keys wide
+    -- `{attacker, target, power}` -- so the narrowing had nowhere to be
+    read and the grant would have paid out on any swing. `#1311` added the
+    fourth key, for the reason `power` is there: without it a gate on it
+    *"could only ever have been silently true."*
+
+    `once=True` and the gate together are what make the printed sentence
+    exact: the advantage is spent by the **first off-hand attack**, and a
+    main-hand swing in between neither spends nor benefits from it.
     """
     for foe in sorted(c.enemies()):
-        c.grants_advantage(on=foe, until=When.EOT, once=True)
+        c.grants_advantage(
+            on=foe, until=When.EOT, once=True,
+            when=lambda ctx: ctx.get("hand") == "off",
+        )

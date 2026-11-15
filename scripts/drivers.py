@@ -31059,6 +31059,136 @@ def an_augments_reach_increase(out: Result) -> None:
         )
 
 
+def advantage_narrowed_to_one_hand(out: Result) -> None:
+    """"Combat advantage for the next attack you make with an off-hand weapon."
+
+    `resolve.attack` has carried `hand` in the **attack** context since
+    `#1276`, so *"when you hit with an off-hand attack"* was already
+    answerable for a damage or attack modifier. `has_combat_advantage`
+    builds its **own** context and it was three keys wide --
+    `{attacker, target, power}` -- so a combat-advantage clause could not
+    ask which hand swung, and `p7399`'s whole printed effect is advantage
+    narrowed to one. Laid ungated it pays out on every swing, which is
+    wider than the card. `#1311`.
+
+    Same bargain `power` struck in that dict, whose own comment is the
+    precedent: *"without it those gates could only ever have been silently
+    true."*
+
+    **The pair has to be chosen, not taken.** On this board the caster
+    already has combat advantage against its nearest enemy -- flanking or
+    a granted opening -- so a probe asking about the first enemy reads
+    True before the row fires and cannot tell a narrowed grant from an
+    ungated one. The arms below search for a pair with **no** advantage
+    first, and skip out loud if the board has none.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import (
+        creatures,
+        enemies,
+        has_combat_advantage,
+    )
+
+    world, _me, _ = _board("p7399")
+    pair = None
+    for a in sorted(creatures(world)):
+        for t in sorted(enemies(world, a)):
+            if not has_combat_advantage(world, a, t, "", "off"):
+                pair = (a, t)
+                break
+        if pair:
+            break
+    if pair is None:
+        out.skip(
+            "every pair on this board already has combat advantage, so a"
+            " narrowed grant cannot be told from an ungated one on it"
+        )
+        return
+    actor, victim = pair
+
+    REGISTRY["p7399"].body(Cast(world=world, me=actor, ref="p7399"))
+    off = has_combat_advantage(world, actor, victim, "", "off")
+    main = has_combat_advantage(world, actor, victim, "", "main")
+    none = has_combat_advantage(world, actor, victim, "", "")
+    out.that(
+        off,
+        "p7399 grants combat advantage on an OFF-HAND swing",
+        f"off-hand advantage {off}",
+    )
+    out.that(
+        not main,
+        "and NOT on a main-hand one -- the arm an ungated grant fails, and"
+        " the whole of what the card narrows",
+        f"main-hand advantage {main}",
+    )
+    out.that(
+        not none,
+        "and not when no hand is named at all, which is the sixty-odd"
+        " callers asking about a pair of creatures rather than a swing",
+        f"handless advantage {none}",
+    )
+
+
+def a_target_line_with_a_floor_on_size(out: Result) -> None:
+    """"Target: one adjacent Medium or larger enemy."
+
+    `Target.max_size` has existed since `#658` and had **no sibling**, so
+    the same clause pointed the other way could not be said. The two are
+    printed side by side across the corpus and mean opposite things --
+    *"Medium or smaller"* on a row that grabs or swallows, *"Medium or
+    larger"* on one that climbs its target or hides behind it -- and **11
+    rows** print the second.
+
+    `p16462` is the row that was waiting: its **body was already written**
+    in full, both end conditions included, and only its target line was
+    dropped. `#1319`.
+
+    **Both ends of the range are arms**, because an inclusive bound written
+    exclusively is the likelier slip: *"Medium or larger"* admits Medium.
+    And the two sizes below it are the negative control -- a field tested
+    but not named in `candidates`' relational guard list passes a
+    positive-only check, which is what `#1307` paid to learn.
+    """
+    from combat_engine.engine import movement
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import candidates, get
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Size
+
+    world, me, _ = _board("p16462")
+    p = get("p16462")
+    foes = sorted(enemies(world, me))
+    if p is None or not foes:
+        out.skip("p16462's board has no enemy to size")
+        return
+    foe, here = foes[0], world.need(me, Position).square
+    movement.place(world, foe, (here[0] + 1, here[1]))
+
+    seen: dict[str, bool] = {}
+    for size in (Size.TINY, Size.SMALL, Size.MEDIUM, Size.LARGE, Size.HUGE):
+        world.need(foe, Position).size = size
+        seen[size.value] = foe in candidates(world, me, p)
+    out.that(
+        seen.get("medium") and seen.get("large") and seen.get("huge"),
+        "a Medium, Large or Huge enemy is offered -- the bound is inclusive"
+        " at Medium, which is what the printed 'or larger' says",
+        f"{seen}",
+    )
+    out.that(
+        not seen.get("tiny") and not seen.get("small"),
+        "and a Tiny or Small one is NOT -- the arm that fails when the"
+        " field is tested in the predicate but not named in the guard list",
+        f"{seen}",
+    )
+    out.that(
+        p.target.side == "enemy",
+        "and the line targets an ENEMY, which the old declaration widened"
+        " to any creature",
+        f"side {p.target.side!r}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -87910,6 +88040,14 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "min_size": (
+        a_target_line_with_a_floor_on_size,
+        "a target line with a floor on the target's size",
+    ),
+    "off_hand_advantage": (
+        advantage_narrowed_to_one_hand,
+        "combat advantage narrowed to the hand that swings",
     ),
     "reach_grows": (
         an_augments_reach_increase,

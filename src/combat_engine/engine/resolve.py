@@ -432,7 +432,7 @@ def attack(
             return
 
         ca = (
-            has_combat_advantage(world, attacker, target, power)
+            has_combat_advantage(world, attacker, target, power, hand)
             if advantage is None else advantage
         )
         # `opportunity` is in the context because "+2 to AC against

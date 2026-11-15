@@ -2166,19 +2166,21 @@ _IN_FLIGHT: set[tuple[int, int]] = set()
 
 
 def has_combat_advantage(
-    world: World, attacker: int, target: int, power: str = ""
+    world: World, attacker: int, target: int, power: str = "",
+    hand: str = "",
 ) -> bool:
     if (attacker, target) in _IN_FLIGHT:
         return False
     _IN_FLIGHT.add((attacker, target))
     try:
-        return _has_combat_advantage(world, attacker, target, power)
+        return _has_combat_advantage(world, attacker, target, power, hand)
     finally:
         _IN_FLIGHT.discard((attacker, target))
 
 
 def _has_combat_advantage(
-    world: World, attacker: int, target: int, power: str = ""
+    world: World, attacker: int, target: int, power: str = "",
+    hand: str = "",
 ) -> bool:
     # "You do not grant combat advantage to any of your enemies" suppresses
     # every route at once, so it is asked first -- unlike `unflankable`
@@ -2197,7 +2199,21 @@ def _has_combat_advantage(
     # pair of creatures rather than about a swing, which is most of the sixty-odd
     # of them, and a gate wanting a keyword is then correctly False: nothing can
     # claim a power's narrowing when no power has been named.
-    ca_ctx = {"attacker": attacker, "target": target, "power": power}
+    # **`hand` is here for the reason `power` above is**, and the comment
+    # above is the precedent: *"without it those gates could only ever have
+    # been silently true."* `p7399` grants combat advantage *"for the next
+    # attack you make with an off-hand weapon"*, and the narrowing had
+    # nowhere to be read -- `resolve.attack` has carried `hand` in the
+    # **attack** context since `#1276`, and this is a different context
+    # built three keys wide.
+    #
+    # Empty for the sixty-odd callers asking about a pair of creatures
+    # rather than about a swing, and a gate wanting a hand is then
+    # correctly False -- nothing can claim an off-hand narrowing when no
+    # hand has been named. Same bargain `power` strikes. #1311.
+    ca_ctx = {
+        "attacker": attacker, "target": target, "power": power, "hand": hand,
+    }
     denied = world.get(target, Mods)
     if denied is not None and denied.items and denied.total("no_advantage", ca_ctx) > 0:
         return False

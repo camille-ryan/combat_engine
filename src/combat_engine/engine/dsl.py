@@ -621,6 +621,20 @@ class Target:
     #: or held by a creature". Fields rather than sides of their own,
     #: because they are two restrictions on one pool and not two pools.
     max_size: Size | None = None
+    #: **The same clause pointed the other way**, which `max_size` had no
+    #: sibling for. *"One adjacent Medium or larger enemy"* is `p16462`,
+    #: whose whole body was written and whose target line could not be.
+    #:
+    #: Printed side by side across the corpus and meaning opposite things:
+    #: *"Medium or smaller"* on a row that grabs or swallows, *"Medium or
+    #: larger"* on one that hides behind its target or climbs it. **11 rows**
+    #: print the second -- feats, an item and monster abilities -- so this is
+    #: not one row's field.
+    #:
+    #: Inclusive at both ends, like `max_size`: *"Medium or larger"* admits
+    #: Medium. Compared on `Size.order`, which is what makes the two
+    #: comparable at all. #1319.
+    min_size: Size | None = None
     loose: bool = False
     #: **The two weight clauses an object target line prints**, beside
     #: `max_size` and `loose` and for the same reason: they are further
@@ -3824,6 +3838,11 @@ def candidates(
         or aim.holding
         or aim.carrying
         or aim.max_size is not None
+        # Named here as well as tested in the predicate, which this guard's
+        # own comment demands and `#1307` paid for learning: two fields
+        # tested and not named left one row honouring them and another
+        # silently not. #1319.
+        or aim.min_size is not None
         or aim.loose
         # **The guard's own warning, paid.** `max_weight` and `liftable`
         # were tested in the predicate and not named here, so `p11273`
@@ -4298,6 +4317,8 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         # also fails its own clauses is simply not one of the ways in.
         return False
     if aim.max_size is not None and _size_of(world, target).order > aim.max_size.order:
+        return False
+    if aim.min_size is not None and _size_of(world, target).order < aim.min_size.order:
         return False
     if aim.holding:
         from .query import holding
