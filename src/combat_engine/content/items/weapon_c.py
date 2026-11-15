@@ -1385,7 +1385,7 @@ def i1676x1(c: Cast) -> None:
     target=SELF,
     trigger="you miss every target with an attack using this crossbow",
     on=Trigger(PowerResolved, _all_missed, "you missed with every shot"),
-    dropped=("resolve.replay()",),
+    dropped=("resolve.retract_miss()",),
 )
 def i1676p1(c: Cast) -> None:
     """`c.restore_use` is the "you don't expend the use" half.
@@ -1399,11 +1399,19 @@ def i1676p1(c: Cast) -> None:
     is the one thing a marker must not do.
 
     What is missing is the ability to reach back into a use that has
-    finished resolving, and that is `resolve.replay()` -- the symbol
-    `i1675p1`, `p10354` and `f2448` already carry, all three for a trigger
-    on `PowerResolved` whose effect has to change what the resolution
-    landed. This row wants the narrowest thing of the four: not a re-roll,
-    but the miss half of a resolved use *un-applied*.
+    finished resolving and take its **miss half** off. This row wants the
+    narrowest thing of the four that shared `resolve.replay()`: not a
+    re-roll, but the miss half of a resolved use *un-applied*.
+
+    **Re-aimed again, and this time by triaging the four rather than the
+    name.** `#1314` asked whether its four rows were one gap and they are
+    **two**. The other three -- `i1675p1`, `p10354`, `f2448` -- reroll and
+    need the **new** outcome applied, so a miss that becomes a hit deals
+    the hit's damage; an undo *and* a redo. This row rerolls nothing and
+    wants only the undo, and its first clause is already written. So it is
+    one verb from done where they are a mechanism, and under a shared
+    symbol neither could ever go green honestly. `#1332` is this half,
+    `#1314` keeps the other three.
 
     `c.no_miss_damage` is the near miss and is the other side of the card:
     it is laid on a victim before the blow, where this is the attacker
