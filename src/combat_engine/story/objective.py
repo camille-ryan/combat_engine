@@ -722,8 +722,24 @@ def field_thing(world: World, objective: Objective | None,
     # weight stays `0`, which reads as *not recorded* rather than
     # weightless, so no row offers the object. Camille on `#1308`: the
     # scene says it, and nothing invents it.
+    # **`category="object"`, and this one line is `#1317`.** `kind` is the
+    # module's own noun -- "crate", "brazier", "idol" -- and every row's
+    # target line asks for the printed word `"object"`, so an exact match
+    # meant **no fielded objective thing could ever be the target of a row
+    # printing "creature or object"**. Measured: a `terrain.put` object and
+    # a `field_thing` crate one square apart, identical in weight and
+    # distance, with `p11358` and `p11273` offering the first and neither
+    # offering the second. Six rows carry `objects=True`, and `carry`,
+    # `escort`, `destroy` and `protect` are the four scenes where moving or
+    # breaking the thing is the point.
+    #
+    # Unconditional, because all four `THING_KINDS` are objects by the only
+    # reading that matters here: a crate, a ward, an idol and a brazier are
+    # each a thing a row saying "or object" means. The noun is kept beside
+    # it, so a Requirement reading *"adjacent to a fire"* still asks the
+    # noun and is unaffected.
     return put(world, free[len(free) // 2], kind=objective.thing, hp=hp,
-               weight=objective.weight,
+               weight=objective.weight, category="object",
                fastened=False, ref=f"objective:{objective.kind}")
 
 

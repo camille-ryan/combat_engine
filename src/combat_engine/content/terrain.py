@@ -310,7 +310,7 @@ def object_defences(size: Size) -> Defenses:
 def put(world: World, square: Square, *, kind: str = "object",
         hp: int = 0, size: Size = Size.MEDIUM, fastened: bool = False,
         solid: bool = True, by: int = 0, ref: str = "",
-        weight: int = 0) -> int:
+        weight: int = 0, category: str = "") -> int:
     """Stand something in the room that no power put there. #988.
 
     A crate, a statue, a barricade. `Scenery` has been declared and
@@ -354,7 +354,8 @@ def put(world: World, square: Square, *, kind: str = "object",
     bits: list[object] = [
         Ident(ref=ref or f"scenery:{kind}"),
         Position(square=square, size=size),
-        Scenery(kind=kind, fastened=fastened, by=by, weight=weight),
+        Scenery(kind=kind, fastened=fastened, by=by, weight=weight,
+                category=category),
         # **The printed defences, so the thing can be attacked at
         # all.** Five rows carried `Scenery.defences` and each said
         # the same: aiming at an object was written and there was

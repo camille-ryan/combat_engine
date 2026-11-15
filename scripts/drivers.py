@@ -32123,6 +32123,118 @@ def a_damage_type_chosen_at_creation(out: Result) -> None:
     )
 
 
+def a_module_thing_is_an_object(out: Result) -> None:
+    """A row printing "creature or object" can reach a thing a module placed.
+
+    `query.scenery` matched `Scenery.kind` **exactly**, and that field is
+    documented as the module's own printed noun -- "crate", "brazier",
+    "idol". Every row's target line asks for the word `"object"`:
+    `dsl.candidates`' pool entry is `scenery(world, "object")`. So **no
+    fielded objective thing could ever be the target of a row printing "or
+    object"**, while `carry`, `escort`, `destroy` and `protect` are exactly
+    the four scenes where moving or breaking the thing is the point.
+
+    Six rows carry `objects=True` -- `p465`, `p13128`, `p11273`, `p11358`,
+    `i1145p1`, `x2_117` -- and none of them could reach one.
+
+    **The negative arms are the design, and the LAST one is the only arm
+    that tells the two designs apart.** `#1317` weighed making `"object"` a
+    magic value of `kind` against a category beside the noun.
+
+    My first draft of this docstring said the cheaper fix *"would have
+    broken both"* of the narrowing arms, and **a plant of it refuted
+    that**: `if kind and kind != "object" and thing.kind != kind` passes
+    every arm above. It only widens `"object"`, so asking for a crate still
+    finds the crate and asking for a fire still finds the fire -- the
+    Requirement narrowing six rows depend on is untouched either way. The
+    behavioural case against option 1 is not where I claimed it was.
+
+    Where it actually is: under the magic value, `scenery(world, "object")`
+    matches **every** piece of scenery, so a row printing *"creature or
+    object"* offers a **campfire** as something to pick up and slide three
+    squares. The category is a statement that a crate is an object and a
+    fire is not; the magic value is a statement that everything is. That is
+    the last arm, and it is the one the plant forced into existence.
+    """
+    from combat_engine.content import terrain
+    from combat_engine.engine.components import Position, Stats
+    from combat_engine.engine.dsl import candidates, get
+    from combat_engine.engine.query import scenery
+    from combat_engine.engine.types import Ability
+    from combat_engine.story.objective import Objective, field_thing
+
+    world, me, _ = _board("p11358")
+    stats = world.get(me, Stats)
+    if stats is not None:
+        stats.scores[Ability.STR] = 14      # lifts 280
+    here = world.need(me, Position).square
+    plain = terrain.put(
+        world, (here[0] + 1, here[1]), kind="object", weight=80)
+    crate = field_thing(
+        world, Objective(kind="carry", thing="crate", hp=20, weight=80), 5)
+    out.that(
+        plain and crate,
+        "the board holds a plain object and a module's crate, one square"
+        " apart and identical in weight -- which is the comparison the"
+        " finding was measured as",
+        f"plain={plain} crate={crate}",
+    )
+
+    for ref in ("p11358", "p11273"):
+        pool = candidates(world, me, get(ref))
+        out.that(
+            plain in pool and crate in pool,
+            f"{ref} prints 'or object' and offers BOTH -- the module's thing"
+            " is named with its own printed noun, and before `Scenery."
+            "category` an exact match on that noun put every fielded"
+            " objective out of reach of every such row",
+            f"plain offered: {plain in pool}; crate offered: {crate in pool}",
+        )
+
+    out.that(
+        sorted(scenery(world, "crate")) == [crate],
+        "the NOUN still narrows: asking for a crate finds the crate and not"
+        " the plain object, so the category was added beside the noun"
+        " rather than instead of it",
+        f"scenery('crate') = {sorted(scenery(world, 'crate'))},"
+        f" crate is {crate}",
+    )
+    fires = sorted(scenery(world, "fire"))
+    out.that(
+        crate not in fires and plain not in fires,
+        "and a fire is still only a fire -- which is the arm that rules out"
+        " the cheaper fix. Making 'object' a magic value of `kind` would"
+        " have put the Requirement narrowing six rows depend on"
+        ' ("you must be adjacent to a fire") in tension with a free-text'
+        " noun",
+        f"scenery('fire') = {fires}, which should hold neither"
+        f" {crate} nor {plain}",
+    )
+    out.that(
+        bool(fires),
+        "and there IS a fire on this board, so the arm above is not passing"
+        " over an empty list",
+        "no fire on the board, so the fire arm proves nothing",
+    )
+    # **The arm that tells the two designs apart, and the only one.** A
+    # plant of the cheaper fix -- `kind != "object" and thing.kind != kind`
+    # -- passed every arm above, because it only widens `"object"` and
+    # leaves every other noun narrow. What it also does is match
+    # *everything* when asked for an object, so a row printing "creature or
+    # object" offers a campfire as something to pick up.
+    objects = sorted(scenery(world, "object"))
+    out.that(
+        all(f not in objects for f in fires),
+        "and asking for an OBJECT does not return the fire -- the arm that"
+        " distinguishes a category from making 'object' a magic value"
+        " matching any scenery. Under the magic value a row printing"
+        " 'creature or object' offers a campfire to be picked up and slid"
+        " three squares; the category says a crate is an object and a fire"
+        " is not",
+        f"scenery('object') = {objects} and holds a fire from {fires}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -88974,6 +89086,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "module_thing_object": (
+        a_module_thing_is_an_object,
+        "a module's thing is reachable by a row printing 'or object'",
     ),
     "chosen_damage_type": (
         a_damage_type_chosen_at_creation,

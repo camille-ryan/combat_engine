@@ -472,13 +472,26 @@ def scenery(
     "you must be adjacent to a fire" asks; `loose` drops the ones bolted
     down or in somebody's hands.
 
+    **It matches the noun OR the category**, which is `#1317`: a module
+    names its thing with the printed word from its own scene -- "crate",
+    "brazier" -- and every row's target line asks for `"object"`, so an
+    exact match on the noun meant no fielded objective thing could be the
+    target of a row printing *"creature or object"*. Six rows carry
+    `objects=True` and none of them could reach one.
+
+    So `scenery(world, "object")` finds a crate whose category is
+    `"object"` as well as a thing whose noun is, and
+    `scenery(world, "fire")` still finds only a fire -- nothing carries
+    `"fire"` as a category, and the narrowing a Requirement depends on is
+    untouched.
+
     A module-level function as well as `c.scenery`, because a `requires=`
     gate is handed `(world, eid)` and no `Cast` -- the same split
     `moving_as` has.
     """
     out = []
     for eid, thing in sorted(world.each(Scenery)):
-        if kind and thing.kind != kind:
+        if kind and kind not in (thing.kind, thing.category):
             continue
         if loose and (thing.fastened or thing.by):
             continue

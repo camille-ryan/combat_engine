@@ -736,6 +736,32 @@ class Scenery:
     """
 
     kind: str = "object"
+    #: **What the thing IS, beside the noun it is called.** A module names
+    #: its thing with the printed word from its own scene -- "crate",
+    #: "brazier", "idol" -- and every row's target line asks for the word
+    #: `"object"`, so `query.scenery`'s exact match meant **no fielded
+    #: objective thing could ever be the target of a row printing "or
+    #: object"**. Measured: a `terrain.put(kind="object")` and a
+    #: `field_thing(Objective(thing="crate"))` one square apart, identical
+    #: in weight and distance, and `p11358` and `p11273` offered the first
+    #: and neither offered the second. Six rows carry `objects=True` and
+    #: none of them could reach a thing any module places -- while
+    #: `carry`, `escort`, `destroy` and `protect` are exactly the scenes
+    #: where moving or breaking the thing is the point. #1317.
+    #:
+    #: **A category rather than making `"object"` a magic value of `kind`.**
+    #: That was the cheaper fix and `#1317` weighed both: `kind` is a real
+    #: narrowing that `query.scenery(world, "fire")` depends on -- it is how
+    #: a Requirement reading *"you must be adjacent to a fire"* works -- so
+    #: collapsing the field into a free-text noun with one magic value puts
+    #: those two uses in tension. The issue's own read was this option and
+    #: it is what landed; it is a seam between `story/` and `content/`, so
+    #: say so if the other reading is wanted -- the change is one field and
+    #: one `or`.
+    #:
+    #: Empty by default, so a `terrain.put(kind="object")` keeps matching
+    #: on its noun exactly as before and nothing had to be migrated.
+    category: str = ""
     #: Pounds, `0` meaning **not recorded** -- see the note above. Read
     #: against `query.lift_limit` for *"one object you can lift"* and
     #: against a printed number for *"400 pounds or less"*. #1307.
