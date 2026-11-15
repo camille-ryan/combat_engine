@@ -497,7 +497,13 @@ CATEGORIES: dict[str, dict] = {
                 "attacked_me_since", "floored_me_since", "hurt_me_since",
                 "by_attack", "part_of", "passive", "quarry", "race_of",
                 "reach",
-                "result", "swings", "turn_of",
+                "result",
+                # Beside `result` because it is one: a result the
+                # body is handed instead of rolling, which
+                # `resolve.replay` sets so a rerolled roll's new
+                # outcome gets applied. #1314.
+                "staged",
+                "swings", "turn_of",
                 "with_a_chosen_weapon", "wounded",
             ]),
             # `c.telepathy` is the odd one here and is here on purpose.

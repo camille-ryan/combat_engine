@@ -221,6 +221,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - the last `AttackResult`, or None. `.advantage` is whether the attack had combat advantage; asking again is too late.
 - `c.set_build(self, *choices: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, instead_of: 'str' = '') -> 'Effect | None'`
   - Stand on a build's leg that chargen did not deal you.
+- `c.staged: AttackResult | None`
+  - (not described in vocab.CONTEXT)
 - `c.swings: list[AttackResult]`
   - every `AttackResult` this body has rolled for the current target, in order, where `result` is only the last. Read it when a clause says *every* attack roll you made; `result` answers "did that one hit". #810.
 - `c.turn_of(self) -> 'int | None'`

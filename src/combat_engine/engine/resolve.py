@@ -361,6 +361,72 @@ def settle(result: AttackResult, *, floor: int = 20) -> None:
     )
 
 
+
+def replay(
+    world: World,
+    actor: int,
+    ref: str,
+    target: int,
+    result: AttackResult,
+    *,
+    branch: int = 0,
+    augment: int = 0,
+) -> bool:
+    """Apply a power's outcome again, for one target, from a roll already made.
+
+    *"You reroll the attack rolls that missed their targets and **use the new
+    results**."* The reroll itself is `Cast.reroll_attack`, which updates the
+    `AttackResult` and re-settles it -- but by `PowerResolved`, which is where
+    *"missed with at least two"* is first knowable, the resolution has
+    finished. So a miss turned into a hit lands no damage and no rider: the
+    number changed and nothing read it.
+
+    This re-runs the power's **body** for that one target with the rerolled
+    result staged, so `c.strike()` returns it instead of rolling a third
+    die, and the body's `if c.strike():` branch pays out what the new
+    outcome owes. `#1314`.
+
+    **Only the redo, and that is the triage.** `#1314`'s four rows are two
+    gaps: `p10354` and `i1675p1` reroll only the rolls that **missed**, so
+    there is nothing to take back and a redo alone finishes them. `f2448`
+    rerolls hits as well, so a hit becoming a miss needs its damage undone
+    -- which this does not do and must not pretend to. `i1676p1` wants the
+    undo and no reroll at all and is `#1332`.
+
+    **`index` is set so `c.first` and `c.last` are both False.** They key
+    off `index == 0` and `index == len(targets) - 1`, and they are where a
+    once-per-power line lives -- a zone, a conjuration, an Effect clause. A
+    replay that left `index` at 0 would lay the zone a second time, which is
+    the one way this could be worse than doing nothing. So the staged cast
+    is given three targets and sits in the middle of them.
+
+    **The use is not spent again and `PowerResolved` is not re-announced.**
+    This is the same use finishing differently, not a second use: spending
+    would charge a daily twice, and a second `PowerResolved` would re-offer
+    every row triggered on one -- including the row that called this, which
+    is an unbounded loop with a reroll in it.
+
+    Returns whether the body ran. False when the row is unknown, which is
+    the only way it can refuse.
+    """
+    from .cast import Cast
+    from .dsl import get
+
+    p = get(ref)
+    if p is None:
+        return False
+    cast = Cast(
+        world=world, me=actor, ref=ref, branch=branch, augment=augment,
+        # Three, with this one in the middle: `c.first` and `c.last` are
+        # both False, so a once-per-power clause does not fire twice.
+        targets=[target, target, target],
+        index=1,
+        target=target,
+        staged=result,
+    )
+    p.body(cast)
+    return True
+
 def attack(
     world: World,
     attacker: int,

@@ -32762,6 +32762,266 @@ def hiding_with_any_cover(out: Result) -> None:
     )
 
 
+def replaying_a_resolved_outcome(out: Result) -> None:
+    """"You reroll the attack rolls that missed their targets and use the new
+    results."
+
+    `Cast.reroll_attack` rewrites a roll's number and re-settles it, but by
+    `PowerResolved` -- where *"missed with at least two"* is first knowable
+    -- the resolution has finished. So a miss turned into a hit landed **no
+    damage and no rider**: the number changed and nothing read it.
+
+    `resolve.replay` re-runs the power's body for that one target with the
+    rerolled result **staged**, so `c.strike()` returns it instead of
+    rolling a third die and the body's hit branch pays out what the new
+    outcome owes.
+
+    **The facility is proven by a direct call, deliberately.** Driving it
+    through `p10354` on a real board cannot attribute the damage: that
+    board's caster also holds `i2402p1`, which rerolls too, so a victim
+    losing hit points after a resolution is consistent with either row
+    having done it. That is the misattribution trap -- an aggregate agreed
+    and the credit did not -- so the facility's own arms hand it a
+    hand-made hitting result and read the damage.
+
+    **The second arm is the hazard, not a nicety.** A replay re-runs a whole
+    body, and a body's once-per-use clauses -- a zone, a conjuration, an
+    Effect line -- are guarded by `c.first`/`c.last`, which key off
+    `index`. A replay that left `index` at 0 would lay the zone a second
+    time, which is the one way this could be worse than doing nothing.
+    """
+    from combat_engine.engine import events
+    from combat_engine.engine.components import Defenses, Health, Powers
+    from combat_engine.engine.dsl import get, use
+    from combat_engine.engine.events import PowerResolved
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult, replay
+    from combat_engine.engine.types import Defense
+    from combat_engine.engine.zones import Zone
+
+    def hitting(target: int) -> AttackResult:
+        """A result that already hit -- the state a reroll leaves behind."""
+        made = AttackResult()
+        made.target = target
+        made.hit = True
+        made.natural = 18
+        made.total = 40
+        return made
+
+    # ---- the redo: a staged hit pays out the body's hit branch
+    world, me, _ = _board("p10354")
+    foes = sorted(enemies(world, me))
+    if not foes:
+        out.skip("p10354's board fields no enemy")
+        return
+    foe = foes[0]
+    health = world.get(foe, Health)
+    if health is None:
+        out.skip("that enemy has no hit points to lose")
+        return
+    before = health.hp
+    out.that(
+        replay(world, me, "p11030", foe, hitting(foe)),
+        "resolve.replay runs the body of a resolved power again for one"
+        " target",
+        "replay refused to run the body",
+    )
+    out.that(
+        health.hp < before,
+        "and the staged HIT pays out -- which is the whole gap: a reroll"
+        " after `PowerResolved` rewrote the number and nothing read it, so"
+        " a miss turned into a hit landed no damage and no rider",
+        f"hit points went {before} -> {health.hp}; the replay dealt nothing",
+    )
+
+    # ---- it does not roll a third die
+    #
+    # **Watched on the bus, not read off the staged object.** The first
+    # draft asserted `staged.natural == 18` after the replay, and a plant
+    # ignoring the stage altogether left that **true**: the body rolls its
+    # own result and the staged object is simply untouched. An absent
+    # `AttackRolled` is the observable -- the body answered the number it
+    # was given instead of rolling.
+    world2, me2, _ = _board("p10354")
+    foe2 = sorted(enemies(world2, me2))[0]
+    rolled: list[object] = []
+    world2.bus.on(events.AttackRolled, lambda ev: rolled.append(ev))
+    replay(world2, me2, "p11030", foe2, hitting(foe2))
+    out.that(
+        not rolled,
+        "and NO attack roll is made during the replay -- the staged result"
+        " is used, so the rerolled number is what the body answered rather"
+        " than a third die for one printed sentence",
+        f"{len(rolled)} attack roll(s) were made during the replay",
+    )
+
+    # ---- the hazard: a once-per-use clause does not fire twice
+    world3, me3, _ = _board("m4741a4")
+    foe3 = sorted(enemies(world3, me3))[0]
+    zones = len(list(world3.each(Zone)))
+    out.that(
+        replay(world3, me3, "m4741a4", foe3, hitting(foe3)),
+        "m4741a4 replays -- it is the control for the arm below because its"
+        " body lays a zone under `if c.first`",
+        "m4741a4 would not replay",
+    )
+    out.that(
+        len(list(world3.each(Zone))) == zones,
+        "and its once-per-use ZONE is not laid a second time: `c.first` and"
+        " `c.last` key off `index`, and the replay sits in the middle of"
+        " three targets so both are False. A replay that left `index` at 0"
+        " would double every Effect line in the body",
+        f"zones went {zones} -> {len(list(world3.each(Zone)))}",
+    )
+
+    # ---- and the row that wanted it is finished
+    out.that(
+        not get("p10354").unfinished,
+        "p10354 carries no marker: it rerolls the rolls that missed and"
+        " replays the ones that now hit, which is its whole printed Effect",
+        f"p10354 still marked: {get('p10354').unfinished}",
+    )
+    # **And it is observed CALLING it, not merely unmarked.** A plant
+    # deleting the replay call from the body passed every arm above,
+    # because the arms about the row read its marker. Driving it on a real
+    # board cannot attribute the damage -- that caster also holds
+    # `i2402p1`, which rerolls too -- so the call itself is counted.
+    #
+    # The body does `from combat_engine.engine.resolve import replay`
+    # **inside** the function, so the import runs at call time and reads
+    # the module attribute. A stand-in therefore sees it, where patching a
+    # module a caller imported at module scope would not.
+    from combat_engine.engine import resolve as _resolve
+
+    calls: list[tuple] = []
+    real = _resolve.replay
+
+    def counted(world, actor, ref, target, result, **kw):  # noqa: ANN001,ANN003,ANN202
+        calls.append((ref, target, getattr(result, "hit", None)))
+        return real(world, actor, ref, target, result, **kw)
+
+    # **The seed is found from the ROLLS, not from the call being counted.**
+    # The first draft searched for a seed on which `calls` was non-empty --
+    # so a plant deleting the call found no seed and the arm *skipped*,
+    # which is not a red. The posing condition is a roll that was rerolled
+    # and now hits, which is true of the board whether or not the row goes
+    # on to replay it.
+    posed = None
+    _resolve.replay = counted
+    try:
+        for seed in (1, 2, 3, 4, 5, 6, 7, 8):
+            world4, me4, _ = _board("p10354", seed)
+            foes4 = sorted(enemies(world4, me4))
+            for f in foes4:
+                guard = world4.get(f, Defenses)
+                if guard is not None:
+                    for which in (
+                        Defense.AC, Defense.FORT, Defense.REF, Defense.WILL,
+                    ):
+                        guard.values[which] = 28
+            landed: list[object] = []
+            world4.bus.on(
+                events.PowerResolved,
+                lambda ev, into=landed: into.append(ev),
+            )
+            del calls[:]
+            use(world4, me4, "p11030")
+            outer = next(
+                (e for e in landed if getattr(e, "power", "") == "p11030"),
+                None,
+            )
+            if outer is None:
+                continue
+            woke = [
+                r for r in outer.rolls
+                if getattr(r, "hit", False) and getattr(r, "rerolled_by", ())
+            ]
+            if woke:
+                posed = (seed, len(woke), list(calls))
+                break
+    finally:
+        _resolve.replay = real
+
+    if posed is None:
+        out.skip("no seed in 1..8 turned a missed roll into a hit, so the"
+                 " row's own call to replay could not be posed")
+    else:
+        seed, woken, made = posed
+        out.that(
+            bool(made) and all(hit for _ref, _t, hit in made),
+            f"and p10354 itself calls replay on seed {seed}, where {woken}"
+            " missed roll(s) became hits -- only for rolls that now HIT."
+            " The arms above read its marker, and a plant deleting this"
+            " call passed every one of them",
+            f"{woken} roll(s) were rerolled into hits and replay was"
+            f" called {len(made)} time(s): {made}",
+        )
+
+
+    # ---- f2448, and a correction to my own triage
+    #
+    # `#1314`'s triage had this row needing an **undo** as well, on the
+    # ground that it rerolls hits where the other two reroll only misses.
+    # Its trigger is *"when you miss EVERY target"* -- so every roll it
+    # rerolls is a miss, by the condition for the row firing at all, and
+    # the redo alone finishes it. All three reroll rows land on one
+    # facility and `i1676p1` is the only one left.
+    #
+    # Driven by hand because its own board deals it no reliable power:
+    # measured, the caster knows `f2448` and `p6186` and **none** of the
+    # corpus's 50 reliable attack rows, so the trigger cannot arise there.
+    world5, me5, _ = _board("f2448")
+    foes5 = sorted(enemies(world5, me5))
+    held = world5.get(me5, Powers)
+    if not foes5 or held is None or "p6186" not in held.all:
+        out.skip("f2448's board wants an enemy and the racial power it spends")
+    else:
+        whiffed = AttackResult()
+        whiffed.target = foes5[0]
+        whiffed.hit = False
+        whiffed.natural = 2
+        whiffed.total = 5
+        whiffed.target_defence = 15
+        # `p9435` is a real RELIABLE attack row, which `_reliable_whiff`
+        # reads off the header -- a made-up ref would fail the trigger for
+        # the wrong reason.
+        landed5 = PowerResolved(
+            actor=me5, power="p9435", targets=(foes5[0],), rolls=[whiffed],
+        )
+        spent_before = "p6186" in (held.used or set())
+        out.that(
+            use(world5, me5, "f2448", trigger=landed5),
+            "f2448 fires when every roll of a reliable power missed",
+            "f2448 refused its own trigger",
+        )
+        out.that(
+            not spent_before and "p6186" in (held.used or set()),
+            "and it SPENDS the racial power the card names -- paid once and"
+            " before any rerolling, because the card spends it *to* reroll:"
+            " a row that rerolled and then failed to pay would be a free"
+            " reroll, and one paying per roll would charge a burst several"
+            " times for one printed sentence",
+            f"p6186 spent: {spent_before} -> "
+            f"{'p6186' in (held.used or set())}",
+        )
+        out.that(
+            whiffed.natural != 2 and whiffed.hit,
+            "and the missed roll is rerolled into a hit, which is what the"
+            " replay beside it then pays out",
+            f"the roll came back natural {whiffed.natural}, hit"
+            f" {whiffed.hit}",
+        )
+
+    out.that(
+        get("i1676p1").unfinished == ("resolve.retract_miss()",),
+        "while i1676p1 keeps a NARROWER marker, which is the triage rather"
+        " than an oversight: it rerolls nothing and wants the miss half of"
+        " a resolved use taken off, with its use-handback half already"
+        " written. #1332",
+        f"i1676p1 marker: {get('i1676p1').unfinished}",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -89613,6 +89873,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "replay_outcome": (
+        replaying_a_resolved_outcome,
+        "applying a rerolled outcome after the resolution finished",
     ),
     "hide_any_cover": (
         hiding_with_any_cover,

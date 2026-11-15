@@ -3730,7 +3730,7 @@ def i1675x1(c: Cast) -> None:
 
 
 @power("i1675p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("resolve.replay()",),
+       reach=PERSONAL, target=SELF,
        trigger="you use an arcane attack power and miss all targets",
        on=Trigger(Miss, _hit_by_me_with(Keyword.ARCANE),
                   "you miss with an arcane attack power"))
@@ -3764,15 +3764,33 @@ def i1675p1(c: Cast) -> None:
     `p10354` all carry this marker and this trigger shape, and narrowing one
     of the four alone makes the group disagree about what the rule is.
 
-    **Re-pointed: this was never a parameter.** `c.reroll_attack(rolls=)`
-    read as "let it take a set of rolls", and taking the set is the easy
-    half. All three rows that wore it trigger on `PowerResolved`, by which
-    point every miss has already been resolved -- so a roll turned into a
-    hit buys **no damage and no rider**, and the row would have reported
-    finished while paying nothing. What is wanted is to *replay* what each
-    new number lands, which is a re-resolution and belongs in `resolve`.
-    #775."""
-    c.reroll_attack(keep="new")
+    **The effect half lands, and it is the reroll plus the replay.**
+    `c.reroll_attack(keep="new")` rewrites the number; `resolve.replay`
+    re-runs the triggering power's body for that target when the new number
+    hits, so it buys the damage and the riders it should. Without the
+    second call the roll changed and nothing read it -- which is what the
+    paragraph this replaces described and what `#1314` is about.
+
+    **One roll, which is this card and not a limit of the facility.**
+    *"You reroll one attack roll of the triggering power"*; the Level 20
+    and 30 lines raise it to two and three, and `#1278`'s level bands are
+    where that belongs rather than here. `p10354` rerolls every missed one
+    through the same two calls.
+
+    **It stays on `Miss`**, per the paragraph above: `PowerResolved` would
+    make the trigger exact and this row has the narrower one, which is the
+    group disagreement that paragraph declines to introduce alone. So the
+    roll it rerolls is the one it is answering -- `c.reroll_attack` with no
+    `ev=` reads `c.trigger` -- and the replay is handed that same result.
+
+    #775, #1314."""
+    rolled = c.reroll_attack(keep="new")
+    landed = getattr(c.trigger, "result", None)
+    if rolled and landed is not None and landed.hit and landed.target:
+        from combat_engine.engine.resolve import replay
+
+        replay(c.world, c.me, getattr(c.trigger, "power", ""),
+               landed.target, landed)
 
 
 @power("i2838x1", level=10, cls=ITEM, action=ActionType.NONE,

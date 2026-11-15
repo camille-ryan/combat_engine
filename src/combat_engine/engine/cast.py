@@ -436,6 +436,15 @@ class Cast:
     origin: Square | None = None
     #: The most recent attack this cast rolled. `c.landed` reads off it.
     result: AttackResult | None = None
+    #: **A result to use instead of rolling**, consumed by the one funnel in
+    #: `Cast.attack`. `resolve.replay` sets it so a body re-run for one
+    #: target applies the outcome of a roll that has **already** been made
+    #: and rerolled -- rolling again there would be a third die for one
+    #: printed sentence and would discard the rerolled number.
+    #:
+    #: Consumed, not read, so a body with two roll sites stages only its
+    #: first and the second rolls normally. `#1314`.
+    staged: AttackResult | None = None
     #: **Every** attack this body has rolled for the current target, in
     #: order, where `result` is only the last one.
     #:
@@ -4256,6 +4265,21 @@ class Cast:
         # idiom `resolve` already states for `landed.vs`: it stays off the
         # wire and out of a replay fixture. `cf:fighter-weaponmaster-f3s4`.
         self._swung_hand = hand
+        # **A staged result is used instead of rolling.** `resolve.replay`
+        # re-runs a body for one target so a *rerolled* roll's new outcome
+        # gets applied, and the roll it is replaying has already been made
+        # -- rolling again here would be a third die for one printed
+        # sentence and would throw the rerolled number away.
+        #
+        # Consumed rather than read, so a body with two roll sites stages
+        # only its first: the second rolls normally, which is what a power
+        # whose second swing is a fresh attack means. `#1314`.
+        if self.staged is not None:
+            self.result = self.staged
+            self.staged = None
+            if on is None and self.result.target and self.result.target != who:
+                self.target = self.result.target
+            return self.result
         # flanking are measured from there. The numbers stay the caster's,
         # which is what a conjuration is: your attack, its position.
         self.result = attack(

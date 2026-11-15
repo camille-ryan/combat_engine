@@ -804,6 +804,26 @@ def _missed_twice(world: World, me: int, ev: PowerResolved) -> bool:
     return sum(1 for roll in ev.rolls if not getattr(roll, "hit", False)) >= 2
 
 
+def _rolled(result: object) -> object:
+    """`c.reroll_attack` reads `.result` off an event, and here the result is
+    what we have.
+
+    `PowerResolved.rolls` is a list of `AttackResult`, where every other
+    caller of `reroll_attack` is answering an `AttackRolled` and passes that.
+    So this wraps one result in the smallest thing with the attribute the
+    verb reads -- rather than widening `reroll_attack` to take a result
+    directly, which would give it two ways to be called and a second place
+    for `ctx` to be missing.
+
+    `ctx` is carried through because `reroll_attack` reads it for the
+    reroll-gated modifiers three rows print, and an absent one silently
+    skips them. #1314.
+    """
+    from types import SimpleNamespace
+
+    return SimpleNamespace(result=result, ctx=getattr(result, "ctx", None))
+
+
 @power(
     "p10354",
     level=10,
@@ -820,20 +840,43 @@ def _missed_twice(world: World, me: int, ev: PowerResolved) -> bool:
         _missed_twice,
         "you miss with at least two of one arcane power's attack rolls",
     ),
-    todo=("resolve.replay()",),
 )
 def p10354(c: Cast) -> None:
-    """The trigger is exact. The effect is not: `c.reroll_attack` reads one
-    result off `c.trigger` and rewrites its number, and by `PowerResolved`
-    every miss has already been resolved -- so a roll turned into a hit would
-    buy no damage and no rider. It wants the set, and to replay what each new
-    number now lands.
+    """"You reroll the attack rolls that missed their targets and use the new
+    results."
 
-    **Re-pointed: this was never a parameter.** `c.reroll_attack(rolls=)`
-    read as "let it take a set of rolls", and taking the set is the easy
-    half. All three rows that wore it trigger on `PowerResolved`, by which
-    point every miss has already been resolved -- so a roll turned into a
-    hit buys **no damage and no rider**, and the row would have reported
-    finished while paying nothing. What is wanted is to *replay* what each
-    new number lands, which is a re-resolution and belongs in `resolve`.
-    #775."""
+    Both halves. `c.reroll_attack(ev=)` rewrites each missed roll's number
+    and re-settles it; `resolve.replay` then re-runs the triggering power's
+    body for the targets whose rolls now **hit**, so the new number buys
+    the damage and the riders it should. Without the second half the roll
+    changed and nothing read it -- which is what this row's old note
+    described and what `#1314` is about.
+
+    **Only the rolls that missed**, which is the printed line and also why
+    this row needs no undo: nothing that landed is being taken back. That
+    is the triage `#1314` came to -- `f2448` rerolls hits as well and does
+    need one, so it is still marked.
+
+    **"Use the new results" is `keep="new"`**, not best-of-two. The card
+    does not offer a choice, and `c.reroll_attack`'s default is already
+    that; it is passed explicitly because the three spellings read alike
+    and the wrong one is a silent improvement.
+
+    **The replay is per target, from `PowerResolved.rolls`.** Each
+    `AttackResult` carries its own `target`, so the set is walked rather
+    than the trigger's single `c.result` -- this row is the reason
+    `PowerResolved.rolls` exists.
+    """
+    ev = c.trigger
+    if ev is None:
+        return
+    from combat_engine.engine.resolve import replay
+
+    ref = getattr(ev, "power", "")
+    for roll in list(getattr(ev, "rolls", ())):
+        if getattr(roll, "hit", False):
+            continue
+        if not c.reroll_attack(keep="new", ev=_rolled(roll)):
+            continue
+        if roll.hit and roll.target:
+            replay(c.world, c.me, ref, roll.target, roll)

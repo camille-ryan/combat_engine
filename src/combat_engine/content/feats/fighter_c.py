@@ -63,12 +63,13 @@ from combat_engine.engine import (
     SecondWind,
     Trigger,
     When,
+    World,
     about_me,
     power,
 )
 from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import Moved, PowerUsed
+from combat_engine.engine.events import Moved, PowerResolved, PowerUsed
 from combat_engine.engine.grid import distance, neighbours
 from combat_engine.engine.query import (
     enemies,
@@ -1049,9 +1050,50 @@ def f2438(c: Cast) -> None:
     )
 
 
+def _rerolled(result: object) -> object:
+    """`Cast.reroll_attack` reads `.result` off an event; here the result is
+    what we have.
+
+    `PowerResolved.rolls` is a list of `AttackResult` where every other
+    caller is answering an `AttackRolled` and passes that. So this wraps one
+    result in the smallest thing carrying the attribute the verb reads,
+    rather than widening `reroll_attack` to take a result directly and
+    giving it two ways to be called. `ctx` comes along because the verb
+    reads it for the reroll-gated modifiers three rows print, and an absent
+    one silently skips them. #1314.
+    """
+    from types import SimpleNamespace
+
+    return SimpleNamespace(result=result, ctx=getattr(result, "ctx", None))
+
+
+def _reliable_whiff(world: World, me: int, ev: PowerResolved) -> bool:
+    """"When you miss every target with a reliable power."
+
+    Both halves off the event: `PowerResolved.rolls` is every
+    `AttackResult` the use made, so *"miss every target"* is no roll having
+    hit, and `Keyword.RELIABLE` is on the power's header -- the same
+    keyword `dsl.use` already reads to refund a missed daily.
+
+    `bool(ev.rolls)` first, because a use that rolled nothing missed
+    nothing: an Effect-only power resolving would otherwise satisfy
+    "every roll missed" vacuously and spend the racial power for it.
+    """
+    from combat_engine.engine.dsl import get
+
+    if ev.actor != me or not ev.rolls:
+        return False
+    if any(getattr(roll, "hit", False) for roll in ev.rolls):
+        return False
+    row = get(getattr(ev, "power", ""))
+    return row is not None and Keyword.RELIABLE in (row.keywords or ())
+
+
 @power("f2448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("resolve.replay()",))
+       trigger="you miss every target with a reliable power",
+       on=Trigger(PowerResolved, _reliable_whiff,
+                  "you miss every target with a reliable power"))
 def f2448(c: Cast) -> None:
     """Spends the racial power to reroll every attack roll of a use that
     missed everything. Two of the three holds had already gone, and the
@@ -1088,7 +1130,38 @@ def f2448(c: Cast) -> None:
     Nothing else is owed. "Reliable" is `Keyword.RELIABLE`, which
     `dsl.use` already reads to refund a missed power, and "missed every
     target" is `PowerResolved`'s roll list -- so the trigger is writable
-    the day the replay exists."""
+    the day the replay exists.
+
+    **Written, and one claim above is wrong.** `#1314`'s triage had this
+    row needing an *undo* as well as the redo, on the ground that it
+    rerolls hits where `p10354` and `i1675p1` reroll only misses. Read the
+    trigger again: *"when you miss **every** target"*. Every roll it
+    rerolls is a miss, because that is the condition for the row firing at
+    all -- so there is nothing landed to take back and the redo alone
+    finishes it, exactly as it finishes the other two. The paragraph above
+    was right that the three are one facility at one setting.
+
+    So: `c.expend_row` pays the printed cost, `c.reroll_attack(ev=)`
+    rewrites each number, and `resolve.replay` applies the ones that now
+    hit. `#1314`.
+
+    **The cost is paid first and only once**, before any rerolling: the
+    card spends the racial power *to* reroll, so a row that rerolled and
+    then failed to pay would be a free reroll, and one that paid per roll
+    would charge a burst several times for one printed sentence."""
+    ev = c.trigger
+    if ev is None:
+        return
+    from combat_engine.engine.resolve import replay
+
+    if not c.expend_row("p6186"):
+        return
+    ref = getattr(ev, "power", "")
+    for roll in list(getattr(ev, "rolls", ())):
+        if not c.reroll_attack(keep="new", ev=_rerolled(roll)):
+            continue
+        if roll.hit and roll.target:
+            replay(c.world, c.me, ref, roll.target, roll)
 
 
 @power("f2456", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
