@@ -257,12 +257,25 @@ def p13650(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.ZONE],
 )
 def p13652(c: Cast) -> None:
-    """A zone blocks sight for everybody or for nobody, so "for all creatures
-    except you" is the half that is not written; the darkvision has nothing
-    to be dark for."""
+    """**"For all creatures except you" is written now.** The old note said
+    a zone "blocks sight for everybody or for nobody"; `c.zone(exempt=)` is
+    who the sight-blocking does not apply to, and its docstring calls this
+    the common case -- "`exempt={c.me}` for the eight cards printing a
+    cloud that blinds everybody except the creature that made it". #1341,
+    and the same fix `p13804` took.
+
+    The darkvision stays unwritten and the old note's reason for it
+    stands: with the warlock exempt there is nothing left for it to see
+    through. It is the printed redundancy, not a dropped clause -- the
+    card grants darkvision so that "except you" works, and `exempt` is
+    that sentence said directly.
+    """
     area = c.area()
     if area:
-        c.zone(area, label=c.ref, until=When.SUSTAIN, blocks_sight=True, sustain=MINOR)
+        c.zone(
+            area, label=c.ref, until=When.SUSTAIN, blocks_sight=True,
+            exempt={c.me}, sustain=MINOR,
+        )
 
 
 @power(

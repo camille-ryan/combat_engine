@@ -102,11 +102,26 @@ def p10321(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p12472(c: Cast) -> None:
-    """The Active Familiar clause -- prone for anyone shoved up against it
-    -- is dropped: nothing in the engine is a familiar."""
+    """**The Active Familiar clause is written now.** The old note said
+    "nothing in the engine is a familiar"; there are three verbs for one
+    -- `c.familiar`, `c.familiar_active`, `c.familiar_mode` -- and the
+    board deals a sorcerer none, so this is the second row of the walk to
+    drop a clause on that sentence after `p10417`. #1341.
+
+    `c.familiar_active` rather than `c.familiar`: the card's line is
+    headed **Active Familiar**, which is the printed fork between a
+    familiar that is out and one that is not.
+
+    Read **after** the push, because the whole clause is about where the
+    target ends up -- "any enemy that is adjacent to your familiar AFTER
+    you push it".
+    """
     if c.strike():
         c.damage("2d8", c.cha_mod, dtype=DamageType.PSYCHIC)
         c.push(2)
+        pet = c.familiar_active()
+        if pet is not None and c.target is not None and c.adjacent_to(pet, c.target):
+            c.prone(on=c.target)
 
 
 @power(
