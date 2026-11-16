@@ -115,14 +115,31 @@ def p5676(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(CHA, vs=FORT),
+    dropped=("c.no_hide()",),
 )
 def p5677(c: Cast) -> None:
-    """The hiding-and-concealment half is dropped -- nothing takes concealment
-    away from one creature. The burn is the rest of it, and it is an Effect
-    line, so it lands whether or not the attack did."""
+    """**The concealment and cover half is written; "cannot become hidden"
+    is the one real gap.** The old note dropped all of it on "nothing takes
+    concealment away from one creature", and that was already false.
+
+    `c.no_cover` is the right verb and `c.no_conceal` is not: the card
+    denies "concealment **or cover**" in one breath, and `c.no_cover`'s own
+    docstring is "does not benefit from cover or concealment" while
+    `c.no_conceal` is concealment only.
+
+    `partial=True` is the printed exception -- "except for total
+    concealment or superior cover" -- which is the same partial/superior
+    distinction both docstrings name.
+
+    What is left is "cannot become hidden". `c.hide` and `c.unhide` exist,
+    and `c.unhide` ends a hide that has happened; nothing forbids one from
+    being made. That is a prohibition rather than a removal, so it gets the
+    marker rather than an approximation. #1341.
+    """
     if c.strike():
         c.damage("2d6", c.cha_mod, dtype=DamageType.THUNDER)
     c.ongoing(5, DamageType.THUNDER, until=When.SAVE_ENDS)
+    c.no_cover(on=c.target, partial=True, until=When.SAVE_ENDS)
 
 
 @power(

@@ -175,11 +175,25 @@ def p16236(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.ELEMENTAL],
 )
 def p16237(c: Cast) -> None:
-    """The partial concealment is not written -- concealment is not modelled.
+    """**"You have partial concealment against enemies in the aura" is
+    written now.** The old note said "concealment is not modelled", and
+    `c.conceal` has been there all along -- with a `when=` handed the attack
+    context, which is what makes *against enemies in the aura* sayable
+    rather than approximated as concealment from everybody.
+
+    Read against the aura's **current** occupants, so an enemy that steps
+    out stops benefiting from being unable to see straight, which is what a
+    one-square aura on a moving caster means. #1341.
+
     The latch is per creature per round, which is what "only once per turn"
     means when several creatures share a round.
     """
-    c.aura(1, label=c.ref, until=When.EONT)
+    aura = c.aura(1, label=c.ref, until=When.EONT)
+    c.conceal(
+        on=c.me,
+        until=When.EONT,
+        when=lambda ctx: ctx.get("attacker") in c.world.zones.occupants(aura),
+    )
     me, bite = c.me, c.cha_mod
     struck: dict[int, int] = {}
 

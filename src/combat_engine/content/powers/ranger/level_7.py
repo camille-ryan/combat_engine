@@ -346,13 +346,36 @@ def p11574(c: Cast) -> None:
     usual target selection runs -- which with two enemies in reach may pick
     the wrong one. Left as written; the fix belongs in `Triggers._at`.
 
-    The concealment half of the Hit line is dropped: concealment is not a
-    state a creature can be put into, only a consequence of cover.
+    **"You also gain concealment against the target" is written now.** The
+    old note said concealment "is not a state a creature can be put into,
+    only a consequence of cover", and that was already false twice over:
+    `c.conceal` puts a creature in exactly that state, and its `when=` is
+    handed the attack context, so *against whom* is a gate rather than an
+    approximation.
+
+    The idiom is `battlemind/level_3.py`'s, which this file could have
+    copied all along: a `when` closing over the victim and comparing
+    `ctx["attacker"]`. Concealment against everybody would be a stronger
+    rule than the card prints.
+
+    **Written from the precedent and not verified on a board**, which is
+    worth saying plainly: this row is on `silent_refs` and was before this
+    change. It needs two melee weapons *and* an opportunity attack of its
+    own, and the harness poses neither together -- it fired on none of six
+    seeds. So the clause rests on the idiom it copies, not on a verdict.
+    #1341.
     """
+    victim = c.target
     if not c.strike():
         return
     c.damage(c.w(2, hand="off"), c.str_mod)
     c.grants_advantage(until=When.EONT)
+    if victim is not None:
+        c.conceal(
+            on=c.me,
+            until=When.EONT,
+            when=lambda ctx, w=victim: ctx.get("attacker") == w,
+        )
 
 
 @power(

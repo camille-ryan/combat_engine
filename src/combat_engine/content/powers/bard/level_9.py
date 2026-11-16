@@ -199,13 +199,23 @@ def p5001(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p5695(c: Cast) -> None:
-    """The concealment clause is dropped; the combat advantage is the half that
-    can be said."""
+    """**The whole concealment clause is written now.** The old note kept
+    only the combat advantage; all three of the printed denials exist.
+
+    "No benefit from concealment, total concealment, or invisibility" is two
+    verbs rather than three: `c.no_conceal(total=True)` is worth 5 and
+    cancels total concealment with it -- its docstring names this exact
+    card, "the card that says concealment or total concealment" -- and
+    `c.no_invisibility` is the per-creature form of the zone-bounded
+    `c.no_invisibility_in`. #1341.
+    """
     if c.strike():
         c.damage("2d6", c.cha_mod, dtype=DamageType.RADIANT)
     else:
         c.half_damage("2d6", c.cha_mod, dtype=DamageType.RADIANT)
     c.grants_advantage(to="team", until=When.SAVE_ENDS)
+    c.no_conceal(on=c.target, total=True, until=When.SAVE_ENDS)
+    c.no_invisibility(on=c.target, until=When.SAVE_ENDS)
 
 
 @power(

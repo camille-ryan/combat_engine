@@ -202,13 +202,26 @@ def p14452(c: Cast) -> None:
     on=Trigger(Hit, _my_basic_hit, "you hit an enemy with a basic attack"),
 )
 def p14453(c: Cast) -> None:
-    """The concealment half is dropped: concealment is cover's cousin here and
-    nothing takes it away from one creature."""
+    """**"Cannot benefit from partial concealment" is written now.** The old
+    note said "nothing takes it away from one creature", and that was
+    already false: `c.no_conceal` sits on whoever is being looked at and
+    does exactly this.
+
+    `c.no_conceal` and not `c.no_cover`, which is the distinction the two
+    docstrings draw between them: `c.no_cover` denies cover **and**
+    concealment, and this card denies only the concealment. Writing it as
+    `c.no_cover` would strip cover the printed line never mentions.
+
+    The default leaves total concealment standing, which is what "partial"
+    means here -- `total=True` is for the card that says "concealment or
+    total concealment". #1341.
+    """
     foe = getattr(c.trigger, "target", None)
     if foe is None:
         return
     c.flat(5, dtype=DamageType.THUNDER, on=foe)
     c.grants_advantage(on=foe, to="team", until=When.EONT)
+    c.no_conceal(on=foe, until=When.EONT)
 
 
 @power(
