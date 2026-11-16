@@ -64,7 +64,9 @@ from combat_engine.engine import (
     DamageType,
     Keyword,
     MeleeOrRanged,
+    MoveStart,
     Ranged,
+    TurnEnd,
     UpTo,
     When,
     ZoneEntered,
@@ -553,10 +555,48 @@ def p13902(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p13904(c: Cast) -> None:
-    # The gloom pact rider -- psychic damage if it stays put -- has no leg.
-    if c.strike():
-        c.damage("2d8", c.cha_mod, dtype=DamageType.PSYCHIC)
-        c.push(2)
+    """**The gloom rider is written now** -- `c.build("gloom")`, and the
+    leg was always there. #1346.
+
+    "**If it doesn't move**" means under its own power. `MoveStart.kind_`
+    is the field that tells the two apart -- `walk`, `shift` and
+    `teleport` are the creature going somewhere, and `push`, `pull` and
+    `slide` are it being taken -- and the distinction is load-bearing on
+    this card in particular, because the row's own `c.push(2)` moves the
+    target two squares a line earlier. Counting that as movement would
+    make the rider fire never.
+
+    **The settling watcher outlives the clock the clause names.** `EOTNT`
+    ends at exactly the moment the damage is due, which would expire the
+    hold before it could pay -- the trap `p13916` was written into and
+    measured out of. So it waits on `ENCOUNTER` with `once=True` and is
+    filtered to the target's own turn ending, which fires once and at the
+    right time.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("2d8", c.cha_mod, dtype=DamageType.PSYCHIC)
+    c.push(2)
+    if not c.build("gloom") or victim is None:
+        return
+    stirred = False
+
+    def went(ev: MoveStart) -> None:
+        nonlocal stirred
+        if ev.actor == victim and ev.kind_ in ("walk", "shift", "teleport"):
+            stirred = True
+
+    def settle(ev: TurnEnd) -> None:
+        if ev.actor == victim and not stirred:
+            c.flat(
+                2 + max(0, c.dex_mod),
+                dtype=DamageType.PSYCHIC,
+                on=victim,
+            )
+
+    c.watch(MoveStart, went, until=When.ENCOUNTER)
+    c.watch(TurnEnd, settle, until=When.ENCOUNTER, once=True)
 
 
 @power(
@@ -571,11 +611,27 @@ def p13904(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p13914(c: Cast) -> None:
-    # The star pact rider -- the burst also leaves difficult ground -- has
-    # no leg, so the row leaves no zone and carries no Zone keyword.
+    """**The zone is written now** -- `c.build("star")`, and the leg was
+    always there. The old note reasoned from that false premise to "no
+    zone and no Zone keyword", while the header has carried
+    `Keyword.ZONE` throughout. #1346.
+
+    Laid **once per use**, not once per target: the body runs for every
+    creature in the burst and a zone apiece would stack four copies of
+    the same ground. The memo lives on the `Cast`, the unit `dsl.use`
+    builds one of.
+
+    And **not gated on a hit** -- "the burst also creates a zone" is
+    about the burst, so a use that misses everything still leaves the
+    ground difficult.
+    """
     if c.target is not None and c.strike():
         c.damage("1d10", c.cha_mod, dtype=DamageType.COLD)
         c.slowed()
+    if not c.build("star") or getattr(c, "star_ground", False):
+        return
+    c.star_ground = True
+    c.zone(c.area(), label=c.ref, until=When.EONT, difficult=True)
 
 
 @power(
@@ -634,9 +690,22 @@ def p13952(c: Cast) -> None:
     attack=Attack(CON, vs=WILL),
 )
 def p15902(c: Cast) -> None:
-    # The star pact rider -- advantage and a slow -- has no leg to ask for.
-    if c.strike():
-        c.damage("2d6", c.con_mod, dtype=DamageType.PSYCHIC)
+    """**The star rider is written now** -- `c.build("star")`, and the leg
+    was always there. #1346.
+
+    Two clauses on one line of card, and they are two holds: the
+    advantage is a relation and the slow is a condition, so there is
+    nothing to put them on together. `to="team"` is "grants combat
+    advantage" with nobody named -- the caster and allies -- which is the
+    reading `p12887` in this same file already uses.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("2d6", c.con_mod, dtype=DamageType.PSYCHIC)
+    if c.build("star") and victim is not None:
+        c.grants_advantage(on=victim, to="team", until=When.EONT)
+        c.slowed(on=victim, until=When.EONT)
 
 
 @power(
