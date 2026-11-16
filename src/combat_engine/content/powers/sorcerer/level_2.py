@@ -237,6 +237,20 @@ def p16239(c: Cast) -> None:
         c.zone(area, label=c.ref, until=When.EONT, difficult=True)
 
 
+def _land_or_fall(c: Cast, who: int) -> None:
+    """"Falls if he or she does not land by the end of the movement."
+
+    `falling.height` is the altitude and `drop` is the fall; the audit
+    board poses one the same way. Nothing happens for a creature that
+    finished on the floor, which is the usual case and is why this is a
+    question rather than a consequence.
+    """
+    from combat_engine.engine.falling import drop, height
+
+    if height(c.world, who) > 0:
+        drop(c.world, who)
+
+
 @power(
     "p3053",
     level=2,
@@ -248,20 +262,36 @@ def p16239(c: Cast) -> None:
     keywords=ARCANE,
 )
 def p3053(c: Cast) -> None:
-    """The fall is not written: nothing drops a creature that ends a move in
-    the air, and granting the mode for the move is what actually carries it.
-    The caster is the other half of the printed target line and goes first.
+    """**The fall is written now.** The old note said "nothing drops a
+    creature that ends a move in the air"; `falling.drop` is what the
+    audit board itself uses to pose a fall, and `falling.height` says
+    whether there is one to take. #1341.
+
+    Asked **after** each move rather than once at the end, because the
+    card gives each target its own movement and its own landing -- "falls
+    if HE OR SHE does not land by the end of the movement".
+
+    Granting the mode for the move is still what carries it; that half of
+    the old note was right and is why the flight is laid first.
+
+    **It does not fire on the audit board, and that is the board.** The
+    floor there is flat, so a flying move ends at height 0 and there is
+    nothing to fall from -- measured, no creature above the ground after
+    the move and no `Fell`. The helper is verified on its own: a creature
+    lifted to height 4 is dropped to 0 and `Fell` is announced.
     """
     if c.first:
         pace = c.speed_of() + 2
         c.mode("fly", pace, on=c.me, until=When.EOT)
         c.move(pace)
+        _land_or_fall(c, c.me)
     friend = c.target
     if friend is None:
         return
     theirs = c.speed_of(friend) + 2
     c.mode("fly", theirs, on=friend, until=When.EOT)
     c.move(theirs, who=friend)
+    _land_or_fall(c, friend)
 
 
 @power(

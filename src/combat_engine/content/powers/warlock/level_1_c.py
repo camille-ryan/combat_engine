@@ -41,6 +41,7 @@ from combat_engine.engine import (
     CloseBlast,
     CloseBurst,
     Condition,
+    DamageApplied,
     DamageType,
     Event,
     Hit,
@@ -296,13 +297,37 @@ def p4052(c: Cast) -> None:
     ),
 )
 def p4055(c: Cast) -> None:
-    """"It cannot save against this until it has taken the ongoing damage at
-    least once" is not written: `c.unsave` answers a save being rolled now,
-    and nothing holds a saving throw back until a condition is met."""
+    """**"It cannot save against this until it has taken the ongoing damage
+    at least once" is written now.** The old note said `c.unsave` "answers
+    a save being rolled now, and nothing holds a saving throw back" --
+    and answering the save being rolled now is enough: a save that cannot
+    yet succeed is a save that automatically fails, which is what
+    `c.unsave` is for ("it automatically fails"). #1341.
+
+    So the clause is a latch rather than a gate. The ongoing damage
+    landing once opens it; until then every save against this is failed
+    for the creature. `"ongoing" in ev.detail` is how `p9411` tells its
+    own tick from an ordinary blow.
+    """
+    victim = c.target
     if c.strike():
         c.damage("1d8", c.cha_mod, dtype=DamageType.PSYCHIC)
         c.penalty("save", 2, until=When.SAVE_ENDS)
     c.ongoing(5, DamageType.PSYCHIC)
+    if victim is None:
+        return
+    burned: list[bool] = []
+
+    def tick(ev: DamageApplied, v: int = victim) -> None:
+        if ev.target == v and "ongoing" in (ev.detail or ""):
+            burned.append(True)
+
+    def too_soon(ev: SavingThrow, v: int = victim) -> None:
+        if getattr(ev, "actor", None) == v and not burned:
+            c.unsave(ev)
+
+    c.watch(DamageApplied, tick, until=When.ENCOUNTER)
+    c.watch(SavingThrow, too_soon, until=When.ENCOUNTER)
 
 
 @power(
