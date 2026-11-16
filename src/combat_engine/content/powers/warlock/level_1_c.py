@@ -1,8 +1,11 @@
 """Warlock, level 1: the rows from the books after the first, part two.
 
-The conventions `level_1_b.py` sets out hold here too -- the two pact legs
-the class carries, one `dtype` for a line printing two, and no refund for
-"you do not expend this power".
+The conventions `level_1_b.py` sets out hold here too, and **all three
+of the ones this sentence used to name were false** -- the class carries
+eight pact legs rather than two, `c.damage` takes `dtypes` for a line
+printing two, and `c.restore_use` is the refund for "you do not expend
+this power". Read that header rather than this summary of it; the rows
+below still carry the old premise in places. #1346.
 
 Two shapes are new to this half.
 

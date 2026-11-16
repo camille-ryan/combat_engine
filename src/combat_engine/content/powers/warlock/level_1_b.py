@@ -2,19 +2,35 @@
 
 Four things recur across this batch and the next, and are settled here once.
 
-**Pacts.** `chargen.BUILDS["warlock"]` carries two legs, `infernal` and
-`fey`, and `c.build` answers those. A rider printed for the star, dark,
-vestige, sorcerer-king, gloom or elemental pact has no leg to ask for, so
-the base row is written in full and the rider is named in a comment rather
-than guessed at or handed to everybody. A row whose *whole* content is such
-a pact is absent -- see the report.
+**Pacts.** `chargen.BUILDS["warlock"]` carries **eight** legs --
+`infernal`, `fey`, `dark`, `elemental`, `sorcerer-king`, `star`,
+`vestige`, `gloom` -- and `c.build` answers all of them.
 
-**Two damage types at once** -- "necrotic and psychic" -- is one amount in
-the printed rules and `c.damage` carries one `dtype`, so the first named
-type is dealt and both keywords are declared.
+**This paragraph used to say two, and name the other six as having "no
+leg to ask for".** That is the single most expensive sentence in this
+class: 33 sites across seven files dropped a printed rider citing it, and
+the facility was not merely present but already in use while they were
+being written -- `features/warlock.py:359` gates a whole feature on
+`c.build("sorcerer-king")` and `feats/general_q.py:1828` gates a feat.
 
-**"You do not expend this power"** has no method: nothing refunds a use. The
-rest of such a line is written and the refund is left out.
+So a pact rider is **written**, with `c.build(leg)` for the leg. A *pact
+boon* clause is a different mechanism and is not a build gate at all: it
+is `c.spend_charge(FELL)`, whose False **is** the printed "if you spend",
+settled above the attack roll because the boon's card requires the
+decision before any roll. `p12887` and `p12888` are the worked pair.
+#1346.
+
+**Two damage types at once** -- "necrotic and psychic" -- is one amount
+in the printed rules, and `c.damage` takes **`dtypes`** for exactly this:
+"a blow that is several types at once". This paragraph used to say it
+carried one `dtype` and that the first named type was dealt, which
+under-sold every such row against a resistance to the second type.
+#1346.
+
+**"You do not expend this power"** is `c.restore_use(c.ref)`, which has
+been on `Cast` throughout -- its own docstring is about exactly these
+rows. This paragraph used to say nothing refunded a use and that was
+false; `shared.backlash` carries the refund now. #1346.
 
 **"Charisma or Constitution"** is fixed once at first level and a header
 holds one ability, so the Charisma line is the one written, as `level_1.py`

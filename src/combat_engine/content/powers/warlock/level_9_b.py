@@ -1,9 +1,11 @@
 """Warlock, level 9: the dailies from the books after the first.
 
-The class's settled readings hold: `c.build` answers the `infernal` and
-`fey` legs and every other pact rider is named in a comment, a line printing
-two damage types is one amount under the first of them, and nothing refunds
-a use.
+The class's settled readings hold -- but **the three this sentence used
+to state were each false**, and the rows below were written against them.
+`c.build` answers **eight** legs, not two, so a pact rider is written
+rather than named in a comment; a line printing two damage types is one
+amount under **`dtypes`**, which `c.damage` takes for exactly that; and
+`c.restore_use` refunds a use. #1346.
 
 Three shapes recur here.
 

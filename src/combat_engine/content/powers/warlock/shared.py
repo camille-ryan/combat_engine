@@ -68,12 +68,25 @@ def augmenting(c: Cast, *feats: str) -> str:
 def backlash(c: Cast) -> None:
     """The Miss line several of these share: pay psychic damage for a bonus.
 
-    "You do not expend this power" is the half that is still not said.
-    Nothing gave a use back when this was written, so what is here is the
-    price and the bonus it buys against the same target.
+    **"You do not expend this power" is said now.** The old note here --
+    "nothing gave a use back when this was written" -- was false when it
+    was written: `c.restore_use` is on `Cast` and its own docstring is
+    about exactly this, "the half-dozen rows whose entire Effect is this
+    line". Both callers are dailies, so the refund is the larger half of
+    what the Miss line buys. #1346.
+
+    `dsl.use` spends the use **above** the body, which is what makes this
+    reachable from inside it: measured, the row goes to one use spent on
+    the way in and back to none here, and `restore_use` returns True
+    rather than the False it gives for a row that was never used.
+
+    Order is deliberate. The refund comes **first**, so that a caster the
+    psychic damage drops still gets the power back -- the card prices the
+    Miss at damage, not at the power.
     """
     if not c.may("take the backlash", who=c.me):
         return
+    c.restore_use(c.ref)
     c.flat(5 + c.level // 2, dtype=DamageType.PSYCHIC, on=c.me)
     c.bonus("attack", 4, on=c.me, kind="power", until=When.EONT, once=True)
 
