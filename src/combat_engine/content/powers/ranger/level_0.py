@@ -500,10 +500,30 @@ def p13596(c: Cast) -> None:
     keywords=PRIMAL_STANCE,
 )
 def p13620(c: Cast) -> None:
-    """"Your movement during a charge doesn't provoke" is dropped:
-    `c.no_provoke` takes a creature and a duration and cannot be gated on
-    what you are doing at the time."""
+    """**"Your movement during a charge doesn't provoke" is written now.**
+    The old note said `c.no_provoke` "takes a creature and a duration and
+    cannot be gated on what you are doing at the time". It takes `when=`
+    as well -- and this row was already reading `ctx["charge"]` two lines
+    below for its damage bonus, so the key it needed was in use in its own
+    body. #1341.
+
+    **`move_kind`, not `charge`.** `c.no_provoke` builds its own context
+    for the veto -- `actor`, `provoker`, `why` and `move_kind`, "how and by
+    what means the provoker moved" -- and its note records why that key is
+    not called `kind`: "one key carried four unrelated vocabularies and a
+    gate could not say which it meant", which cost "a wrong bug report and
+    three hours". The damage bonus below reads `ctx["charge"]` because the
+    **damage** context is a different dictionary, and writing the same
+    spelling in both places is the trap that note is about.
+
+    `from_=None`, because the card excuses the movement rather than one
+    creature's opening: everything the charge runs past is covered.
+    """
     held = c.stance()
+    c.no_provoke(
+        on=c.me, until=When.STANCE,
+        when=lambda ctx: ctx.get("move_kind") == "charge",
+    )
     _hold(c, held, "damage", 2, when=lambda ctx: bool(ctx.get("charge")))
 
     def flatten(ev: Hit) -> None:

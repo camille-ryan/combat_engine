@@ -21,6 +21,7 @@ from combat_engine.engine import (
     Cast,
     DamageApplied,
     DamageRolled,
+    DamageType,
     Hit,
     Keyword,
     Melee,
@@ -90,9 +91,33 @@ def p11176(c: Cast) -> None:
     keywords=PSIONIC,
 )
 def p12428(c: Cast) -> None:
-    """The four extra damage types are dropped: a modifier carries a number
-    and not a type, and `c.vulnerable` is the wrong end of it."""
-    c.bonus("damage", c.cha_mod, on=c.me, until=When.EONT, when=_weapon_attack)
+    """**The four damage types are written now.** The old note said "a
+    modifier carries a number and not a type"; `c.bonus` takes `dtype`,
+    and its docstring is about this exact family -- "the difference
+    between '+2 damage' and '2 extra fire damage'... every one of them
+    used to roll untyped: the points went past a fire resistance that
+    should have stopped them". A **sequence** is "one rider of several
+    types", which is what this card's four are. #1341.
+
+    `c.vulnerable` really is the wrong end of it, and that half of the old
+    note stands: this is about what the blow *is*, not about what the
+    target suffers extra from.
+
+    What this carries and what it does not: the Charisma rider now meets
+    cold, fire, lightning and thunder defences on its own terms. The
+    power's own damage "stays whatever type the power was", per the same
+    docstring -- so a target resistant to fire takes less of the rider and
+    the weapon damage is untouched. The printed line reads as typing the
+    whole blow; typing the rider is the part the engine can say, and it is
+    the part that meets a resistance.
+    """
+    c.bonus(
+        "damage", c.cha_mod, on=c.me, until=When.EONT, when=_weapon_attack,
+        dtype=(
+            DamageType.COLD, DamageType.FIRE,
+            DamageType.LIGHTNING, DamageType.THUNDER,
+        ),
+    )
 
 
 @power(
