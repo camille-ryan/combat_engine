@@ -3836,6 +3836,27 @@ def board(ref: str, seed: int, pose: bool = False,
             place(world, e, was)
 
     _make_marks(world).armed = set(world.effects.live)
+    # **The hand holds every branch of a fork that prints "choose one", so
+    # the branches cancel each other out.** `features` above sweeps in
+    # every level-0 row of the class, on the stated ground that "every one
+    # of them is true of the character at once". That is false for an
+    # exclusive fork: the assassin's three guilds each grant their own
+    # three cards and `c.forbid` the other six, so a caster holding all
+    # three guilds has all nine forbidden and not one of them is usable.
+    #
+    # Measured: 21 of the 222 unusable rows were forbidden on their own
+    # board -- assassin 12, shaman 8, fighter 1 -- and every one of them
+    # is a card some legal character holds, because the character who
+    # picked that branch holds exactly it.
+    #
+    # The row under test wins, which is `keep=`'s rule one layer up and
+    # for the same reason: a board must not sabotage the measurement it
+    # was built to make. Aimed off the **observed** state rather than off
+    # a naming convention, so it covers the shaman and the fighter without
+    # knowing anything about either -- and it is read at setup, before any
+    # provocation, so a forbid a row earns *in play* is untouched. #1336.
+    if (_held := world.get(caster, Powers)) is not None:
+        _held.forbidden.discard(ref)
     armed = {e.kind for e in world.bus.log[mark:]} - START_NOISE
     world.turn = caster
     # Where the fight begins, which is **before** the opening initiative

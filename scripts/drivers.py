@@ -7145,6 +7145,63 @@ def the_board_keeps_the_row_it_is_measuring(out: Result) -> None:
         out.that(held(ref, frozenset({ref})),
                  f"and {ref} survives once keep= names it")
 
+def a_choose_one_fork_does_not_forbid_itself(out: Result) -> None:
+    """The board dealt all three guilds at once and they cancelled out.
+
+    `audit.board` sweeps every level-0 row of the class into the hand, on
+    the stated ground that *"every one of them is true of the character at
+    once"*. False for an exclusive fork: the assassin's three guild traits
+    each grant their own three cards and `c.forbid` the other six, so a
+    caster holding all three has **all nine** forbidden and not one is
+    usable. `usable()` says `cannot be used right now`, which is the
+    `powers.forbidden` branch -- so `--never` filed them under "no trigger
+    and no Requirement", the group whose whole point is being diagnosable.
+
+    21 rows were forbidden on their own board; 16 became usable. The other
+    five are the walk gap (#1337) and not this.
+
+    **The content is right and is asserted here as such.** The fork is the
+    row's whole clause, so a plant deleting `c.forbid` from it must red
+    something -- the first arm below is that assertion, and it is why this
+    rule reads the live `forbidden` set rather than only the verdict.
+
+    Aimed off observed state, never a naming convention: the content file
+    writes the exclusivity out by hand precisely so it is not derivable
+    from the refs. #1336.
+    """
+    import audit
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+
+    # **The fork still forbids**, read off a sibling's board rather than
+    # the row's own -- the knob clears the row under test and would hide
+    # the clause working. `p13796` belongs to a different guild from
+    # `p13795`, so on `p13795`'s board it is forbidden by a trait that is
+    # not being waived for it.
+    world, caster, _ = audit.board("p13795", 1)
+    held = world.get(caster, Powers)
+    out.that(held is not None, "the caster carries Powers")
+    if held is None:
+        return
+    out.that("p13796" in held.forbidden,
+             "a rival guild's card is still forbidden, so the fork's clause ran")
+
+    # And the row under test is not, which is the knob.
+    out.that("p13795" not in held.forbidden,
+             "the row under test is not forbidden on its own board")
+    _, why = usable(world, caster, REGISTRY["p13795"], board=True)
+    out.that(why != "cannot be used right now",
+             f"so usable() no longer refuses it as forbidden (said {why!r})")
+
+    # **Per-entity, which is what makes the knob a no-op elsewhere.** The
+    # whole claim that this change cannot touch a row outside the 21 rests
+    # on `forbidden` not being shared, so it is asserted and not assumed.
+    sets = [world.get(e, Powers) for e in range(1, 12)]
+    sets = [p.forbidden for p in sets if p is not None]
+    out.that(len(sets) > 1, "several creatures on the board carry Powers")
+    out.that(len({id(f) for f in sets}) == len(sets),
+             "and every one has its own forbidden set, so discard is local")
+
 def a_familiar_changing_mode_is_announced(out: Result) -> None:
     """`c.familiar_mode` did the work and said nothing.
 
@@ -91114,6 +91171,9 @@ DRIVERS = {
     "the_board_keeps_the_row_it_is_measuring": (
         the_board_keeps_the_row_it_is_measuring,
         "the audit board traded away the card it was about to measure"),
+    "a_choose_one_fork_does_not_forbid_itself": (
+        a_choose_one_fork_does_not_forbid_itself,
+        "the board dealt all three guilds at once and they cancelled out"),
     "a_familiar_changing_mode_is_announced": (
         a_familiar_changing_mode_is_announced,
         "c.familiar_mode did the work and announced nothing"),
