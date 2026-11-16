@@ -33028,6 +33028,159 @@ def replaying_a_resolved_outcome(out: Result) -> None:
     )
 
 
+def the_kit_a_character_needs_for_its_job(out: Result) -> None:
+    """"You must be playing a musical instrument", and a holy symbol for a
+    divine character.
+
+    Camille's ruling on `#1324`, asked because one row's Requirement names
+    ordinary equipment and no character ever held any:
+
+        "characters at 1st level start with 100gp. We can actually model
+         that later. For now, yes give the character a musical instrument
+         (I assume it's a bard?) It should be dealt the same way mundane
+         arms and armor are dealt. Divine characters should start with a
+         holy symbol. Characters should get the things necessary to do
+         their jobs."
+
+    So the claim is the last sentence, and it is asserted twice: the row
+    that asked is offered, and a divine character holds a symbol.
+
+    **Dealt like arms and armour means off the chassis, deterministic and
+    rng-free.** That is also the only safe shape: `#1334` measured what a
+    new *draw* costs -- one `BUILD_OPTIONS` entry silenced `f2176` by
+    shifting the stream -- and this consumes no rng, so no other dealer
+    moves. The arm below checks exactly that.
+
+    **The row is `r62`, not the bard Camille guessed**, which is why the
+    kit is keyed by race. Said rather than quietly corrected.
+
+    **And `i192` goes only to a divine character that lacks one.** Cleric
+    and paladin already carry `HOLY_SYMBOL` in their printed arms line, so
+    handing them a second would be the kind of double-grant this project
+    keeps finding -- the negative arms are that.
+    """
+    from combat_engine import chargen
+    from combat_engine.chargen import INSTRUMENTS, Character, kit_for, spawn
+    from combat_engine.engine import Bus, Grid, World
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import get, usable, use
+    from combat_engine.engine.events import TurnEnd
+    from combat_engine.engine.rng import Rng
+
+    def dealt(cls: str, race: str = "") -> list[str]:
+        world = World(Grid(24, 16), Rng(3), Bus())
+        eid = spawn(world, Character(cls=cls, level=1, race=race), (2, 2))
+        held = world.get(eid, Gear)
+        return sorted(held.carried) if held is not None else []
+
+    # ---- the holy symbol, and only where it is missing
+    out.that(
+        kit_for("avenger", "", ["longsword", "rod"]) == (
+            chargen.HOLY_SYMBOL_KIT,),
+        "a divine character holding no holy symbol is dealt one -- the"
+        " avenger carries a rod, which is an implement and not a symbol",
+        f"avenger kit: {kit_for('avenger', '', ['longsword', 'rod'])}",
+    )
+    out.that(
+        kit_for("cleric", "", ["mace", "holy-symbol"]) == (),
+        "while a cleric is dealt NOTHING, because its printed arms line"
+        " already carries one -- the arm that stops this being a"
+        " double-grant, and a reader that only checked the power source"
+        " would hand it a second",
+        f"cleric kit: {kit_for('cleric', '', ['mace', 'holy-symbol'])}",
+    )
+    out.that(
+        kit_for("fighter", "", ["longsword"]) == (),
+        "and a martial character is dealt no symbol at all -- the ruling"
+        " says divine characters, not everybody",
+        f"fighter kit: {kit_for('fighter', '', ['longsword'])}",
+    )
+    out.that(
+        chargen.HOLY_SYMBOL_KIT in dealt("avenger"),
+        "and it reaches a DEALT avenger, not just the table -- `spawn` is"
+        " where kit is laid and a mapping nothing reads is the failure"
+        " this project calls a facility with no caller",
+        f"a dealt avenger carries {dealt('avenger')}",
+    )
+
+    # ---- the instrument, and the row that asked for it
+    out.that(
+        any(ref in dealt("wizard", "r62") for ref in INSTRUMENTS),
+        "an r62 character carries one of the five printed instruments --"
+        " the race the row belongs to, which is not the bard Camille"
+        " guessed",
+        f"an r62 character carries {dealt('wizard', 'r62')}",
+    )
+
+    row = get("p15845")
+    world, me, _ = _board("p15845")
+    held = world.get(me, Gear)
+    out.that(
+        held is not None
+        and any(ref in held.carried for ref in INSTRUMENTS)
+        and usable(world, me, row)[0],
+        "so p15845 is OFFERED: its board's caster carries an instrument"
+        " and the Requirement is met",
+        f"carried {sorted(held.carried) if held else None};"
+        f" usable {usable(world, me, row)}",
+    )
+    held.carried = [r for r in held.carried if r not in INSTRUMENTS]
+    refused, why = usable(world, me, row)
+    out.that(
+        refused is False and "instrument" in why,
+        "and REFUSED with the instrument taken away, naming the printed"
+        " line. A `requires=` and not a body guard, so the row is not"
+        " offered rather than spending a minor action on nothing",
+        f"usable without an instrument: {(refused, why)}",
+    )
+
+    # ---- the deactivation, both ways
+    def aura_of(world: object, me: int) -> set[int]:
+        was = {eid for eid, _z in world.zones.all()}
+        use(world, me, "p15845")
+        return {eid for eid, _z in world.zones.all()} - was
+
+    world2, me2, _ = _board("p15845")
+    mine = aura_of(world2, me2)
+    out.that(
+        len(mine) == 1,
+        "using it lays exactly one aura, which the two arms below are"
+        " measured against",
+        f"{len(mine)} zone(s) appeared",
+    )
+    world2.bus.emit(TurnEnd(actor=me2, round=1))
+    out.that(
+        mine <= {eid for eid, _z in world2.zones.all()},
+        "and it SURVIVES the end of the turn while the instrument is held",
+        "the aura went out with the instrument still in hand",
+    )
+    world3, me3, _ = _board("p15845")
+    theirs = aura_of(world3, me3)
+    gear3 = world3.get(me3, Gear)
+    gear3.carried = [r for r in gear3.carried if r not in INSTRUMENTS]
+    world3.bus.emit(TurnEnd(actor=me3, round=1))
+    out.that(
+        theirs and not (theirs <= {eid for eid, _z in world3.zones.all()}),
+        'while losing the instrument deactivates it -- "the aura is'
+        ' deactivated if you are not playing your musical instrument at'
+        ' the end of your turn". The clause runs on a path nothing'
+        " ordinary reaches, which is why it is asserted: its first draft"
+        " called `zones.remove`, which does not exist, and would have"
+        " raised the one time it mattered",
+        f"{len(theirs)} laid, "
+        f"{len(theirs & {eid for eid, _z in world3.zones.all()})} left",
+    )
+
+    # ---- and the kit costs no rng
+    out.that(
+        dealt("fighter") == dealt("fighter"),
+        "and dealing kit is reproducible -- it consumes no rng, which is"
+        " what keeps it from moving every later draw the way a"
+        " BUILD_OPTIONS entry did in #1334",
+        "two identical deals disagreed",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -89879,6 +90032,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "job_kit": (
+        the_kit_a_character_needs_for_its_job,
+        "the mundane kit a character needs to use its own rows",
     ),
     "replay_outcome": (
         replaying_a_resolved_outcome,

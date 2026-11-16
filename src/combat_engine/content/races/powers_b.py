@@ -1472,6 +1472,33 @@ def p15842(c: Cast) -> None:
     c.grants_advantage(on=foe, to=c.me, until=When.EONT)
 
 
+def _playing_an_instrument(world: World, eid: int) -> bool:
+    """"Requirement: you must be playing a musical instrument."
+
+    **Any of the five, not the one that was dealt.** `chargen.INSTRUMENTS`
+    is the set the `Equipment` import carries, and the card names the kind
+    rather than a particular instrument -- so a character handed a drum and
+    one who bought a harp both satisfy it.
+
+    `Gear.carried` is the field, which is what it is for: *"item refs the
+    creature has on its person -- carried, not worn and not wielded"*, and
+    `themes/batch_f.py`'s `_carrying` reads it for the three rows printing
+    "you must have `<ref>` on your person".
+
+    A `requires=` predicate rather than a body guard, for `_carrying`'s
+    stated reason: `dsl.usable` reads it, so the row is **not offered**
+    when there is no instrument, where a guard inside the body would let a
+    minor action be spent on nothing. #1324.
+    """
+    from combat_engine.chargen import INSTRUMENTS
+    from combat_engine.engine.components import Gear
+
+    held = world.get(eid, Gear)
+    return held is not None and any(
+        ref in held.carried for ref in INSTRUMENTS
+    )
+
+
 @power(
     "p15845",
     level=10,
@@ -1481,7 +1508,8 @@ def p15842(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CHARM],
-    dropped=("chargen.deals_equipment",),
+    requires=_playing_an_instrument,
+    requires_text="you must be playing a musical instrument",
 )
 def p15845(c: Cast) -> None:
     """Both premises of the old note are false, and the card is roll-twice,
@@ -1533,12 +1561,38 @@ def p15845(c: Cast) -> None:
     "Any enemy", so the caster's own saves are untouched -- the aura is not
     a general charm-dampener and a bard standing in it keeps its dice.
 
-    Still dropped: the Requirement and the clause that deactivates the aura
-    both turn on *playing a musical instrument*, which is ordinary kit --
-    `Gear` records weapons, a shield, armour, worn magic and ammunition and
-    has no slot for the rest, so there is no ref to ask for. Same gap and
-    same symbol as `p16442`, whose note sets it out. The consequence is
-    that the aura, once up, is never deactivated.
+    **The Requirement and the deactivation both land now**, and what
+    unblocked them was the dealing half rather than a reader. Camille's
+    ruling on `#1324`:
+
+        "For now, yes give the character a musical instrument (I assume
+         it's a bard?) It should be dealt the same way mundane arms and
+         armor are dealt. Divine characters should start with a holy
+         symbol. Characters should get the things necessary to do their
+         jobs."
+
+    So `chargen.KIT_BY_RACE` deals `r62` an instrument off the chassis --
+    unconditional and rng-free, which is both what "like arms and armour"
+    means and the only safe shape, since a new *draw* moves every later
+    one (`#1334`). This row is `r62` and not the bard Camille guessed,
+    which is why the kit is keyed by race.
+
+    The old note said `Gear` "has no slot for the rest" and that was true
+    when it was written; `Gear.carried` arrived with `#1233` and is
+    exactly the slot -- *"item refs the creature has on its person"*.
+    What was missing was anything putting an instrument in it.
+
+    **The deactivation reads the same predicate at the end of the turn**,
+    which is the printed clause: *"the aura is deactivated if you are not
+    playing your musical instrument at the end of your turn"*. It is not a
+    no-op even though kit is rarely lost mid-fight -- a disarm, a theft or
+    a scene that takes the instrument away ends the aura, and the card's
+    own next clause ("but you can reactivate the aura as a minor action")
+    only makes sense if something can switch it off.
+
+    Watched rather than checked when the aura is laid, because the clause
+    is about *each* end of turn and the aura outlives the one it went up
+    on.
     """
     me = c.me
     ring = c.aura(5, until=When.ENCOUNTER, on=me)
@@ -1558,6 +1612,16 @@ def p15845(c: Cast) -> None:
         SavingThrow, worse, until=When.ENCOUNTER, on=me,
         window=Window.BEFORE, label=f"{c.ref} refrain",
     )
+
+    def silence(ev: TurnEnd) -> None:
+        """"Deactivated if you are not playing your instrument at the end
+        of your turn." The same predicate the Requirement asks."""
+        if ev.actor != me or _playing_an_instrument(c.world, me):
+            return
+        c.world.zones.end(ring, f"{c.ref}: stopped playing")
+
+    c.watch(TurnEnd, silence, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} silence")
 
 
 # -- r66 --------------------------------------------------------------------

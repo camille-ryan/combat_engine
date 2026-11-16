@@ -5789,6 +5789,82 @@ def _spellbook_picks(held: set[str], level: int,
     return out
 
 
+#: **Mundane kit a character needs to do its own job.** Camille's ruling on
+#: `#1324`, asked because one row's Requirement names a piece of ordinary
+#: equipment and no character ever held one:
+#:
+#:     "characters at 1st level start with 100gp. We can actually model
+#:      that later. For now, yes give the character a musical instrument
+#:      (I assume it's a bard?) It should be dealt the same way mundane
+#:      arms and armor are dealt. Divine characters should start with a
+#:      holy symbol. Characters should get the things necessary to do
+#:      their jobs."
+#:
+#: So the test is the last sentence: a character gets the kit its own
+#: printed rows require. Two needs today.
+#:
+#: **Dealt like arms and armour means dealt off the chassis, deterministic
+#: and unconditional** -- not drawn and not left to a scene. That is also
+#: the only safe way to add it: `#1334` is the measurement of what a new
+#: *draw* costs, and this consumes no rng at all, so no other dealer moves.
+#:
+#: **The 100gp is deliberately not modelled**, per the ruling's own first
+#: sentence. A purse and a price list is a bigger change and this is the
+#: part the rows need.
+#:
+#: Keyed by race ref as well as class, because the row that asked is
+#: **racial** -- `p15845` is `r62`, not the bard Camille guessed. The
+#: parallel to a printed arms line is therefore the race's line, not a
+#: class's.
+KIT_BY_RACE: dict[str, tuple[str, ...]] = {
+    #: `i247`, a drum -- the first of the five printed instruments, which
+    #: is reproducible where a draw would not be. Any of `INSTRUMENTS`
+    #: satisfies the Requirement, so which one is dealt carries no
+    #: mechanical weight. `p15845`.
+    "r62": ("i247",),
+}
+
+#: The five mundane instruments the `Equipment` import carries, by ref.
+#: *"You must be playing a musical instrument"* is satisfied by any of
+#: them, so a row asks the set rather than the one that was dealt.
+#:
+#: `#876` imported `Category = 'Equipment'` (233 rows) and is what gave
+#: these refs at all; before it the instrument this card needs did not
+#: exist to be asked for.
+INSTRUMENTS: tuple[str, ...] = ("i247", "i248", "i249", "i250", "i251")
+
+#: The mundane holy symbol. Camille: *"Divine characters should start with
+#: a holy symbol."*
+#:
+#: **Dealt only to a divine character that is not already holding one**,
+#: which is three of the five: `cleric` and `paladin` carry `HOLY_SYMBOL`
+#: in their printed arms line as an implement, and `avenger`, `invoker`
+#: and `runepriest` carry a rod, a staff and nothing respectively. So this
+#: fills the gap without touching a printed proficiency line -- the
+#: printed row wins, and a carried symbol is kit rather than a claim about
+#: what the page trains them in.
+HOLY_SYMBOL_KIT = "i192"
+
+
+def kit_for(cls: str, race: str, holding: Iterable[str]) -> tuple[str, ...]:
+    """The mundane kit this character needs, by item ref. `#1324`.
+
+    `holding` is what it already has -- weapon slugs and carried refs
+    together -- so a class whose printed arms line already includes a holy
+    symbol is not handed a second one.
+
+    Deterministic and rng-free, which is the whole shape of it: see
+    `KIT_BY_RACE` for why a draw here would be the wrong mechanism and
+    `#1334` for what one costs.
+    """
+    out: list[str] = list(KIT_BY_RACE.get(race, ()))
+    if power_source(cls) == "divine" and not any(
+        "holy" in str(h) for h in holding
+    ):
+        out.append(HOLY_SYMBOL_KIT)
+    return tuple(out)
+
+
 def _stock_consumables(
     gear: Gear | None,
     powers: Powers | None,
@@ -7649,6 +7725,20 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # different potions and a drunk one comes back. `story.Party.of` is
     # what pins it. Dealt here only when nothing pinned it, which is every
     # single-encounter caller -- the audit board, `fight.py`, `winrate`.
+    # **The mundane kit its own rows require**, on Camille's `#1324`
+    # ruling -- an instrument for the race that needs one, a holy symbol
+    # for a divine character holding none. Unconditional and rng-free, so
+    # it moves no other dealer; `kit_for` has the ruling verbatim.
+    #
+    # Before the consumables, so a kit item is in `carried` whichever way
+    # that call goes -- a pinned party returns early from it.
+    _kit = world.get(eid, Gear)
+    if _kit is not None:
+        for _ref in kit_for(
+            who.cls, who.race, [w.slug for w in _kit.weapons] + _kit.carried
+        ):
+            if _ref not in _kit.carried:
+                _kit.carried.append(_ref)
     _stock_consumables(
         world.get(eid, Gear),
         world.get(eid, Powers),
