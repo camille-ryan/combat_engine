@@ -22,8 +22,10 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Melee,
+    OpportunityWindow,
     Trigger,
     When,
+    Window,
     by_me,
     power,
 )
@@ -194,13 +196,42 @@ def p11207(c: Cast) -> None:
 )
 def p13123(c: Cast) -> None:
     """"Cannot shift" is `c.cannot_shift`, not `c.immobilized` -- the creature can
-    still walk. "Cannot make opportunity attacks" has no `Cast` method at
-    all, so the second half of the off-target clause is dropped."""
+    still walk.
+
+    **"Cannot make opportunity attacks" is written now.** The old note was
+    right that there is no `Cast` method for it and wrong that the clause
+    therefore cannot be said: cancelling the creature's
+    `OpportunityWindow` is the mechanism, which `wizard/level_1_b.py`'s
+    `_no_opportunity` has used all along and `p8242` now uses too. #1341.
+
+    **Not `c.no_immediate`**, which is the near miss: `query.can_react`
+    gates immediate *and* opportunity actions, so that verb would also
+    take away the immediate actions this card never mentions.
+
+    The clause is conditional -- "if the target was **not** a target of the
+    triggering attack" -- so it is gated on the triggering event's own
+    target rather than applied to every creature this row touches.
+    """
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
         c.flat(2 + c.con_mod)
     c.cannot_shift(until=When.SONT)
+    victim = c.target
+    struck = getattr(c.trigger, "target", None)
+    if victim is None or victim == struck:
+        return
+    held = c.effect(f"{c.ref} rooted", on=victim, until=When.EOT)
+    if held is None:
+        return
+
+    def refuse(ev: OpportunityWindow) -> None:
+        if ev.actor == victim:
+            ev.cancel("cannot make opportunity attacks")
+
+    held.subs.append(
+        c.world.bus.on(OpportunityWindow, refuse, window=Window.BEFORE, owner=c.me)
+    )
 
 
 @power(
