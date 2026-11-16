@@ -34,8 +34,13 @@ from combat_engine.engine import (
     attack=Attack(DEX, vs=REF),
 )
 def p9435(c: Cast) -> None:
-    """Escapes are not rolled anywhere, so the -5 to them has nothing reading
-    it and is dropped. The -2 is gated on the attack context's `target`, which
+    """**The -5 to escape attempts is written now.** The old note said
+    "escapes are not rolled anywhere, so the -5 to them has nothing reading
+    it", and `"escape"` is one of `c.penalty`'s words with fourteen callers
+    already in the tree -- `escape.attempt` is what reads it, and the audit
+    board poses one. #1341.
+
+    The -2 is gated on the attack context's `target`, which
     is the caster -- the printed line is "against you". The Special (sustain
     as a minor and lose the effect) is a choice of action cost and has no
     field for it."""
@@ -51,6 +56,8 @@ def p9435(c: Cast) -> None:
             until=When.ENCOUNTER,
             when=lambda ctx: ctx.get("target") == c.me
         )
+
+        c.penalty("escape", 5, on=victim, until=When.ENCOUNTER)
 
         def squeeze() -> None:
             c.damage("2d10", c.dex_mod, on=victim)

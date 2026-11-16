@@ -39,6 +39,7 @@ from combat_engine.engine import (
     power,
     query,
 )
+from combat_engine.engine.events import Moved
 
 PSIONIC = [Keyword.PSIONIC]
 
@@ -249,8 +250,17 @@ def p8237(c: Cast) -> None:
 )
 def p8238(c: Cast) -> None:
     """Who is within 5 squares is settled each time the effect is sustained,
-    which is as often as the printed line can be re-read. "If you move, the
-    effect ends" is dropped -- an effect cannot end itself here."""
+    which is as often as the printed line can be re-read.
+
+    **"If you move, the effect ends" is written now.** The old note said
+    "an effect cannot end itself here", and it can: the effect is held, a
+    `Moved` watch on the caster calls `world.effects.end` on it, and the
+    watch dies with it. #1341.
+
+    `Moved` rather than `MoveStart`, so the effect survives a move that is
+    declared and then cancelled -- the printed line is "if you move", and a
+    cancelled move is not one.
+    """
 
     def steady() -> None:
         c.immovable(on=c.me, until=When.EONT)
@@ -259,4 +269,11 @@ def p8238(c: Cast) -> None:
                 c.immovable(on=friend, until=When.EONT)
 
     steady()
-    c.on_sustain(c.effect(c.ref, on=c.me, until=When.SUSTAIN, sustain=MINOR), steady)
+    held = c.effect(c.ref, on=c.me, until=When.SUSTAIN, sustain=MINOR)
+    c.on_sustain(held, steady)
+
+    def walked(ev: Moved) -> None:
+        if ev.actor == c.me and held is not None:
+            c.world.effects.end(held, "the psion moved")
+
+    c.watch(Moved, walked, until=When.SUSTAIN, on=c.me, label=f"{c.ref} breaks")
