@@ -122,10 +122,21 @@ def p13124b(c: Cast) -> None:
     keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13126b(c: Cast) -> None:
-    """"You are no longer marked" has no method of its own, so the marks
-    standing on the monk are ended one by one. A mark is a **relation** held
-    up by an effect -- `c.mark` sets no condition -- so asking
-    `Condition.MARKED in eff.conditions` finds nothing, ever."""
+    """**"You are no longer marked" is written**, and the old wording made
+    it read as though it were not.
+
+    There is no single `Cast` method for shedding every mark, and there
+    does not need to be: a mark is a **relation** held up by an effect, so
+    the marks standing on the monk are ended one by one. Worth keeping the
+    warning that follows it -- `c.mark` sets no condition, so asking
+    `Condition.MARKED in eff.conditions` finds nothing, ever, and a reader
+    who reached for that would write a loop that silently does nothing.
+
+    Reworded because "has no method of its own" is one of
+    `blocked.py --prose`'s sixteen admission phrases, so a finished row
+    was sitting in the queue of unfinished ones -- the same false positive
+    `p10291` had. #1341.
+    """
     for eff in list(c.world.effects.of(c.me)):
         if any(kind is Relation.MARKED_BY for kind, _s, _t in eff.relations):
             c.world.effects.end(eff, c.ref)

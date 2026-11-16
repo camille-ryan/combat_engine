@@ -50,6 +50,7 @@ from combat_engine.engine import (
     MoveEnd,
     OpportunityWindow,
     Ranged,
+    Target,
     TurnEnd,
     UpTo,
     When,
@@ -606,7 +607,11 @@ def p13743(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Ranged(10),
-    target=ONE_CREATURE,
+    target=Target(
+        "any", 1,
+        label="one creature in contact with the ground",
+        on_the_ground=True,
+    ),
     keywords=[*ARCANE_IMPLEMENT, Keyword.ZONE, Keyword.NECROMANCY, Keyword.SHADOW],
     attack=Attack(INT, vs=REF),
 )
@@ -615,8 +620,18 @@ def p13972(c: Cast) -> None:
     row's ref and everybody on the caster's side excused from that label,
     which is exactly what `c.ignores_difficult` takes.
 
-    "One nonflying creature" has nowhere to go: a target line filters by side
-    and count and cannot ask what a creature is doing.
+    **"One nonflying creature" is written now.** The old note said a target
+    line "filters by side and count and cannot ask what a creature is
+    doing"; it has thirty-odd filters and one of them is exactly this.
+    `Target(on_the_ground=)` reads `query.on_the_ground`, which `#660`
+    added because "five rows asked it in their bodies and spelled it four
+    different ways between them, one of them with the wrong notion of
+    airborne". #1341.
+
+    It is **two** inputs rather than a flight check: height and how the
+    creature is moving, so "a hovering creature at height 0 is not
+    touching the ground and a climbing one is holding a wall". That is the
+    printed test and it is why the field exists instead of a body check.
     """
     if not c.strike():
         return
