@@ -396,6 +396,7 @@ def p13704(c: Cast) -> None:
     keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:8"),
     requires_text="you must have a comp:8 beast companion",
+    dropped=("c.prone(held_away_from=)",),
     trigger=_MELEE_DAMAGE,
     on=Trigger(DamageApplied, when=both(targets_me, by_melee), text=_MELEE_DAMAGE),
 )
@@ -403,9 +404,17 @@ def p13705(c: Cast) -> None:
     """The Requirement is positional, so it is asked here rather than in the
     header: the beast has to be standing next to whoever swung.
 
-    "Cannot stand up until it begins a move action not adjacent to your
-    beast companion" is a condition on a square, and `c.prone(held=)` takes
-    a duration. The prone is applied; the hold on standing is dropped.
+    **"Cannot stand up until it begins a move action not adjacent to your
+    beast companion" is a real gap and now carries the marker.** Checked
+    against the near misses rather than assumed: `c.prone(held=)` takes a
+    `When` and nothing else, there is no `c.no_stand` beside the fifteen
+    other `c.no_*` prohibitions, and `"stand"` is in `actions.GRANTABLE`
+    as a thing a row can *grant* for a cheaper action rather than forbid.
+
+    What the card asks for is a prohibition that lifts on a *position* --
+    the move action has to begin somewhere not adjacent to the beast --
+    which is neither a duration nor a condition the engine has. The prone
+    itself is applied. #1341.
     """
     ev = c.trigger
     beast = c.companion()

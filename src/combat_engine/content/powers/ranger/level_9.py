@@ -390,9 +390,29 @@ def p12504(c: Cast) -> None:
     shift is taken first and whoever is in reach afterwards is who it
     catches.
 
-    Where the slide ends -- next to the beast companion -- has nowhere to go:
-    `c.slide` takes no anchor, so the destination is the mover's decider's,
-    the reading `level_2.py`'s `p923` settled. Of the trailing Effect, the
+    **Where the slide ends is written now.** The old note said "`c.slide`
+    takes no anchor, so the destination is the mover's decider's", and
+    `c.slide` has `anchor=`, `to=` **and** `toward=`. `toward=` is the one
+    this card wants: it "names a creature to slide somebody at", which is
+    exactly "slide the target 5 squares to a square adjacent to your beast
+    companion".
+
+    Its own docstring records why this kept going wrong -- the verb was
+    missed when the other movement verbs were given a destination bias, so
+    rows that slide a creature *at* something were sliding it away, and
+    "invisible for as long as the swing afterwards went unchecked". This
+    row was one of them, and the A/B says so plainly -- same board, same
+    creature, slid 5:
+
+        plain  c.slide(5)              lands at gap 6 from the beast
+        this   c.slide(5, toward=)     lands at gap 2
+
+    The gap does not close to 1 on the audit board because the squares
+    beside the beast are occupied and `forced` stops where it legally can.
+    What the anchor fixes is the direction: without it the row slid the
+    target four squares further AWAY than where it started. #1341.
+
+    Of the trailing Effect, the
     half that grants `p12504b` is the hold left here under this ref; the
     other half -- the beast answering with an opportunity action rather than
     an immediate interrupt -- is a budget the engine keeps and no row can
@@ -402,12 +422,13 @@ def p12504(c: Cast) -> None:
         c.shift(4)
         c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
     alone = c.first and c.last
+    beast = c.companion()
     if c.strike():
         c.damage(c.w(2 if alone else 1), c.str_mod)
-        c.slide(5)
+        c.slide(5, toward=beast)
     else:
         c.half_damage(c.w(1), c.str_mod)
-        c.slide(3)
+        c.slide(3, toward=beast)
 
 
 @power(
