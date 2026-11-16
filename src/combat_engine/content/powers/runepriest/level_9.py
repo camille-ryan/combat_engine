@@ -24,6 +24,7 @@ from combat_engine.engine import (
     TurnStart,
     When,
     ZoneEntered,
+    get,
     power,
 )
 
@@ -123,9 +124,21 @@ def p11402(c: Cast) -> None:
     attack=Attack(STR, vs=FORT),
 )
 def p11403(c: Cast) -> None:
-    """The zone's resist is dropped -- `c.resist` cannot be gated on the
-    shape of the attack coming in. Its AC bonus is handed out on entry and
-    runs its duration rather than ending when somebody steps out."""
+    """**The zone's resist is written now.** The old note said `c.resist`
+    "cannot be gated on the shape of the attack coming in", and its
+    `when=` is handed the damage context with `power` in it -- so the
+    incoming row's `reach.kind` is readable, which is how four other rows
+    already ask this question. #1341.
+
+    Not `c.resist_in`, which is the near miss: that gives everyone in the
+    zone a flat resistance and takes no `when`, where this card resists
+    **only close and area attacks**. A flat version would shrug off every
+    arrow as well, which is a stronger card than the one printed.
+
+    Both halves are read live, so stepping out of the zone drops the
+    resistance -- unlike the AC bonus beside it, which is handed out on
+    entry and runs its own duration.
+    """
     if c.strike():
         c.damage(c.w(), c.str_mod, dtype=DamageType.RADIANT)
         c.push(4)
@@ -136,12 +149,29 @@ def p11403(c: Cast) -> None:
         return
     area = c.area()
     zid = c.zone(area, until=When.EONT, sustain=MINOR)
+    def shielded(ctx: dict[str, Any], who: int, z: int = zid) -> bool:
+        """A close or area attack, landing on somebody still in the zone."""
+        if who not in c.world.zones.occupants(z):
+            return False
+        dealt = get(ctx.get("power") or "")
+        return dealt is not None and dealt.reach.kind in (
+            "close_burst", "close_blast", "area_burst",
+        )
+
     for who in [c.me, *c.in_squares(area, side="ally")]:
         c.bonus(AC, 2, on=who, until=When.EONT, kind="power")
+        c.resist(
+            5, None, on=who, until=When.EONT,
+            when=lambda ctx, w=who: shielded(ctx, w),
+        )
 
     def ward(ev: Any, z: int = zid) -> None:
         if ev.zone == z and ev.actor in [c.me, *c.allies()]:
             c.bonus(AC, 2, on=ev.actor, until=When.EONT, kind="power")
+            c.resist(
+                5, None, on=ev.actor, until=When.EONT,
+                when=lambda ctx, w=ev.actor: shielded(ctx, w),
+            )
 
     c.watch(ZoneEntered, ward, until=When.EONT)
 

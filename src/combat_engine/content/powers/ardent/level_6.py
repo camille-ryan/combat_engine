@@ -48,6 +48,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import InitiativeRolled
 from combat_engine.engine.triggers import about_me
+from combat_engine.engine.zones import Zone
 
 PSIONIC = [Keyword.PSIONIC]
 
@@ -235,10 +236,31 @@ def p12955(c: Cast) -> None:
     keywords=PSIONIC,
 )
 def p13782(c: Cast) -> None:
-    """Dismissing the aura as a minor action is dropped -- an aura has no drop
-    cost -- and so is "that can't be reduced in any way": `c.flat` goes through
-    the caster's own resistances like any other damage."""
-    c.aura(5, until=When.ENCOUNTER)
+    """**Both halves are written now, and both verbs already had the
+    keyword.**
+
+    "That can't be reduced in any way" is `c.flat(unpreventable=True)` --
+    the old note said `c.flat` "goes through the caster's own resistances
+    like any other damage", which is its default and not its only mode.
+
+    "Until you dismiss it as a minor action" is `c.endable`, which sets
+    `Effect.drop_cost` on the hold the aura rides. The old note said "an
+    aura has no drop cost"; the aura does not carry one, its **effect**
+    does, and that is what `actions.legal` offers. #1341.
+    """
+    ring = c.aura(5, until=When.ENCOUNTER)
+    held = c.world.get(ring, Zone)
+    # `Zone.effect` is the Effect itself; `Conjuration.effect` is an id.
+    # Same field name, different type, and looking the first one up in
+    # `effects.live` raises "unhashable type: Effect".
+    if held is not None and held.effect is not None:
+        # **`by=c.me`, because an aura's effect is owned by the ZONE
+        # entity**, which has no turn -- so `actions._dropping`, which
+        # walks `effects.of(actor)`, would offer it to nobody. That is the
+        # same shape `#296` fixed for conjurations with a branch of its
+        # own; `drop_by` is the generalised answer and `c.endable` takes
+        # it as `by`.
+        c.endable(held.effect, MINOR, by=c.me)
 
     def payout(ev: DamageApplied) -> None:
         foe = ev.target
@@ -246,7 +268,7 @@ def p13782(c: Cast) -> None:
             return
         if not c.may("take 5 psychic damage to open the enemy up", who=c.me):
             return
-        c.flat(5, dtype=DamageType.PSYCHIC, on=c.me)
+        c.flat(5, dtype=DamageType.PSYCHIC, on=c.me, unpreventable=True)
         c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="team")
 
     c.watch(DamageApplied, payout, until=When.ENCOUNTER)
