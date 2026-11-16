@@ -25,6 +25,7 @@ say so, the way `level_1.py`'s pact prerequisites already do.
 
 from __future__ import annotations
 
+from combat_engine.content.features.warlock import FELL
 from combat_engine.content.powers.warlock.level_0 import holding
 from combat_engine.content.powers.warlock.shared import augmenting
 from combat_engine.content.powers.warlock.shared import rally as _rally
@@ -53,11 +54,14 @@ from combat_engine.engine import (
     Melee,
     MeleeOrRanged,
     Miss,
+    OpportunityWindow,
     Ranged,
     Target,
     Trigger,
+    TurnStart,
     UpTo,
     When,
+    Window,
     World,
     power,
     targets_me,
@@ -155,9 +159,28 @@ def p12310(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p12894(c: Cast) -> None:
-    """Both branches roll the same line, so no `attack_alt` is declared. The
-    sorcerer-king rider has no leg to ask for."""
+    """Both branches roll the same line, so no `attack_alt` is declared.
+
+    **The sorcerer-king rider is written now.** It was dropped as having
+    "no leg to ask for" and the leg was always there -- `BUILDS` carries
+    eight. #1346.
+
+    Its resource is the pact boon, not the build: `cf:warlock-f1s4` is
+    the feature, and "if you spend your fell might" is
+    `c.spend_charge(FELL)`, settled **above** the attack roll because the
+    boon's card requires the decision before any roll.
+
+    "Each enemy adjacent to the target **before the push**" is already the
+    set this row measures early, for the reason the comment below gives,
+    so the rider needs no second reading of the floor -- and the psychic
+    damage is dealt off that same pre-push list.
+    """
     victim = c.target
+    spent = (
+        c.build("sorcerer-king")
+        and c.may("spend the boon")
+        and c.spend_charge(FELL)
+    )
     if not c.strike() or victim is None:
         return
     c.damage("2d8", c.cha_mod, dtype=DamageType.LIGHTNING)
@@ -165,6 +188,9 @@ def p12894(c: Cast) -> None:
     # The neighbours are read before the target moves: a push that opens a
     # gap would otherwise spare whoever was standing there.
     beside = [f for f in c.within(1, of=victim, side="enemy") if f != victim]
+    if spent:
+        for foe in beside:
+            c.flat(max(0, c.int_mod), dtype=DamageType.PSYCHIC, on=foe)
     c.push(shove)
     for foe in beside:
         c.push(shove, on=foe)
@@ -255,10 +281,53 @@ def p13752(c: Cast) -> None:
     attack=Attack(CHA, vs=FORT),
 )
 def p13906(c: Cast) -> None:
-    # The gloom pact rider has no leg to ask for.
-    if c.strike():
-        c.damage("2d6", c.cha_mod, dtype=DamageType.NECROTIC)
-        c.blinded()
+    """**The gloom rider is written now** -- `c.build("gloom")` answers,
+    and the leg was always there. #1346.
+
+    Two clauses on one hold, and both are about *whoever is standing next
+    to the target*, which is a set that changes while the effect lasts.
+    So the adjacency is asked at **read** time rather than written down
+    at cast time: the combat-advantage half rides `when=`, and the
+    opportunity half re-asks inside the veto. An enemy that walks away
+    stops granting, which is what "while adjacent" says.
+
+    **The target itself is excluded**, because nothing is adjacent to
+    itself -- the card's "enemies" are its neighbours, not it.
+
+    "Cannot make opportunity attacks" has no `Cast` method and does not
+    need one: cancelling the `OpportunityWindow` is the mechanism,
+    the same one `wizard/level_1_b.py`'s `_no_opportunity` and `p8242`
+    use. Not `c.no_immediate`, which is the near miss -- `can_react`
+    gates immediate actions too, and this card never mentions those.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("2d6", c.cha_mod, dtype=DamageType.NECROTIC)
+    c.blinded()
+    if not c.build("gloom") or victim is None:
+        return
+    for foe in c.enemies():
+        if foe == victim:
+            continue
+        held = c.grants_advantage(
+            on=foe,
+            to="team",
+            until=When.EONT,
+            when=lambda ctx, f=foe: c.adjacent_to(f, victim),
+        )
+        if held is None:
+            continue
+
+        def refuse(ev: OpportunityWindow, f: int = foe) -> None:
+            if ev.actor == f and c.adjacent_to(f, victim):
+                ev.cancel("cannot make opportunity attacks")
+
+        held.subs.append(
+            c.world.bus.on(
+                OpportunityWindow, refuse, window=Window.BEFORE, owner=c.me
+            )
+        )
 
 
 @power(
@@ -273,10 +342,53 @@ def p13906(c: Cast) -> None:
     attack=Attack(CHA, vs=FORT),
 )
 def p13916(c: Cast) -> None:
-    # The star pact rider -- a slide and a splash at the start of your next
-    # turn -- has no leg to ask for.
-    if c.strike():
-        c.damage("2d6", c.cha_mod, dtype=DamageType.COLD)
+    """**Two corrections in one row**, both from #1346.
+
+    The Hit line prints "cold **and** necrotic damage", which is one blow
+    that is both types -- `dtypes`, not the first of them under `dtype`.
+    Written the first way it was under-sold against anything resisting
+    necrotic. `level_0.py` in this same class was already using `dtypes`
+    while the header said it did not exist.
+
+    And the star rider is written: `c.build("star")` is the leg, and the
+    clause lands on the caster's **own** next turn, so the watcher is
+    filtered on `c.me` rather than firing for whoever acts next.
+
+    The splash is read **after** the slide -- "each creature adjacent to
+    it at the end of the slide" -- so the neighbours are gathered inside
+    the watcher rather than at cast time. It is "creature", not "enemy",
+    so an ally standing by the landing square is caught too; that is the
+    printed word.
+    """
+    victim = c.target
+    if not c.strike() or victim is None:
+        return
+    c.damage(
+        "2d6", c.cha_mod, dtypes=(DamageType.COLD, DamageType.NECROTIC)
+    )
+    if not c.build("star"):
+        return
+
+    def on_start(ev: TurnStart) -> None:
+        if ev.actor != c.me:
+            return
+        c.slide(3, on=victim)
+        caught = [victim, *(w for w in c.within(1, of=victim) if w != victim)]
+        for who in caught:
+            c.flat(
+                max(0, c.int_mod),
+                dtypes=(DamageType.COLD, DamageType.NECROTIC),
+                on=who,
+            )
+
+    # **`EONT`, not `SONT`, and the difference is the whole clause.** The
+    # hold has to outlive the moment it fires: `SONT` ends it *at* the
+    # start of the caster's next turn, which is exactly when the watcher
+    # is meant to run, and measured that way it expired first and the
+    # slide never happened. `EONT` keeps it through that turn, and
+    # `once=True` plus the `c.me` filter mean it still fires on exactly
+    # one turn start -- the caster's own next one.
+    c.watch(TurnStart, on_start, until=When.EONT, once=True)
 
 
 @power(
@@ -294,11 +406,19 @@ def p15904(c: Cast) -> None:
     """"If you hit both targets" needs the body to remember across its calls,
     and it is called once per target with nothing carried between -- so each
     creature hit is given a named hold and `c.suffering` reads them back on
-    the last call. The star pact rider has no leg to ask for.
+    the last call.
+
+    **The star rider is written now** -- `c.build("star")` answers, and
+    the leg was always there. #1346. It sits inside the hit branch
+    because the body runs once per target and the card grants it per
+    target: a two-target use that lands one swing gives it to the one it
+    hit.
     """
     if c.strike():
         c.damage("2d6", c.con_mod, dtype=DamageType.COLD)
         c.effect(f"{c.ref} rimed", until=When.EOT)
+        if c.build("star"):
+            c.grants_advantage(until=When.EONT, to="team")
     if not c.last:
         return
     caught = c.suffering(f"{c.ref} rimed")
