@@ -796,13 +796,24 @@ push is still affordable — but do not quote 25 minutes.
   which — read the per-field diff, never the headline.
 
   **What `audited.json` actually holds**, because it is asked about and the
-  answer decides how a diff on it is read. Counted off the file on
-  2026-11-09: a `sha`, six counters (`refs` 21,662, `fired` 20,121,
-  `silent` 539, `never` 841, `known_quiet` 161, `raises` 0) and **four
-  per-ref lists** — `silent_refs` 539, `never_refs` 841, `refused_refs`
-  755, `known_quiet_refs` 161. `raises` is the one number treated as
-  inviolable. Note `refused_refs` has no counter beside it, so its 755 is
-  only readable from the list.
+  answer decides how a diff on it is read. The *shape* is a `sha`, six
+  counters (`refs`, `fired`, `silent`, `never`, `known_quiet`, `raises`)
+  and **four per-ref lists** — `silent_refs`, `never_refs`,
+  `refused_refs`, `known_quiet_refs`. `raises` is the one number treated
+  as inviolable. Note `refused_refs` has no counter beside it, so its
+  figure is only readable from the list.
+
+  **The numbers are deliberately not written down here any more, and that
+  is this file's own lesson applied to itself.** It carried `never` 841
+  and the baseline held **991** — so a session that recovered 121 rows
+  and brought it to 870 would have compared 870 against 841 and concluded
+  the sweep had made things *worse*. That very nearly happened on
+  2026-11-16. A count in this file decays on every sweep, which is more
+  often than any line number, and the figure is one command:
+
+  ```
+  uv run python -c "import json;d=json.load(open('scripts/fixtures/audited.json'));print({k:(len(v) if isinstance(v,list) else v) for k,v in d.items()})"
+  ```
 
   The per-ref lists are the whole point, and they are *stricter* than the
   counters beside them. A silent row **not** on the list is red; a listed
