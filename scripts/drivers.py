@@ -91801,6 +91801,27 @@ UNSCORED_DRAW = frozenset(
         "substitute_check",
         "vestige_augment",
         "weapon_is_mine",
+        # **The five board-defect rules of #1335-#1340**, every one of
+        # which asks whether `audit`'s own board can reach a row -- so the
+        # draw they need is the one `audit.py` intends, not whatever flag
+        # the previously-registered rule left behind.
+        #
+        # `the_board_runs_a_charge` is the one that proved it. It passed
+        # alone and failed in the full suite, through `audit.audit` as
+        # well as through a hand-built board, and neither
+        # `_SPEND_FOR_REAL` nor `_ALLY_IS_DYING` explained it: under the
+        # scored draw the dealt caster cannot reach `p14145` at all.
+        #
+        # The other four are named on the same ground rather than because
+        # they went red. They passed, and they passed on luck -- the flag
+        # they inherited happened to be the right one. A rule whose
+        # verdict depends on registration order is wrong even while it is
+        # green.
+        "a_bare_sword_hand_is_posed",
+        "a_choose_one_fork_does_not_forbid_itself",
+        "the_board_keeps_the_row_it_is_measuring",
+        "the_board_runs_a_charge",
+        "the_board_walks_an_enemy_and_not_only_shifts",
     }
 )
 
