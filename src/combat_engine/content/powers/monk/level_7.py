@@ -275,10 +275,19 @@ def p16166(c: Cast) -> None:
     requires_text="needs at least one hand free",
 )
 def p16168(c: Cast) -> None:
-    """The escape penalty has no modifier key to write to and is dropped."""
+    """**The escape penalty is written now.** The old note said it "has no
+    modifier key to write to", and `"escape"` is one of `c.penalty`'s keys
+    with fourteen callers in the tree; `escape.attempt` reads it. #1341.
+
+    No `once=`, deliberately: this card's penalty lasts "until the end of
+    your next turn" rather than being spent on the first attempt, which is
+    the distinction `p13806` turns on -- and `c.bonus` refuses `once=` for
+    this key anyway, because it has no spend moment.
+    """
     if c.strike():
         c.damage("2d6", c.dex_mod)
         c.grab()
+        c.penalty("escape", c.str_mod, on=c.target, until=When.EONT)
 
 
 @power(

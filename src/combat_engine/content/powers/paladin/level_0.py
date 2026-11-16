@@ -200,12 +200,25 @@ def p13554(c: Cast) -> None:
         ally_within(3),
         "an ally within 3 squares of you is damaged by an attack",
     ),
+    dropped=("c.absorb(raw=)",),
 )
 def p13555(c: Cast) -> None:
     """`DamageRolled` rather than `DamageApplied`: `c.absorb` moves a number
     that has been rolled and not yet dealt, which is the whole point of the
-    interrupt. "Ignores your immunities and resistances" cannot be told to
-    `deal_damage` and is dropped."""
+    interrupt.
+
+    **"Ignores your immunities and resistances" is a real gap and now
+    carries the marker.** Checked against the near miss, which points the
+    other way: `c.ignore_resistance` exists but is **attacker-side** --
+    "your fire powers ignore the target's fire resistance", and its own
+    docstring calls that "the one thing about it that is easy to get
+    backwards". Here the paladin is the creature being hurt, and it is his
+    own resistances that must not apply.
+
+    `c.absorb(ev, on=)` takes no flag for it: it reads the `DamageRolled`,
+    zeroes it and deals it to the absorber through the ordinary path,
+    resistances and all. So the marker names `c.absorb(raw=)`. #1341.
+    """
     c.absorb(c.trigger)
     c.bonus("attack", 2, until=When.EONT, on=c.me, kind="power")
 
