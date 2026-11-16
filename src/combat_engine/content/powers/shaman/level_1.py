@@ -151,7 +151,7 @@ def p5393(c: Cast) -> None:
     The printed escape clause -- end it as a minor action for 10 hit points
     -- is the half that really is missing and now carries the marker:
     `actions.GRANTABLE` is the authority on granted actions and has no word
-    for ending an effect.
+    for ending an effect. #1344.
     """
     if c.strike():
         c.damage("1d8", c.wis_mod)

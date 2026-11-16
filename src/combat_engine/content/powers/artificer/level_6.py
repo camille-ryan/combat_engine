@@ -81,7 +81,7 @@ def p4142(c: Cast) -> None:
     missing and now carries the marker: it is the target's own later minor
     action, `c.grant_action` is the facility for a granted action, and
     `actions.GRANTABLE` -- which is the authority, and raises on a word it
-    does not know -- has no word for ending an effect.
+    does not know -- has no word for ending an effect. #1344.
     """
     ally = c.target
     if ally is None or not c.bloodied(ally) or c.con_mod <= 0:

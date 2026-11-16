@@ -438,7 +438,7 @@ def p13031(c: Cast) -> None:
     What remains is "as a minor action you can end this effect to gain
     resist 5". That is a granted action, `actions.GRANTABLE` is the
     authority on the words, and it has none for ending an effect -- the
-    same gap `p4142` and `p5393` carry.
+    same gap `p4142` and `p5393` carry. #1344.
     """
     if c.strike():
         c.damage(c.w(3), c.con_mod)
