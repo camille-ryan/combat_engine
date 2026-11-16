@@ -176,7 +176,19 @@ def p2602(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p4368(c: Cast) -> None:
-    """The Effect is a step by the beast companion and is not written.
+    """**The Effect -- "before or after the attack, your beast companion
+    can shift 1 square" -- is written now.**
+
+    It was never missing for want of a facility. `c.beast()` and
+    `c.shift(who=)` are both here and this body already called them; the
+    bug was that `beast` was looked up **only when a feat applied**
+    (`c.beast() if arena else None`), so the row's own printed Effect ran
+    for a character holding `f971` and for nobody else. #1341.
+
+    The step is taken after the attack, which is one of the two the card
+    offers. `f971` is what widens "before **or** after" to "before **and**
+    after", so its branch takes the extra one in front -- that is the
+    feat's whole content and it must not be what buys the base step.
 
     **`f971`'s and `f983`'s clauses are written in here** (#550), as one
     `c.declare` chain because both are `[Arena Fighting]` and one feat of
@@ -198,17 +210,17 @@ def p4368(c: Cast) -> None:
     is honest rather than silently true.
     """
     arena = c.declare("Arena Fighting", "f971", "f983")
-    beast = c.beast() if arena else None
+    beast = c.beast()
+    # `f971`'s extra step, in front of the attack. The row's own is below.
     if arena == "f971" and beast is not None:
         with c.credit("f971"):
             c.shift(1, who=beast)
     landed = c.strike()
     if landed:
         c.damage(c.w(1), c.str_mod)
-    if arena == "f971" and beast is not None:
-        with c.credit("f971"):
-            c.shift(1, who=beast)
-    elif arena == "f983" and landed and beast is not None and c.target is not None:
+    if beast is not None:
+        c.shift(1, who=beast)
+    if arena == "f983" and landed and beast is not None and c.target is not None:
         victim, companion = c.target, beast
         spent: list[bool] = []
 

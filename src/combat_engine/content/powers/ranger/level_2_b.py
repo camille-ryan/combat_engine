@@ -96,6 +96,16 @@ def _has_beast(world: World, eid: int) -> bool:
 #: eight of them were wrong. Measured with a bear: 9 usable before, 1 after.
 
 
+#: The two categories `p4381` names and the three `p4398` names, by ref.
+#: Refs and never species words, for the reason `_beast_is` records below:
+#: a word here is a printed name in content code, and `api/render.py`
+#: falls back to `requires_text` when the localisation is absent.
+_BEAR = "comp:1"
+_BOAR = "comp:2"
+_SNAKE = "comp:6"
+_SPIDER = "comp:7"
+
+
 def _beast_is(want: str) -> Callable[[World, int], bool]:
     """"You must have a <ref> beast companion" -- the half that used to be
     unaskable.
@@ -224,12 +234,16 @@ def p13698(c: Cast) -> None:
     requires_text="you must have a comp:91 beast companion",
 )
 def p13699(c: Cast) -> None:
-    """The Acrobatics bonus is a skill check and is dropped.
+    """**The skill bonus is written now.** The old note said it "is a skill
+    check and is dropped"; this tree has skills, a 90-number DC table and
+    the `"skill:<name>"` bonus word that five other rows already use.
+    #1341.
 
     "Or until your beast companion is killed" is not a duration the engine
     has; the encounter is the longer of the two and is what is held.
     """
     c.mode("climb", c.speed_of(), on=c.me, until=When.ENCOUNTER)
+    c.bonus("skill:acrobatics", 4, on=c.me, until=When.ENCOUNTER, kind="power")
 
 
 @power(
@@ -418,11 +432,23 @@ def p4381(c: Cast) -> None:
     picks -- a companion takes no turn and is nobody's enemy or ally in the
     targeting sense -- so it is reached through `c.companion()` instead.
 
-    The bear-or-boar bonus to the save is dropped: no species is knowable.
+    **The species bonus is written now.** The old note said "no species is
+    knowable", and this file's own `_beast_is` docstring already records
+    why that stopped being true: `chargen` writes the category beside the
+    leg as `beast:comp:N` and `c.beast(category=)` reads it back. #1341.
+
+    Two refs rather than one call, because the card names two categories
+    and `category=` asks about one. `c.save(bonus=)` takes the number, so
+    the bonus is part of the roll rather than a modifier laid beside it --
+    which matters for a save, the one roll nothing else modifies here.
     """
     beast = c.companion()
-    if beast is not None:
-        c.save(on=beast)
+    if beast is None:
+        return
+    rider = c.wis_mod if any(
+        c.beast(category=kind) is not None for kind in (_BEAR, _BOAR)
+    ) else 0
+    c.save(on=beast, bonus=rider)
 
 
 @power(

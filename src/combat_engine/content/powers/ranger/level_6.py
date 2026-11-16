@@ -132,10 +132,30 @@ def p925(c: Cast) -> None:
 )
 def p10621(c: Cast) -> None:
     """`"team"` is the side including the caster, which is what "you and one
-    ally" means -- the `"ally"` pool has not held the caster since #364. The
-    Beast line adds squares for the companion; it is not
-    modelled, so that clause is dropped."""
-    c.shift(1, who=c.target)
+    ally" means -- the `"ally"` pool has not held the caster since #364.
+
+    **The Beast line is written now.** The old note said the companion "is
+    not modelled", and `c.beast()` has answered it all along -- returning
+    None for a character who keeps none, so the gate is honest rather than
+    silently true. #1341.
+
+    The line is "**if** your beast companion is a target", so it is asked
+    of each target rather than applied to the shift as a whole: this row
+    moves two creatures and only one of them can be the beast.
+
+    **The allowance is not observable on the audit board, and that is the
+    board rather than the clause.** `c.shift(n)` moves exactly one square
+    for every `n` here -- measured at 1, 3 and 5, all landing on the same
+    adjacent square -- because the headless decider takes the nearest
+    option and `c.shift` returns a bool rather than a count. So a row whose
+    only effect is a larger shift *allowance* cannot be told apart from the
+    base row by reading positions, and this one is asserted by the
+    arithmetic it passes, not by a verdict.
+    """
+    squares = 1
+    if c.target is not None and c.target == c.beast():
+        squares += c.wis_mod
+    c.shift(squares, who=c.target)
 
 
 @power(

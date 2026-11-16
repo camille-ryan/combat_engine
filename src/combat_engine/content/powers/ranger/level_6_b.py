@@ -27,6 +27,8 @@ from combat_engine.engine.events import AdjacencyGained, AttackRolled
 from combat_engine.engine.query import distance_between as _gap
 from combat_engine.engine.triggers import Trigger, hits_my_companion
 
+from .level_2_b import _BEAR, _SNAKE, _SPIDER
+
 MARTIAL = [Keyword.MARTIAL]
 MARTIAL_HEALING = [Keyword.MARTIAL, Keyword.HEALING]
 
@@ -104,14 +106,32 @@ def p4398(c: Cast) -> None:
 
     The printed Target is the beast, which is not a creature the targeting
     machinery offers -- a companion holds no initiative slot -- so it is
-    reached through `c.companion()`. The species rider extends the duration
-    and is dropped.
+    reached through `c.companion()`.
+
+    **The species rider is written now.** The old note said it "extends the
+    duration and is dropped", and the species has been knowable since
+    `chargen` began writing the category beside the leg -- see
+    `_beast_is`'s docstring in `level_2_b.py`, which records the day that
+    claim stopped being true. #1341.
+
+    Three refs, because the card names three categories and
+    `c.beast(category=)` asks about one. The rider changes only the clock:
+    `SONT` where the base is `EONT`, which is the printed "lasts until the
+    start of your next turn" against the default end of it.
     """
     ev = c.trigger
     beast = c.companion()
     if ev is None or beast is None:
         return
-    c.bonus(ev.vs, 4, on=beast, until=When.EONT, kind="power")
+    longer = any(
+        c.beast(category=kind) is not None
+        for kind in (_BEAR, _SPIDER, _SNAKE)
+    )
+    c.bonus(
+        ev.vs, 4, on=beast,
+        until=When.SONT if longer else When.EONT,
+        kind="power",
+    )
 
 
 @power(
