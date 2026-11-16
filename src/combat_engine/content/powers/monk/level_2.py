@@ -179,8 +179,17 @@ def p16146(c: Cast) -> None:
 )
 def p16147(c: Cast) -> None:
     """The stance's second stat block is a row of its own, gated on this
-    one being up. The Perception bonus is narrative and is not written."""
+    one being up.
+
+    **The Perception bonus is written now, and it was never narrative.**
+    The old note called it that; a skill check is a roll this engine makes,
+    `combat_engine/dc.py` holds 90 numbers for it, and
+    `c.bonus("skill:perception", ...)` is the key several rows already
+    use. A `narrative=` marker is for a clause with no combat meaning, and
+    a +5 to a roll the engine rolls is not one. #1341.
+    """
     c.stance()
+    c.bonus("skill:perception", 5, on=c.me, until=When.STANCE, kind="power")
 
 
 @power(

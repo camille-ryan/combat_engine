@@ -190,10 +190,25 @@ def p13223(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
+    dropped=("c.no_charge()",),
 )
 def p15984(c: Cast) -> None:
-    """"Cannot charge" has nothing to hang on -- a charge is an action kind,
-    not a row -- so only the slow is written."""
+    """**"Cannot charge" is a real gap and now carries the marker**, and the
+    near miss is worth naming because it would pass a careless check.
+
+    `c.no_walk` **does** bar charging -- its own docstring says so: "a
+    charge is a walk for this... when the charge started passing
+    `kind="charge"` (#301) this test had to widen or the bar would have
+    been skipped". But it also bars walking, which this card does not say:
+    the target is *slowed*, not rooted. Using it would be strictly
+    stronger than print.
+
+    Nothing narrower exists. `actions._charges` gates on PRONE, on the
+    action budget and on holding a basic attack, and reads no
+    charge-specific bar; there is no `c.no_charge` beside the fifteen
+    other `c.no_*` prohibitions. So the slow is written and the marker
+    names the missing one. #1341.
+    """
     if c.strike():
         c.damage("2d8", c.dex_mod)
         c.slowed(until=When.EONT)
