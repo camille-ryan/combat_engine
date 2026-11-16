@@ -7202,6 +7202,66 @@ def a_choose_one_fork_does_not_forbid_itself(out: Result) -> None:
     out.that(len({id(f) for f in sets}) == len(sets),
              "and every one has its own forbidden set, so discard is local")
 
+def the_board_walks_an_enemy_and_not_only_shifts(out: Result) -> None:
+    """The board shifted enemies and never walked one.
+
+    A shift is the one kind of movement half these triggers print
+    themselves to exclude -- *"moves **without shifting**"*, *"**leaves a
+    square** adjacent to your spirit companion"*. Both kinds emit
+    `MoveStart`, so the event class says nothing and `--never` filed a
+    dozen rows under an event the board was emitting all along. The
+    difference is a **field**: `MoveStart.kind_`, and the
+    `OpportunityWindow` only a walk opens.
+
+    Asserted on the two movers rather than on a verdict, because the
+    verdict is what the pass is *for* and a rule reading it would be
+    asserting its own conclusion. #1337.
+    """
+    import audit
+    from combat_engine.engine.movement import shift, walk
+    from combat_engine.engine.query import enemies as foes_of
+
+    seen = {}
+    for name, mover in (("shift", shift), ("walk", walk)):
+        world, caster, _ = audit.board("p12865", 1)
+        foe = sorted(foes_of(world, caster))[0]
+        square = sorted(world.reachable_squares(foe, 2))[0]
+        mark = len(world.bus.log)
+        mover(world, foe, square if name == "shift" else [square])
+        seen[name] = [
+            (e.kind, getattr(e, "kind_", None)) for e in world.bus.log[mark:]
+            if e.kind in ("MoveStart", "OpportunityWindow")
+        ]
+
+    out.that(("MoveStart", "shift") in seen["shift"],
+             "a shift emits MoveStart(kind_='shift')")
+    out.that(("MoveStart", "walk") in seen["walk"],
+             "a walk emits MoveStart(kind_='walk'), which is a different card")
+    out.that(not any(k == "OpportunityWindow" for k, _ in seen["shift"]),
+             "a shift opens no opportunity window")
+    out.that(any(k == "OpportunityWindow" for k, _ in seen["walk"]),
+             "and a walk opens one, which nothing else on this board does")
+
+    # The pass itself, through the board: the four shaman rows wanting a
+    # square *left* beside the companion were UNUSED and now fire.
+    #
+    # **Over several seeds, which is how `audit.py` itself judges a row** --
+    # it gives one a few boards before calling it silent, because an attack
+    # that misses has honestly done nothing. A single seed asserted here
+    # was stricter than the instrument it is about, and seed 1 is one of the
+    # boards where the row does not land.
+    reached = any(
+        audit._provoke(*_fresh(audit, "p12865", seed)) for seed in range(1, 9)
+    )
+    out.that(reached,
+             "so p12865 is reached, where the shift loop alone never reached it")
+
+
+def _fresh(audit, ref: str, seed: int):  # noqa: ANN001, ANN202
+    """A board and the arguments `_provoke` wants for it."""
+    world, caster, _ = audit.board(ref, seed)
+    return world, caster, ref, len(world.bus.log)
+
 def a_familiar_changing_mode_is_announced(out: Result) -> None:
     """`c.familiar_mode` did the work and said nothing.
 
@@ -91174,6 +91234,9 @@ DRIVERS = {
     "a_choose_one_fork_does_not_forbid_itself": (
         a_choose_one_fork_does_not_forbid_itself,
         "the board dealt all three guilds at once and they cancelled out"),
+    "the_board_walks_an_enemy_and_not_only_shifts": (
+        the_board_walks_an_enemy_and_not_only_shifts,
+        "the board only ever shifted, which these triggers exclude"),
     "a_familiar_changing_mode_is_announced": (
         a_familiar_changing_mode_is_announced,
         "c.familiar_mode did the work and announced nothing"),

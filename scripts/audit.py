@@ -4616,8 +4616,8 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     its predicate and its action budget are exercised too -- which a direct
     call skips entirely.
     """
-    from combat_engine.engine.components import Budget, Powers
-    from combat_engine.engine.movement import shift
+    from combat_engine.engine.components import Budget, Position, Powers
+    from combat_engine.engine.movement import shift, walk
     from combat_engine.engine.query import enemies
 
     def basic(eid: int) -> str:
@@ -5053,6 +5053,93 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
             shift(world, foe, sq)
             if probe():
                 return True
+
+    # **A walk, which this board had never once produced.** The loop above
+    # shifts, and a shift is the one kind of movement half these triggers
+    # print themselves to exclude: *"an adjacent enemy marked by you moves
+    # **without shifting**"*, *"an enemy leaves a square adjacent to your
+    # spirit companion"*. Both kinds emit `MoveStart`, so the event class
+    # says nothing -- the difference is `MoveStart.kind_`, `'shift'` against
+    # `'walk'`, and **only a walk opens an `OpportunityWindow`**. Measured
+    # on `p12865`'s own board: a shift emits `MoveStart(kind_='shift')` and
+    # no window; a walk emits `MoveStart(kind_='walk')` and one.
+    #
+    # So a dozen rows reading the movement events were being provoked with
+    # the single kind of movement their own clause rules out, and reported
+    # UNUSED for it. Grouping by event class hid this for as long as it
+    # lasted: `--never` counted them under `MoveStart`, which the board was
+    # emitting all along.
+    #
+    # Gated on the declared trigger, like `_rolls_checks` and
+    # `_rolls_saves`, so a row that never mentions moving pays nothing --
+    # this is 15-odd walks a foe and `audit.py`'s runtime is the one number
+    # in the repo documented as un-tunable.
+    #
+    # **Put back between attempts**, which the shift loop above does not
+    # need to be: a walk is up to two squares and compounding them marches
+    # a foe off the caster's side of the board, so the later passes --
+    # every one of which reaches for `foes[0]` -- would be posing against a
+    # creature that had wandered out of reach. #1337.
+    _walk_wants = {
+        t.event.__name__ for t in (getattr(get(ref), "triggers", None) or ())
+    } & _WALK_EVENTS
+    if _walk_wants:
+        # **Which foe walks is the whole pass, and `foes[:2]` was the wrong
+        # two.** These clauses are about a square being *left*, and the
+        # square they mean is one adjacent to something the caster owns --
+        # *"adjacent to your spirit companion"*, *"an adjacent enemy".* On
+        # `p12865`'s board the companion stands at (5,9), the only foe
+        # beside it is the third in ref order, and a flat `foes[:2]` took
+        # the first two and walked them around the far side of the caster.
+        # The pass ran, 30 walks happened, and not one of them left a
+        # square the row cared about.
+        #
+        # So the candidates are ordered by whether the foe starts adjacent
+        # to the caster or to one of its allies -- the companion is an ally
+        # -- and the slice is taken after the sort rather than before it.
+        _ours = [caster, *(_allies_of(world, caster))]
+        _beside = {
+            f for f in foes
+            for o in _ours
+            if (po := world.get(o, Position)) is not None
+            and (pf := world.get(f, Position)) is not None
+            and max(abs(po.square[0] - pf.square[0]),
+                    abs(po.square[1] - pf.square[1])) <= 1
+        }
+        _walkers = sorted(foes, key=lambda f: (f not in _beside, f))[:3]
+        for foe in _walkers:
+            if not alive(world, foe):
+                continue
+            _home = world.get(foe, Position)
+            if _home is None:
+                continue
+            _was = _home.square
+            # **Only the squares that change who this foe stands beside.**
+            # Every clause in this group is about adjacency moving -- a
+            # square *left*, a square *entered*, an enemy that *moves
+            # away* -- so a walk ending with the same neighbours is a walk
+            # none of them can see. Unpruned this probed ~25 squares a foe
+            # and `probe()` is the expensive call in the pass, not `walk`.
+            _mine = {
+                o for o in _ours
+                if world.get(o, Position) is not None
+            }
+
+            def _beside_now(sq: tuple[int, int], mine: set[int] = _mine) -> frozenset[int]:
+                return frozenset(
+                    o for o in mine
+                    if (po := world.get(o, Position)) is not None
+                    and max(abs(po.square[0] - sq[0]),
+                            abs(po.square[1] - sq[1])) <= 1
+                )
+
+            _start = _beside_now(_was)
+            for sq in sorted(world.reachable_squares(foe, 2)):
+                if _beside_now(sq) == _start:
+                    continue
+                if walk(world, foe, [sq]) and probe():
+                    return True
+                place(world, foe, _was)
 
     # An opportunity attack, swung by hand in both directions. Walking out
     # of reach opens the window and nothing comes of it: the engine never
@@ -5930,6 +6017,16 @@ def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
 #:     Rerolled       4    somebody rolls an attack again
 #:
 #: #755, and #753 is the same shape for a saving throw.
+#: The events a **walk** produces that the shift loop cannot. `MoveStart` is
+#: on the list even though a shift emits one too: the rows that want a walk
+#: read `MoveStart.kind_`, so the class is the right gate and the kind is
+#: what the pass supplies. `OpportunityWindow` has no other natural source
+#: on this board at all -- the opportunity pass below swings one by hand.
+_WALK_EVENTS = frozenset({
+    "MoveStart", "MoveEnd", "Moved", "LeaveSquare", "EnterSquare",
+    "OpportunityWindow", "AdjacencyLost", "AdjacencyGained",
+})
+
 _ORDINARY = ("TotalDefence", "Fell", "Escaped", "WeaponHeld",
               "Rerolled", "TurnEnd")
 
