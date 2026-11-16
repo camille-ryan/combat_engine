@@ -68,7 +68,6 @@ def p10201(c: Cast) -> None:
     reach=CloseBurst(10),
     target=Target("team", 1, label="bloodied"),
     keywords=[Keyword.ARCANE, Keyword.HEALING],
-    dropped=("c.grant_action('end_effect_for_surge')",),
 )
 def p4142(c: Cast) -> None:
     """**`c.regeneration` is the primitive, and this row hand-rolled it.**
@@ -77,16 +76,20 @@ def p4142(c: Cast) -> None:
     three files had each grown separately. The verb takes the amount, the
     duration, whose it is and a `while_bloodied` gate. #1341.
 
-    Cashing the effect in for a healing surge is the half that really is
-    missing and now carries the marker: it is the target's own later minor
-    action, `c.grant_action` is the facility for a granted action, and
-    `actions.GRANTABLE` -- which is the authority, and raises on a word it
-    does not know -- has no word for ending an effect. #1344.
+    **The way out is `c.endable`, not `c.grant_action`.** I filed
+    `#1344` saying `actions.GRANTABLE` had no word for "end this effect as
+    a minor action for X" -- which is true and is the wrong question. The
+    offer is a property of the **effect**, `Effect.drop_cost`, which
+    `actions.legal` hands to whoever holds it; the payout is
+    `Effect.drop_then`, whose own note says it "runs only for a deliberate
+    drop... a payout owed for choosing is not owed for waiting". `c.endable`
+    is the verb for both, and four rows were already using it. #1341.
     """
     ally = c.target
     if ally is None or not c.bloodied(ally) or c.con_mod <= 0:
         return
-    c.regeneration(c.con_mod, on=ally, until=When.ENCOUNTER)
+    mending = c.regeneration(c.con_mod, on=ally, until=When.ENCOUNTER)
+    c.endable(mending, MINOR, then=lambda: c.surge(on=ally))
 
 
 @power(

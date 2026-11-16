@@ -139,7 +139,6 @@ def p4783(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.HEALING],
     attack=Attack(WIS, vs=FORT),
-    dropped=("c.grant_action('end_effect_for_hp')",),
 )
 def p5393(c: Cast) -> None:
     """**Regeneration has a verb of its own and this row hand-rolled it.**
@@ -148,10 +147,18 @@ def p5393(c: Cast) -> None:
     `c.regeneration(while_bloodied=True)` is the printed "regeneration 2
     while bloodied" exactly. #1341.
 
-    The printed escape clause -- end it as a minor action for 10 hit points
-    -- is the half that really is missing and now carries the marker:
-    `actions.GRANTABLE` is the authority on granted actions and has no word
-    for ending an effect. #1344.
+    **The way out is `c.endable`, not `c.grant_action`.** I filed
+    `#1344` saying `actions.GRANTABLE` had no word for "end this effect as
+    a minor action for X" -- which is true and is the wrong question. The
+    offer is a property of the **effect**, `Effect.drop_cost`, which
+    `actions.legal` hands to whoever holds it; the payout is
+    `Effect.drop_then`, whose own note says it "runs only for a deliberate
+    drop... a payout owed for choosing is not owed for waiting". `c.endable`
+    is the verb for both, and four rows were already using it. #1341.
+
+    Endable **per creature**, because the card says "a character can end
+    this effect **on himself or herself**" -- each beneficiary holds its
+    own regeneration, and `c.endable` aims by whose effect it is.
     """
     if c.strike():
         c.damage("1d8", c.wis_mod)
@@ -160,7 +167,10 @@ def p5393(c: Cast) -> None:
     if not c.first:
         return
     for mate in dict.fromkeys([c.me, *c.in_squares(c.area(), side="ally")]):
-        c.regeneration(2, on=mate, while_bloodied=True, until=When.ENCOUNTER)
+        theirs = c.regeneration(
+            2, on=mate, while_bloodied=True, until=When.ENCOUNTER
+        )
+        c.endable(theirs, MINOR, then=lambda who=mate: c.heal(10, on=who))
 
 
 @power(

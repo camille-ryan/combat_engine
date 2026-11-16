@@ -12,6 +12,7 @@ from combat_engine.engine import (
     DAILY,
     EACH_ENEMY,
     FORT,
+    MINOR,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -422,7 +423,6 @@ def p13030(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CON, vs=AC),
-    dropped=("c.grant_action('end_effect_for_resist')",),
 )
 def p13031(c: Cast) -> None:
     """**The cover half is written now; the trade is the real gap.** The old
@@ -435,16 +435,28 @@ def p13031(c: Cast) -> None:
     freeze the answer for the whole encounter, which this card plainly does
     not say.
 
-    What remains is "as a minor action you can end this effect to gain
-    resist 5". That is a granted action, `actions.GRANTABLE` is the
-    authority on the words, and it has none for ending an effect -- the
-    same gap `p4142` and `p5393` carry. #1344.
+    **The way out is `c.endable`, not `c.grant_action`.** I filed
+    `#1344` saying `actions.GRANTABLE` had no word for "end this effect as
+    a minor action for X" -- which is true and is the wrong question. The
+    offer is a property of the **effect**, `Effect.drop_cost`, which
+    `actions.legal` hands to whoever holds it; the payout is
+    `Effect.drop_then`, whose own note says it "runs only for a deliberate
+    drop... a payout owed for choosing is not owed for waiting". `c.endable`
+    is the verb for both, and four rows were already using it. #1341.
+
+    The trade is the caster's own, so it hangs on the caster's cover
+    rather than on an ally's: "you can end this effect to gain resist 5",
+    and the allies' cover goes with it when the hold ends.
     """
     if c.strike():
         c.damage(c.w(3), c.con_mod)
     else:
         c.half_damage(c.w(3), c.con_mod)
-    c.cover(on=c.me, until=When.ENCOUNTER)
+    mine = c.cover(on=c.me, until=When.ENCOUNTER)
+    c.endable(
+        mine, MINOR,
+        then=lambda: c.resist(5, None, on=c.me, until=When.SONT),
+    )
     for mate in c.allies():
         if mate != c.me:
             c.cover(
