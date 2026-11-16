@@ -8,9 +8,16 @@ the body quietly doing nothing. Nothing in this batch is wild shape itself,
 so on a board where no form has been assumed those rows are unusable --
 which is the printed rule and not a fault in them.
 
-**"Your Constitution or Dexterity modifier" is the guardian/predator fork**,
-and `chargen.BUILDS["druid"]` has one build called `standard`. Every row
-printing it takes the larger of the two through `forms.fork_mod` and says so.
+**"Your Constitution or Dexterity modifier" is the guardian/predator
+fork**, and `forms.fork_mod` asks the character's leg for it.
+
+This paragraph used to say `chargen.BUILDS["druid"]` has one build called
+`standard`, so every row printing the clause took the larger of the two.
+It has **four** -- `f1s0`, `f1s1`, `f1s2`, `f1s3` -- and none is named
+`standard`, so the name it asserted does not exist. The legs encode the
+fork: `f1s0` and `f1s2` carry Constitution, `f1s1` and `f1s3` Dexterity.
+The larger is still the fallback for a creature with no leg dealt, and
+only that. #1349.
 
 **"Special: this power can be used as a melee basic attack" has nowhere to
 go.** `Powers.basic` is a field on the creature and no header field says a

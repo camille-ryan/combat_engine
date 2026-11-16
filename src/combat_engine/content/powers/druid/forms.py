@@ -218,15 +218,45 @@ def ends_with(c: Cast, shape: Effect | None, *holds: Effect | None) -> None:
 # -- the druid's second ability ---------------------------------------------
 
 
-def fork_mod(c: Cast) -> int:
-    """"Your Constitution or Dexterity modifier."
+#: **The druid legs whose secondary ability is Constitution.** Read off
+#: `chargen.BUILDS["druid"]`, which carries four legs named for the
+#: features that print them -- `f1s0` and `f1s2` take `CON`, `f1s1` and
+#: `f1s3` take `DEX`. Named here rather than imported because `chargen`
+#: reads `content` and a module-level import the other way would close a
+#: cycle. Re-check with:
+#:
+#:     [(b.name, b.secondary) for b in chargen.BUILDS["druid"]]
+_CON_LEGS = ("f1s0", "f1s2")
 
-    That line is the guardian/predator fork written into the row, and
-    `chargen.BUILDS["druid"]` has one build named `standard`. With no leg to
-    ask about, the larger of the two is taken -- which is the number the
-    character actually built on either leg would have. Every row printing it
-    says so in its own docstring as well.
+
+def fork_mod(c: Cast) -> int:
+    """"Your Constitution or Dexterity modifier" -- the fork, asked properly.
+
+    **This used to take `max(c.con_mod, c.dex_mod)`**, on a premise stated
+    at the top of `level_1_c.py`: that `chargen.BUILDS["druid"]` holds one
+    build named `standard`, so there was no leg to ask about. It holds
+    **four**, and none of them is called `standard` -- so the name that
+    premise asserted does not exist, and `c.build("standard")` would have
+    answered False for every druid ever dealt. #1349, #1346.
+
+    The fork is the printed guardian/predator split and the legs already
+    encode it: the two in `_CON_LEGS` carry Constitution as their
+    secondary ability and the other two carry Dexterity. So the clause
+    needs no build *name* at all -- it is a two-way question the data
+    answers.
+
+    **The larger is still the fallback, and only as a fallback.** A
+    creature with no leg dealt -- a monster druid, a hand-built sheet --
+    has no answer to give, and `max` is the number a character built on
+    either leg would have had. It is now the exception rather than the
+    rule, which is the whole correction: on a dealt druid the two differ,
+    and taking the larger quietly handed the guardian the predator's
+    Dexterity whenever it was higher.
     """
+    if any(c.build(leg) for leg in _CON_LEGS):
+        return c.con_mod
+    if c.build("f1s1") or c.build("f1s3"):
+        return c.dex_mod
     return max(c.con_mod, c.dex_mod)
 
 

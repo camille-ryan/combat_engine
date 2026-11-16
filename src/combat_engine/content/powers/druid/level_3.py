@@ -72,8 +72,11 @@ BEAST_FORM = "you must be in beast form"
     attack=Attack(WIS, vs=REF),
 )
 def p14505(c: Cast) -> None:
-    """"Constitution or Dexterity modifier" is the fork with no leg to stand
-    on; `forms.fork_mod` takes the larger and says so."""
+    """"Constitution or Dexterity modifier" is the guardian/predator
+    fork, and `forms.fork_mod` asks the character's leg for it. It used
+    to take the larger of the two on the ground that the class had no
+    leg to ask; `BUILDS["druid"]` carries four. #1349.
+    """
     if c.strike():
         c.damage("2d8", c.wis_mod, dtype=DamageType.FORCE)
     if not c.first:

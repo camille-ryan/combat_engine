@@ -240,8 +240,11 @@ def p9657(c: Cast) -> None:
     keywords=PRIMAL,
 )
 def p9658(c: Cast) -> None:
-    """"Constitution or Dexterity modifier" is the fork with no leg to stand
-    on; `forms.fork_mod` takes the larger."""
+    """"Constitution or Dexterity modifier" is the guardian/predator
+    fork, and `forms.fork_mod` asks the character's leg for it. It used
+    to take the larger of the two on the ground that the class had no
+    leg to ask; `BUILDS["druid"]` carries four. #1349.
+    """
     me = c.me
     foes = set(c.enemies())
 

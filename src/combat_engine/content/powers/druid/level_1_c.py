@@ -8,9 +8,15 @@ as its distance and lays the run of squares in the body, which is what
 struck one at a time with `c.strike(on=...)`, since a `target=` line cannot
 name squares that do not exist until the body runs.
 
-**Four rows print a build rider** -- Primal Predator, Primal Guardian,
-Primal Swarm. `chargen.BUILDS["druid"]` has one build, `standard`, so there
-is no leg for `c.build(...)` to answer about and the rider is left off each
+**Four rows print a build rider** -- and the premise this paragraph used
+to rest on was false. It said `chargen.BUILDS["druid"]` has one build,
+`standard`; it has **four** -- `f1s0`, `f1s1`, `f1s2`, `f1s3` -- and none
+is named `standard`, so `c.build("standard")` answered False for every
+druid ever dealt. #1349.
+
+The "Constitution or Dexterity" fork is fixed (`forms.fork_mod`): the
+legs encode it, `f1s0`/`f1s2` carrying Constitution and `f1s1`/`f1s3`
+Dexterity. The riders that name a build **in words** are still left off each
 of them rather than folded into the base line. The base line is what is
 written; each docstring says which rider is missing, and the report lists
 them.
@@ -123,9 +129,13 @@ def p14501(c: Cast) -> None:
 def p14502(c: Cast) -> None:
     """A wall of five squares, laid in the body; see the module note.
 
-    "Constitution or Dexterity modifier" is the fork with no leg to stand
-    on, so the larger is taken -- `forms.fork_mod` -- and the poison it does
-    is the ending-your-turn kind, which `c.burns` cannot say.
+"Constitution or Dexterity modifier" is the guardian/predator
+    fork, and `forms.fork_mod` asks the character's leg for it. It used
+    to take the larger of the two on the ground that the class had no
+    leg to ask; `BUILDS["druid"]` carries four. #1349.
+
+    The poison it does is the ending-your-turn kind, which `c.burns`
+    cannot say.
     """
     from .forms import fork_mod
 
