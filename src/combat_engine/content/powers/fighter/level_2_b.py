@@ -641,7 +641,7 @@ def p12693(c: Cast) -> None:
     pool = sorted(e for e in c.within(1, side="enemy") if e != swung)
     who = c.choose(pool, "who catches the elbow") if pool else None
     if who is not None:
-        c.flat(3 + c.dex_mod, on=who)
+        c.flat(3 + c.dex_mod, on=who, from_attack=False)
 
 
 @power(

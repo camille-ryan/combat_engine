@@ -123,7 +123,7 @@ def p11210(c: Cast) -> None:
         c.damage("2d8", c.dex_mod, dtype=DamageType.THUNDER)
         for foe in c.within(1, of=c.target, side="enemy"):
             if foe != c.target:
-                c.flat(c.str_mod, dtype=DamageType.THUNDER, on=foe)
+                c.flat(c.str_mod, dtype=DamageType.THUNDER, on=foe, from_attack=False)
 
 
 @power(

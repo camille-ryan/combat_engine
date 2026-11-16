@@ -741,7 +741,7 @@ def p16256(c: Cast) -> None:
     near = sorted(c.within(5, of=victim))
     splash = c.choose(near, f"{c.ref}: who the echo finds") if near else None
     if splash is not None:
-        c.flat(c.con_mod, dtype=DamageType.PSYCHIC, on=splash)
+        c.flat(c.con_mod, dtype=DamageType.PSYCHIC, on=splash, from_attack=False)
 
 
 @power(

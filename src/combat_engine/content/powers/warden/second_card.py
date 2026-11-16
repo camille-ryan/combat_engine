@@ -357,7 +357,7 @@ def p9825b(c: Cast) -> None:
     if c.first and c.str_mod > 0:
         for foe in c.enemies():
             if c.marked(foe):
-                c.flat(c.str_mod, dtype=DamageType.LIGHTNING, on=foe)
+                c.flat(c.str_mod, dtype=DamageType.LIGHTNING, on=foe, from_attack=False)
     if not c.can_see():
         return
     if c.strike():

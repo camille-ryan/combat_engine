@@ -212,7 +212,7 @@ def p4829(c: Cast) -> None:
     everyone = c.build("rageblood")
     for foe in sorted(c.within(1, side="enemy")):
         if everyone or c.bloodied(on=foe):
-            c.flat(c.con_mod, on=foe)
+            c.flat(c.con_mod, on=foe, from_attack=False)
 
 
 @power(

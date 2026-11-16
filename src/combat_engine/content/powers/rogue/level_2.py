@@ -245,7 +245,7 @@ def p10746(c: Cast) -> None:
     ev = c.trigger
     who = getattr(ev, "target", None) or getattr(ev, "actor", None)
     if who is not None:
-        c.flat(c.int_mod, on=who)
+        c.flat(c.int_mod, on=who, from_attack=False)
 
 
 @power(

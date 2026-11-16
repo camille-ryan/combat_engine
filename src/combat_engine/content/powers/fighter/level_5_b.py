@@ -310,7 +310,7 @@ def p12849(c: Cast) -> None:
         c.half_damage(c.w(2), c.str_mod)
         c.push(1)
     for foe in around:
-        c.flat(c.str_mod, on=foe)
+        c.flat(c.str_mod, on=foe, from_attack=False)
         c.push(1, on=foe)
 
 

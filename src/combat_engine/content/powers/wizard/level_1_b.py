@@ -130,7 +130,7 @@ def p10069(c: Cast) -> None:
     c.damage("1d8", c.int_mod, dtype=DamageType.PSYCHIC)
     for who in c.within(1, of=victim, side="enemy"):
         if who != victim:
-            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=who)
+            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=who, from_attack=False)
 
 
 @power(
@@ -753,7 +753,7 @@ def p13976(c: Cast) -> None:
         c.damage("2d8", c.int_mod, dtype=DamageType.NECROTIC)
     for who in c.within(1, of=victim):
         if who != victim:
-            c.flat(c.int_mod, dtype=DamageType.FIRE, on=who)
+            c.flat(c.int_mod, dtype=DamageType.FIRE, on=who, from_attack=False)
 
 
 @power(

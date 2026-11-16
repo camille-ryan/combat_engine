@@ -337,7 +337,7 @@ def p992(c: Cast) -> None:
     if others:
         beside = c.choose(others, "who else does it catch")
         if not _thrown_instead_of_the_splash(c, arena):
-            c.flat(c.str_mod, on=beside)
+            c.flat(c.str_mod, on=beside, from_attack=False)
 
     foe = c.target
     if foe is None:
@@ -356,7 +356,7 @@ def p992(c: Cast) -> None:
     if c.feat("f1305") and c.str_mod > 0:
         with c.credit("f1305"):
             for other in _others_in_cloud(c, foe):
-                c.flat(c.str_mod, on=other)
+                c.flat(c.str_mod, on=other, from_attack=False)
 
 
 @power(

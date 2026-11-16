@@ -1899,7 +1899,7 @@ def p16394(c: Cast) -> None:
     c.reroll_attack(keep="new")
     result = getattr(c.trigger, "result", None)
     if result is not None and result.hit:
-        c.flat(5 + c.level // 2, dtype=DamageType.FIRE, on=foe)
+        c.flat(5 + c.level // 2, dtype=DamageType.FIRE, on=foe, from_attack=False)
 
 
 # -- x7_988 -----------------------------------------------------------------

@@ -263,7 +263,7 @@ def p12661(c: Cast) -> None:
     if foe is None:
         return
     if not c.basic(on=foe):
-        c.flat(c.str_mod, on=foe)
+        c.flat(c.str_mod, on=foe, from_attack=False)
 
 
 @power(

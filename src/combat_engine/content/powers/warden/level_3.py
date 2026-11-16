@@ -162,7 +162,7 @@ def p5574(c: Cast) -> None:
     else:
         c.flat(5, dtype=DamageType.LIGHTNING, on=who)
     if c.build("f1s2"):
-        c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=who)
+        c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=who, from_attack=False)
 
 
 @power(

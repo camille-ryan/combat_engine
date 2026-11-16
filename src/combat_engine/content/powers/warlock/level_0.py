@@ -360,8 +360,7 @@ def p13722(c: Cast) -> None:
             c.flat(
                 c.int_mod,
                 dtype=DamageType.RADIANT,
-                on=c.choose(near, "who the light spills onto"),
-            )
+                on=c.choose(near, "who the light spills onto"), from_attack=False)
 
 
 @power(

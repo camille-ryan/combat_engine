@@ -193,7 +193,7 @@ def p12894(c: Cast) -> None:
     beside = [f for f in c.within(1, of=victim, side="enemy") if f != victim]
     if spent:
         for foe in beside:
-            c.flat(max(0, c.int_mod), dtype=DamageType.PSYCHIC, on=foe)
+            c.flat(max(0, c.int_mod), dtype=DamageType.PSYCHIC, on=foe, from_attack=False)
     c.push(shove)
     for foe in beside:
         c.push(shove, on=foe)
@@ -629,7 +629,7 @@ def p4094(c: Cast) -> None:
     if c.build("infernal"):
         for foe in c.within(1, of=victim, side="enemy"):
             if foe != victim:
-                c.flat(c.int_mod, dtype=DamageType.ACID, on=foe)
+                c.flat(c.int_mod, dtype=DamageType.ACID, on=foe, from_attack=False)
 
 
 @power(

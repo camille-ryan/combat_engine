@@ -1028,7 +1028,7 @@ def p14171(c: Cast) -> None:
     foe = getattr(ev, "target", None)
     if foe is None:
         return
-    c.flat(_mod_of(c, getattr(ev, "power", "")), on=foe)
+    c.flat(_mod_of(c, getattr(ev, "power", "")), on=foe, from_attack=False)
     c.prone(on=foe)
 
 

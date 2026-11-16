@@ -112,7 +112,7 @@ def p10336(c: Cast) -> None:
     c.damage(c.w(2), c.str_mod)
     if c.wielding("axe"):
         for foe in sorted(e for e in c.within(1, of=victim, side="enemy") if e != victim)[:2]:
-            c.flat(c.con_mod, on=foe)
+            c.flat(c.con_mod, on=foe, from_attack=False)
     if c.wielding("heavy blade"):
         c.grants_advantage(until=When.EONT)
 
@@ -469,4 +469,4 @@ def p9998(c: Cast) -> None:
         return
     c.damage(c.w(2), c.str_mod)
     for foe in sorted(e for e in c.within(1, side="enemy") if e != victim):
-        c.flat(c.con_mod, on=foe)
+        c.flat(c.con_mod, on=foe, from_attack=False)

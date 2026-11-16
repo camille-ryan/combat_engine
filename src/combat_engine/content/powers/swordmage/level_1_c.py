@@ -268,7 +268,7 @@ def p7379(c: Cast) -> None:
     if others:
         second = c.choose(sorted(others), "the cold also bites")
         if second is not None:
-            c.flat(c.con_mod, dtype=DamageType.COLD, on=second)
+            c.flat(c.con_mod, dtype=DamageType.COLD, on=second, from_attack=False)
 
 
 @power(

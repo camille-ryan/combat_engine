@@ -126,7 +126,7 @@ def p9815(c: Cast) -> None:
         near = [e for e in c.within(2, side="enemy") if e != c.target and c.marked(e)]
         if near:
             who = c.choose(near, "which marked enemy the thunder reaches")
-            c.flat(c.con_mod, dtype=DamageType.THUNDER, on=who)
+            c.flat(c.con_mod, dtype=DamageType.THUNDER, on=who, from_attack=False)
 
 
 @power(
@@ -190,7 +190,7 @@ def p11071(c: Cast) -> None:
         seen = [e for e in c.enemies() if c.marked(e) and c.can_see(e)]
         if seen:
             who = c.choose(seen, "which marked enemy the thunder pins")
-            c.flat(c.str_mod, dtype=DamageType.THUNDER, on=who)
+            c.flat(c.str_mod, dtype=DamageType.THUNDER, on=who, from_attack=False)
             c.immobilized(on=who, until=When.EONT)
 
 
@@ -216,7 +216,7 @@ def p13602(c: Cast) -> None:
         c.damage(c.w())
         for e in caught:
             if e != c.target:
-                c.flat(c.str_mod, on=e)
+                c.flat(c.str_mod, on=e, from_attack=False)
 
 
 @power(
@@ -350,7 +350,7 @@ def p9816(c: Cast) -> None:
         c.damage(c.w(2), c.str_mod)
         for e in [e for e in c.enemies() if c.marked(e)]:
             if e != c.target:
-                c.flat(c.con_mod, on=e)
+                c.flat(c.con_mod, on=e, from_attack=False)
             if c.build("f1s2"):
                 c.slide(1, on=e)
 

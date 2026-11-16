@@ -333,7 +333,7 @@ def p5269(c: Cast) -> None:
     c.damage("2d10", c.cha_mod, dtype=DamageType.LIGHTNING)
     for near in c.within(1, of=victim, side="any"):
         if near != victim:
-            c.flat(c.cha_mod, dtype=DamageType.THUNDER, on=near)
+            c.flat(c.cha_mod, dtype=DamageType.THUNDER, on=near, from_attack=False)
 
 
 @power(

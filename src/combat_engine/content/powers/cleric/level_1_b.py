@@ -509,7 +509,7 @@ def p13709(c: Cast) -> None:
         if foe is not None:
             area = blast(squares(c.world, c.me), 3, c.there)
             for who in {*c.in_squares(area, side="enemy"), foe}:
-                c.flat(c.con_mod, on=who)
+                c.flat(c.con_mod, on=who, from_attack=False)
     for friend in c.within(3, side="team"):
         c.bonus(AC, 2, on=friend, until=When.EONT, kind="power")
         c.bonus(FORT, 2, on=friend, until=When.EONT, kind="power")

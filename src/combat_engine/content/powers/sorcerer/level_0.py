@@ -359,4 +359,4 @@ def p16235(c: Cast) -> None:
     c.damage("1d8" if c.level < 21 else "2d8", dtype=DamageType.LIGHTNING)
     beside = [e for e in c.within(1, of=c.target, side="enemy") if e != c.target]
     if beside:
-        c.flat(c.cha_mod, dtype=DamageType.LIGHTNING, on=beside[0])
+        c.flat(c.cha_mod, dtype=DamageType.LIGHTNING, on=beside[0], from_attack=False)

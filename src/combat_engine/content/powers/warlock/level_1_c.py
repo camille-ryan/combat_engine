@@ -155,7 +155,7 @@ def p1881(c: Cast) -> None:
     if friends and c.may("bleed an ally", who=c.me):
         who = c.choose(friends, f"{c.ref}: which ally pays")
         if who is not None:
-            c.flat(c.cha_mod, on=who)
+            c.flat(c.cha_mod, on=who, from_attack=False)
             paid = True
     if c.strike(plus=2 if paid else 0):
         c.damage("3d8", c.cha_mod)

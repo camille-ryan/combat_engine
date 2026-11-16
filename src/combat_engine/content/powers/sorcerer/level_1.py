@@ -129,7 +129,7 @@ def p1163(c: Cast) -> None:
     elif face == 2:
         for near in c.within(1, of=victim, side="any"):
             if near != victim:
-                c.flat(c.dex_mod, dtype=DamageType.FIRE, on=near)
+                c.flat(c.dex_mod, dtype=DamageType.FIRE, on=near, from_attack=False)
     elif face == 3:
         c.ongoing(5, DamageType.POISON)
     elif face == 4:
@@ -288,7 +288,7 @@ def p3005(c: Cast) -> None:
     pool = sorted(f for f in c.enemies() if f != victim and c.distance(f) <= 10)
     second = c.choose(pool, f"{c.ref}: who the arc jumps to") if pool else None
     if second is not None:
-        c.flat(c.dex_mod, dtype=DamageType.LIGHTNING, on=second)
+        c.flat(c.dex_mod, dtype=DamageType.LIGHTNING, on=second, from_attack=False)
 
 
 @power(

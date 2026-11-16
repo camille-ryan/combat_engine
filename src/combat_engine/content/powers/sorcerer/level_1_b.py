@@ -507,7 +507,7 @@ def p7405(c: Cast) -> None:
             continue
         blocks = squares(c.world, foe)
         if c.world.grid.cover(here, there, blockers=set(blocks)) is not Cover.NONE:
-            c.flat(c.cha_mod, dtype=DamageType.FIRE, on=foe)
+            c.flat(c.cha_mod, dtype=DamageType.FIRE, on=foe, from_attack=False)
 
 
 @power(

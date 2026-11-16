@@ -254,7 +254,7 @@ def p1724(c: Cast) -> None:
         c.damage(c.w(2 if c.level >= 21 else 1), c.int_mod, dtype=DamageType.FIRE)
         for foe in c.within(1, of=c.target, side="enemy"):
             if foe != c.target:
-                c.flat(c.str_mod, dtype=DamageType.FIRE, on=foe)
+                c.flat(c.str_mod, dtype=DamageType.FIRE, on=foe, from_attack=False)
 
 
 @power(

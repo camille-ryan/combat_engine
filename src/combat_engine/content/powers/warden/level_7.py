@@ -159,7 +159,7 @@ def p5515(c: Cast) -> None:
     c.slide(1, on=second)
     if c.build("f1s3"):
         c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=victim)
-        c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=second)
+        c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=second, from_attack=False)
 
 
 @power(

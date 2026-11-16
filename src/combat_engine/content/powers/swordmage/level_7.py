@@ -349,4 +349,4 @@ def p583(c: Cast) -> None:
         return
     c.mark(on=other)
     if c.build("assault"):
-        c.flat(c.str_mod, on=other)
+        c.flat(c.str_mod, on=other, from_attack=False)

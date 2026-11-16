@@ -123,7 +123,7 @@ def p9519(c: Cast) -> None:
     if not c.build("second-dex"):
         return
     for foe in foes_around(c, c.target):
-        c.flat(c.dex_mod, dtype=DamageType.THUNDER, on=foe)
+        c.flat(c.dex_mod, dtype=DamageType.THUNDER, on=foe, from_attack=False)
         c.condition(Condition.DEAFENED, on=foe, until=When.EONT)
 
 
