@@ -439,7 +439,7 @@ def p14258(c: Cast) -> None:
     def backlash(ev: Hit) -> None:
         if ev.attacker != foe or team(c.world, ev.target) is not team(c.world, me):
             return
-        c.flat(c.con_mod, dtype=DamageType.RADIANT, on=foe)
+        c.flat(c.con_mod, dtype=DamageType.RADIANT, on=foe, from_attack=False)
 
     c.watch(Hit, backlash, until=When.EONT, on=foe, once=True, label=c.ref)
 
@@ -553,7 +553,7 @@ def p14271(c: Cast) -> None:
 
     def sting(ev: AttackDeclared) -> None:
         if ev.target != me and team(c.world, ev.target) is team(c.world, me):
-            c.flat(c.con_mod, on=foe)
+            c.flat(c.con_mod, on=foe, from_attack=False)
 
     c.on_attack(sting, by=foe, until=When.SONT, once=True, label=c.ref)
 

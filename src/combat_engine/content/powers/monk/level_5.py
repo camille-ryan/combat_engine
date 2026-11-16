@@ -75,7 +75,7 @@ def p11220(c: Cast) -> None:
 
     def sting(ev: Hit) -> None:
         if ev.attacker == victim and ev.target == c.me:
-            c.flat(c.str_mod, on=victim)
+            c.flat(c.str_mod, on=victim, from_attack=False)
 
     watcher = c.watch(Hit, sting, until=When.ENCOUNTER)
     held.on_end.append(lambda: c.world.effects.end(watcher, "mark ended"))
@@ -156,7 +156,7 @@ def p13156(c: Cast) -> None:
         if ev.ghost or ev.actor == c.me or ev.actor not in c.enemies():
             return
         if c.adjacent_to(victim, ev.actor):
-            c.flat(c.dex_mod, dtype=DamageType.COLD, on=ev.actor)
+            c.flat(c.dex_mod, dtype=DamageType.COLD, on=ev.actor, from_attack=False)
 
     watcher = c.watch(TurnEnd, chill, until=When.ENCOUNTER)
     held.on_end.append(lambda: c.world.effects.end(watcher, "the hold ended"))

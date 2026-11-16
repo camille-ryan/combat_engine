@@ -818,7 +818,7 @@ def p14220(c: Cast) -> None:
         if ev.actor != c.me:
             return
         if not swung:
-            c.flat(c.level, on=c.me)
+            c.flat(c.level, on=c.me, from_attack=False)
         swung.clear()
 
     c.watch(AttackDeclared, saw, until=When.SUSTAIN, on=c.me)

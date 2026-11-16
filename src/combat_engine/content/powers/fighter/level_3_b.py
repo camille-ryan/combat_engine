@@ -132,7 +132,7 @@ def p10334(c: Cast) -> None:
             return
         others = sorted(e for e in c.within(1, side="enemy") if e != victim)
         if others:
-            c.flat(c.str_mod, on=c.choose(others, "who is shoved into the blow"))
+            c.flat(c.str_mod, on=c.choose(others, "who is shoved into the blow"), from_attack=False)
 
     c.watch(
         AttackDeclared, collateral, until=When.EONT, on=me, once=True,
@@ -184,7 +184,7 @@ def p10489(c: Cast) -> None:
 
     def costly(ev: MoveEnd) -> None:
         if ev.actor == victim:
-            c.flat(c.con_mod, on=victim)
+            c.flat(c.con_mod, on=victim, from_attack=False)
 
     c.watch(MoveEnd, costly, until=When.EONT, on=me, once=True, label=f"{c.ref} toll")
     if c.wielding("axe") or c.wielding("pick"):

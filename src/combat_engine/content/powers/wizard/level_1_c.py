@@ -218,7 +218,7 @@ def p14541(c: Cast) -> None:
         # A reroll, not a repeat of the first one -- and `c.flat` rather than
         # `c.damage`, which would still be maximising off the original hit
         # if that one happened to be a critical.
-        c.flat(c.roll("1d10") + c.int_mod, dtype=DamageType.LIGHTNING, on=victim)
+        c.flat(c.roll("1d10") + c.int_mod, dtype=DamageType.LIGHTNING, on=victim, from_attack=False)
 
     c.on_sustain(hold, again)
 

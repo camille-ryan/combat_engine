@@ -454,7 +454,7 @@ def p6860(c: Cast) -> None:
 
     def recoil(ev: AttackDeclared) -> None:
         if ev.attacker == victim and ev.target == c.me:
-            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=victim)
+            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=victim, from_attack=False)
 
     c.watch(AttackDeclared, recoil, until=When.ENCOUNTER)
 

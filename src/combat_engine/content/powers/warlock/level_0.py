@@ -436,7 +436,7 @@ def p13746(c: Cast) -> None:
 
         def lingers(ev: TurnEnd) -> None:
             if ev.actor == victim and c.adjacent(victim) and c.dex_mod > 0:
-                c.flat(c.dex_mod, dtype=DamageType.RADIANT, on=victim)
+                c.flat(c.dex_mod, dtype=DamageType.RADIANT, on=victim, from_attack=False)
 
         c.watch(TurnEnd, lingers, until=When.EOTNT, once=True)
 
@@ -852,6 +852,6 @@ def p16349(c: Cast) -> None:
 
         def recoil(ev: AttackDeclared) -> None:
             if ev.target == c.me and c.int_mod > 0:
-                c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=victim)
+                c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=victim, from_attack=False)
 
         c.on_attack(recoil, by=victim, until=When.EONT, once=True)

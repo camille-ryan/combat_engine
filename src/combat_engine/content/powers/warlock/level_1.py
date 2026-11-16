@@ -226,7 +226,7 @@ def p1457(c: Cast) -> None:
             return
         fired = True
         # The extra damage is printed untyped, unlike the hit line.
-        c.flat(c.world.rng.roll("1d6").total + c.cha_mod, on=victim)
+        c.flat(c.world.rng.roll("1d6").total + c.cha_mod, on=victim, from_attack=False)
 
     c.watch(Moved, closing, until=When.EOTNT)
 
@@ -259,8 +259,7 @@ def p1458(c: Cast) -> None:
         c.flat(
             c.world.rng.roll("1d6").total + c.con_mod,
             dtype=DamageType.FIRE,
-            on=victim,
-        )
+            on=victim, from_attack=False)
 
     c.watch(DamageApplied, scorch, until=When.EONT, on=c.me)
 
@@ -459,8 +458,7 @@ def p222(c: Cast) -> None:
             c.flat(
                 c.world.rng.roll("1d6").total + c.con_mod,
                 dtype=DamageType.COLD,
-                on=ev.actor,
-            )
+                on=ev.actor, from_attack=False)
 
     c.watch(TurnStart, chill, until=When.ENCOUNTER, on=c.me)
 

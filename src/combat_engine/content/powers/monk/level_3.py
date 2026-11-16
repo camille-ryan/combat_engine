@@ -117,7 +117,7 @@ def p13148(c: Cast) -> None:
             if busy or ev.target != victim or ev.amount <= 0:
                 return
             busy.append(1)
-            c.flat(3 + c.str_mod, dtype=DamageType.THUNDER, on=victim)
+            c.flat(3 + c.str_mod, dtype=DamageType.THUNDER, on=victim, from_attack=False)
 
         c.watch(DamageApplied, echo, until=When.SONT, once=True)
 

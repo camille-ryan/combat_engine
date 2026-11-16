@@ -249,7 +249,7 @@ def p11701(c: Cast) -> None:
         others = sorted(f for f in c.within(1, side="enemy") if f != ev.target)
         foe = c.choose(others, "who the light catches") if others else None
         if foe is not None:
-            c.flat(max(0, c.wis_mod), dtype=DamageType.RADIANT, on=foe)
+            c.flat(max(0, c.wis_mod), dtype=DamageType.RADIANT, on=foe, from_attack=False)
 
     _swing(c)
     _oath_rider(c, splash)

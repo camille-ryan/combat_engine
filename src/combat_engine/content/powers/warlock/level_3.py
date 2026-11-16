@@ -231,7 +231,7 @@ def _spite(c: Cast) -> None:
             return
         for foe in c.within(1, side="enemy"):
             if foe != ev.attacker:
-                c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=foe)
+                c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=foe, from_attack=False)
 
     c.watch(AttackDeclared, lash, until=When.EONT)
 

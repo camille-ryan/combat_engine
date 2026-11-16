@@ -268,13 +268,13 @@ def p13025(c: Cast) -> None:
 
     def recoil(ev: Hit) -> None:
         if ev.attacker == victim and ev.target in c.allies():
-            c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=victim)
+            c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=victim, from_attack=False)
 
     def sidled(ev: MoveEnd) -> None:
         if ev.actor != victim or ev.kind_ != "shift":
             return
         if any(c.adjacent_to(a, victim) for a in c.allies() if a != c.me):
-            c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=victim)
+            c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=victim, from_attack=False)
 
     c.watch(Hit, recoil, until=When.SONT, on=victim)
     if spent == 1:
@@ -603,7 +603,7 @@ def p2622(c: Cast) -> None:
 
         def rider(ev: Hit) -> None:
             if ev.attacker == me and getattr(ev, "power", "") == "p10440":
-                c.flat(c.cha_mod, on=ev.target)
+                c.flat(c.cha_mod, on=ev.target, from_attack=False)
 
         c.watch(Hit, rider, until=When.EONT, label=c.ref)
     if c.strike():

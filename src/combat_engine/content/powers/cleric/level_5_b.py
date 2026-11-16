@@ -444,7 +444,7 @@ def p9984(c: Cast) -> None:
         row = get(ev.power)
         if ev.actor != c.me or row is None or row.level != 0 or row.cls != "cleric":
             return
-        c.flat(c.cha_mod, on=victim)
+        c.flat(c.cha_mod, on=victim, from_attack=False)
         for friend in c.within(1, side="ally"):
             c.temp_hp(c.cha_mod, on=friend)
 

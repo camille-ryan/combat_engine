@@ -402,6 +402,6 @@ def p9819(c: Cast) -> None:
         if ev.zone == ground and ev.actor == victim:
             c.prone(on=victim)
             if c.build("f1s0"):
-                c.flat(c.con_mod, on=victim)
+                c.flat(c.con_mod, on=victim, from_attack=False)
 
     c.watch(ZoneExited, on_exit, until=When.EONT)

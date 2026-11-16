@@ -70,7 +70,7 @@ def p10188(c: Cast) -> None:
 
         def sting(ev: Hit) -> None:
             if ev.target == ally and ev.attacker in c.enemies():
-                c.flat(c.wis_mod, dtype=DamageType.COLD, on=ev.attacker)
+                c.flat(c.wis_mod, dtype=DamageType.COLD, on=ev.attacker, from_attack=False)
 
         c.watch(Hit, sting, until=When.EONT)
     if c.strike():
@@ -120,7 +120,7 @@ def p10190(c: Cast) -> None:
 
         def sting(ev: Hit) -> None:
             if ev.target == ally and by_melee(c.world, c.me, ev):
-                c.flat(c.wis_mod, dtype=DamageType.POISON, on=ev.attacker)
+                c.flat(c.wis_mod, dtype=DamageType.POISON, on=ev.attacker, from_attack=False)
 
         c.watch(Hit, sting, until=When.EONT)
 
@@ -473,7 +473,7 @@ def p7424(c: Cast) -> None:
 
     def stab(ev: Hit) -> None:
         if ev.attacker in c.allies() and near(c, eye, ev.target, 3):
-            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=ev.target)
+            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=ev.target, from_attack=False)
 
     c.watch(Hit, stab, until=When.ENCOUNTER)
 
@@ -571,6 +571,6 @@ def p7641(c: Cast) -> None:
             and c.is_(Condition.MARKED, on=who)
             and c.adjacent_to(servant, who)
         ):
-            c.flat(c.wis_mod, on=who)
+            c.flat(c.wis_mod, on=who, from_attack=False)
 
     c.watch(TurnStart, sting, until=When.ENCOUNTER)

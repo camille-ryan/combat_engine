@@ -553,7 +553,7 @@ def p9991(c: Cast) -> None:
 
     def answer(ev: AttackDeclared) -> None:
         if ev.target == me and getattr(ev, "opportunity", False):
-            c.flat(c.con_mod, on=ev.attacker)
+            c.flat(c.con_mod, on=ev.attacker, from_attack=False)
 
     guard = c.watch(AttackDeclared, answer, until=When.EOT, on=me, label=f"{c.ref} spines")
     c.charge = True

@@ -270,7 +270,7 @@ def p7173(c: Cast) -> None:
             if ev.attacker != c.me and ev.attacker not in c.within(5, side="ally"):
                 return
             if ev.target in c.enemies():
-                c.flat(c.con_mod, on=ev.target)
+                c.flat(c.con_mod, on=ev.target, from_attack=False)
 
         c.watch(Hit, press, until=When.ENCOUNTER)
     if c.strike():

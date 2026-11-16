@@ -108,7 +108,7 @@ def p2849(c: Cast) -> None:
 
     def sting(ev: AttackRolled, who: int = victim) -> None:
         if ev.attacker == who and getattr(ev, "opportunity", False):
-            c.flat(c.int_mod, dtype=DamageType.LIGHTNING, on=who)
+            c.flat(c.int_mod, dtype=DamageType.LIGHTNING, on=who, from_attack=False)
 
     c.watch(AttackRolled, sting, until=When.EONT, on=victim)
 
@@ -236,7 +236,7 @@ def p7385(c: Cast) -> None:
 
     def closer(ev: MoveEnd, who: int = victim, before: int = was) -> None:
         if ev.actor == who and c.distance(to=who) < before:
-            c.flat(c.con_mod, on=who)
+            c.flat(c.con_mod, on=who, from_attack=False)
 
     c.watch(MoveEnd, closer, until=When.EOTNT, on=victim, once=True)
 

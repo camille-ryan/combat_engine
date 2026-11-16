@@ -269,7 +269,7 @@ def p7186(c: Cast) -> None:
         c.trigger = held
         result = getattr(ev, "result", None)
         if result is not None and not result.hit:
-            c.flat(5 + c.con_mod, on=who)
+            c.flat(5 + c.con_mod, on=who, from_attack=False)
 
     c.watch(AttackRolled, meddle, until=When.SAVE_ENDS, on=victim)
 

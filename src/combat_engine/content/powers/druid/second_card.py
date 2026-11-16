@@ -178,7 +178,7 @@ def p10844b(c: Cast) -> None:
             return
         if not c.is_(Condition.SLOWED, on=victim) or c.adjacent(victim):
             return
-        c.flat(c.con_mod, on=victim)
+        c.flat(c.con_mod, on=victim, from_attack=False)
 
     c.watch(MoveEnd, stepped, until=When.EONT, on=c.me, label=c.ref)
 

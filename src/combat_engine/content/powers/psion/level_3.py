@@ -424,6 +424,6 @@ def p8234(c: Cast) -> None:
 
     def bit(ev: AttackRolled) -> None:
         if ev.target == victim and ev.vs is FORT and ev.total >= ev.defence:
-            c.flat(c.cha_mod, on=victim)
+            c.flat(c.cha_mod, on=victim, from_attack=False)
 
     c.watch(AttackRolled, bit, until=When.EONT, on=victim, once=True, label=c.ref)

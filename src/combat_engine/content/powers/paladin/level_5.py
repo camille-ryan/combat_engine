@@ -451,6 +451,6 @@ def p7254(c: Cast) -> None:
 
     def sear(ev: DamageApplied) -> None:
         if ev.source == victim and ev.target in mine and ev.amount > 0:
-            c.flat(c.wis_mod, dtype=DamageType.RADIANT, on=victim)
+            c.flat(c.wis_mod, dtype=DamageType.RADIANT, on=victim, from_attack=False)
 
     recoil.subs.append(c.world.bus.on(DamageApplied, sear, owner=me))

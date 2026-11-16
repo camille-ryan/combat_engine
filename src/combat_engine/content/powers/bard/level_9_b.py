@@ -36,7 +36,7 @@ def p14469(c: Cast) -> None:
         if row is None or row.usage is not Usage.AT_WILL:
             return
         spent.append(1)
-        c.flat(c.cha_mod, on=ev.target)
+        c.flat(c.cha_mod, on=ev.target, from_attack=False)
 
     c.watch(Miss, missed, until=When.ENCOUNTER)
     c.watch(TurnStart, lambda ev: spent.clear(), until=When.ENCOUNTER)

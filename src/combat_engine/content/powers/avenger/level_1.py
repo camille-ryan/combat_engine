@@ -283,7 +283,7 @@ def p5333(c: Cast) -> None:
         if not _hostile(c, ev.attacker):
             return
         spent.append(1)
-        c.flat(max(0, c.int_mod), dtype=DamageType.RADIANT, on=victim)
+        c.flat(max(0, c.int_mod), dtype=DamageType.RADIANT, on=victim, from_attack=False)
 
     for kind in (Hit, Miss):
         c.watch(kind, lash, until=When.EONT, on=c.me, label=f"{c.ref} answer")

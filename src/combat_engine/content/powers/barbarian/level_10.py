@@ -437,7 +437,7 @@ def p4952(c: Cast) -> None:
         if ev.attacker != me or p is None or p.usage is not Usage.AT_WILL:
             return
         if c.cha_mod > 0:
-            c.flat(c.cha_mod, on=ev.target)
+            c.flat(c.cha_mod, on=ev.target, from_attack=False)
 
     held_by(c, stance, c.watch(Hit, bite, until=When.ENCOUNTER, on=me, label=f"{c.ref} fury"))
 

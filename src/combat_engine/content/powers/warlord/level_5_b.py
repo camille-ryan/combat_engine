@@ -519,7 +519,7 @@ def p2451(c: Cast) -> None:
         if friend == me or team(c.world, friend) is not team(c.world, me):
             return
         marked = c.build("tactical") and any(c.marked(on=foe, by=a) for a in c.allies())
-        c.flat(c.roll(c.w(1)) + c.int_mod if marked else c.int_mod, on=foe)
+        c.flat(c.roll(c.w(1)) + c.int_mod if marked else c.int_mod, on=foe, from_attack=False)
 
     watching = c.watch(Miss, punish, until=When.ENCOUNTER, on=me, label=f"{c.ref} reprisal")
     stance.on_end.append(lambda: c.world.effects.end(watching, "stance ended"))
@@ -606,7 +606,7 @@ def p4558(c: Cast) -> None:
         shield = [a for a in c.allies() if adjacent(c.world, me, a)]
         if not beside_me and not any(_near(c.world, a, ev.to) for a in shield):
             return
-        c.flat(c.str_mod, on=foe)
+        c.flat(c.str_mod, on=foe, from_attack=False)
 
     c.watch(Moved, sting, until=When.ENCOUNTER, on=me, label=f"{c.ref} bristle")
 
@@ -644,6 +644,6 @@ def p4559(c: Cast) -> None:
         # Resourceful Presence. `chargen` names no such build, so this is
         # inert until one exists -- the plain rider is the printed default.
         extra = c.roll(c.w(1)) if c.build("resourceful") else 0
-        c.flat(extra + c.int_mod, on=ev.target)
+        c.flat(extra + c.int_mod, on=ev.target, from_attack=False)
 
     c.watch(Hit, press, until=When.EONT, on=me, label=f"{c.ref} pressed")

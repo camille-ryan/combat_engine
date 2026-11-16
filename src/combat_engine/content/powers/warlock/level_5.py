@@ -268,7 +268,7 @@ def p4076(c: Cast) -> None:
 
     def spite(ev: AttackDeclared) -> None:
         if ev.target == c.me and c.cursed(ev.attacker):
-            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=ev.attacker)
+            c.flat(c.int_mod, dtype=DamageType.PSYCHIC, on=ev.attacker, from_attack=False)
 
     c.watch(AttackDeclared, spite, until=When.ENCOUNTER)
 
@@ -342,7 +342,7 @@ def p6859(c: Cast) -> None:
             if c.may("go quiet rather than hurt", who=victim):
                 c.dazed(on=victim, until=When.SOTNT)
             else:
-                c.flat(2 * c.con_mod, dtype=DamageType.PSYCHIC, on=victim)
+                c.flat(2 * c.con_mod, dtype=DamageType.PSYCHIC, on=victim, from_attack=False)
 
         hold.subs.append(c.world.bus.on(TurnStart, whisper))
         return

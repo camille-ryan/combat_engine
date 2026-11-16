@@ -168,7 +168,7 @@ def p11051(c: Cast) -> None:
         if ev.attacker != me or not by_melee(c.world, me, ev):
             return
         for foe in sorted(f for f in c.within(1, side="enemy") if f != ev.target):
-            c.flat(max(0, c.wis_mod), dtype=DamageType.RADIANT, on=foe)
+            c.flat(max(0, c.wis_mod), dtype=DamageType.RADIANT, on=foe, from_attack=False)
 
     c.watch(Hit, splash, until=When.EONT, on=me, label=f"{c.ref} backwash")
 

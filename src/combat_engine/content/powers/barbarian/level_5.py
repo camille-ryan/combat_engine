@@ -126,7 +126,7 @@ def p10066(c: Cast) -> None:
         if ev.target != me or ev.attacker not in c.enemies():
             return
         for who in c.within(5, side="other"):
-            c.flat(c.str_mod, dtype=DamageType.THUNDER, on=who)
+            c.flat(c.str_mod, dtype=DamageType.THUNDER, on=who, from_attack=False)
 
     watcher = c.watch(Hit, answer, until=When.ENCOUNTER, on=me, label=f"{c.ref} rage")
     held_by(c, stance, watcher)

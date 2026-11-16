@@ -77,7 +77,7 @@ def p2979(c: Cast) -> None:
         if picked[0] == "slowed":
             c.slowed(on=ev.actor, until=When.EOTNT)
         elif picked[0] == "psychic damage":
-            c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=ev.actor)
+            c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=ev.actor, from_attack=False)
         else:
             c.grants_advantage(on=ev.actor, to="team", until=When.EOTNT)
 

@@ -290,7 +290,7 @@ def p13826(c: Cast) -> None:
         if team(c.world, who) is team(c.world, me):
             return
         if who in c.world.zones.occupants(ring):
-            c.flat(c.cha_mod, dtype=DamageType.NECROTIC, on=who)
+            c.flat(c.cha_mod, dtype=DamageType.NECROTIC, on=who, from_attack=False)
 
     c.watch(Hit, sting, until=When.ENCOUNTER, on=me, label=f"{c.ref} gloom")
 
@@ -500,7 +500,7 @@ def p7500(c: Cast) -> None:
         if not use(c.world, me, "p805", targets=[foe], spend=False):
             return
         if getattr(ev, "vs", None) is Defense.WILL:
-            c.flat(3 + c.cha_mod, dtype=DamageType.RADIANT, on=foe)
+            c.flat(3 + c.cha_mod, dtype=DamageType.RADIANT, on=foe, from_attack=False)
 
     held = c.watch(
         AttackDeclared, answer, until=When.ENCOUNTER, on=me, label=f"{c.ref} vigil"

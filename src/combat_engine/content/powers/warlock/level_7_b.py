@@ -381,8 +381,7 @@ def p13916(c: Cast) -> None:
             c.flat(
                 max(0, c.int_mod),
                 dtypes=(DamageType.COLD, DamageType.NECROTIC),
-                on=who,
-            )
+                on=who, from_attack=False)
 
     # **`EONT`, not `SONT`, and the difference is the whole clause.** The
     # hold has to outlive the moment it fires: `SONT` ends it *at* the
@@ -700,7 +699,7 @@ def p4097(c: Cast) -> None:
 
     def sting(ev: AttackRolled) -> None:
         if ev.attacker == victim:
-            c.flat(max(0, c.int_mod), on=victim)
+            c.flat(max(0, c.int_mod), on=victim, from_attack=False)
 
     held.subs.append(c.world.bus.on(AttackRolled, sting, owner=c.me))
 

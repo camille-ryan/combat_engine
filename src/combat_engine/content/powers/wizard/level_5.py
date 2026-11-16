@@ -418,7 +418,7 @@ def p14552(c: Cast) -> None:
         if ev.ghost or ev.actor == victim:
             return
         if c.adjacent_to(victim, ev.actor):
-            c.flat(5 + c.int_mod, on=ev.actor)
+            c.flat(5 + c.int_mod, on=ev.actor, from_attack=False)
 
     held.subs.append(c.world.bus.on(TurnEnd, dusk, owner=c.me))
 
@@ -454,7 +454,7 @@ def p16280(c: Cast) -> None:
         if struck.get(victim) == c.world.round or victim not in c.enemies():
             return
         struck[victim] = c.world.round
-        c.flat(c.int_mod, dtype=DamageType.FIRE, on=victim)
+        c.flat(c.int_mod, dtype=DamageType.FIRE, on=victim, from_attack=False)
 
     def walked_in(ev: ZoneEntered) -> None:
         if ev.zone == ring:

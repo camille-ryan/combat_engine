@@ -99,7 +99,7 @@ def p11464(c: Cast) -> None:
     def end(ev: object) -> None:
         now = square_of(c, victim)
         if began and now is not None and distance(began[0], now) < 2:
-            c.flat(c.str_mod, on=victim)
+            c.flat(c.str_mod, on=victim, from_attack=False)
 
     once_when(c, TurnStart, victim, start)
     once_when(c, TurnEnd, victim, end)
@@ -252,7 +252,7 @@ def p11469(c: Cast) -> None:
             return
         spent[0] = c.world.round
         for foe in foes_around(c, victim):
-            c.flat(c.wis_mod, on=foe)
+            c.flat(c.wis_mod, on=foe, from_attack=False)
 
     c.watch(Miss, whiffed, until=When.ENCOUNTER)
 
@@ -381,7 +381,7 @@ def p12787(c: Cast) -> None:
         if struck.get(ev.actor) == c.world.round:
             return
         struck[ev.actor] = c.world.round
-        c.flat(c.wis_mod, on=ev.actor)
+        c.flat(c.wis_mod, on=ev.actor, from_attack=False)
         banish(c, arrow)
 
     c.watch(EnterSquare, stepped, until=When.ENCOUNTER)
@@ -434,7 +434,7 @@ def p9502(c: Cast) -> None:
 
     def scorch(who: int) -> None:
         if who != victim:
-            c.flat(c.dex_mod, dtype=kind, on=who)
+            c.flat(c.dex_mod, dtype=kind, on=who, from_attack=False)
 
     when_turn_starts_in(c, ring, scorch, until=When.EONT)
 
@@ -477,7 +477,7 @@ def p9504(c: Cast) -> None:
     zone = c.zone(spread({c.there}, 1), until=When.SONT)
 
     def rot(who: int) -> None:
-        c.flat(c.wis_mod, dtype=DamageType.POISON, on=who)
+        c.flat(c.wis_mod, dtype=DamageType.POISON, on=who, from_attack=False)
 
     when_turn_ends_in(c, zone, rot, until=When.SONT)
 

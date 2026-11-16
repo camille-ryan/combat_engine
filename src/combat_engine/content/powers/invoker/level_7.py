@@ -319,7 +319,7 @@ def p7185(c: Cast) -> None:
             return
         stayed.discard(ev.actor)
         if ev.actor in c.world.zones.occupants(z):
-            c.flat(10 + c.wis_mod, dtype=DamageType.FIRE, on=ev.actor)
+            c.flat(10 + c.wis_mod, dtype=DamageType.FIRE, on=ev.actor, from_attack=False)
 
     c.watch(TurnStart, note, until=When.EONT)
     c.watch(TurnEnd, scorch, until=When.EONT)

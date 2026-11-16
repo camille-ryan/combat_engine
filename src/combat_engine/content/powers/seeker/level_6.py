@@ -45,7 +45,7 @@ def p11479(c: Cast) -> None:
             and getattr(ev, "opportunity", False)
             and c.adjacent(ev.attacker)
         ):
-            c.flat(c.str_mod, on=ev.attacker)
+            c.flat(c.str_mod, on=ev.attacker, from_attack=False)
 
     c.watch(Hit, spite, until=When.EONT)
 

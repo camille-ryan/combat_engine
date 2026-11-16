@@ -351,7 +351,7 @@ def p12957(c: Cast) -> None:
 
         def stung(ev: Hit) -> None:
             if ev.attacker == victim and ev.target in c.allies():
-                c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=victim)
+                c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=victim, from_attack=False)
 
         c.watch(Hit, stung, until=When.EONT, once=True, label=c.ref)
     elif spent == 2 and victim is not None:

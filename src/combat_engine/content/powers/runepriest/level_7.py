@@ -94,7 +94,7 @@ def p11396(c: Cast) -> None:
 
     def sear(ev: Any, v: int = victim) -> None:
         if by_opportunity(c.world, c.me, ev):
-            c.flat(5 + c.con_mod, dtype=DamageType.FIRE, on=v)
+            c.flat(5 + c.con_mod, dtype=DamageType.FIRE, on=v, from_attack=False)
 
     c.on_attack(sear, by=victim, until=When.EONT)
 

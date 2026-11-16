@@ -157,7 +157,7 @@ def p11170(c: Cast) -> None:
         if fired or ev.attacker != victim or ev.target not in c.allies():
             return
         fired.append(1)
-        c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=victim)
+        c.flat(c.wis_mod, dtype=DamageType.PSYCHIC, on=victim, from_attack=False)
 
     held = c.watch(Hit, sting, until=When.EONT, on=victim)
     held.subs.append(c.world.bus.on(Miss, sting, owner=c.me))

@@ -287,7 +287,12 @@ def p1725(c: Cast) -> None:
             return
         if c.distance(victim) > 1:
             state["spent"] = True
-            c.flat(c.roll("1d6") + c.con_mod, dtype=DamageType.THUNDER, on=victim)
+            c.flat(
+                c.roll("1d6") + c.con_mod,
+                dtype=DamageType.THUNDER,
+                on=victim,
+                from_attack=False,
+            )
 
     c.watch(TurnStart, begin, until=When.EOTNT, on=victim, label=c.ref)
     c.watch(MoveEnd, leaving, until=When.EOTNT, on=victim, label=c.ref)

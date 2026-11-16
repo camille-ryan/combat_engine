@@ -298,7 +298,7 @@ def p16133b(c: Cast) -> None:
 
     def scald(ev: Hit) -> None:
         if ev.target == c.me and getattr(ev, "opportunity", False):
-            c.flat(2 + c.cha_mod, dtype=DamageType.FIRE, on=ev.attacker)
+            c.flat(2 + c.cha_mod, dtype=DamageType.FIRE, on=ev.attacker, from_attack=False)
 
     hold = c.watch(Hit, scald, until=When.EOT)
     c.move(c.speed_of())

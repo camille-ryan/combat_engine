@@ -394,7 +394,7 @@ def p16265(c: Cast) -> None:
         pool = sorted(f for f in c.enemies() if c.distance(f) <= 5)
         mark = c.choose(pool, f"{c.ref}: who the element finds") if pool else None
         if mark is not None:
-            c.flat(c.con_mod, dtype=dtype, on=mark)
+            c.flat(c.con_mod, dtype=dtype, on=mark, from_attack=False)
 
     c.watch(Hit, lash, until=When.ENCOUNTER)
 

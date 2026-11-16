@@ -871,7 +871,7 @@ def p9739(c: Cast) -> None:
 
     def arc(ev: Any) -> None:
         if ev.attacker in friends(c) and beside_spirit(c, ev.target):
-            c.flat(c.dex_mod, dtype=DamageType.LIGHTNING, on=ev.target)
+            c.flat(c.dex_mod, dtype=DamageType.LIGHTNING, on=ev.target, from_attack=False)
 
     c.watch(Hit, arc, until=When.EONT, on=c.me)
 

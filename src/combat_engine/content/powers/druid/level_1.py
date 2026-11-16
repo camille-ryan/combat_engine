@@ -84,7 +84,7 @@ def p12325(c: Cast) -> None:
 
     def sting() -> None:
         if c.adjacent_to(chosen, victim):
-            c.flat(fork_mod(c), dtype=DamageType.POISON, on=victim)
+            c.flat(fork_mod(c), dtype=DamageType.POISON, on=victim, from_attack=False)
 
     at_end_of_its_next_turn(c, victim, sting)
 
@@ -141,7 +141,7 @@ def p13508(c: Cast) -> None:
 
     def fumbled(ev: Miss) -> None:
         if ev.target == victim and ev.attacker in friends:
-            c.flat(max(1, c.con_mod), on=victim)
+            c.flat(max(1, c.con_mod), on=victim, from_attack=False)
 
     c.watch(Miss, fumbled, until=When.EONT, on=c.me, once=True, label=c.ref)
 
@@ -284,6 +284,6 @@ def p5033(c: Cast) -> None:
         p = get(ev.power)
         if p is None or not p.is_attack:
             return
-        c.flat(5 + c.wis_mod, dtype=DamageType.PSYCHIC, on=victim)
+        c.flat(5 + c.wis_mod, dtype=DamageType.PSYCHIC, on=victim, from_attack=False)
 
     during_its_next_turn(c, victim, PowerUsed, swung)

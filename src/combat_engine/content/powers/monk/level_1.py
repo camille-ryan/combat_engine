@@ -161,7 +161,7 @@ def p11212(c: Cast) -> None:
         other = pair[0] if ev.target == pair[1] else pair[1]
         busy.append(1)
         try:
-            c.flat(c.str_mod, dtype=DamageType.THUNDER, on=other)
+            c.flat(c.str_mod, dtype=DamageType.THUNDER, on=other, from_attack=False)
         finally:
             busy.clear()
 
@@ -227,7 +227,7 @@ def p13124(c: Cast) -> None:
             if ev.other not in c.enemies() or struck.get(0) == c.world.round:
                 return
             struck[0] = c.world.round
-            c.flat(c.con_mod, on=ev.other)
+            c.flat(c.con_mod, on=ev.other, from_attack=False)
 
         c.watch(AdjacencyGained, nip, until=When.SONT)
 
@@ -377,7 +377,7 @@ def p13134(c: Cast) -> None:
 
         def riposte(ev: Hit) -> None:
             if ev.target == c.me and c.adjacent(ev.attacker):
-                c.flat(c.con_mod, on=ev.attacker)
+                c.flat(c.con_mod, on=ev.attacker, from_attack=False)
 
         c.watch(Hit, riposte, until=When.SONT)
 
@@ -582,6 +582,6 @@ def p16141(c: Cast) -> None:
         if ev.ghost or ev.actor not in c.enemies():
             return
         if c.distance(ev.actor) <= 1:
-            c.flat(2 + c.cha_mod, dtype=DamageType.FIRE, on=ev.actor)
+            c.flat(2 + c.cha_mod, dtype=DamageType.FIRE, on=ev.actor, from_attack=False)
 
     c.watch(TurnStart, sear, until=When.SONT)

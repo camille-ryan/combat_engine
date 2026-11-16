@@ -171,7 +171,7 @@ def p9752(c: Cast) -> None:
             if ev.target not in c.world.zones.occupants(coils):
                 return
             if ev.target == c.me or ev.target in c.allies():
-                c.flat(c.wis_mod, on=ev.attacker)
+                c.flat(c.wis_mod, on=ev.attacker, from_attack=False)
 
         c.watch(Hit, bite, until=When.ENCOUNTER, on=c.me)
     if c.strike():

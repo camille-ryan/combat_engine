@@ -280,7 +280,7 @@ def p12949(c: Cast) -> None:
         if struck.get(ev.target) == c.world.round:
             return
         struck[ev.target] = c.world.round
-        c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=ev.target)
+        c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=ev.target, from_attack=False)
 
     c.watch(DamageApplied, lash, until=When.EONT)
 

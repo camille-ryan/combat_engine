@@ -462,7 +462,7 @@ def _p87_both_swings(c: Cast, arena: str, doom: bool,
         elif (arena == "f989" and len(caught) > 1
                 and len(c.held(what="light blade", on=c.me)) > 1):
             with c.credit("f989"):
-                c.flat(c.dex_mod, on=caught[-1])
+                c.flat(c.dex_mod, on=caught[-1], from_attack=False)
         if doom and len(caught) > 1:
             # "If you hit with both attacks, **one** target takes the
             # penalty" -- one and not one per hit. Where both swings went
@@ -483,7 +483,7 @@ def _p87_both_swings(c: Cast, arena: str, doom: bool,
                     dead, f"{ref}: who takes the extra damage"))
                 if who is not None:
                     with c.credit("f1102"):
-                        c.flat(c.wis_mod, on=who)
+                        c.flat(c.wis_mod, on=who, from_attack=False)
 
     held.append(c.watch(PowerResolved, finished, until=When.EOT, on=me,
                         label=f"{ref} both swings"))

@@ -62,7 +62,7 @@ def burning_mark(
         if struck.get(who) == c.world.round:
             return  # the first time each round, and no more
         struck[who] = c.world.round
-        c.flat(3 + c.cha_mod, dtype=DamageType.RADIANT, on=who)
+        c.flat(3 + c.cha_mod, dtype=DamageType.RADIANT, on=who, from_attack=False)
 
     if hold is None:
         held = c.mark(until=until, on=who)

@@ -287,10 +287,10 @@ def p9854(c: Cast) -> None:
     def backlash(ev: AttackDeclared) -> None:
         if ev.target == c.me:
             return
-        c.flat(c.con_mod, dtype=DamageType.COLD, on=victim)
+        c.flat(c.con_mod, dtype=DamageType.COLD, on=victim, from_attack=False)
         for e in c.enemies():
             if e != victim and c.marked(e):
-                c.flat(c.con_mod, dtype=DamageType.COLD, on=e)
+                c.flat(c.con_mod, dtype=DamageType.COLD, on=e, from_attack=False)
 
     c.on_attack(backlash, by=victim, until=When.EONT)
 

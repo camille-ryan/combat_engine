@@ -241,7 +241,7 @@ def p4837(c: Cast) -> None:
         if ev.attacker != me or _mine(c, ev.target) or not by_melee(c.world, me, ev):
             return
         if c.is_(Condition.PRONE, on=ev.target):
-            c.flat(c.con_mod, on=ev.target)
+            c.flat(c.con_mod, on=ev.target, from_attack=False)
         else:
             c.prone(on=ev.target)
 
@@ -447,7 +447,7 @@ def p7392(c: Cast) -> None:
         if victim is None:
             return
         c.flat(5, on=me)
-        c.flat(5 + c.con_mod, on=victim)
+        c.flat(5 + c.con_mod, on=victim, from_attack=False)
 
     offer = _each_turn(
         c, MINOR, "bleed to maul an adjacent enemy", maul,

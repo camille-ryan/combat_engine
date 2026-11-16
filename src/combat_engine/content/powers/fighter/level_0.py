@@ -304,7 +304,7 @@ def p12663(c: Cast) -> None:
     def splash(ev: Hit) -> None:
         others = [f for f in c.enemies() if f != ev.target and c.adjacent(f)]
         if others:
-            c.flat(c.con_mod, on=others[0])
+            c.flat(c.con_mod, on=others[0], from_attack=False)
 
     _on_basic_hit(c, stance, splash)
 

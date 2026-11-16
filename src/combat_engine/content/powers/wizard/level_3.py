@@ -545,7 +545,7 @@ def p4022(c: Cast) -> None:
                 if pos is not None:
                     near |= spread(pos.squares, 1)
             if near and ev.actor in c.in_squares(near):
-                c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=ev.actor)
+                c.flat(c.con_mod, dtype=DamageType.LIGHTNING, on=ev.actor, from_attack=False)
 
         c.watch(TurnStart, dawn, until=When.EONT, on=me, label=f"{c.ref} beetles")
 

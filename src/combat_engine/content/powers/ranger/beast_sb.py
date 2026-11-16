@@ -372,7 +372,7 @@ def p12503(c: Cast) -> None:
         if not by_melee(c.world, c.me, ev):
             return
         if c.adjacent_to(pet, ev.attacker):
-            c.flat(c.b_mod(Ability.STR), on=ev.attacker)
+            c.flat(c.b_mod(Ability.STR), on=ev.attacker, from_attack=False)
 
     c.watch(AttackDeclared, bite, until=When.ENCOUNTER, label=c.ref)
 

@@ -273,7 +273,7 @@ def p4996(c: Cast) -> None:
             return
         was = start.pop(0, None)
         if was is not None and gap(c, keeper, victim) < was:
-            c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=victim)
+            c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=victim, from_attack=False)
 
     c.watch(TurnStart, began, until=When.ENCOUNTER, on=c.me, label="p4996 start")
     c.watch(TurnEnd, ended, until=When.ENCOUNTER, on=c.me, label="p4996 end")

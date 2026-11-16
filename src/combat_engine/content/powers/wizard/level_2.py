@@ -621,7 +621,7 @@ def p6900(c: Cast) -> None:
         if struck.get(foe) == c.world.round:
             return
         struck[foe] = c.world.round
-        c.flat(c.int_mod, dtype=DamageType.FORCE, on=foe)
+        c.flat(c.int_mod, dtype=DamageType.FORCE, on=foe, from_attack=False)
 
     held = c.watch(AttackDeclared, recoil, until=When.ENCOUNTER, on=me, label=c.ref)
 

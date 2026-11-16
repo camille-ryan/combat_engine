@@ -216,7 +216,7 @@ def p970(c: Cast) -> None:
                 return
             spent.append(True)
             with c.credit("f975"):
-                c.flat(c.cha_mod, on=foe)
+                c.flat(c.cha_mod, on=foe, from_attack=False)
 
         c.watch(Hit, ally_hit, until=When.EONT, on=c.me,
                 label=f"{c.ref} next ally")

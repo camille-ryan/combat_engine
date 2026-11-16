@@ -194,7 +194,7 @@ def p12298(c: Cast) -> None:
         if spent or ev.target != foe or ev.attacker not in friends:
             return
         spent.append(True)
-        c.flat(c.cha_mod, dtype=DamageType.RADIANT, on=foe)
+        c.flat(c.cha_mod, dtype=DamageType.RADIANT, on=foe, from_attack=False)
 
     c.watch(Hit, blaze, until=When.EONT, on=c.me, label=f"{c.ref} radiance")
 
@@ -670,7 +670,7 @@ def p12604(c: Cast) -> None:
         if ev.ghost or ev.actor == me or ev.actor not in c.enemies():
             return
         if c.adjacent(ev.actor):
-            c.flat(c.con_mod, dtype=DamageType.RADIANT, on=ev.actor)
+            c.flat(c.con_mod, dtype=DamageType.RADIANT, on=ev.actor, from_attack=False)
 
     c.watch(TurnEnd, sear, until=When.ENCOUNTER, on=me, label=f"{c.ref} halo")
 

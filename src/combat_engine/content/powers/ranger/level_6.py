@@ -266,7 +266,7 @@ def p13609(c: Cast) -> None:
         if ev.ghost or ev.actor == me:
             return
         if ev.actor in c.enemies() and ev.actor in c.world.zones.occupants(zone):
-            c.flat(c.wis_mod, on=ev.actor)
+            c.flat(c.wis_mod, on=ev.actor, from_attack=False)
 
     c.watch(TurnEnd, scour, until=When.ENCOUNTER, on=me, label=c.ref)
 

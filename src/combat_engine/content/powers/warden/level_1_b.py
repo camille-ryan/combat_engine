@@ -280,7 +280,7 @@ def p9825(c: Cast) -> None:
             spent["round"] = c.world.round
             for e in c.enemies():
                 if c.marked(e):
-                    c.flat(c.str_mod, dtype=DamageType.THUNDER, on=e)
+                    c.flat(c.str_mod, dtype=DamageType.THUNDER, on=e, from_attack=False)
 
     while_in(
         c,

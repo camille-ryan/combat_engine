@@ -411,7 +411,7 @@ def p14560(c: Cast) -> None:
         if ev.ghost or ev.actor not in c.enemies():
             return
         if ev.actor in c.world.zones.occupants(zone):
-            c.flat(2 + c.int_mod, dtype=DamageType.PSYCHIC, on=ev.actor)
+            c.flat(2 + c.int_mod, dtype=DamageType.PSYCHIC, on=ev.actor, from_attack=False)
 
     held = c.world.get(zone, Zone)
     if held is not None and held.effect is not None:

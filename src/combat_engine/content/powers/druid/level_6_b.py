@@ -250,7 +250,7 @@ def p9658(c: Cast) -> None:
             return
         p = get(ev.power)
         if p is not None and p.reach.kind == "melee":
-            c.flat(fork_mod(c), on=ev.attacker)
+            c.flat(fork_mod(c), on=ev.attacker, from_attack=False)
 
     c.watch(Hit, thorns, until=When.ENCOUNTER, on=me, label=c.ref)
 

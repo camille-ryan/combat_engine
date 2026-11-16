@@ -173,7 +173,7 @@ def p5039(c: Cast) -> None:
 
     def judge() -> None:
         if steps[0] < 2:
-            c.flat(c.wis_mod, dtype=DamageType.LIGHTNING, on=victim)
+            c.flat(c.wis_mod, dtype=DamageType.LIGHTNING, on=victim, from_attack=False)
         c.world.effects.end(counting, "its turn ended")
 
     at_end_of_its_next_turn(c, victim, judge)

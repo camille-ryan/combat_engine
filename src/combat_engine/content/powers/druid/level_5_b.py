@@ -227,7 +227,7 @@ def p5050(c: Cast) -> None:
         if declared is None or declared.reach.kind != "melee":
             return
         if in_beast_form(c.world, me) and can_act(c.world, me):
-            c.flat(max(1, c.con_mod), on=ev.attacker)
+            c.flat(max(1, c.con_mod), on=ev.attacker, from_attack=False)
 
     c.watch(Hit, thorns, until=When.ENCOUNTER, on=me, label=f"{c.ref} thorns")
 
@@ -265,7 +265,7 @@ def p9656(c: Cast) -> None:
 
     def left(ev: ZoneExited) -> None:
         if ev.zone == zone and alive(c.world, ev.actor):
-            c.flat(5 + c.wis_mod, on=ev.actor)
+            c.flat(5 + c.wis_mod, on=ev.actor, from_attack=False)
 
     def reached(ev: PowerUsed) -> None:
         inside = c.world.zones.occupants(zone)
@@ -275,7 +275,7 @@ def p9656(c: Cast) -> None:
         if declared is None or not declared.is_attack:
             return
         if any(who not in inside for who in ev.targets):
-            c.flat(5 + c.wis_mod, on=ev.actor)
+            c.flat(5 + c.wis_mod, on=ev.actor, from_attack=False)
 
     c.watch(ZoneExited, left, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} out")
     c.watch(PowerUsed, reached, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} reach")

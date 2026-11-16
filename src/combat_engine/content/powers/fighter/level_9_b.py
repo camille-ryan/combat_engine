@@ -295,7 +295,7 @@ def p12197(c: Cast) -> None:
 
     def squeeze(ev: TurnStart) -> None:
         if not ev.ghost and ev.actor == victim and not held.ended:
-            c.flat(c.str_mod, on=victim)
+            c.flat(c.str_mod, on=victim, from_attack=False)
 
     held.subs.append(c.world.bus.on(TurnStart, squeeze, owner=me))
 

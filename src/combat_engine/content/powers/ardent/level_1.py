@@ -450,7 +450,7 @@ def p12933(c: Cast) -> None:
 
     def punish(ev: Hit) -> None:
         if ev.target == victim:
-            c.flat(c.con_mod, on=victim)
+            c.flat(c.con_mod, on=victim, from_attack=False)
 
     def armed(ev: DamageRolled) -> None:
         if ev.source == victim:

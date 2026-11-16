@@ -314,7 +314,7 @@ def p14264(c: Cast) -> None:
         if ev.target != c.me and ev.target not in c.allies():
             return
         spent.append(True)
-        c.flat(5 + c.wis_mod, dtype=DamageType.COLD, on=victim)
+        c.flat(5 + c.wis_mod, dtype=DamageType.COLD, on=victim, from_attack=False)
 
     hold = c.watch(Hit, backlash, until=When.EOTNT, on=victim, label=c.ref)
     hold.subs.append(c.world.bus.on(Miss, backlash, owner=c.me))
@@ -538,7 +538,7 @@ def p16423(c: Cast) -> None:
         beside.discard(ev.actor)
         if gone and ev.actor not in struck and ev.actor in c.enemies():
             struck.add(ev.actor)
-            c.flat(c.con_mod, dtype=DamageType.PSYCHIC, on=ev.actor)
+            c.flat(c.con_mod, dtype=DamageType.PSYCHIC, on=ev.actor, from_attack=False)
         reread()
 
     c.watch(MoveStart, began, until=When.EONT, label=f"{c.ref} watches")

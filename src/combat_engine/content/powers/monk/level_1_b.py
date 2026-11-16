@@ -76,7 +76,7 @@ def p16133(c: Cast) -> None:
 
         def burn(ev: Hit) -> None:
             if ev.attacker == c.me and by_melee(c.world, c.me, ev):
-                c.flat(c.cha_mod, dtype=DamageType.FIRE, on=ev.target)
+                c.flat(c.cha_mod, dtype=DamageType.FIRE, on=ev.target, from_attack=False)
 
         c.watch(Hit, burn, until=When.EONT)
 
@@ -256,7 +256,7 @@ def p16145(c: Cast) -> None:
         if who not in c.enemies() or bitten.get(who) == c.world.round:
             return
         bitten[who] = c.world.round
-        c.flat(c.dex_mod, dtype=DamageType.FIRE, on=who)
+        c.flat(c.dex_mod, dtype=DamageType.FIRE, on=who, from_attack=False)
 
     def on_close(ev: AdjacencyGained) -> None:
         if ev.actor == c.me and ev.mover not in (0, c.me):

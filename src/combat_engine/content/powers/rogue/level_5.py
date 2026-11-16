@@ -102,7 +102,7 @@ def p543(c: Cast) -> None:
     def retort(ev: AttackDeclared) -> None:
         if ev.target != c.me:
             return
-        c.flat(c.dex_mod, on=victim)
+        c.flat(c.dex_mod, on=victim, from_attack=False)
         if c.may("shift a square", who=c.me):
             c.shift(1)
 

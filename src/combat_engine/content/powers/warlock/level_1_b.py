@@ -478,7 +478,7 @@ def p13877(c: Cast) -> None:
         if bitten[0] or ev.actor != victim or c.turn_of() != victim:
             return
         bitten[0] = True
-        c.flat(2 + c.dex_mod, dtype=DamageType.COLD, on=victim)
+        c.flat(2 + c.dex_mod, dtype=DamageType.COLD, on=victim, from_attack=False)
 
     c.watch(MoveEnd, stepped, until=When.EOTNT)
 
@@ -604,8 +604,7 @@ def p13904(c: Cast) -> None:
             c.flat(
                 2 + max(0, c.dex_mod),
                 dtype=DamageType.PSYCHIC,
-                on=victim,
-            )
+                on=victim, from_attack=False)
 
     c.watch(MoveStart, went, until=When.ENCOUNTER)
     c.watch(TurnEnd, settle, until=When.ENCOUNTER, once=True)

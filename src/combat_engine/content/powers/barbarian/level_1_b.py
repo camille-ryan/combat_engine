@@ -345,7 +345,7 @@ def p4874(c: Cast) -> None:
         if ev.ghost or ev.actor not in c.enemies():
             return
         if me in c.world.relations.sources(Relation.GRABBED_BY, ev.actor):
-            c.flat(5 + c.str_mod, on=ev.actor)
+            c.flat(5 + c.str_mod, on=ev.actor, from_attack=False)
 
     held_by(
         c, stance,

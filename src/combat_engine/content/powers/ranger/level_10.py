@@ -352,7 +352,7 @@ def p13611(c: Cast) -> None:
     def spring(ev: ZoneEntered) -> None:
         if ev.zone != zone or ev.actor == me or ev.actor not in c.enemies():
             return
-        c.flat(5 + c.wis_mod, on=ev.actor)
+        c.flat(5 + c.wis_mod, on=ev.actor, from_attack=False)
         c.immobilized(on=ev.actor, until=When.EONT)
         c.world.zones.end(zone, "sprung")
 
@@ -405,7 +405,7 @@ def p13612(c: Cast) -> None:
         if ev.ghost or ev.actor == me:
             return
         if ev.actor in c.enemies() and ev.actor in c.world.zones.occupants(zone):
-            c.flat(c.wis_mod, dtype=DamageType.FIRE, on=ev.actor)
+            c.flat(c.wis_mod, dtype=DamageType.FIRE, on=ev.actor, from_attack=False)
 
     for who in c.world.zones.occupants(zone):
         expose(who)

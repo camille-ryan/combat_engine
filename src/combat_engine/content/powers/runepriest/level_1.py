@@ -217,7 +217,7 @@ def p11368(c: Cast) -> None:
             return
         if c.marked(on=v, by=ev.target):
             return
-        c.flat(c.con_mod, on=v)
+        c.flat(c.con_mod, on=v, from_attack=False)
 
     c.on_attack(backlash, by=victim, until=When.EONT, once=True)
 
@@ -434,7 +434,7 @@ def p11374(c: Cast) -> None:
         if not pending:
             return
         if not any(pending.values()):
-            c.flat(c.str_mod, on=v)
+            c.flat(c.str_mod, on=v, from_attack=False)
         pending.clear()
 
     c.watch(Miss, missed, until=When.ENCOUNTER)

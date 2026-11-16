@@ -340,7 +340,7 @@ def p12426b(c: Cast) -> None:
         if paid or who is None or who == c.me or not c.marked(on=who):
             return
         paid.append(who)
-        c.flat(c.cha_mod, dtype=DamageType.FORCE, on=who)
+        c.flat(c.cha_mod, dtype=DamageType.FORCE, on=who, from_attack=False)
 
     allowed = c.may_enter(when=lambda ctx: c.marked(on=ctx.get("occupant")))
     watching = c.world.bus.on(EnterSquare, crossing, owner=c.me)

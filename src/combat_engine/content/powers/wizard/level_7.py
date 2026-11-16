@@ -96,7 +96,7 @@ def p1430(c: Cast) -> None:
     def dawn(ev: TurnStart) -> None:
         if ev.ghost or ev.actor not in c.world.zones.occupants(zone):
             return
-        c.flat(c.int_mod, dtype=DamageType.COLD, on=ev.actor)
+        c.flat(c.int_mod, dtype=DamageType.COLD, on=ev.actor, from_attack=False)
 
     c.watch(TurnStart, dawn, until=When.EONT, label=c.ref)
     c.note(f"{c.ref}: the zone is lightly obscured, and there is no concealment here")
@@ -626,7 +626,7 @@ def p5806(c: Cast) -> None:
     c.damage("4d8", c.int_mod, dtype=DamageType.ACID)
 
     def bite(_ev: object) -> None:
-        c.flat(c.con_mod, dtype=DamageType.ACID, on=victim)
+        c.flat(c.con_mod, dtype=DamageType.ACID, on=victim, from_attack=False)
 
     c.on_attack(bite, by=victim, until=When.EONT, label=f"{c.ref} bite")
 

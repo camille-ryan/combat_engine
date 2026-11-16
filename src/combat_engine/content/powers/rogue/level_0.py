@@ -237,7 +237,7 @@ def p12718(c: Cast) -> None:
             return
         others = [e for e in c.within(1, side="enemy") if e != ev.target]
         if others:
-            c.flat(c.str_mod, on=c.choose(others, "who else the blade catches"))
+            c.flat(c.str_mod, on=c.choose(others, "who else the blade catches"), from_attack=False)
 
     c.watch(Hit, spill, until=When.EOT, once=True)
 

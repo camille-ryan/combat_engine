@@ -335,7 +335,7 @@ def p12547(c: Cast) -> None:
 
     def dusk(ev: TurnEnd) -> None:
         if not ev.ghost and ev.actor != victim and c.adjacent_to(victim, ev.actor):
-            c.flat(c.int_mod, dtype=DamageType.FIRE, on=ev.actor)
+            c.flat(c.int_mod, dtype=DamageType.FIRE, on=ev.actor, from_attack=False)
 
     c.watch(TurnEnd, dusk, until=When.EOTNT, on=victim, label=c.ref)
 
