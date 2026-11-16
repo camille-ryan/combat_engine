@@ -33331,6 +33331,176 @@ def _slide_probe():  # noqa: ANN202
     return world, world.encounter, me
 
 
+def the_four_manoeuvres_nobody_performed(out: Result) -> None:
+    """Aid attack, aid defence, bull rush and grab, taken on a board.
+
+    Four printed manoeuvres that `actions._manoeuvres` offers and **no rule
+    had ever performed**. Measured over all 571 rules: each of the four is
+    *named* by two to four of them, and none of those called `perform` on
+    it. The other ten kinds in `drivers.UNNAMED_KINDS_OWED` all have a rule
+    that poses and performs them, so these four were the gap.
+
+    **This is the row question, not the policy one**, which is why it is
+    here and not on `#1065`. Camille, asked why weights were being
+    discussed: *"For this round of work we aren't working on AI policy. We
+    are just trying to get the rows working, reachable, complete. Is it not
+    possible to just have a board test out these actions?"* It is -- a
+    board calls `perform` and the AI's scoring table is never consulted.
+    Whether the AI ever *chooses* these is a separate question and stays on
+    `#1065`.
+
+    **A fresh board per kind, and that is load-bearing.** `perform` spends
+    the actor's budget, and `legal` without `include_blocked` filters an
+    action the actor can no longer afford -- so performing one manoeuvre and
+    then asking for the next reports it as **not offered**. Measured while
+    writing this: aiding first made `aid_defence`, `bull_rush` and `grab`
+    all look unavailable on a board where all three were in fact offered
+    five ways each, and the first reading of that was "three printed
+    actions only monsters get".
+
+    **The two aids are deterministic and the two attacks are not**, so they
+    are asserted differently. `c.aid_attack`'s docstring is explicit --
+    *"**No roll.** The combat aid actions grant outright"* -- while a bull
+    rush and a grab are each an attack, so `perform` returning False on a
+    miss is the printed rule and not a fault. The seeded arms below are
+    what tells those two apart; a single seed cannot, and read as a bug the
+    first time.
+    """
+    from combat_engine.engine import events
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.query import allies, creatures
+    from combat_engine.engine.types import Relation
+
+    FOUR = ("aid_attack", "aid_defence", "bull_rush", "grab")
+
+    def posed(kind: str, seed: int = 1):  # noqa: ANN202
+        """A board of its own, for the budget reason in the docstring."""
+        world, me, _ = _board("m145a0", seed)
+        offers = [
+            a for a in legal(world, world.encounter, me) if a.kind == kind
+        ]
+        return world, me, offers
+
+    # ---- all four are offered, each on a board of its own
+    missing = [k for k in FOUR if not posed(k)[2]]
+    out.that(
+        not missing,
+        "all four manoeuvres are offered to the creature on a fresh board --"
+        " asked one per board, because `perform` spends the budget and a"
+        " shared board reports the later ones as not offered at all",
+        f"not offered: {missing}",
+    )
+
+    # ---- the aids grant outright, which is their printed line
+    #
+    # Guarded rather than indexed blind: a plant that stopped the four being
+    # offered made the arm above red and then this one **raise** an
+    # IndexError, and a driver that raises is a worse failure than one that
+    # reports. The guard turns the second symptom into a second red.
+    for kind in ("aid_attack", "aid_defence"):
+        world, me, offers = posed(kind)
+        if not offers:
+            out.that(False, f"{kind} is offered, so it can be performed",
+                     f"{kind} was not offered on a fresh board")
+            continue
+        friends = [a for a in allies(world, me) if a != me]
+        before = {
+            eid: {
+                id(e) for e in world.effects.of(eid)
+                if getattr(e, "by", "") == f"manoeuvre:{kind}"
+            }
+            for eid in creatures(world)
+        }
+        done = perform(world, world.encounter, me, offers[0])
+        laid = [
+            eid for eid in creatures(world)
+            for e in world.effects.of(eid)
+            if getattr(e, "by", "") == f"manoeuvre:{kind}"
+            and id(e) not in before.get(eid, set())
+        ]
+        out.that(
+            done and bool(laid),
+            f"performing {kind} grants outright and lays a hold -- no roll,"
+            " which its own docstring insists on because the DC-10-plus-half"
+            " -level check is the *skill* version of aid another and a"
+            " different printed block",
+            f"perform={done}, holds laid by manoeuvre:{kind} on {laid};"
+            f" allies available: {friends}",
+        )
+
+    # ---- the grab rolls, and grabs only when it hits
+    rolled = grabbed = tries = 0
+    for seed in range(1, 9):
+        world, me, offers = posed("grab", seed)
+        if not offers:
+            continue
+        tries += 1
+        saw: list[str] = []
+        world.bus.on(events.AttackRolled,
+                     lambda ev, into=saw: into.append("roll"))
+        done = perform(world, world.encounter, me, offers[0])
+        rolled += bool(saw)
+        held = any(
+            me in world.relations.sources(Relation.GRABBED_BY, who)
+            for who in sorted(creatures(world))
+        )
+        grabbed += bool(held)
+        if done != held:
+            out.that(
+                False,
+                "a grab's return value and the relation agree",
+                f"seed {seed}: perform={done} but grabbed={held}",
+            )
+            break
+    out.that(
+        tries and rolled == tries,
+        "a grab attempt rolls an attack EVERY time it is performed -- it is"
+        " a Strength attack against Reflex, not an application, which is the"
+        " distinction `c.grab_attempt` draws against `c.grab`",
+        f"{rolled} of {tries} attempts rolled",
+    )
+    out.that(
+        0 < grabbed < tries,
+        "and it grabs on some attempts and not others, which is what makes"
+        " `perform` returning False the printed rule rather than a fault."
+        " A single seed cannot tell those apart and read as a bug the first"
+        " time",
+        f"{grabbed} of {tries} attempts ended holding somebody",
+    )
+
+    # ---- and the bull rush pushes only when it hits
+    pushes = rushes = 0
+    for seed in range(1, 9):
+        world, me, offers = posed("bull_rush", seed)
+        if not offers:
+            continue
+        rushes += 1
+        shoved: list[str] = []
+        world.bus.on(events.ForcedMove,
+                     lambda ev, into=shoved: into.append("push"))
+        swung: list[str] = []
+        world.bus.on(events.AttackRolled,
+                     lambda ev, into=swung: into.append("roll"))
+        done = perform(world, world.encounter, me, offers[0])
+        pushes += bool(shoved)
+        if bool(shoved) != done or not swung:
+            out.that(
+                False,
+                "a bull rush rolls, and pushes exactly when it lands",
+                f"seed {seed}: perform={done}, pushed={bool(shoved)},"
+                f" rolled={bool(swung)}",
+            )
+            break
+    out.that(
+        rushes and 0 < pushes < rushes,
+        "a bull rush rolls an attack and pushes **only on a hit** -- so it"
+        " succeeds on some boards and not others, and its False is a miss."
+        " Both halves matter: a version that always pushed would pass a"
+        " positive-only check",
+        f"{pushes} of {rushes} rushes shoved somebody",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -90223,6 +90393,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "manoeuvres_performed": (
+        the_four_manoeuvres_nobody_performed,
+        "the four printed manoeuvres no rule had ever performed",
     ),
     "slides_owed": (
         the_granted_slides_are_owed_a_price,
