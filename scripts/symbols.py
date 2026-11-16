@@ -161,7 +161,7 @@ CATEGORIES: dict[str, dict] = {
                 "any_size_manoeuvre", "blocks_entry", "difficult_for",
                 "extend_every",
                 "extend_move", "forces", "ignores_difficult", "ignores_difficult_in",
-                "ignores_hazards", "immovable", "no_walk", "phasing",
+                "ignores_hazards", "immovable", "no_charge", "no_walk", "phasing",
                 "may_enter", "resist_forced", "rideable", "shares_space",
                 "speed_of", "squares_for", "squeeze_through",
             ]),
@@ -1010,7 +1010,8 @@ READERS: dict[str, list[str]] = {
         "shield_bonus", "takes_half",
     ],
     "what a creature may do": [
-        "can_act", "can_move", "can_react", "can_shift", "can_run", "can_walk",
+        "can_act", "can_charge", "can_move", "can_react", "can_shift", "can_run",
+        "can_walk",
         "can_wield",
         "granted_actions", "held_by", "holding", "holds_somebody",
         "immune_to", "may_ride", "needs_loading", "ready_to_fire",

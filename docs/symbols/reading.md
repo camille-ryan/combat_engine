@@ -195,6 +195,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 - `query.can_act(world: 'World', eid: 'int', *, ignoring: 'Condition | None' = None) -> 'bool'`
   - (no docstring)
+- `query.can_charge(world: 'World', eid: 'int') -> 'bool'`
+  - "The target cannot charge." It may still walk, run and shift.
 - `query.can_move(world: 'World', eid: 'int') -> 'bool'`
   - (no docstring)
 - `query.can_react(world: 'World', eid: 'int', *, ignoring: 'Condition | None' = None) -> 'bool'`
