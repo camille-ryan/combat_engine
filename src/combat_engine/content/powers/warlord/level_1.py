@@ -658,25 +658,41 @@ def p1412(c: Cast) -> None:
 def p1554(c: Cast) -> None:
     """Somebody trades places with the creature you just hit.
 
-    The pool from `c.within(1, of=foe, side="ally")` already reads "you, only
-    if you are adjacent to it, or an ally adjacent to it" -- the caster is in
-    that list exactly when the printed proviso says so.
+    **The pool had lost the caster, and the docstring said otherwise.** It
+    read: the pool from `c.within(1, of=foe, side="ally")` "already reads
+    'you, only if you are adjacent to it, or an ally adjacent to it' --
+    the caster is in that list exactly when the printed proviso says so."
+    It is not: `"ally"` has not held the caster since `#364`, which
+    `p10621`'s own note records. Measured on this row's board -- the
+    warlord at (6, 8), the target at (7, 8), plainly adjacent, and the
+    pool came back **empty**, so the hit landed and nobody swapped.
 
-    A true swap cannot be written: `c.slide` has no destination argument, so
-    the creature is slid a square and the swapper steps into the space it
-    left, which is the same two squares of movement without the guarantee
-    that they cross.
+    So the caster is added explicitly, gated on the printed proviso:
+    "you (only if you are adjacent to the target)".
+
+    **The true swap is written now.** The old note said `c.slide` "has no
+    destination argument" -- it has `to`, `anchor` and `toward` -- and
+    more to the point `c.swap` exists and is the whole sentence: "two
+    creatures change places. Either both move or neither does."
+
+    That guarantee is what the old version could not make. Sliding the
+    creature and then stepping into the square it left is two separate
+    movements, and either could be refused on its own -- leaving the
+    target moved and the swapper where it started, which is not a swap at
+    all. #1341.
     """
     if c.strike():
         c.damage(c.w(2), c.str_mod)
         foe = c.target
-        swappers = c.within(1, of=foe, side="ally")
+        swappers = [
+            *( [c.me] if foe is not None and c.adjacent(foe) else [] ),
+            *c.within(1, of=foe, side="ally"),
+        ]
         if not swappers:
             return
         who = c.choose(swappers, "who changes places with it")
-        vacated = c.there
-        if who is not None and c.slide(1, on=foe):
-            c.shift(who=who, to=vacated)
+        if who is not None and foe is not None:
+            c.swap(foe, who=who)
 
 
 # -- daily ------------------------------------------------------------------

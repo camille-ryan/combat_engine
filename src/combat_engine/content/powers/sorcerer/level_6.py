@@ -41,9 +41,11 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Trigger,
+    TurnStart,
     When,
     Window,
     World,
+    ZoneEntered,
     ally_within,
     both,
     get,
@@ -129,13 +131,43 @@ def p11833(c: Cast) -> None:
 )
 def p16242(c: Cast) -> None:
     """What survives is the ice: difficult terrain over the burst, until the
-    fight ends. The DC 11 Acrobatics check that follows it is not written --
-    nothing here rolls a skill check -- and neither is the requirement that
-    there be water to freeze, which is a question about the map.
+    fight ends.
+
+    **The DC 11 Acrobatics check is written now.** The old note said
+    "nothing here rolls a skill check"; `c.check(skill, dc)` is "roll a
+    skill check, truthy when it beat the DC", and `combat_engine/dc.py`
+    holds 90 printed numbers for the ones that are not stated outright.
+    This card states its own, so the 11 is the card's and not a band's.
+    #1341.
+
+    Both halves of "enters a square of this ice **or starts its turn
+    there**", which is two events and one clause.
+
+    Still not written: the requirement that there be water to freeze.
+    That is a question about the map rather than about the engine, and
+    the old note had it right.
     """
     area = c.area()
-    if area:
-        c.zone(area, label=c.ref, until=When.ENCOUNTER, difficult="ice")
+    if not area:
+        return
+    ice = c.zone(area, label=c.ref, until=When.ENCOUNTER, difficult="ice")
+
+    def slip(who: int) -> None:
+        if not c.check("acrobatics", 11, who=who):
+            c.prone(on=who)
+
+    def walked_in(ev: ZoneEntered) -> None:
+        if ev.zone == ice:
+            slip(ev.actor)
+
+    def stood_there(ev: TurnStart) -> None:
+        if not ev.ghost and ev.actor in c.world.zones.occupants(ice):
+            slip(ev.actor)
+
+    c.watch(ZoneEntered, walked_in, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} underfoot")
+    c.watch(TurnStart, stood_there, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} still underfoot")
 
 
 @power(
