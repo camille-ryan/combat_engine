@@ -99,22 +99,30 @@ def p2979(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_WEAPON, Keyword.TELEPORTATION],
     attack=Attack(CHA, vs=REF),
-    dropped=("c.grant_action('teleport')",),
+    dropped=("c.grant_action('teleport', toward=)",),
 )
 def p3464(c: Cast) -> None:
-    """**The reason was wrong and the clause is still dropped**, now with
-    the marker.
+    """**Still dropped, and the marker has been corrected twice.**
 
-    "Nothing grants an action" is false -- `c.grant_action` is the
-    facility, and `#1341` found two rows of this walk whose granted
-    *shift* was written with it. What is missing is the **word**:
-    `actions.GRANTABLE` holds `shift`, `escape`, `mount`, `move_zone` and
-    nine others, and no `teleport`. It raises on a word it does not know,
-    deliberately (`#583`), so this cannot be approximated into existence.
+    "Nothing grants an action" was false -- `c.grant_action` is the
+    facility and two rows of this walk had their granted *shift* written
+    with it.
 
-    `c.teleport` moves a creature now; the printed line offers the ally
-    the *option*, on its own later turn, which is a menu entry. #1344 is
-    the same shape for a different missing word.
+    Then I wrote that `actions.GRANTABLE` "holds shift, escape, mount,
+    move_zone and nine others, and no `teleport`". **That was also
+    false**, and it came from a grep whose output was cut off before the
+    end of the set: `GRANTABLE` holds `teleport`, `stand` and `bull_rush`
+    too, and `actions._teleports` reads the word off `_granted` and offers
+    a destination. Asserting absence from a truncated read is the mistake
+    this repo's own rules name -- a failed search is not an absent thing.
+
+    **What is really missing is the destination anchor.** The reader
+    offers every passable square within `squares_` of the *ally*; the card
+    says "to a space **adjacent to you**", meaning the bard. Granting the
+    unanchored version would hand the ally a free teleport anywhere in
+    range, which is strictly stronger than print -- the thing this tree
+    refuses to do. `c.slide` has `toward=` for exactly this shape and the
+    granted teleport has nothing. #1341.
     """
     if c.strike():
         c.damage(c.w(3), c.cha_mod)

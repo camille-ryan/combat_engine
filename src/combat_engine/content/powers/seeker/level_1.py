@@ -276,9 +276,22 @@ def p11470(c: Cast) -> None:
     `actions.GRANTABLE` and read by the action menu all along, and several
     monster rows grant it this way. #1342.
 
-    What remains is "the zone is rough going for creatures that fly too" --
-    `c.zone(difficult=)` is a property of the ground with no notion of who
-    is walking on it, so it is marked rather than approximated."""
+    What remains is "the zone is rough going for creatures that fly too",
+    and the marker is **measured** rather than assumed -- the two near
+    misses were checked and neither reaches it.
+
+    `Zone.difficult_for` is a set of creature ids written by
+    `c.difficult_for`, and flight *is* askable (`Movement.modes` carries
+    `{"fly": n}`), so the clause looks constructible. It is not: flight
+    bypasses difficult ground before the adder is consulted. Driven on
+    this row's own board, squares reachable with 4 --
+
+        walking                              15
+        flying                               17
+        flying, after c.difficult_for        17
+
+    -- so the adder moves nothing for a creature in the air, which is the
+    one case this clause is about."""
     if c.strike():
         c.damage(c.w(), c.wis_mod)
     c.slide(1)
