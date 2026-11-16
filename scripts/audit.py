@@ -2314,6 +2314,19 @@ class Result:
     fired: int = 0
     error: str = ""
     events: set[str] = field(default_factory=set)
+    #: **Did the caster ever actually hold the row?** Recorded on the first
+    #: board built for it, because that is the only place the hand exists.
+    #:
+    #: `_why_never` could not ask this and so reported the wrong reason for
+    #: a whole class of rows: `board()` sweeps every level-0 feature of the
+    #: class into the hand and `chargen.power_swap` then trades away **the
+    #: row under test**, so 92 warlock and paladin dailies are filed under
+    #: "waiting for a trigger" or "a Requirement the board cannot meet"
+    #: when the truth is the caster was never given the card.
+    #:
+    #: `None` means no board was ever built -- a row refused before the
+    #: harness got that far -- which is a third answer and not a False.
+    held_it: bool | None = None
 
     @property
     def silent(self) -> bool:
@@ -8471,6 +8484,15 @@ def audit(ref: str) -> Result:
         try:
             world, caster, _armed = board(ref, seed, pose=posed, arm=held,
                                           element=element, terrain=weather)
+            # **Whether the caster was given the row, asked once.** Sticky:
+            # any board that held it answers the question for the row, so a
+            # later attempt whose hand differs cannot erase the fact. See
+            # `Result.held_it`.
+            if out.held_it is not True:
+                from combat_engine.engine.components import Powers as _Powers
+
+                _known = world.get(caster, _Powers)
+                out.held_it = bool(_known and ref in _known.all)
             world.rng.loaded = face
             if not (trait or triggered):
                 # The rows this one is printed beside, **before** the
@@ -8692,9 +8714,20 @@ def _why_never(never: list[Result]) -> None:
     triggered: Counter = Counter()
     gated: list[str] = []
     bare: list[str] = []
+    unheld: list[str] = []
     for r in never:
         row = REGISTRY.get(r.ref)
         if row is None:
+            continue
+        # **Asked before the trigger and before the Requirement, because it
+        # strictly dominates both.** A row the caster never held could not
+        # have been used however well it is written, so reporting it as
+        # "waiting for a trigger" names a cause that is not the binding
+        # one. Measured: the live hand says 94 rows are simply absent where
+        # this function said 90 were "bare" and filed the rest under the
+        # other two headings.
+        if r.held_it is False:
+            unheld.append(r.ref)
             continue
         if getattr(row, "on", None) is not None:
             # **`on=` may be a tuple of triggers**, and assuming one crashed this
@@ -8713,6 +8746,12 @@ def _why_never(never: list[Result]) -> None:
             gated.append(r.ref)
         else:
             bare.append(r.ref)
+    if unheld:
+        print(f"      **the caster never held the row: {len(unheld)}** -- it"
+              f" could not have been used however well it is written, so"
+              f" this is reported before any other cause")
+        print("        " + ", ".join(sorted(unheld)[:16])
+              + (" ..." if len(unheld) > 16 else ""))
     if triggered:
         print("      waiting for a trigger to fire, by event:")
         for name, n in triggered.most_common(8):

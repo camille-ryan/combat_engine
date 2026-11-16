@@ -33501,6 +33501,103 @@ def the_four_manoeuvres_nobody_performed(out: Result) -> None:
     )
 
 
+def the_board_says_when_it_never_dealt_the_row(out: Result) -> None:
+    """"Never usable here" has three causes and the reporter named two.
+
+    `audit._why_never` is first-excuse-wins: a row with a trigger is filed
+    as *waiting for a trigger*, a row with a Requirement as *a Requirement
+    the board cannot meet*, and only what is left is called bare. It never
+    asked the question that **dominates both** -- was the caster ever given
+    the row at all?
+
+    It is not a hypothetical. `audit.board` sweeps every level-0 row of the
+    class into the hand, and `chargen.power_swap` then takes *"the lowest
+    qualifying power"* -- which is the row under test. Verified on three
+    paladin dailies: none of them is in its own board's hand.
+
+    So 92 warlock and paladin dailies were filed under a trigger or a
+    Requirement that is not what is stopping them. A row nobody holds could
+    not have been used however well it is written, which is why
+    `Result.held_it` is asked **first**.
+
+    **Three states, not two.** `None` means no board was ever built -- a row
+    refused before the harness got that far -- and collapsing that into
+    False would invent a hand that never existed.
+
+    **Sticky, and that is the fix for a subtle version of the same bug.**
+    `_attempts` builds many boards per row and their hands differ: a later
+    attempt that happens not to hold the row must not erase a earlier one
+    that did. Recorded only while it is not already True.
+    """
+    import audit as _audit
+
+    out.that(
+        hasattr(_audit.Result("probe"), "held_it"),
+        "a Result carries whether the caster ever held the row, which is"
+        " what lets the reporter ask the dominant question at all",
+        "Result has no held_it",
+    )
+    out.that(
+        _audit.Result("probe").held_it is None,
+        "and it starts as None rather than False -- a row no board was ever"
+        " built for is a third answer, and calling it False would invent a"
+        " hand that never existed",
+        f"fresh Result.held_it is {_audit.Result('probe').held_it!r}",
+    )
+
+    # ---- the live board, on a row the swap is known to eat
+    world, me, _ = _audit.board("p10100", 1)
+    from combat_engine.engine.components import Powers
+
+    known = world.get(me, Powers)
+    out.that(
+        known is not None and "p10100" not in known.all,
+        "p10100 really is absent from its own board's hand -- the defect"
+        " this rule is about, and the reason its 'never usable' line named"
+        " a Requirement rather than the missing card",
+        f"p10100 in hand: {'p10100' in (known.all if known else [])}",
+    )
+
+    # ---- the RECORDING, through the real audit path
+    #
+    # **Not a hand-set field.** The first draft built a `Result`, set
+    # `held_it = False` itself and handed that to the reporter -- so a
+    # plant deleting the recording line in `audit.audit` changed nothing
+    # the rule saw and stayed green. A rule that supplies the value it is
+    # testing cannot fail.
+    ran = _audit.audit("p10100")
+    out.that(
+        ran.held_it is False,
+        "auditing p10100 for real records that the caster never held it --"
+        " the recording path, not a value this rule supplied",
+        f"audit('p10100').held_it came back {ran.held_it!r}",
+    )
+
+    # ---- and the reporter leads with it
+    res = _audit.Result("p10100")
+    res.held_it = False
+    import io
+    from contextlib import redirect_stdout
+
+    said = io.StringIO()
+    with redirect_stdout(said):
+        _audit._why_never([res])
+    text = said.getvalue()
+    out.that(
+        "never held the row" in text,
+        "and `_why_never` reports it as never held -- the arm that fails if"
+        " the cause is filed under a trigger or a Requirement again",
+        f"what it said: {text.strip()[:140]!r}",
+    )
+    out.that(
+        "waiting for a trigger" not in text,
+        "and does NOT also file it under a trigger: the causes are ordered"
+        " rather than counted, because a row nobody holds is not waiting"
+        " for anything",
+        "it was reported under a trigger as well",
+    )
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -90393,6 +90490,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "never_held": (
+        the_board_says_when_it_never_dealt_the_row,
+        "the board says when it never dealt the row it is measuring",
     ),
     "manoeuvres_performed": (
         the_four_manoeuvres_nobody_performed,
