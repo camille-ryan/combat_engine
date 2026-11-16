@@ -287,8 +287,24 @@ def p4076(c: Cast) -> None:
 def p6858(c: Cast) -> None:
     """`c.burns` is the once-a-turn bite the printed line asks for, and it
     rolls its dice per bite rather than once when the zone was made.
-    Concealment is not denied -- nothing suppresses it -- and this row's pact
-    boon has no leg to ask for."""
+    Concealment is not denied -- nothing suppresses it.
+
+    **This row's pact boon is written now.** It was dropped as having "no
+    leg to ask for", and the leg was always there -- `BUILDS` carries
+    eight. The boon itself lives in `features.warlock._granted_boon`,
+    with the other seven, because `cf:warlock-f1c12` is the card that
+    asks which remnant is active and pays it, and a boon fires long
+    after this body has finished. The leg offers this remnant to a
+    warlock that `c.knows` this row. #1346.
+
+    **The `p6855` augment this card also prints is NOT written.** That
+    is a second clause with a second home -- `_vestige_augment`, keyed
+    the same way -- and `p6855` is the same card as `cf:warlock-f1c11`
+    under a second compendium id. #1348.
+
+    Its boon is the one that reaches back for the zone laid here, found
+    by the label this row writes it under.
+    """
     if c.target is not None and c.strike():
         c.damage("1d10", c.con_mod, dtype=DamageType.FIRE)
     if not c.last:

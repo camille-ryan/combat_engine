@@ -50,6 +50,7 @@ from combat_engine.engine import (
     CON,
     DEFENCES,
     ENCOUNTER,
+    FORT,
     FREE,
     NO_TARGET,
     ONE_CREATURE,
@@ -61,6 +62,7 @@ from combat_engine.engine import (
     Attack,
     AttackRolled,
     Cast,
+    Condition,
     DamageType,
     Dropped,
     Hit,
@@ -431,6 +433,104 @@ _PRIMARY_REMNANTS = ("cf:warlock-f1c12s0", "cf:warlock-f1c12s1")
 #: a callable, because every such line so far is one slide.
 _GRANTED_AUGMENTS = {"f2035": "f2035"}
 
+#: **The remnants a daily attack power grants access to.** The leg prints
+#: two primary ones and then says the rest are elsewhere: *"other pact
+#: boons are described in the daily attack powers that give you access to
+#: new vestiges"*. These are those powers, and the ref of the granting row
+#: **is** the remnant's name here -- the same convention
+#: `_GRANTED_AUGMENTS` already uses, and the reason there is no separate
+#: vocabulary to keep in step.
+#:
+#: Each is offered only to a warlock who actually **knows** the row, which
+#: is what `c.knows` is asked below: the card grants the vestige by
+#: granting the power, so a warlock without the power has no bargain to
+#: strike with that remnant.
+_GRANTED_VESTIGES = (
+    "p11303", "p6856", "p6857", "p6858",
+    "p11304", "p11305", "p6860", "p6861",
+)
+
+
+def _granted_boon(c: Cast, active: str) -> None:
+    """The pact boon of a remnant a daily attack power granted. #1346.
+
+    Eight of these, one per row in `_GRANTED_VESTIGES`, and they were all
+    dropped on the same false premise -- that the class carried two pact
+    legs and so there was nothing to ask. It carries eight, and the
+    machinery for exactly this was already built: `c.bargain`'s own
+    docstring says its exclusivity is *"what makes the eight waiting rows
+    writable"*.
+
+    They sit together rather than in their eight files because they are
+    one card's worth of dispatch -- `cf:warlock-f1c12` asks which remnant
+    is active and pays that one -- and because a boon fires at a moment
+    the granting row's body is long finished.
+
+    **"One creature/ally within 5 squares" is a choice**, so it is
+    `c.choose`n rather than taken as the first body found, which is the
+    reading `cf:warlock-f1c12` already uses for its own adjacent ally.
+    """
+    def one(side: str, label: str, needs_curse: bool = False) -> int | None:
+        pool = [w for w in c.within(5, side=side) if w != c.me]
+        if needs_curse:
+            pool = [w for w in pool if c.cursed(w)]
+        if not pool:
+            return None
+        return pool[0] if len(pool) == 1 else c.choose(pool, label)
+
+    if active == "p11303":
+        # "A +2 power bonus to his or her NEXT attack roll": once=True is
+        # the word "next", and the clock is how long it waits for one.
+        mate = one("ally", "which ally gains the bonus to its next attack")
+        if mate is not None:
+            c.bonus("attack", 2, on=mate, kind="power",
+                    until=When.EONT, once=True)
+    elif active == "p6856":
+        mate = one("ally", "which ally gains the temporary hit points")
+        if mate is not None:
+            c.temp_hp(max(0, c.int_mod), on=mate)
+    elif active == "p6857":
+        # "Cursed by you AND within 5 squares" -- both, and the curse half
+        # is relational, so `c.cursed` asks about this warlock's own curse.
+        who = one("enemy", "which cursed creature turns brittle", True)
+        if who is not None:
+            c.vulnerable(5, DamageType.THUNDER, on=who, until=When.EONT)
+    elif active == "p6858":
+        # The zone this remnant's own row left behind, found by the label
+        # that row laid it under -- the boon fires long after that body.
+        for zone, held in c.world.zones.all():
+            if getattr(held, "label", "") == "p6858":
+                c.move_zone(zone, 3)
+                break
+    elif active == "p11304":
+        # Two clauses, two holds: nothing says both at once, and
+        # `c.no_charge` is deliberately narrower than `c.no_walk` -- the
+        # card takes the charge and the shift and leaves walking alone.
+        who = one("enemy", "which cursed creature is pinned", True)
+        if who is not None:
+            c.no_charge(on=who, until=When.EONT)
+            c.cannot_shift(on=who, until=When.EONT)
+    elif active == "p11305":
+        who = one("enemy", "whose Fortitude gives way")
+        if who is not None:
+            c.penalty(FORT, 2, on=who, until=When.EONT)
+    elif active == "p6860":
+        mate = one("ally", "which ally changes places with you")
+        if mate is not None:
+            c.swap(mate)
+    elif active == "p6861":
+        # "You **or** an ally", so the caster is a candidate -- which is
+        # why this one does not use `one()`, whose pool leaves it out.
+        catching = (Condition.DAZED, Condition.STUNNED,
+                    Condition.IMMOBILIZED, Condition.RESTRAINED)
+        pool = [c.me, *(w for w in c.within(5, side="ally") if w != c.me)]
+        stuck = [w for w in pool if any(c.is_(cond, w) for cond in catching)]
+        if stuck:
+            who = stuck[0] if len(stuck) == 1 else c.choose(
+                stuck, "who shakes a condition off")
+            if who is not None:
+                c.cure(*catching, on=who)
+
 
 @power(
     "cf:warlock-f1s6",
@@ -475,7 +575,17 @@ def warlock_f1s6(c: Cast) -> None:
     c.grant_row("cf:warlock-f1c11")
     c.grant_row("cf:warlock-f1c12")
     c.offer_vestige(*_PRIMARY_REMNANTS, primary=True)
-    c.bargain(*c.vestiges(primary=True))
+    # **And the remnants this warlock's own dailies grant**, which nothing
+    # offered before -- so eight printed pact boons had no remnant to be
+    # active and could never pay. Offered without `primary=`, which is the
+    # printed distinction: a card naming "one of your primary vestiges"
+    # must not find these. #1346.
+    c.offer_vestige(*(r for r in _GRANTED_VESTIGES if c.knows(r)))
+    # `c.vestiges()` and not `c.vestiges(primary=True)`: the bargain is
+    # among everything on offer, which is what "you can choose from
+    # between two or more vestige pacts" says. With one it is taken; with
+    # several `c.bargain` asks.
+    c.bargain(*c.vestiges())
 
 
 # -- the cards only a pact above prints ---------------------------------
@@ -794,6 +904,11 @@ def warlock_f1c12(c: Cast) -> None:
         elif active == _PRIMARY_REMNANTS[1]:
             c.bonus("attack", 2, on=c.me, until=When.EONT, kind="untyped",
                     when=nearest_to_target(c))
+        elif active in _GRANTED_VESTIGES:
+            # The leg's third printed line: *"other pact boons are
+            # described in the daily attack powers that give you access to
+            # new vestiges"*. Those eight live in `_granted_boon`. #1346.
+            _granted_boon(c, active)
 
     # **Offered as the named `BOON` clause, so a card saying "instead of
     # gaining your normal pact boon" can replace it.** That is `#641`, and

@@ -144,7 +144,19 @@ def p10379(c: Cast) -> None:
     attack=Attack(CON, vs=REF),
 )
 def p11303(c: Cast) -> None:
-    """This row's pact boon is dropped: no such leg in the class's builds."""
+    """**This row's pact boon is written now.** It was dropped as having "no
+    leg to ask for", and the leg was always there -- `BUILDS` carries
+    eight. The boon itself lives in `features.warlock._granted_boon`,
+    with the other seven, because `cf:warlock-f1c12` is the card that
+    asks which remnant is active and pays it, and a boon fires long
+    after this body has finished. The leg offers this remnant to a
+    warlock that `c.knows` this row. #1346.
+
+    **The `p6855` augment this card also prints is NOT written.** That
+    is a second clause with a second home -- `_vestige_augment`, keyed
+    the same way -- and `p6855` is the same card as `cf:warlock-f1c11`
+    under a second compendium id. #1348.
+    """
     if c.int_mod > 0 and c.may("step", who=c.me):
         c.shift(c.int_mod)  # "before or after"; before is what a body can take
     if c.strike():

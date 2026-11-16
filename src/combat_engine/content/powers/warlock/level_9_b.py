@@ -101,8 +101,21 @@ def p10384(c: Cast) -> None:
 )
 def p11305(c: Cast) -> None:
     """The Aftereffect hangs on the hold's `on_end`, so it begins whichever
-    way the petrification ended. The vestige pact and the augment it grants
-    have no leg to ask for."""
+    way the petrification ended.
+
+    **This row's pact boon is written now.** It was dropped as having "no
+    leg to ask for", and the leg was always there -- `BUILDS` carries
+    eight. The boon itself lives in `features.warlock._granted_boon`,
+    with the other seven, because `cf:warlock-f1c12` is the card that
+    asks which remnant is active and pays it, and a boon fires long
+    after this body has finished. The leg offers this remnant to a
+    warlock that `c.knows` this row. #1346.
+
+    **The `p6855` augment this card also prints is NOT written.** That
+    is a second clause with a second home -- `_vestige_augment`, keyed
+    the same way -- and `p6855` is the same card as `cf:warlock-f1c11`
+    under a second compendium id. #1348.
+    """
     victim = c.target
     if victim is None:
         return
@@ -417,7 +430,19 @@ def p4287(c: Cast) -> None:
     attack=Attack(CON, vs=REF),
 )
 def p6860(c: Cast) -> None:
-    # This row's pact boon has no leg to ask for.
+    """**This row's pact boon is written now.** It was dropped as having "no
+    leg to ask for", and the leg was always there -- `BUILDS` carries
+    eight. The boon itself lives in `features.warlock._granted_boon`,
+    with the other seven, because `cf:warlock-f1c12` is the card that
+    asks which remnant is active and pays it, and a boon fires long
+    after this body has finished. The leg offers this remnant to a
+    warlock that `c.knows` this row. #1346.
+
+    **The `p6855` augment this card also prints is NOT written.** That
+    is a second clause with a second home -- `_vestige_augment`, keyed
+    the same way -- and `p6855` is the same card as `cf:warlock-f1c11`
+    under a second compendium id. #1348.
+    """
     victim = c.target
     if c.strike():
         c.damage("2d10", c.con_mod, dtype=DamageType.PSYCHIC)
@@ -446,7 +471,19 @@ def p6860(c: Cast) -> None:
     attack=Attack(CON, vs=FORT),
 )
 def p6861(c: Cast) -> None:
-    # This row's pact boon has no leg to ask for.
+    """**This row's pact boon is written now.** It was dropped as having "no
+    leg to ask for", and the leg was always there -- `BUILDS` carries
+    eight. The boon itself lives in `features.warlock._granted_boon`,
+    with the other seven, because `cf:warlock-f1c12` is the card that
+    asks which remnant is active and pays it, and a boon fires long
+    after this body has finished. The leg offers this remnant to a
+    warlock that `c.knows` this row. #1346.
+
+    **The `p6855` augment this card also prints is NOT written.** That
+    is a second clause with a second home -- `_vestige_augment`, keyed
+    the same way -- and `p6855` is the same card as `cf:warlock-f1c11`
+    under a second compendium id. #1348.
+    """
     if c.target is None:
         return
     c.prone()  # an Effect line: everything the blast covers falls
