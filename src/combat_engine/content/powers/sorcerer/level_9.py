@@ -21,6 +21,7 @@ from combat_engine.engine import (
     EACH_ENEMY,
     EACH_OTHER,
     FORT,
+    MOVE,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -323,9 +324,12 @@ def p5280(c: Cast) -> None:
     attack=Attack(CHA, vs=FORT),
 )
 def p5856(c: Cast) -> None:
-    """"As a move action, you can move the zone 6 squares" is not written --
-    a zone has no speed and nothing offers moving one. The same gap p3034
-    and p5850 record."""
+    """**"As a move action, you can move the zone 6 squares" is written
+    now.** The old note said a zone "has no speed and nothing offers moving
+    one" and pointed at p3034 and p5850 as sharing the gap. There was no
+    gap: `"move_zone"` has been in
+    `actions.GRANTABLE` and read by the action menu all along, and several
+    monster rows grant it this way. #1342."""
     if c.strike():
         c.damage("3d8", c.cha_mod, dtype=DamageType.THUNDER)
         c.slide(c.dex_mod)
@@ -335,6 +339,8 @@ def p5856(c: Cast) -> None:
     if not area:
         return
     swirl = c.zone(area, label=c.ref, until=When.EONT)
+    c.grant_action("move_zone", MOVE, squares_=6, on=c.me,
+                   until=When.ENCOUNTER)
 
     def whirl(ev: TurnStart) -> None:
         if not ev.ghost and ev.actor in c.world.zones.occupants(swirl):

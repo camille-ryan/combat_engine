@@ -32,6 +32,7 @@ from combat_engine.engine import (
     EACH_OTHER,
     ENCOUNTER,
     FORT,
+    MOVE,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -345,9 +346,17 @@ def p3034(c: Cast) -> None:
     bite is only for a creature *starting* its turn inside, and a hazard
     also bites on entry.
 
-    "As a move action, you can move the zone 3 squares" is not written --
-    `c.zone` takes no speed and nothing offers moving one, the same gap the
-    other three zone rows of this class record.
+    **"As a move action, you can move the zone 3 squares" is written now,
+    and nothing had to be built for it.** The old note here said `c.zone`
+    "takes no speed and nothing offers moving one", and both halves were
+    already false: `c.move_zone` translates a zone's squares, `"move_zone"`
+    is in `actions.GRANTABLE`, the action menu has read it since, and
+    several monster rows grant it exactly this way.
+
+    `until=ENCOUNTER` rather than the zone's own `EONT` because the zone is
+    Sustain Minor and may stand for the whole fight -- and the menu gates
+    the entry on a live, non-aura zone of this creature's, so the grant
+    offers nothing once the wind is gone. #1342.
     """
     if c.strike():
         c.damage("2d6", c.cha_mod, dtype=DamageType.THUNDER)
@@ -360,6 +369,8 @@ def p3034(c: Cast) -> None:
     if not area:
         return
     wind = c.zone(area, label=c.ref, until=When.EONT)
+    c.grant_action("move_zone", MOVE, squares_=3, on=c.me,
+                   until=When.ENCOUNTER)
     bite = c.cha_mod
 
     def gust(ev: TurnStart) -> None:

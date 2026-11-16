@@ -7329,6 +7329,67 @@ def a_bare_sword_hand_is_posed(out: Result) -> None:
     out.that("one-handed" in axe and "one-handed melee" not in axe,
              "f2713 says one-handed but not one-handed melee, so the gate skips it")
 
+def a_zone_row_grants_its_printed_move_action(out: Result) -> None:
+    """Eight zone rows dropped "as a move action you can move the zone".
+
+    Every one said the same thing -- *"nothing moves a zone once it is
+    placed"* -- and it was false the whole time: `c.move_zone` exists,
+    `"move_zone"` is in `actions.GRANTABLE`, the menu has read it since,
+    and several monster rows already grant it this way. #1341, #1342.
+
+    **Asserted through the action menu and `perform`, never `c.move_zone`.**
+    The printed line is a menu entry, so a rule calling the verb directly
+    would pass for a row that grants nothing -- which is exactly the state
+    all eight were in.
+
+    Two board facts have to be arranged first, and each one hid a correct
+    row during this work: `p5856`'s level-9 caster ends its own power at
+    **-18 hp** and is UNCONSCIOUS, so `can_act` is False and the menu is
+    empty; and on some boards the move action is already spent. Putting hit
+    points back does **not** clear the condition -- `conscious()` reads
+    both -- so this uses `audit._revive_everyone`, which is what the
+    harness's own passes do between poses.
+    """
+    import audit
+    from combat_engine.engine import actions
+    from combat_engine.engine.components import Budget
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.zones import Zone
+
+    ref, squares = "p3034", 3
+    world, caster, _ = audit.board(ref, 1)
+    was = {eid for eid, _ in world.each(Zone)}
+    use(world, caster, ref, spend=False)
+    mine = {eid: min(z.squares) for eid, z in world.each(Zone)
+            if eid not in was and z.owner == caster and z.squares}
+    out.that(len(mine) == 1, f"{ref} lays one zone of its own",
+             f"it laid {len(mine)}")
+    if not mine:
+        return
+
+    audit._revive_everyone(world, except_=())
+    budget = world.get(caster, Budget)
+    if budget is not None:
+        budget.refresh()
+
+    offered = [a for a in actions.legal(world, world.encounter, caster)
+               if a.kind == "move_zone" and a.targets and a.targets[0] in mine]
+    out.that(bool(offered),
+             "and the action menu offers a move_zone on that zone -- the"
+             " printed line is a menu entry, which is why this reads the"
+             " menu and not the verb",
+             "no move_zone entry was offered")
+    if not offered:
+        return
+
+    before = dict(mine)
+    actions.perform(world, world.encounter, caster, offered[0])
+    after = {eid: min(z.squares) for eid, z in world.each(Zone) if eid in mine}
+    out.that(after != before,
+             f"and performing it relocates the zone's squares ({squares}"
+             " squares on this card)",
+             f"the zone stayed at {before}")
+
 def a_familiar_changing_mode_is_announced(out: Result) -> None:
     """`c.familiar_mode` did the work and said nothing.
 
@@ -91331,6 +91392,9 @@ DRIVERS = {
     "a_bare_sword_hand_is_posed": (
         a_bare_sword_hand_is_posed,
         "the board dealt an orb too, so no hand was ever bare"),
+    "a_zone_row_grants_its_printed_move_action": (
+        a_zone_row_grants_its_printed_move_action,
+        "eight zone rows dropped their printed move action"),
     "a_familiar_changing_mode_is_announced": (
         a_familiar_changing_mode_is_announced,
         "c.familiar_mode did the work and announced nothing"),
@@ -91818,6 +91882,7 @@ UNSCORED_DRAW = frozenset(
         # verdict depends on registration order is wrong even while it is
         # green.
         "a_bare_sword_hand_is_posed",
+        "a_zone_row_grants_its_printed_move_action",
         "a_choose_one_fork_does_not_forbid_itself",
         "the_board_keeps_the_row_it_is_measuring",
         "the_board_runs_a_charge",

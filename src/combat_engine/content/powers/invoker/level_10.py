@@ -59,11 +59,22 @@ def _my_area_power(world: Any, me: int, ev: Any) -> bool:
     reach=CloseBurst(3),
     target=NO_TARGET,
     keywords=[Keyword.DIVINE, Keyword.ZONE],
+    dropped=("c.aura(obscured=)",),
 )
 def p11298(c: Cast) -> None:
-    """A zone that stays centred on the caster is an aura, and an aura
-    takes no `blocks_sight`, so the heavily obscured half of the printed
-    line is not written -- the moving half is the one the row is for."""
+    """**A marker now, where the prose admitted the gap and declared
+    nothing.** A zone that stays centred on the caster is an aura, and
+    `c.aura` takes `radius`, `label`, `until`, `on`, `sustain` and
+    `difficult` -- no obscurity of any kind. So "squares inside the zone
+    are heavily obscured" cannot be said here.
+
+    Checked against the near miss rather than assumed: `c.zone` **does**
+    take `obscured=` with `obscured_for=`, and eight other rows of this
+    walk were finished with it. An aura is the one shape it does not
+    reach, and `c.move_zone` refuses an aura for the same reason -- the
+    printed rule is that an aura moves with its owner.
+
+    The dazing half plays. #1341."""
     swarm = c.aura(3, until=When.SUSTAIN, sustain=MINOR)
 
     def bite(ev: Bloodied, z: int = swarm) -> None:

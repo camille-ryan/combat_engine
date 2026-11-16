@@ -374,10 +374,15 @@ def p13612(c: Cast) -> None:
     has to be taken off again when they leave, so it is granted on entry and
     ended on exit rather than handed a duration it cannot keep.
 
-    The Move Action that relocates the zone is not written -- nothing moves a
-    zone once it is placed.
+    **"Move Action: You move the zone up to 5 squares" is written now.**
+    The old note said "nothing moves a zone once it is placed", and that was
+    already false: `"move_zone"` has been in
+    `actions.GRANTABLE` and read by the action menu all along, and several
+    monster rows grant it this way. #1342.
     """
     zone = c.zone(c.area(), until=When.ENCOUNTER, label=c.ref)
+    c.grant_action("move_zone", MOVE, squares_=5, on=c.me,
+                   until=When.ENCOUNTER)
     me = c.me
     exposed: dict[int, Effect] = {}
 

@@ -390,11 +390,23 @@ def p13598(c: Cast) -> None:
     keywords=PRIMAL_ZONE,
 )
 def p13599(c: Cast) -> None:
-    """"Heavily obscured **to your enemies**" is one-sided and
-    `blocks_sight` is not: the ranger cannot see through it either. The Move
-    Action that relocates the zone is not written -- nothing moves a zone
-    once it is placed."""
-    c.zone(c.area(), until=When.ENCOUNTER, blocks_sight=True, label=c.ref)
+    """**Both halves are written now, and neither needed anything built.**
+
+    "Heavily obscured **to your enemies**" is one-sided and `blocks_sight`
+    is not -- the old note had that exactly right, and then dropped the
+    clause. `c.zone` takes `obscured=` with `obscured_for=`, whose own
+    docstring says "four cards print" this and names the sided reading:
+    the owner's side sees through it. So the ranger keeps his sight, which
+    is the whole point of the printed line.
+
+    The Move Action is the second half. The old note said "nothing moves a
+    zone once it is placed"; `"move_zone"` has been in `actions.GRANTABLE`
+    and read by the action menu all along. #1342.
+    """
+    c.zone(c.area(), until=When.ENCOUNTER, label=c.ref,
+           obscured="dark", obscured_for="enemies")
+    c.grant_action("move_zone", MOVE, squares_=5, on=c.me,
+                   until=When.ENCOUNTER)
 
 
 @power(

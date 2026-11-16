@@ -12,6 +12,7 @@ from combat_engine.engine import (
     ENCOUNTER,
     FORT,
     MINOR,
+    MOVE,
     NO_TARGET,
     ONE_CREATURE,
     REF,
@@ -162,10 +163,17 @@ def p7157(c: Cast) -> None:
 def p11283(c: Cast) -> None:
     """The zone's penalties are held by each enemy and gated on standing in
     the zone, which is how an enemy that walks in later picks them up and
-    how they all lapse when the zone goes. Moving the zone as part of a move
-    action is not written: nothing can relocate a zone's squares."""
+    how they all lapse when the zone goes.
+
+    **"As part of a move action, you can move the zone up to 6 squares" is
+    written now.** The old note said "nothing can relocate a zone's
+    squares", and that was already false: `"move_zone"` has been in
+    `actions.GRANTABLE` and read by the action menu all along, and several
+    monster rows grant it this way. #1342."""
     if c.first:
         light = c.zone(c.area(), until=When.SUSTAIN, sustain=MINOR)
+        c.grant_action("move_zone", MOVE, squares_=6, on=c.me,
+                       until=When.ENCOUNTER)
         for foe in c.enemies():
             for what in ("attack", "save", *DEFENCES):
                 c.penalty(

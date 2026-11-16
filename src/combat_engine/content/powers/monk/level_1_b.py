@@ -16,6 +16,7 @@ from combat_engine.engine import (
     ENCOUNTER,
     FORT,
     MINOR,
+    MOVE,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -147,8 +148,11 @@ def p16139(c: Cast) -> None:
 def p16143(c: Cast) -> None:
     """The flight is printed *before* the attack, so it runs first even
     though the blast's targets were picked from where the monk started.
-    Moving the zone as a move action is not written -- a zone has no way to
-    be walked around once it is down."""
+    **"You can move the zone up to 3 squares as a move action" is written
+    now.** The old note said a zone "has no way to be walked around once it
+    is down", and that was already false: `"move_zone"` has been in
+    `actions.GRANTABLE` and read by the action menu all along, and several
+    monster rows grant it this way. #1342."""
     if c.first:
         c.mode("fly", c.speed_of(), until=When.EOT)
         foes = c.enemies()
@@ -164,6 +168,8 @@ def p16143(c: Cast) -> None:
     if not c.last:
         return
     zone = c.zone(c.area(), until=When.SUSTAIN, sustain=MINOR)
+    c.grant_action("move_zone", MOVE, squares_=3, on=c.me,
+                   until=When.ENCOUNTER)
     herded: dict[int, int] = {}
 
     def nudge(ev: ZoneEntered) -> None:

@@ -26,6 +26,7 @@ from combat_engine.engine import (
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
+    MOVE,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -266,16 +267,25 @@ def p11469(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.ZONE],
     attack=Attack(WIS, vs=REF),
+    dropped=("c.zone(difficult_in_flight=)",),
 )
 def p11470(c: Cast) -> None:
-    """Two clauses are dropped, both for want of anywhere to put them: the
-    zone being rough going for fliers as well, and the move action that walks
-    the zone four squares. A zone has no notion of either."""
+    """**The move action is written; the flier clause is the one real gap
+    here.** The old note dropped both "for want of anywhere to put them",
+    and that was only ever true of one: `"move_zone"` has been in
+    `actions.GRANTABLE` and read by the action menu all along, and several
+    monster rows grant it this way. #1342.
+
+    What remains is "the zone is rough going for creatures that fly too" --
+    `c.zone(difficult=)` is a property of the ground with no notion of who
+    is walking on it, so it is marked rather than approximated."""
     if c.strike():
         c.damage(c.w(), c.wis_mod)
     c.slide(1)
     if c.first:
         zone = c.zone(c.area(), until=When.EONT, difficult=True)
+        c.grant_action("move_zone", MOVE, squares_=4, on=c.me,
+                       until=When.ENCOUNTER)
         on_enemies_within(
             c,
             zone,

@@ -231,10 +231,15 @@ def p13609(c: Cast) -> None:
     enemy *ending* its turn there, and `c.hazard` bites on entry and at the
     start of a turn as well.
 
-    The Move Action that relocates the zone is not written -- nothing moves a
-    zone once it is placed -- and is in the report.
+    **"Move Action: You move the zone up to 5 squares" is written now.**
+    The old note said "nothing moves a zone once it is placed", and that was
+    already false: `"move_zone"` has been in
+    `actions.GRANTABLE` and read by the action menu all along, and several
+    monster rows grant it this way. #1342.
     """
     zone = c.zone(c.area(), until=When.ENCOUNTER, label=c.ref)
+    c.grant_action("move_zone", MOVE, squares_=5, on=c.me,
+                   until=When.ENCOUNTER)
     me = c.me
 
     def scour(ev: TurnEnd) -> None:
