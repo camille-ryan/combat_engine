@@ -44,6 +44,7 @@ from combat_engine.engine import (
     AreaBurst,
     Attack,
     AttackDeclared,
+    AttackRolled,
     Cast,
     CloseBlast,
     Condition,
@@ -58,11 +59,13 @@ from combat_engine.engine import (
     Ranged,
     Target,
     Trigger,
+    TurnEnd,
     TurnStart,
     UpTo,
     When,
     Window,
     World,
+    ZoneEntered,
     power,
     targets_me,
 )
@@ -438,10 +441,56 @@ def p15904(c: Cast) -> None:
     attack=Attack(CON, vs=FORT),
 )
 def p15905(c: Cast) -> None:
-    # The star pact rider is the whole of this row's zone, so with no leg to
-    # ask for there is no zone and no Zone keyword.
+    """**The zone is written now, and it is the whole of the rider.**
+    `c.build("star")` answers and the leg was always there; the old note
+    reasoned from that false premise to "no zone and no Zone keyword",
+    while the header has carried `Keyword.ZONE` throughout. #1346.
+
+    `c.hazard` is the obvious verb and the wrong one: it bites on
+    entering or **starting** a turn in the zone, and this card says
+    entering or **ending** one. So the teeth are hand-written, keeping
+    `c.burns`'s once-per-round latch, which is the part worth copying.
+
+    **Laid once per use, not once per target.** The body runs for every
+    creature in the burst, and a zone per target would stack four copies
+    of the same acid. The memo lives on the `Cast`, which is the unit
+    `dsl.use` builds one of -- the same place `shared.augmenting` keeps
+    its spend.
+
+    **And it does not wait for a hit.** The printed line is about the
+    burst, not about the attack, so a use that misses everything still
+    leaves the zone.
+
+    The bite goes through `world.damage` rather than `c.flat`, which is
+    what `c.burns` does for every other zone in the tree.
+    """
     if c.target is not None and c.strike():
         c.damage("2d8", c.con_mod, dtype=DamageType.ACID)
+    if not c.build("star") or getattr(c, "star_zone", False):
+        return
+    c.star_zone = True
+    zone = c.zone(c.area(), label=c.ref, until=When.EONT)
+    bite_for = 1 + max(0, c.int_mod)
+    struck: dict[int, int] = {}
+
+    def bite(who: int) -> None:
+        if struck.get(who) == c.world.round:
+            return
+        struck[who] = c.world.round
+        c.world.damage(
+            c.me, who, bite_for, DamageType.ACID, detail=f"{c.ref} zone"
+        )
+
+    def on_enter(ev: ZoneEntered) -> None:
+        if ev.zone == zone:
+            bite(ev.actor)
+
+    def on_end(ev: TurnEnd) -> None:
+        if ev.actor in c.world.zones.occupants(zone):
+            bite(ev.actor)
+
+    c.watch(ZoneEntered, on_enter, until=When.EONT)
+    c.watch(TurnEnd, on_end, until=When.EONT)
 
 
 @power(
@@ -477,8 +526,18 @@ def p16352(c: Cast) -> None:
 )
 def p1871(c: Cast) -> None:
     """The extra die is rolled when it is promised rather than when it is
-    paid: a modifier holds a number, not an expression. The dark pact rider
-    -- the same reward for merely bloodying -- has no leg to ask for."""
+    paid: a modifier holds a number, not an expression.
+
+    **The dark rider is written now** -- `c.build("dark")`, and the leg
+    was always there. #1346. It lowers the bar rather than adding a
+    second reward: the printed line pays for dropping the target, and the
+    pact pays the same 1d8 for merely bloodying it.
+
+    So the two are **one** `or`, not two grants. Dropping a creature also
+    bloodies it, and written as two independent checks a dark warlock
+    would have collected twice for one kill -- `once=True` would not have
+    caught that, since it spends each hold separately.
+    """
     from combat_engine.engine import Health
 
     victim = c.target
@@ -486,7 +545,9 @@ def p1871(c: Cast) -> None:
         return
     c.damage("2d8", c.cha_mod, dtype=DamageType.NECROTIC)
     hp = c.world.get(victim, Health) if victim is not None else None
-    if hp is not None and hp.hp <= 0:
+    if hp is None:
+        return
+    if hp.hp <= 0 or (c.build("dark") and c.bloodied(victim)):
         c.bonus("damage", c.roll("1d8"), on=c.me, until=When.EONT, once=True)
 
 
@@ -536,10 +597,16 @@ def p1872(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p4093(c: Cast) -> None:
-    # The star pact rider has no leg to ask for.
-    if c.target is not None and c.strike():
-        c.damage("2d6", c.cha_mod, dtype=DamageType.PSYCHIC)
-        c.dazed()
+    """**The star rider is written now** -- `c.build("star")`, and the leg
+    was always there. #1346. "Extra psychic damage" is the same blow made
+    larger, so it rides the bonus argument rather than laying a second
+    packet, and the blast's body re-asks it per creature.
+    """
+    if c.target is None or not c.strike():
+        return
+    extra = c.int_mod if c.build("star") else 0
+    c.damage("2d6", c.cha_mod + extra, dtype=DamageType.PSYCHIC)
+    c.dazed()
 
 
 @power(
@@ -607,10 +674,35 @@ def p4095(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p4097(c: Cast) -> None:
-    # The dark pact rider -- damage every time it swings -- has no leg.
-    if c.strike():
-        c.damage("2d8", c.cha_mod)
-        c.penalty("attack", 2)
+    """**The dark rider is written now** -- `c.build("dark")`, and the leg
+    was always there. #1346.
+
+    "Whenever the target makes an attack **roll**" is `AttackRolled` and
+    not `AttackDeclared`: a swing that is refused or never rolled does
+    not pay, and the two are a declaration and a roll rather than two
+    names for one thing. The watcher is filtered on `attacker`, which is
+    the field naming who swung -- `target` on that event is who was swung
+    *at*, and reading it would have charged the wrong creature.
+
+    It rides a hold on the target so it ends with the rest of the card,
+    and the damage is untyped because the card names no type.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("2d8", c.cha_mod)
+    c.penalty("attack", 2)
+    if not c.build("dark") or victim is None:
+        return
+    held = c.effect(f"{c.ref} backlash", on=victim, until=When.EONT)
+    if held is None:
+        return
+
+    def sting(ev: AttackRolled) -> None:
+        if ev.attacker == victim:
+            c.flat(max(0, c.int_mod), on=victim)
+
+    held.subs.append(c.world.bus.on(AttackRolled, sting, owner=c.me))
 
 
 @power(
@@ -655,10 +747,20 @@ def p4177(c: Cast) -> None:
 def p4285(c: Cast) -> None:
     """"Spends its next standard action swinging at nothing" is a standard
     action gone, which is `Condition.SHAPED` -- the one card in the table
-    that means exactly that. The star pact rider has no leg to ask for."""
-    if c.strike():
-        c.damage("1d6", c.cha_mod, dtype=DamageType.PSYCHIC)
-        c.condition(Condition.SHAPED, until=When.EOTNT)
+    that means exactly that.
+
+    **The star rider is written now** -- `c.build("star")`, and the leg
+    was always there. #1346. It is a penalty to a *defence*, so the first
+    argument is the `Defense` rather than a word, and it hangs on the
+    target: `c.penalty` lays on the caster by default.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("1d6", c.cha_mod, dtype=DamageType.PSYCHIC)
+    c.condition(Condition.SHAPED, until=When.EOTNT)
+    if c.build("star") and victim is not None:
+        c.penalty(WILL, 2, on=victim, until=When.EONT)
 
 
 @power(
@@ -696,13 +798,29 @@ def p5919(c: Cast) -> None:
     """**Carries `f3427`'s augment** -- see `p1341` for the convention. Two
     targets, and the spend is settled once for the use rather than per
     target, which is what `augmenting`'s memo is for: charged twice the
-    second target would get nothing. #630."""
-    # The vestige pact rider has no leg to ask for.
+    second target would get nothing. #630.
+
+    **Two corrections, both #1346.** The vestige rider is written --
+    `c.build("vestige")`, and the leg was always there -- and the Hit
+    line prints "acid **and** necrotic damage", one blow that is both,
+    so it is `dtypes` rather than the first of them under `dtype`.
+
+    The penalty runs to the end of the **target's** next turn, not the
+    caster's: `EOTNT`, the same clock the `SHAPED` condition elsewhere in
+    this file uses, and a different one from the `EONT` most of these
+    riders carry. The card says "its".
+    """
+    victim = c.target
     pact = augmenting(c, "f3427")
-    if c.strike():
-        c.damage("1d12", c.con_mod, dtype=DamageType.ACID)
-        if pact:
-            c.prone()
+    if not c.strike():
+        return
+    c.damage(
+        "1d12", c.con_mod, dtypes=(DamageType.ACID, DamageType.NECROTIC)
+    )
+    if pact:
+        c.prone()
+    if c.build("vestige") and victim is not None:
+        c.penalty("attack", 2, on=victim, until=When.EOTNT)
 
 
 @power(
