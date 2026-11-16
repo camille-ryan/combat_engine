@@ -665,6 +665,47 @@ def warlock_f1c10(c: Cast) -> None:
     c.instead_of(BOON, payout)
 
 
+def _granted_augment(c: Cast, victim: int, active: str) -> None:
+    """The `p6855` augment of a remnant a daily attack power granted. #1348.
+
+    The mirror of `_granted_boon`: that one is the pact boon and this is
+    the augment, and the eight cards print both. `p6855` is the same card
+    as `cf:warlock-f1c11` under a second compendium id -- byte-identical
+    `spec` in `game.db` -- so these attach to the row that is already
+    declared and nothing is missing from the import.
+
+    **On a hit**, like every other branch here, because the leg says so
+    and this card does not: *"you gain an additional effect, referred to
+    as an augment, associated with your active vestige when you make a
+    successful attack with this power"*.
+
+    **Four of the eight are written. Four are not**, and they are named
+    here rather than left to be rediscovered:
+
+    * `p11303` -- a free-action **shift** granted to whoever the target
+      misses, which is an offer on somebody else's blow;
+    * `p11304` -- a free-action **slide** of the target whenever an ally
+      hits it, the same shape;
+    * `p6856` -- an offered **damage transfer** of an amount the player
+      chooses, so a choice with a number in it rather than a yes or no;
+    * `p6858` -- fire instead of psychic **and** "loses concealment and
+      cannot regain it", whose second half `p6858`'s own docstring
+      already records as unsayable: *"concealment is not denied --
+      nothing suppresses it"*.
+
+    They are tracked on #1348 rather than marked on this function,
+    because a marker belongs to a row and this is a dispatcher.
+    """
+    if active == "p6857":
+        c.damage("1d6", dtype=DamageType.THUNDER, on=victim)
+    elif active == "p11305":
+        c.damage("1d10", dtype=DamageType.POISON, on=victim)
+    elif active == "p6860":
+        c.penalty("attack", 2, on=victim, until=When.EONT)
+    elif active == "p6861":
+        c.push(max(0, c.int_mod), on=victim)
+
+
 def _vestige_augment(c: Cast, victim: int) -> None:
     """The extra effect `cf:warlock-f1c11` gains from the active remnant.
 
@@ -738,6 +779,8 @@ def _vestige_augment(c: Cast, victim: int) -> None:
         # the row that grants it handed it over, so the feat check would be
         # a second gate saying the same thing.
         c.slide(1, on=victim)
+    elif active in _GRANTED_VESTIGES:
+        _granted_augment(c, victim, active)
     elif active == _PRIMARY_REMNANTS[1]:
         c.bonus("attack", PRIME_SHOT_BONUS, on=c.me, until=When.EONT,
                 kind="untyped",
