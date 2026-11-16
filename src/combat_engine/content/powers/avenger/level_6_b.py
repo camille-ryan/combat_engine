@@ -227,8 +227,16 @@ def p5341(c: Cast) -> None:
     keywords=[Keyword.CONJURATION, *DIVINE, Keyword.HEALING],
 )
 def p6934(c: Cast) -> None:
-    """"Counts as an ally for flanking" has nowhere to go: `query.flanked_by`
-    walks the caster's allies, and a conjuration carries no side. Noted.
+    """**"Counts as an ally for flanking" is written now.** The old note was
+    right that `query.flanked_by` walks the caster's allies and a
+    conjuration carries no side -- and that is precisely what
+    `c.can_flank` exists to fix. Its docstring: *"A companion is left out
+    of `query.allies` on purpose, so one standing in the far square is
+    furniture... This is the modifier `query.flank...` reads."* #1341.
+
+    So the `c.note` that stood in for it is gone: a note is not an effect,
+    and a row whose clause is a note reads as working to everything except
+    a reader.
 
     The second half of the line is the oath being sworn anew, which is what
     "use your oath of enmity power as a free action" comes to -- `swear`
@@ -239,7 +247,7 @@ def p6934(c: Cast) -> None:
     if not spirit:
         return
     c.ignores_difficult(on=spirit)
-    c.note(f"{c.ref}: {spirit} counts as an ally for flanking, which nothing holds")
+    c.can_flank(on=spirit, until=When.SUSTAIN)
     held = next((e for e in c.world.effects.of(spirit) if e.label == c.ref), None)
 
     def reap(ev: DamageApplied) -> None:

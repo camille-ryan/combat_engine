@@ -199,10 +199,21 @@ def p11107(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.PSYCHIC],
     attack=Attack(CHA, vs=WILL),
+    dropped=("c.regain_power_point()",),
 )
 def p11118(c: Cast) -> None:
-    """The second half of the Effect refunds a power point, and there are no
-    power points, so that clause is dropped."""
+    """**The claim is true and now carries the marker**, which is the rarer
+    outcome in this walk.
+
+    Checked against the whole augment family rather than assumed, because
+    the names look like a pool and are not: `c.augment` is an **int** on
+    the use in flight, `c.augmented(ref)` says what bought the latest use,
+    `c.augment_used` is a property and `c.lend_augment` hands a row an
+    augmentable clause. Not one of them is a spendable store, so there is
+    nothing for "regains 1 power point" to add to.
+
+    The -2 to all defences is the half that plays. #1341.
+    """
     if c.strike():
         c.damage(c.w(3), c.cha_mod, dtype=DamageType.PSYCHIC)
     for d in (AC, FORT, REF, WILL):
