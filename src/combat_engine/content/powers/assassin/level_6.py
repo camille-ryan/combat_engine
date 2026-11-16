@@ -186,16 +186,30 @@ def p9429(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.SHADOW, Keyword.ZONE],
+    dropped=("c.zone(sustain_inside=)",),
 )
 def p13804(c: Cast) -> None:
     """Totally obscured, so `blocks_sight` rather than the concealment
     `p13802` lays -- `cover_between` reads the flag.
 
-    "To creatures other than you" is dropped: the flag is a property of the
-    ground and has no side, so the assassin is blinded by his own dark. The
-    Sustain's "you must be in the zone" is dropped too -- sustaining asks
-    for an action and never asks where the sustainer is standing.
+    **"To creatures other than you" is written now.** The old note said
+    the flag "is a property of the ground and has no side, so the assassin
+    is blinded by his own dark", and `c.zone(exempt=)` is precisely the
+    answer: its own docstring calls this the common case -- *"`exempt={c.
+    me}` for the eight cards printing a cloud that blinds everybody except
+    the creature that made it."* This is the ninth. #1341.
+
+    Not `obscured_for="enemies"`, which is the near miss: this zone is
+    **totally** obscured and blocks line of sight, which is the
+    `blocks_sight` flag `cover_between` reads, and `obscured_for` gives a
+    *grade* of obscurity a side rather than exempting anyone from a hard
+    sight block.
+
+    The Sustain's "you must be in the zone" is the one real gap and now
+    carries the marker: sustaining asks for an action and never asks where
+    the sustainer is standing.
     """
     c.zone(
-        c.area(), label=c.ref, until=When.EONT, blocks_sight=True, sustain=MINOR
+        c.area(), label=c.ref, until=When.EONT, blocks_sight=True,
+        exempt={c.me}, sustain=MINOR,
     )

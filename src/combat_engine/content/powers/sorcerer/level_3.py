@@ -253,8 +253,19 @@ def p3163(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p3174(c: Cast) -> None:
-    """The concealment is not written -- concealment is not modelled, and
-    hiding outright is a stronger thing than the card prints."""
+    """**"Until the end of your next turn, you have concealment" is written
+    now.** The old note said "concealment is not modelled", and `c.conceal`
+    has been the verb for it all along -- defaulting to the caster, which
+    is what every printed line granting it says. The same note's second
+    half was right and is why `c.hide` is not used here: hiding outright is
+    a stronger thing than this card prints. #1341.
+
+    Laid once on `c.first` rather than per target. The blast hits each
+    creature in it, so the body runs several times, and a second
+    `c.conceal` would stack a second -2 the card does not give.
+    """
+    if c.first:
+        c.conceal(on=c.me, until=When.EONT)
     if c.strike():
         c.damage("2d6", c.cha_mod)
 

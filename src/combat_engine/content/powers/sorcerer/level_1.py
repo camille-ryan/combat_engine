@@ -52,6 +52,7 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.query import creatures, distance_between
 
 from . import wild_even
 from .ground import beside
@@ -319,15 +320,50 @@ def p3009(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p3033(c: Cast) -> None:
-    """What follows the blindness -- "treats each creature more than 5
-    squares away as having concealment" -- is not written on either branch:
-    concealment is not modelled, and blinding everything further off would
-    be a much stronger thing than the card prints."""
+    """**Both branches are written now.** The old note dropped them on
+    "concealment is not modelled", and the whole clause turned out to be
+    three facilities this tree already had. #1341.
+
+    The sentence runs from the **target's** eyes -- it "treats each
+    creature more than 5 squares away as having concealment" -- so the
+    concealment is laid on everyone else and gated on the target being the
+    one looking. `c.conceal(when=)` is handed the attack context, which is
+    what makes that sayable; concealment against everybody would be the
+    much stronger thing the old note rightly refused.
+
+    **The distance is read live, not at cast time.** A creature that walks
+    within 5 squares stops being hard to see, which is what the printed
+    line means and what a snapshot of the board would get wrong.
+
+    The Hit branch is an *aftereffect*: the card says "when the blinded
+    condition ends, the target then treats...", so it hangs off the
+    blindness with `c.aftereffect` rather than running beside it. The Miss
+    branch has no blindness to wait for and lands at once.
+    """
+    victim = c.target
+
+    def blinkered(until: When) -> None:
+        """Everyone more than 5 squares from the target is concealed from it."""
+        if victim is None:
+            return
+        for other in creatures(c.world):
+            if other == victim:
+                continue
+            c.conceal(
+                on=other,
+                until=until,
+                when=lambda ctx, o=other: (
+                    ctx.get("attacker") == victim
+                    and distance_between(c.world, victim, o) > 5
+                ),
+            )
+
     if c.strike():
         c.damage("2d8", c.cha_mod, dtype=DamageType.RADIANT)
-        c.blinded()
+        c.aftereffect(c.blinded(), lambda: blinkered(When.SAVE_ENDS))
     else:
         c.half_damage("2d8", c.cha_mod, dtype=DamageType.RADIANT)
+        blinkered(When.EONT)
 
 
 @power(
@@ -516,10 +552,20 @@ def p3705(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p3716(c: Cast) -> None:
-    """"The target can't gain combat advantage against any creature" has no
-    shape here -- `c.cannot_be_flanked` closes one route to it and nothing
-    denies the advantage itself -- so the clause is not written. The Dragon
-    Magic concealment goes with the fork.
+    """**"The target can't gain combat advantage against any creature" is
+    written now.** The old note said `c.cannot_be_flanked` "closes one
+    route to it and nothing denies the advantage itself", and that was
+    already false: `c.no_advantage(gains=True)` denies the gaining rather
+    than the granting, which is this card's direction, and
+    `battlemind/level_7.py` has been calling it that way.
+
+    `gains=True` is the whole point. The default denies *granting* -- "you
+    do not grant combat advantage to any of your enemies" -- which is the
+    opposite sentence and would have made this row help the creature it is
+    aimed at. #1341.
+
+    The Dragon Magic concealment goes with the fork.
     """
     if c.strike():
         c.damage("2d6", c.cha_mod, dtype=DamageType.ACID)
+        c.no_advantage(gains=True, on=c.target, until=When.EONT)
