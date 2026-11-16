@@ -27,6 +27,7 @@ from combat_engine.engine import (
     power,
     spread,
 )
+from combat_engine.engine.query import creatures
 
 PSIONIC_WEAPON = [Keyword.PSIONIC, Keyword.WEAPON]
 
@@ -141,14 +142,48 @@ def p11099(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p11100(c: Cast) -> None:
-    """Both aftereffects are dropped: their whole content is concealment against
-    the target and a Perception penalty, and neither can be said."""
+    """**Both aftereffects are written now.** The old note said neither half
+    "can be said", and both could: `c.conceal(when=)` is handed the attack
+    context, so *against the target* is a gate rather than concealment from
+    everybody, and a Perception penalty is `c.penalty("skill:perception")`,
+    which five rows already use. #1341.
+
+    An **aftereffect**, not a second clause beside the blindness: the card
+    prints it under `Aftereffect:`, meaning it lands when the blindness
+    ends. `c.aftereffect` hangs it off the effect the branch just laid.
+
+    Both branches get one, which is what the card prints -- the Hit's
+    blindness is save-ends and the Miss's runs to the start of the next
+    turn, and the aftereffect itself is save-ends on either.
+    """
+    victim = c.target
+
+    def blinkered(until: When) -> None:
+        """Everyone is concealed from the target, and it sees badly."""
+        if victim is None:
+            return
+        for other in creatures(c.world):
+            if other == victim:
+                continue
+            c.conceal(
+                on=other,
+                until=until,
+                when=lambda ctx: ctx.get("attacker") == victim,
+            )
+        c.penalty("skill:perception", 5, on=victim, until=until)
+
     if c.strike():
         c.damage(c.w(), c.cha_mod)
-        c.blinded(until=When.SAVE_ENDS)
+        c.aftereffect(
+            c.blinded(until=When.SAVE_ENDS),
+            lambda: blinkered(When.SAVE_ENDS),
+        )
     else:
         c.half_damage(c.w(), c.cha_mod)
-        c.blinded(until=When.SONT)
+        c.aftereffect(
+            c.blinded(until=When.SONT),
+            lambda: blinkered(When.SAVE_ENDS),
+        )
 
 
 @power(

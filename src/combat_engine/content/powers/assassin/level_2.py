@@ -148,8 +148,18 @@ def p9415(c: Cast) -> None:
     keywords=[Keyword.SHADOW],
 )
 def p9416(c: Cast) -> None:
-    """The concealment against everybody is dropped for want of a verb; being
-    unseen by anything further off than 5 squares is written as it reads."""
+    """**"You gain concealment against all creatures" is written now.** The
+    old note dropped it "for want of a verb", and `c.conceal` is that verb
+    and wants no gate at all here: *against all creatures* is plain
+    concealment, which is exactly its default. The `when=` the harder rows
+    of this family need is for *against one creature*. #1341.
+
+    Being unseen by anything further off than 5 squares was already written
+    as it reads, and the two stack the way the card prints them: the
+    invisibility is per distant enemy, the concealment is against
+    everybody.
+    """
+    c.conceal(on=c.me, until=When.EONT)
     for foe in c.enemies():
         if c.distance(foe) > 5:
             c.invisible(to=foe, on=c.me, until=When.EONT)

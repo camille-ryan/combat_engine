@@ -376,12 +376,29 @@ def p4277(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p4278(c: Cast) -> None:
-    """"It treats all its enemies as concealed" is not written: concealment
-    is a property of the creature being looked at, and there is nothing that
-    grants it to a whole side from the looker's end."""
+    """**"It treats all its enemies as concealed" is written now.** The old
+    note said concealment "is a property of the creature being looked at,
+    and there is nothing that grants it to a whole side from the looker's
+    end". The first half is true and is exactly why this works: the
+    concealment is laid on the lookers' *targets* -- the warlock's own side
+    -- and `c.conceal(when=)` is handed the attack context, so it applies
+    only when the dazed creature is the one attacking. #1341.
+
+    "Until it saves from its dazed condition" is the same save-ends clock
+    as the daze, so both carry `When.SAVE_ENDS` rather than the
+    concealment being chained to the daze ending.
+    """
+    victim = c.target
     if c.strike():
         c.damage("2d8", c.cha_mod, dtype=DamageType.PSYCHIC)
         c.dazed(until=When.SAVE_ENDS)
+        if victim is not None:
+            for mine in [c.me, *(a for a in c.allies() if a != c.me)]:
+                c.conceal(
+                    on=mine,
+                    until=When.SAVE_ENDS,
+                    when=lambda ctx: ctx.get("attacker") == victim,
+                )
     else:
         c.half_damage("2d8", c.cha_mod, dtype=DamageType.PSYCHIC)
 

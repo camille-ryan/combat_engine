@@ -28,11 +28,28 @@ PRIMAL_WEAPON = [Keyword.PRIMAL, Keyword.WEAPON]
     keywords=[Keyword.PRIMAL, Keyword.ZONE],
 )
 def p11075(c: Cast) -> None:
-    """The zone stays centred on the warden, which is an aura. The
-    concealment it gives its own side has no expression and is left out;
-    the damage is the half that can be said. "Constitution modifier or
-    Wisdom modifier" is the warden's choice, so: the better of the two."""
+    """The zone stays centred on the warden, which is an aura.
+
+    **"You and your allies in the zone have concealment" is written now.**
+    The old note said it "has no expression", and `c.conceal` has been the
+    expression all along -- held by each of them and gated on standing in
+    the aura, which is the idiom `p11283` uses for a zone's penalties.
+
+    Read against the aura's **current** occupants, so an ally who steps out
+    loses it and one who steps in picks it up. That matters more here than
+    on a fixed zone: this aura follows the warden, so the ground under an
+    ally changes without the ally moving at all. #1341.
+
+    "Constitution modifier or Wisdom modifier" is the warden's choice, so:
+    the better of the two.
+    """
     grit = c.aura(1, until=When.ENCOUNTER)
+    for friend in [c.me, *(a for a in c.allies() if a != c.me)]:
+        c.conceal(
+            on=friend,
+            until=When.ENCOUNTER,
+            when=lambda ctx, w=friend: w in c.world.zones.occupants(grit),
+        )
     bite = max(c.con_mod, c.wis_mod)
 
     def sting(who: int) -> None:
