@@ -33181,6 +33181,156 @@ def the_kit_a_character_needs_for_its_job(out: Result) -> None:
     )
 
 
+def the_granted_slides_are_owed_a_price(out: Result) -> None:
+    """Both granted slides are offered and unchoosable, and nothing said so.
+
+    `#1305` added `slide_grabbed` and `slide_subject`; `#1309` recorded that
+    `policy.features` names no `is_<kind>` term for either, so the AI scores
+    them entirely on terms about something else -- `i_am_bloodied` and
+    `nearest_enemy` -- and then loses to the `0.001` `is_end` floor.
+
+    **The deferral was documented and unenforced, which is why this rule
+    exists.** `disable`, `terrain` and `spot` each have a rule of this shape
+    already, and `terrain`'s records exactly what the absence costs:
+
+        a plant putting the 0.0 weight back **stayed green** against every
+        other assertion in the suite: `kinds_named` is satisfied by the
+        owed entry either way, and `weights_named` only reads prose.
+
+    So without this, somebody could price either kind -- or declare it
+    `0.0`, which `#1098` refused twice -- and no run would go red. `#1309`
+    is closed into `#1065` on the strength of this rule rather than on its
+    own prose.
+
+    **Two keys per kind, because naming and pricing are two steps.**
+    `is_load`'s own comment is the worked case: it was named and left
+    unpriced and still scored zero, because `WEIGHTS` prices only the
+    features it lists. A rule checking `features()` alone would pass a
+    half-done pricing.
+
+    **And the cost is measured on a board rather than argued.** The figures
+    below are what being unpriced actually does, which is the only form of
+    this claim worth having -- `#1065`'s own thread records that an unnamed
+    kind's score is invisible to `scripts/doctrine.py` by construction, so
+    a board comparison is the instrument.
+    """
+    from combat_engine.engine.actions import Action, legal
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import ActionType
+    from combat_engine.policy import WEIGHTS, features
+
+    OWED = ("slide_grabbed", "slide_subject")
+
+    # ---- unpriced, in both halves
+    probe = {
+        kind: features(
+            *_slide_probe(), Action(kind=kind, cost=ActionType.MINOR),
+        )
+        for kind in OWED
+    }
+    unnamed = [k for k in OWED if f"is_{k}" not in probe[k]]
+    out.that(
+        sorted(unnamed) == sorted(OWED),
+        "neither granted slide has an `is_<kind>` term in `features()` --"
+        " the first of the two steps, and the one `kinds_named` reads",
+        f"named already: {sorted(set(OWED) - set(unnamed))}",
+    )
+    unweighted = [k for k in OWED if f"is_{k}" not in WEIGHTS]
+    out.that(
+        sorted(unweighted) == sorted(OWED),
+        "and neither has a weight in `WEIGHTS` -- the second step, which is"
+        " separate: `is_load` was named and left unpriced and still scored"
+        " zero, because `WEIGHTS` prices only what it lists",
+        f"priced already: {sorted(set(OWED) - set(unweighted))}",
+    )
+    out.that(
+        all(k in UNNAMED_KINDS_OWED for k in OWED)
+        and "pull_grabbed" in UNNAMED_KINDS_OWED,
+        "both are still owed, beside the `pull_grabbed` whose deferral they"
+        " inherit -- the three want one answer between them, which is the"
+        " shape the owed note demands for `mount`/`dismount` too",
+        f"owed: {[k for k in (*OWED, 'pull_grabbed') if k in UNNAMED_KINDS_OWED]}",
+    )
+    out.that(
+        "is_pull_grabbed" not in WEIGHTS,
+        "and there is nothing numeric to inherit: `pull_grabbed` carries no"
+        " weight either, so 'price them like their sibling' evaluates to"
+        " `0.0` -- the declared zero `#1098` refused, which still loses to"
+        " `is_end` while claiming a decision was made",
+        "pull_grabbed is priced now, so the three are no longer one question",
+    )
+
+    # ---- and what that costs, on the board that poses them
+    world, me, _ = _board("p1471")
+    known = world.need(me, Powers)
+    if "p1471" not in known.known:
+        known.known.append("p1471")
+    foes = sorted(enemies(world, me))
+    if not foes or not use(world, me, "p1471", targets=[foes[0]]):
+        out.skip("p1471 would not pose a subject on this board")
+        return
+    enc = world.encounter
+    world.bus.emit(TurnStart(actor=me, round=world.round))
+
+    best: dict[str, float] = {}
+    for a in legal(world, enc, me):
+        if a.kind not in (*OWED, "end"):
+            continue
+        tot = sum(
+            WEIGHTS.get(k, 0.0) * v
+            for k, v in features(world, enc, me, a).items()
+        )
+        best[a.kind] = max(best.get(a.kind, tot), tot)
+
+    out.that(
+        "slide_subject" in best and "end" in best,
+        "the floor for the arm below: the board offers a slide_subject and"
+        " an end, without which the comparison is between missing numbers",
+        f"scored kinds: { {k: round(v, 3) for k, v in best.items()} }",
+    )
+    out.that(
+        best.get("slide_subject", 0.0) < best.get("end", 0.0),
+        "and the slide **loses to ending the turn** -- which is what being"
+        " unpriced costs, and the reason this is a debt rather than a"
+        " curiosity: a printed action the AI will never choose. `disable`"
+        " reads -0.100 against -0.099; this is the same knife-edge",
+        f"slide_subject={best.get('slide_subject', float('nan')):.3f} vs"
+        f" end={best.get('end', float('nan')):.3f}",
+    )
+    #: **Measured rather than assumed, and it is the one way these two
+    #: could differ from `pull_grabbed`.** The slides are built with
+    #: `ref="slide_grabbed"` / `ref="slide_subject"`, which are *granted
+    #: words* and not power refs -- `dsl.get` returns `None` for them -- so
+    #: they should not pick up `inert_wastes_action`'s -0.5 the way a real
+    #: inert power would. `pull_grabbed` carries no `ref` at all. The
+    #: figure is reported rather than asserted against a constant, because
+    #: a constant here is the thing `weights_named` exists to refuse.
+    got = features(world, enc, me, next(
+        a for a in legal(world, enc, me) if a.kind == "slide_subject"))
+    out.that(
+        "inert_wastes_action" not in got,
+        "and it is not charged as an inert action: its `ref` is a granted"
+        " word rather than a power ref, so the inert guard does not fire."
+        " That is the one way these two can score differently from"
+        " `pull_grabbed`, which carries no ref at all",
+        f"terms that fired: {sorted(k for k, v in got.items() if v)}",
+    )
+
+
+def _slide_probe():  # noqa: ANN202
+    """A world, encounter and actor for scoring a synthetic action.
+
+    `features` needs all three and none of the terms this rule checks for
+    depend on which board it is, so the cheapest one serves. Separate from
+    the rule so the four unpriced arms do not each build a board.
+    """
+    world, me, _ = _board("p1471")
+    return world, world.encounter, me
+
+
 def trained_skills(out: Result) -> None:
     """Being trained in a skill is worth +5, and only on that skill.
 
@@ -83154,7 +83304,17 @@ UNNAMED_KINDS_OWED = frozenset(
         # is worse than owing it: `is_end` is 0.001, so a zero loses to
         # ending the turn and the AI never chooses it anyway, while the
         # table would claim a decision had been made. `#1065`'s standing
-        # deferral covers pricing all three together. `#1309`.
+        # deferral covers pricing all three together.
+        #
+        # **`drivers.slides_owed` is what keeps this honest**, and it is
+        # why `#1309` could close into `#1065` rather than being retired on
+        # its own prose. `terrain`'s rule records what the absence cost: a
+        # plant putting a 0.0 weight back **stayed green** against every
+        # other assertion in the suite, because `kinds_named` is satisfied
+        # by the owed entry either way and `weights_named` only reads
+        # prose. That rule reds on a weight, on a declared zero, on naming
+        # the kind without pricing it, and on deleting these entries while
+        # they are still unpriced -- all four planted. `#1065`.
         "slide_grabbed",
         "slide_subject",
         "ready",
@@ -90063,6 +90223,10 @@ DRIVERS = {
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",
+    ),
+    "slides_owed": (
+        the_granted_slides_are_owed_a_price,
+        "the two granted slides are offered, unpriced and unchoosable",
     ),
     "job_kit": (
         the_kit_a_character_needs_for_its_job,
