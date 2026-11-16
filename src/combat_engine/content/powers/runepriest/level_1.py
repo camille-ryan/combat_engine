@@ -28,11 +28,13 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     CloseBurst,
+    DamageApplied,
     DamageType,
     Keyword,
     Melee,
     Miss,
     MoveEnd,
+    PowerResolved,
     TurnEnd,
     When,
     ZoneEntered,
@@ -387,9 +389,22 @@ def p11373(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p11374(c: Cast) -> None:
-    """"Cannot shift" is `c.cannot_shift`. The Effect's "and deals no damage on a
-    miss" is dropped: a `Miss` does not say whether the power had a miss
-    line, so the rune punishes every miss made next to the caster."""
+    """"Cannot shift" is `c.cannot_shift`.
+
+    **"And deals no damage on a miss" is written now**, and the old note
+    was right about why it could not be read the obvious way: `Miss`
+    carries `power`, but a `Power` has no miss field at all -- the miss
+    clause lives in the body, as a branch. So the header cannot be asked.
+
+    What the card actually turns on is not what the power *prints* but
+    what it *did*: "deals no damage on a miss". That is observable. A miss
+    on the target opens a tally, any damage landing on the target closes
+    it, and `PowerResolved` settles it -- punishing only if nothing landed.
+
+    This replaces a rune that fired on **every** miss made next to the
+    caster, which was stronger than the card and is the direction this
+    tree refuses. #1341.
+    """
     victim = c.target
     if c.strike():
         c.damage(c.w(2), c.str_mod)
@@ -402,11 +417,29 @@ def p11374(c: Cast) -> None:
     if victim is None:
         return
 
-    def punish(ev: Any, v: int = victim) -> None:
-        if ev.target == v and c.adjacent(v):
-            c.flat(c.str_mod, on=v)
+    # seq of each miss on the target that is still waiting to be judged,
+    # against whether anything has hurt the target since.
+    pending: dict[int, bool] = {}
 
-    c.watch(Miss, punish, until=When.ENCOUNTER)
+    def missed(ev: Miss, v: int = victim) -> None:
+        if ev.target == v and c.adjacent(v):
+            pending[ev.seq] = False
+
+    def landed(ev: DamageApplied, v: int = victim) -> None:
+        if ev.target == v and ev.amount > 0:
+            for key in pending:
+                pending[key] = True
+
+    def settle(ev: PowerResolved, v: int = victim) -> None:
+        if not pending:
+            return
+        if not any(pending.values()):
+            c.flat(c.str_mod, on=v)
+        pending.clear()
+
+    c.watch(Miss, missed, until=When.ENCOUNTER)
+    c.watch(DamageApplied, landed, until=When.ENCOUNTER)
+    c.watch(PowerResolved, settle, until=When.ENCOUNTER)
 
 
 @power(
