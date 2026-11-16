@@ -171,13 +171,18 @@ def p749(c: Cast) -> None:
     on=Trigger(Miss, when=both(targets_me, by_melee), text=_MISSED_BY_MELEE),
 )
 def p923(c: Cast) -> None:
-    """Where the slide ends -- "a square adjacent to you" -- cannot be said.
+    """**The slide's destination is written now.** The old note said
+    `c.slide` "takes no `to`, and an anchor does nothing to a slide". It
+    takes `to`, `anchor` **and** `toward`, and `toward` "names a creature
+    to slide somebody at" -- which is "into a square adjacent to you"
+    exactly. Its own docstring records why rows kept getting this wrong:
+    the verb was missed when the other movement verbs were given a
+    destination bias, so rows that slide a creature *at* something were
+    sliding it away. #1341.
 
-    `c.slide` takes no `to`, and an anchor does nothing to a slide, so the
-    destination is whatever the mover's decider picks. The three squares and
-    the advantage afterwards are as printed.
+    The three squares and the advantage afterwards were already as printed.
     """
-    c.slide(3)
+    c.slide(3, toward=c.me)
     c.grants_advantage()
 
 

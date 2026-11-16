@@ -476,12 +476,21 @@ def p883(c: Cast) -> None:
     requires_text="needs two melee weapons",
 )
 def p9350(c: Cast) -> None:
-    """Where the slide ends -- "a square adjacent to you" -- cannot be said:
-    `c.slide` takes no destination and an anchor does nothing to a slide, so
-    the mover's decider picks."""
+    """**The slide's destination is written now.** The old note said
+    `c.slide` "takes no `to`, and an anchor does nothing to a slide". It
+    takes `to`, `anchor` **and** `toward`, and `toward` "names a creature
+    to slide somebody at" -- which is "into a square adjacent to you"
+    exactly. Its own docstring records why rows kept getting this wrong:
+    the verb was missed when the other movement verbs were given a
+    destination bias, so rows that slide a creature *at* something were
+    sliding it away. #1341.
+
+    Both slides take it, and the second is the longer one: "if both
+    attacks hit, the second slide increases to 3 squares".
+    """
     landed = 0
     for swing in range(2):
         if c.strike():
             landed += 1
             c.damage(c.w(1, hand="off" if swing else "main"), c.str_mod)
-            c.slide(3 if landed == 2 else 1)
+            c.slide(3 if landed == 2 else 1, toward=c.me)

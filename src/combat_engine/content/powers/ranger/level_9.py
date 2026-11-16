@@ -24,6 +24,7 @@ from combat_engine.engine import (
     DAILY,
     DEX,
     EACH_ENEMY,
+    ENCOUNTER,
     INTERRUPT,
     ONE_CREATURE,
     STANDARD,
@@ -48,6 +49,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.events import AdjacencyGained, Hit, ZoneEntered
 from combat_engine.engine.movement import walk
 from combat_engine.engine.query import hidden_from, team
@@ -523,16 +525,46 @@ def p4409(c: Cast) -> None:
     attack_alt=Attack(DEX, vs=AC),
 )
 def p4410(c: Cast) -> None:
-    """Regaining a spent encounter power is not written: `Powers` counts uses
-    and nothing gives one back, so the clause would be prose. The other half
-    of the same "or" -- the extra dice against the quarry -- is, and with the
-    first branch absent it is simply taken when it applies.
+    """**The refund is written now.** The old note said "`Powers` counts
+    uses and nothing gives one back"; `c.restore_use` gives one back, and
+    `c.expended`/`c.unspent` are the two halves of asking which. #1341.
+
+    Both of the printed conditions are asked. "If you have used all your
+    encounter attack powers" is `c.unspent(usage=ENCOUNTER, attacks=True)`
+    coming back empty -- the complement of `c.expended`, which is what
+    that verb exists for. And the refund is drawn from the expended
+    encounter *attacks* of this class, which is the card's "a c5 attack
+    power you have used during this encounter".
+
+    It is an "or": the refund and the extra dice are alternatives, and the
+    card gives the choice only when the quarry was hit. With both
+    available the quarry damage is taken, which is the stronger half and
+    what any player would pick.
     """
     quarry = c.is_quarry()
+    took_the_dice = False
     if c.strike():
         c.damage(c.w(2), c.attack_mod)
         if quarry:
             c.damage(c.w(2))
+            took_the_dice = True
+    # **Not an `elif` on the strike.** The printed "or" is between the
+    # refund and the extra dice, not between hitting and missing -- so a
+    # hit on something that is not the quarry still earns the refund.
+    if not took_the_dice and not c.unspent(usage=ENCOUNTER, attacks=True):
+        back = next(
+            (
+                r
+                for r in c.expended()
+                if (row := REGISTRY.get(r)) is not None
+                and row.usage is ENCOUNTER
+                and row.attack is not None
+                and row.cls == "ranger"
+            ),
+            "",
+        )
+        if back:
+            c.restore_use(back)
     c.shift(max(1, c.speed_of(c.me) // 2))
 
 
