@@ -440,8 +440,20 @@ def p7378(c: Cast) -> None:
 )
 def p7424(c: Cast) -> None:
     """The eye is a conjuration with a speed, which is what "you can move it
-    3 squares as a move action" comes to. Nothing grants or denies
-    concealment, so that half of the line is dropped."""
+    3 squares as a move action" comes to.
+
+    **"Enemies within 3 squares of the eye do not benefit from concealment"
+    is written now.** The old note said "nothing grants or denies
+    concealment", and that was already false: `c.no_conceal` is the deny
+    half of `c.conceal`, and both take the `when=` predicate this clause
+    needs. #1341.
+
+    Held by each enemy and gated on standing near the eye, which is
+    `p11283`'s idiom for the same shape -- an enemy that walks into range
+    later picks it up, and it lapses with the conjuration. Read against the
+    eye's *current* square, so moving the eye moves the denial with it,
+    which is the whole point of a conjuration with a speed.
+    """
     spot = free_squares(c, spread({c.here}, 5) - {c.here}, 1)
     eye = c.conjure(
         at=spot[0] if spot else None,
@@ -451,6 +463,13 @@ def p7424(c: Cast) -> None:
     )
     if not eye:
         return
+
+    for foe in c.enemies():
+        c.no_conceal(
+            on=foe,
+            until=When.ENCOUNTER,
+            when=lambda ctx, w=foe: near(c, eye, w, 3),
+        )
 
     def stab(ev: Hit) -> None:
         if ev.attacker in c.allies() and near(c, eye, ev.target, 3):
