@@ -7262,6 +7262,41 @@ def _fresh(audit, ref: str, seed: int):  # noqa: ANN001, ANN202
     world, caster, _ = audit.board(ref, seed)
     return world, caster, ref, len(world.bus.log)
 
+def the_board_runs_a_charge(out: Result) -> None:
+    """Nothing on this board had ever charged.
+
+    29 rows print a trigger about charging and every one reported UNUSED.
+    A charge is not a walk plus a swing as far as a row is concerned: the
+    flag is what puts `charge` on the attack events and in both modifier
+    contexts, which is what every charge rider reads.
+
+    Asserted through `Cast.charge_at`, the one door and the same one
+    `actions.perform` uses, and then through the board. #1339.
+    """
+    import audit
+    from combat_engine.engine import Cast
+    from combat_engine.engine.query import enemies as foes_of
+
+    world, caster, _ = audit.board("p14145", 1)
+    victim = sorted(foes_of(world, caster))[0]
+    mark = len(world.bus.log)
+    out.that(Cast(world=world, me=caster, ref="audit:charge").charge_at(victim),
+             "charge_at resolves from where the board leaves the caster")
+    charged = [
+        e for e in world.bus.log[mark:]
+        if e.kind in ("AttackDeclared", "Hit", "Miss")
+    ]
+    out.that(bool(charged),
+             "and it swings, so the pass produces an attack and not only a move")
+
+    # Through the board, over several seeds -- `audit.py` gives a row a few
+    # boards before judging it, so a single seed would be stricter than the
+    # instrument this rule is about.
+    reached = any(
+        audit._provoke(*_fresh(audit, "p14145", seed)) for seed in range(1, 9)
+    )
+    out.that(reached, "so p14145 is reached, where no earlier pass reached it")
+
 def a_familiar_changing_mode_is_announced(out: Result) -> None:
     """`c.familiar_mode` did the work and said nothing.
 
@@ -91237,6 +91272,9 @@ DRIVERS = {
     "the_board_walks_an_enemy_and_not_only_shifts": (
         the_board_walks_an_enemy_and_not_only_shifts,
         "the board only ever shifted, which these triggers exclude"),
+    "the_board_runs_a_charge": (
+        the_board_runs_a_charge,
+        "nothing on the audit board had ever run a charge"),
     "a_familiar_changing_mode_is_announced": (
         a_familiar_changing_mode_is_announced,
         "c.familiar_mode did the work and announced nothing"),

@@ -5141,6 +5141,39 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
                     return True
                 place(world, foe, _was)
 
+    # **A charge, which nothing on this board had ever run.** 29 rows print
+    # a trigger about charging -- *"you hit a creature with a charge
+    # attack"*, *"you charge an enemy"*, *"an ally within 10 squares of you
+    # charges a creature"* -- and every one of them reported UNUSED. A
+    # charge is not a walk plus a swing as far as a row is concerned: the
+    # flag is what puts `charge` on the attack events and in both modifier
+    # contexts, which is what every charge rider reads.
+    #
+    # `Cast.charge_at` is the one door, and it is the same one
+    # `actions.perform` goes through. Note it does **not** enforce the
+    # action menu's "end two squares from where you started" rule -- that
+    # belongs to `actions._charges`, which builds the player's options --
+    # so a charge from an adjacent square resolves here, and the board's
+    # foes start adjacent. Verified on three rows before this was written.
+    #
+    # **Gated on the trigger TEXT, not the event class**, and that is the
+    # cost decision rather than a shortcut: these rows trigger on `Hit` and
+    # `AttackDeclared`, which thousands of rows declare, so an event gate
+    # would pay for the pass across the corpus to serve 29 rows. The same
+    # reasoning `_typed_wanted` already records for damage keywords. #1339.
+    if "charg" in ((get(ref).trigger or "") if get(ref) is not None else "").lower():
+        _mates_c = [a for a in _allies_of(world, caster) if a != caster]
+        _runs = [(caster, foes[0])]
+        if _mates_c:
+            _runs.append((_mates_c[0], foes[0]))
+        _runs.append((foes[0], caster))
+        for _runner, _victim in _runs:
+            if not alive(world, _runner) or not alive(world, _victim):
+                continue
+            Cast(world=world, me=_runner, ref="audit:charge").charge_at(_victim)
+            if probe():
+                return True
+
     # An opportunity attack, swung by hand in both directions. Walking out
     # of reach opens the window and nothing comes of it: the engine never
     # decides what goes into one -- a policy does, and this board installs
