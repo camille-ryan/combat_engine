@@ -135,8 +135,13 @@ def p11305(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p12895(c: Cast) -> None:
-    """"Has cover against all creatures except you" is not written: cover is
-    computed from the board and nothing grants it to a creature outright.
+    """**"Has cover against all creatures except you" is written now.** The
+    old note said "cover is computed from the board and nothing grants it
+    to a creature outright", and `c.cover` has granted it outright since
+    2026-10-17 -- the commit that added it is titled "Cover could not be
+    narrowed to the attack, and could not say who gave it". Its `when=` is
+    handed the attack context, so "except you" is a gate on the attacker
+    rather than cover from nobody. #1341.
 
     The prone and the hold that stops it standing are laid separately --
     which is all `c.prone(held=)` does -- so that the first failed save has
@@ -161,6 +166,11 @@ def p12895(c: Cast) -> None:
         )
 
     c.condition(Condition.PINNED, until=When.SAVE_ENDS, escalate=worse)
+    c.cover(
+        on=victim,
+        until=When.SAVE_ENDS,
+        when=lambda ctx: ctx.get("attacker") != c.me,
+    )
 
 
 @power(

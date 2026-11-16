@@ -481,15 +481,26 @@ def p9504(c: Cast) -> None:
     attack=Attack(WIS, vs=AC),
 )
 def p9505(c: Cast) -> None:
-    """The cover clause is dropped -- cover is computed from two positions at
-    the moment of the attack and no modifier reaches it. The ring of penalty
-    is an aura on the target, because it moves when the target does."""
+    """**The cover clause is written now.** The old note said "cover is
+    computed from two positions at the moment of the attack and no modifier
+    reaches it", and `c.no_cover` is the modifier that reaches it -- "the
+    target does not benefit from cover **or concealment**", which is this
+    card's "cover, concealment, or total concealment" in one call. #1341.
+
+    The default rather than `partial=True`: the printed line excepts
+    nothing, where `partial=True` is for the cards that leave superior
+    cover and total concealment standing.
+
+    The ring of penalty is an aura on the target, because it moves when the
+    target does.
+    """
     if not c.strike():
         return
     c.damage(c.w(), c.wis_mod + extra_dice(c, "1d6"))
     victim = c.target
     if victim is None:
         return
+    c.no_cover(on=victim, until=When.EONT)
     reach = 2 + c.dex_mod if c.build("second-dex") else 2
     ring = c.aura(reach, on=victim, until=When.EONT)
     on_enemies_within(
