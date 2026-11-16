@@ -398,15 +398,18 @@ def p3590(c: Cast) -> None:
     attack=Attack(WIS, vs=AC),
 )
 def p3592(c: Cast) -> None:
-    """The Athletics third of the Effect has nowhere to go -- there are no
-    skill checks in the engine -- so the speed and the melee damage are the
-    whole of it here."""
+    """**All three thirds of the Effect are written now.** The old note said
+    "there are no skill checks in the engine", and there are: 17 of them,
+    a 90-number DC table in `combat_engine/dc.py`, `engine/skills.py`, and
+    the `"skill:<name>"` bonus word several rows already use. #1341.
+    """
     if c.strike():
         c.damage(c.w(3), c.wis_mod)
     else:
         c.half_damage(c.w(3), c.wis_mod)
     if not c.first:
         return
+    c.bonus("skill:athletics", 5, on=c.me, until=When.ENCOUNTER, kind="power")
     c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="power")
     c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=_melee_damage, kind="power")
 

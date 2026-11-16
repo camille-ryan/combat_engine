@@ -36,8 +36,14 @@ def p5398(c: Cast) -> None:
     """The gate asks `world.zones.occupants` rather than the square set, so
     an enemy that walks into the light is lit and one that walks out is not.
 
-    "Any enemy takes a -5 penalty to Stealth checks" is a skill check and
-    there are none, so it is dropped rather than approximated.
+    **"Any enemy takes a -5 penalty to Stealth checks" is written now.**
+    The old note said "a skill check and there are none", and there are 17,
+    with `"skill:<name>"` the word `c.penalty` takes. #1341.
+
+    Held by each enemy and gated on standing in the light, the same way the
+    cover waiver above is -- but on the holder's own square rather than on
+    `ctx["target"]`, because a Stealth check is the enemy's own roll and
+    there is no target in it.
     """
     light = c.zone(c.area(), label=c.ref, until=When.EONT)
 
@@ -46,3 +52,9 @@ def p5398(c: Cast) -> None:
 
     for who in (c.me, *c.allies()):
         c.ignore_cover(on=who, until=When.EONT, when=inside)
+
+    for foe in c.enemies():
+        c.penalty(
+            "skill:stealth", 5, on=foe, until=When.EONT,
+            when=lambda ctx, w=foe: w in c.world.zones.occupants(light),
+        )
