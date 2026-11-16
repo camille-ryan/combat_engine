@@ -37,6 +37,7 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.events import PowerUsed
 
 SHADOW_WEAPON = [Keyword.SHADOW, Keyword.WEAPON]
 
@@ -88,10 +89,29 @@ def p9404(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=SHADOW_WEAPON,
     attack=Attack(DEX, vs=AC),
+    dropped=("c.spend_shrouds(optional=)",),
 )
 def p9405(c: Cast) -> None:
-    """The extra damage per uninvoked shroud is dropped: shrouds are not
-    modelled, so there is no count to read."""
+    """**The old note was wrong about the reason and the clause is still
+    dropped, now with the marker and the real reason.**
+
+    "Shrouds are not modelled, so there is no count to read" is false:
+    `c.shroud` lays them, `c.shrouds` counts them, `c.spend_shrouds`
+    invokes them. What is actually in the way is that **invoking is not
+    optional here.** `p9400` watches every `Hit` and `Miss` by the assassin
+    and calls `c.spend_shrouds()` unconditionally, so by the time this
+    row's own clause could look, the count is always 0.
+
+    Measured: four shrouds planted on the target, `c.shrouds` reads 4,
+    `use(p9405)` lands, `c.shrouds` reads 0. A version of this clause that
+    reads the count after the strike is dead code that always pays nothing
+    -- which is what the first attempt at it was.
+
+    "If you didn't invoke your shrouds on the target" is a *choice* the
+    card offers and `p9400` does not model, so this is a question about the
+    shroud mechanic rather than about this row. Marked and referred up
+    rather than approximated. #1341.
+    """
     if c.strike():
         c.damage(c.w(), c.dex_mod)
 
@@ -216,10 +236,26 @@ def p9410(c: Cast) -> None:
 def p9411(c: Cast) -> None:
     """The prone rider watches for the ongoing damage landing rather than for
     the save, which is what "whenever the target takes this ongoing damage"
-    says. The Effect line is a bonus gated on shrouds and is dropped."""
+    says.
+
+    **The Effect line is written now.** The old note called it "a bonus
+    gated on shrouds" and dropped it for that; the gate is readable --
+    `c.shrouds(on=)` is the count -- and `c.bonus(when=)` is handed the
+    attack context, so "against the target" and "while your shrouds are on
+    it" are both askable at the moment the roll happens. #1341.
+
+    An Effect line, so it lands whether or not the attack did -- which is
+    why it sits outside the `c.strike()` branch.
+    """
     victim = c.target
     if victim is None:
         return
+    c.bonus(
+        "attack", 2, on=c.me, until=When.ENCOUNTER, kind="power",
+        when=lambda ctx: (
+            ctx.get("target") == victim and c.shrouds(on=victim) > 0
+        ),
+    )
     if c.strike():
         c.damage(c.w(2), c.dex_mod)
         c.ongoing(5, until=When.SAVE_ENDS)
@@ -281,12 +317,49 @@ def p9412(c: Cast) -> None:
     attack=Attack(DEX, vs=WILL),
 )
 def p9413(c: Cast) -> None:
-    """The Effect line doubles the shrouds the class feature lays down, and
-    the feature does not exist here, so it is dropped."""
+    """**The Effect line is written now.** The old note said "the feature
+    does not exist here", and it does: `p9400` is declared, `c.shroud` lays
+    a shroud and `c.shrouds` counts them. #1341.
+
+    "Two instead of one" is laid as **one extra** rather than by rewriting
+    what `p9400` does, which leaves the class feature's own row alone and
+    is the same arithmetic.
+
+    **On `PowerUsed`, not `PowerResolved`, and the difference is the whole
+    clause.** `p9400` watches every `Hit` and `Miss` and calls
+    `c.spend_shrouds()`, so a shroud added after resolution arrives *after*
+    the invoke that was supposed to pay for it. Measured on the first
+    attempt: the watcher fired with the right target and the count still
+    came out 1, because p9400's own shroud had already been spent and mine
+    was simply the next one. `PowerUsed` is before the body, so the pair is
+    on the target when the invoke reads it. `c.shroud`'s cap keeps it
+    honest at the top end.
+
+    Measured with the shrouds zeroed first, so a board's own leftovers
+    cannot be mistaken for the clause:
+
+        p9400 alone                    lays 1
+        p9400 with this row standing   lays 2
+
+    True on all three boards of ten where the target survives p9413's own
+    attack. On the other seven it dies, and a dead creature carries no
+    shrouds -- which is the board, not the clause, and is why the count was
+    measured on the survivors rather than averaged over all ten.
+    """
+    victim = c.target
     if c.strike():
         c.damage("3d8", c.dex_mod, dtype=DamageType.COLD)
     else:
         c.half_damage("3d8", c.dex_mod, dtype=DamageType.COLD)
+    if victim is None:
+        return
+
+    def doubled(ev: PowerUsed) -> None:
+        if ev.power == "p9400" and victim in (ev.targets or ()):
+            c.shroud(on=victim)
+
+    c.watch(PowerUsed, doubled, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} doubles")
 
 
 @power(
