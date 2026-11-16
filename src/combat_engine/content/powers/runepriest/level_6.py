@@ -16,6 +16,7 @@ from combat_engine.engine import (
     WILL,
     YOU_AND_EACH_ALLY,
     YOU_OR_ONE_ALLY,
+    AdjacencyLost,
     Cast,
     CloseBurst,
     DamageRolled,
@@ -85,10 +86,35 @@ def p11391(c: Cast) -> None:
     keywords=[Keyword.DIVINE],
 )
 def p11393(c: Cast) -> None:
-    """"Or until he or she is no longer adjacent to you" is dropped: nothing
-    ends an effect on a distance."""
-    for defence in DEFENCES:
+    """**"...or until you aren't adjacent" is written now.** The old
+    note said "nothing ends an effect on a distance", and `AdjacencyLost`
+    is the event for exactly that -- emitted twice, mirrored, "so either
+    creature can answer it". `p8238` ends its own effect on a `Moved` in
+    the same way; this is the narrower version, which does not have to ask
+    where anybody went.
+
+    All four bonuses end together, because the printed line is one
+    duration over one effect rather than four that happen to agree.
+    """
+    mate = c.target
+    held = [
         c.bonus(defence, 2, until=When.EONT, kind="power")
+        for defence in DEFENCES
+    ]
+    if mate is None:
+        return
+
+    def parted(ev: AdjacencyLost) -> None:
+        if {ev.actor, ev.other} != {c.me, mate}:
+            return
+        for one in held:
+            if one is not None:
+                c.world.effects.end(one, "the ally stepped away")
+
+    for one in held:
+        if one is not None:
+            one.subs.append(c.world.bus.on(AdjacencyLost, parted))
+            break
 
 
 @power(

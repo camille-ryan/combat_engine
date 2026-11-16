@@ -23,6 +23,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    AdjacencyLost,
     Attack,
     Cast,
     CloseBlast,
@@ -75,8 +76,14 @@ def _rune(c: Cast, which: str) -> bool:
     attack=Attack(STR, vs=AC),
 )
 def p11354(c: Cast) -> None:
-    """"Until you aren't adjacent to it" is dropped -- nothing ends an effect
-    on a distance. The rune's "next attack" is one spend per ally rather than
+    """**"...or until you aren't adjacent" is written now.** The old
+    note said "nothing ends an effect on a distance", and `AdjacencyLost`
+    is the event for exactly that -- emitted twice, mirrored, "so either
+    creature can answer it". `p8238` ends its own effect on a `Moved` in
+    the same way; this is the narrower version, which does not have to ask
+    where anybody went.
+
+    The rune's "next attack" is one spend per ally rather than
     one across all of them: a gate cannot see what another ally has spent.
 
     The dice-less Hit line stays on `c.damage` and not `c.flat`: it is this
@@ -88,7 +95,14 @@ def p11354(c: Cast) -> None:
     destruction = _rune(c, _DESTRUCTION)
     if c.strike():
         c.damage(0, c.str_mod)
-        c.immobilized(until=When.EONT)
+        held = c.immobilized(until=When.EONT)
+        if held is not None and victim is not None:
+
+            def parted(ev: AdjacencyLost) -> None:
+                if {ev.actor, ev.other} == {c.me, victim}:
+                    c.world.effects.end(held, "the runepriest stepped away")
+
+            held.subs.append(c.world.bus.on(AdjacencyLost, parted))
         if destruction and victim is not None:
             for ally in c.allies():
                 c.bonus(
