@@ -422,15 +422,36 @@ def p13030(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_WEAPON,
     attack=Attack(CON, vs=AC),
+    dropped=("c.grant_action('end_effect_for_resist')",),
 )
 def p13031(c: Cast) -> None:
-    """The whole Effect is dropped: nothing on `Cast` grants cover, and the
-    minor action that trades the cover away for resist 5 needs the first half
-    to exist before it can be written."""
+    """**The cover half is written now; the trade is the real gap.** The old
+    note said "nothing on `Cast` grants cover", and `c.cover` has since
+    2026-10-17. #1341.
+
+    "You and allies **adjacent to you**" is read live rather than at cast
+    time -- `c.adjacent` inside the `when=`, so an ally who steps away
+    stops having cover and one who steps in gets it. A list taken now would
+    freeze the answer for the whole encounter, which this card plainly does
+    not say.
+
+    What remains is "as a minor action you can end this effect to gain
+    resist 5". That is a granted action, `actions.GRANTABLE` is the
+    authority on the words, and it has none for ending an effect -- the
+    same gap `p4142` and `p5393` carry.
+    """
     if c.strike():
         c.damage(c.w(3), c.con_mod)
     else:
         c.half_damage(c.w(3), c.con_mod)
+    c.cover(on=c.me, until=When.ENCOUNTER)
+    for mate in c.allies():
+        if mate != c.me:
+            c.cover(
+                on=mate,
+                until=When.ENCOUNTER,
+                when=lambda ctx, w=mate: c.adjacent(w),
+            )
 
 
 @power(

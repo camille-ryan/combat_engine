@@ -160,6 +160,17 @@ def p9523(c: Cast) -> None:
     keywords=[Keyword.PRIMAL, Keyword.ZONE],
 )
 def p9524(c: Cast) -> None:
-    """The cover half is dropped: cover is traced between two positions at
-    the moment of an attack and no held modifier reaches it."""
-    rough_for_enemies(c, spread({c.here}, 2), until=When.SUSTAIN, sustain=MINOR)
+    """**The cover half is written now.** The old note said "cover is traced
+    between two positions at the moment of an attack and no held modifier
+    reaches it", and `c.cover_in` is the held modifier that reaches it --
+    "you and your allies have cover while within the zone", which is this
+    card's sentence word for word. #1341.
+
+    `side="team"` is its default and is the printed side. `rough_for_enemies`
+    already returns the zone id, so the two halves ride the same zone and
+    lapse together.
+    """
+    zone = rough_for_enemies(
+        c, spread({c.here}, 2), until=When.SUSTAIN, sustain=MINOR
+    )
+    c.cover_in(zone, side="team")
