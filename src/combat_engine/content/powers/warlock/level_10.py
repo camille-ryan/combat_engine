@@ -491,11 +491,21 @@ def p4126(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
     trigger=_AN_ALLY_HEALS_ME,
     on=Trigger(Healed, when=_ally_healed_me, text=_AN_ALLY_HEALS_ME),
+    dropped=("Health.dies_at_failures",),
 )
 def p4288(c: Cast) -> None:
-    """The price -- dying on the second failed death save rather than the
-    third -- is not written: `Health.failures` is counted against a constant
-    and no row can move it."""
+    """**The claim is true and now carries the marker.** Checked rather
+    than assumed, and the near miss is on the same component: `Health`
+    has `dies_at_zero`, so a per-creature death rule is a shape this
+    engine already has -- it simply has no `dies_at_failures` beside it.
+
+    `Health.failures` is compared against a literal `3` in `Cast`, in the
+    one place that reads it, and nothing else in `engine/` reads the
+    field at all. So there is no modifier, no field and no second reader
+    to aim at; it is a number in a comparison. #1341.
+
+    The healing half plays.
+    """
     c.heal(c.surge_value(), on=c.me)
 
 

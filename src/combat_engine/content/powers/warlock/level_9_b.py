@@ -471,9 +471,25 @@ def p7506(c: Cast) -> None:
     It walks rather than shifts, which is the one clause that does not
     survive -- leaving a square this way provokes where a shift would not.
 
-    "Squeeze without penalties" has no method: `Condition.SQUEEZING` is the
-    state and nothing exempts a creature from what it costs.
+    **"Squeeze without penalties" is written now.** The old note said
+    "nothing exempts a creature from what it costs"; `c.waive` is that
+    exemption, and its docstring gives this card's sentence as its
+    example -- `c.waive(Condition.SQUEEZING, "attack", "halve_speed")` is
+    "you take no penalty to attack rolls and move at full speed while
+    squeezing". #1341.
+
+    **Not `c.suppress`**, which its own note calls out as the difference
+    this verb exists for: suppressing squeezing would mean you are not
+    squeezing, so you no longer fit in the space you squeezed into. The
+    penalties go; the state stays.
+
+    The two named costs are the two the card names. `Condition.SQUEEZING`
+    also grants combat advantage, and that is left standing because the
+    printed line excuses "penalties to your attack rolls or speed" and
+    nothing else.
     """
+    c.waive(Condition.SQUEEZING, "attack", "halve_speed",
+            on=c.me, until=When.EONT)
     for caught in c.overrun():
         if c.attack(c.con_, REF, on=caught):
             c.damage("3d8", c.con_mod, dtype=DamageType.ACID, on=caught)
