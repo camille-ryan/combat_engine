@@ -26,9 +26,11 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     Keyword,
+    OpportunityWindow,
     Ranged,
     Summon,
     When,
+    Window,
     get,
     power,
 )
@@ -211,9 +213,21 @@ def p8241(c: Cast) -> None:
     attack=Attack(INT, vs=WILL),
 )
 def p8242(c: Cast) -> None:
-    """"It can't take opportunity actions" is dropped -- `c.forbid` takes one
-    named row away and `c.no_basic` takes away what a row is used as; neither
-    bars a category of action."""
+    """**"It can't take opportunity actions" is written now.** The old note
+    was right that `c.forbid` and `c.no_basic` do not bar a category of
+    action, and wrong that nothing does: cancelling the creature's
+    `OpportunityWindow` is how `wizard/level_1_b.py`'s `_no_opportunity`
+    has done it all along. #1341.
+
+    **Not `c.no_immediate`, which is the near miss and would be wrong.**
+    `query.can_react` gates immediate *and* opportunity actions, so that
+    verb would also take away the immediate actions this card never
+    mentions. Cancelling the window bars exactly the printed category.
+
+    The subscription hangs off a held effect, so it lapses on the printed
+    clock with the two penalties rather than living to the end of the
+    encounter.
+    """
     if c.strike():
         c.damage("2d10", c.int_mod, dtype=DamageType.PSYCHIC)
         c.ongoing(5, DamageType.PSYCHIC)
@@ -222,6 +236,19 @@ def p8242(c: Cast) -> None:
     c.penalty("attack", 2, until=When.EONT)
     for defence in (AC, FORT, REF, WILL):
         c.penalty(defence, 2, until=When.EONT)
+    victim = c.target
+    held = c.effect(c.ref, on=victim, until=When.EONT)
+    if victim is not None and held is not None:
+
+        def refuse(ev: OpportunityWindow) -> None:
+            if ev.actor == victim:
+                ev.cancel("cannot take opportunity actions")
+
+        held.subs.append(
+            c.world.bus.on(
+                OpportunityWindow, refuse, window=Window.BEFORE, owner=c.me
+            )
+        )
 
 
 @power(

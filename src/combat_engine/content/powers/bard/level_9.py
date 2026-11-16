@@ -99,10 +99,23 @@ def p2979(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_WEAPON, Keyword.TELEPORTATION],
     attack=Attack(CHA, vs=REF),
+    dropped=("c.grant_action('teleport')",),
 )
 def p3464(c: Cast) -> None:
-    """The Effect is dropped: it hands the ally a move action it does not have,
-    and nothing grants an action."""
+    """**The reason was wrong and the clause is still dropped**, now with
+    the marker.
+
+    "Nothing grants an action" is false -- `c.grant_action` is the
+    facility, and `#1341` found two rows of this walk whose granted
+    *shift* was written with it. What is missing is the **word**:
+    `actions.GRANTABLE` holds `shift`, `escape`, `mount`, `move_zone` and
+    nine others, and no `teleport`. It raises on a word it does not know,
+    deliberately (`#583`), so this cannot be approximated into existence.
+
+    `c.teleport` moves a creature now; the printed line offers the ally
+    the *option*, on its own later turn, which is a menu entry. #1344 is
+    the same shape for a different missing word.
+    """
     if c.strike():
         c.damage(c.w(3), c.cha_mod)
 
