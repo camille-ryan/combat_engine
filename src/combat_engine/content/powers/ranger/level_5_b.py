@@ -150,8 +150,18 @@ def p10156(c: Cast) -> None:
     creature is still standing in it -- afterwards it is the square it was
     pushed to, and the shift would follow it rather than take its place.
 
-    The Effect line is the beast companion's charge, and the companion is
-    not modelled; it is dropped rather than approximated.
+    **The companion IS modelled, and the old note said it was not.**
+    `c.companion()` answers -- its docstring calls itself "the question 107
+    blocked rows were asking" -- and with it come `c.strike(from_=pet)`,
+    `c.b(n)` and `c.b_mod` for the beast's dice and modifier,
+    `c.charge_at(who=pet)`, `c.move_companion` and
+    `Melee(n, from_="companion")`. `beast_sb.py` is a whole file of rows
+    using them. #1341.
+
+    So the Effect line -- the companion's charge -- is writable with
+    `c.charge_at(..., who=pet)`, including the Wisdom bonus it gets when
+    the enemy took an opportunity attack at the ranger this turn.
+    Unwritten rather than unwritable.
     """
     victim = c.target
     if victim is None:

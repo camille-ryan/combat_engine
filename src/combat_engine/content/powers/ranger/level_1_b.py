@@ -329,8 +329,21 @@ def p10599(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p10600(c: Cast) -> None:
-    """The secondary attack is the beast companion's and is not written.
-    The primary, and the refund for felling with it, are."""
+    """The primary, and the refund for felling with it, are written.
+
+    **The companion IS modelled, and the old note said it was not.**
+    `c.companion()` answers -- its docstring calls itself "the question 107
+    blocked rows were asking" -- and with it come `c.strike(from_=pet)`,
+    `c.b(n)` and `c.b_mod` for the beast's dice and modifier,
+    `c.charge_at(who=pet)`, `c.move_companion` and
+    `Melee(n, from_="companion")`. `beast_sb.py` is a whole file of rows
+    using them. #1341.
+
+    The secondary is the beast's: `c.move_companion` for "moves its
+    speed", then `c.strike(from_=pet)` rolling the beast's bonus, and
+    `c.damage(c.b(2), c.b_mod(Ability.STR))` for the 2[B] line. Every
+    piece is present; none is written yet.
+    """
     victim = c.target
     if c.strike():
         c.damage(c.w(1), c.str_mod)

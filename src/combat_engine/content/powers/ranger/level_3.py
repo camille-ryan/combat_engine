@@ -37,6 +37,7 @@ from combat_engine.engine import (
     MeleeOrRanged,
     Powers,
     Ranged,
+    Target,
     UpTo,
     When,
     World,
@@ -45,6 +46,10 @@ from combat_engine.engine import (
 from combat_engine.engine.events import AttackDeclared, ZoneEntered
 from combat_engine.engine.query import cover_between, team
 from combat_engine.engine.triggers import Trigger
+
+#: The printed Target line of a quarry-only row, spelled the same way
+#: `level_1_b`, `level_1_c`, `level_5_b` and `level_9` spell it.
+_QUARRY = Target("enemy", 1, label="One creature designated as your quarry")
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 MARTIAL_RANGED = [Keyword.MARTIAL, Keyword.WEAPON, Keyword.RANGED]
@@ -143,17 +148,27 @@ def p1416(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=MeleeOrRanged(1, 20, by_weapon=True),
-    target=ONE_CREATURE,
+    target=_QUARRY,
     keywords=MARTIAL_RANGED,
     attack=Attack(STR, vs=REF),
     attack_alt=Attack(DEX, vs=REF),
 )
 def p1521(c: Cast) -> None:
-    """Printed for the quarry only, and nothing can ask whether one is.
+    """**The printed restriction is declared now**, and the old reason was
+    false twice over. #1341.
 
-    The quarry lives in a closure inside `cf:ranger-f1` rather than as
-    anything on the creature, so the restriction is dropped and any one
-    enemy may be attacked.
+    It said the quarry "lives in a closure inside `cf:ranger-f1` rather
+    than as anything on the creature, so nothing can ask whether one is".
+    `c.is_quarry` exists and its own docstring describes that exact gap in
+    the past tense -- *"several rows read 'one creature that is your
+    quarry' and had no way to ask"* -- and eight ranger rows already call
+    it.
+
+    The restriction goes in the **target line**, not a body gate, which
+    is how the other four ranger files spell it: `_QUARRY` here is byte
+    for byte `level_1_b`'s. A body gate would make the row refuse itself
+    on a board with no quarry designated, which is a different card from
+    one the player simply cannot aim yet.
     """
     if c.strike():
         c.damage(c.w(2), c.attack_mod)
@@ -431,6 +446,7 @@ def p2603(c: Cast) -> None:
 
 @power(
     "p4384",
+    dropped=("c.beast_kind()",),
     level=3,
     cls="ranger",
     usage=ENCOUNTER,
@@ -441,9 +457,23 @@ def p2603(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p4384(c: Cast) -> None:
-    """Both beast clauses -- the extra damage and the companion's free step
-    after the target moves -- are dropped; the quarry half of the Effect is
-    written."""
+    """The quarry half of the Effect **is** written, and `c.is_quarry`
+    is what writes it.
+
+    **The companion IS modelled, and the old note said it was not.**
+    `c.companion()` answers -- its docstring calls itself "the question 107
+    blocked rows were asking" -- and with it come `c.strike(from_=pet)`,
+    `c.b(n)` and `c.b_mod` for the beast's dice and modifier,
+    `c.charge_at(who=pet)`, `c.move_companion` and
+    `Melee(n, from_="companion")`. `beast_sb.py` is a whole file of rows
+    using them. #1341.
+
+    The companion's free step after the target moves is therefore
+    writable. The extra damage is **not**, and for a different reason the
+    old note did not separate out: it is gated on the companion being a
+    bear, a cat, a raptor, a spider or a snake, and nothing reads a
+    beast's species. That is #1343, not a gap in the companion model.
+    """
     if c.strike():
         c.damage(c.w(2), c.str_mod)
     if c.is_quarry():

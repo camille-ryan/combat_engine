@@ -223,9 +223,22 @@ def p10625(c: Cast) -> None:
     requires_text="must be wielding a thrown weapon",
 )
 def p10626(c: Cast) -> None:
-    """Both beast clauses are dropped: the printed Target is a creature
-    standing next to the companion, and the second half of the Hit line is
-    the companion's own attack. Neither has anything to read."""
+    """**The companion IS modelled, and the old note said it was not.**
+    `c.companion()` answers -- its docstring calls itself "the question 107
+    blocked rows were asking" -- and with it come `c.strike(from_=pet)`,
+    `c.b(n)` and `c.b_mod` for the beast's dice and modifier,
+    `c.charge_at(who=pet)`, `c.move_companion` and
+    `Melee(n, from_="companion")`. `beast_sb.py` is a whole file of rows
+    using them. #1341.
+
+    So both clauses here are **writable and not written**: the Target is
+    `Melee(..., from_="companion")`'s question and the secondary is
+    `c.strike(from_=pet)` with `Attack(..., by="companion")`. What they
+    want is the care a ranger-primary/beast-secondary row needs -- the
+    secondary rolls the BEAST's attack bonus, not the ranger's, and
+    getting that wrong is a row that fires and audits green on the wrong
+    numbers. Sized rather than guessed at.
+    """
     if c.strike():
         c.damage(c.w(2), c.str_mod)
 
