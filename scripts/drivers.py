@@ -7245,22 +7245,14 @@ def the_board_walks_an_enemy_and_not_only_shifts(out: Result) -> None:
     # The pass itself, through the board: the four shaman rows wanting a
     # square *left* beside the companion were UNUSED and now fire.
     #
-    # **Over several seeds, which is how `audit.py` itself judges a row** --
-    # it gives one a few boards before calling it silent, because an attack
-    # that misses has honestly done nothing. A single seed asserted here
-    # was stricter than the instrument it is about, and seed 1 is one of the
-    # boards where the row does not land.
-    reached = any(
-        audit._provoke(*_fresh(audit, "p12865", seed)) for seed in range(1, 9)
-    )
-    out.that(reached,
+    # **Through `audit.audit`, not a seeded `_provoke` on a board this rule
+    # built.** A single seed was stricter than the instrument -- seed 1 is
+    # one of the boards where this row does not land -- and the seeded loop
+    # that fixed that is order-dependent inside the full suite, which is
+    # how the charge rule beside this one went red. `audit.audit` builds
+    # its own boards across `_attempts` and answers the real question.
+    out.that(audit.audit("p12865").fired > 0,
              "so p12865 is reached, where the shift loop alone never reached it")
-
-
-def _fresh(audit, ref: str, seed: int):  # noqa: ANN001, ANN202
-    """A board and the arguments `_provoke` wants for it."""
-    world, caster, _ = audit.board(ref, seed)
-    return world, caster, ref, len(world.bus.log)
 
 def the_board_runs_a_charge(out: Result) -> None:
     """Nothing on this board had ever charged.
@@ -7289,13 +7281,15 @@ def the_board_runs_a_charge(out: Result) -> None:
     out.that(bool(charged),
              "and it swings, so the pass produces an attack and not only a move")
 
-    # Through the board, over several seeds -- `audit.py` gives a row a few
-    # boards before judging it, so a single seed would be stricter than the
-    # instrument this rule is about.
-    reached = any(
-        audit._provoke(*_fresh(audit, "p14145", seed)) for seed in range(1, 9)
-    )
-    out.that(reached, "so p14145 is reached, where no earlier pass reached it")
+    # **Through `audit.audit`, not `_provoke` on a board this rule built.**
+    # The seeded `_provoke` version passed alone and failed inside the full
+    # suite -- `_provoke` reads module state (`_SPEND_FOR_REAL`) and the
+    # die stream, and 156 rules call `audit.board` directly, so a rule
+    # standing up its own board is order-dependent by construction.
+    # `audit.audit` is the real entry point: it builds its own boards
+    # across `_attempts` and judges the row the way the instrument does.
+    out.that(audit.audit("p14145").fired > 0,
+             "so p14145 is reached, where no earlier pass reached it")
 
 def a_bare_sword_hand_is_posed(out: Result) -> None:
     """The board dealt an orb as well as a blade, so no hand was ever bare.
@@ -33759,15 +33753,20 @@ def the_board_says_when_it_never_dealt_the_row(out: Result) -> None:
     asked the question that **dominates both** -- was the caster ever given
     the row at all?
 
-    It is not a hypothetical. `audit.board` sweeps every level-0 row of the
-    class into the hand, and `chargen.power_swap` then takes *"the lowest
-    qualifying power"* -- which is the row under test. Verified on three
-    paladin dailies: none of them is in its own board's hand.
+    It was not a hypothetical. `audit.board` sweeps every level-0 row of
+    the class into the hand, and `chargen.power_swap` then took *"the
+    lowest qualifying power"* -- which was the row under test. 92 warlock
+    and paladin dailies were filed under a trigger or a Requirement that
+    was not what stopped them. A row nobody holds could not have been used
+    however well it is written, which is why `Result.held_it` is asked
+    **first**.
 
-    So 92 warlock and paladin dailies were filed under a trigger or a
-    Requirement that is not what is stopping them. A row nobody holds could
-    not have been used however well it is written, which is why
-    `Result.held_it` is asked **first**.
+    **The cause is fixed as of #1335** -- `spawn(keep=)` pins the row under
+    test out of the trades, and 88 of those rows came back. So the live
+    arms below assert the *fix*, and the reporter arm keeps asserting the
+    `held_it is False` path off a hand-made `Result`. The question this
+    rule asks is still the right first question; the answer on a healthy
+    tree is now yes.
 
     **Three states, not two.** `None` means no board was ever built -- a row
     refused before the harness got that far -- and collapsing that into
@@ -33794,16 +33793,29 @@ def the_board_says_when_it_never_dealt_the_row(out: Result) -> None:
         f"fresh Result.held_it is {_audit.Result('probe').held_it!r}",
     )
 
-    # ---- the live board, on a row the swap is known to eat
+    # ---- the live board, on the row the swap used to eat
+    #
+    # **This arm asserted the DEFECT and #1335 fixed it, so it is inverted
+    # rather than deleted.** It read "p10100 really is absent from its own
+    # board's hand", which was true when this rule was written and is now
+    # false: `spawn(keep=)` pins the row under test out of the feat trades,
+    # and 88 rows came back. A rule using a live defect as its fixture goes
+    # red the day the defect is fixed, and the red looks like the fix broke
+    # something.
+    #
+    # The reporter arm below still covers `held_it is False`, off a
+    # hand-made `Result`, so the diagnostic this rule exists for is still
+    # asserted -- it is kept against a regression rather than against a
+    # live fault. Expect `_why_never`'s unheld bucket to be **empty** on a
+    # healthy tree now; a row appearing in it is the thing to chase.
     world, me, _ = _audit.board("p10100", 1)
     from combat_engine.engine.components import Powers
 
     known = world.get(me, Powers)
     out.that(
-        known is not None and "p10100" not in known.all,
-        "p10100 really is absent from its own board's hand -- the defect"
-        " this rule is about, and the reason its 'never usable' line named"
-        " a Requirement rather than the missing card",
+        known is not None and "p10100" in known.all,
+        "p10100 is in its own board's hand, which is #1335's fix: the"
+        " board no longer trades away the card it is about to measure",
         f"p10100 in hand: {'p10100' in (known.all if known else [])}",
     )
 
@@ -33816,9 +33828,12 @@ def the_board_says_when_it_never_dealt_the_row(out: Result) -> None:
     # testing cannot fail.
     ran = _audit.audit("p10100")
     out.that(
-        ran.held_it is False,
-        "auditing p10100 for real records that the caster never held it --"
-        " the recording path, not a value this rule supplied",
+        ran.held_it is True,
+        "auditing p10100 for real records that the caster DID hold it --"
+        " the recording path, not a value this rule supplied. The value"
+        " moved with #1335; that the path still records one is the half"
+        " this assertion is for, and a plant deleting the recording line"
+        " leaves it None and reds this",
         f"audit('p10100').held_it came back {ran.held_it!r}",
     )
 
