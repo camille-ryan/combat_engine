@@ -25,6 +25,7 @@ from combat_engine.engine import (
     FREE,
     INTERRUPT,
     MINOR,
+    MOVE,
     NO_TARGET,
     PERSONAL,
     REACTION,
@@ -288,12 +289,34 @@ def p13700(c: Cast) -> None:
     keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:6"),
     requires_text="you must have a comp:6 beast companion",
+    dropped=("query.ignores_difficult()",),
 )
 def p13701(c: Cast) -> None:
-    """"You can shift 2 squares as a move action" is dropped: nothing grants
-    an action, and no modifier key sets how far a shift goes. The terrain
-    half is the part that can be said, and the extra square it would buy a
-    ranger who already had it has nowhere to go either."""
+    """**"You can shift 2 squares as a move action" is written now.** The
+    old note said "nothing grants an action, and no modifier key sets how
+    far a shift goes", and both halves were already false: `c.grant_action`
+    is the facility, `"shift"` is in `actions.GRANTABLE` with a reader, and
+    `squares_=` is how far it goes. Three rows were already calling it that
+    way. #1341.
+
+    **The "3 instead of 2" upgrade keeps its marker**, and that is the half
+    the old note got right. It turns on whether the ranger *already*
+    ignored difficult terrain **before** this row granted it, and there is
+    no public reader for that -- `c.ignores_difficult` is the setter and
+    `_ignores_difficult_made_by` is private. Asking after the fact would
+    always answer yes, which is the wrong answer and a worse one than
+    leaving it out.
+
+    **Not verified on a board, and it cannot be here.** This row's
+    Requirement is a `comp:6` companion and the board deals a beast with
+    no category at all, so `usable()` answers "you must have a comp:6
+    beast companion" and the row is UNUSED -- as it was before this
+    change, being in `never_refs` at the last sweep. The grant rests on
+    the three rows already calling `c.grant_action("shift", ...)` and on
+    `p5104`, whose identical clause IS verified through the menu:
+    MOVE-cost shift entries 2 -> 8. #1343.
+    """
+    c.grant_action("shift", MOVE, squares_=2, on=c.me, until=When.ENCOUNTER)
     c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
 
 

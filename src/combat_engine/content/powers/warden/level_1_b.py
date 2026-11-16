@@ -94,12 +94,20 @@ def p5103(c: Cast) -> None:
     keywords=POLYMORPH,
 )
 def p5104(c: Cast) -> None:
-    """"You can shift 2 squares as a move action" is a granted row and the
-    form's shift has no id, so it is left out rather than approximated."""
+    """**"You can shift 2 squares as a move action" is written now.** The
+    old note called it "a granted row" whose "shift has no id", and it is
+    not a row at all: `c.grant_action("shift", MOVE, squares_=2)` is a line
+    in the action menu, which is what `c.grant_action` exists for and what
+    `"shift"` is in `actions.GRANTABLE` for. #1341.
+
+    Handed to `while_in` with the two bonuses, so it lapses when the form
+    does -- the printed line is "while you are in this form".
+    """
     form = assume(c)
     while_in(
         c,
         form,
+        c.grant_action("shift", MOVE, squares_=2, on=c.me, until=When.ENCOUNTER),
         c.bonus(REF, 2, on=c.me, until=When.ENCOUNTER, kind="untyped"),
         c.bonus(
             "attack", 1, on=c.me, until=When.ENCOUNTER, kind="untyped",
