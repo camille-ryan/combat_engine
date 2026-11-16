@@ -266,20 +266,51 @@ def p12887(c: Cast) -> None:
 def p12888(c: Cast) -> None:
     """The bonus is the allies' and is spent only on this one creature, so it
     is a gated modifier held by each of them rather than anything on the
-    target. The sorcerer-king rider that doubles it is dropped."""
+    target.
+
+    **The sorcerer-king rider is written now**, the same way `p12887`
+    writes its own in this very file: the build exists -- `cf:warlock-f1s4`
+    asks `c.build("sorcerer-king")` on its first line -- and the resource
+    is `c.spend_charge` on `FELL`, whose False **is** the printed "if you
+    spend". #1341, #529.
+
+    **Settled before the attack roll**, which the boon's card requires:
+    "you must decide whether or not to spend your fell might when you
+    choose to use a power, before you make any attack rolls or apply any
+    of that power's effects". Asked afterwards it would let a player buy
+    the rider only on hits.
+
+    The rider changes two things, as printed: the bonus becomes +2, and it
+    reaches damage rolls as well as attack rolls -- so the spent version
+    lays a second modifier rather than a bigger one.
+    """
     victim = c.target
+    spent = (
+        c.build("sorcerer-king")
+        and c.may("spend the boon")
+        and c.spend_charge(FELL)
+    )
     if not c.strike() or victim is None:
         return
     c.damage("2d6", c.cha_mod, dtype=DamageType.RADIANT)
     for friend in c.allies():
         c.bonus(
             "attack",
-            1,
+            2 if spent else 1,
             on=friend,
             kind="power",
             until=When.EONT,
             when=lambda ctx, v=victim: ctx.get("target") == v,
         )
+        if spent:
+            c.bonus(
+                "damage",
+                2,
+                on=friend,
+                kind="power",
+                until=When.EONT,
+                when=lambda ctx, v=victim: ctx.get("target") == v,
+            )
 
 
 @power(
