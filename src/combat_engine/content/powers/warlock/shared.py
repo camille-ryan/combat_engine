@@ -87,7 +87,12 @@ def backlash(c: Cast) -> None:
     if not c.may("take the backlash", who=c.me):
         return
     c.restore_use(c.ref)
-    c.flat(5 + c.level // 2, dtype=DamageType.PSYCHIC, on=c.me)
+    c.flat(
+        5 + c.level // 2,
+        dtype=DamageType.PSYCHIC,
+        on=c.me,
+        from_attack=False,
+    )
     c.bonus("attack", 4, on=c.me, kind="power", until=When.EONT, once=True)
 
 

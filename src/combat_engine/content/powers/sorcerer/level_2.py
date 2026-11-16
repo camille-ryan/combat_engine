@@ -110,7 +110,12 @@ def p11831(c: Cast) -> None:
         return
     result = getattr(c.trigger, "result", None)
     if result is not None and not result.hit:
-        c.flat(c.cha_mod, dtype=DamageType.PSYCHIC, on=c.me)
+        c.flat(
+            c.cha_mod,
+            dtype=DamageType.PSYCHIC,
+            on=c.me,
+            from_attack=False,
+        )
 
 
 @power(

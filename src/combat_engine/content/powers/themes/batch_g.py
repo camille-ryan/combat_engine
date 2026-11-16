@@ -1027,7 +1027,7 @@ def p14221(c: Cast) -> None:
     """The recoil is aimed at the caster; `c.flat` follows `c.target`, which
     on a `NO_TARGET` row is nobody, so it has to be named."""
     c.dazed(on=c.trigger.target, until=When.EONT)
-    c.flat(5 + c.level // 2, on=c.me)
+    c.flat(5 + c.level // 2, on=c.me, from_attack=False)
 
 
 @power(

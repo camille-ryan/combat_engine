@@ -189,7 +189,7 @@ def p12307(c: Cast) -> None:
         return
     if not c.may("pay for a second shot", who=c.me):
         return
-    c.flat(c.level, on=c.me)
+    c.flat(c.level, on=c.me, from_attack=False)
     if c.strike():
         c.damage("1d10", c.cha_mod)
 
@@ -228,7 +228,7 @@ def p12308(c: Cast) -> None:
         if c.build("infernal"):
             c.resist(2 + c.int_mod, on=c.me, until=When.EONT)
         return
-    c.flat(c.level, on=c.me)
+    c.flat(c.level, on=c.me, from_attack=False)
     pool = sorted(e for e in c.enemies() if e != victim and c.distance(e) <= 10)
     second = c.choose(pool, f"{c.ref}: who the backlash finds") if pool else None
     if second is not None and c.attack(c.cha_, FORT, on=second):

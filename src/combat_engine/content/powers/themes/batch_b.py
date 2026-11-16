@@ -1739,7 +1739,7 @@ def p15937(c: Cast) -> None:
 )
 def p15938(c: Cast) -> None:
     """"Must use the second result" is `keep="new"`, not `"best"`."""
-    c.flat(c.level, on=c.me)
+    c.flat(c.level, on=c.me, from_attack=False)
     if c.target is not None:
         c.flat(c.level, on=c.target)
     c.reroll_attack(keep="new", bonus=2)

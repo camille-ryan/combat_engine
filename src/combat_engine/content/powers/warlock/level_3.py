@@ -206,7 +206,7 @@ def p12309(c: Cast) -> None:
         if c.build("infernal"):
             _spite(c)
         return
-    c.flat(c.level, on=c.me)
+    c.flat(c.level, on=c.me, from_attack=False)
     pool = sorted(e for e in c.enemies() if e != victim and c.distance(e) <= 10)
     second = c.choose(pool, f"{c.ref}: who the backlash finds") if pool else None
     if second is None or not c.attack(c.cha_, WILL, on=second):

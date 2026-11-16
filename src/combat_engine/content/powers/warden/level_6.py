@@ -106,7 +106,7 @@ def p5592(c: Cast) -> None:
     """The printed trigger wants the hit *and* the damage; `Hit` is the only
     event an immediate reaction can answer while the attack is still the
     "triggering attack", so the damage half is assumed."""
-    c.flat(c.level // 2, on=c.me)
+    c.flat(c.level // 2, on=c.me, from_attack=False)
 
     def against_a_mark(ctx: dict) -> bool:
         who = ctx.get("target")

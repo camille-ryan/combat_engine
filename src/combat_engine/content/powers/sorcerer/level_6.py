@@ -357,4 +357,4 @@ def p12471(c: Cast) -> None:
     c.shift(c.speed_of(fam), who=fam)
     if ally in c.within(1, of=fam):
         c.redirect(to=fam)
-    c.flat(c.level, on=c.me)
+    c.flat(c.level, on=c.me, from_attack=False)
