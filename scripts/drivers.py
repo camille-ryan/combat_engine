@@ -14635,10 +14635,14 @@ def scope_boundary(out: Result) -> None:
     from combat_engine.etl import item as etl_item
     from combat_engine.etl.build import MAX_MONSTER_LEVEL, MAX_POWER_LEVEL
 
-    #: The one class feature in scope still carrying a symbol. Named here
-    #: so the assertions below read it once rather than repeating a
-    #: literal three times -- and so retiring it is one edit.
-    ONE_IN_SCOPE = "cf:warlord-marshal-f0"
+    # **A named carve-out used to live here and is retired**, which is what
+    # it was written to allow. It held `cf:warlord-marshal-f0`, the last
+    # class feature in scope carrying a symbol -- its *"you lose
+    # proficiency with chainmail and light shields"* -- and `#1310`
+    # finished it: a build option narrows its own class line, on Camille's
+    # ruling that the option modifies the class's grant rather than
+    # subtracting from the total. The two assertions below are stronger for
+    # naming no exception.
 
     readme = (ROOT / "README.md").read_text()
     said = re.search(r"up to level (\d+) for PCs, and level (\d+) for "
@@ -14671,13 +14675,14 @@ def scope_boundary(out: Result) -> None:
     # censuses in this file already use and is the stronger one: a second
     # row drifting into scope fails here, where a count of one would let
     # it swap places with this one unseen.
-    out.that([r for r, _lv in below] == [ONE_IN_SCOPE],
-             "EXACTLY ONE class-feature row in scope still carries an"
-             f" unfinished symbol -- `{ONE_IN_SCOPE}`, which wants a"
-             " proficiency LOSS (`armour_opened` reads only gains) and a"
-             " second choice axis (its class's legs are spent on the six"
-             f" presence options). Every other marked row is above level"
-             f" {pcs} ({len(marked)} marked, {len(below)} in scope)",
+    out.that(not below,
+             "NO class-feature row in scope carries an unfinished symbol."
+             " The last one was `cf:warlord-marshal-f0`, whose printed"
+             " proficiency loss `#1310` landed as a narrowing of its"
+             " class's own grant -- Camille's ruling, because a"
+             " subtraction would keep cancelling a proficiency a later"
+             f" feat legitimately restores. Every marked row is above"
+             f" level {pcs} ({len(marked)} marked, {len(below)} in scope)",
              f"in scope and marked: {below}")
 
     # **Asked of the dealer, not derived from the level.** A row's
@@ -14692,16 +14697,17 @@ def scope_boundary(out: Result) -> None:
                 got = set(chargen.loadout(cls, level=lvl, build=leg))
                 for ref in got & set(marked):
                     dealt.append((cls, leg.name, lvl, ref))
-    # **And the one in scope IS dealt**, which is the whole reason it
-    # matters: a marked row nobody holds costs nothing, and this one is a
-    # level-1 feature every marshal has. So the assertion is that nothing
-    # ELSE is -- the same named-not-counted shape as above.
-    others = sorted({ref for _c, _l, _lv, ref in dealt if ref != ONE_IN_SCOPE})
+    # **And NO marked row is dealt at all now.** This used to carve out
+    # the one in scope, because a marked row nobody holds costs nothing
+    # and that one was a level-1 feature every marshal had. With it
+    # finished the carve-out is gone, so the claim is the whole of what it
+    # should be: nothing a dealt character holds is unfinished.
+    others = sorted({ref for _c, _l, _lv, ref in dealt})
     out.that(not others,
-             "and no OTHER marked row is dealt to any character this"
-             f" project builds -- {len(chargen.BUILDS)} classes,"
+             "and no marked row is dealt to any character this project"
+             f" builds -- {len(chargen.BUILDS)} classes,"
              f" {sum(len(v) for v in chargen.BUILDS.values())} legs,"
-             f" levels 1 to {pcs}. The one that is, is named above",
+             f" levels 1 to {pcs}, and no exception carved out",
              f"{others}")
 
     # The in-scope row's two symbols are `chargen.` ones, which is the

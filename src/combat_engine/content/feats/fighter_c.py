@@ -1089,7 +1089,7 @@ def _reliable_whiff(world: World, me: int, ev: PowerResolved) -> bool:
     return row is not None and Keyword.RELIABLE in (row.keywords or ())
 
 
-@power("f2448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2448", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you miss every target with a reliable power",
        on=Trigger(PowerResolved, _reliable_whiff,
@@ -1144,6 +1144,17 @@ def f2448(c: Cast) -> None:
     So: `c.expend_row` pays the printed cost, `c.reroll_attack(ev=)`
     rewrites each number, and `resolve.replay` applies the ones that now
     hit. `#1314`.
+
+    **`AT_WILL`, not `ENCOUNTER`, and the linter caught me.** A triggered
+    trait declared `ENCOUNTER` is spent on its first firing, and this card
+    prints no such limit -- the only thing it costs is the racial power,
+    which `c.expend_row("p6186")` spends and which has its own usage. So a
+    per-encounter cap here would be a second limit the page does not give,
+    and it would silently stop the feat working for the rest of the fight.
+
+    Found by `lint.py`'s whole-tree structural walk on a wide sweep, not by
+    `lint.py <file>` -- which passed. Worth knowing: a per-file lint does
+    not ask this question.
 
     **The cost is paid first and only once**, before any rerolling: the
     card spends the racial power *to* reroll, so a row that rerolled and
