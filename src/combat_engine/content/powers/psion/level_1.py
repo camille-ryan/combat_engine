@@ -29,6 +29,7 @@ from combat_engine.engine import (
     Augment,
     Cast,
     Damage,
+    DamageApplied,
     DamageType,
     Keyword,
     Melee,
@@ -300,13 +301,45 @@ def p13308(c: Cast) -> None:
     attack=Attack(INT, vs=FORT),
 )
 def p13310(c: Cast) -> None:
-    """The squares around the target becoming *lightly* obscured is dropped:
-    `c.zone` only knows `blocks_sight`, which is total obscurement."""
+    """**The lightly obscured squares are written now.** The old note said
+    "`c.zone` only knows `blocks_sight`, which is total obscurement", and
+    `c.zone` takes `obscured=` as well -- `"dim"` is lightly obscured and
+    `"dark"` is heavily, which that kwarg's own docstring spells out.
+    `blocks_sight` is the wrong flag here for the reason it gives: it is
+    terrain and blinds both sides. #1341.
+
+    **Hung on the ongoing damage, not on the hit.** The card says "WHEN the
+    target takes ongoing damage from this power", which is a later turn's
+    event rather than this body's -- so it is a `DamageApplied` watch
+    reading `"ongoing"` out of `ev.detail`, the same way `p9411` tells its
+    own ongoing tick from an ordinary blow.
+
+    The squares are re-read each time, because the target may have moved
+    between ticks and the card says "adjacent to the target" rather than
+    naming a place.
+    """
     if c.strike():
         c.damage("2d8", c.int_mod)
     else:
         c.half_damage("2d8", c.int_mod)
     c.ongoing(5)
+    victim = c.target
+    if victim is None:
+        return
+
+    def fogged(ev: DamageApplied) -> None:
+        if ev.target != victim or "ongoing" not in (ev.detail or ""):
+            return
+        spot = c.world.get(victim, Position)
+        if spot is None:
+            return
+        c.zone(
+            sorted(spread({spot.square}, 1) - {spot.square}),
+            label=f"{c.ref} haze", until=When.EONT, obscured="dim",
+        )
+
+    c.watch(DamageApplied, fogged, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} hazes")
 
 
 @power(
