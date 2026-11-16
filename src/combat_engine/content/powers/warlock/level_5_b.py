@@ -365,11 +365,38 @@ def p13955(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p1883(c: Cast) -> None:
-    # The dark pact rider -- a penalty to the saves against the burn -- has
-    # no leg to ask for.
-    if c.strike():
-        c.damage("2d6", c.cha_mod, dtype=DamageType.NECROTIC)
-        c.ongoing(10, DamageType.NECROTIC)
+    """**The dark rider is written now** -- `c.build("dark")`, and the leg
+    was always there. #1346.
+
+    "Against **the ongoing necrotic damage**" is a narrowed save penalty
+    and not a blanket one, so it rides `when=`. The save context carries
+    exactly the two keys that clause needs -- `ongoing`, a bool, and
+    `dtypes` -- which `durations.py` fills from the effect being saved
+    against. Without the gate the target would be worse at shaking off
+    every condition on it, which is a much bigger card.
+
+    `dtypes` rather than `dtype`: an ongoing that is two types at once
+    carries both there and only the first in the singular key, which is
+    the trap `c.resist`'s own context records.
+
+    The clock is the burn's, not a turn's -- the penalty is worth nothing
+    once there is nothing to save against, and `ENCOUNTER` lets it last
+    as long as the ongoing does.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("2d6", c.cha_mod, dtype=DamageType.NECROTIC)
+    c.ongoing(10, DamageType.NECROTIC)
+    if c.build("dark") and victim is not None:
+        c.penalty(
+            "save",
+            2,
+            on=victim,
+            until=When.ENCOUNTER,
+            when=lambda ctx: bool(ctx.get("ongoing"))
+            and DamageType.NECROTIC in (ctx.get("dtypes") or ()),
+        )
 
 
 @power(

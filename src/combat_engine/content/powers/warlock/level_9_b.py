@@ -222,8 +222,31 @@ def p16494(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p1873(c: Cast) -> None:
-    # The dark pact rider -- ignoring necrotic resistance -- has no leg to
-    # ask for, and nothing lets one damage roll walk past a resistance.
+    """**The dark rider is written now, and BOTH halves of the old note
+    were wrong.** "No leg" was false -- `c.build("dark")` answers -- and
+    so was "nothing lets one damage roll walk past a resistance":
+    `c.ignore_resistance` opens its own docstring with this very
+    sentence, *"your fire powers ignore the target's fire
+    resistance"*. #1346.
+
+    **It defaults to the caster and that is correct here**, which is the
+    opposite of `p4281` two files over. The two are a matched pair worth
+    reading together: this card says *your attack* ignores a resistance,
+    a property of the attacker; that one says *the target loses* its
+    resistance, which strips it for everybody and is `c.resist` with a
+    negative amount, `on=` the target. Writing either with the other's
+    verb gives a row that fires and does the wrong thing.
+
+    Laid **above** the strike and gated to this row's own ref, because
+    the printed scope is "this attack" -- a blanket hold would carry on
+    to the warlock's next necrotic power.
+    """
+    if c.build("dark"):
+        c.ignore_resistance(
+            dtype=DamageType.NECROTIC,
+            until=When.EOT,
+            when=lambda ctx: ctx.get("power") == c.ref,
+        )
     if c.strike():
         c.damage("3d10", c.cha_mod, dtype=DamageType.NECROTIC)
 
