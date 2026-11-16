@@ -68,9 +68,21 @@ def p11165(c: Cast) -> None:
     attack=Attack(CON, vs=WILL),
 )
 def p11166(c: Cast) -> None:
-    """"The target's reach is reduced by 1" is dropped: `c.threatens` sets how
-    far a creature threatens, not how far it can swing. The slide is the other
-    half of the same save-ends hold, so one save clears both."""
+    """**"The target's reach is reduced by 1" is written now.** The old note
+    was right that `c.threatens` is the wrong verb -- it sets how far a
+    creature threatens, not how far it can swing -- and wrong that nothing
+    else reaches it. `"reach"` is a modifier key, read by `dsl.py`'s
+    `mods.total("reach", ctx)` and by `movement.py`'s, and four rows were
+    already laying one. One of them is `c.penalty("reach", ...)` in this
+    very class's level 1. #1341.
+
+    **"(minimum 1)" needs nothing here**: `movement.py` computes
+    `max(1, 1 + mods.total("reach", ctx))`, so the floor is the engine's
+    and a second guard in the row would be a copy of it.
+
+    The slide is the other half of the same save-ends hold, so one save
+    clears both.
+    """
     victim = c.target
     if victim is None:
         return
@@ -78,6 +90,8 @@ def p11166(c: Cast) -> None:
         c.damage(c.w(2), c.con_mod)
     else:
         c.half_damage(c.w(2), c.con_mod)
+
+    c.penalty("reach", 1, on=victim, until=When.SAVE_ENDS)
 
     def nudge(ev: Hit) -> None:
         if ev.target == victim and c.may("slide it", who=c.me):

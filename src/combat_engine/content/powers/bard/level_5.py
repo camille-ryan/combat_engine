@@ -86,14 +86,66 @@ def p2370(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(CHA, vs=WILL),
+    dropped=("PowerRecharged.cancel",),
 )
 def p2975(c: Cast) -> None:
-    """The Effect is dropped whole: nothing announces a recharge, and nothing
-    hands a spent encounter power back."""
+    """**Half of the Effect is written now; the other half really is
+    blocked, and the two reasons the old note gave were one true and one
+    false.**
+
+    "Nothing announces a recharge" is false -- `PowerRecharged` exists, and
+    its own docstring quotes the state this note is still in: *"there is no
+    `PowerRecharged` event yet"*, `#605` being the commit that minted it.
+    "Nothing hands a spent encounter power back" is also false:
+    `c.restore_use` does.
+
+    So the second half is written -- the first recharge by the target hands
+    an encounter power back to the caster or an ally.
+
+    **What is blocked is the stopping.** `PowerRecharged` is emitted
+    *after* `actions.py` has already restored the row, so it announces
+    rather than gates: cancelling it would leave the power back anyway.
+    "The power instead does not recharge" needs a veto point that does not
+    exist, so it carries the marker.
+
+    Once only, which is "the **next** time", latched in the closure.
+    """
     if c.strike():
         c.damage("3d8", c.cha_mod, dtype=DamageType.PSYCHIC)
     else:
         c.half_damage("3d8", c.cha_mod, dtype=DamageType.PSYCHIC)
+    victim = c.target
+    if victim is None:
+        return
+    spent_once: list[bool] = []
+
+    def repaid(ev: PowerRecharged) -> None:
+        if spent_once or ev.actor != victim:
+            return
+        for who in (c.me, *c.allies()):
+            # `c.expended` is "the rows this creature has used up, for one
+            # that hands a use back", and the card names an ENCOUNTER
+            # power, so the usage is read off the row rather than guessed.
+            back = next(
+                (
+                    r
+                    for r in c.expended(on=who)
+                    if getattr(REGISTRY.get(r), "usage", None) is ENCOUNTER
+                ),
+                "",
+            )
+            if back and c.restore_use(back, on=who):
+                spent_once.append(True)
+                return
+
+    # **Subscribed off a held effect rather than through
+    # `c.watch(on=c.me)`.** The `c.watch` form installs -- the label shows
+    # up on the caster -- and does not fire for a `PowerRecharged` about
+    # another creature, which is the same thing `p10417` hit on `TurnEnd`.
+    # Hung on the hold, it dies with it.
+    held = c.effect(f"{c.ref} repays", on=c.me, until=When.ENCOUNTER)
+    if held is not None:
+        held.subs.append(c.world.bus.on(PowerRecharged, repaid))
 
 
 @power(
