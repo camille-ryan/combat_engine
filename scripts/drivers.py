@@ -60373,10 +60373,41 @@ def the_dm_reports_which_phase_it_is_in(out: Result) -> None:
              "and a Director with a sink is told both phases, in order",
              f"heard {[p for p, _ in heard]}")
 
-    # -- live, and it skips rather than failing --------------------------
-    reasoning = llm.Role(model="deepseek-r1:14b", temperature=0.6,
-                         max_tokens=1200, timeout=400,
-                         base_url="http://100.106.140.121:11434")
+    # -- live, and OPT-IN rather than wired to one machine ---------------
+    #
+    # **This used to hardcode a Tailscale IP**, which meant every wide
+    # sweep streamed 1200 tokens of reasoning off whichever box that
+    # address belonged to -- with `timeout=400`, so a busy host held the
+    # suite for up to seven minutes a call. Camille, mid-game on that
+    # machine: *"what's interrogating the remote LLM? I'm playing a game
+    # on that machine"*, and then *"can you use a different model for the
+    # time being?"*
+    #
+    # So the host and the model are read from the environment and the arm
+    # **skips when nothing is set**. That is not a loosening of the check:
+    # the arm already skipped when the host was unreachable, and a skip
+    # reports as a skip. What changes is that an unconfigured sweep asks
+    # *nobody*, where before it asked one particular desktop whether or
+    # not anyone was using it.
+    #
+    #     CE_REASONING_URL=http://host:11434 CE_REASONING_MODEL=deepseek-r1:14b
+    #
+    # Both are needed: the point of the arm is a model with a **thinking**
+    # phase, and naming the host without naming such a model would ask a
+    # plain model to prove something it cannot. #1333.
+    import os
+
+    where = os.environ.get("CE_REASONING_URL", "").strip()
+    which = os.environ.get("CE_REASONING_MODEL", "").strip()
+    if not where or not which:
+        out.skip(
+            "no reasoning model configured -- set CE_REASONING_URL and"
+            " CE_REASONING_MODEL to exercise the thinking-phase arm."
+            " Unset by design, so a sweep asks nobody's GPU"
+        )
+        return
+    reasoning = llm.Role(model=which, temperature=0.6,
+                         max_tokens=1200, timeout=400, base_url=where)
     why = llm.reachable(reasoning)
     if why:
         out.skip(f"no reasoning model to ask: {why.splitlines()[0]}")
