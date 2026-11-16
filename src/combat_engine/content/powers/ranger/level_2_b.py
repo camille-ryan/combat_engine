@@ -96,12 +96,13 @@ def _has_beast(world: World, eid: int) -> bool:
 #: eight of them were wrong. Measured with a bear: 9 usable before, 1 after.
 
 
-#: The two categories `p4381` names and the three `p4398` names, by ref.
+#: The categories `p4381`, `p4398` and `p4399` name between them, by ref.
 #: Refs and never species words, for the reason `_beast_is` records below:
 #: a word here is a printed name in content code, and `api/render.py`
 #: falls back to `requires_text` when the localisation is absent.
 _BEAR = "comp:1"
 _BOAR = "comp:2"
+_LIZARD = "comp:4"
 _SNAKE = "comp:6"
 _SPIDER = "comp:7"
 
@@ -450,6 +451,15 @@ def p4381(c: Cast) -> None:
     and `category=` asks about one. `c.save(bonus=)` takes the number, so
     the bonus is part of the roll rather than a modifier laid beside it --
     which matters for a save, the one roll nothing else modifies here.
+
+    **The rider branch is not exercised on the audit board.** It deals a
+    beast with **no category at all** -- checked on fourteen seeds,
+    `c.beast(category=)` answers None for every one of the eight -- so the
+    row always takes the no-rider arm there. The arithmetic without a
+    category is verified (`p4399`: surge 3, rider 0, hit points 1 -> 4);
+    the rider itself rests on `c.beast(category=)` being the same call
+    `_beast_is` uses for its Requirement, which the board does meet.
+    #1343.
     """
     beast = c.companion()
     if beast is None:

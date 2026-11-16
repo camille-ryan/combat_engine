@@ -27,7 +27,7 @@ from combat_engine.engine.events import AdjacencyGained, AttackRolled
 from combat_engine.engine.query import distance_between as _gap
 from combat_engine.engine.triggers import Trigger, hits_my_companion
 
-from .level_2_b import _BEAR, _SNAKE, _SPIDER
+from .level_2_b import _BEAR, _BOAR, _LIZARD, _SNAKE, _SPIDER
 
 MARTIAL = [Keyword.MARTIAL]
 MARTIAL_HEALING = [Keyword.MARTIAL, Keyword.HEALING]
@@ -118,6 +118,15 @@ def p4398(c: Cast) -> None:
     `c.beast(category=)` asks about one. The rider changes only the clock:
     `SONT` where the base is `EONT`, which is the printed "lasts until the
     start of your next turn" against the default end of it.
+
+    **The rider branch is not exercised on the audit board.** It deals a
+    beast with **no category at all** -- checked on fourteen seeds,
+    `c.beast(category=)` answers None for every one of the eight -- so the
+    row always takes the no-rider arm there. The arithmetic without a
+    category is verified (`p4399`: surge 3, rider 0, hit points 1 -> 4);
+    the rider itself rests on `c.beast(category=)` being the same call
+    `_beast_is` uses for its Requirement, which the board does meet.
+    #1343.
     """
     ev = c.trigger
     beast = c.companion()
@@ -147,7 +156,25 @@ def p4398(c: Cast) -> None:
 def p4399(c: Cast) -> None:
     """"As if it had spent a healing surge" -- so a surge's worth of hit
     points and no surge actually spent, which is what `c.surge_value`
-    without `c.spend_surge` says. The boar-or-lizard rider is dropped."""
+    without `c.spend_surge` says.
+
+    **The boar-or-lizard rider is written now**, the same way `p4398`'s is
+    two rows up: `c.beast(category=)` reads the category `chargen` wrote
+    beside the leg. #1341.
+
+    **The rider branch is not exercised on the audit board.** It deals a
+    beast with **no category at all** -- checked on fourteen seeds,
+    `c.beast(category=)` answers None for every one of the eight -- so the
+    row always takes the no-rider arm there. The arithmetic without a
+    category is verified (`p4399`: surge 3, rider 0, hit points 1 -> 4);
+    the rider itself rests on `c.beast(category=)` being the same call
+    `_beast_is` uses for its Requirement, which the board does meet.
+    #1343.
+    """
     beast = c.companion()
-    if beast is not None:
-        c.heal(c.surge_value(of=beast), on=beast)
+    if beast is None:
+        return
+    rider = c.wis_mod if any(
+        c.beast(category=kind) is not None for kind in (_BOAR, _LIZARD)
+    ) else 0
+    c.heal(c.surge_value(of=beast) + rider, on=beast)

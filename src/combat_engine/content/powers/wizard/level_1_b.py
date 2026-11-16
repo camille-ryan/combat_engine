@@ -199,7 +199,29 @@ def p10417(c: Cast) -> None:
     """"The zone moves with the target" is an aura on the target rather than
     a zone, which is the one difference between the two.
 
-    The Active Familiar rider is dropped: nothing in the engine is a familiar.
+    **The Active Familiar rider is written now.** The old note said
+    "nothing in the engine is a familiar", and there are three verbs for
+    one: `c.familiar`, `c.familiar_active` and `c.familiar_mode`. #1341.
+
+    Both halves of "while your familiar is in the zone" are read **live**,
+    at the moment a turn ends: whether a familiar is out, and whether it is
+    standing in the ring. The ring follows the target, so the familiar can
+    fall in and out of it without moving at all -- a check made when the
+    zone was laid would have frozen the answer.
+
+    Measured with the familiar staged on both sides of the edge, which is
+    the half that proves the gate does anything:
+
+        familiar out of the ring    no prone
+        familiar in the ring        prone
+
+    Two things had to be got right to see it, and each read as a broken
+    clause first. The zone's own 5 cold damage lands on the same `TurnEnd`
+    and **killed the enemy** before the prone could apply, so the victim's
+    hit points are topped up first. And `Zones` caches occupancy, so moving
+    the familiar needs a `world.zones.refresh()` -- without it the pet
+    counted as inside from the far corner of the board and the negative
+    control passed for the wrong reason.
     """
     victim = c.target
     if not c.strike() or victim is None:
@@ -218,6 +240,23 @@ def p10417(c: Cast) -> None:
         cold.effect.clock = c.me
         cold.effect.latch = c.world.turn == c.me
     _teeth(c, ring, 5, DamageType.COLD)
+
+    def tripped(ev: TurnEnd) -> None:
+        if ev.ghost or ev.actor not in c.enemies():
+            return
+        here = c.world.zones.occupants(ring)
+        pet = c.familiar()
+        if pet is not None and pet in here and ev.actor in here:
+            c.prone(on=ev.actor)
+
+    # **Subscribed and hung off the zone's own effect, the way `_teeth`
+    # above does it, rather than through `c.watch`.** A `c.watch` with
+    # `on=c.me` did not fire for a staged `TurnEnd` at all, while the
+    # identical predicate inside `_teeth` did -- so the sub goes where the
+    # working one goes and dies with the ring.
+    held = c.world.get(ring, Zone)
+    if held is not None and held.effect is not None:
+        held.effect.subs.append(c.world.bus.on(TurnEnd, tripped))
 
 
 @power(
