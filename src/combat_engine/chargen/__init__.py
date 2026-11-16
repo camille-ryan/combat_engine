@@ -6051,7 +6051,8 @@ def _stock_thrown(gear: Gear | None) -> None:
 
 def power_swap(powers: list[str], feats: list[str], *,
                cls: str = "", level: int = 0,
-               record: set[str] | None = None) -> list[str]:
+               record: set[str] | None = None,
+               keep: frozenset[str] = frozenset()) -> list[str]:
     """The hand that is left after the feats that trade a card for one.
 
     "You can swap one of your 3rd-level or higher encounter attack powers
@@ -6072,6 +6073,30 @@ def power_swap(powers: list[str], feats: list[str], *,
     printed *"of the same level"*, and excluding what the character
     already knows, because a trade for a card already in hand is not a
     trade.
+
+    **`keep` pins a card so it is never the one given up**, and it exists
+    for a measuring harness rather than for a character. `audit.board`
+    composes a hand out of the row under test plus *every* level-0 feature
+    of its class -- a hand no real character holds -- and six of those
+    features carry a `Swap`:
+
+        cf:warlock-binder-f15/f18/f23      Swap(level=1, DAILY, pool='class')
+        cf:paladin-blackguard-f18/f21/f23  Swap(level=1, DAILY, pool='class')
+
+    The only level>=1 daily in that hand is usually the row being measured,
+    so `min(pool)` picked it and the board traded away its own subject. 92
+    warlock and paladin dailies were unusable for that reason and reported
+    as "a Requirement the board cannot meet".
+
+    **Here rather than in the harness**, and the alternative was measured:
+    composing the hand without the swapping features changes what *every*
+    warlock and paladin row is audited against, and feeding the trade a
+    decoy daily rescues only 86 of the 92 -- six rows have fewer than three
+    same-class dailies sorting before them and cannot be rescued by a decoy
+    at all. Pinning the one card changes exactly the 92.
+
+    Empty by default, so every existing caller gets precisely the old
+    behaviour -- the contract `cls` and `level` already state one line up.
 
     **No stream, and the pick is the highest-rated rather than random.**
     Every other dealer here takes an rng of its own so that dealing a
@@ -6111,7 +6136,11 @@ def power_swap(powers: list[str], feats: list[str], *,
         pool = [
             p
             for p in out
-            if (row := REGISTRY.get(p)) is not None
+            # **`keep` is off the table before anything else is asked.**
+            # A caller that has pinned a card is not offering it, so it
+            # cannot be the one traded away -- see the parameter's note.
+            if p not in keep
+            and (row := REGISTRY.get(p)) is not None
             and row.level >= trade.level
             and (trade.usage is None or row.usage is trade.usage)
             # A utility is a row with nothing to attack with, which is how
@@ -7227,8 +7256,19 @@ def _plus_race(db: sqlite3.Connection, cls: str, race: str,
     return out
 
 
-def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
-    """Put a character on the board and return its entity id."""
+def spawn(world: World, who: Character, square: tuple[int, int], *,
+          keep: frozenset[str] = frozenset()) -> int:
+    """Put a character on the board and return its entity id.
+
+    `keep` pins cards out of the feat trades -- see `power_swap(keep=)`,
+    which has the argument and the measurement. It is a **harness**
+    parameter rather than a character attribute, which is why it is here
+    and not on `Character`: a pinned card says something about who is
+    asking, not about who the character is, and a field would reach the
+    sheet, the wire and every replay fixture to say it.
+
+    Empty by default, so every caller but `audit.board` is unchanged.
+    """
     from combat_engine.engine.types import modifier
 
     line = who.line
@@ -7403,7 +7443,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     #: the feat's body can read what it drew. #1114.
     swapped_in: set[str] = set()
     powers = power_swap(list(powers), list(feats), cls=who.cls,
-                        level=who.level, record=swapped_in)
+                        level=who.level, record=swapped_in, keep=keep)
     # **The build-time options, drawn ONCE here rather than inside the
     # component list.** Two readers want them -- `BuildState.choices`,
     # and the loadout, because the hexblade's pact weapon is one of these

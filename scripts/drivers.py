@@ -7086,6 +7086,65 @@ def a_header_only_clause_is_spent_by_chargen(out: Result) -> None:
     out.that(len(power_swap(list(pool), ["f3724"])) == 7,
              "and so costs nothing")
 
+def the_board_keeps_the_row_it_is_measuring(out: Result) -> None:
+    """The audit board traded away the very card it was about to test.
+
+    `audit.board` sweeps **every** level-0 row of the class into the hand,
+    because a row triggering on a cursed enemy needs the thing that curses.
+    Six of those features carry a `Swap`, and `chargen.power_swap` pays a
+    swap with *"the lowest qualifying power"* -- which, in a hand holding
+    one real card and a pile of level-0 features, is the row under test.
+
+    So 92 power rows were reported `NEVER` -- never usable on a board --
+    by a board that had just discarded them. Nothing was wrong with the
+    content. Shape: warlock 59, paladin 32, sorcerer 3, dailies at levels
+    1/5/9, which is the swap's qualifying band.
+
+    The fix is `spawn(keep=)` down to `power_swap(keep=)`: a pinned ref is
+    off the table before anything else is asked. **Not** an audit-local
+    filter over `features`, which was the first design -- removing the
+    swapping feature rescues only 86 of the 92, because a feature can
+    qualify for a trade it does not itself declare.
+
+    The two halves below are one rule deliberately. `keep=` holding the
+    card proves nothing on its own: a hand that was never going to lose it
+    reads identically. The no-keep arm is what shows the trade is real, so
+    a plant deleting `if p not in keep` from `power_swap`'s pool reds the
+    second arm while the first stays green and honest. #1335.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    def held(ref: str, keep: frozenset[str]) -> bool:
+        """Is `ref` in the hand `spawn` actually deals?
+
+        Through `spawn`, never `power_swap` directly: the pin has to
+        survive the whole build, and a rule calling the helper would stay
+        green if `spawn` stopped passing the argument down.
+        """
+        row = REGISTRY[ref]
+        features = sorted(
+            p.ref for p in REGISTRY.values()
+            if p.cls == row.cls and p.level == 0
+        )
+        world = World(Grid(12, 12), Rng(7), Bus())
+        who = chargen.Character(row.cls, max(1, row.level), [ref, *features])
+        eid = chargen.spawn(world, who, (6, 8), keep=keep)
+        return ref in (world.get(eid, Powers).known or ())
+
+    # Three of the 92, at the three levels the swap band covers, so a fix
+    # that happened to rescue one level is not mistaken for the rule.
+    for ref, level in (("p10247", 1), ("p1252", 5), ("p10100", 9)):
+        out.that(REGISTRY[ref].level == level,
+                 f"{ref} is a level-{level} card of the affected band")
+        out.that(not held(ref, frozenset()),
+                 f"{ref} is traded away by its own board when nothing pins it")
+        out.that(held(ref, frozenset({ref})),
+                 f"and {ref} survives once keep= names it")
+
 def a_familiar_changing_mode_is_announced(out: Result) -> None:
     """`c.familiar_mode` did the work and said nothing.
 
@@ -91052,6 +91111,9 @@ DRIVERS = {
     "a_header_only_clause_is_spent_by_chargen": (
         a_header_only_clause_is_spent_by_chargen,
         "f3725's whole clause is a swap= header and nothing asserted it"),
+    "the_board_keeps_the_row_it_is_measuring": (
+        the_board_keeps_the_row_it_is_measuring,
+        "the audit board traded away the card it was about to measure"),
     "a_familiar_changing_mode_is_announced": (
         a_familiar_changing_mode_is_announced,
         "c.familiar_mode did the work and announced nothing"),

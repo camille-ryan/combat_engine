@@ -3203,6 +3203,14 @@ def board(ref: str, seed: int, pose: bool = False,
         hand = [*named, *features] if a_feat else [ref, *named, *features]
         if trade_bait and trade_bait not in hand:
             hand.append(trade_bait)
+        # **The row under test is pinned out of the swap.** This hand holds
+        # every level-0 feature of the class, six of which carry a `Swap`
+        # that takes "the lowest qualifying power" -- and in a composed
+        # hand that is the row being measured. 92 warlock and paladin
+        # dailies were traded away by their own board and reported as
+        # unusable. `chargen.power_swap(keep=)` has the argument and the
+        # measurement behind choosing it over composing the hand
+        # differently.
         caster = chargen.spawn(
             world,
             chargen.Character(
@@ -3219,6 +3227,7 @@ def board(ref: str, seed: int, pose: bool = False,
                 skills=(skill_word,) if skilled else (),
             ),
             (6, 8),
+            keep=frozenset({ref}),
         )
         # The item itself, at the bottom rung of its ladder, so that a body
         # reading "equal to the enhancement bonus" has a number to read and
