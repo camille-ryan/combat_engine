@@ -232,13 +232,26 @@ def p11368(c: Cast) -> None:
     attack=Attack(STR, vs=FORT),
 )
 def p11369(c: Cast) -> None:
-    """The resist 5 is dropped: `c.resist` cannot be pointed at one
-    creature's attacks, and resist 5 to everything is a different power."""
+    """**The resist 5 is written now.** The old note said `c.resist` "cannot
+    be pointed at one creature's attacks", and its `when=` is handed the
+    damage context -- `source`, `power`, `dtype`, `opportunity`, `charge` --
+    which its own docstring offers for exactly this narrowing. `source` is
+    who dealt it, so "against the target's attacks" is a gate rather than
+    the different and stronger power the note was right to refuse. #1341.
+
+    `dtype=None` because the card says "resist 5 to **all** damage" and
+    narrows by attacker instead.
+    """
     victim = c.target
     destruction = _rune(c, _DESTRUCTION)
     if not c.strike():
         return
     c.damage(c.w(), c.str_mod)
+    if victim is not None:
+        c.resist(
+            5, None, on=c.me, until=When.SONT,
+            when=lambda ctx, v=victim: ctx.get("source") == v,
+        )
     if not destruction or victim is None:
         return
 
@@ -445,8 +458,16 @@ def p11375(c: Cast) -> None:
 )
 def p11376(c: Cast) -> None:
     """The printed choice of damage type is a real choice, so it is offered.
-    "This effect ends if the ally ends his turn not adjacent" is dropped --
-    an effect cannot end itself on somebody else's geometry."""
+
+    **"This effect ends if the ally ends his or her turn not adjacent" is
+    written now.** The old note said an effect "cannot end itself on
+    somebody else's geometry"; it can, and the watch this row already had
+    is where it goes -- the same `TurnEnd` that charges the target is
+    asked about the ally too, and ends the hold.
+
+    Two creatures, one subscription, because the card's two sentences turn
+    on the same moment: whose turn ended, and who was standing where.
+    """
     victim = c.target
     kind = c.choose([DamageType.NECROTIC, DamageType.RADIANT], "which rune")
     kind = kind or DamageType.RADIANT
@@ -459,10 +480,14 @@ def p11376(c: Cast) -> None:
     if mate is None or victim is None:
         return
 
-    def tether(ev: Any, v: int = victim, m: int = mate) -> None:
-        if ev.actor != v or ev.ghost:
-            return
-        if not c.adjacent_to(m, v):
-            c.flat(5, dtype=kind, on=v)
+    rune: list[Any] = []
 
-    c.watch(TurnEnd, tether, until=When.ENCOUNTER)
+    def tether(ev: Any, v: int = victim, m: int = mate) -> None:
+        if ev.ghost:
+            return
+        if ev.actor == v and not c.adjacent_to(m, v):
+            c.flat(5, dtype=kind, on=v)
+        elif ev.actor == m and not c.adjacent_to(m, v) and rune:
+            c.world.effects.end(rune[0], "the ally ended a turn away from it")
+
+    rune.append(c.watch(TurnEnd, tether, until=When.ENCOUNTER))
