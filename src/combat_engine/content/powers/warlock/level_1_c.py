@@ -119,10 +119,22 @@ def _missed_after(c: Cast, who: int, mark: int) -> bool:
     attack=Attack(CHA, vs=FORT),
 )
 def p1868(c: Cast) -> None:
-    """No ability modifier on the damage, which is what the printed line says.
-    The dark pact rider that would add Intelligence has no leg to ask for."""
+    """No ability modifier on the damage, which is what the printed line
+    says -- the base line, that is.
+
+    **The dark rider is written now**, and the leg was always there:
+    `BUILDS` carries eight, not the two the old header claimed. #1346.
+    It adds Intelligence as *extra damage*, which is the same necrotic
+    blow made larger rather than a second packet, so it rides the bonus
+    argument of the one `c.damage` call.
+
+    The body runs once per creature in the burst and `c.build` asks about
+    the **caster**, so the rider is re-asked per target and answers the
+    same each time, which is right: one pact, every target.
+    """
     if c.target is not None and c.strike():
-        c.damage("2d8", dtype=DamageType.NECROTIC)
+        extra = c.int_mod if c.build("dark") else 0
+        c.damage("2d8", extra, dtype=DamageType.NECROTIC)
 
 
 @power(
@@ -213,6 +225,7 @@ def p3403(c: Cast) -> None:
 @power(
     "p3404",
     level=1,
+    dropped=("dsl.Power.range_from_build",),
     cls="warlock",
     usage=ENCOUNTER,
     action=STANDARD,
@@ -223,8 +236,19 @@ def p3403(c: Cast) -> None:
 )
 def p3404(c: Cast) -> None:
     """The advantage is read off the roll that was made, not asked again: a
-    one-shot grant has been spent by then. The dark pact rider that widens
-    the range to ten has no leg."""
+    one-shot grant has been spent by then.
+
+    **The dark rider is marked rather than written, and the old reason was
+    wrong.** "No leg" was false -- `c.build("dark")` answers. The real
+    obstacle is *when*: "the range is 10 instead of 5" has to hold while
+    the engine picks targets, and targeting is settled from the header
+    before this body is entered. A `c.bonus("range", 5)` laid here would
+    widen the **next** use of the row and not this one, which is a
+    different card and a worse bug than the missing clause.
+
+    So it waits for a way to say a range from a build at declaration
+    time. #1346.
+    """
     shot = c.strike()
     if not shot:
         return
@@ -367,11 +391,34 @@ def p4062(c: Cast) -> None:
     attack=Attack(CON, vs=FORT),
 )
 def p4170(c: Cast) -> None:
-    # The vestige pact rider -- three temporary hit points per creature hit,
-    # and they pile up -- has no leg to ask for.
-    if c.target is not None and c.strike():
-        c.damage("3d4", c.con_mod, dtype=DamageType.THUNDER)
-        c.condition(Condition.DEAFENED)
+    """**The vestige rider is written now** -- `c.build("vestige")`, and
+    the leg was always there. #1346.
+
+    "**Cumulative**" is the whole difficulty and it is why this keeps its
+    own running total. `c.temp_hp` takes the **larger** of what you have
+    and what is offered, which is how temporary hit points normally work
+    and the opposite of what this card says. Handing it 3 once per target
+    would therefore leave 3 after three hits.
+
+    So the tally is kept on the `Cast` and the *total* is offered each
+    time -- 3, then 6, then 9, each larger than the last, so the max rule
+    hands back exactly the sum. `shared.augmenting` keeps its own spend
+    on the `Cast` for the same reason: `dsl.use` builds one per use, and
+    a body that runs once per target has nowhere else to remember.
+
+    What this does **not** do is add to temporary hit points from some
+    other source, which a strict reading of "cumulative" might want. That
+    is a question about the stacking rule rather than about this row, and
+    it is not invented here.
+    """
+    if c.target is None or not c.strike():
+        return
+    c.damage("3d4", c.con_mod, dtype=DamageType.THUNDER)
+    c.condition(Condition.DEAFENED)
+    if c.build("vestige"):
+        running = getattr(c, "vestige_temp", 0) + 3
+        c.vestige_temp = running
+        c.temp_hp(running)
 
 
 @power(
@@ -386,10 +433,25 @@ def p4170(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p4277(c: Cast) -> None:
-    # The star pact rider -- a penalty to the next save it makes this fight
-    # -- has no leg to ask for.
-    if c.strike():
-        c.damage("2d8", c.cha_mod, dtype=DamageType.RADIANT)
+    """**The star rider is written now** -- `c.build("star")`, and the leg
+    was always there. #1346.
+
+    "The **next** saving throw it makes **before the end of the
+    encounter**" is two words doing two jobs: `once=True` spends the
+    penalty on the first save attempted, and `When.ENCOUNTER` is how long
+    it waits for one. Either alone is a different card -- without `once`
+    it would dog every save of the fight, and without the long clock it
+    would lapse before the target rolled.
+
+    It hangs on the target rather than the caster, which `on=` has to say:
+    `c.penalty` lays on the caster by default.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("2d8", c.cha_mod, dtype=DamageType.RADIANT)
+    if c.build("star") and victim is not None:
+        c.penalty("save", 2, on=victim, until=When.ENCOUNTER, once=True)
 
 
 @power(
