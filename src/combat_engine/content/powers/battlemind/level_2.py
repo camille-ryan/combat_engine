@@ -125,6 +125,7 @@ def p13033(c: Cast) -> None:
 
 @power(
     "p13034",
+    dropped=("c.halve_incoming()",),
     level=2,
     cls="battlemind",
     usage=ENCOUNTER,

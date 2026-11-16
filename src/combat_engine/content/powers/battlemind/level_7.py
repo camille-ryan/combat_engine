@@ -241,6 +241,7 @@ def p12425(c: Cast) -> None:
 
 @power(
     "p13051",
+    dropped=("Position.second_square",),
     level=7,
     cls="battlemind",
     usage=AT_WILL,
@@ -316,6 +317,7 @@ def p13052(c: Cast) -> None:
 
 @power(
     "p13053",
+    dropped=("c.grant_action_row()",),
     level=7,
     cls="battlemind",
     usage=AT_WILL,

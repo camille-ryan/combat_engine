@@ -127,6 +127,7 @@ def p11157(c: Cast) -> None:
 
 @power(
     "p11158",
+    dropped=("c.offer_augment()",),
     level=1,
     cls="battlemind",
     usage=DAILY,
@@ -222,6 +223,7 @@ def p12419(c: Cast) -> None:
 
 @power(
     "p12420",
+    dropped=("c.resist(from_=)",),
     level=1,
     cls="battlemind",
     usage=DAILY,

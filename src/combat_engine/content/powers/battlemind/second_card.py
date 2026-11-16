@@ -11,9 +11,14 @@ immediate interrupt, a move.
 labelled with its own ref -- that is what `c.stance` does -- except the one
 that lays a zone, which needs the battlemind standing in it as well.
 
-One of the six is left out: `p12426b`, whose damage is owed for a space the
-shift *passes through*, and a shift is a single `step` to its destination
-with no squares in between. See `docs/blocked.json`.
+**All six are written.** This used to say one was left out --
+`p12426b`, "whose damage is owed for a space the shift *passes through*,
+and a shift is a single `step` to its destination with no squares in
+between". That was true when written and `#684` fixed it:
+`movement.shift` walks its path now, `_clear` asks `may_enter` of each
+square on the way, and the entry the card charges for is an event with a
+moment in it. `p12426b`'s own docstring has recorded that for a while
+and this paragraph did not. #1341.
 """
 
 from __future__ import annotations

@@ -47,6 +47,7 @@ def _weapon_attack(ctx: dict[str, Any]) -> bool:
 
 @power(
     "p11175",
+    dropped=("c.grant_action_row()",),
     level=10,
     cls="battlemind",
     usage=DAILY,

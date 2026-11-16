@@ -33,6 +33,7 @@ _LANDED: set[int] = set()
 
 @power(
     "p11172",
+    dropped=("c.offer_augment()",),
     level=9,
     cls="battlemind",
     usage=DAILY,
@@ -151,9 +152,18 @@ def p11174(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p12426(c: Cast) -> None:
-    """The stance's move-action power is `p12426b`, which is left out: the
-    force damage is owed for a space the shift passes *through*, and a shift
-    is one `step` to its destination with no squares in between."""
+    """The stance's move-action power is `p12426b`, and it is **declared,
+    written and firing** -- `second_card.py`, reached through
+    `requires=active("p12426")` like the other five of its family, so the
+    stance hands it over by standing rather than by `c.grant_row`.
+
+    This used to say it "is left out" because the force damage is owed for
+    a square the shift passes *through* and a shift was one `step` to its
+    destination. That was true when written; `#684` made `movement.shift`
+    walk its path, and the note outlived the fix by long enough to be
+    counted as a dropped clause twice -- here and in that file's header.
+    #1341.
+    """
     if c.strike():
         c.damage(c.w(3), c.con_mod, dtype=DamageType.FORCE)
     else:

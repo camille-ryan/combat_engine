@@ -32,6 +32,7 @@ from . import shift_beside
 
 @power(
     "p11165",
+    dropped=("c.offer_augment()",),
     level=5,
     cls="battlemind",
     usage=DAILY,
@@ -102,6 +103,7 @@ def p11166(c: Cast) -> None:
 
 @power(
     "p12423",
+    dropped=("c.grant_action_row()",),
     level=5,
     cls="battlemind",
     usage=DAILY,
@@ -210,6 +212,7 @@ def p13045(c: Cast) -> None:
 
 @power(
     "p13046",
+    dropped=("c.grant_action_row()",),
     level=5,
     cls="battlemind",
     usage=DAILY,
