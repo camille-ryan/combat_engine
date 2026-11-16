@@ -4772,6 +4772,29 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         return False
 
     _grip_for(world, caster, ref)
+    # **One hand on a blade and the other empty**, for the six bladespells
+    # whose predicate ends in `len(gear.held) == 1`.
+    #
+    # **Beside `_grip_for` and not further down, because it is a pose and
+    # not a provocation.** It changes what the caster is holding and then
+    # lets the passes below do the swinging. Placed after the basic-attack
+    # pairs first time round, where it posed a hand nothing went on to
+    # swing, and all six rows still reported UNUSED -- a correct pose,
+    # applied too late to be seen. #1340.
+    #
+    # **"one-handed melee", not "one-handed".** The looser gate caught three
+    # feats reading *"a critical hit with a one-handed **axe**"*, and the
+    # pose actively harmed them: it picks the first one-handed melee weapon
+    # carried, which is a club, so it threw away the axe `_grip_for` had
+    # just put in the hand. `f2713` went from green to silent on the first
+    # run with the wide gate -- a pose helping six rows by breaking three.
+    # A row that names a weapon or a group has `_grip_for` for that; this
+    # pose is only for the rows whose printed trigger names no weapon at
+    # all.
+    if "one-handed melee" in (
+        (get(ref).trigger or "") if get(ref) is not None else ""
+    ).lower():
+        _bare_sword_hand(world, caster, ref)
 
     from combat_engine.engine import Health
 
@@ -7437,6 +7460,50 @@ def _wanted_weapon(ref: str) -> tuple[str, ...]:
             seen.append(found)
     _WANTED_WEAPON[ref] = tuple(seen)
     return _WANTED_WEAPON[ref]
+
+
+def _bare_sword_hand(world, caster: int, ref: str) -> bool:  # noqa: ANN001
+    """Leave exactly one printed one-handed melee weapon in the caster's hands.
+
+    The six bladespells read *"you hit an enemy with a **one-handed melee
+    basic attack** on your turn"*, and their predicate ends in a
+    `_sword_hand` test whose last clause is `len(gear.held) == 1` -- a
+    one-handed melee weapon **and nothing in the other hand**. The board's
+    wizard is dealt an orb as well as a blade, so that clause was false on
+    every board and all six reported UNUSED.
+
+    Wielding the blade is not enough and that was the first thing tried:
+    `Gear.held` is `weapons` minus `stowed`, so `wield` leaves the orb in
+    the off hand and the count at two. The off hand has to be **stowed**.
+
+    Picked on the printed `one-handed` **property**, not on "not ranged and
+    not two-handed" -- which was the second thing tried and selected the
+    *orb*, an implement being neither. The pose then held the orb, kept the
+    count at one, and still failed, which reads exactly like the row being
+    broken.
+
+    Per row off the row's own printed trigger, never on the shared recipe.
+    The gate admits 9 rows in the whole corpus. #1340.
+    """
+    from combat_engine.engine import Gear
+
+    gear = world.get(caster, Gear)
+    if gear is None:
+        return False
+    blade = next(
+        (w for w in gear.weapons
+         if "one-handed" in (getattr(w, "properties", ()) or ())
+         and not getattr(w, "ranged", None)),
+        None,
+    )
+    if blade is None:
+        return False
+    for other in gear.weapons:
+        if other.ref != blade.ref:
+            gear.stowed.add(other.ref)
+    gear.wield(blade)
+    gear.shield = 0
+    return True
 
 
 def _grip_for(world, caster: int, ref: str) -> None:  # noqa: ANN001

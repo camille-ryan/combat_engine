@@ -7297,6 +7297,44 @@ def the_board_runs_a_charge(out: Result) -> None:
     )
     out.that(reached, "so p14145 is reached, where no earlier pass reached it")
 
+def a_bare_sword_hand_is_posed(out: Result) -> None:
+    """The board dealt an orb as well as a blade, so no hand was ever bare.
+
+    Six bladespells read *"you hit an enemy with a one-handed melee basic
+    attack on your turn"*, and the predicate ends in `len(gear.held) == 1`
+    -- a one-handed melee weapon and **nothing in the other hand**. The
+    board's wizard carries an orb too, so that clause was false on every
+    board.
+
+    The off hand must be **stowed**, not merely un-wielded: `Gear.held` is
+    `weapons` minus `stowed`, so `wield` leaves the orb in place and the
+    count at two. Asserted below, because it is the thing that was wrong
+    the first time. #1340.
+    """
+    import audit
+    from combat_engine.engine import Gear
+
+    world, caster, _ = audit.board("p14286", 1)
+    gear = world.get(caster, Gear)
+    out.that(len(gear.held) > 1,
+             "the board deals the wizard more than one thing to hold")
+
+    out.that(audit._bare_sword_hand(world, caster, "p14286"),
+             "the pose finds a printed one-handed melee weapon to keep")
+    out.that(len(gear.held) == 1,
+             "and leaves exactly one thing held, which is the clause's own test")
+    kept = gear.held[0]
+    out.that("one-handed" in (getattr(kept, "properties", ()) or ()),
+             "and the thing kept is the blade, never the implement")
+
+    # The gate, which is the half that cost a regression: "one-handed
+    # melee" admits the six, where "one-handed" also caught three axe feats
+    # and threw away the axe `_grip_for` had put in the hand.
+    from combat_engine.engine.dsl import REGISTRY
+    axe = (REGISTRY["f2713"].trigger or "").lower()
+    out.that("one-handed" in axe and "one-handed melee" not in axe,
+             "f2713 says one-handed but not one-handed melee, so the gate skips it")
+
 def a_familiar_changing_mode_is_announced(out: Result) -> None:
     """`c.familiar_mode` did the work and said nothing.
 
@@ -91275,6 +91313,9 @@ DRIVERS = {
     "the_board_runs_a_charge": (
         the_board_runs_a_charge,
         "nothing on the audit board had ever run a charge"),
+    "a_bare_sword_hand_is_posed": (
+        a_bare_sword_hand_is_posed,
+        "the board dealt an orb too, so no hand was ever bare"),
     "a_familiar_changing_mode_is_announced": (
         a_familiar_changing_mode_is_announced,
         "c.familiar_mode did the work and announced nothing"),
