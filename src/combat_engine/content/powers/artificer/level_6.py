@@ -20,7 +20,6 @@ from combat_engine.engine import (
     SurgeSpent,
     Target,
     Trigger,
-    TurnStart,
     When,
     ally_within,
     power,
@@ -69,20 +68,25 @@ def p10201(c: Cast) -> None:
     reach=CloseBurst(10),
     target=Target("team", 1, label="bloodied"),
     keywords=[Keyword.ARCANE, Keyword.HEALING],
+    dropped=("c.grant_action('end_effect_for_surge')",),
 )
 def p4142(c: Cast) -> None:
-    """Regeneration is a heal at the start of each of the target's turns --
-    there is no primitive for it. Cashing the effect in for a healing surge
-    is the target's own later minor action and nothing declares one."""
+    """**`c.regeneration` is the primitive, and this row hand-rolled it.**
+    The old note said "there is no primitive for it" and then wrote one out
+    as a `TurnStart` watch -- which worked, and is the shape three rows in
+    three files had each grown separately. The verb takes the amount, the
+    duration, whose it is and a `while_bloodied` gate. #1341.
+
+    Cashing the effect in for a healing surge is the half that really is
+    missing and now carries the marker: it is the target's own later minor
+    action, `c.grant_action` is the facility for a granted action, and
+    `actions.GRANTABLE` -- which is the authority, and raises on a word it
+    does not know -- has no word for ending an effect.
+    """
     ally = c.target
     if ally is None or not c.bloodied(ally) or c.con_mod <= 0:
         return
-
-    def mend(ev: TurnStart) -> None:
-        if ev.actor == ally and not ev.ghost:
-            c.heal(c.con_mod, on=ally)
-
-    c.watch(TurnStart, mend, until=When.ENCOUNTER)
+    c.regeneration(c.con_mod, on=ally, until=When.ENCOUNTER)
 
 
 @power(

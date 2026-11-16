@@ -139,12 +139,20 @@ def p4783(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.HEALING],
     attack=Attack(WIS, vs=FORT),
+    dropped=("c.grant_action('end_effect_for_hp')",),
 )
 def p5393(c: Cast) -> None:
-    """Regeneration has no verb of its own, so it is a watch on the
-    beneficiary's own turn start, gated on being bloodied. The printed
-    escape clause -- end it as a minor action for 10 hit points -- is a
-    minor action nobody can spend, and is dropped."""
+    """**Regeneration has a verb of its own and this row hand-rolled it.**
+    The old note said it had none, then wrote the watch out by hand -- the
+    same shape `p4142` and `p9846` each grew separately.
+    `c.regeneration(while_bloodied=True)` is the printed "regeneration 2
+    while bloodied" exactly. #1341.
+
+    The printed escape clause -- end it as a minor action for 10 hit points
+    -- is the half that really is missing and now carries the marker:
+    `actions.GRANTABLE` is the authority on granted actions and has no word
+    for ending an effect.
+    """
     if c.strike():
         c.damage("1d8", c.wis_mod)
     else:
@@ -152,12 +160,7 @@ def p5393(c: Cast) -> None:
     if not c.first:
         return
     for mate in dict.fromkeys([c.me, *c.in_squares(c.area(), side="ally")]):
-
-        def tick(ev: object, who: int = mate) -> None:
-            if getattr(ev, "actor", None) == who and c.bloodied(on=who):
-                c.heal(2, on=who)
-
-        c.watch(TurnStart, tick, until=When.ENCOUNTER, on=mate)
+        c.regeneration(2, on=mate, while_bloodied=True, until=When.ENCOUNTER)
 
 
 @power(

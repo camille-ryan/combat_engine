@@ -287,9 +287,18 @@ def p9844(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p9846(c: Cast) -> None:
-    """Regeneration has no method of its own; it is a heal at the start of
-    each of the warden's turns, which is what the printed line describes and
-    is also where the choice to hand it over is offered."""
+    """**"Regeneration has no method of its own" was false** --
+    `c.regeneration(while_bloodied=True)` is the verb, and `p4142` and
+    `p5393` have both been moved onto it.
+
+    **This row keeps the hand-rolled watch, deliberately.** Its printed
+    line is not plain regeneration: "at the start of each of your turns you
+    can forgo regaining the 5 hit points to allow a bloodied ally adjacent
+    to you to regain them instead" is a *choice taken at the moment the
+    regeneration would land*, and `c.regeneration` heals whoever holds it.
+    So the watch is where the choice can be offered, which is what the old
+    note's second half said and got right. #1341.
+    """
     if c.strike():
         c.damage(c.w(), c.str_mod)
         c.ongoing(5)
