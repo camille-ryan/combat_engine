@@ -370,11 +370,28 @@ def p13028(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p13029(c: Cast) -> None:
-    """Two clauses are dropped: moving through enemies' spaces during the
-    opening shift, and the extra square on every later shift -- `c.bonus`
-    names speed but nothing names a shift's length."""
+    """**Both clauses the old note dropped are written now, and both verbs
+    existed when it was written.** #1341.
+
+    "You can move through enemies' spaces during this movement" is
+    `c.may_enter(side="enemy")`, whose own docstring opens on that
+    sentence. It is laid for the length of the opening shift and taken
+    off again: the card scopes it to *this movement*, and left standing
+    it would be a permanent permission the row never granted.
+
+    "When you shift, you shift 1 extra square" is
+    `c.extend_every("shift", 1)`. The old note said `c.bonus` names
+    speed and nothing names a shift's length -- the first half is true
+    and the second is not. `extend_move` keys on one row's ref, which is
+    why it does not fit; `extend_every` keys on the *kind*, is read by
+    the movement verb rather than by the row, and its docstring names
+    this exact sentence as one of the eight it was built for.
+    """
     if c.first:
+        through = c.may_enter(side="enemy", until=When.ENCOUNTER)
         c.shift(c.speed_of())
+        if through is not None:
+            c.world.effects.end(through)
     if c.strike(advantage=True):
         c.damage(c.w(2), c.con_mod)
         c.no_provoke(from_=c.target, until=When.ENCOUNTER)
@@ -382,6 +399,7 @@ def p13029(c: Cast) -> None:
         c.half_damage(c.w(2), c.con_mod)
     if c.last:
         c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="power")
+        c.extend_every("shift", 1, until=When.ENCOUNTER)
 
 
 @power(

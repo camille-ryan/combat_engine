@@ -312,6 +312,7 @@ def p2636(c: Cast) -> None:
 
 @power(
     "p2638",
+    dropped=("c.gain_points()",),
     level=9,
     cls="battlemind",
     usage=DAILY,
@@ -322,8 +323,19 @@ def p2636(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p2638(c: Cast) -> None:
-    """The power points regained on a hit and on a miss are dropped: there is
-    no pool to put them back into."""
+    """The regained power points are still dropped, and **the old reason
+    was false**: there is a pool. `PowerPoints` carries `points` and
+    `maximum`, `c.spend_points` takes from it and `pool.refresh()` fills
+    it. #1341.
+
+    What is missing is the giving-back half. `PowerPoints.spend` clamps
+    at `max(0, ...)`, so `c.spend_points(-2)` is not a loophole, and
+    content reaching into the component to add to `points` by hand would
+    be the one row in the tree doing its own bookkeeping on a pool five
+    other readers share.
+
+    So this wants `c.gain_points`, the mirror of the verb already there.
+    """
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.dazed(until=When.EONT)
