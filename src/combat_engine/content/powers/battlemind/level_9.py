@@ -68,15 +68,55 @@ def p11172(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.POLYMORPH],
     attack=Attack(CON, vs=FORT),
+    dropped=("c.resist(onto=)",),
 )
 def p11173(c: Cast) -> None:
-    """"Immune to all damage but psychic" is dropped. `c.resist` takes one
-    damage type at a time, so saying it would mean ten separate save-ends
-    holds on one creature and ten separate saves to shed them."""
-    if c.strike():
-        c.stunned(until=When.SAVE_ENDS)
-    else:
-        c.stunned(until=When.EONT)
+    """**"Immune to all damage but psychic" is written now, as ONE hold.**
+
+    The old note said `c.resist` "takes one damage type at a time, so
+    saying it would mean ten separate save-ends holds on one creature and
+    ten separate saves to shed them". It does not: `c.resist(amount,
+    None)` "shrugs off `amount` of **every** hit", and its `when=` is
+    handed the damage context -- `source`, `power`, `dtype` -- so "but
+    psychic" is a gate on the type rather than nine separate holds.
+
+    `9999` is the tree's immunity idiom, as `monsters/level_10` uses it.
+    `c.resist(immunity=)` is the accurate symbol a warlock row's marker
+    names, and this does not wait for it: the number says the same thing
+    and the gate is what the card actually turns on. #1341.
+
+    **"(save ends both)" is two saves here, not one, and that is the half
+    still owed.** `c.bonus` takes `onto=` to add a modifier to an existing
+    hold and `c.resist` does not, so the stun and the immunity are two
+    effects on the same clock rather than one effect with two clauses. The
+    marker names it. A creature could therefore shed one and keep the
+    other, which is a real divergence from the card and is why it is
+    recorded rather than left to be noticed.
+    """
+    victim = c.target
+    clock = When.SAVE_ENDS if c.strike() else When.EONT
+    c.stunned(until=clock)
+    # **`on=victim` and not the default.** `c.resist` defaults to the
+    # CASTER, like `c.conceal` -- so written without it this row made the
+    # battlemind immune and left the target untouched, which measured as
+    # 10 fire damage landing on a creature the card says cannot be hurt
+    # by it.
+    c.resist(
+        9999, None, on=victim, until=clock,
+        # **The resist context carries the type as a STRING**, where the
+        # damage context carries the enum: `resolve.py` builds
+        # `{**dmg_ctx, "dtype": dtype.value, "dtypes": types}` for this
+        # read. So `is not DamageType.PSYCHIC` is true of every string and
+        # resisted psychic too -- measured, 10 psychic landing for 0 on a
+        # creature the card says it should hurt.
+        #
+        # `dtypes` and not `dtype`, for the reason `themes/batch_e.py`
+        # records: a fire-and-radiant burn is both, and asking the single
+        # key would miss one of them.
+        when=lambda ctx: DamageType.PSYCHIC.value not in (
+            ctx.get("dtypes") or (ctx.get("dtype"),)
+        ),
+    )
 
 
 @power(
