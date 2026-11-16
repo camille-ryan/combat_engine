@@ -6,6 +6,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     DAILY,
     EACH_ENEMY,
     FORT,
@@ -154,9 +155,10 @@ def p11403(c: Cast) -> None:
         if who not in c.world.zones.occupants(z):
             return False
         dealt = get(ctx.get("power") or "")
-        return dealt is not None and dealt.reach.kind in (
-            "close_burst", "close_blast", "area_burst",
-        )
+        # `AREA_OR_CLOSE` and not a hand-written tuple: mine omitted
+        # `"wall"`, which is an area attack by the same printed rule.
+        # `lint.py` caught it -- seventeen files already import this.
+        return dealt is not None and dealt.reach.kind in AREA_OR_CLOSE
 
     for who in [c.me, *c.in_squares(area, side="ally")]:
         c.bonus(AC, 2, on=who, until=When.EONT, kind="power")
