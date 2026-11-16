@@ -2068,6 +2068,26 @@ def can_move(world: World, eid: int) -> bool:
     return can_act(world, eid) and not any(rules(c).cannot_move for c in active(world, eid))
 
 
+def can_charge(world: World, eid: int) -> bool:
+    """"The target cannot charge." It may still walk, run and shift.
+
+    **Narrower than `can_walk`, and `can_walk` is not a substitute.**
+    `c.no_walk` bars the charge inside `movement.walk` -- `#301` widened
+    that test when a charge began passing `kind="charge"` -- but
+    `actions._charges` never consulted it, so a rooted creature is still
+    *offered* charges it cannot make. Measured: under `no_walk` the menu
+    kept four of them while the moves went 156 to 0. And `no_walk` roots
+    the creature, which the cards printing only "cannot charge" do not
+    say -- `p15984` slows its target, and a slowed creature walks. #1345.
+
+    Held as a modifier for `can_walk`'s reason: nothing else about the
+    creature changes. `actions._charges` is the one reader, so the menu
+    stops offering the run-up and a policy cannot pick one either. #1345.
+    """
+    mods = world.get(eid, Mods)
+    return not (mods is not None and mods.items and mods.total("no_charge", {}) > 0)
+
+
 def can_walk(world: World, eid: int) -> bool:
     """"It cannot use move actions to walk or run", but it may still shift.
 

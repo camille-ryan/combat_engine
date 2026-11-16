@@ -7390,6 +7390,78 @@ def a_zone_row_grants_its_printed_move_action(out: Result) -> None:
              " squares on this card)",
              f"the zone stayed at {before}")
 
+def a_barred_charge_leaves_the_walk_alone(out: Result) -> None:
+    """Cards printing "cannot charge" had only `c.no_walk`, which is wrong
+    in two directions.
+
+    `c.no_walk` bars the charge inside `movement.walk` -- "a charge is a
+    walk for this", `#301` -- so a row could be written with it. But it
+    **roots** the creature, which those cards do not say, and it does not
+    take the option off the menu either: `actions._charges` never
+    consulted `can_walk`, so a rooted creature is offered charges the
+    walk then refuses.
+
+    Both halves are asserted, because the first alone would pass for a
+    verb that simply barred everything. #1345.
+    """
+    import audit
+    from combat_engine.engine import Cast, When, actions
+    from combat_engine.engine.components import Budget, Position
+    from combat_engine.engine.movement import place
+
+    def menu(world, who: int) -> tuple[int, int, int]:  # noqa: ANN001
+        """Charges, moves and shifts this creature is offered."""
+        world.turn = who
+        budget = world.get(who, Budget)
+        if budget is not None:
+            budget.refresh()
+        acts = actions.legal(world, world.encounter, who)
+        return (
+            len([a for a in acts if a.kind == "charge"]),
+            len([a for a in acts if a.kind == "move"]),
+            len([a for a in acts if a.kind == "shift"]),
+        )
+
+    def staged() -> tuple:
+        """A foe four squares back, so a run-up exists to be offered."""
+        world, caster, _ = audit.board("p15984", 1)
+        hand = Cast(world=world, me=caster, ref="drivers:no_charge")
+        foe = sorted(hand.enemies())[0]
+        here = world.get(caster, Position).square
+        place(world, foe, (here[0] + 4, here[1]))
+        return world, hand, foe
+
+    world, hand, foe = staged()
+    base = menu(world, foe)
+    out.that(base[0] > 0,
+             "a foe stood four squares back is offered a charge at all",
+             f"charges/moves/shifts {base}")
+    if not base[0]:
+        return
+
+    hand.no_charge(on=foe, until=When.ENCOUNTER)
+    barred = menu(world, foe)
+    out.that(barred[0] == 0,
+             "c.no_charge takes every charge off its menu",
+             f"charges still offered: {barred[0]}")
+    out.that(barred[1] == base[1] and barred[2] == base[2],
+             "and leaves the moves and the shifts untouched -- the half that"
+             " makes it narrower than c.no_walk",
+             f"moves {base[1]}->{barred[1]}, shifts {base[2]}->{barred[2]}")
+
+    # The near miss, measured rather than described.
+    world, hand, foe = staged()
+    was = menu(world, foe)
+    hand.no_walk(on=foe, until=When.ENCOUNTER)
+    rooted = menu(world, foe)
+    out.that(rooted[1] == 0,
+             "c.no_walk takes the moves instead, which is its own job")
+    out.that(rooted[0] == was[0],
+             "and leaves the charges ON the menu, which is why it is not a"
+             " substitute: the option is offered and the walk inside it"
+             " then refuses",
+             f"charges {was[0]}->{rooted[0]}")
+
 def a_familiar_changing_mode_is_announced(out: Result) -> None:
     """`c.familiar_mode` did the work and said nothing.
 
@@ -91395,6 +91467,9 @@ DRIVERS = {
     "a_zone_row_grants_its_printed_move_action": (
         a_zone_row_grants_its_printed_move_action,
         "eight zone rows dropped their printed move action"),
+    "a_barred_charge_leaves_the_walk_alone": (
+        a_barred_charge_leaves_the_walk_alone,
+        "cards printing 'cannot charge' had only c.no_walk, which roots"),
     "a_familiar_changing_mode_is_announced": (
         a_familiar_changing_mode_is_announced,
         "c.familiar_mode did the work and announced nothing"),
@@ -91882,6 +91957,7 @@ UNSCORED_DRAW = frozenset(
         # verdict depends on registration order is wrong even while it is
         # green.
         "a_bare_sword_hand_is_posed",
+        "a_barred_charge_leaves_the_walk_alone",
         "a_zone_row_grants_its_printed_move_action",
         "a_choose_one_fork_does_not_forbid_itself",
         "the_board_keeps_the_row_it_is_measuring",

@@ -1640,9 +1640,15 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
     target are the same decision, and the shortest legal one is what anybody
     would take.
     """
-    from .query import enemies, speed, squares
+    from .query import can_charge, enemies, speed, squares
 
     if is_(world, actor, Condition.PRONE):
+        return []
+    # **"The target cannot charge" and nothing else.** `c.no_walk` already
+    # bars this, by way of `#301` widening its test to `kind="charge"` --
+    # but it roots the creature as well, and the cards printing only this
+    # half leave it walking. `query.can_charge` is the narrow read. #1345.
+    if not can_charge(world, actor):
         return []
     if not encounter.can_spend(actor, ActionType.STANDARD):
         return []

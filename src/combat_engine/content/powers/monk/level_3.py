@@ -190,28 +190,24 @@ def p13223(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
-    dropped=("c.no_charge()",),
 )
 def p15984(c: Cast) -> None:
-    """**"Cannot charge" is a real gap and now carries the marker**, and the
-    near miss is worth naming because it would pass a careless check.
+    """**"Cannot charge" is written now**, and the near miss is worth
+    naming because it would pass a careless check.
 
-    `c.no_walk` **does** bar charging -- its own docstring says so: "a
-    charge is a walk for this... when the charge started passing
-    `kind="charge"` (#301) this test had to widen or the bar would have
-    been skipped". But it also bars walking, which this card does not say:
-    the target is *slowed*, not rooted. Using it would be strictly
-    stronger than print.
+    `c.no_walk` bars the charge inside `movement.walk` -- "a charge is a
+    walk for this", `#301` -- but it roots the creature, which this card
+    does not say: the target is *slowed*, not immobile. And it does not
+    even take the option off the menu, which `#1345` measured: under
+    `no_walk` four charges stayed on offer while the moves went to zero.
 
-    Nothing narrower exists. `actions._charges` gates on PRONE, on the
-    action budget and on holding a basic attack, and reads no
-    charge-specific bar; there is no `c.no_charge` beside the fifteen
-    other `c.no_*` prohibitions. So the slow is written and the marker
-    names the missing one. #1341.
+    `c.no_charge` is the narrow verb, gated in `actions._charges` so the
+    option disappears rather than being offered and then refused. #1345.
     """
     if c.strike():
         c.damage("2d8", c.dex_mod)
         c.slowed(until=When.EONT)
+        c.no_charge(on=c.target, until=When.EONT)
     if not c.last:
         return
     c.shift(3)

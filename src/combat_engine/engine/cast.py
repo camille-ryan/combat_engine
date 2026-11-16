@@ -16676,6 +16676,32 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         return self.bonus("run_waived", 1, on=on, until=until,
                           kind="untyped", when=gate)
 
+    def no_charge(
+        self, *, until: When = When.EONT, on: int | None = None
+    ) -> Effect | None:
+        """"The target cannot charge." It may still walk, run and shift.
+
+        **Narrower than `c.no_walk` and not simply a subset of it.**
+        `c.no_walk` is the near miss and is wrong in **two**
+        directions, measured with the foe stood four squares back so a
+        run-up exists:
+
+            baseline      4 charges, 156 moves, 7 shifts
+            c.no_charge   4 -> 0 charges, moves and shifts untouched
+            c.no_walk     charges stay 4, moves 156 -> 0
+
+        Too strong, because it roots the creature and these cards leave it
+        walking. And too weak where it counts: `actions._charges` never
+        consulted `can_walk`, so a creature under `no_walk` is still
+        offered charges that the walk inside them then refuses.
+
+        A modifier rather than a condition, for `c.no_walk`'s reason:
+        nothing else about the creature changes. `query.can_charge` reads
+        it and `actions._charges` is the one gate, so the menu stops
+        offering the run-up and no policy can pick one. #1345.
+        """
+        return self.bonus("no_charge", 1, on=on, until=until, kind="untyped")
+
     def no_walk(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         """"It cannot use move actions to walk or run." It may still shift.
 
