@@ -15,6 +15,7 @@ written as one more swing, since `c.reroll_attack` reads the roll off
 
 from __future__ import annotations
 
+from combat_engine.content.features.warlock import FELL
 from combat_engine.content.powers.warlock.shared import augmenting
 from combat_engine.content.powers.warlock.shared import rally as _rally
 from combat_engine.content.powers.warlock.shared import riposte as _riposte
@@ -247,8 +248,25 @@ def _spite(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p12891(c: Cast) -> None:
-    """The sorcerer-king rider would drop the word "melee"; no leg to ask."""
+    """**The sorcerer-king rider is written now** -- the leg was always
+    there, `BUILDS` carries eight. #1346.
+
+    It is unusual among this class's riders in **removing** a condition
+    rather than adding an effect: the printed clause is "your ally's
+    attack need not be a melee attack", so the spend widens which blows
+    pay rather than paying more for them. That makes it a flag on the
+    one test inside the watcher, not a second branch.
+
+    Its resource is the pact boon, so it is `c.spend_charge(FELL)` and it
+    is settled **above** the attack roll, which the boon's card requires:
+    the decision comes before any roll of the power.
+    """
     victim = c.target
+    anywhere = (
+        c.build("sorcerer-king")
+        and c.may("spend the boon")
+        and c.spend_charge(FELL)
+    )
     if not c.strike() or victim is None:
         return
     c.damage("1d10", c.cha_mod, dtype=DamageType.PSYCHIC)
@@ -259,7 +277,7 @@ def p12891(c: Cast) -> None:
         if paid[0] or ev.target != victim or ev.attacker not in friends:
             return
         p = get(ev.power)
-        if p is None or p.reach.kind != "melee":
+        if p is None or (not anywhere and p.reach.kind != "melee"):
             return
         paid[0] = True
         c.temp_hp(c.int_mod, on=ev.attacker)
@@ -270,6 +288,7 @@ def p12891(c: Cast) -> None:
 @power(
     "p13905",
     level=3,
+    dropped=("c.grant_minor_row()",),
     cls="warlock",
     usage=ENCOUNTER,
     action=STANDARD,
@@ -279,7 +298,24 @@ def p12891(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p13905(c: Cast) -> None:
-    # The gloom pact rider has no leg to ask for.
+    """**Marked rather than written, and the old reason was wrong.** "No
+    leg" was false -- `c.build("gloom")` answers. #1346.
+
+    The real obstacle is the clause's shape. It is a **repeatable
+    granted action**: "until the end of your turn, you can use a minor
+    action to deal necrotic damage equal to your Dexterity modifier to
+    one creature adjacent to the target", so it has to appear in the
+    action menu, be takeable more than once, and carry a target choice
+    each time.
+
+    `c.grant_action` is the near miss and will not do it: it lets a
+    creature do an **ordinary** thing for a different action -- its own
+    docstring is "allies within 3 squares can stand up as a minor" --
+    and it raises on a word no reader looks for, which is the right
+    answer here rather than a loophole. What this wants is a granted
+    *row*, which is `c.grant_row` plus a row to grant, and the row does
+    not exist.
+    """
     if c.strike():
         c.damage("2d8", c.cha_mod, dtype=DamageType.NECROTIC)
         c.slowed()
@@ -374,7 +410,18 @@ def p16351(c: Cast) -> None:
 def p1886(c: Cast) -> None:
     """The damage changes type to whatever the target is weakest to, read off
     its own `Defences`. With more than one the choice is offered; with none
-    it stays psychic, as printed. The dark pact rider has no leg."""
+    it stays psychic, as printed.
+
+    **The dark rider is written now** -- `c.build("dark")`, and the leg
+    was always there. #1346. "If the target takes damage of a type it is
+    vulnerable to" is already decided by the lines above: `soft` is
+    non-empty exactly when this row found a weakness and struck it, so
+    the condition is read off that rather than asked again of the
+    `Defences` -- which would answer the same and could drift.
+
+    The extra is **psychic**, which the card names outright, and not the
+    weakness type the blow above was recoloured to.
+    """
     victim = c.target
     if not c.strike() or victim is None:
         return
@@ -384,6 +431,8 @@ def p1886(c: Cast) -> None:
     if soft:
         dtype = c.choose(soft, f"{c.ref}: which weakness to strike") or soft[0]
     c.damage("2d6", c.cha_mod, dtype=dtype)
+    if soft and c.build("dark"):
+        c.flat(max(0, c.int_mod), dtype=DamageType.PSYCHIC, on=victim)
 
 
 @power(
@@ -522,11 +571,34 @@ def p4070(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p4281(c: Cast) -> None:
-    # The star pact rider -- eating into the target's cold resistance -- has
-    # no leg to ask for, and nothing lowers a resistance in any case.
-    if c.strike():
-        c.damage("2d12", c.cha_mod, dtype=DamageType.COLD)
-        c.slowed()
+    """**The star rider is written now, and BOTH halves of the old note
+    were wrong.** "No leg" was false -- `c.build("star")` answers. So was
+    "nothing lowers a resistance": `c.resist` takes a **negative**
+    amount, and its own docstring names this exact sentence as the case
+    -- *"`c.resist(-n, ..., on=foe)` is the other sentence, 'the target
+    loses resist 10 to fire', and it strips the resistance for everybody
+    rather than for you"*. #1346.
+
+    So it is `on=` the target and not the caster, which is the one thing
+    about this verb that is easy to get backwards -- the caster-facing
+    sentence is `c.ignore_resistance`, and written that way the warlock
+    would have gained something and the target lost nothing.
+
+    "(save ends)" is `When.SAVE_ENDS`, and the amount is the caster's
+    level as printed.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("2d12", c.cha_mod, dtype=DamageType.COLD)
+    c.slowed()
+    if c.build("star") and victim is not None:
+        c.resist(
+            -c.level,
+            DamageType.COLD,
+            on=victim,
+            until=When.SAVE_ENDS,
+        )
 
 
 @power(
@@ -599,10 +671,38 @@ def p5911(c: Cast) -> None:
     attack=Attack(CON, vs=REF),
 )
 def p5912(c: Cast) -> None:
-    """The rider is printed as all four types at once and `c.damage` carries
-    one, so it is dealt as cold. The vestige pact rider that splashes it onto
-    the target's neighbours has no leg to ask for."""
-    if c.strike():
-        c.damage("2d8", c.con_mod)
-        if c.cursed():
-            c.flat(c.int_mod, dtype=DamageType.COLD)
+    """**Two corrections, both #1346.**
+
+    The rider is printed as all four types at once, and `c.flat` takes
+    **`dtypes`** for exactly that -- "one blow of several types". The old
+    note said `c.damage` carried one and dealt it as cold, which cost the
+    clause three of its four types against anything resisting cold.
+
+    And the vestige rider is written: the leg was always there. "The
+    attack **also** deals the extra damage to each creature adjacent to
+    the target" is the same packet repeated outward, so it is the same
+    `dtypes` call aimed at the neighbours -- and it rides the same
+    `c.cursed()` gate, because the printed sentence is a clause of that
+    one and not a second condition.
+
+    The neighbours exclude the target, which `c.within(1, of=...)`
+    returns at distance 0.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage("2d8", c.con_mod)
+    if not c.cursed():
+        return
+    burn = (
+        DamageType.COLD,
+        DamageType.FIRE,
+        DamageType.LIGHTNING,
+        DamageType.THUNDER,
+    )
+    extra = max(0, c.int_mod)
+    c.flat(extra, dtypes=burn)
+    if c.build("vestige") and victim is not None:
+        for near in c.within(1, of=victim):
+            if near != victim:
+                c.flat(extra, dtypes=burn, on=near)
