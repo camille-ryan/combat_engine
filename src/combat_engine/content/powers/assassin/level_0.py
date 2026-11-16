@@ -46,6 +46,7 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     Effect,
+    Escaped,
     Event,
     Gear,
     Hit,
@@ -459,18 +460,41 @@ def p13798(c: Cast) -> None:
     attack=Attack(DEX, vs=AC),
     requires=_light_blade,
     requires_text="needs a hand free and a light blade",
+    dropped=("c.spend_row(on_miss=)",),
 )
 def p13806(c: Cast) -> None:
-    """The escape penalty is dropped -- escaping a grab is rolled inside the
-    engine and nothing can put a number on that one attempt. So is the
-    clause letting a missed swing still spend the strike, which is a rule
-    about another row's usage."""
+    """**The escape penalty is written now.** The old note said "escaping a
+    grab is rolled inside the engine and nothing can put a number on that
+    one attempt", and both halves of that are answered: `"escape"` is one
+    of `c.penalty`'s words with fourteen callers and `escape.attempt`
+    reads it. #1341.
+
+    **"First" is ended by hand, because `once=True` refuses here and the
+    refusal is right.** `c.bonus` raises for `'escape'` with the reason
+    spelled out: the key has no spend moment, so `once=` would be consumed
+    by the next *attack* roll instead -- "which is the bug this refusal
+    replaces". So the penalty is laid plain and dropped on the first
+    `Escaped`, which the engine emits for a failed attempt as well as a
+    successful one, gated on `holder` being this grabber.
+
+    Still dropped, and this half the old note had right: the clause letting
+    a missed swing spend `p13799` is a rule about another row's usage
+    limit rather than an effect, so it carries the marker.
+    """
     victim = c.target
     if victim is None or not c.strike():
         return
     c.damage(c.w())
     c.grab(on=victim)
     c.grants_advantage(until=When.EONT, on=victim, to="team")
+    first = c.penalty("escape", 2, on=victim, until=When.EONT)
+    if first is not None:
+
+        def spent(ev: Escaped) -> None:
+            if ev.actor == victim and ev.holder == c.me:
+                c.world.effects.end(first, "the first escape attempt is past")
+
+        first.subs.append(c.world.bus.on(Escaped, spent))
     hold = c.effect(f"{c.ref} hold", until=When.SUSTAIN, on=victim, sustain=MINOR)
     c.on_sustain(hold, lambda: c.grab(on=victim))
 

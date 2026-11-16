@@ -83,26 +83,44 @@ def p10283(c: Cast) -> None:
 )
 def p10284(c: Cast) -> None:
     """"You and one ally in the burst" is one printed target plus the caster, so
-    the header names the ally. The last sentence -- regaining the use of the
-    power if both swings miss -- is dropped; nothing can refund a daily."""
+    the header names the ally.
+
+    **"If both basic attacks miss, you regain the use of this power" is
+    written now.** The old note said "nothing can refund a daily", and
+    `c.restore_use` is exactly that -- *"you regain the use of your second
+    wind"* is its own docstring's example. #1341.
+
+    Counted off the `Hit` watch already here rather than by a second
+    subscription: `reward` fires for every hit by either swinger, so a
+    flag set there says whether anything landed. Both grants resolve inside
+    this body, so the count is final by the time it is read.
+    """
     friend = c.target
     if friend is None:
         return
     c.swap(friend)
 
+    landed: list[int] = []
+
     def reward(ev: Hit) -> None:
         if ev.attacker not in (c.me, friend):
             return
+        landed.append(ev.attacker)
         who = _pick(c, [c.me, *c.allies()], "who is mended")
         if who is not None:
             c.surge(on=who)
             c.save(on=who)
 
     c.watch(Hit, reward, until=When.EOT)
+    swung = 0
     for swinger in (c.me, friend):
         foe = _pick(c, c.within(1, of=swinger, side="enemy"), "whom to strike")
         if foe is not None:
+            swung += 1
             c.grant_attack(swinger, on=foe, attack_bonus=2)
+    # "If both basic attacks miss" -- so only when both were actually made.
+    if swung == 2 and not landed:
+        c.restore_use(c.ref)
 
 
 @power(
