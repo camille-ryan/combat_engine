@@ -418,7 +418,15 @@ def p4170(c: Cast) -> None:
     if c.build("vestige"):
         running = getattr(c, "vestige_temp", 0) + 3
         c.vestige_temp = running
-        c.temp_hp(running)
+        # **`on=c.me`, and the default was wrong here.** The card reads
+        # "**You** gain 3 temporary hit points for each target you hit",
+        # and `c.temp_hp` aims at the **target** when nothing says
+        # otherwise -- so the first draft handed the points to each enemy
+        # the blast caught. The amounts were right, which is what made it
+        # look verified: 3, 6, 9, 12 went out in order, to the wrong
+        # creature every time. `drivers.healing_waste` is what caught it,
+        # by counting this row into the "reaches no friend" bucket.
+        c.temp_hp(running, on=c.me)
 
 
 @power(

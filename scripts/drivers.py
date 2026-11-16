@@ -49037,22 +49037,31 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # reader gets the wrong figure.
     reach = SC._heal_reach()
     out.that(reach["reaches_an_ally"] == 122
-             and reach["holdable"] == 600,
-             "122 of the 600 character-holdable healing rows can reach an"
+             and reach["holdable"] == 601,
+             "122 of the 601 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
-             " refusal counter is about, and it has moved four times:"
+             " refusal counter is about, and it has moved five times:"
              " `i545p2` (#1139) and `p3847` (#1153) by one each against"
-             " their printed cards, six at once with `#1163`'s wave, and"
+             " their printed cards, six at once with `#1163`'s wave,"
              " `f1848` with `i2273p1` when two waves wrote them a heal,"
-             " and `f2864` when `#1233` unblocked it",
+             " `f2864` when `#1233` unblocked it, and `p4170` when #1346"
+             " wrote its vestige rider -- 'you gain 3 temporary hit points"
+             " for each target you hit' is a heal the row did not have"
+             " before, so the POPULATION grew while `reaches_an_ally`"
+             " stood still",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
     out.that(reach["self_only"] == 338
-             and reach["cannot_reach_an_ally"] == 140
+             and reach["cannot_reach_an_ally"] == 141
              and reach["reaches_an_ally"] + reach["self_only"]
              + reach["cannot_reach_an_ally"] == reach["holdable"],
-             "and the three buckets partition it -- 338 self-only, 140"
+             "and the three buckets partition it -- 338 self-only, 141"
              " that reach no friend, 122 that do. They have to add up or"
-             " the census is reading something twice",
+             " the census is reading something twice."
+             " **`p4170` is in the 141 and its heal reaches the caster**,"
+             " which is not a contradiction: this census reads the"
+             " declared TARGET LINE, and that row's is `EACH_OTHER`."
+             " The bucket is a proxy, which the assertion below says"
+             " outright for the other 122 in it",
              f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
              f" + {reach['reaches_an_ally']}")
     out.that(reach["undeclared"] == 122,
