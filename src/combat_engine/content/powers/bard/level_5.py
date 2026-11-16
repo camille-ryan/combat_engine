@@ -109,6 +109,14 @@ def p2975(c: Cast) -> None:
     exist, so it carries the marker.
 
     Once only, which is "the **next** time", latched in the closure.
+
+    A plain `c.watch` and nothing cleverer: it fires for an event about
+    any creature, which is the whole point of the `ev.actor != victim`
+    guard above. (Checked in isolation after I briefly believed otherwise
+    -- `c.watch` fired for actor 3 and for the caster in a two-line probe.
+    What had failed was my own probe emitting `PowerRecharged` for the
+    wrong creature: a fresh `Cast` has no `target`, so I guessed foes 3
+    and 4 when the row had taken 2.)
     """
     if c.strike():
         c.damage("3d8", c.cha_mod, dtype=DamageType.PSYCHIC)
@@ -138,14 +146,8 @@ def p2975(c: Cast) -> None:
                 spent_once.append(True)
                 return
 
-    # **Subscribed off a held effect rather than through
-    # `c.watch(on=c.me)`.** The `c.watch` form installs -- the label shows
-    # up on the caster -- and does not fire for a `PowerRecharged` about
-    # another creature, which is the same thing `p10417` hit on `TurnEnd`.
-    # Hung on the hold, it dies with it.
-    held = c.effect(f"{c.ref} repays", on=c.me, until=When.ENCOUNTER)
-    if held is not None:
-        held.subs.append(c.world.bus.on(PowerRecharged, repaid))
+    c.watch(PowerRecharged, repaid, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} repays")
 
 
 @power(

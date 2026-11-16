@@ -222,6 +222,13 @@ def p10417(c: Cast) -> None:
     the familiar needs a `world.zones.refresh()` -- without it the pet
     counted as inside from the far corner of the board and the negative
     control passed for the wrong reason.
+
+    **A plain `c.watch` is correct here and an earlier version of this
+    note said it was not.** It claimed `c.watch(on=c.me)` "did not fire
+    for a staged `TurnEnd`" and hung the subscription off the zone's
+    effect instead. That was wrong: `c.watch` fires for an event about any
+    creature -- checked in a two-line probe -- and what had failed was the
+    staging above. `on=` only says who holds the effect.
     """
     victim = c.target
     if not c.strike() or victim is None:
@@ -249,14 +256,7 @@ def p10417(c: Cast) -> None:
         if pet is not None and pet in here and ev.actor in here:
             c.prone(on=ev.actor)
 
-    # **Subscribed and hung off the zone's own effect, the way `_teeth`
-    # above does it, rather than through `c.watch`.** A `c.watch` with
-    # `on=c.me` did not fire for a staged `TurnEnd` at all, while the
-    # identical predicate inside `_teeth` did -- so the sub goes where the
-    # working one goes and dies with the ring.
-    held = c.world.get(ring, Zone)
-    if held is not None and held.effect is not None:
-        held.effect.subs.append(c.world.bus.on(TurnEnd, tripped))
+    c.watch(TurnEnd, tripped, until=When.EONT, on=c.me, label=f"{c.ref} trips")
 
 
 @power(
