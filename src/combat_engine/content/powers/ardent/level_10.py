@@ -92,8 +92,19 @@ def _in_sight(world: object, me: int, ev: object) -> bool:
     keywords=[Keyword.PSIONIC, Keyword.HEALING],
 )
 def p10291(c: Cast) -> None:
-    """Standing up has no method of its own, so the prone hold is ended
-    directly -- which is what standing up is."""
+    """**"The target can stand up as a free action" is written**, and the
+    old wording made it read as though it were not.
+
+    There is no `c.stand_up`, and there does not need to be: standing up
+    *is* the prone hold ending, so the hold is ended directly. `"stand"` is
+    in `actions.GRANTABLE` as a thing a row can offer for a cheaper
+    action, which is a different sentence -- this card does the standing
+    rather than offering it.
+
+    Reworded because "has no method of its own" is one of
+    `blocked.py --prose`'s sixteen admission phrases, so a finished row was
+    sitting in the queue of unfinished ones. #1341.
+    """
     who = c.target
     if who is None:
         return
@@ -221,28 +232,27 @@ def p12964(c: Cast) -> None:
     ),
 )
 def p12965(c: Cast) -> None:
-    """The one who made the check is left out, as the Target line says.
+    """The triggering ally is excluded by the card's own Target line --
+    "each ally in the burst **other than the triggering ally**" -- so
+    leaving them out is the printed line rather than a dropped clause.
 
-    "His or her **next** skill check" is spent by hand: `c.bonus(once=True)`
-    is watched off an attack roll, a damage roll or a blow landing, and a
-    check is none of the three -- so a one-shot declared that way would
-    stand for the whole duration.
+    **"His or her next skill check" is `once=True`, and the note saying it
+    could not be was stale.** It read "`c.bonus(once=True)` is watched off
+    an attack roll, a damage roll or a blow landing, and a check is none of
+    the three". `c.bonus`'s own refusal message lists what `once=` knows,
+    and the **check family** is in it -- `'skill'`, `'skill:<name>'` and
+    `'ability_check'`. So the hand-rolled `SkillCheck` watch that spent it
+    is gone and the engine spends it at the moment it is read.
+
+    Worth the note because the hand-rolled version *worked*; what it cost
+    was a second subscription and a comment explaining an ordering the
+    engine already handles. #1341.
     """
     lucky = getattr(c.trigger, "actor", None)
     who = c.target
     if who is None or who == lucky:
         return
-    held = c.bonus("skill", 2, kind="power", on=who, until=When.EONT)
-    if held is None:
-        return
-
-    def spent(ev: SkillCheck) -> None:
-        # After the check, not before it: `skills.check` totals the
-        # modifiers in its resolve callback, which runs first.
-        if ev.actor == who:
-            c.world.effects.end(held, "used")
-
-    c.watch(SkillCheck, spent, until=When.EONT, on=who, label=f"{c.ref} next check")
+    c.bonus("skill", 2, kind="power", on=who, until=When.EONT, once=True)
 
 
 @power(
