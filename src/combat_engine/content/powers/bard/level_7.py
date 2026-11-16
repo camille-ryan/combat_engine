@@ -201,11 +201,22 @@ def p14467(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
     trigger="an ally within 10 squares of you ends its turn without having attacked",
     on=Trigger(TurnEnd, _idle_ally, "an ally ends its turn without having attacked"),
+    dropped=("c.grant_attack(ignoring=)",),
 )
 def p14468(c: Cast) -> None:
-    """"Even if dominated or stunned" is dropped: `c.grant_attack` and
-    `c.charge_at` both go through the usual act gate and there is no way past
-    it."""
+    """**The claim is true and now carries the marker.**
+
+    Checked rather than assumed, because the engine *does* have the hook
+    one layer down: `query.can_act` and `Encounter.can_spend` both take
+    `ignoring: Condition | None`, which is exactly "even if dominated or
+    stunned". What is missing is a way to pass it from a row --
+    `c.grant_attack` takes `on`, `ref`, the two bonuses, `trigger` and
+    `reentrant`, and `c.charge_at` takes `victim`, `ref` and `who`.
+    Neither forwards an `ignoring`.
+
+    So the gate is reachable and the door is not, which is a narrower gap
+    than "there is no way past it" and the marker says which. #1341.
+    """
     mate = getattr(c.trigger, "actor", None)
     if mate is None:
         return

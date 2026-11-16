@@ -32,6 +32,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.components import Conjuration
 
 from . import PSIONIC
 
@@ -183,8 +184,65 @@ def p2640(c: Cast) -> None:
     """The +4 is written flat rather than gated on "an attack that doesn't
     include both you and the duplicate": the defence context names one
     target and not a power's whole target list, so the gate would be silently
-    false. That makes this row stronger than printed. The duplicate's own
-    destruction is dropped -- a conjuration has no hit points to lose."""
-    c.conjure(label=c.ref, until=When.ENCOUNTER, sustain=None, speed=5)
+    false. That makes this row stronger than printed.
+
+    **"The duplicate disappears if a melee or a ranged attack deals any
+    damage to it" is written now.** The old note said "a conjuration has
+    no hit points to lose", which is true and is not what the clause
+    needs: it turns on *damage being dealt*, not on hit points running
+    out. A `DamageApplied` watch aimed at the duplicate ends the
+    conjuration's own effect, which is how `seeker`'s `banish` takes one
+    off the board. #1341.
+
+    "A melee or a ranged attack" rather than any damage at all, read off
+    the power's reach, so an area burst that catches the duplicate leaves
+    it standing -- which is the printed distinction and the reason this is
+    not simply "any damage".
+
+    **Verified at the handler rather than through the board, because the
+    board cannot aim an attack at a conjuration.** A foe's basic, used
+    with `targets=[duplicate]`, resolves to nothing at all -- no
+    `AttackDeclared`, no `Hit` -- for the reason `p4381`'s docstring
+    gives about companions: a conjuration "is nobody's enemy or ally in
+    the targeting sense". So the four arms were driven by emitting the
+    `DamageApplied` the clause watches:
+
+        detail "mba"      pops it
+        detail "rba"      pops it
+        detail "p3034"    leaves it standing   (an area burst)
+        no detail         leaves it standing
+
+    All four, because a handler that pops on everything is
+    indistinguishable from a correct one from the melee side.
+    """
+    double = c.conjure(label=c.ref, until=When.ENCOUNTER, sustain=None, speed=5)
     for defence in (AC, FORT, REF, WILL):
         c.bonus(defence, 4, on=c.me, until=When.ENCOUNTER, kind="power")
+    if not double:
+        return
+
+    def popped(ev: DamageApplied) -> None:
+        if ev.target != double or ev.amount <= 0:
+            return
+        # **`ev.detail`, because `DamageApplied` has no `power` field** --
+        # its fields are source, target, amount, dtype, absorbed, hp,
+        # detail, dtypes, resisted. `detail` carries the ref, or `"mba"` /
+        # `"rba"` for a basic attack, which is where the reach comes from.
+        hit_by = get(ev.detail) if ev.detail else None
+        kind = (
+            hit_by.reach.kind if hit_by is not None
+            else {"mba": "melee", "rba": "ranged"}.get(ev.detail or "", "")
+        )
+        if kind not in ("melee", "ranged"):
+            return
+        conj = c.world.get(double, Conjuration)
+        held = (
+            c.world.effects.live.get(conj.effect)
+            if conj is not None and conj.effect is not None
+            else None
+        )
+        if held is not None:
+            c.world.effects.end(held, "a blow landed on the duplicate")
+
+    c.watch(DamageApplied, popped, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} pops")
