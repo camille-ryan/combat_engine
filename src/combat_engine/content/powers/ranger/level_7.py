@@ -40,6 +40,7 @@ from combat_engine.engine import (
     Melee,
     MeleeOrRanged,
     Ranged,
+    Target,
     Trigger,
     UpTo,
     When,
@@ -49,8 +50,10 @@ from combat_engine.engine import (
     by_opportunity,
     power,
 )
+from combat_engine.engine.components import Position
 from combat_engine.engine.events import AttackDeclared
 from combat_engine.engine.query import defence as defence_of
+from combat_engine.engine.query import distance_between
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 MARTIAL_RANGED = [Keyword.MARTIAL, Keyword.WEAPON, Keyword.RANGED]
@@ -208,6 +211,12 @@ def p10625(c: Cast) -> None:
         c.damage(c.w(2, hand="main"), c.str_mod)
 
 
+#: The printed Target line, which the beast's position decides.
+_BESIDE_THE_BEAST = Target(
+    "enemy", 1, label="One creature adjacent to your beast companion"
+)
+
+
 @power(
     "p10626",
     level=7,
@@ -215,7 +224,7 @@ def p10625(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Ranged(5, by_weapon=True),
-    target=ONE_CREATURE,
+    target=_BESIDE_THE_BEAST,
     keywords=[*MARTIAL_RANGED, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
     thrown_by_hand=True,
@@ -231,16 +240,43 @@ def p10626(c: Cast) -> None:
     `Melee(n, from_="companion")`. `beast_sb.py` is a whole file of rows
     using them. #1341.
 
-    So both clauses here are **writable and not written**: the Target is
-    `Melee(..., from_="companion")`'s question and the secondary is
-    `c.strike(from_=pet)` with `Attack(..., by="companion")`. What they
-    want is the care a ranger-primary/beast-secondary row needs -- the
-    secondary rolls the BEAST's attack bonus, not the ranger's, and
-    getting that wrong is a row that fires and audits green on the wrong
-    numbers. Sized rather than guessed at.
+    **Both clauses are written now.**
+
+    The printed Target -- "one creature adjacent to your beast
+    companion" -- is declared in the target line rather than gated in
+    the body, which is the reading `level_1_b`'s `_QUARRY` and
+    `level_1.py`'s cursed targets both use: a restriction the player
+    aims by, not a refusal the row makes of itself.
+
+    The secondary goes through `c.attack` longhand and not `c.strike`,
+    because `c.strike` would roll the bonus the header declared -- the
+    ranger's, with a thrown weapon. The card says "Beast's attack bonus
+    vs. AC", so it is built from `Attack(STR, vs=AC, by="companion")`
+    and aimed `from_=pet` so the square is the beast's too.
+
+    "**Pulls the target adjacent to it**" is `c.pull(anchor=)` -- the
+    beast's square after its shift, read after the shift rather than
+    before, because the square it pulls toward is the one it ended in.
     """
-    if c.strike():
-        c.damage(c.w(2), c.str_mod)
+    victim = c.target
+    if not c.strike() or victim is None:
+        return
+    c.damage(c.w(2), c.str_mod)
+    pet = c.companion()
+    if pet is None:
+        return
+    beast = Attack(STR, vs=AC, by="companion")
+    bonus = beast.bonus_for(c.world, c.me, c.ref, c.branch)
+    if not c.attack(bonus, AC, on=victim, from_=pet).hit:
+        return
+    c.shift(max(0, c.wis_mod), who=pet)
+    landed = c.world.get(pet, Position)
+    if landed is not None:
+        c.pull(
+            distance_between(c.world, pet, victim),
+            on=victim,
+            anchor=landed.square,
+        )
 
 
 @power(

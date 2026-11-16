@@ -133,6 +133,7 @@ def _melee_row(ref: str) -> bool:
 
 @power(
     "p10156",
+    dropped=("c.opportunity_since()",),
     level=5,
     cls="ranger",
     usage=DAILY,
@@ -158,10 +159,23 @@ def p10156(c: Cast) -> None:
     `Melee(n, from_="companion")`. `beast_sb.py` is a whole file of rows
     using them. #1341.
 
-    So the Effect line -- the companion's charge -- is writable with
-    `c.charge_at(..., who=pet)`, including the Wisdom bonus it gets when
-    the enemy took an opportunity attack at the ranger this turn.
-    Unwritten rather than unwritable.
+    **The companion's charge is written now**, through
+    `c.charge_at(..., who=pet)` -- which sets the `charge` flag on the
+    attack events and in both modifier contexts, so every charge rider
+    reads it, rather than being a walk and a swing dressed up.
+
+    "An enemy" is a choice and not the primary target: the card charges
+    the beast at somebody, and the ranger has just pushed the primary
+    out of its square. So the pool excludes the primary and the beast is
+    aimed by `c.choose`.
+
+    **The Wisdom rider is NOT written and is the one thing here that
+    cannot be said.** It asks whether that enemy "attacked you with an
+    opportunity attack during your turn", and nothing records an
+    opportunity attack against a creature. `c.hurt_me_since` is the near
+    miss and is a different question -- it answers *damage* since the end
+    of your last turn, from any attack of any kind, so using it would pay
+    the bonus for a creature that merely hit the ranger normally.
     """
     victim = c.target
     if victim is None:
@@ -174,6 +188,13 @@ def p10156(c: Cast) -> None:
     vacated = c.there
     c.push(1)
     c.shift(1, to=vacated)
+    pet = c.companion()
+    if pet is None:
+        return
+    prey = sorted(f for f in c.enemies() if f != victim)
+    mark = c.choose(prey, f"{c.ref}: who the beast runs at") if prey else None
+    if mark is not None and c.charge_at(mark, who=pet):
+        c.prone(on=mark)
 
 
 @power(

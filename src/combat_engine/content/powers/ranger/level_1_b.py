@@ -39,6 +39,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     STR,
+    Ability,
     Attack,
     AttackDeclared,
     Cast,
@@ -339,10 +340,26 @@ def p10600(c: Cast) -> None:
     `Melee(n, from_="companion")`. `beast_sb.py` is a whole file of rows
     using them. #1341.
 
-    The secondary is the beast's: `c.move_companion` for "moves its
-    speed", then `c.strike(from_=pet)` rolling the beast's bonus, and
-    `c.damage(c.b(2), c.b_mod(Ability.STR))` for the 2[B] line. Every
-    piece is present; none is written yet.
+    **The secondary is written now.** `c.move_companion` walks the beast
+    its own speed, and the swing goes through `c.attack` longhand rather
+    than `c.strike`, because `c.strike` rolls the bonus the **header**
+    declared -- the ranger's. The printed line is "Beast's attack bonus
+    vs. AC", so the bonus is built from `Attack(STR, vs=AC,
+    by="companion")`, whose `bonus_for` resolves the roller through
+    `by=` to the companion. That is the same route `psion/level_3.py`
+    takes for its own secondary.
+
+    `from_=pet` as well as the bonus, and both are needed: the bonus
+    makes the numbers the beast's and `from_` makes the **square** the
+    beast's, so reach and cover are measured from it. `beast_sb.py`'s
+    header records that `from_=` alone "moved the square and left the
+    numbers the ranger's, which is the shape that looks finished and is
+    wrong".
+
+    **The Effect is not gated on the primary landing.** The card puts it
+    under `Effect:`, not under `Hit:`, so the beast attacks whether or
+    not the ranger connected -- and the Miss line gives it half damage,
+    which is the beast's own miss and not the ranger's.
     """
     victim = c.target
     if c.strike():
@@ -351,6 +368,17 @@ def p10600(c: Cast) -> None:
             _unexpend(c)
     else:
         c.half_damage(c.w(1), c.str_mod)
+    pet = c.companion()
+    if pet is None or victim is None:
+        return
+    c.move_companion(c.speed_of(pet))
+    beast = Attack(STR, vs=AC, by="companion")
+    bonus = beast.bonus_for(c.world, c.me, c.ref, c.branch)
+    if c.attack(bonus, AC, on=victim, from_=pet).hit:
+        c.damage(c.b(2), c.b_mod(Ability.STR), on=victim)
+        c.prone(on=victim)
+    else:
+        c.half_damage(c.b(2), c.b_mod(Ability.STR), on=victim)
 
 
 @power(

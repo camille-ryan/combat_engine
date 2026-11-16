@@ -43,7 +43,11 @@ from combat_engine.engine import (
     World,
     power,
 )
-from combat_engine.engine.events import AttackDeclared, ZoneEntered
+from combat_engine.engine.events import (
+    AttackDeclared,
+    MoveStart,
+    ZoneEntered,
+)
 from combat_engine.engine.query import cover_between, team
 from combat_engine.engine.triggers import Trigger
 
@@ -468,16 +472,42 @@ def p4384(c: Cast) -> None:
     `Melee(n, from_="companion")`. `beast_sb.py` is a whole file of rows
     using them. #1341.
 
-    The companion's free step after the target moves is therefore
-    writable. The extra damage is **not**, and for a different reason the
+    **The companion's free step is written now.** "If the target moves
+    during its next turn" is a `MoveStart` on the target, and the step is
+    offered rather than taken -- the card says *can* shift, as a free
+    action, so `c.may` asks and a player who declines keeps the beast
+    where it is.
+
+    "To any square adjacent to the target's new location" is a shift
+    `toward=` the target with the beast's own speed as the allowance,
+    which is the longest the printed line can ever need: a square
+    adjacent to the target is at most that far if the beast can reach it
+    at all, and `c.shift` stops when it arrives.
+
+    The extra damage is **not** written, and for a different reason the
     old note did not separate out: it is gated on the companion being a
     bear, a cat, a raptor, a spider or a snake, and nothing reads a
     beast's species. That is #1343, not a gap in the companion model.
     """
+    victim = c.target
     if c.strike():
         c.damage(c.w(2), c.str_mod)
     if c.is_quarry():
         c.slowed()
+    pet = c.companion()
+    if pet is None or victim is None:
+        return
+    stepped = [False]
+
+    def follow(ev: MoveStart) -> None:
+        if ev.actor != victim or stepped[0]:
+            return
+        if not c.may("step the beast after it", who=c.me):
+            return
+        stepped[0] = True
+        c.shift(c.speed_of(pet), who=pet, toward=victim)
+
+    c.watch(MoveStart, follow, until=When.EOTNT)
 
 
 @power(
