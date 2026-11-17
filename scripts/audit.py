@@ -4108,6 +4108,181 @@ def _pose_lamp_and_spirit(world, caster: int, declared) -> None:  # noqa: ANN001
             _Cast(world, caster, "audit:provoke").dismiss_companion()
 
 
+#: A printed trigger about the caster spending a move action. Three rows
+#: tree-wide, all three unreachable before this pass existed.
+_WANTS_A_MOVE_ACTION = re.compile(
+    r"\b(?:end|ends|take|takes|use|uses) a move action|\bmove action\b", re.I
+)
+
+
+def _the_caster_takes_a_move_action(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Walk the caster one square, on its own turn, as a move action.
+
+    **Nothing on this board moves the caster.** Every movement pass here
+    moves a *foe* -- the shift loop, the walk pass, `_stand_off` -- and the
+    one exception is `_springs_a_trap`, which walks the caster onto a trap
+    for its own reason. So *"you end a move action"* was never true here,
+    and the three rows tree-wide that print it all sat in `never_refs`.
+
+    `p9341` fires. `f2255` and `f3055` are the other two.
+
+    **This started out as a cover pass and the plant is what corrected
+    it.** `p9341` reads "you end a move action **and have cover against at
+    least one creature**", so the first version built the caster a wall --
+    one blocking square between it and a foe two squares out, which
+    `cover_between` confirmed gives cover 2. Then:
+
+        the wall removed, the walk kept     p9341 still fires
+        the wall kept, the walk removed     p9341 goes back to UNUSED
+
+    So the cover was never what was missing: the caster already has cover
+    against *somebody* on a board of eight creatures, because a ranged
+    line is blocked by the target's own allies. The wall was dead weight
+    perturbing every row whose text says "cover", and only the move was
+    load-bearing.
+
+    Two things worth keeping from the version that was wrong. Posing cover
+    changed **no row's usability** -- of the five rows that ask about it,
+    four are already usable and merely unprovoked. And `m3675a2`'s
+    `KNOWN_SILENT` excuse, *"requires cover; no terrain here grants any"*,
+    names a true fact about the board and the **wrong cause** for that
+    row: it is refused for "nearest is 8 squares away". The same shape as
+    `an_audit_excuse_can_be_covering_a_bug`.
+
+    On its own turn and with the actions refreshed, because a move action
+    is spent from a budget and an earlier pass has usually spent it.
+    """
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.movement import walk as _walk
+
+    declared = get(ref)
+    if declared is None or not declared.triggers:
+        return False
+    if not _WANTS_A_MOVE_ACTION.search(declared.trigger or ""):
+        return False
+
+    seat = world.get(caster, Position)
+    if seat is None or seat.square is None:
+        return False
+    home = seat.square
+    cx, cy = home
+    _was_turn = world.turn
+    try:
+        _free_the_immediate(world, caster)
+        _refresh_actions(world, caster)
+        world.turn = caster
+        for step in ((cx, cy + 1), (cx, cy - 1), (cx - 1, cy), (cx + 1, cy)):
+            if not world.grid.inside(step):
+                continue
+            if world.grid.occupant(step) is not None:
+                continue
+            with contextlib.suppress(Exception):
+                _walk(world, caster, [step])
+                if _fired(world, ref, cursor):
+                    return True
+            _back_to(world, caster, home)
+    finally:
+        world.turn = _was_turn
+        _back_to(world, caster, home)
+    return False
+
+
+#: A Requirement naming another row that has to be up before this one can
+#: be used. Four printed spellings of the same idea, and the fifth --
+#: "must be **resolving**" -- is deliberately not here: see below.
+_WANTS_A_PARENT = re.compile(
+    r"\bthe (p\d+[a-z]?) (?:power|stance|conjuration) must be "
+    r"(?:active|activated|up|standing|expended)",
+    re.I,
+)
+
+
+def _pose_the_parent_power(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Use the row's parent power, for a second card that needs it up.
+
+    A `...b` row is the second card printed inside another power, and a
+    good many of them gate on the first being live -- *"the p10848 power
+    must be active"*. The board deals the child and never the parent, so
+    `usable()` refuses before any provocation runs and the row reports
+    UNUSED with its own Requirement as the reason. Nine power rows in
+    `never_refs` say this.
+
+    So the parent is granted and **used**, which is the only way to put a
+    stance up or a conjuration on the floor -- there is no state to paint.
+    Measured over the nine:
+
+        p10493b  "the p10493 stance must be up and a hand free"   usable
+        p10848b  "the p10848 power must be active"                usable
+        p13442b  "the p13442 conjuration must be standing"        usable
+        p14510   "the p15852 power must be expended"              usable
+        p10197b  "...active, its ally within 10 squares"          no
+        p12787b  "the p12787 power must be active"                no
+        p9507b   "the p9507 power must be activated"              no
+        p464b    "the p464 power must be resolving"               no
+        p465b    "the p465 power must be resolving"               no
+
+    **"Resolving" is a window and not a state**, which is why
+    `_WANTS_A_PARENT` does not match it. `p464b` and `p465b` want to be
+    offered *while their parent is mid-resolution*, so nothing a pose can
+    do reaches them -- the board would have to interrupt the parent's own
+    body. They are the honest residue of this family rather than a gap in
+    this function.
+
+    `p12787b` and `p9507b` use their parent and are still refused, so
+    whatever "active" means for those two is not set by using it; left
+    alone rather than guessed at. `p10197b` wants a range band as well.
+
+    Granted with `Powers.known` and left there: the parent is the row's own
+    other half, so a board holding both is what the card describes. The
+    *action* it spends is given back, because the child is frequently an
+    immediate and the parent would otherwise have eaten its turn.
+    """
+    import contextlib as _ctx
+
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import usable as _usable
+    from combat_engine.engine.dsl import use as _use
+
+    if declared is None:
+        return
+    said = getattr(declared, "requires_text", "") or ""
+    found = _WANTS_A_PARENT.search(said)
+    if not found:
+        return
+    parent = found.group(1)
+    if parent == getattr(declared, "ref", ""):
+        return
+    # Only when the row is actually refused -- a Requirement naming a
+    # parent the board happens to have dealt needs nothing doing, and
+    # using the parent anyway would spend a turn and credit the child with
+    # whatever the parent emitted.
+    if _usable(world, caster, declared, board=True)[0]:
+        return
+    known = world.get(caster, Powers)
+    if known is None:
+        return
+    if parent not in known.known:
+        known.known.append(parent)
+    with _ctx.suppress(Exception):
+        _use(world, caster, parent)
+    _free_the_immediate(world, caster)
+    _refresh_actions(world, caster)
+
+
+def _refresh_actions(world, caster: int) -> None:  # noqa: ANN001
+    """Give back the standard, move and minor actions for this turn.
+
+    Used after a pose has *spent* one. A pose is meant to be setup rather
+    than a turn, so a row needing a standard action must not find it gone
+    because the arrangement used one up.
+    """
+    from combat_engine.engine import Budget
+
+    budget = world.get(caster, Budget)
+    if budget is not None:
+        budget.refresh()
+
+
 def _pose_own_shadow(world, caster: int, declared) -> None:  # noqa: ANN001
     """Put the caster's own square, and its surrounds, in darkness.
 
@@ -4958,6 +5133,12 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
     # with this call placed before the loop, and `dark` after it.
     _pose_lamp_and_spirit(world, caster, declared)
     _pose_own_shadow(world, caster, declared)
+    # **After every other pose**, because the parent power is *used* rather
+    # than painted on: it swings, lays effects and spends an action, so a
+    # pose running after it would be dressing a board the parent has
+    # already moved. The light poses above are the clearest case -- a
+    # parent that conjures something would relight a darkened square.
+    _pose_the_parent_power(world, caster, declared)
 
 
 #: What starting a fight emits no matter who is in it. Subtracted from what
@@ -5577,6 +5758,19 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     # and the passes come back here. The union is a biased set by
     # construction, which is why this is confirmed against the corpus
     # rather than left on the 32.
+    # **The parent power again, because a stance does not survive the
+    # provocations.** `_pose_the_parent_power` puts it up at board time and
+    # `usable()` reads True immediately afterwards; by the time the late
+    # passes run it reads False again with the same Requirement. `p10493b`
+    # is the worked case -- its pass was reached three times, found the
+    # stance down each time, and the row reported UNUSED for a reason that
+    # had nothing to do with the arrangement being wrong.
+    #
+    # Cheap and idempotent: the function returns immediately unless the row
+    # is *currently* refused and its Requirement names a parent, so for the
+    # other 23,000 rows this is one regex that does not match.
+    _pose_the_parent_power(world, caster, get(ref))
+
     _free_the_immediate(world, caster)
     if _starts_a_turn_held(world, caster, ref, cursor):
         return True
@@ -5614,6 +5808,10 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
 
     _free_the_immediate(world, caster)
     if _an_opportunity_attack_lands(world, caster, ref, cursor):
+        return True
+
+    _free_the_immediate(world, caster)
+    if _the_caster_takes_a_move_action(world, caster, ref, cursor):
         return True
 
     if _does_the_ordinary_things(world, caster, ref, cursor):
@@ -8501,8 +8699,8 @@ def _an_opportunity_attack_lands(world, caster: int, ref: str, cursor: int) -> b
             _free_the_immediate(world, caster)
             cx, cy = home
             with _ctx.suppress(Exception):
-                place(world, mate, Square(cx + 1, cy))
-                place(world, foe, Square(cx + 1, cy + 1))
+                place(world, mate, Square((cx + 1, cy)))
+                place(world, foe, Square((cx + 1, cy + 1)))
                 world.rng.loaded = 20
                 _swing_from_reach(world, foe, mate, basic_of(foe),
                                   opportunity=True)
