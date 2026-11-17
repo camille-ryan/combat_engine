@@ -4070,6 +4070,44 @@ _WANTS_OWN_SHADOW = re.compile(
 )
 
 
+#: The two inverse light-and-companion Requirements: a row that wants a
+#: lamp in hand, and one that wants the spirit gone.
+_WANTS_A_LAMP = re.compile(r"carrying a light|light source", re.I)
+_WANTS_NO_SPIRIT = re.compile(
+    r"companion must not be present|must not have [^.]{0,20}companion", re.I
+)
+
+
+def _pose_lamp_and_spirit(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Give the caster a lamp, or take its spirit companion away.
+
+    Two Requirements the board never arranges, and each is the inverse of
+    something it does arrange:
+
+    * **"you must be carrying a light source."** `_carries_light` reads a
+      `light_radius` modifier "whatever laid it", so `c.light` is the
+      whole of it. Labelled `audit:lamp` and **not** `audit:pose`, which
+      matters: `_pose_own_shadow` puts out the board's torch by that
+      label, and a lamp this pose laid must not be swept up by it. The two
+      gates are different sentences and cannot both match.
+    * **"your spirit companion must not be present."** The board fields
+      one for a shaman, so the row is refused for the companion's
+      presence. `c.dismiss_companion` is the printed verb -- "your spirit
+      companion disappears" -- and is what the row itself would use.
+    """
+    want = getattr(declared, "requires_text", "") or ""
+    if _NEGATED.search(want) and not _WANTS_NO_SPIRIT.search(want):
+        return
+    from combat_engine.engine.cast import Cast as _Cast
+
+    if _WANTS_A_LAMP.search(want):
+        with contextlib.suppress(Exception):
+            _Cast(world, caster, "audit:lamp").light(5)
+    if _WANTS_NO_SPIRIT.search(want):
+        with contextlib.suppress(Exception):
+            _Cast(world, caster, "audit:provoke").dismiss_companion()
+
+
 def _pose_own_shadow(world, caster: int, declared) -> None:  # noqa: ANN001
     """Put the caster's own square, and its surrounds, in darkness.
 
@@ -4906,6 +4944,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
     # burning -- which relit the square this pose had just darkened.
     # Measured: the caster read `light=bright` after the full setup
     # with this call placed before the loop, and `dark` after it.
+    _pose_lamp_and_spirit(world, caster, declared)
     _pose_own_shadow(world, caster, declared)
 
 
