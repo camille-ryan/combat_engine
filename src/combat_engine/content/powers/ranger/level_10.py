@@ -324,6 +324,7 @@ def p13610(c: Cast) -> None:
 
 @power(
     "p13611",
+    dropped=("c.zone(unnoticed=)",),
     level=10,
     cls="ranger",
     usage=ENCOUNTER,

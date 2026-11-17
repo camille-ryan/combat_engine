@@ -342,6 +342,7 @@ def p13590(c: Cast) -> None:
 
 @power(
     "p13591",
+    dropped=("c.initiative_bonus()",),
     level=0,
     cls="ranger",
     usage=AT_WILL,
@@ -535,6 +536,7 @@ def p13620(c: Cast) -> None:
 
 @power(
     "p13621",
+    dropped=("c.grant_action_row()",),
     level=0,
     cls="ranger",
     usage=AT_WILL,

@@ -378,6 +378,7 @@ def p4376(c: Cast) -> None:
 
 @power(
     "p4377",
+    dropped=("Swung.hand",),
     level=1,
     cls="ranger",
     usage=DAILY,

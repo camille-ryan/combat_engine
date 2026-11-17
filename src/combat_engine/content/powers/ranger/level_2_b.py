@@ -322,6 +322,7 @@ def p13701(c: Cast) -> None:
 
 @power(
     "p13702",
+    dropped=("c.undo_riders()",),
     level=2,
     cls="ranger",
     usage=ENCOUNTER,

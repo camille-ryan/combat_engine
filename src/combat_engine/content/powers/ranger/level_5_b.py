@@ -481,6 +481,7 @@ def p16480(c: Cast) -> None:
 
 @power(
     "p16486",
+    dropped=("c.lose_sense()",),
     level=5,
     cls="ranger",
     usage=DAILY,
@@ -492,9 +493,20 @@ def p16480(c: Cast) -> None:
     attack_alt=Attack(DEX, vs=AC),
 )
 def p16486(c: Cast) -> None:
-    """The Effect line takes away blindsight and tremorsense. Neither is a
-    thing a creature has here -- sight is line of effect and nothing else --
-    so there is nothing to take, and the clause is dropped."""
+    """The Effect line takes away blindsight and tremorsense, and **the old
+    reason it was dropped was false**: it said neither is a thing a
+    creature has here. `c.blindsight` and `c.tremorsense` both exist,
+    `query.sees_in` reads them, and `query.has_sense` is the public
+    per-key reader written for three rows that ask about one. #1341.
+
+    What is missing is the taking-away. Both are stored as modifier keys
+    whose value is the printed radius, so a penalty of
+    `query.UNLIMITED_SENSE` would zero one -- and **no row in the tree
+    does that**, this would be the first, and it is fragile in the way
+    that matters: a creature granted the sense twice would still have it.
+    So this wants `c.lose_sense`, the suppressor the pair never got,
+    rather than one row doing arithmetic on somebody else's key.
+    """
     if c.strike():
         c.damage(c.w(2), c.attack_mod)
         c.dazed(until=When.SAVE_ENDS)
