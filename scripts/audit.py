@@ -3985,6 +3985,22 @@ _WANTS_TWO_HANDS = re.compile(
 #: Requirement is about the grip rather than the family.
 _TWO_HANDED_REACH = "w3614"
 
+#: **Three printed Requirements about somebody's STATE that no knob posed.**
+#: `_pose_conditions` reads `Target.conditions` and lays them on an enemy,
+#: which reaches none of these: "bloodied" is a hit-point reading rather
+#: than a `Condition`, "a dying ally" is on the caster's own side, and
+#: "you must be marked" is about the caster. Six rows between them. #1341.
+_WANTS_STATE = (
+    ("bloodied_foe", re.compile(r"bloodied (?:enemy|creature|foe)", re.I)),
+    ("dying_ally", re.compile(r"dying ally", re.I)),
+    ("marked_me", re.compile(r"you must be marked|^must be marked", re.I)),
+    # **A fourth, because one row wants two of these at once.** `p9338`
+    # prints "you must be marked, AND concealed from whoever marked you",
+    # so marking it alone left it refused -- the pose has to satisfy the
+    # whole sentence or it satisfies none of it.
+    ("concealed_me", re.compile(r"conceal", re.I)),
+)
+
 _WANTS = (
     ("grab", re.compile(r"grabb|GRABBED|c\.grabbing")),
     ("dark", re.compile(
@@ -4092,6 +4108,76 @@ _READS_FLOORED = re.compile(
 #: A printed Requirement that wants the state *absent*. Posing it for one of
 #: these refuses the row rather than arming it. See `_pose`.
 _NEGATED = re.compile(r"\bmust not\b|\bno longer\b|\bwithout\b|\bis not\b", re.I)
+
+
+def _pose_state(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Put the board into a STATE a printed Requirement asks for.
+
+    The sibling of `_pose_conditions`, which reads `Target.conditions` and
+    lays them on an enemy. Three printed Requirements are outside what that
+    can reach, and six rows sat in `never_refs` for it:
+
+    * **"a bloodied enemy"** -- a hit-point reading, not a `Condition`, so
+      there is nothing in `Target.conditions` to find. Posed by taking an
+      enemy to half rather than by laying a state, because that is what
+      being bloodied *is* and what every reader of it asks.
+    * **"a dying ally"** -- on the caster's own side, where
+      `_pose_conditions` deliberately works from the enemies.
+    * **"you must be marked"** -- about the **caster**, not a target.
+
+    Gated on the row being refused first, so a board that already satisfies
+    the Requirement is left exactly as it was. Nothing here spawns: every
+    creature touched is one the recipe already fielded, which is the lesson
+    the grab knob paid 11 rows for.
+    """
+    from combat_engine.engine import Health
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.dsl import usable as _usable
+    from combat_engine.engine.query import allies as _allies
+    from combat_engine.engine.query import enemies as _enemies
+    from combat_engine.engine.types import Condition as _Cond
+
+    req = getattr(declared, "requires_text", "") or ""
+    if not req:
+        return
+    for what, pattern in _WANTS_STATE:
+        if not pattern.search(req):
+            continue
+        if _usable(world, caster, declared, board=True)[0]:
+            continue
+        if what == "bloodied_foe":
+            for foe in _enemies(world, caster):
+                hp = world.get(foe, Health)
+                if hp is None or hp.hp <= 0:
+                    continue
+                # Half, less one: "bloodied" is at or below half, and
+                # landing exactly on the boundary leaves the reading to
+                # whichever comparison the reader happens to use.
+                hp.hp = max(1, hp.max_hp // 2 - 1)
+                break
+        elif what == "dying_ally":
+            for mate in _allies(world, caster):
+                hp = world.get(mate, Health)
+                if hp is None or mate == caster:
+                    continue
+                hp.hp = 0
+                _Cast(world, caster, getattr(declared, "ref", "")).condition(
+                    _Cond.DYING, on=mate, until=When.ENCOUNTER
+                )
+                break
+        elif what == "concealed_me":
+            _Cast(world, caster, getattr(declared, "ref", "")).conceal(
+                until=When.ENCOUNTER
+            )
+        elif what == "marked_me":
+            foes = _enemies(world, caster)
+            if foes:
+                # Marked **by an enemy**, which is the only direction the
+                # printed sentence can mean: a creature does not mark
+                # itself, and `c.mark` is relational.
+                _Cast(world, foes[0], getattr(declared, "ref", "")).mark(
+                    on=caster, until=When.ENCOUNTER
+                )
 
 
 def _pose_conditions(world, caster: int, declared, src: str) -> None:  # noqa: ANN001
@@ -4280,6 +4366,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
 
         if not _usable(world, caster, declared, board=True)[0]:
             _put_in_hand(world, caster, _TWO_HANDED_REACH)
+    _pose_state(world, caster, declared)
     for what, pattern in _WANTS:
         if not pattern.search(asking):
             continue
