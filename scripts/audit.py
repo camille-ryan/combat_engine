@@ -6002,9 +6002,17 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         _was_face = getattr(world.rng, "loaded", None)
         try:
             for _runner, _victim in _runs:
+                _revive_everyone(world, caster)
                 if not alive(world, _runner) or not alive(world, _victim):
                     continue
-                for _face in (20, 3):
+                # **The natural roll first, then the loaded faces.** A
+                # loaded 20 is a *critical*, so on the foe-charges-caster
+                # run it can drop the caster before it can answer
+                # anything -- `i3015p1` and `p4875` both trigger on being
+                # charged and both stopped firing when the load went in
+                # (bisected to this commit). `None` leaves the die alone,
+                # which is the arrangement they had.
+                for _face in (None, 20, 3):
                     world.rng.loaded = _face
                     Cast(
                         world=world, me=_runner, ref="audit:charge"
