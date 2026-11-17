@@ -3962,6 +3962,29 @@ def board(ref: str, seed: int, pose: bool = False,
 #: **It is applied in `board` rather than here**, because `_pose` runs after
 #: the traits arm and a passive row has already done its work by then. See
 #: `_wants_milestone` below.
+#: **A printed Requirement for a weapon held in two hands.** The board
+#: deals its casters ONE weapon -- `w3610`, a one-handed heavy blade with
+#: reach 1 -- so `_grip_for` has nothing to switch to and eight rows could
+#: never meet their Requirement: five want "a two-handed reach weapon" and
+#: three want "a melee weapon in two hands". Measured on `p4820`:
+#: `(False, 'needs a melee weapon in two hands')` before, `(True, '')` after.
+#:
+#: `w3614` satisfies both shapes at once -- two-handed, reach 2 -- and is a
+#: heavy blade, which is the group the board's casters are already trained
+#: in, so the pose changes the Requirement and not the proficiency.
+#:
+#: **Matched on "two", never on "handed" alone.** `#1340`'s one-handed pose
+#: is keyed on "one-handed melee" and the two must not both fire: a row
+#: wanting a free hand and a row wanting both hands full are opposite
+#: sentences. #1341.
+_WANTS_TWO_HANDS = re.compile(
+    r"two-handed|in two hands|both hands", re.I
+)
+
+#: What `_WANTS_TWO_HANDS` reaches for. A ref and not a group, because the
+#: Requirement is about the grip rather than the family.
+_TWO_HANDED_REACH = "w3614"
+
 _WANTS = (
     ("grab", re.compile(r"grabb|GRABBED|c\.grabbing")),
     ("dark", re.compile(
@@ -4248,6 +4271,15 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
              f"{getattr(declared, 'target', '')}"
     _pose_conditions(world, caster, declared, src)
     _pose_kinds(world, declared, foe_team)
+    # **Both hands on the haft, for a row whose Requirement asks.** Read
+    # off `requires_text` alone and not off the body: the source of a row
+    # that merely *mentions* two-handed weapons in a comment is not a row
+    # that needs one, and `asking` folds the body in.
+    if _WANTS_TWO_HANDS.search(getattr(declared, "requires_text", "") or ""):
+        from combat_engine.engine.dsl import usable as _usable
+
+        if not _usable(world, caster, declared, board=True)[0]:
+            _put_in_hand(world, caster, _TWO_HANDED_REACH)
     for what, pattern in _WANTS:
         if not pattern.search(asking):
             continue
