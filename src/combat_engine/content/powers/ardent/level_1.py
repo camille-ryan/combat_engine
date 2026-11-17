@@ -219,6 +219,7 @@ def p10277(c: Cast) -> None:
         Keyword.ZONE,
     ],
     attack=Attack(CHA, vs=AC),
+    dropped=("c.grant_action_row()",),
 )
 def p10278(c: Cast) -> None:
     """The last printed sentence -- "once per round as a free action you can

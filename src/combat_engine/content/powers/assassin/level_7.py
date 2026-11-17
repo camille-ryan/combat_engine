@@ -82,6 +82,7 @@ def p9431(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.IMPLEMENT, Keyword.PSYCHIC, Keyword.SHADOW, Keyword.TELEPORTATION],
     attack=Attack(DEX, vs=WILL),
+    dropped=("c.grant_action_row()",),
 )
 def p9432(c: Cast) -> None:
     """The build rider grants a minor-action teleport on a later turn, which

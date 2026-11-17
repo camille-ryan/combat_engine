@@ -207,14 +207,28 @@ def p7648(c: Cast) -> None:
     ],
     trigger="an ally within 10 squares of you misses an enemy with an attack",
     on=Trigger(Miss, ally_within(10), "an ally within 10 squares of you misses"),
+    dropped=("query.flanked_by(conjuration=)",),
 )
 def p13442(c: Cast) -> None:
     """A conjuration, so creatures move through it -- nothing printed says it
     blocks.
 
     Its own attack is `p13442b`, which reads the standing conjuration as its
-    Requirement. The move action that walks the thing and the flanking it
-    grants have no field and are dropped."""
+    Requirement.
+
+    **The move action that walks it is written and this note said it was
+    dropped.** `speed=6` is on the `c.conjure` call four lines down, and
+    `p1195` records what that field is: the hand "is walked six squares
+    with a move action -- all of which `c.conjure` is". One half of a
+    two-clause admission was simply wrong about the code beside it.
+
+    The flanking it grants is genuinely dropped. `query.flanked_by`
+    requires **both flankers to be able to attack** -- "a stunned ally
+    standing in the right square is furniture, and the printed rule says
+    so" -- and a conjuration cannot act, so it cannot be one of them.
+    `Grid.flanks(a, b, space)` takes two squares and reads no creature, so
+    the geometry is already answerable; what is missing is `flanked_by`
+    counting a conjuration as the second flanker."""
     victim = getattr(c.trigger, "target", None)
     spot = c.world.get(victim, Position) if victim is not None else None
     where = None

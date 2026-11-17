@@ -735,6 +735,7 @@ def p7402(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=ARCANE_IMPLEMENT,
     attack=Attack(CHA, vs=FORT),
+    dropped=("c.grant_action_row()",),
 )
 def p7428(c: Cast) -> None:
     """Sustaining squeezes whatever is still held. The minor action the
