@@ -81,6 +81,7 @@ from combat_engine.engine import (
     Gear,
     Healed,
     Hit,
+    InitiativeRolled,
     Keyword,
     Miss,
     Moved,
@@ -100,6 +101,7 @@ from combat_engine.engine import (
     get,
     hits_me,
     power,
+    query,
     spread,
 )
 from combat_engine.engine.components import Health, Mods
@@ -3921,21 +3923,53 @@ def f2717(c: Cast) -> None:
 
 @power("f2718", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("story.terrain_words",))
+       )
 def f2718(c: Cast) -> None:
     """The Perception bonus is written -- `skill:perception` is a key the
     engine really does consult, and `kind="feat"` is the word the card
     prints.
 
-    **Re-pointed, and the row plays now.** `c.terrain` exists and was never
-    the hold: `World.terrain` is initialised to an empty set in `ecs` and
-    **nothing anywhere ever adds a word to it** -- `terrain.dress` lays
-    blocking squares, rough going and traps and no words at all -- so every
-    one of the 68 `c.terrain(...)` gates in this tree is False in every
-    fight. That is a story-engine gap, not a `Cast` one, so the opening
-    hide is the dropped clause and the bonus is the half that pays.
+    **The opening hide is written too, and the marker's premise had
+    lapsed.** It said *"`World.terrain` is initialised to an empty set in
+    `ecs` and **nothing anywhere ever adds a word to it**"*, which was true
+    of `terrain.dress` and is no longer true of the fight path:
+    `story.run.ground` does `world.terrain |= set(scene.terrain)` and is
+    called from `run.py`, which then tells the table *"riders that only
+    apply in that sort of place are live"*. `"outdoors"` is one of
+    `cast.TERRAIN_WORDS`' eighteen words.
+
+    Both halves of the printed condition are asked, in the order the card
+    states them: outdoors, and any cover or concealment. **Any** of either,
+    which is looser than the ordinary hide action -- `actions._hiding`
+    wants superior cover or total concealment -- and that laxity is what
+    the feat is for, so `c.hide(check=True)` is handed the Stealth check
+    rather than the action being borrowed.
+
+    On `InitiativeRolled` because the card says *"when you make an
+    initiative check"*, which is one moment per fight; `once=True` would be
+    redundant against that and is left off so the watch reads as the event
+    it is.
     """
     c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+
+    def sheltered() -> bool:
+        """Any cover or concealment from any enemy, which is the degree
+        the card names."""
+        if query.concealment_of(c.world, c.me):
+            return True
+        return any(
+            query.cover_between(c.world, foe, c.me)
+            for foe in query.enemies(c.world, c.me)
+        )
+
+    def opening(ev: InitiativeRolled) -> None:
+        if getattr(ev, "actor", 0) != c.me:
+            return
+        if c.terrain("outdoors") and sheltered():
+            c.hide(check=True)
+
+    c.watch(InitiativeRolled, opening, until=When.ENCOUNTER, on=c.me,
+            label=c.ref)
 
 
 @power("f2728", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -9465,13 +9465,32 @@ def _wants_terrain(ref: str) -> tuple[str, ...]:
 
     row = get(ref)
     body = _source_of(getattr(row, "body", None), ref)
-    if not body:
+    # **The printed sentences as well as the body, because the card does
+    # not always put the question in the body.** A terrain clause that is
+    # part of a printed **Requirement** or **Trigger** belongs in the
+    # header -- `requires=(world, eid)` has no `Cast` to ask, which is why
+    # `query.terrain` exists -- and six rows write it there through a
+    # helper, so `_source_of(row.body)` holds no `terrain(` call at all.
+    #
+    # Measured: `p11544` and `p11545` had their underground half written
+    # and both went straight to UNUSED, because the board stayed dry. The
+    # clause was right and nothing could reach it.
+    #
+    # A bare word is enough **in these two fields and not in the body**,
+    # and the asymmetry is the point: `requires_text` and `trigger` are
+    # the card's own sentences, so "underground" in one of them is the
+    # printed condition. In a body it could be a docstring, which is the
+    # case the `terrain("word")` form below exists to exclude.
+    said = (f"{getattr(row, 'requires_text', '') or ''} "
+            f"{getattr(row, 'trigger', '') or ''}").lower()
+    if not body and not said.strip():
         return ()
     return tuple(
         word for word in sorted(TERRAIN_WORDS)
         # The call, not the bare word: `c.terrain("ice")` dresses a board
         # and the word "ice" in a docstring does not.
         if f'terrain("{word}")' in body or f"terrain('{word}')" in body
+        or word in said
     )
 
 

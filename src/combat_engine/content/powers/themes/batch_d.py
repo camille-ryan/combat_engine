@@ -1803,11 +1803,16 @@ def p16434(c: Cast) -> None:
     on=Trigger(
         SkillCheck,
         both(my_check("acrobatics", "athletics", "endurance", "perception"),
-             check_failed),
-        "you fail one of those checks",
+             check_failed,
+             # **The "while underground" half, whose marker was stale.**
+             # `story.terrain_words` named a pipeline that is complete:
+             # `story.run.ground` does `world.terrain |= set(scene.terrain)`
+             # and `"underground"` is one of `cast.TERRAIN_WORDS`' eighteen
+             # words, so the gate is live in play rather than always false.
+             lambda world, me, ev: query.terrain(world, "underground")),
+        "you fail one of those checks while underground",
     ),
     requires_text="while underground",
-    dropped=("story.terrain_words",),
 )
 def p16435(c: Cast) -> None:
     """*"You make a Dungeoneering check and use its result instead."*

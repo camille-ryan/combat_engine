@@ -492,7 +492,7 @@ def i3037x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.terrain(penalty=)", "story.terrain_words"),
+    todo=("c.terrain(penalty=)",),
 )
 def i3050x1(c: Cast) -> None:
     """Waives the attack penalty for fighting underwater, and both halves
@@ -505,12 +505,20 @@ def i3050x1(c: Cast) -> None:
     would have nothing to take off. One symbol for the two rows printing
     the sentence, rather than one each.
 
-    `story.terrain_words` is the other half and nine rows wait on it. A
-    module's scene may declare its terrain and `story/run.py` records that
-    `terrain.dress` has no way to be told what sort of place a fight is
-    in, so `World.terrain` is empty in every fight and every
-    `c.terrain(...)` gate is False. Either symbol alone leaves this row
-    unwritable, which is why both are named."""
+    **`story.terrain_words` is dropped from the marker, because that half
+    arrived.** It said *"`World.terrain` is empty in every fight and every
+    `c.terrain(...)` gate is False"*, and that has stopped being true:
+    `story.run.ground` does `world.terrain |= set(scene.terrain)` and is
+    called in the fight path, and `"aquatic"` is one of
+    `cast.TERRAIN_WORDS`' eighteen words. So the engine can be told the
+    fight is underwater.
+
+    What is still absent is the thing to waive: `c.terrain` answers
+    *whether* the fight is aquatic and **nothing in `engine/` charges an
+    attack penalty for it**, so a waiver would have nothing to take off.
+    One symbol, named by the two rows printing the sentence -- `f2903b`
+    prints the same clause. Naming both was right when both were missing
+    and over-states the gap now."""
 
 
 @power(

@@ -57,6 +57,26 @@ _GUIDED = frozenset({
 })
 
 
+def _underground(world: World, eid: int) -> bool:
+    """Is the fight being had underground?
+
+    **The half of two printed clauses that `story.terrain_words` was
+    marked for, and the marker was stale.** The pipeline it named is
+    complete: `story.run.ground` does `world.terrain |= set(scene.terrain)`,
+    the importer constrains a module's `terrain` list to
+    `cast.TERRAIN_WORDS`, and `"underground"` is one of its eighteen words.
+    So the gate is live in play rather than permanently false.
+
+    `query.terrain` is the one reader -- a printed **Requirement** is a
+    `requires=(world, eid)` gate with no `Cast` to ask, which is why that
+    function exists and `c.terrain` delegates to it.
+
+    `eid` is unused and kept so this reads as a `requires` predicate like
+    its neighbour: the question is about the room, not about who is asking.
+    """
+    return query.terrain(world, "underground")
+
+
 def _sheltered(world: World, eid: int) -> bool:
     """Any cover or concealment from any enemy, which is the degree
     `p11544`'s Requirement names.
@@ -127,9 +147,8 @@ def _ally_dislikes_a_check(world: World, me: int, ev: object) -> bool:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    requires=_sheltered,
-    requires_text="you must have cover or concealment",
-    dropped=("story.terrain_words",),
+    requires=lambda world, eid: _sheltered(world, eid) and _underground(world, eid),
+    requires_text="you must have cover or concealment underground",
 )
 def p11544(c: Cast) -> None:
     """The substitution is the difference between the two modifiers, laid on
@@ -140,8 +159,11 @@ def p11544(c: Cast) -> None:
     `once=True` because the clause is about this one check: the hide below
     spends it immediately and nothing later picks it up.
 
-    The underground half of the Requirement is the dropped clause; the cover
-    half is a board question and is asked.
+    **Both halves of the Requirement are asked now.** The underground half
+    was the dropped clause and its marker -- `story.terrain_words` -- was
+    stale: `query.terrain` reads `World.terrain`, which `story.run.ground`
+    fills from the scene, and `"underground"` is one of
+    `cast.TERRAIN_WORDS`' eighteen words. See `_underground` above.
     """
     edge = c.passive("dungeoneering") - c.passive("stealth")
     if edge:
@@ -239,8 +261,12 @@ def p9311(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you would make a Perception check underground",
-    on=Trigger(SkillCheck, my_check("perception"), "you would make a Perception check"),
-    dropped=("story.terrain_words",),
+    on=Trigger(
+        SkillCheck,
+        both(my_check("perception"),
+             lambda world, me, ev: _underground(world, me)),
+        "you would make a Perception check underground",
+    ),
 )
 def p11545(c: Cast) -> None:
     """The amount is the gap between the two modifiers, so the die stands

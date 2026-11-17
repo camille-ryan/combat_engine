@@ -37,8 +37,10 @@ from combat_engine.engine import (
     Trigger,
     When,
     about_me,
+    both,
     my_check,
     power,
+    query,
 )
 from combat_engine.engine.ecs import World
 from combat_engine.engine.events import MoveEnd
@@ -86,6 +88,28 @@ def _aim_beside(c: Cast, mine: frozenset[Square]) -> Square | None:
         return min(foes)[1]
     ring = sorted(spread(mine, 1) - mine)
     return ring[0] if ring else None
+
+
+def _urban(world: World, eid: int) -> bool:
+    """Is the fight being had in an urban environment?
+
+    **The half two printed clauses were marked `story.terrain_words` for,
+    and the marker was stale.** The pipeline it named is complete:
+    `story.run.ground` does `world.terrain |= set(scene.terrain)`, the
+    importer constrains a module's `terrain` list to `cast.TERRAIN_WORDS`,
+    and `"urban"` is one of its eighteen words -- so the gate is live in
+    play rather than permanently false.
+
+    `query.terrain` is the one reader, which is why it exists: a printed
+    **Requirement** is a `requires=(world, eid)` gate with no `Cast` to
+    ask, and `c.terrain` delegates to the same function so the two cannot
+    drift.
+
+    `eid` is unused and kept so this reads as a `requires` predicate --
+    the question is about the room, not about who is asking.
+    """
+    del eid
+    return query.terrain(world, "urban")
 
 
 @power(
@@ -210,11 +234,11 @@ def p9341(c: Cast) -> None:
     ),
     on=Trigger(
         CheckDeclared,
-        my_check("acrobatics", "athletics", "perception"),
-        "you would make one of those checks",
+        both(my_check("acrobatics", "athletics", "perception"),
+             lambda world, me, ev: _urban(world, me)),
+        "you would make one of those checks in an urban environment",
     ),
     requires_text="in an urban environment",
-    dropped=("story.terrain_words",),
 )
 def p11597(c: Cast) -> None:
     """*"You make a Streetwise check in place of the Acrobatics, Athletics,
@@ -245,11 +269,17 @@ def p11597(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    requires=_urban,
     requires_text="you must be in an urban environment",
-    dropped=("story.terrain_words",),
 )
 def p9342(c: Cast) -> None:
-    """The move and the ground both play; the Requirement does not.
+    """The move, the ground and the Requirement all play now.
+
+    **The Requirement was the dropped clause and its marker was stale.**
+    `story.terrain_words` named a pipeline that is complete --
+    `story.run.ground` fills `World.terrain` from the scene and `"urban"`
+    is one of `cast.TERRAIN_WORDS`' eighteen words. `_urban` above has the
+    measurement.
 
     "At one point during the movement" is taken as the end of it, which is
     where the caster is when the zone is laid and the only point a body can

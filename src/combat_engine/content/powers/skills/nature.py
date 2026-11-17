@@ -36,6 +36,7 @@ from combat_engine.engine import (
     Trigger,
     When,
     World,
+    both,
     power,
     query,
 )
@@ -95,11 +96,20 @@ def p11584(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you would make an initiative check in a natural environment",
-    on=Trigger(InitiativeRolled, _my_initiative, "you make an initiative check"),
-    dropped=("story.terrain_words",),
+    on=Trigger(
+        InitiativeRolled,
+        both(_my_initiative,
+             # **The environment half, whose marker was stale.** See
+             # `p11544`'s `_underground` for the measurement:
+             # `story.run.ground` fills `World.terrain` from the scene and
+             # `"natural environment"` is one of `cast.TERRAIN_WORDS`'
+             # eighteen words, so this is live in play.
+             lambda world, me, ev: query.terrain(world, "natural environment")),
+        "you make an initiative check in a natural environment",
+    ),
 )
 def p9329(c: Cast) -> None:
-    """Both halves play; the environment is the dropped clause.
+    """Both halves play, and the environment is asked now.
 
     **The substitution goes through `c.initiative`, not `c.bonus`.**
     `Initiative.bonus` is read before the d20 and setting `ev.rolled` writes

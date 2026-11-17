@@ -2604,29 +2604,39 @@ def m5565a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("story.terrain_words",),
 )
 def m5906a0(c: Cast) -> None:
     """Every hit point back at the top of each turn, as long as it is not yet
     down -- "has at least 1 hit point" is `hp > 0` and not `alive`, which is
     the printed sentence saying it does not knit itself together once felled.
 
-    **The marker was re-aimed and the gap is not a `Cast` one.** `c.terrain`
-    takes any free-form word, so the verb says this already -- what is absent
-    is data: `World.terrain` starts empty and nothing anywhere adds a word to
-    it, `terrain.dress` least of all, so every one of the tree's
-    `c.terrain(...)` gates is false in every fight. `story.terrain_words` is
-    the symbol f2718 and m6530a0 already wait on.
+    **The gate is written and the marker's premise had lapsed.** It said
+    *"`World.terrain` starts empty and nothing anywhere adds a word to it,
+    `terrain.dress` least of all, so every one of the tree's
+    `c.terrain(...)` gates is false in every fight"*, and the first clause
+    is still true of a *fresh* board while the conclusion is not:
+    `story.run.ground` does `world.terrain |= set(scene.terrain)` and is
+    called in the fight path, the importer constrains a module's `terrain`
+    list to `cast.TERRAIN_WORDS`, and `"natural world"` is one of its
+    eighteen words. `drivers` already proves a content gate reads true for
+    a scene's word.
 
-    So "while in the natural world" is the dropped clause and the heal is
-    ungated. Writing the gate would make a solo's signature trait inert in
-    every fight rather than in the few the card excludes, which is the
-    trade f2718 settled the same way.
+    So the old trade -- leave it ungated rather than make a solo's
+    signature trait inert in every fight -- was the right call against an
+    empty set and is the wrong one now: the card conditions the
+    regeneration on the place, and a module that says where the fight is
+    gets the printed behaviour.
     """
     me = c.me
 
     def knit(ev: TurnStart) -> None:
         if ev.ghost or ev.actor != me:
+            return
+        # **"While in the natural world", asked at the top of each turn
+        # rather than once at arming.** A scene declares its terrain and a
+        # creature can be dragged between scenes, so the question belongs
+        # where the heal is and not where the watch is laid.
+        if not c.terrain("natural world"):
             return
         health = c.world.get(me, Health)
         if health is not None and health.hp > 0:
