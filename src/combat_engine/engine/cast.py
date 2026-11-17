@@ -10213,7 +10213,8 @@ class Cast:
         was = max(0, getattr(ev, "amount", 0)) if ev is not None else 0
         return self.reduce(was - was // 2, ev)
 
-    def run_at(self, victim: int, *, who: int | None = None) -> bool:
+    def run_at(self, victim: int, *, who: int | None = None,
+               kind: str = "walk") -> bool:
         """Walk into reach of a named creature, the way a charge's move does.
 
         `c.move` picks its own destination through the decider, which is
@@ -10239,7 +10240,7 @@ class Cast:
             default=None,
         )
         if best is not None:
-            walk(self.world, runner, list(best[2]))
+            walk(self.world, runner, list(best[2]), kind=kind)
         return adjacent(self.world, runner, victim)
 
     def charge_at(self, victim: int, ref: str = "", *, who: int | None = None) -> bool:
@@ -10265,12 +10266,21 @@ class Cast:
         # flag `actions.execute` does: `query.charging` has to be true for
         # the run and the swing alike whichever way the charge started, or a
         # row reading it works in play and not from inside a body. #732.
+        #
+        # **And the same `kind` on the movement, which it did not set.**
+        # `actions.execute` walks with `kind="charge"` and this walked with
+        # the default, so `MoveStart.kind_` came out `"walk"` -- and
+        # `p16379`'s predicate is exactly `ev.kind_ == "charge"`, with a
+        # docstring saying "`actions` passes `kind="charge"` for a charge's
+        # run, so 'you charge' is askable here". It was askable through one
+        # door of two. The note above claims this method sets "the same
+        # flag"; it set one of the two things and this is the other.
         mover = self.world.get(runner, Movement)
         was_charging = mover.charging if mover is not None else False
         if mover is not None:
             mover.charging = True
         try:
-            if not self.run_at(victim, who=runner):
+            if not self.run_at(victim, who=runner, kind="charge"):
                 return False
             if not ref:
                 known = self.world.get(runner, Powers)
