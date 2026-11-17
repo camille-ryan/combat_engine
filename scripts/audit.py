@@ -5193,6 +5193,39 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     if _rolls_saves(world, caster, ref, cursor):
         return True
 
+    # **These five run before the ordinary provocations, and the placement
+    # is measured rather than argued.** They were moved to the end in
+    # `19f379bc` on the reasoning that each perturbs the board
+    # irreversibly -- which is true -- and the wide sweep at `005397ef`
+    # then found 20 rows worse, 9 of them wanting these passes to run
+    # while the board was still whole.
+    #
+    # Measured over the union of every row either arrangement has hurt,
+    # 32 of them:
+    #
+    #     in-loop substitution, passes early     12
+    #     deferred pairs, passes late            12
+    #     deferred pairs, passes early           14
+    #
+    # So the deferred pairs are kept -- they cost no die-stream shift --
+    # and the passes come back here. The union is a biased set by
+    # construction, which is why this is confirmed against the corpus
+    # rather than left on the 32.
+    if _starts_a_turn_held(world, caster, ref, cursor):
+        return True
+
+    if _springs_a_trap(world, caster, ref, cursor):
+        return True
+
+    if _opens_with_surprise(world, caster, ref, cursor):
+        return True
+
+    if _an_ally_attacks(world, caster, ref, cursor):
+        return True
+
+    if _hit_against_a_defence(world, caster, ref, cursor):
+        return True
+
     if _does_the_ordinary_things(world, caster, ref, cursor):
         return True
 
@@ -5812,21 +5845,6 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
             _swing_from_reach(world, attacker, target, basic(attacker))
             if probe():
                 return True
-
-    if _starts_a_turn_held(world, caster, ref, cursor):
-        return True
-
-    if _springs_a_trap(world, caster, ref, cursor):
-        return True
-
-    if _opens_with_surprise(world, caster, ref, cursor):
-        return True
-
-    if _an_ally_attacks(world, caster, ref, cursor):
-        return True
-
-    if _hit_against_a_defence(world, caster, ref, cursor):
-        return True
 
     return _fired(world, ref, cursor)
 
