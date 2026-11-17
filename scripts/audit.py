@@ -5795,6 +5795,9 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     if _starts_a_turn_held(world, caster, ref, cursor):
         return True
 
+    if _springs_a_trap(world, caster, ref, cursor):
+        return True
+
     if _an_ally_attacks(world, caster, ref, cursor):
         return True
 
@@ -7376,6 +7379,80 @@ def _an_ally_attacks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa
 #: lowercase form admits 42 rows where this admits 33, and the nine extra
 #: are sentences like "an ally will be adjacent"; same reasoning the tree
 #: already applies to a power name being propcase in the source.
+#: A row whose trigger names a trap or a hazard. Six rows do, and five of
+#: them were unreachable: nothing on this board had ever put a trap down.
+_WANTS_A_TRAP = re.compile(r"\btrap\b|\bhazard\b", re.I)
+
+
+def _springs_a_trap(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Arm a trap beside the caster and walk it in.
+
+    **Nothing on this board has ever put a trap down**, so six rows
+    printing a trigger about one -- *"a trap attacks you"*, *"a hazard,
+    object or trap within 5 squares of you triggers"*, *"a trap or hazard
+    damages you while a nonminion is adjacent"* -- had no arrangement
+    between them, and five reported UNUSED.
+
+    `content.terrain.arm` is the door and does the whole thing: it puts a
+    trap in a square and has it attack whoever steps on it, through
+    `resolve.attack` **with the trap itself as the attacker** -- which is
+    what `query.is_trap` asks and what every one of these predicates
+    reads. So the arrangement is one `arm` and one `walk`.
+
+    The square has to be free of *creatures* and the trap does not make it
+    otherwise, which is `arm`'s own design note: "a trap that owned its
+    square could never be walked into, and being walked into is the whole
+    of how it goes off".
+
+    **Squares beside another creature first**, for the row that wants a
+    witness: `p16468` reads "while a nonminion is adjacent", so a trap
+    sprung in an empty corner satisfies everything except the clause it is
+    about. Measured: 2 of 3 fire from any free neighbour and the third only
+    from one beside somebody.
+
+    The level comes off the row, so a level-9 row springs a trap worth its
+    board rather than the level-1 default.
+    """
+    from combat_engine.content.terrain import arm
+    from combat_engine.engine.components import Position as _Position
+    from combat_engine.engine.grid import neighbours
+    from combat_engine.engine.movement import walk as _walk
+    from combat_engine.engine.query import creatures as _creatures
+
+    declared = get(ref)
+    if declared is None or not declared.triggers:
+        return False
+    if not _WANTS_A_TRAP.search(declared.trigger or ""):
+        return False
+    spot = world.get(caster, _Position)
+    if spot is None:
+        return False
+    home = spot.square
+    others = [
+        o for o in _creatures(world)
+        if o != caster and world.get(o, _Position) is not None
+    ]
+
+    def beside_somebody(sq: tuple[int, int]) -> bool:
+        return any(
+            max(abs(world.get(o, _Position).square[0] - sq[0]),
+                abs(world.get(o, _Position).square[1] - sq[1])) <= 1
+            for o in others
+        )
+
+    free = [
+        sq for sq in sorted(neighbours(home))
+        if world.grid.inside(sq) and world.grid.occupant(sq) is None
+    ]
+    for where in sorted(free, key=lambda sq: (not beside_somebody(sq), sq))[:3]:
+        arm(world, where, level=max(1, declared.level or 1))
+        _walk(world, caster, [where])
+        if _fired(world, ref, cursor):
+            return True
+        _back_to(world, caster, home)
+    return False
+
+
 _NAMED_DEFENCE = re.compile(r"\b(Will|Fortitude|Reflex)\b")
 
 #: Plain low-level monster attacks that target something other than AC, to
