@@ -273,8 +273,23 @@ def sight_squares(world: World, eid: int) -> frozenset[Square]:
     from .components import Senses
 
     lent = world.get(eid, Senses)
-    if lent is not None and lent.sight_from is not None:
-        return frozenset({lent.sight_from})
+    if lent is not None:
+        # **A lent body first.** `sight_from_who` is the creature-valued
+        # form -- *"you can see and hear as if you were in the target's
+        # space"* -- and it resolves through `squares` so the eye follows
+        # the body as it moves, where a lent square stays put. Nothing
+        # prints both, and a body is the more specific of the two.
+        #
+        # Falls back when that creature has left the board, which is the
+        # same proviso `dsl._lenders` carries for a borrowed origin: a
+        # scryed creature that dies leaves the watcher looking out of its
+        # own eyes rather than out of nowhere.
+        if lent.sight_from_who:
+            theirs = squares(world, lent.sight_from_who)
+            if theirs:
+                return theirs
+        if lent.sight_from is not None:
+            return frozenset({lent.sight_from})
     return squares(world, eid)
 
 

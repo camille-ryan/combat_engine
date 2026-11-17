@@ -1040,7 +1040,6 @@ def p12344(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=ARCANE,
-    todo=("c.see_from(who)",),
 )
 def p12345(c: Cast) -> None:
     """Seeing and hearing from another creature's square is not narrative
@@ -1048,16 +1047,36 @@ def p12345(c: Cast) -> None:
     moves where a creature's senses sit. `c.sight_range` changes how far,
     not from where.
 
-    **`c.cast_from` is the near-miss and is checked rather than assumed.**
-    It borrows another creature's square through `Relation.CASTS_FROM`,
-    which is read in `dsl.measured_from` -- so the borrowed square decides
-    the line *and the range* of a ranged or area attack. This card moves
-    the senses and says nothing about where an attack comes from, so
-    laying that verb would measure this character's ranged attacks from a
-    creature ten squares away: stronger than print, in the direction the
-    card is careful about. Refused in play rather than written with the
-    wrong verb."""
-    ...
+    **`c.cast_from` is the near-miss and this row was right to refuse
+    it.** That verb borrows another creature's square through
+    `Relation.CASTS_FROM`, read in `dsl.measured_from` -- so the borrowed
+    square decides the line *and the range* of a ranged or area attack.
+    This card moves the senses and says nothing about where an attack
+    comes from, so laying that verb would have measured this character's
+    ranged attacks from a creature ten squares away: stronger than print,
+    in the direction the card is careful about.
+
+    `c.see_from` is the verb that fits. It writes `Senses.sight_from_who`,
+    which `query.sight_squares` reads ahead of the square-valued
+    `sight_from`, and `query.squares` still answers what a power may
+    reach -- so the eye travels and the firing position does not.
+
+    **A body rather than a square, because this one is save-ends.**
+    `c.line_of_sight_from` already lent a bare square and would have been
+    right for one turn: a lent square stays where it was put, and this
+    card's eye is in a creature that walks. Freezing it at the moment of
+    the cast would have gone quietly wrong from the second turn on.
+
+    **The target rolls the save, not the caster.** The sense sits on the
+    caster -- they are the one seeing -- and the card targets a creature
+    and prints "(save ends)", so the creature being looked through is what
+    shakes it off. `Effect.saver` is the split, and without it the caster
+    would be saving against their own power.
+
+    The Aftereffect is the same sight again on a turn clock, which is what
+    `c.aftereffect` is for."""
+    held = c.see_from(c.target, until=When.SAVE_ENDS)
+    c.aftereffect(held, lambda: c.see_from(c.target, until=When.EONT))
 
 
 # ==========================================================================

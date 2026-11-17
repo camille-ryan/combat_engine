@@ -79,6 +79,11 @@ CATEGORIES: dict[str, dict] = {
                 "becomes_burst",
                 "cast_from", "coup_de_grace", "crit", "crit_becomes",
                 "line_of_sight_from",
+                # Beside `line_of_sight_from` because they are the pair:
+                # that one lends a SQUARE for sight, this lends a BODY, so
+                # the eye follows it. Neither lends a firing position --
+                # which is what keeps both out of `cast_from`'s meaning.
+                "see_from",
                 "disarm",
                 "flurry_of_blows", "grant_attack", "hit", "hit_becomes",
                 "landed", "oversized",

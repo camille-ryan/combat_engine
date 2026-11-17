@@ -110,6 +110,21 @@ class Senses:
     #: `query.sight_squares` is the only reader and `c.can_see` the only
     #: caller, so the lent origin and the sight answer cannot disagree.
     sight_from: Square | None = None
+    #: The **creature** whose space this one's sight is traced from, for a
+    #: card that lends a body rather than a square: *"you can see and hear
+    #: as if you were in the target's space"* -- `p12345`.
+    #:
+    #: A second field rather than storing that creature's square in
+    #: `sight_from`, because the two sentences differ in what happens
+    #: **next**: a lent square stays where it was put, and a lent body
+    #: takes its eye with it when it walks. Freezing the square at the
+    #: moment of the cast would have been right for one turn and wrong for
+    #: the rest of a save-ends duration.
+    #:
+    #: Read by `query.sight_squares` ahead of `sight_from`, which is the
+    #: order the two cards imply: nothing prints both, and a body is the
+    #: more specific of the two.
+    sight_from_who: int = 0
 
 
 @dataclass

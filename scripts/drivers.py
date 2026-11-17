@@ -24089,6 +24089,98 @@ def a_borrowed_origin_for_a_melee_line(out: Result) -> None:
              f"lending {lending()}, adjacent {adjacent()}")
 
 
+def a_lent_eye_travels_but_does_not_shoot(out: Result) -> None:
+    """"You can see and hear as if you were in the target's space." `p12345`.
+
+    Three verbs sit close together and the row refused two of them before
+    this one existed, correctly:
+
+        c.cast_from            borrows a square for ranged and area
+                               ATTACKS -- would have measured the caster's
+                               attacks from ten squares away
+        c.line_of_sight_from   lends a bare SQUARE for sight, which is
+                               right for one turn and wrong after that:
+                               this card is save-ends and its eye is in a
+                               creature that walks
+        c.see_from             lends the BODY, so the eye follows it
+
+    So the assertions here are mostly about what must **not** happen. The
+    firing position staying the caster's is the one that would be silent
+    if it broke -- the row would simply be stronger than its card, and
+    nothing else in the suite asks.
+
+    And the save is split: the sense sits on the caster because they are
+    the one seeing, the card targets a creature and prints "(save ends)",
+    so the creature being looked through is what shakes it off.
+    `Effect.rolls_the_save` is `saver or owner`, and without the split the
+    caster would roll against their own power.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import alive, sight_squares, squares
+    from combat_engine.engine.query import enemies as _enemies
+
+    world, me, _ = _audit.board("p12345", 1, pose=True)
+    foes = [f for f in _enemies(world, me) if alive(world, f)]
+    seat = world.get(me, Position)
+    if not foes or seat is None or seat.square is None:
+        out.skip("no creature to look through on this board")
+        return
+    eye = foes[0]
+    home = seat.square
+    place(world, eye, (home[0] + 6, home[1]))
+    mine = frozenset(squares(world, me))
+
+    out.that(frozenset(sight_squares(world, me)) == mine,
+             "the caster sees from its own square before the power")
+
+    held = Cast(world=world, me=me, ref="drivers").see_from(
+        eye, until=When.SAVE_ENDS,
+    )
+    out.that(held is not None, "the power returns a hold")
+    out.that(frozenset(sight_squares(world, me))
+             == frozenset(squares(world, eye)),
+             "and then from the scryed creature's space")
+    out.that(frozenset(squares(world, me)) == mine,
+             "**while the firing position stays the caster's** -- the eye"
+             " travels and the attack does not, which is the whole reason"
+             " this is not c.cast_from")
+
+    place(world, eye, (home[0] + 9, home[1] + 2))
+    out.that(frozenset(sight_squares(world, me))
+             == frozenset(squares(world, eye)),
+             "the eye FOLLOWS the body when it walks -- a lent square"
+             " would have stayed where it was put, which is right for"
+             " c.line_of_sight_from's card and wrong for this one")
+
+    out.that(held is not None and held.rolls_the_save == eye,
+             "the scryed creature rolls the save, not the caster",
+             f"rolls_the_save is {held.rolls_the_save if held else None},"
+             f" caster is {me}, scryed is {eye}")
+
+    if held is not None:
+        world.effects.end(held)
+    out.that(frozenset(sight_squares(world, me)) == mine,
+             "and the caster sees from its own square again once it ends")
+
+    # -- the lender leaves the board -------------------------------------
+    held2 = Cast(world=world, me=me, ref="drivers").see_from(
+        eye, until=When.SAVE_ENDS,
+    )
+    world.despawn(eye)
+    out.that(frozenset(sight_squares(world, me)) == mine,
+             "**and a scryed creature that leaves the board** puts the"
+             " watcher back behind its own eyes rather than looking out"
+             " of nowhere -- the same proviso dsl._lenders carries",
+             f"sight is {sorted(sight_squares(world, me))}")
+    if held2 is not None:
+        world.effects.end(held2)
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -91663,6 +91755,14 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    # **`lent_body`, because `lent_eye` is taken** -- by the rule for
+    # `c.line_of_sight_from`, which is this one's square-valued sibling
+    # and the verb `p12345` was right to refuse. Two names for two cards.
+    "lent_body": (
+        a_lent_eye_travels_but_does_not_shoot,
+        "c.see_from lends a body for SIGHT, follows it, and lends no"
+        " firing position (p12345)",
+    ),
     "melee_borrow": (
         a_borrowed_origin_for_a_melee_line,
         "c.cast_from(melee=) lends to a melee line, and only while the"

@@ -15746,6 +15746,58 @@ class Cast:
 
     # -- borrowing somebody else's square ------------------------------------
 
+    def see_from(
+        self, who: int, *, on: int | None = None,
+        until: When = When.SAVE_ENDS, saver: int | None = None,
+    ) -> Effect | None:
+        """"You can see and hear as if you were in the target's space."
+
+        `line_of_sight_from` below is the sibling and lends a **square**;
+        this lends a **body**, and the difference is what happens next: a
+        lent square stays where it was put, and a lent body takes the eye
+        with it when it walks. `p12345` is save-ends, so freezing the
+        square at the moment of the cast would have been right for one
+        turn and wrong for the rest of the duration.
+
+        **It is not `c.cast_from`, and that row checked rather than
+        assumed.** That verb borrows a square for ranged and area
+        *attacks*, so laying it here would measure the caster's attacks
+        from a creature ten squares away -- stronger than print, in the
+        direction this card is careful about. `query.squares` still
+        answers what a power may reach, so the eye travels and the firing
+        position does not.
+
+        **`saver` is who rolls to end it, which is not who holds it.** The
+        sense sits on the caster because they are the one seeing; the card
+        targets a creature and prints "(save ends)", so the creature being
+        looked *through* is the one that shakes it off.
+        `Effect.rolls_the_save` is `saver or owner` and exists for exactly
+        this split -- without it the caster would be saving against their
+        own power.
+
+        Hearing is not modelled apart from sight: `query.can_hear` composes
+        from `Condition.DEAFENED` and `query.sealed` and has no origin of
+        its own, so the printed "and hear" is covered to the extent
+        anything in this engine distinguishes the two. Said rather than
+        left, because the card names both.
+        """
+        from .components import Senses
+
+        holder = on if on is not None else self.me
+        lent = self.world.get(holder, Senses) or self.world.add(holder, Senses())
+        before = lent.sight_from_who
+        lent.sight_from_who = who
+
+        def undo() -> None:
+            lent.sight_from_who = before
+
+        return self.world.effects.apply(
+            holder, self.me, until,
+            label=f"{self.ref} sight", on_end=[undo],
+            saver=who if saver is None else saver,
+            by=self.ref,
+        )
+
     def line_of_sight_from(
         self, square: Square, *, on: int | None = None,
         until: When = When.EONT,
