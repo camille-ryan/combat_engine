@@ -5160,6 +5160,19 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     # UNUSED, which reads as "this row cannot work" rather than "the board
     # never asked it to".
     pairs = [(foes[0], caster), (caster, foes[0])]
+    # **And the caster's companion, which nothing ever swung at.** "Your
+    # spirit companion is hit by a melee attack" and "an enemy hits your
+    # spirit companion" are printed Triggers, and a companion is
+    # attackable on purpose -- `Companion`'s own docstring says so, and
+    # that it carries `Health`, `Defences` and a `Side` for exactly this.
+    # It was simply never in the pair list. #1341.
+    from combat_engine.engine.components import Companion as _Comp
+
+    for pet in list(world.having(_Comp)):
+        held = world.get(pet, _Comp)
+        if held is not None and held.owner == caster:
+            pairs.append((foes[0], pet))
+            break
     for mate in _allies_of(world, caster)[:2]:
         # Both directions: "an enemy attacks an ally" and "an ally misses
         # with a melee attack" are both printed triggers, and whether the
@@ -5186,6 +5199,22 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         _swing_from_reach(world, attacker, target, basic(attacker))
         if probe():
             return True
+        # **And a RANGED basic, which `basic()` never returns.** That
+        # helper answers whichever row the creature's basic is, and the
+        # board's creatures carry a melee one -- so "an enemy hits you
+        # with a ranged attack" and "you are hit by a ranged weapon
+        # attack" could not happen, however many melee basics went past.
+        # The same shape as the close/area gap, one step smaller. #1341.
+        # Granted first: `dsl.use` refuses a row the creature does not
+        # know, and the board's creatures carry a melee basic only --
+        # measured, the guard alone left all three rows dark.
+        arms = world.get(attacker, Powers)
+        if arms is not None:
+            if _RANGED_BASIC not in arms.known:
+                arms.known.append(_RANGED_BASIC)
+            _swing_from_reach(world, attacker, target, _RANGED_BASIC)
+            if probe():
+                return True
 
     # The same pairs again, with a **class** power rather than a basic. See
     # `class_attacks`: a basic carries `cls=""`, so this is the only pass in
@@ -7042,6 +7071,11 @@ def _release(world, caster: int) -> None:  # noqa: ANN001
     for holder in list(world.relations.sources(Relation.GRABBED_BY, caster)):
         world.relations.clear(Relation.GRABBED_BY, holder, caster)
 
+
+#: The generic ranged basic. Named rather than searched for: `basic()`
+#: answers the creature's own basic, which on this board is always a melee
+#: one, and three rows read a ranged attack coming in.
+_RANGED_BASIC = "rba"
 
 #: A printed Trigger answering an attack of a SHAPE the board never makes.
 #: Every swing this harness throws is a basic -- its own note says "`mba` is
