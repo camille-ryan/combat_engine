@@ -81,20 +81,32 @@ def p11599(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     once_per_round=True,
-    todo=("c.pick_up()",),
 )
 def p9344(c: Cast) -> None:
-    """Half of the card is already free here and the other half is shut.
+    """Half of the card is already free here and the other half has a door
+    now.
 
     Drawing and sheathing cost no action in this engine -- `f157` records
-    it -- so that clause is the engine's behaviour rather than a benefit.
-    Picking something up is `actions._picking_up`, which is offered in the
-    action menu for a minor out of the actor's **own** square and has no
-    `Cast` verb at all, so a body cannot reach the path to do it for free or
-    from the square next door. `cf:swordmage-f0` waits on the same door.
+    it -- so that clause is the engine's behaviour rather than a benefit,
+    and `c.draw` is there for a row that needs to say it out loud.
+
+    **Picking something up was the shut half and `c.pick_up` opens it.**
+    `actions._picking_up` offered the same thing in the action menu all
+    along, and two of its terms are not this card's: it charges a
+    **minor** where this is a free action, and it reaches the actor's
+    **own square** where this reaches one further. So the menu could not
+    be routed through for either reason -- which is why the paragraph
+    above was right and `triage.json`'s "mis-marked" verdict, reading the
+    action's existence rather than its terms, was not.
+
+    The body tries the floor first and falls back to the belt, because a
+    free action that found nothing to pick up should still be the draw the
+    card also offers.
 
     `once_per_round=True` is the printed Special and is header data, so it
-    holds whatever the body eventually says."""
+    holds whatever the body says."""
+    if not c.pick_up():
+        c.draw()
 
 
 @power(

@@ -31,7 +31,7 @@ Making an attack, and what the attack turns out to be.
   - Make a basic attack -- whichever row that creature's actually is.
 - `c.becomes_burst(self, size: 'int' = 1, *, vs: 'Defense | None' = None, damage: 'Callable[[Any], Any] | None' = None, ranged: 'bool' = True, on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'list[Effect]'`
   - The next basic attack becomes a burst centred on its target.
-- `c.cast_from(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, optional: 'bool' = False) -> 'Effect | None'`
+- `c.cast_from(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, optional: 'bool' = False, melee: 'bool' = False) -> 'Effect | None'`
   - "Determine line of sight and effect for your ranged and area
 - `c.coup_de_grace(self, *, on: 'int | None' = None) -> 'bool'`
   - Finish a helpless creature. An automatic critical, and nothing added.

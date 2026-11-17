@@ -3431,6 +3431,59 @@ def within_of(
     return max(0, r.within + _stretched(world, actor, "within", ctx))
 
 
+def _lenders(world: World, actor: int, r: Range) -> list[int]:
+    """Whose squares this actor may measure `r` from besides its own.
+
+    The one place `c.cast_from`'s terms are read, so `measured_from` and
+    `origins` cannot disagree about them -- they did read the proviso
+    twice, in two copies that had already drifted apart once.
+
+    Two words may ride on the relation's `via`, comma-joined:
+
+        optional   the borrowed square is an ALTERNATIVE rather than a
+                   replacement, so `origins` offers the actor's own too
+        melee      a melee line may borrow as well
+
+    **`melee` is a per-relation word and not a widening of the gate**, and
+    that is the row's own reasoning rather than a choice made here:
+    `p11769`'s stance says *"a square adjacent to you that is occupied by
+    an enemy as the square of origin for your **weapon** attacks"*, where
+    both rows already borrowing print *"your ranged and area attacks"*.
+    Opening melee to every caller would make those two stronger than their
+    cards.
+
+    The proviso is unchanged: on the board, and in line of effect.
+    """
+    from .components import Position as _Position
+    from .types import Relation as _Relation
+
+    out: list[int] = []
+    for lender in world.relations.targets(_Relation.CASTS_FROM, actor):
+        words = set(
+            world.relations.via(_Relation.CASTS_FROM, actor, lender).split(",")
+        )
+        allowed = ("ranged", "area_burst", "wall")
+        if "melee" in words:
+            allowed = (*allowed, "melee")
+        if r.kind not in allowed:
+            continue
+        if world.get(lender, _Position) and line_of_effect(world, actor, lender):
+            out.append(lender)
+    return out
+
+
+def _borrow_is_optional(world: World, actor: int, lenders: list[int]) -> bool:
+    """Does any live borrow offer its square rather than impose it?"""
+    from .types import Relation as _Relation
+
+    return any(
+        "optional" in world.relations.via(
+            _Relation.CASTS_FROM, actor, lender,
+        ).split(",")
+        for lender in lenders
+    )
+
+
 def measured_from(world: World, actor: int, r: Range) -> int:
     """Whose square this range is taken from -- the caster, unless it says.
 
@@ -3441,17 +3494,11 @@ def measured_from(world: World, actor: int, r: Range) -> int:
     throwing from inside `legal()`.
     """
     if r.from_ != "companion":
-        # A square lent by another creature -- `c.cast_from`. Only a ranged
-        # or area line borrows one, and only while the lender is on the
-        # board and in sight, which is the proviso both printed lines carry.
-        if r.kind in ("ranged", "area_burst", "wall"):
-            from .components import Position as _Position
-            from .types import Relation
-
-            for lender in world.relations.targets(Relation.CASTS_FROM, actor):
-                if world.get(lender, _Position) and line_of_effect(world, actor, lender):
-                    return lender
-        return actor
+        # A square lent by another creature -- `c.cast_from`. `_lenders`
+        # holds the terms: which range kinds may borrow, and the proviso
+        # that the lender is on the board and in sight.
+        lent = _lenders(world, actor, r)
+        return lent[0] if lent else actor
     from .components import Companion, Position
 
     for eid in world.having(Companion):
@@ -3495,21 +3542,9 @@ def origins(world: World, actor: int, r: Range) -> list[int]:
         #
         # The plain `c.cast_from` is unchanged and still **replaces** the
         # origin, which is what "rather than from yourself" says.
-        if r.kind in ("ranged", "area_burst", "wall"):
-            from .components import Position as _Pos
-            from .types import Relation as _Rel
-
-            lent = [
-                lender
-                for lender in world.relations.targets(_Rel.CASTS_FROM, actor)
-                if world.get(lender, _Pos)
-                and line_of_effect(world, actor, lender)
-            ]
-            if any(
-                world.relations.via(_Rel.CASTS_FROM, actor, lender) == "optional"
-                for lender in lent
-            ):
-                return [actor, *lent]
+        lent = _lenders(world, actor, r)
+        if lent and _borrow_is_optional(world, actor, lent):
+            return [actor, *lent]
         return [measured_from(world, actor, r)]
     from .components import Companion, Position
 

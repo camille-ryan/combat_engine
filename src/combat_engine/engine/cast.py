@@ -15796,7 +15796,7 @@ class Cast:
 
     def cast_from(
         self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER,
-        optional: bool = False,
+        optional: bool = False, melee: bool = False,
     ) -> Effect | None:
         """"Determine line of sight and effect for your ranged and area
         attacks from the target rather than from yourself."
@@ -15829,11 +15829,27 @@ class Cast:
         own square **and** the lender's when this is set, where it returns
         the lender's alone otherwise. Everything downstream already takes
         the best of a list, because the shaman's two spirits made it do so.
+
+        **`melee` lets a melee line borrow too, and it is a word on the
+        relation rather than a widening of the reader.** `dsl._lenders`
+        allows `ranged`, `area_burst` and `wall` by default, which is
+        *correct* for the rows already calling this: both of their printed
+        lines say *"your **ranged and area** attacks"*, so opening melee to
+        every caller would make them stronger than their cards. `p11769`'s
+        stance is the one that needs it -- *"a square adjacent to you that
+        is occupied by an enemy as the square of origin for your **weapon**
+        attacks"* -- and its own docstring asked for the parameter by name
+        for exactly this reason.
+
+        The two words are comma-joined on `via`, so a borrow can be both.
         """
         borrower = on if on is not None else self.me
         self.world.relations.set(
             Relation.CASTS_FROM, borrower, who,
-            via="optional" if optional else "",
+            via=",".join(
+                word for word, on_ in (("optional", optional), ("melee", melee))
+                if on_
+            ),
         )
 
         def undo() -> None:
@@ -19830,6 +19846,70 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             who, self.me, until, label=f"{self.ref} decays {arm.ref}", on_end=[restore],
             by=self.ref,
         )
+
+    def pick_up(self, ref: str = "", *, on: int | None = None,
+                adjacent: bool = True) -> bool:
+        """Take something up off the floor, paying nothing for it.
+
+        *"You draw or sheathe a weapon, **pick up an item in your space or
+        adjacent to it**, or retrieve or stow an item"* -- `p9344`, a free
+        action once per round. `c.draw` is the belt; this is the floor.
+
+        **The door existed and had no handle.** `actions._picking_up`
+        offers the same thing in the action menu, and two things about it
+        do not fit a row that has already bought its own action: it charges
+        a **minor**, and it reaches only the actor's **own square**.
+        `p9344`'s card is free and reaches one square further, so a body
+        could not route through the menu for either reason -- which is what
+        that row's docstring said, against a `triage.json` verdict calling
+        the symbol mis-marked. The verdict was reading the action's
+        existence; the row was reading its terms.
+
+        `adjacent` is the square-next-door half, on by default because the
+        two printed lines that reach the floor both say it. Turn it off for
+        a card that says "in your space".
+
+        `ref` names which item, for a card that says so; without it the
+        nearest-sorted one is taken, which is what "an item" means.
+
+        **Emits `WeaponHeld`, not a `Note`.** A `Note` is outside
+        `audit.DID_SOMETHING` on purpose -- it has no actor to attribute it
+        with -- so a row whose whole content is this would be correct and
+        invisible. That event exists for exactly this family and its own
+        docstring says so.
+
+        False when there is nothing within reach to take, so a row can
+        tell.
+        """
+        from .components import Gear as _Gear
+        from .components import Item as _Item
+        from .components import Position as _Position
+        from .events import WeaponHeld
+        from .query import squares as _squares
+
+        who = on if on is not None else self.me
+        gear = self.world.get(who, _Gear)
+        if gear is None:
+            return False
+        mine = set(_squares(self.world, who))
+        if adjacent:
+            mine |= spread(mine, 1)
+        for eid, item in sorted(self.world.each(_Item)):
+            if item.owner or item.weapon is None:
+                continue
+            if ref and item.ref != ref and item.weapon.ref != ref:
+                continue
+            where = self.world.get(eid, _Position)
+            if where is None or where.square not in mine:
+                continue
+            gear.weapons.append(item.weapon)
+            gear.wield(item.weapon)
+            self.world.despawn(eid)
+            self.world.bus.emit(
+                WeaponHeld(actor=who, ref=item.weapon.ref, drawn=True),
+            )
+            return True
+        return False
 
     def draw(self, ref: str = "", *, on: int | None = None) -> bool:
         """Take a stowed weapon up, paying nothing for it.

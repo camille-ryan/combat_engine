@@ -648,7 +648,6 @@ def p11766(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.MARTIAL, Keyword.STANCE],
-    todo=("c.cast_from(melee=)",),
 )
 def p11769(c: Cast) -> None:
     """The stance's whole content is moving the square a weapon attack is
@@ -679,17 +678,56 @@ def p11769(c: Cast) -> None:
     opening melee lines to every caller would make those rows stronger
     than print.
 
-    Left `todo=` rather than written half-way, for two measured reasons.
-    The melee half **is** the card -- borrowing the square of the enemy
-    you are standing next to buys a melee attacker one square of reach
-    past it, and buys a ranged weapon attack almost nothing -- so the
-    ranged half alone is not the power. And `c.cast_from` carries no
-    adjacency proviso: it lapses only when the lender leaves the board or
-    goes out of line of effect, where this card requires the enemy to be
-    *adjacent*, so laying it for a stance would keep the borrowed square
-    after the enemy walked away. That proviso is the row's to write, on
-    the day the melee half exists."""
-    ...
+    **Both halves are written now, and the paragraph above is the
+    specification they were written to.** It said the row was left
+    `todo=` for two measured reasons and that the adjacency proviso was
+    "the row's to write, on the day the melee half exists". That day is
+    this commit.
+
+    `melee=True` is the parameter this docstring asked for by name:
+    `dsl._lenders` allows `ranged`, `area_burst` and `wall` by default
+    because both rows already borrowing print *"your ranged and area
+    attacks"*, and the word on the relation opens the melee line for this
+    caster alone.
+
+    `optional=True` because the card says *"you **can** use"*: the stance
+    offers the enemy's square, it does not impose it, and a fighter forced
+    to measure from the creature it is standing next to would sometimes be
+    worse off than the card leaves them.
+
+    **The adjacency proviso is the `TurnStart` refresh**, which is the
+    half `c.cast_from` cannot carry: the borrow lapses only when the
+    lender leaves the board or goes out of line of effect, where this card
+    wants the enemy *adjacent*. So every borrow is dropped and re-laid on
+    whoever is adjacent now, at the top of each of the caster's turns. An
+    enemy that walks away stops lending at the next refresh rather than
+    the instant it moves, which is the honest limit of a turn-grained
+    hook and is said here rather than left to be discovered.
+
+    `c.stance` holds it, so taking another stance ends this one -- which
+    is what makes a stance a stance, and is why the borrows hang off the
+    stance's own effect rather than an encounter clock.
+    """
+    from combat_engine.engine.types import Relation
+
+    held = c.stance()
+
+    def lend() -> None:
+        """Drop every borrow and re-lay it on whoever is adjacent now."""
+        for was in list(c.world.relations.targets(Relation.CASTS_FROM, c.me)):
+            c.world.relations.clear(Relation.CASTS_FROM, c.me, was, "not adjacent")
+        for foe in sorted(c.enemies()):
+            if c.distance(foe) <= 1:
+                c.cast_from(foe, until=When.STANCE, optional=True, melee=True)
+
+    lend()
+
+    def refresh(ev: TurnStart) -> None:
+        if not ev.ghost and ev.actor == c.me:
+            lend()
+
+    c.watch(TurnStart, refresh, until=When.STANCE, on=c.me, label=c.ref)
+    return held
 
 
 # ==========================================================================

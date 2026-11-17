@@ -23982,6 +23982,113 @@ def immunity_to_a_damage_type(out: Result) -> None:
              "while the granted one is gone")
 
 
+def a_borrowed_origin_for_a_melee_line(out: Result) -> None:
+    """"A square adjacent to you that is occupied by an enemy as the square
+    of origin for your weapon attacks." `p11769`.
+
+    `c.cast_from` has borrowed another creature's square for a duration
+    since it was written, and `dsl._lenders` allows `ranged`, `area_burst`
+    and `wall` only. That is **correct** for the two rows already calling
+    it -- both print *"your ranged and area attacks"* -- so the melee line
+    is a word on the relation rather than a widening of the gate, which is
+    what `p11769`'s own docstring asked for by name.
+
+    Two halves, and the second is the row's rather than the verb's:
+
+    * `melee=True` lets a `melee` range borrow. The default must still
+      refuse one, or the other two rows get stronger than their cards --
+      that is the first pair of assertions and the one a careless widening
+      fails.
+    * **the adjacency proviso**, which `c.cast_from` cannot carry: a
+      borrow lapses only when the lender leaves the board or goes out of
+      line of effect, where this card wants the enemy *adjacent*. So the
+      row drops and re-lays every borrow at the top of each of its turns,
+      and the set lending must equal the set adjacent.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import Range, measured_from, origins, use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import alive, distance_between
+    from combat_engine.engine.query import enemies as _enemies
+    from combat_engine.engine.types import Relation
+
+    MELEE = Range(kind="melee", size=1)
+    RANGED = Range(kind="ranged", size=10)
+
+    def board() -> tuple:
+        world, me, _ = _audit.board("p11769", 1, pose=True)
+        foes = [f for f in _enemies(world, me) if alive(world, f)]
+        seat = world.get(me, Position)
+        return world, me, foes, (seat.square if seat else None)
+
+    # -- the default still refuses a melee line --------------------------
+    world, me, foes, home = board()
+    if not foes or home is None:
+        out.skip("no enemy on this board to borrow a square from")
+        return
+    place(world, foes[0], (home[0] + 1, home[1]))
+    Cast(world=world, me=me, ref="drivers").cast_from(
+        foes[0], until=When.ENCOUNTER,
+    )
+    out.that(measured_from(world, me, MELEE) == me,
+             "a plain borrow does NOT lend to a melee line -- both rows"
+             " already calling c.cast_from print 'your ranged and area"
+             " attacks', and widening the gate would make them stronger"
+             " than print")
+    out.that(measured_from(world, me, RANGED) == foes[0],
+             "while the ranged line borrows, as it always has")
+
+    # -- melee=True opens it ---------------------------------------------
+    world, me, foes, home = board()
+    place(world, foes[0], (home[0] + 1, home[1]))
+    Cast(world=world, me=me, ref="drivers").cast_from(
+        foes[0], until=When.ENCOUNTER, melee=True, optional=True,
+    )
+    out.that(foes[0] in origins(world, me, MELEE),
+             "with melee=True the melee line borrows the square")
+    out.that(me in origins(world, me, MELEE),
+             "and the caster's own square is still offered, because the"
+             " card says 'you CAN use' rather than imposing it")
+
+    # -- the row, and its adjacency proviso ------------------------------
+    world, me, foes, home = board()
+    place(world, foes[0], (home[0] + 1, home[1]))
+    use(world, me, "p11769")
+
+    def lending() -> list[int]:
+        return sorted(world.relations.targets(Relation.CASTS_FROM, me))
+
+    def adjacent() -> list[int]:
+        return sorted(f for f in foes if distance_between(world, me, f) <= 1)
+
+    out.that(lending() == adjacent() and lending() != [],
+             "the stance lends from every adjacent enemy and no other",
+             f"lending {lending()}, adjacent {adjacent()}")
+
+    for i, foe in enumerate(foes):
+        place(world, foe, (home[0] + 8, home[1] + i))
+    world.turn = me
+    world.bus.emit(TurnStart(actor=me, round=world.round))
+    out.that(lending() == [] and adjacent() == [],
+             "**and stops when they walk away** -- the proviso c.cast_from"
+             " cannot carry, re-measured at the top of each of the"
+             " caster's turns",
+             f"lending {lending()}, adjacent {adjacent()}")
+    out.that(origins(world, me, MELEE) == [me],
+             "so the melee line is measured from the caster again")
+
+    place(world, foes[1], (home[0], home[1] + 1))
+    world.bus.emit(TurnStart(actor=me, round=world.round))
+    out.that(lending() == adjacent() == [foes[1]],
+             "and picks up an enemy that steps back into reach",
+             f"lending {lending()}, adjacent {adjacent()}")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -91556,6 +91663,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "melee_borrow": (
+        a_borrowed_origin_for_a_melee_line,
+        "c.cast_from(melee=) lends to a melee line, and only while the"
+        " enemy is adjacent (p11769)",
+    ),
     "immune_dtype": (
         immunity_to_a_damage_type,
         "c.immune(dtype=) writes Defences.immune and puts back only what"

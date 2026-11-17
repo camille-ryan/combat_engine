@@ -107,6 +107,8 @@ Things a creature spends, and the budget it spends them from.
   - Put a one-shot in somebody's hands for them to spend later.
 - `c.loads_free(self, *, cost: 'ActionType' = <ActionType.FREE: 'free'>, per_turn: 'int' = -1, only: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Make reloading cost less than the printed minor action.
+- `c.pick_up(self, ref: 'str' = '', *, on: 'int | None' = None, adjacent: 'bool' = True) -> 'bool'`
+  - Take something up off the floor, paying nothing for it.
 - `c.recall_weapon(self, *, within: 'int' = 0, on: 'int | None' = None) -> 'bool'`
   - Call a weapon that was yours back into your hand from a distance.
 - `c.stow(self, ref: 'str' = '', *, on: 'int | None' = None) -> 'bool'`

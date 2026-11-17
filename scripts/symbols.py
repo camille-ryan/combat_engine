@@ -608,6 +608,11 @@ CATEGORIES: dict[str, dict] = {
             # question -- is what it was written against. #736.
             ("cards and carried things", [
                 "draw", "draws_free", "give", "loads_free", "recall_weapon",
+                # The floor rather than the belt, and the comment four
+                # lines up is about exactly this: `actions._picking_up`
+                # charges a minor from your own square, where the printed
+                # free action reaches one further. #736, p9344.
+                "pick_up",
                 "stow",
             ]),
         ],
