@@ -4935,6 +4935,49 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         caster_health.hp = was
     if probe():
         return True
+
+    # **And an ALLY's second wind, which is a different sentence.** Five
+    # rows trigger on "an ally within 5 squares spends a healing surge"
+    # and three more on an ally being healed; the caster's own wind above
+    # emits `SurgeSpent` and `Healed` with the **caster** as the actor, so
+    # none of them could ever answer it. The same shape as the escape
+    # poses: the event was being produced from the wrong side of the
+    # relation. #1341.
+    #
+    # Hit points go back here too, and for the stronger reason: an ally
+    # left healed changes what every later pass is measuring, and the
+    # board bloodies on purpose.
+    from combat_engine.engine.query import allies as _mates
+
+    for mate in _mates(world, caster):
+        if mate == caster:
+            continue
+        mate_health = world.get(mate, Health)
+        before = mate_health.hp if mate_health is not None else 0
+        Cast(world=world, me=mate, ref="audit:provoke").second_wind(on=mate)
+        if mate_health is not None:
+            mate_health.hp = before
+        if probe():
+            return True
+
+        # **And the ally healing the CASTER, which is a third sentence.**
+        # "An ally heals you" and "an ally grants you the use of a healing
+        # surge" are both about the caster receiving, where everything
+        # above has the ally as both actor and subject. Two rows wanted
+        # it and neither could be answered by any amount of the ally
+        # tending itself.
+        hurt = world.get(caster, Health)
+        standing = hurt.hp if hurt is not None else 0
+        if hurt is not None and hurt.hp > 1:
+            hurt.hp = max(1, hurt.hp // 2)
+        Cast(world=world, me=mate, ref="audit:provoke").heal(
+            amount=1, on=caster
+        )
+        if hurt is not None:
+            hurt.hp = standing
+        if probe():
+            return True
+        break
     mine.action_point()
     if probe():
         return True
