@@ -44,12 +44,14 @@ from combat_engine.engine import (
     CloseBurst,
     Condition,
     DamageType,
+    Hit,
     Keyword,
     Melee,
     Ranged,
     TurnStart,
     UpTo,
     When,
+    get,
     power,
 )
 from combat_engine.engine.query import creatures, distance_between
@@ -479,11 +481,28 @@ def p3162(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p3171(c: Cast) -> None:
-    """The Dragon Magic clause -- 3 squares instead of 1 against a bloodied
-    target -- is dropped with the fork."""
+    """**The fork IS modelled, and "dropped with the fork" was false.**
+    `chargen.BUILDS["sorcerer"]` carries all four sources -- `dragon`,
+    `storm`, `cosmic`, `wild` -- beside the four elemental legs, and
+    content asks for them at twelve sites already (`souls.py` dispatches
+    on `dragon` and `wild`, `feats/sorcerer_b.py` on `wild`). The
+    printed refs map to legs off their own spec text: `f0s0` cosmic,
+    `f0s1` dragon, `f0s2` storm, `f0s3` wild. #1341, #1346.
+
+    So the Dragon Magic clause is written: `c.build("dragon")` for the
+    leg and `c.bloodied()` for the target's state. **It replaces the
+    distance rather than adding to it** -- "3 squares **instead of** 1"
+    -- so it is one `c.push` with a chosen number and not a second push
+    on top of the first.
+
+    `c.bloodied()` with no argument asks about the **target**, which is
+    what this card means, and the burst re-asks it per enemy -- so a
+    bloodied one is pushed 3 while the one beside it is pushed 1.
+    """
     if c.strike():
         c.damage("1d10", c.cha_mod)
-        c.push(1)
+        far = 3 if (c.build("dragon") and c.bloodied()) else 1
+        c.push(far)
 
 
 @power(
@@ -515,10 +534,53 @@ def p3172(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p3701(c: Cast) -> None:
-    """The Dragon Magic clause -- a scorch on the next enemy to hit you --
-    is dropped with the fork."""
+    """**The fork IS modelled, and "dropped with the fork" was false.**
+    `chargen.BUILDS["sorcerer"]` carries all four sources -- `dragon`,
+    `storm`, `cosmic`, `wild` -- beside the four elemental legs, and
+    content asks for them at twelve sites already (`souls.py` dispatches
+    on `dragon` and `wild`, `feats/sorcerer_b.py` on `wild`). The
+    printed refs map to legs off their own spec text: `f0s0` cosmic,
+    `f0s1` dragon, `f0s2` storm, `f0s3` wild. #1341, #1346.
+
+    So the Dragon Magic clause is written. Three words in it carry the
+    whole shape:
+
+    * "**the next** enemy" -- one payout, spent by the first melee hit
+      that qualifies, which is the `paid` latch rather than `once=` on a
+      hold: the hold here is a watcher, and `once=` would spend it on
+      any `Hit` at all;
+    * "**that hits you**" -- filtered on `ev.target == me`, so an ally
+      being hit does not spend it;
+    * "with a **melee** attack" -- read off the swinging row's own reach
+      kind, the same way `p12891` reads it.
+
+    Laid once per use and not once per creature in the blast: the body
+    runs per target and the clause is the caster's, so the memo lives on
+    the `Cast`.
+    """
     if c.strike():
         c.damage("1d8", c.cha_mod, dtype=DamageType.FIRE)
+    if not c.build("dragon") or getattr(c, "dragon_scorch", False):
+        return
+    c.dragon_scorch = True
+    paid = [False]
+    me = c.me
+
+    def scorch(ev: Hit) -> None:
+        if paid[0] or ev.target != me:
+            return
+        swung = get(ev.power)
+        if swung is None or swung.reach.kind != "melee":
+            return
+        paid[0] = True
+        c.flat(
+            max(0, c.str_mod),
+            dtype=DamageType.FIRE,
+            on=ev.attacker,
+            from_attack=False,
+        )
+
+    c.watch(Hit, scorch, until=When.EONT)
 
 
 @power(
