@@ -5194,8 +5194,26 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         # Skipping would be the honest minimum and would leave the trigger
         # unreachable whenever the first foe happens to die early, which is
         # the board luck #1149 is about. #1149.
+        # **The substitution the paragraph above describes, which was
+        # never written.** The code `continue`d instead, so a dead
+        # `foes[0]` took every pair with it -- as attacker AND as target.
+        # Measured on `p7250`: all seven pairs skipped, `alive(foes[0])`
+        # False, and six of the seven involve it. The ally pairs are the
+        # ones that never happen, which is why "an enemy hits your ally"
+        # reported UNUSED for nine bard rows while the pass meant to
+        # produce it ran every time. #1353.
         if not alive(world, attacker):
-            continue
+            attacker = next(
+                (f for f in foes if alive(world, f) and f != target), 0
+            )
+            if not attacker:
+                continue
+        if not alive(world, target):
+            target = next(
+                (f for f in foes if alive(world, f) and f != attacker), 0
+            )
+            if not target:
+                continue
         _swing_from_reach(world, attacker, target, basic(attacker))
         if probe():
             return True
