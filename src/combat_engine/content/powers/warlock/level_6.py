@@ -53,6 +53,7 @@ from combat_engine.engine import (
     Relation,
     RelationSet,
     Trigger,
+    TurnStart,
     When,
     World,
     by_me,
@@ -303,7 +304,6 @@ def p13648(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[*ARCANE, Keyword.SHADOW],
-    dropped=("c.dismount(from_=)",),
 )
 def p13885(c: Cast) -> None:
     """Ending the step inside an enemy's space is `share=True`, and being
@@ -320,25 +320,32 @@ def p13885(c: Cast) -> None:
     what "the nearest unoccupied square" asks for. So the eviction exists
     and a `TurnStart` watch is the clock.
 
-    **What is missing is saying *which* mount.** `c.mount()` is
-    `relations.sources(RIDDEN_BY, me)` and hands back `found[0]` -- the
-    first of however many -- and `c.dismount` takes no argument naming
-    one. Written and controlled: with the clause in and a `TurnStart`
-    posed, `mount()` answered **8**, an ally the board had already
-    mounted this warlock on, so the row stepped off the *ally*, left the
-    enemy still ridden, and put the caster at (3, 8) with the enemy at
-    (7, 9).
+    **And it names which mount**, which is what the clause was waiting
+    for. `c.mount()` is `relations.sources(RIDDEN_BY, me)` and hands back
+    `found[0]`, so a bare `c.dismount()` got off whichever came first:
+    measured, with a `TurnStart` posed it answered an ally the board had
+    already mounted this warlock on, stepped off *that*, and left the
+    enemy still ridden. `c.dismount(from_=)` takes the ref, so the row
+    gets off the creature it rode.
 
-    That is why the clause is not here. It would have fired, audited
-    green, and moved the warlock to the wrong square -- worse than the
-    gap, and invisible to every instrument.
+    `once=True` because the card evicts once rather than every turn, and
+    the clock is the warlock's own next turn start.
     """
     c.no_provoke(until=When.EOT)
     c.shift(2, share=True)
     here = c.here
     inside = [f for f in c.enemies() if here in squares_of(c.world, f)]
-    if inside:
-        c.ride(on=inside[0])
+    if not inside:
+        return
+    mount = inside[0]
+    c.ride(on=mount)
+    me = c.me
+
+    def step_off(ev: TurnStart) -> None:
+        if ev.actor == me and not ev.ghost:
+            c.dismount(from_=mount)
+
+    c.watch(TurnStart, step_off, until=When.EONT, on=me, once=True)
 
 
 @power(

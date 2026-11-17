@@ -12926,13 +12926,28 @@ class Cast:
         self.world.relations.set(Relation.RIDDEN_BY, who, self.me)
         return True
 
-    def dismount(self, *, to: Square | None = None) -> bool:
+    def dismount(self, *, to: Square | None = None,
+                 from_: int | None = None) -> bool:
         """Get off, into an adjacent square. `c.ride`'s missing inverse.
 
         Dismounting is a **printed action in its own right**, a peer of
         mounting rather than an afterthought, and had no verb at all -- so
         `Relation.RIDDEN_BY` could be set and never cleared by anything a
         row could say. #749.
+
+        **`from_` names which mount to get off**, for a creature astride
+        more than one. `c.mount()` is `relations.sources(RIDDEN_BY, me)`
+        and hands back `found[0]`, so without this a row could only ever
+        dismount whichever came first -- and `p13885`, whose printed line
+        is "at the start of your next turn you appear in the nearest
+        unoccupied square", rode an **enemy** while the board had already
+        mounted the warlock on an ally. Measured: `mount()` answered the
+        ally, the row stepped off that instead, and left the enemy still
+        ridden with the caster beside the wrong creature.
+
+        A ref it is not riding is refused rather than ignored, because a
+        row naming the wrong mount is a bug in the row and silence would
+        hide it.
 
         The printed line is "moving to a square adjacent to it", so this
         **moves** rather than only clearing the relation: a carried rider is
@@ -12948,7 +12963,11 @@ class Cast:
         from .movement import step
         from .query import squares as occupies
 
-        beast = self.mount()
+        if from_ is not None:
+            astride = self.world.relations.sources(Relation.RIDDEN_BY, self.me)
+            beast = from_ if from_ in astride else None
+        else:
+            beast = self.mount()
         if beast is None:
             return False
         spots = sorted(
