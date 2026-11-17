@@ -154,14 +154,25 @@ def _chills(c: Cast, zone: int) -> None:
     target=ONE_CREATURE,
     keywords=DIVINE_WEAPON,
     attack=Attack(STR, vs=AC),
+    # **The Special line, which the old note said had no header field.**
+    # It has one: `instead_of_basic=` is a `Power` field and twelve rows
+    # already declare it, four of them with `basic_at=` beside it for the
+    # augment-gated case. This card's Special is unconditional -- "you can
+    # use this attack in place of a melee basic attack when charging" --
+    # so the window alone is the whole of it, and `basic_form` answers the
+    # base form for an empty scope.
+    #
+    # It has to be a declaration rather than a `c.as_basic` call: the
+    # permission exists *before* the row is used, and a body only runs
+    # once the row has been chosen.
+    instead_of_basic="charge",
 )
 def p11048(c: Cast) -> None:
     """The follow-up hangs off the burn rather than off a clock: it lasts
     exactly as long as the ongoing damage this attack applied, which is what
     "while it is taking ongoing damage from this attack" reads.
 
-    The Special line -- swinging this instead of a basic attack when
-    charging -- has no header field and is not written; see the report.
+    The Special line is declared in the header -- see the note there.
     """
     victim = c.target
     if victim is None:

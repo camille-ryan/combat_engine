@@ -37,6 +37,7 @@ from combat_engine.engine import (
     Position,
     Ranged,
     Summon,
+    TurnEnd,
     TurnStart,
     When,
     Window,
@@ -123,8 +124,27 @@ def p11270(c: Cast) -> None:
 def p11271(c: Cast) -> None:
     """The standing "use a minor action to push the target 1 square" is written
     as a sustain-minor hold with the push as its payout -- the same shape, and
-    the only one that gives a minor action somewhere to go. The clause ending
-    it when you finish your turn adjacent to the target is dropped."""
+    the only one that gives a minor action somewhere to go.
+
+    **"This effect ends if you end your turn adjacent to the target" is
+    written now**, and the note calling it dropped named no obstacle --
+    because there is none. It is a `TurnEnd` watch on the caster asking
+    one adjacency question, and `world.effects.end` is how a row takes its
+    own hold down early; `p12660` does the same thing for an aura that
+    ends when its owner falls.
+
+    The watch is bounded by the hold rather than by a clock of its own:
+    `on_end` closes it, so the two cannot outlive each other.
+
+    **And the hold is `on=c.me` now, which is a bug this clause exposed.**
+    `c.effect` defaults `on=` to the **target**, so the sustain was filed
+    on the enemy -- and `actions.legal` offers a sustain to the effect's
+    *owner*, meaning the minor action that keeps a psion's own power up
+    was being offered to the creature it was aimed at. Measured before the
+    fix: `owner=2 label='p11271' sustain=minor` with the caster as 1.
+    Nothing reported it, because the row fired and did something either
+    way.
+    """
     victim = c.target
     if c.strike():
         c.damage("2d8", c.int_mod, dtype=DamageType.FORCE)
@@ -135,7 +155,20 @@ def p11271(c: Cast) -> None:
         if victim is not None and c.distance(victim) <= 5:
             c.push(1, on=victim)
 
-    c.on_sustain(c.effect(c.ref, until=When.SUSTAIN, sustain=MINOR), shove)
+    hold = c.effect(c.ref, on=c.me, until=When.SUSTAIN, sustain=MINOR)
+    c.on_sustain(hold, shove)
+    if hold is None or victim is None:
+        return
+    me = c.me
+
+    def stepped_up(ev: TurnEnd) -> None:
+        if ev.actor == me and not hold.ended and c.adjacent_to(victim, me):
+            c.world.effects.end(hold, "you ended your turn beside it")
+
+    watcher = c.watch(TurnEnd, stepped_up, until=When.ENCOUNTER, on=me)
+    hold.on_end.append(
+        lambda: c.world.effects.end(watcher, "the hold is over")
+    )
 
 
 @power(
