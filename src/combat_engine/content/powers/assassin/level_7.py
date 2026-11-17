@@ -110,12 +110,30 @@ def p9432(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.SHADOW, Keyword.WEAPON],
     attack=Attack(DEX, vs=AC),
+    dropped=("c.miss_lands_on(on=)",),
 )
 def p9433(c: Cast) -> None:
     """Sharing the target's square is `share=True`; moving with it is riding
-    it, which is the relation that makes a creature carry another. "Any melee
-    or ranged attack that misses you hits the target instead" needs a redirect
-    from inside the attack's own interrupt window and is dropped."""
+    it, which is the relation that makes a creature carry another.
+
+    "Any melee or ranged attack that misses you hits the target instead" is
+    still dropped, and the reason has been narrowed: the old note said it
+    "needs a redirect from inside the attack's own interrupt window", and
+    that window is reachable -- `c.pass_on`'s docstring demonstrates it,
+    and `c.redirect` is a verb that lives in it.
+
+    Three near misses, and what each cannot do:
+
+    * `c.redirect` moves the blow **with its live result**, so a miss
+      stays a miss wherever it is pointed.
+    * `c.also_hits` copies a blow that has already landed, by watching the
+      `DamageRolled` that attack makes -- a miss rolls none, so there is
+      nothing to copy.
+    * `c.hit_becomes(True)` forces the blow that was answered to land, on
+      the creature it was already aimed at, not on a second one.
+
+    What the card asks for is a **standing** hold that turns a miss on one
+    creature into a hit on another, and none of the three is that."""
     victim = c.target
     if victim is None:
         return

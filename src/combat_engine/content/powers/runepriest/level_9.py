@@ -20,10 +20,12 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     DamageType,
+    Hit,
     Keyword,
     Melee,
     TurnStart,
     When,
+    Window,
     ZoneEntered,
     get,
     power,
@@ -105,12 +107,50 @@ def p11400(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p11402(c: Cast) -> None:
-    """The Effect is dropped: nothing can make an attack miss creatures it
-    has already been declared against -- `c.autohit` has no counterpart."""
+    """**The Effect is written now, and the reason it was dropped was
+    false.** The note said "`c.autohit` has no counterpart". It has one:
+    `c.hit_becomes(False)`, whose docstring is about this exact
+    asymmetry -- *"the attack misses, or it lands after all"*, with
+    `hit=True` named as "the `forced` half".
+
+    Three things the printed line needs, and all three were already
+    answerable:
+
+    * **"included as a target of"** is a membership test on
+      `Hit.among`, "everybody this one attack is aimed at, for a burst or
+      a blast" -- not an `attacker`/`target` comparison.
+      `skills/insight.py` records the same reading.
+    * **"a close or an area attack"** is `AREA_OR_CLOSE`, which this file
+      already imports and already uses eight rows below, with a comment
+      saying why a hand-written tuple was wrong.
+    * **`Window.BEFORE`**, which is the part that would have failed
+      silently. `hit_becomes` works by setting `result.hit` so that
+      `resolve.attack`'s `confirm` callback turns the announcement into a
+      real `Miss` -- so a listener in the default AFTER window runs once
+      `confirm` has already read it and changes nothing.
+
+    It misses the caster and allies and leaves the blow on the target
+    alone, which is what "misses you and your allies" says."""
+    victim = c.target
     if c.strike():
         c.damage(c.w(3), c.str_mod)
     else:
         c.half_damage(c.w(3), c.str_mod)
+    if victim is None or not c.first:
+        return
+    me = c.me
+
+    def spared(ev: Hit) -> None:
+        if victim not in getattr(ev, "among", ()) or ev.target == victim:
+            return
+        if ev.target != me and ev.target not in c.allies():
+            return
+        dealt = get(getattr(ev, "power", ""))
+        if dealt is None or dealt.reach.kind not in AREA_OR_CLOSE:
+            return
+        c.hit_becomes(False, ev=ev)
+
+    c.watch(Hit, spared, until=When.ENCOUNTER, on=me, window=Window.BEFORE)
 
 
 @power(
