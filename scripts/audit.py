@@ -2508,6 +2508,17 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
     # Before the empty-hand branch below, and skipped when that one matches:
     # "wielding a shield" and "nothing in the other hand" are opposite
     # sentences and a row saying the second must not be handed the first.
+    # **An item in the bag, which is one line and a `set`.** `Gear.carried`
+    # is what the gate reads and nothing fills it on this board.
+    if gear is not None:
+        found = _CARRIES_ITEM.search(
+            getattr(declared, "requires_text", "") or ""
+        )
+        if found and found.group(1) not in gear.carried:
+            # A `list[str]`, not a set -- `.add` raised on all three rows
+            # the first time, which `audit.py`'s own raise count caught
+            # immediately.
+            gear.carried.append(found.group(1))
     if gear is not None and not _EMPTY_HAND.search(wanted):
         if _WANTS_SYMBOL.search(wanted) and not any(
             w.ref == chargen.HOLY_SYMBOL.ref for w in gear.weapons
@@ -4016,6 +4027,16 @@ _WANTS_SHIELD = re.compile(r"\bshield\b", re.I)
 #: A holy symbol, which `chargen` has a constant for and deals to nobody the
 #: board fields. The cleric chassis here carries a greataxe.
 _WANTS_SYMBOL = re.compile(r"holy symbol", re.I)
+
+#: **An item a Requirement says is on your person.** Three theme rows gate
+#: on `ref in Gear.carried` and the board deals the character nothing, so
+#: all three were refused for a bag rather than for anything they do. The
+#: ref is read out of our own `requires_text`, which is where it is already
+#: written -- not parsed out of the printed card.
+_CARRIES_ITEM = re.compile(
+    r"\b(i\d+)\b[^.]{0,40}?(?:on your person|in your possession|carried)",
+    re.I,
+)
 
 #: What `_WANTS_TWO_HANDS` reaches for. A ref and not a group, because the
 #: Requirement is about the grip rather than the family.
