@@ -5541,17 +5541,21 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     # placement costs nothing here -- but #1149's lesson is that a pass
     # appended after one that already fires the row buys zero, and the
     # cheapest place to be right is beside the pass it resembles.
+    _free_the_immediate(world, caster)
     if _throws_a_shaped_attack(world, caster, ref, cursor):
         return True
+    _free_the_immediate(world, caster)
     if _rolls_checks(world, caster, ref, cursor):
         return True
 
     # After the checks, because a stabilisation is usually a check *on* a
     # dying creature -- so the dying ally has to be standing (or lying)
     # before the check pass can mean anything for it. #1226.
+    _free_the_immediate(world, caster)
     if _lays_an_ally_dying(world, caster, ref, cursor):
         return True
 
+    _free_the_immediate(world, caster)
     if _rolls_saves(world, caster, ref, cursor):
         return True
 
@@ -5573,19 +5577,43 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     # and the passes come back here. The union is a biased set by
     # construction, which is why this is confirmed against the corpus
     # rather than left on the 32.
+    _free_the_immediate(world, caster)
     if _starts_a_turn_held(world, caster, ref, cursor):
         return True
 
+    _free_the_immediate(world, caster)
     if _springs_a_trap(world, caster, ref, cursor):
         return True
 
+    _free_the_immediate(world, caster)
     if _opens_with_surprise(world, caster, ref, cursor):
         return True
 
+    _free_the_immediate(world, caster)
     if _an_ally_attacks(world, caster, ref, cursor):
         return True
 
+    _free_the_immediate(world, caster)
     if _hit_against_a_defence(world, caster, ref, cursor):
+        return True
+
+    # **Three more of the same shape, and the placement is copied rather
+    # than reasoned about again.** Each lends a row, loads the die or moves
+    # two creatures, so each is irreversible in the way the five above are
+    # -- and each is gated on a word in the row's own printed trigger, so a
+    # row that does not say "mark", "opportunity" or a damage kind never
+    # reaches them at all. That gate is what makes the position cheap: the
+    # cost of these passes falls only on rows nothing else could fire.
+    _free_the_immediate(world, caster)
+    if _hit_by_a_named_kind(world, caster, ref, cursor):
+        return True
+
+    _free_the_immediate(world, caster)
+    if _a_marked_foe_acts(world, caster, ref, cursor):
+        return True
+
+    _free_the_immediate(world, caster)
+    if _an_opportunity_attack_lands(world, caster, ref, cursor):
         return True
 
     if _does_the_ordinary_things(world, caster, ref, cursor):
@@ -8073,9 +8101,21 @@ def _hit_against_a_defence(world, caster: int, ref: str, cursor: int) -> bool:  
     swings rather than nine.
 
     Measured over nine rows in this family that no pass could reach: six
-    fire. The three that do not are asking for something else --
-    `p12364` wants no ally adjacent, `p9969` a melee attack specifically,
-    `p1043` a hit read off `AttackRolled`.
+    fire.
+
+    **The three that did not are now all nine, and two of them had been
+    firing for a while with this docstring saying otherwise.** It read
+    *"`p12364` wants no ally adjacent, `p9969` a melee attack
+    specifically, `p1043` a hit read off `AttackRolled`"*; re-measured at
+    `24e97043`, `p12364` and `p9969` fire and only `p1043` did not. So two
+    of the three diagnoses were descriptions of a board that had since
+    moved, and a reader would have gone looking for a melee-specific
+    swing that was not needed.
+
+    `p1043` wanted none of those things either: it wanted the caster to
+    have an **immediate action left**. `_free_the_immediate` is the fix
+    and it is planted -- neutering that helper is the one change that puts
+    `p1043` back to UNUSED while these two stay green.
     """
     import contextlib as _ctx
 
@@ -8107,6 +8147,7 @@ def _hit_against_a_defence(world, caster: int, ref: str, cursor: int) -> bool:  
                     for face in (18, 3):
                         world.rng.loaded = face
                         _revive_everyone(world, caster)
+                        _free_the_immediate(world, caster)
                         with _ctx.suppress(Exception):
                             _swing_from_reach(world, foes[0], caster, lend)
                         if _fired(world, ref, cursor):
@@ -8121,6 +8162,360 @@ def _hit_against_a_defence(world, caster: int, ref: str, cursor: int) -> bool:  
                 world.rng.loaded = None
         else:
             world.rng.loaded = was
+    return False
+
+
+def _free_the_immediate(world, caster: int) -> None:  # noqa: ANN001
+    """Give the caster its immediate action back.
+
+    **A pass that calls `_fired` instead of `probe` has to do this itself**,
+    and the three passes below did not until `p7382` showed what it costs.
+    `probe()` in `_provoke_passes` clears these two stamps after every
+    attempt, so by the time a late pass runs the caster has usually spent
+    its immediate action on some earlier provocation -- and a printed
+    *interrupt* or *reaction* then cannot be offered however perfectly the
+    board is arranged.
+
+    It is invisible in the worst way: the arrangement is right, the
+    triggering event is in the log, the row is simply not asked. `p7382`
+    ("the creature you marked hits you") was traced to the mark held, the
+    hit landed, and the row silent -- the only thing missing was an action
+    to answer with.
+
+    Both stamps, because the two limits are different: `immediate_round`
+    is per round and `opportunity_turn` is per other creature's turn, and a
+    row refused for either reads the same from outside. `-1` is the unspent
+    value, which is what `probe()` writes.
+    """
+    from combat_engine.engine import Budget
+
+    budget = world.get(caster, Budget)
+    if budget is not None:
+        budget.immediate_round = -1
+        budget.opportunity_turn = -1
+
+
+#: Lender rows for `_hit_by_a_named_kind`, one damage type or keyword each.
+#: Every one is an at-will monster attack carrying that word, found off
+#: `dsl.REGISTRY` rather than chosen -- the same bargain `_DEFENCE_SWINGS`
+#: makes, and for the same reason: this board fields foes whose only
+#: attack is an untyped `vs ac` basic, so no arrangement of swinging it
+#: produces a hit of a named kind.
+#:
+#: **Five kinds, not the whole damage table.** These are the five the
+#: unreachable rows actually name and the five whose lenders have been
+#: driven. A sixth is two lines and a probe; adding one untested would put
+#: a ref in here that may not carry the word its key claims.
+_KIND_SWINGS = {
+    "necrotic": ("m5053a1", "m382a1"),
+    "radiant": ("m235a1", "m4592a2"),
+    "charm": ("m4991a2", "m4692a1"),
+    "psychic": ("m668a1", "m5034a2"),
+    "fear": ("m235a2", "m4592a2"),
+}
+
+_WANTS_A_KIND = re.compile(
+    r"\b(necrotic|radiant|charm|psychic|fear)\b", re.I
+)
+
+
+def _hit_by_a_named_kind(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Have a foe hit the caster with an attack of the kind its trigger names.
+
+    `_hit_against_a_defence`'s argument, one column over. That pass lends a
+    row to reach a defence the board cannot roll against; this lends one to
+    reach a *damage type or keyword* the board cannot deal, and the reason
+    is the same line: every foe here holds one attack and it is an untyped
+    `vs ac` basic.
+
+    Measured over the four rows in this family that no pass could reach:
+
+        p9336   "hit by a necrotic or a radiant attack"    fires
+        p16438  "hit by a charm or a psychic attack"       fires
+        p13693  "the target of an enemy's fear effect"     fires
+
+    `p1043` ("hit by an attack against your Will") is **not** in this
+    family and was never short of a lender -- the Will swings in
+    `_hit_against_a_defence` had always reached it. What it lacked was an
+    immediate action to answer with, which `_free_the_immediate` gives
+    back. Said here because it sits one word away from this gate and the
+    obvious guess is that it wants a kind.
+
+    Planted: emptying `_KIND_SWINGS` puts all three above back to UNUSED.
+
+    **Only the kinds the sentence names**, as the defence pass does, so the
+    common case is two swings rather than ten.
+    """
+    import contextlib as _ctx
+
+    from combat_engine.engine.components import Powers
+
+    declared = get(ref)
+    if declared is None or not declared.triggers:
+        return False
+    wanted = {w.lower() for w in _WANTS_A_KIND.findall(declared.trigger or "")}
+    if not wanted:
+        return False
+
+    foes = [f for f in _foes(world, caster) if alive(world, f)]
+    if not foes:
+        return False
+    known = world.get(foes[0], Powers)
+    if known is None:
+        return False
+
+    was = getattr(world.rng, "loaded", None)
+    try:
+        for kind in sorted(wanted):
+            for lend in _KIND_SWINGS.get(kind, ()):
+                lent = lend not in known.known
+                if lent:
+                    known.known.append(lend)
+                try:
+                    world.rng.loaded = 20
+                    _revive_everyone(world, caster)
+                    _free_the_immediate(world, caster)
+                    with _ctx.suppress(Exception):
+                        _swing_from_reach(world, foes[0], caster, lend)
+                    if _fired(world, ref, cursor):
+                        return True
+                finally:
+                    if lent:
+                        with _ctx.suppress(ValueError):
+                            known.known.remove(lend)
+    finally:
+        if was is None:
+            if hasattr(world.rng, "loaded"):
+                world.rng.loaded = None
+        else:
+            world.rng.loaded = was
+    return False
+
+
+def _a_marked_foe_acts(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Mark a foe, then have it do the thing the row's trigger watches.
+
+    **Nobody on this board marks.** The caster's hand is dealt and a mark
+    is laid by a row's body, so unless the dealt hand happens to hold a
+    marking power the relation is never set -- and `KNOWN_SILENT` has
+    carried *"nobody here marks"* as an excuse for three rows for as long
+    as it has existed. Five power rows print a trigger about a marked
+    enemy and not one of them could ever fire.
+
+    The mark goes on with `relations.set(Relation.MARKED_BY, ...)`, which
+    is what `c.mark` reaches in the end, so the condition is derived and
+    `resolve`'s -2 applies exactly as in play. Taken off afterwards
+    whether or not it fired.
+
+    Four arrangements, because the five sentences ask four different
+    things. Measured:
+
+        p13554  "a marked enemy shifts, or attacks an ally and not you"  fires
+        p7258   "an enemy you marked attacks without you among targets"  fires
+        p7382   "the creature you marked hits you"                       fires
+        p4380   "you hit an enemy an ally has marked"                    fires
+        p5094   "a marked enemy within 5 squares attacks, not you"       no
+
+    **The mark itself is load-bearing for two of the four, not all four**,
+    and the plant is what said so rather than the reasoning above. With
+    every `relations.set` in here replaced by a no-op, `p7382` and `p4380`
+    go back to UNUSED and `p13554` and `p7258` stay green -- so what
+    reaches those two is the rest of what this pass does: a foe swinging
+    at an **ally** on a loaded die, with the caster's immediate action
+    given back. Neither of those existed for them before.
+
+    Written down because the pass is named for the mark and a reader
+    deleting the two `set` calls would see two rows hold and conclude the
+    plant had failed.
+
+    `p5094` is the one left, and the thing it adds over `p7258` is a range
+    band -- so the arrangement it wants is the foe *kept* within 5 squares
+    of the caster while swinging at somebody else, which `_swing_from_reach`
+    undoes by stepping the attacker beside its target. Not chased here.
+    """
+    import contextlib as _ctx
+
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.movement import shift
+    from combat_engine.engine.types import Relation
+
+    declared = get(ref)
+    if declared is None or not declared.triggers:
+        return False
+    if "mark" not in (declared.trigger or "").lower():
+        return False
+
+    foes = [f for f in _foes(world, caster) if alive(world, f)]
+    mates = [a for a in _allies_of(world, caster) if a != caster]
+    if not foes or not mates:
+        return False
+    foe, mate = foes[0], mates[0]
+
+    def swung(marker: int, attacker: int, target: int) -> bool:
+        """One arrangement: `marker` marks `foe`, then `attacker` swings."""
+        _revive_everyone(world, caster)
+        _free_the_immediate(world, caster)
+        world.relations.set(Relation.MARKED_BY, marker, foe, via="audit:mark")
+        try:
+            known = world.get(attacker, Powers)
+            if known is None or not known.basic:
+                return False
+            world.rng.loaded = 20
+            with _ctx.suppress(Exception):
+                _swing_from_reach(world, attacker, target, known.basic)
+            return _fired(world, ref, cursor)
+        finally:
+            world.rng.loaded = None
+            world.relations.clear(Relation.MARKED_BY, marker, foe, "audit")
+
+    was = getattr(world.rng, "loaded", None)
+    try:
+        # The marked foe swings at an ally -- "attacks and not you" -- then
+        # at the caster, which is the other half of the family. The caster
+        # marks for both: these sentences say "an enemy you have marked".
+        for target in (mate, caster):
+            if swung(caster, foe, target):
+                return True
+
+        # **An ALLY marks, and the caster hits.** `p4380` reads "you hit an
+        # enemy an ally has marked", so the marker has to be somebody else
+        # -- a mark laid by the caster makes that sentence false, and the
+        # relation allows one marker at a time, so this cannot be folded
+        # into the loop above.
+        if swung(mate, caster, foe):
+            return True
+
+        # A marked foe *moving*, which no swing produces. On its own turn,
+        # for the reason the shift loop in `_provoke_passes` records: the
+        # commonest predicate in the family asks `world.turn == ev.actor`.
+        _revive_everyone(world, caster)
+        _free_the_immediate(world, caster)
+        world.relations.set(Relation.MARKED_BY, caster, foe, via="audit:mark")
+        seat = world.get(foe, Position)
+        _was_turn = world.turn
+        try:
+            if seat is not None:
+                _home = seat.square
+                world.turn = foe
+                for sq in sorted(world.reachable_squares(foe, 1)):
+                    shift(world, foe, sq)
+                    if _fired(world, ref, cursor):
+                        return True
+                _back_to(world, foe, _home)
+        finally:
+            world.turn = _was_turn
+            world.relations.clear(Relation.MARKED_BY, caster, foe, "audit")
+    finally:
+        if was is None:
+            if hasattr(world.rng, "loaded"):
+                world.rng.loaded = None
+        else:
+            world.rng.loaded = was
+    return False
+
+
+def _an_opportunity_attack_lands(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """The two opportunity attacks the pairs in `_provoke_passes` cannot make.
+
+    That block swings three pairs -- caster at a foe, foe at the caster,
+    and an ally at a foe -- which covers *making* one and *being hit by*
+    one. Two printed sentences are answered by none of them:
+
+        p10285  "an ally is hit by an opportunity attack"        fires
+        p2538   "an adjacent enemy hits an ally with an OA"      fires
+        p16630  "you hit an enemy with an opportunity attack"    fires
+
+    The first wants a **foe swinging at an ally**, which is the one
+    direction the pairs leave out. The second wants that *and* the foe
+    adjacent to the caster, which `_swing_from_reach` will not produce on
+    its own -- it steps the attacker beside its **target**, so a foe sent
+    to hit an ally ends up beside the ally and nowhere near the caster.
+    The third wants the caster's own opportunity attack to **hit**, and the
+    pairs swing it on an unloaded die.
+
+    So the ally is stood beside the caster and the foe diagonally beside
+    both, which is the only arrangement that makes "adjacent enemy" and
+    "hits an ally" true at once. Everybody goes back afterwards.
+
+    **Late and gated on the word, which is what keeps it free.** Loading
+    the die and moving two creatures is exactly the perturbation that cost
+    `i3015p1` and `p4875` their verdicts when the charge pass did it
+    early, so this runs only for a row whose own trigger says
+    "opportunity" and only if nothing above fired it.
+    """
+    import contextlib as _ctx
+
+    from combat_engine.engine.components import Position, Powers
+
+    declared = get(ref)
+    if declared is None or not declared.triggers:
+        return False
+    if "opportunity" not in (declared.trigger or "").lower():
+        return False
+
+    foes = [f for f in _foes(world, caster) if alive(world, f)]
+    mates = [a for a in _allies_of(world, caster) if a != caster]
+    if not foes or not mates:
+        return False
+    foe, mate = foes[0], mates[0]
+
+    def basic_of(eid: int) -> str:
+        known = world.get(eid, Powers)
+        return known.basic if known else ""
+
+    was = getattr(world.rng, "loaded", None)
+    _seats = {
+        who: seat.square
+        for who in (caster, foe, mate)
+        if (seat := world.get(who, Position)) is not None
+    }
+    try:
+        # A foe's opportunity attack against an ally, plainly, and then
+        # with the die loaded -- `p10285` has been seen to need each on a
+        # different seed, so one is not a superset of the other.
+        for face in (None, 20):
+            _revive_everyone(world, caster)
+            _free_the_immediate(world, caster)
+            world.rng.loaded = face
+            with _ctx.suppress(Exception):
+                _swing_from_reach(world, foe, mate, basic_of(foe),
+                                  opportunity=True)
+            if _fired(world, ref, cursor):
+                return True
+
+        # The caster's own, landed.
+        _revive_everyone(world, caster)
+        _free_the_immediate(world, caster)
+        world.rng.loaded = 20
+        with _ctx.suppress(Exception):
+            _swing_from_reach(world, caster, foe, basic_of(caster),
+                              opportunity=True)
+        if _fired(world, ref, cursor):
+            return True
+
+        # "An **adjacent** enemy hits an ally": the ally beside the caster
+        # and the foe diagonally beside both, so the foe is already in
+        # reach and `_swing_from_reach` moves nobody.
+        if (home := _seats.get(caster)) is not None:
+            _revive_everyone(world, caster)
+            _free_the_immediate(world, caster)
+            cx, cy = home
+            with _ctx.suppress(Exception):
+                place(world, mate, Square(cx + 1, cy))
+                place(world, foe, Square(cx + 1, cy + 1))
+                world.rng.loaded = 20
+                _swing_from_reach(world, foe, mate, basic_of(foe),
+                                  opportunity=True)
+            if _fired(world, ref, cursor):
+                return True
+    finally:
+        if was is None:
+            if hasattr(world.rng, "loaded"):
+                world.rng.loaded = None
+        else:
+            world.rng.loaded = was
+        for who, home in _seats.items():
+            _back_to(world, who, home)
     return False
 
 
@@ -8282,7 +8677,23 @@ _RANGED_BASIC = "rba"
 #: happen, however many basics went past. Six rows read it. #1341.
 _WANTS_SHAPED_ATTACK = re.compile(
     r"close or an? area attack|area or a close attack"
-    r"|hit by an? (?:close|area)|(?:close|area) attack hits", re.I
+    r"|hit by an? (?:close|area)|(?:close|area) attack hits"
+    # **Three sentences this missed, and all three were one synonym
+    # short.** The pass worked, the refs below were already proven to
+    # catch the caster from the first enemy's square, and `p12162`,
+    # `p1284` and `p9299` reported UNUSED for their whole lives because
+    # the gate could not read what they printed:
+    #
+    #     "a burst or blast power that includes you"      p12162
+    #     "targeted by a close attack or an area attack"  p1284
+    #     "rolls an area or close attack that includes you"   p9299
+    #
+    # The first two alternatives above want the article -- "close or an
+    # area attack" -- so "close attack or an area attack" and "area or
+    # close attack" both fall through. All three fire once admitted.
+    r"|burst or blast|(?:close|area) attack or an (?:close|area) attack"
+    r"|area or close attack|(?:close|area) attack that includes",
+    re.I
 )
 
 #: One close burst and one area burst, both proven to catch the board's
