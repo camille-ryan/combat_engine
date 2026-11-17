@@ -5819,6 +5819,9 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     if _springs_a_trap(world, caster, ref, cursor):
         return True
 
+    if _opens_with_surprise(world, caster, ref, cursor):
+        return True
+
     if _an_ally_attacks(world, caster, ref, cursor):
         return True
 
@@ -7400,6 +7403,64 @@ def _an_ally_attacks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa
 #: lowercase form admits 42 rows where this admits 33, and the nine extra
 #: are sentences like "an ally will be adjacent"; same reasoning the tree
 #: already applies to a power name being propcase in the source.
+#: A row whose trigger is the surprise round beginning.
+_WANTS_SURPRISE = re.compile(r"surprise", re.I)
+
+
+def _opens_with_surprise(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Begin a surprise round, for a row whose printed trigger is one.
+
+    **The board starts its encounter without one.** `Encounter.start`
+    takes `surprised` and `audit.board` passes nothing, so `_surprise` is
+    False and the `RoundStart` the fight opens with has already gone by
+    the time a row is provoked. Two rows print the trigger -- *"a surprise
+    round begins, and you are conscious"*, *"a surprise round begins with
+    an ally of yours surprised"* -- and both reported UNUSED.
+
+    The condition is what the round *is*, which `Encounter.start` says
+    outright: "the condition already says what being surprised means --
+    grants combat advantage, cannot act, no reactions -- so the round
+    falls out of applying it". So this applies it, sets the flag the
+    encounter reads, and announces the round again.
+
+    **An ally is surprised rather than the caster**, because one row wants
+    the caster *conscious* and able to act and the other wants an ally
+    caught out; surprising the caster would satisfy the second and refuse
+    the first, and `Condition.SURPRISED` carries `cannot_act`.
+
+    Put back afterwards: the flag and the hold both, so no pass below this
+    one runs against a board that is still in a surprise round.
+    """
+    from combat_engine.engine import When as _When
+    from combat_engine.engine.events import RoundStart as _RoundStart
+    from combat_engine.engine.types import Condition as _C
+
+    declared = get(ref)
+    if declared is None or not declared.triggers:
+        return False
+    if not _WANTS_SURPRISE.search(declared.trigger or ""):
+        return False
+    mates = [a for a in _allies_of(world, caster) if a != caster]
+    if not mates:
+        return False
+    enc = getattr(world, "encounter", None)
+    held = world.effects.apply(
+        mates[0], mates[0], _When.ENCOUNTER, label="surprised",
+        conditions=[_C.SURPRISED],
+    )
+    was = getattr(enc, "_surprise", None)
+    if enc is not None:
+        enc._surprise = True
+    try:
+        world.bus.emit(_RoundStart(round=1))
+        return _fired(world, ref, cursor)
+    finally:
+        if enc is not None and was is not None:
+            enc._surprise = was
+        if held is not None:
+            world.effects.end(held, "the surprise round is over")
+
+
 #: A row whose trigger names a trap or a hazard. Six rows do, and five of
 #: them were unreachable: nothing on this board had ever put a trap down.
 _WANTS_A_TRAP = re.compile(r"\btrap\b|\bhazard\b", re.I)
