@@ -186,8 +186,30 @@ def p2388(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
 )
 def p2828(c: Cast) -> None:
-    """The keyword half of the bonus is dropped: an effect carries no keywords
-    for the saving throw to ask about."""
+    """**An effect's keywords ARE askable, and "an effect carries no
+    keywords" was only half true.** `Effect` itself carries none -- that
+    part is right, and `durations.keywords_of`'s docstring says why
+    giving it some would be wrong -- but that function derives them from
+    the row that laid the effect, and the saving-throw context already
+    carries the result as `ctx["keywords"]`. So the question this card
+    asks has an answer. #1341.
+
+    Laid **before** the throw, because `c.save()` rolls there and then
+    and a bonus added after it would be read by nothing.
+    """
+    mate = c.target
+    if mate is not None and c.cha_mod > 0:
+        c.bonus(
+            "save",
+            c.cha_mod,
+            on=mate,
+            until=When.EOT,
+            once=True,
+            when=lambda ctx: bool(
+                {Keyword.CHARM, Keyword.FEAR, Keyword.ILLUSION}
+                & (ctx.get("keywords") or frozenset())
+            ),
+        )
     c.save()
 
 

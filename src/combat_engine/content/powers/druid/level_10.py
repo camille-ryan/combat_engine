@@ -60,6 +60,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import ForcedMove
 from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.types import Size
 from combat_engine.engine.zones import Zone
 
 from .forms import current_form, ends_with, in_beast_form, zone_hold
@@ -165,11 +166,23 @@ def p13529(c: Cast) -> None:
     keywords=[*PRIMAL, Keyword.POLYMORPH],
 )
 def p14515(c: Cast) -> None:
-    """Becoming Small has nowhere to go -- `Size` is read and never written
-    -- and the Perception bonus is a check. The flight is real."""
+    """**Becoming Small is written now, and "`Size` is read and never
+    written" was false.** `c.resize` writes it -- re-indexing the
+    footprint in the grid, which is what everything asking where a
+    creature is actually reads -- and puts the old one back when the hold
+    ends. It defaults to the caster, which is this card's direction.
+    #1341.
+
+    The Perception bonus lands too: `"check"` is a modifier kind `Cast`
+    reads for a `SkillCheck`, so a skill bonus does have somewhere to
+    hang. The flight was always real.
+    """
     shape = c.form(modes={"fly": 8}, until=When.ENCOUNTER, revert=FREE, label=c.ref)
     ends_with(c, shape, c.cannot_attack(on=c.me, until=When.ENCOUNTER))
-    c.note(f"{c.ref}: the form is Small, and nothing here changes a creature's size")
+    ends_with(c, shape, c.resize(Size.SMALL, until=When.ENCOUNTER))
+    ends_with(c, shape, c.bonus(
+        "skill:perception", 5, on=c.me, until=When.ENCOUNTER, kind="power",
+    ))
 
 
 @power(

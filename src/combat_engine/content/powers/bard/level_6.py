@@ -203,6 +203,12 @@ def p5689(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
 )
 def p5692(c: Cast) -> None:
-    """The extra square of shifting is dropped -- a shift's distance is not a
-    held modifier, so there is no key to raise."""
+    """**The extra square of shifting is written now**, and "a shift's
+    distance is not a held modifier, so there is no key to raise" was
+    false. `c.extend_every("shift", 1)` is that key -- keyed on the move
+    *kind* rather than on a row's ref, read by the movement verb itself,
+    and its own docstring names "one extra square on every shift" as one
+    of the eight printed lines it was built for. #1341.
+    """
     c.bonus("speed", 4, until=When.EONT, kind="power")
+    c.extend_every("shift", 1, until=When.EONT)

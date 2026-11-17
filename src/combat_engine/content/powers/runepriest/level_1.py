@@ -365,16 +365,37 @@ def p11372(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p11373(c: Cast) -> None:
-    """Damage is typed fire; `c.damage` takes one type, and nothing retypes
-    the caster's later attacks or enlarges the hit points her powers grant,
-    so those two thirds of the Effect line are dropped."""
+    """**Two corrections.** "Fire **and** radiant damage" is one blow of
+    both types -- `dtypes` -- where the old note said `c.damage` takes
+    one and dealt it as fire alone. Fifth time that claim has been wrong
+    in this tree.
+
+    And "your attacks deal fire and radiant damage instead of their
+    normal damage types" is `c.deals(dtypes=)`, the standing retype:
+    `_typed` reads it, its docstring calls that sentence "an override
+    [that] beats the type the power printed", and it takes a **tuple**
+    precisely because "a retype may be of two at once". #1341.
+
+    The last third of the Effect line is still dropped and its reason
+    stands: nothing enlarges the hit points a character's powers grant.
+    """
     if c.strike():
-        c.damage(c.w(2), c.str_mod, dtype=DamageType.FIRE)
+        c.damage(
+            c.w(2), c.str_mod,
+            dtypes=(DamageType.FIRE, DamageType.RADIANT),
+        )
         c.blinded(until=When.EONT)
     else:
-        c.half_damage(c.w(2), c.str_mod, dtype=DamageType.FIRE)
+        c.half_damage(
+            c.w(2), c.str_mod,
+            dtypes=(DamageType.FIRE, DamageType.RADIANT),
+        )
     if c.first:
         c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER)
+        c.deals(
+            dtypes=(DamageType.FIRE, DamageType.RADIANT),
+            until=When.ENCOUNTER,
+        )
 
 
 @power(
