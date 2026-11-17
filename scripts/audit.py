@@ -8610,7 +8610,6 @@ def _use_rows(world, caster: int, refs: list[str], foe: int | None, skip: str = 
     it was placed in.
     """
     from combat_engine.engine.components import Position
-    from combat_engine.engine.movement import place
 
     # Everybody's square, not just the caster's. A level-0 row that slides
     # or teleports an *ally* moves it too, and one did: firing the warlord's
@@ -8626,6 +8625,42 @@ def _use_rows(world, caster: int, refs: list[str], foe: int | None, skip: str = 
         for e in creatures(world)
         if world.get(e, Position) is not None
     }
+    # **A sibling the caster does not know cannot be used at all**, and
+    # the board's hand does not hold one: `board` composes
+    # `[ref, *named, *features]`, so a second card's parent is in the hand
+    # only when it happens to be a level-0 row of the class. `dsl.use`
+    # refuses an unknown ref, so the whole sibling pass was a no-op for
+    # those -- `p13883` came back `not known` and laid nothing, which
+    # reads as the second card being unreachable.
+    #
+    # Lent and taken back, which is `_range_lenders`' idiom in this file
+    # and `_hit_against_a_defence`'s: the board cannot field every hand a
+    # printed card assumes, and borrowing one row is cheaper than
+    # composing a second character.
+    from combat_engine.engine.components import Powers as _Powers
+
+    known = world.get(caster, _Powers)
+    lent = [
+        other for other in refs
+        if known is not None and other not in known.known
+    ]
+    for other in lent:
+        known.known.append(other)
+    try:
+        _use_each(world, caster, refs, foe, skip, stood)
+    finally:
+        for other in lent:
+            with contextlib.suppress(ValueError):
+                known.known.remove(other)
+    return
+
+
+def _use_each(world, caster: int, refs: list[str], foe: int | None,  # noqa: ANN001
+              skip: str, stood: dict) -> None:
+    """The body of `_use_rows`, split out so the lend above can wrap it."""
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.movement import place
+
     for other in list(refs):
         p = get(other)
         # Not a trait, and not a row that waits for a trigger either: a
