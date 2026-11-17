@@ -5125,6 +5125,9 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     if _rolls_saves(world, caster, ref, cursor):
         return True
 
+    if _starts_a_turn_held(world, caster, ref, cursor):
+        return True
+
     if _does_the_ordinary_things(world, caster, ref, cursor):
         return True
 
@@ -7005,6 +7008,74 @@ def _rolls_saves(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: AN
                 world.rng.loaded = None
         else:
             world.rng.loaded = was
+    return False
+
+
+def _starts_a_turn_held(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Start the caster's turn while something a save can end is on it.
+
+    **Nothing on this board ever emitted a `TurnStart` for the caster**, and
+    nothing ever laid a save-ends hold on it outside `_rolls_saves` -- which
+    is gated on the row watching `SavingThrow`, a different event. So two
+    families that print their trigger plainly had no pass at all between
+    them:
+
+    * *"you start your turn dazed, dominated or stunned"*, *"...held by an
+      effect a save can end"*, *"...and you have ongoing damage"* -- nine
+      power rows, every one UNUSED;
+    * *"you are subjected to an effect that a save can end"* -- which is
+      satisfied by the laying rather than the turn, because `c.condition`
+      emits `EffectApplied` on the way in.
+
+    The condition is laid by the row under test, as `_rolls_saves` does and
+    for its reason: a rider reading *"an effect **your** attack bestowed"*
+    then finds the ref it is looking for.
+
+    **Six conditions rather than one**, because unlike `_rolls_saves` these
+    cards name which: "held" is immobilized, "dazing or dominating" is two,
+    and a row gating on one is not reached by any other. Ongoing damage is
+    a seventh arrangement and a different verb.
+
+    **Each attempt is unwound before the next**, which `_rolls_saves` does
+    not need to be -- it ends on the roll either way. Here a stack of six
+    conditions would reach the passes below with a caster that cannot act,
+    and `_use_rows` already carries the correction for that exact fault
+    arriving from the other direction.
+
+    Gated on the declared event, like `_rolls_checks` and the walk pass:
+    a row that never mentions a turn start or an effect landing pays
+    nothing.
+    """
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.types import Condition
+
+    declared = get(ref)
+    if declared is None:
+        return False
+    watched = {t.event.__name__ for t in (declared.triggers or ())}
+    if not watched & {"TurnStart", "EffectApplied", "ConditionApplied"}:
+        return False
+
+    held: object | None
+    for cond in (Condition.DAZED, Condition.IMMOBILIZED, Condition.SLOWED,
+                 Condition.WEAKENED, Condition.STUNNED, Condition.DOMINATED):
+        hand = _Cast(world=world, me=caster, ref=ref)
+        held = hand.condition(cond, until=When.SAVE_ENDS, on=caster)
+        world.bus.emit(TurnStart(actor=caster, round=world.round))
+        if _fired(world, ref, cursor):
+            return True
+        if held is not None:
+            world.effects.end(held, "audit:probe")
+
+    hand = _Cast(world=world, me=caster, ref=ref)
+    held = hand.ongoing(5, on=caster, until=When.SAVE_ENDS)
+    world.bus.emit(TurnStart(actor=caster, round=world.round))
+    if _fired(world, ref, cursor):
+        return True
+    if held is not None:
+        world.effects.end(held, "audit:probe")
     return False
 
 
