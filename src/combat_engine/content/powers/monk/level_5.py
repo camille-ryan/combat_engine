@@ -387,6 +387,7 @@ def p7461(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=REF),
+    dropped=("spec.feature_ref()",),
 )
 def p7462(c: Cast) -> None:
     """The Effect line widens the monk's Flurry of Blows, a class feature

@@ -144,6 +144,7 @@ def p13327(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.PSIONIC, Keyword.CONJURATION],
+    dropped=("c.cast_from(optional=)", "Conjuration.defences"),
 )
 def p13328(c: Cast) -> None:
     """The prism goes on the board and can be pushed about at Intelligence

@@ -41,6 +41,7 @@ DIVINE_WEAPON = [Keyword.DIVINE, Keyword.WEAPON]
     target=EACH_ENEMY,
     keywords=[*DIVINE_WEAPON, Keyword.RADIANT, Keyword.ZONE],
     attack=Attack(STR, vs=WILL),
+    dropped=("Zone.exit_cost",),
 )
 def p11386(c: Cast) -> None:
     """"Leaving the zone costs enemies 2 extra squares" is dropped: a zone is

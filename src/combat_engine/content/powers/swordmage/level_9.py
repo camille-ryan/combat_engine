@@ -176,6 +176,7 @@ def p3952(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
     attack=Attack(INT, vs=AC),
+    dropped=("c.place_scenery()",),
 )
 def p4803(c: Cast) -> None:
     """The printed Effect is a marker that walks the board on its own,

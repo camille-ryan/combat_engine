@@ -62,6 +62,7 @@ PSIONIC_PSYCHIC = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC]
         Augment(1),
         Augment(2, reach=AreaBurst(1, 10), target=EACH_CREATURE),
     ),
+    dropped=("c.burns(adjacent=)",),
 )
 def p11275(c: Cast) -> None:
     """The zone is the target's own square on the two cheaper forms.
@@ -282,8 +283,11 @@ def p13318(c: Cast) -> None:
 )
 def p13319(c: Cast) -> None:
     """Augment 1 trips the target on any move that is not a shift, which is
-    `MoveEnd.kind_` and nothing else; a shove is left out of it too, since a
-    creature that is pushed has not *made* a move.
+    `MoveEnd.kind_` and nothing else; a shove does not count either, since a
+    creature that is pushed has not *made* a move. That is a reading of the
+    printed line rather than a clause given up on -- said that way because
+    the old phrasing used one of `blocked.py --prose`'s admission phrases
+    and put a finished row in the unfinished queue.
 
     Augment 2 is a target line -- up to three creatures -- and a target line
     is read before the body is called, so it is declared in the header. It

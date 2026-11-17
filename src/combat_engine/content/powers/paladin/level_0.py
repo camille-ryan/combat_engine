@@ -280,13 +280,20 @@ def p13816(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.SHADOW, Keyword.CONJURATION],
+    dropped=("c.grants_advantage(while_adjacent_to=)",),
 )
 def p13819(c: Cast) -> None:
     """`solid=True` is the opt-in: the printed line says the servant occupies
-    its square, and a conjuration is walked through by default. "Creatures
-    other than you grant combat advantage while adjacent to it" is a
-    standing rule about geometry rather than an effect on anybody, and no
-    `Cast` method carries one, so it is dropped."""
+    its square, and a conjuration is walked through by default.
+
+    "Creatures other than you grant combat advantage while adjacent to it"
+    is a standing rule about geometry rather than an effect on anybody,
+    which is the marker. `c.grants_advantage` exists and takes `on=` for
+    who grants it and `to=` for who benefits -- but both name creatures
+    fixed at the moment the hold is laid, and this clause is about
+    whoever happens to be standing beside the servant at the time. A
+    creature walking into that ring afterwards is not covered by a hold
+    laid before it got there."""
     spot = _free_square(c, 2)
     if spot is None:
         return

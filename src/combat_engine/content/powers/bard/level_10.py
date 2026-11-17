@@ -134,6 +134,7 @@ def p14472(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.ZONE],
+    dropped=("c.bonus(clip=)",),
 )
 def p2384(c: Cast) -> None:
     """"Lessens any penalty to attack rolls by 2" is dropped -- a modifier can

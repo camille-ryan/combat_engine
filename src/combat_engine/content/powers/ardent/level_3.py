@@ -327,6 +327,7 @@ def p12946(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
+    dropped=("query.deals_half(attack=)",),
 )
 def p12947(c: Cast) -> None:
     """"Any attack that is not a basic attack" is read off what the creature's

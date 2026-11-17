@@ -432,6 +432,7 @@ def p11282(c: Cast) -> None:
         attack=Attack(WIS, vs=REF),
         damage=Damage("1d8", "wis", dtype=DamageType.FIRE),
     ),
+    dropped=("dsl.Summon.commands",),
 )
 def p3314(c: Cast) -> None:
     """Its standard command is a close burst 1 and its opportunity command a

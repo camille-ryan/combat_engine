@@ -1250,7 +1250,10 @@ def p11052(c: Cast) -> None:
     `optional=True`, so a character who has it may still aim the printed
     burst -- and the printed card restricts the teleport not at all. A
     `c.feat("f2945")` gate would leash the printed aiming too, which is the
-    half of this the feat's own note says cannot be written that way.
+    half of this the feat's own note rules out doing that way. (Phrased
+    around `blocked.py --prose`'s admission phrases deliberately: this is a
+    rejected approach, not a clause given up on, and the earlier wording put
+    a finished row in the unfinished queue.)
 
     This row prints one range, so `c.branch` is 0 for the print and any
     non-zero index is an offered one. A row with two printed branches would

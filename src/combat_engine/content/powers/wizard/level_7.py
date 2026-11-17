@@ -347,6 +347,7 @@ def p12745(c: Cast) -> None:
         *ARCANE_IMPLEMENT, Keyword.NECROTIC, Keyword.ZONE, Keyword.NECROMANCY, Keyword.SHADOW,
     ],
     attack=Attack(INT, vs=FORT),
+    dropped=("Relation.GRANTS_ADVANTAGE_TO_ALL",),
 )
 def p13987(c: Cast) -> None:
     """The zone lasts exactly as long as the hold that made it, so it is torn

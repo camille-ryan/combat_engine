@@ -215,6 +215,7 @@ def p14423(c: Cast) -> None:
     keywords=PRIMAL,
     trigger=_ROLLED_INITIATIVE,
     on=Trigger(InitiativeRolled, when=about_me, text=_ROLLED_INITIATIVE),
+    dropped=("c.boost_initiative()",),
 )
 def p4834(c: Cast) -> None:
     """The bonus to the initiative check itself is not written: the roll has

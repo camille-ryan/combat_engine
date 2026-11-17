@@ -129,6 +129,7 @@ def p12601(c: Cast) -> None:
     reach=CloseBurst(5),
     target=YOU_OR_ONE_ALLY,
     keywords=DIVINE,
+    dropped=("affliction.stage",),
 )
 def p12608(c: Cast) -> None:
     """A saving throw per save-ends effect, then the petrification clause.

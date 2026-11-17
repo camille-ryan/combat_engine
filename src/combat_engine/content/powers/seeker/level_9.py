@@ -168,6 +168,7 @@ def p16602(c: Cast) -> None:
     target=UpTo(2),
     keywords=PRIMAL_WEAPON,
     attack=Attack(WIS, vs=AC),
+    dropped=("c.boost_save()",),
 )
 def p9521(c: Cast) -> None:
     """"Can't move to a square that isn't adjacent to the other" is enforced

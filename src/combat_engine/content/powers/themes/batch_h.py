@@ -1139,10 +1139,11 @@ def p14322(c: Cast) -> None:
 )
 def p14323(c: Cast) -> None:
     """"A d20 roll" is three events, so it is three declared triggers rather
-    than one that reads a field none of them share. The fourth kind -- a bare
-    ability check -- is not rolled on a board and is dropped.
+    than one that reads a field none of them share. The fourth kind, a bare
+    ability check, used to be given up here as unrollable on a board.
 
-    **The ability-check arm is covered now, not dropped.** `skills
+    **The ability-check arm is covered, and the sentence above is only
+    history.** `skills
     .ability_check` announces the same `SkillCheck` event under an
     `ability:<name>` key, and this row's trigger is unnamed -- so it
     hears an ability check without a second entry. Driven in
