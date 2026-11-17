@@ -56,6 +56,7 @@ from combat_engine.engine import (
     Ranged,
     Trigger,
     UpTo,
+    Usage,
     When,
     World,
     both,
@@ -296,9 +297,18 @@ def p14372(c: Cast) -> None:
 )
 def p14399(c: Cast) -> None:
     """"Fire and necrotic damage" is one number of two types and `c.flat`
-    takes one, so it lands as fire; dealing it twice would double the row.
-    The free shroud that comes with the form is dropped -- it is a rule about
-    another power's usage limit, not an effect."""
+    takes **`dtypes`** for exactly this -- "one blow of several types" -- so
+    it lands as both now. The old note said the verb took one type and that
+    the alternative was dealing it twice, which would indeed have doubled
+    the row; `dtypes` is the third option neither half considered, and it is
+    the fourth time this class of claim has been wrong in this tree. #1341.
+
+    The free shroud that comes with the form is still dropped, and the
+    reason is unchanged and correct: it is a rule about another power's
+    usage limit -- "does not count against the limit on the number of times
+    per round" -- not an effect. Shrouds themselves **are** modelled
+    (`c.shroud`, `c.shrouds`, `c.spend_shrouds`); the per-round limit is
+    what has no door."""
     amount = 5 if c.level < 11 else (10 if c.level < 21 else 15)
     armour = c.resist(amount, until=When.EONT, on=c.me)
 
@@ -306,7 +316,12 @@ def p14399(c: Cast) -> None:
         p = get(getattr(ev, "power", "") or "")
         if ev.target != c.me or p is None or p.reach is None or p.reach.kind != "melee":
             return
-        c.flat(amount, dtype=DamageType.FIRE, on=ev.attacker)
+        c.flat(
+            amount,
+            dtypes=(DamageType.FIRE, DamageType.NECROTIC),
+            on=ev.attacker,
+            from_attack=False,
+        )
 
     watcher = c.watch(Hit, retaliate, until=When.EONT, on=c.me)
     _ends_on_my_attack(c, [armour, watcher])
@@ -331,8 +346,22 @@ def p14399(c: Cast) -> None:
 def p13793(c: Cast) -> None:
     """The grab is held on a named effect rather than on `c.grab`, because
     only an effect can carry the printed Sustain Standard and its payout.
-    "You cannot make other attacks" has no `Cast` method and is dropped;
-    neither has "cannot speak", which is not a combat effect anyway."""
+    **"You cannot make other attacks" is written now**, and "has no
+    `Cast` method" was false: `c.forbid(attacks_only=True)` is that
+    sentence, and its own docstring calls `attacks_only` "that second
+    card's narrowing". #1341.
+
+    It lands `on=c.me` -- the assassin is the one whose hands are full --
+    and `c.forbid` takes its creature from `_who`, which defaults to the
+    **target**, so omitting it would have barred the victim's attacks
+    instead. That is the same default `c.flat`, `c.temp_hp` and
+    `c.hover` have.
+
+    It rides the garrote hold rather than a clock of its own, because the
+    printed scope is "while the grab persists" -- so letting the grab go
+    frees the hands in the same moment.
+
+    "Cannot speak" is still dropped and is still not a combat effect."""
     c.shift(2)
     victim = c.target
     if victim is None or not c.strike():
@@ -348,6 +377,19 @@ def p13793(c: Cast) -> None:
     )
     hold = c.effect(f"{c.ref} garrote", until=When.SUSTAIN, on=victim, sustain=STANDARD)
     c.on_sustain(hold, lambda: c.damage(c.w(2), c.dex_mod, on=victim))
+    # **`usage=` is required and `attacks_only=` alone bars nothing.**
+    # That flag narrows a usage list rather than standing on its own --
+    # measured, the first draft left the assassin's basic attack usable --
+    # and "you cannot make OTHER attacks" is every category at once, so
+    # all four are named.
+    busy = c.forbid(
+        usage=(Usage.AT_WILL, Usage.ENCOUNTER, Usage.DAILY, Usage.RECHARGE),
+        attacks_only=True,
+        on=c.me,
+        until=When.SUSTAIN,
+    )
+    if hold is not None and busy is not None:
+        hold.on_end.append(lambda: c.world.effects.end(busy, "grab ended"))
 
 
 @power(

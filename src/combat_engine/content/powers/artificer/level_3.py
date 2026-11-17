@@ -90,9 +90,24 @@ def p10196(c: Cast) -> None:
 )
 def p4138(c: Cast) -> None:
     """The ally's +2 is printed as a floating bonus to any one roll, spent
-    after seeing it. Only the attack roll half is modelled -- there is
-    nothing to hang a skill or ability check on -- and `once=True` spends
-    it on the first attack it could apply to."""
+    after seeing it. Only the attack roll half is modelled, and **the old
+    reason was wrong about why**.
+
+    It said there is "nothing to hang a skill or ability check on". There
+    is: `"check"` is a modifier kind `Cast` reads for a `SkillCheck`, the
+    same way `"attack"` and `"save"` are read for theirs.
+
+    What is missing is **one** latch across three kinds. Laying
+    `once=True` on attack, check and save separately would give the ally
+    three +2s where the card grants one, which is worse than the half
+    that is dropped -- so the three stay one until a hold can carry a
+    single spend over several keys. `c.bonus(onto=)` adds a modifier to
+    an existing hold, but `once=` is spent per modifier rather than per
+    hold, so it is not that either. #1341.
+
+    `once=True` on the attack half still spends it on the first attack it
+    could apply to, which is the printed "after determining the result"
+    read as generously as a headless player can."""
     if c.strike():
         c.damage("1d6", c.int_mod)
         c.penalty("save", 2, until=When.EONT)

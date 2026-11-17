@@ -15,6 +15,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Target,
     TurnEnd,
     TurnStart,
     When,
@@ -133,6 +134,13 @@ def p9433(c: Cast) -> None:
         c.watch(TurnStart, step_off, until=When.ENCOUNTER, once=True)
 
 
+#: The printed Target line: the creature the assassin's shrouds are on.
+#: Declared rather than gated in the body, which is how `ranger`'s
+#: `_QUARRY` and `warlock`'s cursed targets spell the same shape --
+#: a restriction the player aims by, not a refusal the row makes of itself.
+_SHROUDED = Target("enemy", 1, label="The creature your shrouds are on")
+
+
 @power(
     "p9434",
     level=7,
@@ -140,13 +148,24 @@ def p9433(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=_SHROUDED,
     keywords=[Keyword.SHADOW, Keyword.WEAPON],
     attack=Attack(DEX, vs=AC),
 )
 def p9434(c: Cast) -> None:
-    """Printed against the shroud target, and the Hit rider spends shrouds;
-    neither is modelled, so it takes one creature and the rider is dropped."""
+    """**Shrouds ARE modelled and the old note said they were not.**
+    `c.shroud` lays one, `c.shrouds` counts them and `c.spend_shrouds`
+    cashes them in. #1341.
+
+    So the printed Target -- "your `p9400` target" -- is declared in the
+    target line, which is where a restriction the player aims by belongs.
+
+    The Hit rider is **not** written, and the corrected reason is
+    narrower than "shrouds are not modelled": the clause is *"you can use
+    your `p9400` against the target whenever you are hit"*, which grants
+    extra **uses** of another row on somebody else's trigger. That is a
+    usage-limit change, the same shape `p14399`'s free shroud waits on,
+    and not a shroud question at all."""
     if c.strike():
         c.damage(c.w(2), c.dex_mod)
         if c.build("f1s0") and c.con_mod > 0:
