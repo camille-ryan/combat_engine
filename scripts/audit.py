@@ -1184,13 +1184,10 @@ KNOWN_SILENT = {
     # can express and so no pose can be read off.
     "m5738a2": "redirects to a creature it has already slowed; it has not",
     "m4508a4": "cures a mark on itself; nobody here marks",
-    "m6429a4": "answers a condition it starts its turn carrying; it carries none",
     # An ally or a board state the single full-health copy of the caster cannot be.
     "m2785a3": "a bonus while a natural beast ally is near; the board's one ally "
                "is a copy of the caster",
     "m946a3": "its Requirement is no enemy within 3; the board starts them adjacent",
-    "m3453a2": "saves against the effect that triggered it; the board lands no "
-               "save-ends effect on this creature",
     # Concealment and cover the bare grid does not provide.
     "m1167a3": "requires concealment; no terrain here grants any",
     "m3675a2": "requires cover; no terrain here grants any",
@@ -1200,7 +1197,6 @@ KNOWN_SILENT = {
     # the body runs once per ally and the return is correct filtering.
     #
     # A target state `_provoke` does not produce.
-    "m5466a3": "ends an ongoing effect or condition; the target carries neither",
     "m5494a5": "needs a bloodied creature it has already clawed this turn",
     "m115865a2": "attacks a creature grabbed by it; nothing here is grabbed",
     "m2303a2": "attacks a creature grabbed by it; nothing here is grabbed",
@@ -1350,8 +1346,6 @@ KNOWN_SILENT = {
                "`drivers.regeneration_resumed`, with both controls",
     # The remaining four, each its own shape.
     "m3288a6": "rerolls an attack roll; fired alone there is none behind it",
-    "m5468a3": "cures an ally's condition at the start of its turn; the board's "
-               "one ally carries none",
     # **Round 12's fifty-five, over 1,127 rows.** Nineteen are the grab family,
     # which has led every round since `m467a2` and is now unambiguously the
     # board's biggest structural limit -- a row wanting a creature its own sibling
@@ -1624,9 +1618,6 @@ KNOWN_SILENT = {
     "f2158": "its gate is \"while you have any concealment\" and "
              "`concealment_of` answers `Cover.NONE` on this board -- "
              "measured, so the row correctly declines. #755",
-    "f2630": "it returns unless `Gear.shield` is set and this board's "
-             "character holds none -- the same board fact three other "
-             "entries here already record. #755",
     "f1450b": "it refunds a use of `p1450` and this board's character "
               "does not know that row -- measured: `Powers.all` has no "
               "`p1450` and `times` is 0, so `c.restore_use` has nothing "
