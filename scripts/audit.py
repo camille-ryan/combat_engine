@@ -5202,6 +5202,19 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         # ones that never happen, which is why "an enemy hits your ally"
         # reported UNUSED for nine bard rows while the pass meant to
         # produce it ran every time. #1353.
+        #
+        # **The pass below warns against exactly this and the warning does
+        # not reach here.** It records that substituting a living attacker
+        # "fixed `p5910` and four others and broke `f2470` -- a pinned
+        # verdict -- because the extra attack shifts the die stream and the
+        # class-attack pass then stops landing the critical that row
+        # needs". That pass runs *after* the class attacks; this loop runs
+        # after them too, so the stream it shifts is already spent.
+        #
+        # Checked rather than assumed, because the warning is specific:
+        # `f2470` and `p5910` both still fire, and a `--sample 700` run
+        # reports 0 raise and 0 newly silent. If either ever goes red here,
+        # this is the paragraph to read first.
         if not alive(world, attacker):
             attacker = next(
                 (f for f in foes if alive(world, f) and f != target), 0
