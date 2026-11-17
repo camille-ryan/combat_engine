@@ -5758,19 +5758,26 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     # and the passes come back here. The union is a biased set by
     # construction, which is why this is confirmed against the corpus
     # rather than left on the 32.
-    # **The parent power again, because a stance does not survive the
-    # provocations.** `_pose_the_parent_power` puts it up at board time and
-    # `usable()` reads True immediately afterwards; by the time the late
-    # passes run it reads False again with the same Requirement. `p10493b`
-    # is the worked case -- its pass was reached three times, found the
-    # stance down each time, and the row reported UNUSED for a reason that
-    # had nothing to do with the arrangement being wrong.
+    # **The parent power is NOT re-laid here, and the wide sweep is what
+    # settled that.** A stance put up by `_pose_the_parent_power` at board
+    # time does not survive the provocations: `usable()` reads True
+    # immediately after the pose and False again by the time the late
+    # passes run. `p10493b` is the row that wants it -- its pass was
+    # reached three times, found the stance down each time, and reported
+    # UNUSED for a reason that had nothing to do with the arrangement.
     #
-    # Cheap and idempotent: the function returns immediately unless the row
-    # is *currently* refused and its Requirement names a parent, so for the
-    # other 23,000 rows this is one regex that does not match.
-    _pose_the_parent_power(world, caster, get(ref))
-
+    # So a `_pose_the_parent_power(world, caster, get(ref))` call sat here,
+    # and the sweep at `c2c4da99` found it costing **`p16176b`**, which had
+    # been firing since before this work started. One row for one row --
+    # and the one it cost was already working, where `p10493b` has never
+    # fired, so the trade is refused and `p10493b` stays on `#1357`'s list.
+    #
+    # Isolated by disabling each half of that commit in turn: with the
+    # board-time pose off `p16176b` still failed, with the re-lay off it
+    # fired, and with both off it fired. `p16176b` is a `...b` row whose
+    # Requirement names its parent *and* whose trigger reads a mark, so it
+    # is the one row where re-using the parent mid-provocation disturbs
+    # what was already provoking it.
     _free_the_immediate(world, caster)
     if _starts_a_turn_held(world, caster, ref, cursor):
         return True
@@ -8490,6 +8497,79 @@ def _hit_by_a_named_kind(world, caster: int, ref: str, cursor: int) -> bool:  # 
     return False
 
 
+def _mark_for(world, marker: int, foe: int) -> Callable[[], None]:  # noqa: ANN001
+    """Make sure `foe` is marked **by `marker`**, and hand back the undo.
+
+    The counterpart to `_mark_if_unmarked` below, for the arrangements that
+    need a *particular* marker rather than any. `p4380` reads "you hit an
+    enemy an **ally** has marked", so a mark the caster holds makes that
+    sentence false and has to be swapped out -- and `Relations` allows one
+    marker at a time, so swapping is the only way to say it.
+
+    Three cases, and the first is the one that keeps `p16176b` working:
+
+    * `marker` already holds it -- **touch nothing**, which leaves the
+      `via` as whatever row laid it. That is what the row reads.
+    * somebody else holds it -- lay ours, and put theirs back afterwards
+      with its original `via`.
+    * nobody holds it -- lay ours and clear it afterwards.
+
+    Returning a thunk rather than a bool because the restore is no longer
+    one line: `clear` then `set` with the recorded `via`, in that order,
+    since `set` supersedes.
+    """
+    from combat_engine.engine.types import Relation
+
+    sources = list(world.relations.sources(Relation.MARKED_BY, foe))
+    if marker in sources:
+        return lambda: None
+    prior = [
+        (s, world.relations.via(Relation.MARKED_BY, s, foe)) for s in sources
+    ]
+    world.relations.set(Relation.MARKED_BY, marker, foe, via="audit:mark")
+
+    def undo() -> None:
+        world.relations.clear(Relation.MARKED_BY, marker, foe, "audit")
+        for who, via in prior:
+            world.relations.set(Relation.MARKED_BY, who, foe, via=via)
+
+    return undo
+
+
+def _mark_if_unmarked(world, marker: int, foe: int) -> bool:  # noqa: ANN001
+    """Mark `foe` only if nobody has already, and say whether we did.
+
+    **`relations.set` is destructive to a mark that already exists**, in two
+    ways that both cost a row:
+
+    * it supersedes another marker -- `Relations.set` clears any other
+      source's `MARKED_BY` on the same target before laying its own, by
+      design, because a creature allows one marker;
+    * and on a mark the *same* source already holds it **overwrites the
+      `via`**, which is the card the mark answers to. `c.marked(via=...)`
+      compares exactly that string.
+
+    So laying `via="audit:mark"` over a mark a row's own parent power had
+    just laid leaves the relation intact and the row unable to recognise
+    it. `p16176b` is the worked case and the wide sweep is what found it:
+    its Requirement is "the p16176 power must be active" **and** its
+    trigger is "the marked enemy moves willingly on its turn", so
+    `_pose_the_parent_power` put the parent up, the parent marked a foe,
+    and this pass then relabelled that mark as the harness's. The row had
+    been firing and went to UNUSED.
+
+    Returning whether we laid it is what keeps the caller's cleanup
+    honest: clearing a mark we did not lay is the same destruction one
+    step later.
+    """
+    from combat_engine.engine.types import Relation
+
+    if world.relations.anyone(Relation.MARKED_BY, foe):
+        return False
+    world.relations.set(Relation.MARKED_BY, marker, foe, via="audit:mark")
+    return True
+
+
 def _a_marked_foe_acts(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     """Mark a foe, then have it do the thing the row's trigger watches.
 
@@ -8553,7 +8633,7 @@ def _a_marked_foe_acts(world, caster: int, ref: str, cursor: int) -> bool:  # no
         """One arrangement: `marker` marks `foe`, then `attacker` swings."""
         _revive_everyone(world, caster)
         _free_the_immediate(world, caster)
-        world.relations.set(Relation.MARKED_BY, marker, foe, via="audit:mark")
+        undo = _mark_for(world, marker, foe)
         try:
             known = world.get(attacker, Powers)
             if known is None or not known.basic:
@@ -8564,7 +8644,7 @@ def _a_marked_foe_acts(world, caster: int, ref: str, cursor: int) -> bool:  # no
             return _fired(world, ref, cursor)
         finally:
             world.rng.loaded = None
-            world.relations.clear(Relation.MARKED_BY, marker, foe, "audit")
+            undo()
 
     was = getattr(world.rng, "loaded", None)
     try:
@@ -8588,7 +8668,7 @@ def _a_marked_foe_acts(world, caster: int, ref: str, cursor: int) -> bool:  # no
         # commonest predicate in the family asks `world.turn == ev.actor`.
         _revive_everyone(world, caster)
         _free_the_immediate(world, caster)
-        world.relations.set(Relation.MARKED_BY, caster, foe, via="audit:mark")
+        _mine = _mark_if_unmarked(world, caster, foe)
         seat = world.get(foe, Position)
         _was_turn = world.turn
         try:
@@ -8602,7 +8682,8 @@ def _a_marked_foe_acts(world, caster: int, ref: str, cursor: int) -> bool:  # no
                 _back_to(world, foe, _home)
         finally:
             world.turn = _was_turn
-            world.relations.clear(Relation.MARKED_BY, caster, foe, "audit")
+            if _mine:
+                world.relations.clear(Relation.MARKED_BY, caster, foe, "audit")
     finally:
         if was is None:
             if hasattr(world.rng, "loaded"):
