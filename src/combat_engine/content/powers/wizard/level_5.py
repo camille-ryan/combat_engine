@@ -85,6 +85,7 @@ from combat_engine.engine.events import (
     RelationSet,
     ZoneEntered,
 )
+from combat_engine.engine.query import alive
 from combat_engine.engine.zones import Zone
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -703,18 +704,34 @@ def p6958(c: Cast) -> None:
         speed=4, modes=("fly",),
         attack=Attack(INT, vs=REF), damage=Damage("1d8", "int"),
     ),
+    dropped=("dsl.Summon.commands",),
 )
 def p11842(c: Cast) -> None:
     """The command's riders -- ongoing poison, and the imp turning invisible
     -- hang off a standard action nothing offers, so only its attack line is
-    declared. Hovering has nowhere to go, and the symbiosis is not gated on
-    the imp still standing.
+    declared: `Summon` carries exactly one `attack` field, which is the
+    marker.
+
+    **Hover is not a dropped clause and this used to say it was.**
+    `falling.AIRBORNE` holds `"fly"`, and `falling.ground` returns early for
+    anything airborne -- *"a flyer is not settled; it is where it means to
+    be"* -- so a creature declaring `modes=("fly",)` already stays up and
+    hovering adds nothing to it. `c.hover` exists and is for the other case,
+    a creature that does **not** fly being levitated. Same reading
+    `m3023a6` records: a printed qualifier on the mode, with no altitude for
+    the engine to track.
+
+    **And the symbiosis is gated on the imp now.** The old note admitted it
+    was not, which was a real gap and a two-word one: `made` is in scope and
+    `alive(c.world, ...)` is the tree's idiom for asking.
     """
     made = c.summon_inline(get(c.ref).summon, at=c.origin)
     if made:
         c.resist(5, DamageType.FIRE, on=made)
 
     def symbiosis(ev: Hit) -> None:
+        if made is None or not alive(c.world, made):
+            return
         if ev.attacker == c.me and c.had_advantage(ev):
             c.damage("1d6", dtype=DamageType.POISON, on=ev.target)
 

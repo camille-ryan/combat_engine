@@ -482,7 +482,17 @@ def _p7414_instinct(c: Cast, who: int) -> None:
 def p7414(c: Cast) -> None:
     """It attacks at one point during the move; the eagle walks first and
     swings after, which is the same thing whenever the target is still in
-    reach at the end. Hovering has nowhere to go.
+    reach at the end.
+
+    **Hover is not a dropped clause and this used to say it had nowhere to
+    go.** `falling.AIRBORNE` holds `"fly"` and `falling.ground` returns
+    early for anything airborne -- *"a flyer is not settled; it is where it
+    means to be"* -- so a summon declaring `modes=("fly",)` already stays
+    up, and hovering adds nothing on top of that. `c.hover` exists and
+    answers the other case: a creature that does **not** fly being
+    levitated, which is why its docstring is about not being put "straight
+    back down on its next step". The reading `m3023a6` settled -- a printed
+    qualifier on the mode, no altitude for the engine to track.
     """
     made = c.summon_inline(get(c.ref).summon)
     if not made:
