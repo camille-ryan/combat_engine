@@ -2817,7 +2817,7 @@ def area_of(
         mine = set(source)
     else:
         mine = set()
-        for eye in origins(world, actor, r):
+        for eye in origins(world, actor, r, p):
             mine |= squares(world, eye)
     stretch = _stretched(world, actor, r.kind,
                          {"power": p.ref, "range_kind": r.kind})
@@ -3462,7 +3462,8 @@ def within_of(
     return max(0, r.within + _stretched(world, actor, "within", ctx))
 
 
-def _lenders(world: World, actor: int, r: Range) -> list[int]:
+def _lenders(world: World, actor: int, r: Range,
+             p: Power | None = None) -> list[int]:
     """Whose squares this actor may measure `r` from besides its own.
 
     The one place `c.cast_from`'s terms are read, so `measured_from` and
@@ -3483,7 +3484,25 @@ def _lenders(world: World, actor: int, r: Range) -> list[int]:
     Opening melee to every caller would make those two stronger than their
     cards.
 
-    The proviso is unchanged: on the board, and in line of effect.
+    **`only` is a per-row restriction and wants `p`.** `p10265` prints
+    *"your divine ranged or area **at-will or encounter** attacks"*, and
+    this function is reached per **range kind**, not per row -- so without
+    it every ranged or area attack the invoker makes borrows the origin
+    while the hold lasts, which is **wider** than the card: a daily and a
+    non-divine attack both get an origin the printed line withholds. That
+    is the direction of error that earns a marker rather than being
+    shrugged at.
+
+    Written as `only:<word>[+<word>...]` among the `via` words, matched
+    against the row's keywords and its usage, both lower-cased. A row that
+    satisfies none of the words does not borrow. `p` absent means the
+    caller could not say which row is being measured, and then an `only`
+    borrow is **refused** rather than allowed -- failing closed, because
+    the restriction exists to narrow and a borrow nobody can check is the
+    wide reading.
+
+    The rest of the proviso is unchanged: on the board, and in line of
+    effect.
     """
     from .components import Position as _Position
     from .query import distance_between as _apart
@@ -3514,6 +3533,26 @@ def _lenders(world: World, actor: int, r: Range) -> list[int]:
         )
         if band and _apart(world, actor, lender) > band:
             continue
+        # The per-row restriction. Fails closed when the caller could not
+        # name the row: see the docstring.
+        groups = [
+            w.split(":", 1)[1].split("+") for w in words
+            if w.startswith("only:")
+        ]
+        if groups:
+            if p is None:
+                continue
+            said = {str(getattr(k, "value", k)).lower() for k in (p.keywords or ())}
+            said.add(str(getattr(p.usage, "value", p.usage)).lower())
+            # **Each group is an OR and the groups are an AND**, which is
+            # the printed sentence's shape rather than a convenience:
+            # `p10265` says "your **divine** ranged or area **at-will or
+            # encounter** attacks", so a divine *daily* is excluded and so
+            # is an arcane *encounter*. Folded into one set the keyword
+            # alone would have admitted the daily -- measured, before this
+            # was split.
+            if any(not said & set(group) for group in groups):
+                continue
         out.append(lender)
     return out
 
@@ -3530,7 +3569,8 @@ def _borrow_is_optional(world: World, actor: int, lenders: list[int]) -> bool:
     )
 
 
-def measured_from(world: World, actor: int, r: Range) -> int:
+def measured_from(world: World, actor: int, r: Range,
+                  p: Power | None = None) -> int:
     """Whose square this range is taken from -- the caster, unless it says.
 
     "Melee spirit 1" is measured from the shaman's companion, and the row is
@@ -3543,7 +3583,7 @@ def measured_from(world: World, actor: int, r: Range) -> int:
         # A square lent by another creature -- `c.cast_from`. `_lenders`
         # holds the terms: which range kinds may borrow, and the proviso
         # that the lender is on the board and in sight.
-        lent = _lenders(world, actor, r)
+        lent = _lenders(world, actor, r, p)
         return lent[0] if lent else actor
     from .components import Companion, Position
 
@@ -3559,7 +3599,8 @@ def measured_from(world: World, actor: int, r: Range) -> int:
     return actor
 
 
-def origins(world: World, actor: int, r: Range) -> list[int]:
+def origins(world: World, actor: int, r: Range,
+            p: Power | None = None) -> list[int]:
     """Every square this range could be measured from, not just the first.
 
     The plural of `measured_from`, and the shaman's second spirit is why it
@@ -3588,10 +3629,10 @@ def origins(world: World, actor: int, r: Range) -> list[int]:
         #
         # The plain `c.cast_from` is unchanged and still **replaces** the
         # origin, which is what "rather than from yourself" says.
-        lent = _lenders(world, actor, r)
+        lent = _lenders(world, actor, r, p)
         if lent and _borrow_is_optional(world, actor, lent):
             return [actor, *lent]
-        return [measured_from(world, actor, r)]
+        return [measured_from(world, actor, r, p)]
     from .components import Companion, Position
 
     mine = [
@@ -3999,7 +4040,7 @@ def candidates(
     # Line of effect is traced from whatever the range was measured from, so
     # a spirit round the corner reaches what *it* can see rather than what
     # its shaman can.
-    eyes = origins(world, actor, reach)
+    eyes = origins(world, actor, reach, p)
     return [
         c
         for c in pool
@@ -4771,7 +4812,7 @@ def _within_reach(
     far = _reach_of(world, actor, r, p.ref)
     return any(
         distance_between(world, eye, target) <= far
-        for eye in origins(world, actor, r)
+        for eye in origins(world, actor, r, p)
     )
 
 

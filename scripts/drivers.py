@@ -24110,6 +24110,65 @@ def a_borrowed_origin_for_a_melee_line(out: Result) -> None:
                  f"measured_from gave {got}, caster is {me},"
                  f" lender is {foes[0]}")
 
+    # -- the per-row restriction, and its grouping -----------------------
+    #
+    # `p10265` prints *"your **divine** ranged or area **at-will or
+    # encounter** attacks"*, and `_lenders` is reached per range KIND
+    # rather than per row -- so a bare borrow let every ranged or area
+    # attack use the origin, which is wider than the card.
+    #
+    # **The grouping is what the last four assertions are for.** `only` is
+    # a sequence of OR-groups ANDed together, because the sentence is
+    # divine AND (at-will OR encounter). Flattened to three words a divine
+    # *daily* borrows on the keyword alone -- which is the first draft of
+    # this, caught here.
+    from combat_engine.engine.dsl import REGISTRY as _ROWS
+    from combat_engine.engine.types import Usage as _Usage
+
+    def a_row(kw: str, usage) -> tuple:  # noqa: ANN001
+        for ref, row in _ROWS.items():
+            if not ref.startswith("p") or row.reach is None:
+                continue
+            said = {str(getattr(k, "value", k)).lower()
+                    for k in (row.keywords or ())}
+            if kw in said and row.usage is usage:
+                return ref, row
+        return "", None
+
+    world, me, foes, home = board()
+    mates = [a for a in _audit._allies_of(world, me) if a != me]
+    if not mates:
+        out.skip("no ally to borrow an origin from")
+        return
+    Cast(world=world, me=me, ref="drivers").cast_from(
+        mates[0], until=When.ENCOUNTER,
+        only=(("divine",), ("at-will", "encounter")),
+    )
+    for kw, usage, lends in (
+        ("divine", _Usage.AT_WILL, True),
+        ("divine", _Usage.ENCOUNTER, True),
+        ("divine", _Usage.DAILY, False),
+        ("arcane", _Usage.ENCOUNTER, False),
+    ):
+        ref, row = a_row(kw, usage)
+        if row is None:
+            out.skip(f"no {kw} {usage} row in the tree to measure")
+            continue
+        got = measured_from(world, me, RANGED, row)
+        word = str(getattr(usage, "value", usage))
+        out.that((got == mates[0]) is lends,
+                 f"a {kw} {word} row {'borrows' if lends else 'does NOT'}"
+                 f" the origin -- the card is divine AND (at-will OR"
+                 f" encounter), so flattening the groups would admit the"
+                 f" divine daily on its keyword alone",
+                 f"{ref} gave {got}, caster is {me}, lender is {mates[0]}")
+
+    # **And it fails closed**: where the caller cannot name the row, an
+    # `only` borrow is refused rather than allowed. The restriction exists
+    # to narrow, so a borrow nobody can check is the wide reading.
+    out.that(measured_from(world, me, RANGED) == me,
+             "with no row to check, an `only` borrow is REFUSED")
+
 
 def a_lent_eye_travels_but_does_not_shoot(out: Result) -> None:
     """"You can see and hear as if you were in the target's space." `p12345`.

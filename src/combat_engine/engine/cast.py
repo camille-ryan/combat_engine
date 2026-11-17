@@ -15866,6 +15866,7 @@ class Cast:
     def cast_from(
         self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER,
         optional: bool = False, melee: bool = False, within: int = 0,
+        only: Sequence[Sequence[str]] = (),
     ) -> Effect | None:
         """"Determine line of sight and effect for your ranged and area
         attacks from the target rather than from yourself."
@@ -15927,6 +15928,40 @@ class Cast:
 
         Carried as `within:<n>` among the `via` words, so one relation says
         all three things and nothing needs a second component.
+
+        **`only` restricts which of the borrower's rows may use it**, by
+        keyword or by usage. `p10265` prints *"your divine ranged or area
+        **at-will or encounter** attacks"*, and `dsl._lenders` is reached
+        per **range kind** rather than per row -- so without this every
+        ranged or area attack the invoker makes borrows the origin while
+        the hold lasts. That is **wider** than the card: a daily and a
+        non-divine attack both get an origin the printed line withholds,
+        which is the direction of error this tree treats as a marker
+        rather than a rounding.
+
+        Matched against the row's keywords **and** its usage, lower-cased.
+        **`only` is a sequence of OR-groups, ANDed together**, which is
+        the printed sentence's own shape: that card says *divine* **and**
+        (*at-will* **or** *encounter*), so
+
+            only=(("divine",), ("at-will", "encounter"))
+
+        excludes a divine daily and an arcane encounter alike. Folded into
+        one flat set the keyword alone would have admitted the daily --
+        measured, before the groups were split.
+
+        **Groups rather than two calls, because `via` holds one string.**
+        A second `cast_from` on the same pair **overwrites** it rather
+        than accumulating -- measured: after `only=("divine",)` then
+        `only=("at-will", "encounter")` the relation reads
+        `only:at-will+encounter` and the divine half is gone. So the
+        grouping has to arrive in one call. Written as
+        `only:a+b,only:c+d` on the `via`, which `dsl._lenders` reads back
+        as a list of groups.
+
+        It fails **closed**: where a caller cannot say which row is being
+        measured, an `only` borrow is refused. The restriction exists to
+        narrow, so a borrow nobody can check is the wide reading.
         """
         borrower = on if on is not None else self.me
         self.world.relations.set(
@@ -15937,6 +15972,10 @@ class Cast:
                     if on_
                 ]
                 + ([f"within:{within}"] if within else [])
+                + [
+                    f"only:{'+'.join(str(w).lower() for w in group)}"
+                    for group in only if group
+                ]
             ),
         )
 
