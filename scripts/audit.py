@@ -5878,9 +5878,17 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     # * the shift has to be on the foe's **own turn**, because the
     #   commonest predicate in the family asks `world.turn == ev.actor`
     #   -- 49 content predicates do;
-    # * and the foe goes **back** between attempts, because a shift is a
-    #   square each time and compounding them walks a foe out of the reach
-    #   every later pass measures from.
+    # * and the foe goes **back once the foe is done**, so the board every
+    #   later pass measures from is the board it started with.
+    #
+    # **The third one was written as a restore between *attempts* and that
+    # cost two rows.** `_back_to` is itself movement, so restoring after
+    # every candidate square runs it up to eight times a foe and the churn
+    # reaches every later pass: `f2271` ("you use p10439") and `m115787a4`
+    # ("an enemy enters a square adjacent to it") both fire with one
+    # trailing restore and are silent with a restore between attempts.
+    # Measured against the pre-commit board -- 14 rows gained either way,
+    # 5 lost with the inner restore and 3 without it.
     _ours_s = [caster, *_allies_of(world, caster)]
     _beside_s = {
         f for f in foes
@@ -5914,7 +5922,6 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
                 shift(world, foe, sq)
                 if probe():
                     return True
-                _back_to(world, foe, _was_sq)
         finally:
             world.turn = _was_turn
             _back_to(world, foe, _was_sq)
