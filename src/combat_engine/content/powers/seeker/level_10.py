@@ -33,6 +33,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.events import DamageApplied, Dropped, TurnStart
+from combat_engine.engine.falling import height
 from combat_engine.engine.grid import spread
 from combat_engine.engine.query import team
 
@@ -138,15 +139,37 @@ def p12793(c: Cast) -> None:
     on=Trigger(DamageApplied, targets_me, "you are damaged by an attack"),
 )
 def p9523(c: Cast) -> None:
-    """The landing is not written: the form runs out at the start of the next
-    turn and nothing in this engine makes a creature fall, so there is no
-    fall to be spared."""
+    """**The landing is written now, and "nothing in this engine makes a
+    creature fall" was false.** `engine/falling.py` is a whole module and
+    `c.fall` is the verb; `safe=True` is, in its own words, "the printed
+    'you descend without taking falling damage'". #1341.
+
+    "**If you are still airborne**" is the gate, asked at the moment the
+    form runs out rather than assumed: a seeker that came down on its own
+    during the flight has nothing to land from, and `falling.height`
+    answers that in one call.
+
+    It hangs off the form's end rather than a clock of its own, because
+    the card ties the two together -- the landing happens because the
+    form stops.
+    """
     speed = c.speed_of()
     c.form(modes={"fly": speed}, until=When.SONT, revert=None, label=c.ref)
     c.insubstantial(on=c.me, until=When.SONT)
     c.cannot_attack(on=c.me, until=When.SONT)
     c.no_provoke(until=When.SONT)
     c.move(speed)
+    me = c.me
+
+    def land() -> None:
+        if height(c.world, me) > 0:
+            c.fall(on=me, safe=True)
+
+    shape = next(
+        (e for e in c.world.effects.of(me) if str(e.label) == c.ref), None
+    )
+    if shape is not None:
+        shape.on_end.append(land)
 
 
 @power(

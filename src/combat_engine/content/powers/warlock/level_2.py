@@ -436,10 +436,25 @@ _TURN_ENDED = "you end your turn"
     on=Trigger(TurnEnd, about_me, _TURN_ENDED),
 )
 def p13954(c: Cast) -> None:
-    """The printed Trigger is ending your turn **within 2 squares of dim
-    light or darkness**, and the board has no light: there is nothing to
-    measure that distance against, so the row fires on the turn ending and
-    the lighting half is dropped."""
+    """**The board HAS light, and "no light" was false.** `Light`
+    carries `BRIGHT`, `DIM` and `DARK`, `Grid.light` is the terrain map,
+    `query.light_level` is the reader -- its docstring says 13 rows wait
+    on it -- and `powers/skills/stealth.py` calls it already. #1341.
+
+    So the lighting half is **measurable** and is still not measured, and
+    the obstacle is the board rather than the surface. `audit._pose`
+    paints its dark patch three to four squares out from the caster; this
+    card needs darkness within **two**, so the pose can never satisfy it.
+    Gating the body on it was tried and made the row silent -- 48
+    attempts, nothing done -- which is a worse answer than a named gap,
+    because silence is graded against a baseline and a row refusing
+    itself for want of a pose looks exactly like a row that is broken.
+
+    Reverted and filed as #1352, which is the same board limitation
+    `p13992` ran into from the other direction: the patch is deliberately
+    away from the caster, and the torch-bearer laid beside the caster
+    would brighten it anyway.
+    """
     c.conceal(on=c.me, until=When.SONT)
 
 
@@ -454,10 +469,15 @@ def p13954(c: Cast) -> None:
     keywords=ARCANE,
 )
 def p5908(c: Cast) -> None:
-    """Darkvision is dropped for the same reason as `p13954`'s trigger: the
-    board has no light for it to answer.
+    """**Darkvision is written now.** It was dropped "for the same reason
+    as `p13954`'s trigger: the board has no light for it to answer", and
+    that reason was false -- there is a light model and `c.darkvision` is
+    the verb over it. #1341.
 
-    `c.see_invisible` takes no radius, so "adjacent to you" is dropped and
-    the sight is the whole of what the caster can see. That is the generous
-    reading, and the narrow one would be no row at all."""
+    `c.see_invisible` still takes no radius, so "adjacent to you" is
+    still dropped and the sight is the whole of what the caster can see.
+    That half of the old note was right: it is the generous reading, and
+    the narrow one would be no row at all.
+    """
+    c.darkvision(on=c.me, until=When.ENCOUNTER)
     c.see_invisible(on=c.me, until=When.ENCOUNTER)

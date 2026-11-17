@@ -128,7 +128,18 @@ def _repeating(c: Cast) -> bool:
     on=Trigger(Miss, both(by_me, by_ranged), "you miss with a ranged attack"),
 )
 def p9501(c: Cast) -> None:
-    """The shot is fired from the caster: nothing here takes a `from_`, so
+    """The shot is fired from the caster, and the reason is narrower than
+    the old note said. `c.attack` and `c.strike` both take `from_=` --
+    `ranger`'s beast rows use it -- but **`c.basic` does not**, and a
+    basic attack is what this card grants. So the gap is one keyword on
+    one verb rather than anything missing from the surface. #1341.
+
+    Longhand through `c.attack(from_=)` is not the answer either: that
+    rolls a declared attack line, and "a ranged basic attack" is
+    whichever row the creature's basic actually is -- which is the whole
+    reason `c.basic` exists.
+
+    So:
     "using that creature's space as the origin square" is dropped and only
     the range it measures -- 5 squares from the creature missed -- is kept.
     Regaining the power on an action point is not modelled.
