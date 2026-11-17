@@ -66,6 +66,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Conjuration, Position, Powers
 from combat_engine.engine.events import LeaveSquare, MoveStart
+from combat_engine.engine.query import alive
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
 
@@ -568,13 +569,19 @@ def _commands_on_opportunity(c: Cast, made: int, *, mark: bool = False) -> None:
     target=NO_TARGET,
     keywords=[*ARCANE_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(speed=5, attack=Attack(INT, vs=REF), damage=Damage("2d6", "int")),
+    dropped=("dsl.Summon.commands",),
 )
 def p11840(c: Cast) -> None:
     """The special command is a standard action spent on a later turn and
-    nothing offers one, so the header carries the line `c.command` rolls and
-    nothing spends it; "one or two creatures" has nowhere to go either. The
-    symbiosis is not gated on the summoned creature still standing -- nothing asks
-    whether a companion is still on the board.
+    nothing offers one, so the header carries the one line `c.command`
+    rolls and nothing spends it; "one or two creatures" has nowhere to go
+    either. `dsl.Summon` has a single `attack` field -- checked -- which is
+    the marker, and `p11842`, `p7641` and `p7657` wait on the same one.
+
+    **The symbiosis is gated on the creature standing now, and "nothing
+    asks whether a companion is still on the board" was false.**
+    `query.alive(world, eid)` is that question and six content files
+    already ask it. `made` is in scope, so this was two lines.
     """
     made = c.summon_inline(get(c.ref).summon, at=c.origin)
     if not made:
@@ -588,6 +595,8 @@ def p11840(c: Cast) -> None:
     c.watch(Dropped, death_throe, until=When.ENCOUNTER, label=f"{c.ref} death throe")
 
     def symbiosis(ev: Hit) -> None:
+        if not alive(c.world, made):
+            return
         if ev.attacker != c.me or not _at_will_or_basic(ev.power):
             return
         victim = ev.target

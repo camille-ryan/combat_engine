@@ -214,13 +214,22 @@ def p7194(c: Cast) -> None:
     target=NO_TARGET,
     keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.SUMMONING],
     summon=Summon(speed=6, modes=("fly",)),
+    dropped=("dsl.Summon.commands",),
 )
 def p11296(c: Cast) -> None:
     """Its one command heals rather than attacks, and `c.command` rolls the
     header's `summon=` attack line, so there is nothing for it to read. The
-    command is dropped -- see the report -- and what is written is the creature
-    arriving. `Summon.modes` carries no speed, so the printed "fly 8" is set
-    from the body."""
+    command is dropped and what is written is the creature arriving.
+
+    `dsl.Summon`'s fields are `hp, speed, defences, per_defence, size,
+    attack, damage, modes, instinctive, label` -- one `attack` and no
+    command that is not one, which is the marker. `p11840`, `p11842`,
+    `p7641` and `p7657` wait on the same field for the neighbouring
+    reason: they have a second *attack* command where this has a command
+    that does not attack at all.
+
+    `Summon.modes` carries no speed, so the printed "fly 8" is set from the
+    body."""
     angel = c.summon_inline(get(c.ref).summon, at=c.origin)
     if angel:
         c.mode("fly", 8, on=angel, until=When.ENCOUNTER)

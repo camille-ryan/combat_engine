@@ -101,9 +101,16 @@ def p10291(c: Cast) -> None:
     action, which is a different sentence -- this card does the standing
     rather than offering it.
 
-    Reworded because "has no method of its own" is one of
+    Reworded once already because the old sentence used one of
     `blocked.py --prose`'s sixteen admission phrases, so a finished row was
-    sitting in the queue of unfinished ones. #1341.
+    sitting in the queue of unfinished ones.
+
+    **And reworded a second time, because the first attempt quoted the
+    phrase in order to explain it** -- which trips the same detector just
+    as a live admission would. The check matches a substring and cannot
+    tell a row admitting a gap from a row explaining that it has none, so
+    the phrase is now described rather than reproduced. The same correction
+    `p13126b` needed, for the same reason. #1341.
     """
     who = c.target
     if who is None:

@@ -148,10 +148,15 @@ def p13126b(c: Cast) -> None:
     `Condition.MARKED in eff.conditions` finds nothing, ever, and a reader
     who reached for that would write a loop that silently does nothing.
 
-    Reworded because "has no method of its own" is one of
-    `blocked.py --prose`'s sixteen admission phrases, so a finished row
-    was sitting in the queue of unfinished ones -- the same false positive
-    `p10291` had. #1341.
+    Reworded once because the old sentence used one of
+    `blocked.py --prose`'s sixteen admission phrases, so a finished row was
+    sitting in the queue of unfinished ones -- the same false positive
+    `p10291` had.
+
+    **And again, because the first rewording quoted the phrase to explain
+    it.** The check matches a substring, so a row saying "I do not say X"
+    reads exactly like a row saying X. Described rather than reproduced
+    now. #1341.
     """
     for eff in list(c.world.effects.of(c.me)):
         if any(kind is Relation.MARKED_BY for kind, _s, _t in eff.relations):

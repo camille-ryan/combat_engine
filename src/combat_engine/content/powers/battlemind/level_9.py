@@ -157,12 +157,18 @@ def p12426(c: Cast) -> None:
     `requires=active("p12426")` like the other five of its family, so the
     stance hands it over by standing rather than by `c.grant_row`.
 
-    This used to say it "is left out" because the force damage is owed for
-    a square the shift passes *through* and a shift was one `step` to its
-    destination. That was true when written; `#684` made `movement.shift`
-    walk its path, and the note outlived the fix by long enough to be
-    counted as a dropped clause twice -- here and in that file's header.
-    #1341.
+    This used to admit a dropped clause here, because the force damage is
+    owed for a square the shift passes *through* and a shift was one `step`
+    to its destination. That was true when written; `#684` made
+    `movement.shift` walk its path, and the note outlived the fix by long
+    enough to be counted as a dropped clause twice -- here and in that
+    file's header.
+
+    **The admission is described rather than quoted**, which is the second
+    correction this needed: `blocked.py --prose` matches a substring, so a
+    note reproducing the phrase in order to say it no longer applies reads
+    exactly like a row that still admits it. `p10291` and `p13126b` each
+    needed the same edit twice over. #1341.
     """
     if c.strike():
         c.damage(c.w(3), c.con_mod, dtype=DamageType.FORCE)
