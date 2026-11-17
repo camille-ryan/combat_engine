@@ -4038,7 +4038,16 @@ _WANTS_SOLITUDE = re.compile(
 #: `_WANTS["grab"]`, which spawns a dummy the caster is holding -- the
 #: opposite direction, and the tree's own note calls that "the same
 #: wrong-side mistake as the surge and condition poses".
-_WANTS_HELD = re.compile(r"you (?:must be|are) grabbed|while grabbed", re.I)
+#: **"held by something" is the same state said differently**, and the
+#: first pattern missed it: `p10486`'s Requirement is "needs to be held
+#: by something" -- our own words for a row whose two printed choices
+#: both need a hold to shake off -- and it was refused while
+#: `_grabbed_by_a_foe` would have satisfied it outright.
+_WANTS_HELD = re.compile(
+    r"you (?:must be|are) grabbed|while grabbed|held by something"
+    r"|be (?:grabbed|restrained)",
+    re.I,
+)
 _WANTS_WINDED = re.compile(r"used (?:your )?second wind", re.I)
 _WANTS_A_KILL = re.compile(r"dropped (?:a|an) (?:real )?enemy", re.I)
 
