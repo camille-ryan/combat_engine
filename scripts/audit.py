@@ -6958,6 +6958,36 @@ def _lays_an_ally_dying(world, caster: int, ref: str, cursor: int) -> bool:  # n
             spot.square = was_square
 
 
+def _grabbed_by_a_foe(world, caster: int) -> bool:  # noqa: ANN001
+    """Have an enemy take hold of the caster. True if one did.
+
+    The mirror of the grab knob, which holds a spawned dummy
+    `grabbed_by=caster`. Rows reading "an escape attempt" or "while you
+    are grabbed" want the caster to be the one held, and nothing posed
+    that. #1341.
+    """
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.query import enemies as _foes
+
+    foes = _foes(world, caster)
+    if not foes:
+        return False
+    _Cast(world, foes[0], "audit:provoke").grab(on=caster)
+    return True
+
+
+def _release(world, caster: int) -> None:  # noqa: ANN001
+    """Let the caster go again, so the hold does not outlive its pass.
+
+    A creature left grabbed cannot walk, and every pass below this one
+    measures a board where it can.
+    """
+    from combat_engine.engine.types import Relation
+
+    for holder in list(world.relations.sources(Relation.GRABBED_BY, caster)):
+        world.relations.clear(Relation.GRABBED_BY, holder, caster)
+
+
 def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     """Roll skill checks, for a row whose printed trigger is one.
 
@@ -7019,6 +7049,48 @@ def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: A
                     roll_ability(world, roller, ability, dc)
                     if _fired(world, ref, cursor):
                         return True
+                # **A check WITH A PURPOSE and a check AGAINST SOMEBODY**,
+                # both of which `skills.check` takes and this pass passed
+                # neither of. Three rows read them and all three reported
+                # UNUSED while 68 purposeless, targetless checks went by:
+                #
+                #   "you fail an athletics check by 5 or more when
+                #    swimming or climbing"   -> ev.purpose in (swim, climb)
+                #   "you fail a bluff check against a creature"
+                #                            -> ev.target
+                #
+                # The same staleness the `CheckDeclared` and
+                # `ability_check` comments above record, a third time: the
+                # harness rolled the commonest shape of the event and not
+                # the shapes the cards name. #1341.
+                for purpose in ("climb", "swim"):
+                    roll(world, roller, "athletics", dc, purpose=purpose)
+                    if _fired(world, ref, cursor):
+                        return True
+                # **And an athletics check while something is holding the
+                # caster**, which is how `escape.attempt` reads: it rolls
+                # through `skills.check` and stamps no purpose, so being
+                # held is the only thing that tells an escape from any
+                # other athletics check -- `p16518`'s own predicate says
+                # exactly that.
+                #
+                # The grab knob holds a DUMMY `grabbed_by=caster`, which
+                # is the other side of the relation and reaches this not
+                # at all. The same wrong-side mistake as the surge and
+                # condition poses.
+                if _grabbed_by_a_foe(world, caster):
+                    try:
+                        roll(world, roller, "athletics", dc)
+                        if _fired(world, ref, cursor):
+                            return True
+                    finally:
+                        _release(world, caster)
+                from combat_engine.engine.query import enemies as _foes
+                for foe in _foes(world, caster)[:1]:
+                    for skill in sorted(SKILLS):
+                        roll(world, roller, skill, dc, target=foe)
+                        if _fired(world, ref, cursor):
+                            return True
     finally:
         if moves is not None:
             moves.using = was
