@@ -7,6 +7,7 @@ from combat_engine.engine import (
     CON,
     DAILY,
     EACH_ENEMY,
+    FREE,
     ONE_CREATURE,
     REACTION,
     STANDARD,
@@ -212,7 +213,6 @@ def p13045(c: Cast) -> None:
 
 @power(
     "p13046",
-    dropped=("c.grant_action_row()",),
     level=5,
     cls="battlemind",
     usage=DAILY,
@@ -223,14 +223,27 @@ def p13045(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p13046(c: Cast) -> None:
-    """The stance's free-action teleport is a power in its own right sharing
-    this id, so it is dropped: `c.grant_row` needs a ref to grant."""
+    """Both halves of the Effect play.
+
+    **The teleport is a granted ordinary action, not a granted row, and the
+    marker read it as the second.** It said *"a power in its own right
+    sharing this id, so `c.grant_row` needs a ref to grant"*; the card
+    prints *"you can teleport 2 squares as a free action"*, which is a line
+    in the action menu that is normally absent -- exactly what
+    `c.grant_action` is for. `"teleport"` is one of `actions.GRANTABLE`'s
+    sixteen words and `squares_` is how far.
+
+    `When.STANCE` is that verb's default and is the printed duration here,
+    "until the stance ends", so the grant and the stance end together
+    without being told to.
+    """
     if c.strike():
         c.damage(c.w(2), c.con_mod)
     else:
         c.half_damage(c.w(2), c.con_mod)
     if c.first:
         c.stance()
+        c.grant_action("teleport", FREE, squares_=2, on=c.me)
 
 
 @power(

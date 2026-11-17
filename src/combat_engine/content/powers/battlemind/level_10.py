@@ -12,6 +12,7 @@ from combat_engine.engine import (
     FORT,
     INTERRUPT,
     MINOR,
+    MOVE,
     ONE_ALLY,
     PERSONAL,
     REACTION,
@@ -47,7 +48,6 @@ def _weapon_attack(ctx: dict[str, Any]) -> bool:
 
 @power(
     "p11175",
-    dropped=("c.grant_action_row()",),
     level=10,
     cls="battlemind",
     usage=DAILY,
@@ -57,9 +57,24 @@ def _weapon_attack(ctx: dict[str, Any]) -> bool:
     keywords=[Keyword.PSIONIC, Keyword.TELEPORTATION, Keyword.POLYMORPH],
 )
 def p11175(c: Cast) -> None:
-    """The move-action teleport is a power in its own right and `c.grant_row`
-    needs a ref to grant, so it is dropped."""
+    """Both halves play.
+
+    **The teleport is a granted ordinary action, not a granted row, and the
+    marker read it as the second.** It said *"the move-action teleport is a
+    power in its own right and `c.grant_row` needs a ref to grant"* -- but
+    the card prints *"can teleport 3 squares as a move action"*, which is a
+    line in the action menu that is normally absent, and that is exactly
+    what `c.grant_action` is for. `"teleport"` is one of
+    `actions.GRANTABLE`'s sixteen words and `squares_` is how far, so the
+    clause is one call.
+
+    `When.ENCOUNTER` on both, which is the printed duration -- the verb
+    defaults to `When.STANCE` because most of its callers are stances and
+    this is not one.
+    """
     c.resist(5, until=When.ENCOUNTER)
+    c.grant_action("teleport", MOVE, squares_=3, on=c.me,
+                   until=When.ENCOUNTER)
 
 
 @power(

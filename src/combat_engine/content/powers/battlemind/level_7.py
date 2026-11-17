@@ -317,7 +317,6 @@ def p13052(c: Cast) -> None:
 
 @power(
     "p13053",
-    dropped=("c.grant_action_row()",),
     level=7,
     cls="battlemind",
     usage=AT_WILL,
@@ -328,13 +327,41 @@ def p13052(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p13053(c: Cast) -> None:
-    """The rider on the class's own step power is dropped -- that row is a
-    class feature with its own id, which this spec does not name -- and both
-    augments are only louder versions of that same rider, so neither is
-    written either."""
+    """The rider on the class's own step power is written, and the marker
+    named the wrong kind of gap.
+
+    It said `c.grant_action_row()` -- a facility for handing out a *row* as
+    an action -- and the clause grants nothing: *"if the target triggers
+    your p10439 power before the end of your next turn, you shift 1 extra
+    square with that power"* is a **distance** on a row that already
+    exists, which is what `c.extend_move` is for. Its own docstring names
+    eleven rows printing a sentence of that shape.
+
+    **`p10439` had to be made to read it.** That verb's requirement is
+    explicit -- *"a row must read it to be changed, with `squares_for` ...
+    an `extend_move` on a row whose body still hard-codes its distance is a
+    modifier nothing consults"* -- and `p10439`'s body said `c.shift(1)`.
+    It reads `c.squares_for` now, and passes the triggering creature in its
+    context so this gate can name one.
+
+    **The gate is the printed "the target", not any marked enemy.**
+    `p10439` triggers on *an* adjacent marked enemy shifting, and this row
+    marks one creature; an ungated square would pay out for whichever of
+    them moved. That is the difference between the card and a stronger
+    version of it.
+
+    The two augments are louder versions of the same rider and the row
+    declares neither -- the spec's augment text does not say which of them
+    carries which distance, so they are not guessed at here.
+    """
+    victim = c.target
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.mark(until=When.EONT)
+        c.extend_move(
+            "p10439", 1, on=c.me, until=When.EONT,
+            when=lambda ctx: ctx.get("actor") == victim,
+        )
 
 
 @power(

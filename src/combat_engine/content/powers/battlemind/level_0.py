@@ -117,7 +117,34 @@ def p10438(c: Cast) -> None:
     on=Trigger(MoveStart, _marked_shifts, "an adjacent enemy marked by you shifts"),
 )
 def p10439(c: Cast) -> None:
-    c.instead_of("shift", lambda: c.shift(1))
+    """**The distance is read rather than hard-coded, so a row that
+    lengthens it has something to change.** `c.extend_move` is the write
+    half and its own docstring states the requirement: *"a row must read it
+    to be changed, with `squares_for` ... an `extend_move` on a row whose
+    body still hard-codes its distance is a modifier nothing consults,
+    which is this component's commonest bug."*
+
+    `p13053` prints *"if the target triggers your p10439 power before the
+    end of your next turn, you shift 1 extra square with that power"*, and
+    the augments say the same thing louder. Those were marked unwritable
+    against a body that said `c.shift(1)`.
+
+    `default=1` is the printed square, so a character with nothing
+    lengthening it shifts exactly as before.
+
+    **And the context names who triggered it**, because the rows that
+    lengthen this one name a creature. `p13053` prints *"if **the target**
+    triggers your p10439 power"*, so an ungated `extend_move` would pay out
+    when any marked enemy shifted -- stronger than print. `squares_for`
+    takes a `ctx` and `extend_move` takes a matching `when=`, so the gate
+    is the trigger's own actor.
+    """
+    ev = c.trigger
+    who = getattr(ev, "actor", 0)
+    c.instead_of(
+        "shift",
+        lambda: c.shift(c.squares_for(c.ref, 1, ctx={"actor": who})),
+    )
 
 
 @power(

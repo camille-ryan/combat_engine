@@ -6,6 +6,7 @@ from combat_engine.engine import (
     AC,
     DEX,
     ENCOUNTER,
+    MINOR,
     ONE_CREATURE,
     STANDARD,
     WILL,
@@ -82,11 +83,32 @@ def p9431(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.IMPLEMENT, Keyword.PSYCHIC, Keyword.SHADOW, Keyword.TELEPORTATION],
     attack=Attack(DEX, vs=WILL),
-    dropped=("c.grant_action_row()",),
+    dropped=("c.grant_action(toward=)",),
 )
 def p9432(c: Cast) -> None:
-    """The build rider grants a minor-action teleport on a later turn, which
-    is an action nothing can hand out, so it is dropped."""
+    """**The build rider's teleport is written and the marker was wrong
+    about why.** It said the rider *"grants a minor-action teleport on a
+    later turn, which is an action nothing can hand out"*, and
+    `"teleport"` is one of `actions.GRANTABLE`'s sixteen words --
+    `c.grant_action("teleport", MINOR, squares_=...)` hands out exactly
+    that, which is the idiom `p11175` and `p13046` use for the same
+    sentence.
+
+    `c.build("f1s2")` is the gate, which is how every other rider in this
+    class reads its build.
+
+    **What is left is the proviso, and it is a narrower marker.** The card
+    says *"you must end the teleportation closer to the target"*, and
+    `c.grant_action` carries a distance and no destination test -- the
+    grant it writes is the ordinary teleport, which may end anywhere in
+    range. `c.teleport` itself takes `toward=` for precisely this shape,
+    so the gap is passing that through the grant rather than anything
+    larger; hence `c.grant_action(toward=)` and not a row-granting
+    facility.
+
+    "During your next turn" is `When.EONT`, which is the nearest duration
+    the enum has -- the grant is spent on that turn or lapses with it.
+    """
     victim = c.target
     if victim is None:
         return
@@ -98,6 +120,10 @@ def p9432(c: Cast) -> None:
                 c.flat(10, dtype=DamageType.PSYCHIC, on=victim)
 
         c.watch(TurnEnd, late, until=When.ENCOUNTER, once=True)
+
+        if c.build("f1s2") and c.cha_mod > 0:
+            c.grant_action("teleport", MINOR, squares_=c.cha_mod, on=c.me,
+                           until=When.EONT)
 
 
 @power(
