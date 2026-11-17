@@ -76,14 +76,66 @@ def p11386(c: Cast) -> None:
     attack=Attack(STR, vs=WILL),
 )
 def p11387(c: Cast) -> None:
-    """Everything after the damage is dropped. Both riders are gated on the
-    *shape* of the attack coming in -- combat advantage and vulnerability to
-    ranged and area attacks only -- and neither `c.grants_advantage` nor
-    `c.vulnerable` takes a gate; nor can cover be waived for one creature."""
-    if c.strike():
+    """**Both riders are written now, and "neither `c.grants_advantage`
+    nor `c.vulnerable` takes a gate" was false** -- both take `when=`.
+    #1341.
+
+    The gate is the *shape* of the incoming attack, and the damage
+    context carries no reach, so it is **looked up off the attacking
+    row** -- the arrangement `monk/level_2.py`'s `_melee` already uses
+    and whose docstring says why: "the damage context carries no
+    `attacker` and no `ranged`, so the reach has to be looked up off the
+    row".
+
+    "Area attacks and ranged attacks" is three of the seven declared
+    reach kinds -- `ranged`, `area_burst` and `wall`. `close_burst` and
+    `close_blast` are deliberately **out**: a close attack is not an area
+    attack in the printed rules, and folding them in would widen both
+    riders onto every dragon's breath on the board.
+
+    **"(save ends both)" is two holds on one clock, which is two saves
+    rather than one**, because `c.vulnerable` takes no `onto=` to join an
+    existing hold. Said rather than hidden: a target saving against one
+    keeps the other, where the card ends both together.
+
+    The Aftereffect hangs on the advantage hold's `on_end`, so it begins
+    whichever way that one finished -- the same shape `p11305` uses.
+
+    The Effect line -- enemies not granting cover against ranged attacks
+    -- is still dropped, and that half of the old note was right: cover
+    cannot be waived for one creature.
+    """
+    victim = c.target
+    hit = c.strike()
+    if hit:
         c.damage(c.w(2), c.str_mod)
     else:
         c.half_damage(c.w(2), c.str_mod)
+    if victim is None:
+        return
+
+    def from_afar(ctx: dict) -> bool:
+        swung = get(ctx.get("power") or "")
+        reach = getattr(swung, "reach", None)
+        return getattr(reach, "kind", "") in ("ranged", "area_burst", "wall")
+
+    if not hit:
+        c.grants_advantage(
+            on=victim, to="team", until=When.EONT, when=from_afar
+        )
+        return
+    exposed = c.grants_advantage(
+        on=victim, to="team", until=When.SAVE_ENDS, when=from_afar
+    )
+    c.vulnerable(
+        5, on=victim, until=When.SAVE_ENDS, when=from_afar
+    )
+    if exposed is not None:
+        exposed.on_end.append(
+            lambda: c.grants_advantage(
+                on=victim, to="team", until=When.EONT, when=from_afar
+            )
+        )
 
 
 @power(
