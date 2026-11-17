@@ -3985,6 +3985,13 @@ _WANTS_TWO_HANDS = re.compile(
 #: Requirement is about the grip rather than the family.
 _TWO_HANDED_REACH = "w3614"
 
+#: **The companion category a Requirement names.** Ten rows print "you
+#: must have a `comp:N` beast companion" and the board fields a companion
+#: with `ref = ''` -- a beast of no category at all, which is `#1343`.
+#: The gate reads `Companion.ref`, so the category is one field and the
+#: board simply never set it.
+_WANTS_BEAST = re.compile(r"\b(comp:\d+)\b")
+
 #: **Three printed Requirements about somebody's STATE that no knob posed.**
 #: `_pose_conditions` reads `Target.conditions` and lays them on an enemy,
 #: which reaches none of these: "bloodied" is a hit-point reading rather
@@ -4127,6 +4134,46 @@ _READS_FLOORED = re.compile(
 #: A printed Requirement that wants the state *absent*. Posing it for one of
 #: these refuses the row rather than arming it. See `_pose`.
 _NEGATED = re.compile(r"\bmust not\b|\bno longer\b|\bwithout\b|\bis not\b", re.I)
+
+
+def _pose_beast(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Give the caster's companion the category its Requirement names.
+
+    Ten rows print "you must have a `comp:N` beast companion" and the
+    board fields one whose `ref` is the empty string -- a beast of no
+    category, which `#1343` is about. `Companion.ref` is what the gate
+    reads, so the category is a single field the recipe never filled.
+
+    **Stamped on the companion the board already fielded, not a spawned
+    one.** A second companion would be a second body on the grid, and
+    `c.companion()` answers with one because one is the printed rule --
+    so spawning would make every other reader ambiguous.
+
+    `kind` is moved to `"beast"` only when the Requirement says beast:
+    the board's companion is a `"spirit"`, which is the shaman's word,
+    and a row asking for a spirit must keep finding one.
+    """
+    from combat_engine.engine.components import Companion
+
+    req = getattr(declared, "requires_text", "") or ""
+    found = _WANTS_BEAST.search(req)
+    if not found:
+        return
+    want = found.group(1)
+    for who in list(world.having(Companion)):
+        mine = world.get(who, Companion)
+        if mine is None or mine.owner != caster:
+            continue
+        mine.ref = want
+        if "beast" in req.lower():
+            mine.kind = "beast"
+        # **Standing the beast beside an enemy was tried and removed.**
+        # `p13705` reads "while your beast is adjacent to the triggering
+        # enemy" and stayed SILENT with the pose in place, because the
+        # foe its trigger names is not the one a pose can pick in
+        # advance. Measured both ways: 6 of 9 firing and the same two
+        # silent, identical. A pose that buys nothing is cost.
+        return
 
 
 def _pose_state(world, caster: int, declared) -> None:  # noqa: ANN001
@@ -4427,6 +4474,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
         if not _usable(world, caster, declared, board=True)[0]:
             _put_in_hand(world, caster, _TWO_HANDED_REACH)
     _pose_state(world, caster, declared)
+    _pose_beast(world, caster, declared)
     for what, pattern in _WANTS:
         if not pattern.search(asking):
             continue
