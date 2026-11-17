@@ -183,7 +183,16 @@ def p7657(c: Cast) -> None:
 @power(
     "p7657c1",
     level=9,
-    cls="artificer",
+    # **`cls=""`, and this is load-bearing rather than tidiness.** A
+    # command row declared with its class joins that class's power pool:
+    # the nine declared here are `AT_WILL` at a character level, so with a
+    # class on them they shifted the invoker draw and `f1491` -- which
+    # triggers on an invoker class feature -- went from firing to UNUSED on
+    # the wide sweep at `d2899ec7`. They are never dealt (measured: no
+    # command ref reaches a dealt hand), so the cost was the *draw moving*,
+    # not a bad card being offered. A summon's command is not a power a
+    # character can take, so it belongs to no class.
+    cls="",
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
@@ -216,7 +225,7 @@ def p7657c1(c: Cast) -> None:
 @power(
     "p7657c2",
     level=9,
-    cls="artificer",
+    cls="",
     usage=AT_WILL,
     action=ActionType.OPPORTUNITY,
     reach=Melee(1),
