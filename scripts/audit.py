@@ -5830,11 +5830,56 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         _use(world, foes[0], other, spend=False)
         if probe():
             return True
-    for foe in foes[:2]:
-        for sq in sorted(world.reachable_squares(foe, 1)):
-            shift(world, foe, sq)
-            if probe():
-                return True
+    # **The same three corrections the walk pass below already carries**,
+    # which this loop never got. `#1337` records all of them for the walk:
+    #
+    # * `foes[:2]` is "the wrong two" -- these clauses are about a square
+    #   being left *beside something the caster owns*, so the candidates
+    #   are ordered by whether the foe starts adjacent to the caster or an
+    #   ally, and the slice is taken after the sort rather than before it;
+    # * the shift has to be on the foe's **own turn**, because the
+    #   commonest predicate in the family asks `world.turn == ev.actor`
+    #   -- 49 content predicates do;
+    # * and the foe goes **back** between attempts, because a shift is a
+    #   square each time and compounding them walks a foe out of the reach
+    #   every later pass measures from.
+    _ours_s = [caster, *_allies_of(world, caster)]
+    _beside_s = {
+        f for f in foes
+        for o in _ours_s
+        if (po := world.get(o, Position)) is not None
+        and (pf := world.get(f, Position)) is not None
+        and max(abs(po.square[0] - pf.square[0]),
+                abs(po.square[1] - pf.square[1])) <= 1
+    }
+    # **Every foe, not a slice, and that is not an oversight.** Ordering
+    # adjacent-first is right for a square being *left* and wrong for one
+    # being *entered*: `m5067a2` reads "an enemy enters a square adjacent
+    # to it", and a foe that is already adjacent cannot enter one. Slicing
+    # to the adjacent three took its firing verdict away -- caught by a
+    # `--sample 1500` diff, 30 never-usable against 31, one row.
+    #
+    # So the sort still puts the adjacent ones first, because they are the
+    # commoner case and the loop returns on the first hit, and the distant
+    # ones still get their turn.
+    for foe in sorted(foes, key=lambda f: (f not in _beside_s, f)):
+        if not alive(world, foe):
+            continue
+        _seat = world.get(foe, Position)
+        if _seat is None:
+            continue
+        _was_sq = _seat.square
+        _was_turn = world.turn
+        world.turn = foe
+        try:
+            for sq in sorted(world.reachable_squares(foe, 1)):
+                shift(world, foe, sq)
+                if probe():
+                    return True
+                _back_to(world, foe, _was_sq)
+        finally:
+            world.turn = _was_turn
+            _back_to(world, foe, _was_sq)
 
     # **A walk, which this board had never once produced.** The loop above
     # shifts, and a shift is the one kind of movement half these triggers
