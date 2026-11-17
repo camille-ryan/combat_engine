@@ -85,11 +85,29 @@ def p11214(c: Cast) -> None:
     keywords=[*STANCE_KW, Keyword.PSIONIC],
 )
 def p13144(c: Cast) -> None:
-    """The damage context carries no weapon, so "unarmed" cannot be gated
-    on; the modifier is melee-only and the unarmed half is dropped."""
+    """**"Unarmed" is gated now, and "the damage context carries no
+    weapon" was false.** `resolve.py` puts both `weapon` and
+    `group` in it, and the comment directly above that line records the
+    parameter having been present and simply never reaching the context
+    -- the same gap, found the same way, fixed before this note was
+    written. #1341.
+
+    `group == "unarmed"` is the tree's own spelling for it:
+    `chargen.UNARMED` and `w3678` both file under that group, and
+    `feats/defenders_b.py` asks the same question of a held weapon.
+
+    Still melee-**and**-unarmed, both: the card says "your unarmed melee
+    attacks", so dropping either half widens it. `_melee` looks the reach
+    up off the row because the damage context carries no `ranged`, which
+    is its own docstring's point.
+    """
     posture = c.stance()
     held = c.bonus(
-        "damage", c.str_mod, on=c.me, until=When.ENCOUNTER, when=_melee
+        "damage",
+        c.str_mod,
+        on=c.me,
+        until=When.ENCOUNTER,
+        when=lambda ctx: _melee(ctx) and ctx.get("group") == "unarmed",
     )
     if held is not None:
         posture.on_end.append(lambda: c.world.effects.end(held, "stance ended"))

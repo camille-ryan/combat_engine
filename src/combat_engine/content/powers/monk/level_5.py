@@ -229,8 +229,21 @@ def p13158(c: Cast) -> None:
 )
 def p15986(c: Cast) -> None:
     """The charge rider is read off the triggering event, where the flag
-    lives. The miss line -- regaining the power but not being able to use
-    it again -- has no expression and is dropped."""
+    lives.
+
+    **The Miss line is written now**, and "has no expression" was false:
+    it is two verbs that both already existed. `c.restore_use` hands the
+    daily back -- its own docstring is about rows whose entire effect is
+    that line -- and `c.forbid` is the other half, "cannot use it again
+    during this encounter", which is exactly the thing `c.forbid`
+    distinguishes from spending a use: a forbidden row is one the
+    creature still owns and cannot reach. #1341.
+
+    **Both halves, or neither is the card.** Giving the use back alone
+    makes the miss a free retry; forbidding alone just spends the daily
+    twice over. The order is restore-then-forbid so the forbid has
+    something to sit on.
+    """
     charged = bool(getattr(c.trigger, "charge", False))
     if c.strike(plus=2 if charged else 0):
         c.damage("3d10", c.dex_mod)
@@ -238,6 +251,14 @@ def p15986(c: Cast) -> None:
             c.flat(c.roll("1d10"))
         c.slide(2)
         c.prone()
+    else:
+        c.restore_use(c.ref)
+        # **`on=c.me`, and the default is the TARGET.** `c.forbid` takes
+        # its creature from `_who`, like `c.flat` and `c.temp_hp`, so the
+        # first draft forbade this row to the *enemy* that triggered it --
+        # measured as the monk still able to use the power after a miss,
+        # which is the free retry this clause exists to prevent.
+        c.forbid(c.ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

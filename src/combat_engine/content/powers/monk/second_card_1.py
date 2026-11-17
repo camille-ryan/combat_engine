@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from combat_engine.content.powers.cards import active
 from combat_engine.engine import *
+from combat_engine.engine.falling import height
 from combat_engine.engine.query import team
 
 
@@ -90,9 +91,24 @@ def p11208b(c: Cast) -> None:
     keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p11210b(c: Cast) -> None:
-    """Falling is not modelled, so "if you don't land, you fall" is dropped."""
+    """**"If you don't land at the end of this movement, you fall" is
+    written now, and "falling is not modelled" was false.**
+    `engine/falling.py` is a whole module -- `airborne`, `height`, `lift`,
+    `drop`, `catches_itself`, `ground` -- and `c.fall` is the verb over
+    it. #1341.
+
+    `falling.height` is the test rather than `airborne`: the question the
+    card asks is whether the monk ended the move off the ground, and a
+    height of 0 is a landing however it was reached.
+
+    `c.fall()` with no number falls however high the creature is, which
+    is the printed sentence exactly -- and it is **not** `safe=True`,
+    because this fall is the card's penalty for not landing.
+    """
     c.mode("fly", c.speed_of(), until=When.EOT)
     c.move(c.speed_of())
+    if height(c.world, c.me) > 0:
+        c.fall()
 
 
 @power(
@@ -154,9 +170,24 @@ def p13126b(c: Cast) -> None:
     keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13128b(c: Cast) -> None:
-    """Falling is not modelled, so "if you don't land, you fall" is dropped."""
+    """**"If you don't land at the end of this movement, you fall" is
+    written now, and "falling is not modelled" was false.**
+    `engine/falling.py` is a whole module -- `airborne`, `height`, `lift`,
+    `drop`, `catches_itself`, `ground` -- and `c.fall` is the verb over
+    it. #1341.
+
+    `falling.height` is the test rather than `airborne`: the question the
+    card asks is whether the monk ended the move off the ground, and a
+    height of 0 is a landing however it was reached.
+
+    `c.fall()` with no number falls however high the creature is, which
+    is the printed sentence exactly -- and it is **not** `safe=True`,
+    because this fall is the card's penalty for not landing.
+    """
     c.mode("fly", c.speed_of(), until=When.EOT)
     c.move(c.speed_of())
+    if height(c.world, c.me) > 0:
+        c.fall()
 
 
 @power(
