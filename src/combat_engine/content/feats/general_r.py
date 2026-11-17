@@ -261,8 +261,20 @@ def _victim(ctx: dict[str, Any]) -> int | None:
 
 
 def _holding(c: Cast, *groups: str) -> bool:
-    gear = c.world.get(c.me, Gear)
-    return gear is not None and any(w.group in groups for w in gear.held)
+    """Any of these printed words, over every weapon in hand.
+
+    **Group membership is not one column**, which `feats/general_l.py`'s
+    header already records: 8 weapons are polearms and only **4** answer
+    `group == "polearm"`, the other four carrying it among
+    `Weapon.properties`. Its words for a bare `group ==` comparison are
+    "a gate that is half dead and audits green", and that is what this
+    was, for all ten of its callers.
+
+    `c.wielding` is the reader it names -- group, category, properties,
+    and a `counts_as` waiver -- so this delegates rather than keeping a
+    second answer to one question.
+    """
+    return any(c.wielding(g) for g in groups)
 
 
 def _group_of(c: Cast, ref: str) -> str:
@@ -282,6 +294,13 @@ def _group_of(c: Cast, ref: str) -> str:
         if getattr(w, "ref", "") == ref:
             return str(getattr(w, "group", "") or "")
     return ""
+
+
+def _held(c: Cast) -> list[Any]:
+    """Every weapon in hand. `_main` is the first that can be swung, which
+    is the wrong question for "are you holding a two-handed one"."""
+    gear = c.world.get(c.me, Gear)
+    return list(gear.held) if gear is not None else []
 
 
 def _main(c: Cast) -> Any:
@@ -1881,9 +1900,14 @@ def f3611(c: Cast) -> None:
     me = c.me
 
     def two_handed_polearm(ctx: dict[str, Any]) -> bool:
-        arm = _main(c)
+        # **Both halves of this row asked the same question two ways**, and
+        # only one of them worked: the attack bonus below uses `_holding`
+        # and this read `arm.group == "polearm"` off `gear.main`. A glaive
+        # is a polearm by *property* and a heavy blade by group, so the
+        # defence half never applied to the commonest polearm there is.
         return (
-            arm is not None and arm.group == "polearm" and arm.two_handed
+            _holding(c, "polearm")
+            and any(w.two_handed for w in _held(c))
             and bool(ctx.get("charge"))
         )
 

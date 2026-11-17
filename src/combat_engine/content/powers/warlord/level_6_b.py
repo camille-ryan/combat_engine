@@ -111,9 +111,28 @@ def _shield(world: World, eid: int) -> bool:
 
 
 def _polearm(world: World, eid: int) -> bool:
+    """"You must be wielding a polearm."
+
+    **"polearm" is a group *and* a property, and this read only the
+    group.** Four printed weapons are polearms by property while sitting
+    in another group -- the glaive and the talenta sharrash are heavy
+    blades, the halberd and the trikal are axes -- so a warlord holding a
+    glaive was refused a power whose Requirement the glaive meets. The
+    four whose *group* is polearm are the longspear, the greatspear, the
+    pike and the zadatl, and `spear` is kept beside them because the
+    printed line is read that way elsewhere in this file.
+
+    **And `gear.held` rather than `gear.main`**, the same correction the
+    three `_heavy_thrown` copies needed: "wielding" is any hand, and
+    `main` is only the first weapon that can be swung.
+    """
     gear = world.get(eid, Gear)
-    weapon = gear.main if gear else None
-    return weapon is not None and weapon.group in ("polearm", "spear")
+    if gear is None:
+        return False
+    return any(
+        w.group in ("polearm", "spear") or "polearm" in w.properties
+        for w in gear.held
+    )
 
 
 def _adjacent_ally_struck(world: World, me: int, ev: Event) -> bool:
