@@ -4053,6 +4053,81 @@ _WANTS_WINDED = re.compile(r"used (?:your )?second wind", re.I)
 _WANTS_A_KILL = re.compile(r"dropped (?:a|an) (?:real )?enemy", re.I)
 
 
+#: Two more Requirements about where the caster stands or what it is in.
+_WANTS_FLANK = re.compile(r"flank", re.I)
+_WANTS_RAGE = re.compile(r"\braging\b", re.I)
+
+
+def _pose_flanking(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Put the caster and an ally on opposite sides of one enemy.
+
+    Three rows print a flanking Requirement and the board arranges its
+    creatures by the encounter rather than by the card, so flanking
+    happens only by luck. `query.flanked_by` is the reader and
+    `Grid.flanks` the geometry; neither needed anything, the board simply
+    never stood anybody opposite anybody.
+
+    Whoever is already in the two squares is moved out of the way first,
+    and everything goes through `Grid.lift`/`Grid.place` -- the occupant
+    index is a separate map, which is the correction `_stand_off` and
+    `_stand_alone` both carry.
+    """
+    from combat_engine.engine.components import Position as _Position
+    from combat_engine.engine.query import enemies as _foes
+
+    if not _WANTS_FLANK.search(getattr(declared, "requires_text", "") or ""):
+        return
+    if _NEGATED.search(getattr(declared, "requires_text", "") or ""):
+        return
+    foes = [f for f in _foes(world, caster) if alive(world, f)]
+    mates = [a for a in _allies_of(world, caster) if a != caster]
+    if not foes or not mates:
+        return
+    seat = world.get(foes[0], _Position)
+    if seat is None:
+        return
+    middle = seat.square
+
+    def put(who: int, where: tuple[int, int]) -> None:
+        if not world.grid.inside(where) or not world.grid.passable(where):
+            return
+        sitting = world.grid.occupant(where)
+        if sitting is not None and sitting != who:
+            spare = world.get(sitting, _Position)
+            if spare is not None:
+                world.grid.lift(sitting)
+                spare.square = (1, 1)
+                with contextlib.suppress(Exception):
+                    world.grid.place(sitting, frozenset({(1, 1)}))
+        here = world.get(who, _Position)
+        if here is None:
+            return
+        world.grid.lift(who)
+        here.square = where
+        world.grid.place(who, frozenset({where}))
+
+    put(caster, (middle[0] - 1, middle[1]))
+    put(mates[0], (middle[0] + 1, middle[1]))
+
+
+def _pose_rage(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Put the caster in a rage, for a row whose Requirement is one.
+
+    `content.powers.barbarian.rage.RAGE` is the word the stance label
+    carries and `raging()` is one `stance_of` read away, so this is the
+    board using the class's own vocabulary rather than inventing a flag.
+    """
+    if not _WANTS_RAGE.search(getattr(declared, "requires_text", "") or ""):
+        return
+    if _NEGATED.search(getattr(declared, "requires_text", "") or ""):
+        return
+    from combat_engine.content.powers.barbarian.rage import RAGE
+    from combat_engine.engine.cast import Cast as _Cast
+
+    with contextlib.suppress(Exception):
+        _Cast(world, caster, f"audit:{RAGE}").stance(label=f"{RAGE} audit")
+
+
 def _pose_own_history(world, caster: int, declared) -> None:  # noqa: ANN001
     """Put the caster into a state its own Requirement asks for.
 
@@ -4667,6 +4742,8 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
             _put_in_hand(world, caster, _TWO_HANDED_REACH)
     _stand_alone(world, caster, declared)
     _pose_own_history(world, caster, declared)
+    _pose_flanking(world, caster, declared)
+    _pose_rage(world, caster, declared)
     _pose_state(world, caster, declared)
     _pose_beast(world, caster, declared)
     for what, pattern in _WANTS:
