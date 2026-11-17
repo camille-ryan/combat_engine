@@ -427,18 +427,35 @@ def p12668(c: Cast) -> None:
     keywords=MARTIAL_STANCE,
 )
 def p12688(c: Cast) -> None:
-    """The attack half is gated on `charge`, which the attack context
-    carries. The speed half is dropped: speed is asked for with no context
-    at all, so "+2 to your speed **when charging**" cannot be gated and an
-    ungated +2 would be a permanent one. See the report.
+    """Both halves are gated on `charge` now, and **"speed is asked for
+    with no context at all" was false.** `query.speed` takes a `ctx`, and
+    its own docstring says what that context is for: *"`ctx` is the
+    attack context's `{"charge": True}` and nothing else so far"*.
+    `actions.py` already calls it that way when it prices a charge, so
+    the key is read rather than carried and ignored. #1341.
+
+    The old note's worry was right about the alternative -- an ungated
+    +2 to speed would be a permanent one, which is a different card --
+    and wrong that gating was impossible. Both riders now read the same
+    key, which is also what makes them one sentence in play: a move that
+    is not a charge gets neither.
     """
     stance = c.stance(label=c.ref)
+    charging = lambda ctx: bool(ctx.get("charge"))  # noqa: E731
     _ends_with(
         c,
         stance,
         c.bonus(
             "attack", 2, on=c.me, until=When.ENCOUNTER, kind="power",
-            when=lambda ctx: bool(ctx.get("charge")),
+            when=charging,
+        ),
+    )
+    _ends_with(
+        c,
+        stance,
+        c.bonus(
+            "speed", 2, on=c.me, until=When.ENCOUNTER, kind="power",
+            when=charging,
         ),
     )
 
