@@ -5833,6 +5833,27 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     # Reviving asks the original question on a board that can answer it,
     # and costs nothing anywhere else because this runs only if no pass
     # above fired the row.
+    #
+    # **Three arrangements have been swept at corpus scale and this is the
+    # best of them.** Do not re-litigate it from a narrow run:
+    #
+    #     substituting in the loop, passes early   20,774 fired, 601 never
+    #     deferring, passes late                   20,774 fired, 605 never
+    #     deferring, passes early  (this)          20,779 fired, 601 never
+    #
+    # It is a **trade and not a win on every row**, which is the part worth
+    # writing down. Four rows fire under the in-loop substitution and are
+    # silent here -- `f1504`, `f2874`, `m5661a4`, `p16013` of the eight the
+    # `7db0e5fb` sweep named -- because what the substitution was really
+    # worth was *volume*: 33 swings in one provocation against a handful,
+    # and those rows need a particular lucky roll rather than a particular
+    # arrangement. `p11580`'s whole printed effect is turning a hit that
+    # cleared by one into a miss, so only more rolls can reach it.
+    #
+    # Replaying substituted pairs *here* was tried and bought none of the
+    # four back, so the volume has to be early to help them and early is
+    # what costs nine others. Net +5 rows, and the four are named so the
+    # next reader knows the price rather than discovering it.
     if unplayed:
         _revive_everyone(world, caster)
         if caster_health is not None and caster_health.hp <= 0:
