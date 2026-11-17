@@ -594,13 +594,31 @@ def p4025(c: Cast) -> None:
     attack=Attack(INT, vs=FORT),
 )
 def p5804(c: Cast) -> None:
-    """The board is flat, so being lifted two squares has nowhere to go. What
-    the height was *for* survives in full: dazed, immobilized and granting
-    combat advantage until the start of its next turn, when it comes down in
-    the space it left."""
+    """**The lift is written now, and "the board is flat" was false.**
+    `engine/falling.py` models height -- `lift`, `height`, `drop`,
+    `airborne`, `ground` -- and `c.hover` is the verb that puts a creature
+    up and keeps it there. #1341.
+
+    `c.hover` is the whole clause and not just its first half. Its own
+    docstring: *"when the hold ends it descends without taking falling
+    damage, which is the printed line on the one row that levitates"* --
+    which is this card's "it lands on its feet in the space it formerly
+    occupied". So the descent needs no watcher of its own.
+
+    `on=victim`, because `c.hover` defaults to the **caster** -- "yours,
+    so it defaults to the caster" -- and this card lifts the target. That
+    is the direction easiest to get backwards, and it is the same trap
+    `c.resist` and `c.conceal` set.
+
+    The three conditions keep their own `SOTNT` clock rather than riding
+    the hover hold: the card lists them separately and a creature dropped
+    early by something else should still be dazed.
+    """
+    victim = c.target
     if not c.strike():
         return
     c.damage("2d6", c.int_mod)
     c.condition(Condition.DAZED, Condition.IMMOBILIZED, until=When.SOTNT)
     c.grants_advantage(until=When.SOTNT, to="team")
-    c.note(f"{c.ref}: the target is also held 2 squares up, and the board is flat")
+    if victim is not None:
+        c.hover(2, on=victim, until=When.SOTNT)

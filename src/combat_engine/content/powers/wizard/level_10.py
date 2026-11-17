@@ -104,7 +104,22 @@ from combat_engine.engine.events import (
     ZoneEntered,
     ZoneExited,
 )
+from combat_engine.engine.query import light_level
+from combat_engine.engine.types import Light
 from combat_engine.engine.zones import Zone
+
+
+def _in_shadow(world: object, eid: int) -> bool:
+    """Is this creature standing in dim light or darkness? #1341.
+
+    The printed Requirement of `p13992`, and the same question its
+    destination filter asks of the square it is going to -- so it is one
+    predicate read twice rather than two readings that could drift.
+    """
+    from combat_engine.engine.components import Position
+
+    here = getattr(world.get(eid, Position), "square", None)
+    return here is not None and light_level(world, here) is not Light.BRIGHT
 
 ARCANE = [Keyword.ARCANE]
 ARCANE_ILLUSION = [Keyword.ARCANE, Keyword.ILLUSION]
@@ -416,15 +431,55 @@ def p12749(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.TELEPORTATION, Keyword.SHADOW],
+    requires=_in_shadow,
+    requires_text="you must be in a square of dim light or darkness",
 )
 def p13992(c: Cast) -> None:
-    """The printed Requirement and destination are both a square of dim light
-    or darkness, and the engine has no light at all -- squares are lit or they
-    are nothing. Declaring a `requires` that can never be true would refuse the
-    row for a reason that says nothing about it, so the light is dropped and
-    said here instead, and what is left is the teleport.
+    """**The light is written now, and "the engine has no light at all"
+    was false.** `Light` carries `BRIGHT`, `DIM` and `DARK`,
+    `Grid.light` holds the terrain map, `query.light_level` is the reader
+    -- its docstring says 13 rows wait on it -- and `powers/skills/
+    stealth.py` already calls it. #1341.
+
+    Both halves are the same question asked of two squares: the
+    Requirement of the one the wizard stands in, the destination of the
+    one it is going to. So `_in_shadow` is shared rather than written
+    twice.
+
+    **The Requirement goes in `requires=` and the row is therefore
+    REFUSED on the audit board, which is the honest bucket.** That is a
+    deliberate choice over two worse ones. Omitting it would let any
+    wizard use this anywhere, which is simply the wrong card; putting it
+    in the body makes the row *silent* -- measured, 48 attempts out of
+    48 -- and silent is the bucket graded against a baseline, where
+    "refused for a Requirement the board cannot meet" is the bucket this
+    actually belongs in and 62 rows already sit.
+
+    **The board cannot pose it, and that was checked rather than
+    assumed.** `audit._pose`'s dark knob paints its patch "three squares
+    out from wherever the caster actually stands, **outside the caster's
+    own square**" -- right for a row aiming *into* darkness, which is
+    most of the family. Darkening the caster's square as well does not
+    work either: the same pose places a torch-bearer beside the caster,
+    and `c.light` "treats anything within `radius` as bright however
+    dark the square is underneath", so the two knobs cancel. Tried, and
+    reverted. That is an instrument gap and is filed, not worked around
+    here.
+
+    The destination is filtered rather than left to `c.teleport`'s own
+    offer, and the printed "you don't need to see the destination" is
+    why it is filtered on light alone and not on sight.
     """
-    c.teleport(10)
+    room = sorted(
+        sq
+        for sq in spread({c.here}, 10)
+        if c.world.grid.passable(sq)
+        and c.world.grid.occupant(sq) is None
+        and light_level(c.world, sq) is not Light.BRIGHT
+    )
+    where = c.choose(room, f"{c.ref}: which shadow to step into") if room else None
+    if where is not None:
+        c.teleport(10, to=where)
 
 
 @power(
