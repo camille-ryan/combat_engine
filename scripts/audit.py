@@ -5128,6 +5128,9 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     if _starts_a_turn_held(world, caster, ref, cursor):
         return True
 
+    if _an_ally_attacks(world, caster, ref, cursor):
+        return True
+
     if _does_the_ordinary_things(world, caster, ref, cursor):
         return True
 
@@ -7076,6 +7079,110 @@ def _starts_a_turn_held(world, caster: int, ref: str, cursor: int) -> bool:  # n
         return True
     if held is not None:
         world.effects.end(held, "audit:probe")
+    return False
+
+
+#: The `Range.kind` values that are a close or an area attack, for the rows
+#: whose trigger says which -- *"an ally makes a close or an area attack"*.
+_SPREAD = frozenset({"close_burst", "close_blast", "area_burst", "wall"})
+
+
+def _ally_swings(world, mate: int, spread: bool) -> list[str]:  # noqa: ANN001
+    """Up to eight of this ally's own attack rows, the asked-for shape first.
+
+    An ally on this board is a dealt character and holds 25-odd attack rows
+    of its own, which is the thing the pass below needed and the reason it
+    does not borrow the caster's: `class_attacks` reads `world.audit_cls`,
+    so handing that list to anybody else gives them another class's powers.
+    """
+    known = world.get(mate, Powers)
+    if known is None:
+        return []
+    out = []
+    for other in known.known:
+        p = get(other)
+        if p is None or not p.is_attack or p.triggers or p.reach is None:
+            continue
+        out.append((getattr(p.reach, "kind", "") not in _SPREAD, other))
+    if spread:
+        out = [row for row in out if not row[0]] or out
+    return [other for _, other in sorted(out)][:8]
+
+
+def _an_ally_attacks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Have an ALLY swing a power of its own, for a row whose trigger is one.
+
+    **The class-attack pass refuses everybody but the caster** -- `if
+    attacker != caster: continue`, and rightly, because the list it swings
+    comes from `world.audit_cls`. So the only thing an ally has ever done
+    on this board is a **basic** attack, and 345 rows print a trigger
+    naming an ally doing something else: *"an ally makes a close or an area
+    attack"*, *"an ally misses with an encounter or a daily attack"*, *"an
+    ally within 5 squares scores a critical hit"*, *"an ally targets you
+    with a power that does not include that ally"*.
+
+    An ally does not need to borrow anything -- it is a dealt character
+    carrying 25-odd attack rows of its own, which is what `_ally_swings`
+    reads.
+
+    **Every arrangement is taken from the sentence rather than tried
+    through**, which is what keeps this affordable: a trigger saying "miss"
+    loads a 3 and never an 18, one saying "close or area" is offered only
+    those rows, and the caster joins the victims only for a trigger that
+    says "you". Unaimed, this is 2 allies x 2 faces x 2 victims x 8 rows
+    and the gate admits 1.4% of the corpus; aimed, most rows run one
+    quarter of that.
+
+    Measured over eleven rows whose trigger names an ally and which no pass
+    could reach: 6 fire, and the two the loaded die buys -- `p10923` on a
+    miss and `p5590` on a miss aimed at the caster -- are exactly the two
+    the sentence predicts.
+    """
+    import contextlib as _ctx
+
+    from combat_engine.engine.query import enemies as _foes
+
+    declared = get(ref)
+    if declared is None or not declared.triggers:
+        return False
+    said = (declared.trigger or "").lower()
+    if "ally" not in said and "allies" not in said:
+        return False
+
+    foes = [f for f in _foes(world, caster) if alive(world, f)]
+    mates = [a for a in _allies_of(world, caster) if a != caster][:2]
+    if not foes or not mates:
+        return False
+
+    faces = []
+    if "miss" in said:
+        faces.append(3)
+    if "hit" in said or "crit" in said:
+        faces.append(18)
+    victims = [foes[0]]
+    if "you" in said:
+        victims.append(caster)
+    spread = any(w in said for w in ("close", "area", "burst", "blast"))
+
+    was = getattr(world.rng, "loaded", None)
+    try:
+        for mate in mates:
+            rows = _ally_swings(world, mate, spread)
+            for face in (faces or [18, 3]):
+                for victim in victims:
+                    _revive_everyone(world, caster)
+                    world.rng.loaded = face
+                    for swung in rows:
+                        with _ctx.suppress(Exception):
+                            _swing_from_reach(world, mate, victim, swung)
+                        if _fired(world, ref, cursor):
+                            return True
+    finally:
+        if was is None:
+            if hasattr(world.rng, "loaded"):
+                world.rng.loaded = None
+        else:
+            world.rng.loaded = was
     return False
 
 
