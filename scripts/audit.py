@@ -4316,8 +4316,20 @@ def _stand_alone(world, caster: int, declared) -> None:  # noqa: ANN001
         ),
         key=lambda sq: -max(abs(sq[0] - here[0]), abs(sq[1] - here[1])),
     )
+    # **Only the creatures the sentence is about.** "No ally within 5
+    # squares" says nothing about enemies, and clearing those away too
+    # left `p2260` refused for `nearest is 17 squares away` -- its own
+    # attack had nobody to aim at, so the pose met the Requirement and
+    # took the row's target with it. "No creature within 3 squares" does
+    # mean everybody, and `p2297` and `p16454` are posed on that reading.
+    about_allies = re.search(r"all(?:y|ies)", said, re.I) and not re.search(
+        r"\bcreature\b", said, re.I
+    )
+    mine = set(_allies_of(world, caster))
     for other in sorted(_creatures(world)):
         if other == caster or not room:
+            continue
+        if about_allies and other not in mine:
             continue
         seat = world.get(other, _Position)
         if seat is None:
