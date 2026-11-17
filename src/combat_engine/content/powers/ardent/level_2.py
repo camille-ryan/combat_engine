@@ -202,10 +202,31 @@ def p12943(c: Cast) -> None:
     on=Trigger(
         DamageRolled, ally_within(5), "an ally within 5 squares takes damage"
     ),
+    dropped=("c.pass_on(from_=)",),
 )
 def p13781(c: Cast) -> None:
-    """The middle sentence -- taking a save-ends effect onto yourself instead of
-    the ally -- is dropped: nothing can intercept an effect before it lands."""
+    """The middle sentence is still dropped, and **the reason it used to give
+    was false.** It said "nothing can intercept an effect before it lands";
+    `c.pass_on` is exactly that, and its own docstring argues the point:
+
+        An interrupt resolves **before** the blow, so at the moment this
+        runs there is nothing to `c.transfer` -- the conditions do not
+        exist yet. So it arms rather than moves.
+
+    `m5907a1` is the same window used from a watch, and calls
+    `EffectApplied` *"the one window where a creature is being stunned and
+    is not yet stunned"*.
+
+    What is actually missing is the **direction**. `pass_on` sets
+    `mine = self.me`, so it takes the conditions landing on the *caster*
+    and hands them to somebody else. This card is the mirror -- the ardent
+    volunteers for what would land on the **ally** -- and there is no
+    `from_=` to aim it that way, hence the marker.
+
+    Worth saying because the two read alike and only one is written: the
+    verb exists, it points the other way, and a reader who trusted the old
+    note would not have gone looking for it at all.
+    """
     ev = c.trigger
     who = getattr(ev, "target", None)
     if who is None or not c.first:

@@ -91,10 +91,27 @@ def p11220(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=FORT),
+    dropped=("c.forces(or_else=)",),
 )
 def p11221(c: Cast) -> None:
-    """The "lengthen the forced movement instead" option is dropped: there
-    is no way to reach into an attack's own shove after the fact."""
+    """The "lengthen the forced movement instead" option is still dropped,
+    and the reason it used to give was half false. It said "there is no way
+    to reach into an attack's own shove after the fact" -- true of *after
+    the fact*, and `c.forces` reaches it **before**: *"lengthen every push,
+    pull and slide this creature makes"*, with a gate handed `how` and
+    `power` so "when you push with this row" is sayable.
+
+    What the card wants is harder than either. It prints a choice --
+    *"increase the distance of that movement by 1 square **instead of**
+    sliding the target 1 square"* -- so the row has to know, while the
+    attack is still resolving, whether that attack is going to shove at
+    all, and pick one of the two. `c.forces` has to be armed in advance,
+    and `Hit` is before the shove, so arming it unconditionally alongside
+    the slide pays out **both**: strictly stronger than print, which is the
+    failure this tree warns about and would show up nowhere.
+
+    Hence the symbol: a `forces` hold that lengthens the shove when there
+    is one and falls back to the slide when there is not."""
     if c.strike():
         c.damage("3d10", c.dex_mod)
     else:
