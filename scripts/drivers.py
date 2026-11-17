@@ -24088,6 +24088,28 @@ def a_borrowed_origin_for_a_melee_line(out: Result) -> None:
              "and picks up an enemy that steps back into reach",
              f"lending {lending()}, adjacent {adjacent()}")
 
+    # -- the distance proviso, which `_lenders` had none of --------------
+    #
+    # `p10193` prints TWO provisos -- "if the ally is within 10 squares of
+    # you **and** you have line of effect to the ally" -- and only the
+    # second was ever asked, so a borrow reached as far as sight does. The
+    # row waited for the parameter rather than being written anyway, which
+    # is the right trade and is why the band needs a control: with no
+    # band, a distant lender must still lend, or every existing caller
+    # quietly loses its borrow.
+    for band, gap, lends in ((10, 4, True), (10, 14, False), (0, 14, True)):
+        world, me, foes, home = board()
+        place(world, foes[0], (home[0] + gap, home[1]))
+        Cast(world=world, me=me, ref="drivers").cast_from(
+            foes[0], within=band, until=When.ENCOUNTER,
+        )
+        got = measured_from(world, me, RANGED)
+        out.that((got == foes[0]) is lends,
+                 f"within={band or 'none'} and the lender {gap} squares off:"
+                 f" the origin is {'the lender' if lends else 'the caster'}",
+                 f"measured_from gave {got}, caster is {me},"
+                 f" lender is {foes[0]}")
+
 
 def a_lent_eye_travels_but_does_not_shoot(out: Result) -> None:
     """"You can see and hear as if you were in the target's space." `p12345`.

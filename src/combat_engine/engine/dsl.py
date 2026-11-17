@@ -3486,6 +3486,7 @@ def _lenders(world: World, actor: int, r: Range) -> list[int]:
     The proviso is unchanged: on the board, and in line of effect.
     """
     from .components import Position as _Position
+    from .query import distance_between as _apart
     from .types import Relation as _Relation
 
     out: list[int] = []
@@ -3498,8 +3499,22 @@ def _lenders(world: World, actor: int, r: Range) -> list[int]:
             allowed = (*allowed, "melee")
         if r.kind not in allowed:
             continue
-        if world.get(lender, _Position) and line_of_effect(world, actor, lender):
-            out.append(lender)
+        if not (world.get(lender, _Position)
+                and line_of_effect(world, actor, lender)):
+            continue
+        # **The distance proviso, which this check had none of.** A card
+        # may bound the borrow -- `p10193` prints *"if the ally is within
+        # 10 squares of you and you have line of effect to the ally"* --
+        # and only the second half was ever asked, so a borrow reached as
+        # far as sight does. Written as `within:<n>` among the `via` words;
+        # absent means no limit, which is what every other caller prints.
+        band = next(
+            (int(w.split(":", 1)[1]) for w in words if w.startswith("within:")),
+            0,
+        )
+        if band and _apart(world, actor, lender) > band:
+            continue
+        out.append(lender)
     return out
 
 

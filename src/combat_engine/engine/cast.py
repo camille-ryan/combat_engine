@@ -15865,7 +15865,7 @@ class Cast:
 
     def cast_from(
         self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER,
-        optional: bool = False, melee: bool = False,
+        optional: bool = False, melee: bool = False, within: int = 0,
     ) -> Effect | None:
         """"Determine line of sight and effect for your ranged and area
         attacks from the target rather than from yourself."
@@ -15911,13 +15911,32 @@ class Cast:
         for exactly this reason.
 
         The two words are comma-joined on `via`, so a borrow can be both.
+
+        **`within` is the distance proviso, which this verb had none of.**
+        `dsl._lenders` checks that the lender is on the board and in line
+        of effect -- the second half of what `p10193` prints -- and carried
+        no range limit at all, so a bare borrow reached as far as sight
+        does. That card says *"if the ally is **within 10 squares** of you
+        and you have line of effect to the ally"*, and its own note is why
+        this exists rather than the clause being written anyway: without
+        the band the artificer borrows an origin at any distance, which is
+        silently stronger than print.
+
+        `0` is no limit, which is every existing caller: both rows already
+        borrowing print no distance.
+
+        Carried as `within:<n>` among the `via` words, so one relation says
+        all three things and nothing needs a second component.
         """
         borrower = on if on is not None else self.me
         self.world.relations.set(
             Relation.CASTS_FROM, borrower, who,
             via=",".join(
-                word for word, on_ in (("optional", optional), ("melee", melee))
-                if on_
+                [
+                    word for word, on_ in (("optional", optional), ("melee", melee))
+                    if on_
+                ]
+                + ([f"within:{within}"] if within else [])
             ),
         )
 

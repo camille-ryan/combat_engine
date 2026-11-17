@@ -158,30 +158,33 @@ def p10191(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.WEAPON],
     attack=Attack(INT, vs=AC),
-    dropped=("c.cast_from(within=)",),
 )
 def p10193(c: Cast) -> None:
-    """The Effect line is still dropped and **the reason it used to give is
-    the one `c.cast_from` was written to answer.** That verb's docstring:
+    """**The Effect line is written, and the one proviso it waited on is a
+    parameter now.** The note below is kept because it is the reasoning
+    that got the symbol right, and it was right: the card gives two
+    provisos -- *"if the ally is within 10 squares of you and you have line
+    of effect to the ally"* -- and `dsl._lenders` checked only the second.
 
-        `c.strike(from_=)` is one swing and nothing held it, so the
-        standing version of the line -- and the stat block trait that says
-        the same thing about a servant -- had no way to be written.
+    Written with a bare `c.cast_from` the artificer would have borrowed an
+    origin at any distance with line of effect, which reaches further than
+    the card allows: silently stronger than print, which is the reading
+    this tree refuses. So the clause waited for `within=` rather than
+    being written anyway, and that is the trade worth keeping a note of.
 
-    So "no hold to live in" was false. What is missing is one proviso: the
-    card gives two, *"if the ally is within 10 squares of you and you have
-    line of effect to the ally"*, and `dsl.measured_from` checks the second
-    (`line_of_effect`, plus the lender still having a square) and carries
-    no distance limit at all.
+    `within=10` now, and `_lenders` refuses the borrow the moment the ally
+    is further off -- re-measured per attack, not frozen at the cast, so an
+    ally that walks away stops lending and one that comes back lends again.
 
-    Written with a bare `c.cast_from` the artificer would borrow an origin
-    at any distance with line of effect, which reaches further than the
-    card allows -- silently stronger than print, which is the reading this
-    tree refuses. Hence the symbol rather than the clause."""
+    The ally is the target, which is who the card names, and
+    `When.ENCOUNTER` is the printed duration."""
+    ally = c.target
     if c.strike():
         c.damage(c.w(3), c.int_mod)
     else:
         c.half_damage(c.w(3), c.int_mod)
+    if ally is not None:
+        c.cast_from(ally, within=10, until=When.ENCOUNTER)
 
 
 @power(
