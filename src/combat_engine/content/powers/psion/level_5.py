@@ -243,24 +243,34 @@ def p8236(c: Cast) -> None:
     ],
     summon=Summon(
         speed=7,
-        modes=("climb",),
+        per_defence={"ac": 4, "ref": 2},
+        modes={"climb": 3},
         attack=Attack(INT, vs=REF),
         damage=Damage("1d8", "int"),
     ),
 )
 def p13325(c: Cast) -> None:
-    """+4 to AC and +2 to Reflex only, so the two are handed out in
-    the body -- `Summon.defences` is one offset across all four.
+    """**`Summon` carries `per_defence`, and "one offset across all
+    four" was false.** It is a `dict[str, int]` -- `items/misc.py`
+    already passes `per_defence={"ac": 2, "fort": 2}` -- so a block
+    printing a bonus to two defences and not the other two says exactly
+    that. #1341.
+
+    So "+4 to AC and +2 to Reflex" goes in the header rather than being
+    handed out by the body, and the climb is a speed -- "speed 7 and
+    climb 3" -- rather than the bare `("climb",)` tuple that could not
+    say how fast.
 
     Dropped: the grab on the standard command -- `Summon` declares an attack
     and a damage line and has nowhere to put a rider -- and the whole
     opportunity command with its ongoing poison. Augment 1 goes with the
     grab: a penalty to escaping a hold nothing ever applies would be a
     clause that can never come up."""
-    stinger = c.summon_inline(get(c.ref).summon, at=c.origin)
-    if stinger:
-        c.bonus(AC, 4, on=stinger, until=When.ENCOUNTER)
-        c.bonus(REF, 2, on=stinger, until=When.ENCOUNTER)
-        # `Summon.modes` carries no speed, and the printed climb is slower
-        # than the creature walks.
-        c.mode("climb", 3, on=stinger, until=When.ENCOUNTER)
+    # **The defences and the climb are the header's now.** They were
+    # handed out here because `Summon.defences` is one offset for all
+    # four; `per_defence` says two of them and `modes` takes a speed per
+    # mode, so both belong in the block. Left in both places they would
+    # have been applied twice -- the header bakes them into `Defenses`
+    # and the body laid them again as modifiers, which `Mods.total` and
+    # `Defenses.values` would each have reported as correct on their own.
+    c.summon_inline(get(c.ref).summon, at=c.origin)

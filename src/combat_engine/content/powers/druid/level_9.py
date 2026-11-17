@@ -62,6 +62,22 @@ from .forms import (
 )
 from .summons import close_on, hunt
 
+
+def _at_least(c, who, mine) -> bool:  # noqa: ANN001
+    """Is that creature the bear's own size or larger?
+
+    `Size` is ordered, so the printed comparison is a comparison rather
+    than a table of pairs. A target the board cannot name -- no id in the
+    context -- answers False, which is the safer wrong answer: the bonus
+    is withheld rather than handed out blind.
+    """
+    if who is None:
+        return False
+    theirs = c.size_of(who)
+    order = list(type(mine))
+    return order.index(theirs) >= order.index(mine)
+
+
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
 PRIMAL_WEAPON = [Keyword.PRIMAL, Keyword.WEAPON]
 BEAST_FORM = "you must be in beast form"
@@ -355,20 +371,35 @@ def p16122(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
-        speed=6, attack=Attack(WIS, vs=FORT), damage=Damage("2d6", "wis"),
+        speed=6, size="large",
+        attack=Attack(WIS, vs=FORT), damage=Damage("2d6", "wis"),
         instinctive=hunt,
     ),
 )
 def p5375(c: Cast) -> None:
     """Its Instinctive Effect is the shared tail and nothing else, so the
-    header points straight at `summons.hunt`. The block prints Large and
-    no size is passed, so the creature arrives Medium and its +4 against
-    creatures its own size or larger -- which reads off a size it has not
-    got -- is dropped.
+    header points straight at `summons.hunt`.
+
+    **The bear arrives Large now, and `Summon.size`'s own comment is
+    about this row.** It reads: *"Large creatures arrive Large. Two druid
+    blocks print one and both were spawned Medium, which is a square of
+    footprint and a reach."* This is one of the two. #1341.
+
+    With a size it has got, the +4 "against creatures its own size or
+    larger" is readable: `c.size_of` answers both ends and `Size` is
+    ordered, so the comparison is the printed one rather than a guess.
+    It is laid **on the bear** and gated per target, because the card
+    gives the bonus to the bear's attacks and not to the druid's.
     """
     made = c.summon_inline(get(c.ref).summon)
-    if made:
-        c.command(made, on=c.target)
+    if not made:
+        return
+    mine = c.size_of(made)
+    c.bonus(
+        "attack", 4, on=made, until=When.ENCOUNTER, kind="untyped",
+        when=lambda ctx: _at_least(c, ctx.get("target"), mine),
+    )
+    c.command(made, on=c.target)
 
 
 def _p5377_instinct(c: Cast, who: int) -> None:

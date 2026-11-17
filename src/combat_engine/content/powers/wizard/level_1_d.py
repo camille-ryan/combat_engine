@@ -635,16 +635,34 @@ def p11841(c: Cast) -> None:
     target=NO_TARGET,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.SUMMONING],
     summon=Summon(
-        speed=6, defences=2, modes=("fly",),
+        speed=6,
+        per_defence={"ac": 2, "fort": 2},
+        modes={"fly": 6},
         attack=Attack(INT, vs=REF),
         damage=Damage("1d8", "int", dtype=DamageType.FIRE),
     ),
 )
 def p4016(c: Cast) -> None:
-    """`Summon.defences` is one offset for all four and the printed +2 is to
-    AC and Fortitude alone, so Reflex and Will come out 2 too high. Hovering
-    has nowhere to go. The standard-action command has no door; the
-    opportunity one is written, since that is a moment the board reaches.
+    """**`Summon` carries `per_defence`, and "one offset across all
+    four" was false.** It is a `dict[str, int]` -- `items/misc.py`
+    already passes `per_defence={"ac": 2, "fort": 2}` -- so a block
+    printing a bonus to two defences and not the other two says exactly
+    that. #1341.
+
+    So the fire warrior's Reflex and Will are its own again, where
+    `defences=2` had been handing it two points of each the card never
+    printed.
+
+    **The fly speed is a number now too.** `modes=("fly",)` is the bare
+    tuple `Summon.modes`' own comment warns about -- it "could not say
+    'speed 0, fly 6', which three blocks print" -- so "fly 6" is
+    `{"fly": 6}`.
+
+    Hovering itself is still dropped: `modes` carries a speed per mode
+    and has no flag for staying up without moving.
+
+    The standard-action command still has no door; the opportunity one is
+    written, since that is a moment the board reaches.
     """
     made = c.summon_inline(get(c.ref).summon, at=c.origin)
     if made:
