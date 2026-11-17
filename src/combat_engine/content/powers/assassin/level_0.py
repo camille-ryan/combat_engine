@@ -221,12 +221,35 @@ def p9401(c: Cast) -> None:
     keywords=[Keyword.SHADOW],
 )
 def p9402(c: Cast) -> None:
-    """The Stealth half is narrative. Sustain Minor is not written: the two
-    effects run to the end of my next turn or until I attack, whichever the
-    fight reaches first."""
-    thin = c.insubstantial(until=When.EONT, on=c.me)
-    weak = c.vulnerable(5, DamageType.RADIANT, until=When.EONT, on=c.me)
-    _ends_on_my_attack(c, [thin, weak])
+    """The Stealth half is narrative.
+
+    **Sustain Minor is written now, and "not written" understated what
+    was available.** A sustain cost is stored beside an effect and 118
+    content sites already pass `sustain=MINOR`; what neither
+    `c.insubstantial` nor `c.vulnerable` takes is the cost itself, so
+    the form is carried by a hold that does and the two riders are tied
+    to it. #1341.
+
+    That is the arrangement `p13793`'s garrote uses for Sustain Standard,
+    and it is the only one that keeps the card's three clocks straight:
+    the form ends when the assassin attacks, at the end of its next turn
+    **or** when it stops paying -- whichever the fight reaches first, and
+    sustaining pushes only the second of the three.
+    """
+    form = c.effect(
+        f"{c.ref} shadowy form", until=When.SUSTAIN, on=c.me, sustain=MINOR
+    )
+    thin = c.insubstantial(until=When.SUSTAIN, on=c.me)
+    weak = c.vulnerable(5, DamageType.RADIANT, until=When.SUSTAIN, on=c.me)
+    if form is not None:
+        form.on_end.append(
+            lambda: [
+                c.world.effects.end(e)
+                for e in (thin, weak)
+                if e is not None
+            ]
+        )
+    _ends_on_my_attack(c, [form, thin, weak])
 
 
 @power(

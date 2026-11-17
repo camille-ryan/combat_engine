@@ -217,11 +217,25 @@ def p5554(c: Cast) -> None:
 )
 def p9743(c: Cast) -> None:
     """"Difficult terrain for your enemies" is one rough zone plus everyone
-    on my side ignoring that label. The cover the zone grants has no verb
-    and is left out; the slide does not force the square outside the burst,
-    which the world's decider picks."""
+    on my side ignoring that label.
+
+    **The cover is written now, and "has no verb" was false.**
+    `c.cover_in` is that verb and its docstring opens on this card's
+    sentence -- *"you and your allies have cover while within the
+    zone"* -- with a note on why `c.zone(blocks_sight=True)` is the near
+    miss and not it: that is terrain, it blinds both sides, and the
+    creature standing in it gets nothing for being there. #1341.
+
+    `side="team"` is the default and is what "you and your allies"
+    means, so the zone shelters my side and not the enemies it is rough
+    for.
+
+    The slide still does not force the square outside the burst, which
+    the world's decider picks.
+    """
     if c.first:
-        c.zone(c.area(), until=When.ENCOUNTER, difficult=c.ref)
+        shelter = c.zone(c.area(), until=When.ENCOUNTER, difficult=c.ref)
+        c.cover_in(shelter, side="team")
         for mate in dict.fromkeys([c.me, *c.allies()]):
             c.ignores_difficult(c.ref, on=mate, until=When.ENCOUNTER)
     if c.strike():
