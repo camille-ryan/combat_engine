@@ -6702,7 +6702,27 @@ def _does_the_ordinary_things(
                 continue
             was_hp, was_at = health.hp, spot.square
             rearm()
-            drop(world, who, 3)
+            # **Three squares and then one**, because "you fall and take
+            # no damage" is a *shorter* fall rather than a softened one.
+            # `falling.drop` rolls `squares // SQUARES_PER_DIE` dice and
+            # that constant is **2**, so three squares rolls one die for 5
+            # damage and one square rolls none. `p11530`'s own predicate
+            # reads the distance off the event for exactly this reason --
+            # "`Fell` is announced before the roll and no event afterwards
+            # says a fall hurt nobody" -- so the harness has to fall the
+            # short way to satisfy it.
+            #
+            # The hurting fall stays first: a row gated on taking damage
+            # must not be credited by the harmless one.
+            for far in (3, 1):
+                drop(world, who, far)
+                if _fired(world, ref, cursor):
+                    break
+                health.hp = was_hp
+                if spot.square != was_at:
+                    world.grid.lift(who)
+                    spot.square = was_at
+                    world.grid.place(who, frozenset({was_at}))
             health.hp = was_hp
             # **Through the grid, not just `Position`.** A fall moves the
             # creature, and writing the old square back without re-indexing
