@@ -515,7 +515,6 @@ KNOWN_SILENT = {
     # the board is lit everywhere -- so the row correctly declines and does
     # nothing. Written against `c.unlit`; the alternative was leaving the
     # Requirement unwritten, which would teleport her from anywhere.
-    "m6276a5": "needs an unlit square to jump from; the board is lit",
     # Lends a nearby ally's senses, and the board fields this creature
     # alone -- so there is no ally to lend one and the row correctly does
     # nothing. Written against `c.has_sense` and right; the guess that
@@ -4058,6 +4057,70 @@ _WANTS_FLANK = re.compile(r"flank", re.I)
 _WANTS_RAGE = re.compile(r"\braging\b", re.I)
 
 
+#: **The caster's OWN square in shadow**, which is the other side of
+#: `_WANTS["dark"]`. That knob paints a patch three or four squares out
+#: and stands a light-bearer away from it, deliberately -- "a row that must
+#: land in darkness has to be able to tell the dark squares from the lit
+#: ones". Four rows print the opposite: the Requirement is that *this
+#: creature* is standing in dim light or darkness, and the patch is
+#: precisely where it is not.
+_WANTS_OWN_SHADOW = re.compile(
+    r"(?:must be in|while in)\b[^.]{0,30}?(?:dim light|darkness|shadow)",
+    re.I,
+)
+
+
+def _pose_own_shadow(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Put the caster's own square, and its surrounds, in darkness.
+
+    `Grid.light` is the map and `query.light_level` reads it, so this is
+    the same mechanism `_WANTS["dark"]` uses -- painted terrain rather
+    than a zone, for that knob's reason: a zone is an effect with an owner
+    and a duration, and would show up in the row's own credit.
+
+    The ring as well as the square, because a Large creature occupies more
+    than one and `light_level` is asked of wherever it actually stands.
+
+    Measured: `p13992` and `p16484` report `light=bright` on a fresh board
+    and become usable the moment the square under the caster is `DARK`.
+    """
+    from combat_engine.engine.components import Position as _Pos
+    from combat_engine.engine.types import Light as _Light
+
+    want = getattr(declared, "requires_text", "") or ""
+    if not _WANTS_OWN_SHADOW.search(want):
+        return
+    if _NEGATED.search(want):
+        return
+    here = world.get(caster, _Pos)
+    if here is None:
+        return
+    cx, cy = here.square
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            world.grid.light[(cx + dx, cy + dy)] = _Light.DARK
+    # **And put out the board's own torch**, which is the whole reason a
+    # painted square was not enough. `light_level` walks carriers after the
+    # terrain -- "anything within that radius is bright however dark the
+    # square itself is" -- and `_WANTS["dark"]` stands a bearer near the
+    # caster on purpose, for the rows that put lights *out*. Measured: one
+    # creature at `light_radius=2`, label `audit:pose`, adjacent to the
+    # caster, so `grid.light` read `dark` and `light_level` read `bright`.
+    #
+    # Only the board's own, by label. A light a *row* laid is that row's
+    # business and removing it would be the instrument editing the thing it
+    # is measuring.
+    from combat_engine.engine import Mods as _Mods
+
+    for _eid, mods in world.each(_Mods):
+        keep = [
+            m for m in mods.items
+            if not (m.what == "light_radius" and m.label == "audit:pose")
+        ]
+        if len(keep) != len(mods.items):
+            mods.items[:] = keep
+
+
 def _pose_flanking(world, caster: int, declared) -> None:  # noqa: ANN001
     """Put the caster and an ally on opposite sides of one enemy.
 
@@ -4837,6 +4900,13 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
     # `i2339p1`, enemies 3-6 came back cursed and the dummy at 2 -- the foe
     # that was hit -- did not.
     _pose_cursed(world, caster, declared, src)
+    # **Last, so it has the final word on the caster's own square.**
+    # `_WANTS["dark"]` runs above and stands a light-bearer near the
+    # caster on purpose -- a row that puts lights out wants one
+    # burning -- which relit the square this pose had just darkened.
+    # Measured: the caster read `light=bright` after the full setup
+    # with this call placed before the loop, and `dark` after it.
+    _pose_own_shadow(world, caster, declared)
 
 
 #: What starting a fight emits no matter who is in it. Subtracted from what
