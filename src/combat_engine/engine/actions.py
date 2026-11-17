@@ -958,6 +958,43 @@ def _commands(world: World, encounter: Encounter, actor: int) -> list[Action]:
                         subject=eid,
                     )
                 )
+
+    # **A summon's own printed commands.** The loop above skips a summon
+    # deliberately -- its door is `Cast.command`, which rolls the one
+    # shared `summon=` attack line -- and six power rows print commands
+    # that differ from each other in shape, target count and rider, which
+    # one line cannot say. `dsl.Summon.commands` names them as rows.
+    #
+    # Offered here rather than through `Cast.command` because each is a
+    # *menu entry at its own printed cost*: `p3314`'s standard is a close
+    # burst 1 and its opportunity is melee 1, and `_aimings` reads the
+    # named row's reach and target line, so each is aimed as what it is.
+    #
+    # A summon declaring none is untouched and still falls to
+    # `Cast.command`. #1360.
+    for eid in sorted(world.having(Companion)):
+        mine = world.get(eid, Companion)
+        if mine is None or mine.owner != actor:
+            continue
+        if not alive(world, eid) or not can_act(world, eid):
+            continue
+        block = getattr(get(mine.ref), "summon", None)
+        for cost, ref in getattr(block, "commands", ()) or ():
+            row = get(ref)
+            if row is None or not usable(world, eid, row)[0]:
+                continue
+            if not encounter.can_spend(actor, cost):
+                continue
+            for aim in _aimings(world, eid, ref, cost=cost):
+                out.append(
+                    Action(
+                        kind="command",
+                        cost=cost,
+                        ref=ref,
+                        targets=aim.targets,
+                        subject=eid,
+                    )
+                )
     return out
 
 

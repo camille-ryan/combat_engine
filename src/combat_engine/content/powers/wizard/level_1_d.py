@@ -50,6 +50,7 @@ from combat_engine.engine import (
     Dropped,
     Hit,
     Keyword,
+    Melee,
     Mod,
     MoveEnd,
     Ranged,
@@ -568,15 +569,18 @@ def _commands_on_opportunity(c: Cast, made: int, *, mark: bool = False) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[*ARCANE_IMPLEMENT, Keyword.SUMMONING],
-    summon=Summon(speed=5, attack=Attack(INT, vs=REF), damage=Damage("2d6", "int")),
-    dropped=("dsl.Summon.commands",),
+    summon=Summon(
+        speed=5, attack=Attack(INT, vs=REF), damage=Damage("2d6", "int"),
+        commands=((STANDARD, "p11840c1"),),
+    ),
 )
 def p11840(c: Cast) -> None:
-    """The special command is a standard action spent on a later turn and
-    nothing offers one, so the header carries the one line `c.command`
-    rolls and nothing spends it; "one or two creatures" has nowhere to go
-    either. `dsl.Summon` has a single `attack` field -- checked -- which is
-    the marker, and `p11842`, `p7641` and `p7657` wait on the same one.
+    """**The special command is a row now and "one or two creatures" is its
+    target line.** `dsl.Summon.commands` names it and `actions._commands`
+    offers it at the printed standard, so the thing that had nowhere to go
+    has somewhere: `UpTo(2)` is the printed count, which the shared
+    `attack` field could not carry because it has no target line of its
+    own. #1360.
 
     **The symbiosis is gated on the creature standing now, and "nothing
     asks whether a companion is still on the board" was false.**
@@ -707,3 +711,27 @@ def p7429(c: Cast) -> None:
     is one `c.recast`: the at-will keeps its standard-action entry in the
     menu and gains a minor-action one, once a turn, until the fight ends."""
     c.recast(_PREREQUISITE, action=MINOR, until=When.ENCOUNTER)
+
+
+@power(
+    "p11840c1",
+    level=1,
+    cls="wizard",
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(1),
+    target=UpTo(2),
+    keywords=ARCANE_IMPLEMENT,
+    attack=Attack(INT, vs=REF),
+)
+def p11840c1(c: Cast) -> None:
+    """*"Standard Action: Melee 1; targets one or two creatures;
+    Intelligence vs. Reflex; 2d6 + Intelligence modifier damage."*
+
+    `p11840`'s summon command, declared as a row so the printed **two**
+    targets are a target line rather than a thing with nowhere to go. It
+    rolls the summoner's Intelligence without being told to: a summon
+    carries the summoner's `Stats` identically, measured.
+    """
+    if c.strike():
+        c.damage("2d6", c.int_mod)

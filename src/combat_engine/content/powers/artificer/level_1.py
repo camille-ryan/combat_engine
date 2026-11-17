@@ -25,6 +25,7 @@ from combat_engine.engine import (
     REF,
     STANDARD,
     YOU_OR_ONE_ALLY,
+    ActionType,
     AreaBurst,
     Attack,
     AttackDeclared,
@@ -566,16 +567,19 @@ def p7638(c: Cast) -> None:
         speed=6,
         attack=Attack(INT, vs=AC, plus=2),
         damage=Damage("1d10", "int"),
+        commands=((STANDARD, "p7641c1"), (ActionType.OPPORTUNITY, "p7641c2")),
     ),
-    dropped=("dsl.Summon.commands",),
 )
 def p7641(c: Cast) -> None:
     """"Any marked enemy" is the condition rather than a mark of the caster's,
     so this asks `c.is_` and not `c.marked`, which would narrow it to mine.
 
-    The opportunity command's mark rider is dropped: the header carries one
-    attack line and `c.command` rolls it, and the two printed commands differ
-    only in that rider.
+    **Both commands are rows now and the rider is written.** The two differ
+    in exactly two things: the standard is *"melee 1 **or** ranged 5"* and
+    the opportunity is melee 1 and **marks**. One shared `attack` field
+    could carry neither -- it has no reach of its own and no body -- so
+    `dsl.Summon.commands` names the pair. `MeleeOrRanged(1, 5)` is the
+    printed choice of shape. #1360.
 
     Checked rather than assumed, and it holds: `dsl.Summon`'s fields are
     `hp, speed, defences, per_defence, size, attack, damage, modes,
@@ -596,3 +600,52 @@ def p7641(c: Cast) -> None:
             c.flat(c.wis_mod, on=who, from_attack=False)
 
     c.watch(TurnStart, sting, until=When.ENCOUNTER)
+
+
+@power(
+    "p7641c1",
+    level=1,
+    cls="artificer",
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=MeleeOrRanged(1, 5),
+    target=ONE_CREATURE,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    attack=Attack(INT, vs=AC, plus=2),
+)
+def p7641c1(c: Cast) -> None:
+    """*"Standard Action: Melee 1 or Ranged 5; targets one creature;
+    Intelligence + 2 vs. AC; 1d10 + Intelligence modifier damage."*
+
+    `MeleeOrRanged(1, 5)` is the printed "or" -- two shapes in one command,
+    which the shared `summon=` line could not hold because it carries no
+    reach at all. Its opportunity command, `p7641c2`, is melee only and
+    marks.
+    """
+    if c.strike():
+        c.damage("1d10", c.int_mod)
+
+
+@power(
+    "p7641c2",
+    level=1,
+    cls="artificer",
+    usage=AT_WILL,
+    action=ActionType.OPPORTUNITY,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    attack=Attack(INT, vs=AC, plus=2),
+)
+def p7641c2(c: Cast) -> None:
+    """*"Opportunity Attack: Melee 1; targets one creature; Intelligence + 2
+    vs. AC; 1d10 + Intelligence modifier damage, and the target is marked
+    until the end of your next turn."*
+
+    **The mark is the servant's, not the summoner's.** `c.mark` defaults to
+    the caster as marker, and this row is used *by* the servant -- which is
+    what the card says: the thing that hit you is what you are marked by.
+    """
+    if c.strike():
+        c.damage("1d10", c.int_mod)
+        c.mark(until=When.EONT)

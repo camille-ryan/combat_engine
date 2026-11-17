@@ -498,6 +498,37 @@ class Summon:
     #: the ref that did the summoning first, so `c.command` inside here
     #: reads this block's attack line and not the row spending the action.
     instinctive: Callable[[Cast, int], None] | None = None
+    #: The printed commands beyond the shared `attack` line above, as
+    #: `((cost, ref), ...)`. Each ref is **an ordinary row**, declared
+    #: like any other and named here.
+    #:
+    #: **A row rather than a bundle of fields, because the printed commands
+    #: differ in everything.** Six power rows gave the shared line more
+    #: than it can say: `p3314`'s standard is a close burst 1 where its
+    #: opportunity is melee 1; `p11840`'s takes one or two creatures;
+    #: `p7641`'s is "melee 1 or ranged 5" and its opportunity marks;
+    #: `p11842`'s turns the imp invisible and `p11296`'s heals an ally.
+    #: No fixed set of fields says that last pair -- they are body code --
+    #: so the command gets a body, which content already knows how to
+    #: write.
+    #:
+    #: Three things make this cheap and each was measured rather than
+    #: assumed. `actions.perform`'s `kind == "command"` branch already ends
+    #: in `use(world, beast, action.ref, ...)` and has never been specific
+    #: to `Powers.basic`. A summon already carries the summoner's `Stats`
+    #: **identically**, so a command declared `Attack(WIS, vs=REF)` rolls
+    #: the right numbers from the beast and none of `Cast.command`'s
+    #: `bonus_for` machinery is reproduced. And `_aimings` reads the named
+    #: row's reach and target line, so a burst command is aimed as a burst
+    #: for free.
+    #:
+    #: `Cast.summon_inline` grants these into the creature's `Powers.known`
+    #: -- without that `actions._commands` cannot offer them, since
+    #: `dsl.use` refuses a row the creature does not know.
+    #:
+    #: Empty by default, so every summon that declares none keeps the
+    #: single shared line and the `Powers.basic` path. #1360.
+    commands: tuple[tuple[ActionType, str], ...] = ()
     label: str = ""
 
 

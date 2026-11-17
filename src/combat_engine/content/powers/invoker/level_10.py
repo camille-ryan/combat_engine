@@ -6,6 +6,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AREA_OR_CLOSE,
+    AT_WILL,
     DAILY,
     ENCOUNTER,
     FREE,
@@ -25,6 +26,7 @@ from combat_engine.engine import (
     Health,
     Hit,
     Keyword,
+    Melee,
     Miss,
     PowerUsed,
     Ranged,
@@ -213,23 +215,60 @@ def p7194(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.SUMMONING],
-    summon=Summon(speed=6, modes=("fly",)),
-    dropped=("dsl.Summon.commands",),
+    summon=Summon(
+        speed=6, modes=("fly",),
+        commands=((STANDARD, "p11296c1"),),
+    ),
+    dropped=("falling.drop(forced_flight=)",),
 )
 def p11296(c: Cast) -> None:
-    """Its one command heals rather than attacks, and `c.command` rolls the
-    header's `summon=` attack line, so there is nothing for it to read. The
-    command is dropped and what is written is the creature arriving.
+    """**Its standard command heals rather than attacks, which is the case
+    a shared `attack` field could not express at all** -- `c.command` rolls
+    that line and there was nothing for it to read. `dsl.Summon.commands`
+    names a row, and a row is free not to be an attack. #1360.
 
-    `dsl.Summon`'s fields are `hp, speed, defences, per_defence, size,
-    attack, damage, modes, instinctive, label` -- one `attack` and no
-    command that is not one, which is the marker. `p11840`, `p11842`,
-    `p7641` and `p7657` wait on the same field for the neighbouring
-    reason: they have a second *attack* command where this has a command
-    that does not attack at all.
+    **The marker is re-pointed rather than dropped, because the second
+    command has a genuine residue.** The move action is *"the angel and one
+    ally adjacent to it fly 8 squares. The ally must land at the end of
+    this movement, or he or she falls."* Granting and aiming it is the same
+    as any other command; what is missing is the fall -- nothing drops a
+    creature that ends a **forced flight** in the air, where
+    `falling.AIRBORNE` only keeps a flyer up because *"a flyer is not
+    settled; it is where it means to be"*. An ally carried by somebody
+    else's flight is exactly the case that reading excludes, so
+    `falling.drop(forced_flight=)` is the one gap and this row is the
+    first to want it.
 
     `Summon.modes` carries no speed, so the printed "fly 8" is set from the
     body."""
     angel = c.summon_inline(get(c.ref).summon, at=c.origin)
     if angel:
         c.mode("fly", 8, on=angel, until=When.ENCOUNTER)
+
+
+@power(
+    "p11296c1",
+    level=10,
+    cls="invoker",
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(1),
+    target=ONE_ALLY,
+    keywords=[Keyword.DIVINE, Keyword.HEALING],
+)
+def p11296c1(c: Cast) -> None:
+    """*"Standard Action: Melee 1; targets one ally; the ally regains 1d6
+    hit points."*
+
+    **A command that is not an attack**, which is the shape no field on
+    `Summon` could carry: `attack` and `damage` are the only two it has and
+    `c.command` rolls them. A row has no such constraint -- this one
+    declares no `attack=` at all and heals.
+
+    `ONE_ALLY` is the printed target line, and it is the angel's allies
+    that are meant: the row is used *by* the angel, which stands on its
+    summoner's side, so the pool is the party.
+    """
+    # `c.heal` takes a number, not an expression -- the idiom the
+    # runepriest and ardent at-wills use.
+    c.heal(c.roll("1d6"))

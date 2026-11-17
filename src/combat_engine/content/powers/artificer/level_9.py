@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     DAILY,
     EACH_ENEMY,
     INT,
@@ -14,6 +15,7 @@ from combat_engine.engine import (
     REF,
     STANDARD,
     YOU_OR_ONE_ALLY,
+    ActionType,
     Attack,
     Cast,
     CloseBurst,
@@ -155,18 +157,18 @@ def p4147(c: Cast) -> None:
         speed=8,
         attack=Attack(INT, vs=AC, plus=2),
         damage=Damage("1d8", "int"),
+        commands=((STANDARD, "p7657c1"), (ActionType.OPPORTUNITY, "p7657c2")),
     ),
-    dropped=("dsl.Summon.commands",),
 )
 def p7657(c: Cast) -> None:
     """The extra die is read off the landing: `c.had_advantage(ev)` is whether
     *that* attack had combat advantage, and asking again is too late because a
     one-shot grant has already been spent.
 
-    The standard command's "and the servant shifts 2" is dropped -- the header
-    carries one attack line and `c.command` rolls it. `dsl.Summon` has one
-    `attack` field, so a second printed command has nowhere to be declared;
-    the same symbol `p7641` and `p11842` wait on."""
+    **Both commands are rows now, which is what lets them differ.** The
+    standard shifts the servant 2 after the swing and the opportunity does
+    not -- one shared `attack` field could carry neither the rider nor the
+    difference. `dsl.Summon.commands` names the pair. #1360."""
     servant = c.summon_inline(get(c.ref).summon, at=c.origin)
     if not servant:
         return
@@ -176,3 +178,58 @@ def p7657(c: Cast) -> None:
             c.flat(c.roll("1d6"), on=ev.target)
 
     c.watch(Hit, extra, until=When.ENCOUNTER)
+
+
+@power(
+    "p7657c1",
+    level=9,
+    cls="artificer",
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    attack=Attack(INT, vs=AC, plus=2),
+)
+def p7657c1(c: Cast) -> None:
+    """*"Standard Action: Melee 1; targets one creature; Intelligence + 2
+    vs. AC; 1d8 + Intelligence modifier damage, and the servant shifts 2
+    squares."*
+
+    The shift is **the servant's own**, so it is `on=c.me` inside this row
+    -- the row is being used *by* the servant, which is what makes
+    `c.shift` reach the right creature without naming one. That is the
+    difference the shared `attack` field could not hold: its opportunity
+    command, `p7657c2`, is the same swing without the step.
+
+    After the damage and whether or not it landed, because the card puts
+    the shift in the Hit line and the servant steps once either way is
+    **not** what it says -- so it is inside the hit.
+    """
+    if c.strike():
+        c.damage("1d8", c.int_mod)
+        # `who=`, not `on=`: `c.shift` names the mover, and the
+        # mover is the servant -- this row is used BY it.
+        c.shift(2, who=c.me)
+
+
+@power(
+    "p7657c2",
+    level=9,
+    cls="artificer",
+    usage=AT_WILL,
+    action=ActionType.OPPORTUNITY,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    attack=Attack(INT, vs=AC, plus=2),
+)
+def p7657c2(c: Cast) -> None:
+    """*"Opportunity Attack: Melee 1; targets one creature; Intelligence + 2
+    vs. AC; 1d8 + Intelligence modifier damage."*
+
+    The same swing as `p7657c1` without the shift, which is the whole
+    reason the two are separate rows.
+    """
+    if c.strike():
+        c.damage("1d8", c.int_mod)

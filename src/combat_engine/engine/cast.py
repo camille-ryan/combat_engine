@@ -10811,6 +10811,7 @@ class Cast:
             Stats,
             Summon,
         )
+        from .components import Powers as _Powers
         from .events import Summoned
         from .grid import Size
         from .query import team as side_of
@@ -10850,6 +10851,22 @@ class Cast:
         # it says this summon takes no turn, which is a different
         # question from where it came from. #1218.
         self.world.add(made, Summon(by=self.me, ref=self.ref))
+        # **The printed commands, granted so the menu can offer them.**
+        # `dsl.use` refuses a row the creature does not know and
+        # `actions._commands` reads `Powers.known`, so without this a
+        # declared command is invisible -- which is why `p3314`'s burst
+        # was offered nowhere while its block named it. `Powers` is made
+        # if absent: an inline summon has none, measured.
+        #
+        # The component rather than a second list, so everything that asks
+        # what this creature can do finds them in the one place.
+        wanted = [ref for _cost, ref in getattr(spec, "commands", ())]
+        if wanted:
+            known = (self.world.get(made, _Powers)
+                     or self.world.add(made, _Powers()))
+            for ref in wanted:
+                if ref not in known.known:
+                    known.known.append(ref)
         # Announced, because `World.spawn` says nothing and a row whose
         # whole Effect is "you summon X" left no trace at all -- four
         # correct rows reported SILENT for it.

@@ -37,6 +37,7 @@ from combat_engine.content.powers.wizard.level_1_d import (
     _reach_is,
 )
 from combat_engine.engine import (
+    AT_WILL,
     DAILY,
     EACH_CREATURE,
     EACH_ENEMY,
@@ -703,14 +704,15 @@ def p6958(c: Cast) -> None:
     summon=Summon(
         speed=4, modes=("fly",),
         attack=Attack(INT, vs=REF), damage=Damage("1d8", "int"),
+        commands=((STANDARD, "p11842c1"),),
     ),
-    dropped=("dsl.Summon.commands",),
 )
 def p11842(c: Cast) -> None:
-    """The command's riders -- ongoing poison, and the imp turning invisible
-    -- hang off a standard action nothing offers, so only its attack line is
-    declared: `Summon` carries exactly one `attack` field, which is the
-    marker.
+    """**The command is a row now and both riders are written.** The
+    ongoing poison and the imp turning invisible are body code, which is
+    exactly why a bundle of fields on `Summon` could never have said them
+    -- `dsl.Summon.commands` names a row instead and content writes the
+    clause the way it writes every other. #1360.
 
     **Hover is not a dropped clause and this used to say it was.**
     `falling.AIRBORNE` holds `"fly"`, and `falling.ground` returns early for
@@ -876,3 +878,43 @@ def p13984(c: Cast) -> None:
 
     watching = c.watch(Dropped, fell, until=When.ENCOUNTER)
     c.endable(watching, MINOR, then=lambda: c.world.despawn(made))
+
+
+@power(
+    "p11842c1",
+    level=5,
+    cls="wizard",
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.POISON],
+    attack=Attack(INT, vs=REF),
+)
+def p11842c1(c: Cast) -> None:
+    """*"Standard Action: Melee 1; targets one creature; Intelligence vs.
+    Reflex; 1d8 + Intelligence modifier damage, and ongoing 5 poison damage
+    (save ends). The imp becomes invisible until the start of your next
+    turn."*
+
+    Two riders, and they land on different creatures: the poison on the
+    target, the invisibility on **the imp** -- which is `c.me` here,
+    because this row is used *by* the imp. That is the pair no fixed field
+    on `Summon` could have carried, and the reason a command is a row.
+
+    **The invisibility is not inside the hit.** The card puts it in its own
+    sentence after the Hit line, so the imp vanishes whether or not the
+    swing landed -- reading it as part of the hit would have made a miss
+    cost the imp its concealment.
+
+    "Until the start of your next turn" is the **summoner's** next turn and
+    `When.SONT` is read of the effect's owner, so the hold goes on the imp
+    with the summoner as its source -- which `c.invisible(on=c.me)` does,
+    since the cast's `me` is the imp and its source is the row's caster.
+    """
+    victim = c.target
+    if c.strike():
+        c.damage("1d8", c.int_mod)
+        c.condition(until=When.SAVE_ENDS, on=victim,
+                    ongoing=(5, DamageType.POISON))
+    c.invisible(on=c.me, until=When.SONT)

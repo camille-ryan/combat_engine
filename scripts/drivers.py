@@ -24181,6 +24181,126 @@ def a_lent_eye_travels_but_does_not_shoot(out: Result) -> None:
         world.effects.end(held2)
 
 
+def a_summons_commands_are_rows(out: Result) -> None:
+    """A summon's printed commands, one row each. `#1360`.
+
+    `dsl.Summon` carries **one** attack line shared by the standard and
+    opportunity commands, and six power rows print commands that differ
+    from each other in shape, target count and rider -- `p3314`'s standard
+    is a close burst 1 where its opportunity is melee 1, `p11840`'s takes
+    one or two creatures, `p11842`'s turns the imp invisible, `p11296`'s
+    heals an ally and is not an attack at all. No fixed set of fields says
+    that last pair; they are body code. So `Summon.commands` names rows.
+
+    **The load-bearing assertion is the burst.** `p3314`'s two commands
+    have the same numbers and different shapes, so if the reach were read
+    off anything but the named row they would be aimed alike -- and the
+    whole change would be invisible. Measured on the board: the standard
+    reaches strictly more creatures than the opportunity.
+
+    **And the negative control is the summon that declares none.**
+    `actions._commands` skips a summon deliberately -- its door is
+    `Cast.command`, which rolls the shared line -- so the new loop must
+    offer nothing for a block without `commands` and `Cast.command` must
+    still work for it. That is the regression this change could cause and
+    nothing else watches.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.actions import legal
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Powers
+    from combat_engine.engine.dsl import get, use
+    from combat_engine.engine.types import ActionType
+
+    def summoned(ref: str) -> tuple:
+        world, me, _ = _audit.board(ref, 1, pose=True)
+        use(world, me, ref)
+        mine = [e for e, cp in world.each(Companion) if cp.owner == me]
+        return world, me, (mine[-1] if mine else 0)
+
+    def commands_for(world, me: int, beast: int) -> dict:  # noqa: ANN001
+        seen: dict = {}
+        for a in legal(world, world.encounter, me):
+            if a.kind == "command" and a.subject == beast:
+                seen.setdefault((a.ref, a.cost), set()).update(a.targets)
+        return seen
+
+    # -- p3314: two commands, two shapes ---------------------------------
+    world, me, angel = summoned("p3314")
+    if not angel:
+        out.skip("p3314 summoned nothing on this board")
+        return
+    known = world.get(angel, Powers)
+    out.that(known is not None
+             and {"p3314c1", "p3314c2"} <= set(known.known),
+             "the declared commands are granted into the summon's Powers --"
+             " without it `dsl.use` refuses them and the menu offers"
+             " nothing",
+             f"known is {known.known if known else None}")
+
+    offers = commands_for(world, me, angel)
+    costs = {ref: cost for (ref, cost) in offers}
+    out.that(costs.get("p3314c1") is ActionType.STANDARD,
+             "the burst command is offered at its printed STANDARD")
+    out.that(costs.get("p3314c2") is ActionType.OPPORTUNITY,
+             "and the melee one as an OPPORTUNITY -- each at its own cost,"
+             " which one shared attack line could not say")
+
+    burst = {t for (ref, _c), ts in offers.items() if ref == "p3314c1"
+             for t in ts}
+    melee = {t for (ref, _c), ts in offers.items() if ref == "p3314c2"
+             for t in ts}
+    out.that(len(burst) > len(melee) and melee,
+             "**and the burst is aimed as a burst** -- its standard reaches"
+             " strictly more creatures than its melee opportunity, off the"
+             " same numbers. If the reach came from anywhere but the named"
+             " row the two would be aimed alike and this change would be"
+             " invisible",
+             f"standard {len(burst)}, opportunity {len(melee)}")
+
+    # -- p11296: a command that is not an attack -------------------------
+    world, me, herald = summoned("p11296")
+    if herald:
+        row = get("p11296c1")
+        out.that(row is not None and row.attack is None,
+                 "p11296's command declares NO attack line -- a heal, which"
+                 " is the shape `Summon.attack` and `Cast.command` cannot"
+                 " express at all")
+        out.that(bool(commands_for(world, me, herald)),
+                 "and is offered anyway, because a row is free not to be an"
+                 " attack")
+    else:
+        out.skip("p11296 summoned nothing on this board")
+
+    # -- the control: a summon declaring no commands ---------------------
+    #
+    # `p11841` is an inline summon whose block names no commands, so the
+    # new loop must pass it over and leave `Cast.command` its door.
+    plain = next(
+        (r for r, p in __import__("combat_engine.engine.dsl",
+                                  fromlist=["REGISTRY"]).REGISTRY.items()
+         if (blk := getattr(p, "summon", None)) is not None
+         and not getattr(blk, "commands", ())),
+        "",
+    )
+    if not plain:
+        out.skip("every inline summon in the tree declares commands")
+        return
+    world, me, beast = summoned(plain)
+    if not beast:
+        out.skip(f"{plain} summoned nothing on this board")
+        return
+    out.that(not commands_for(world, me, beast),
+             f"**a summon declaring no commands is offered none** ({plain})"
+             " -- the loop passes it over and `Cast.command` stays its"
+             " door, which is the regression this change could cause",
+             f"offered {sorted(commands_for(world, me, beast))}")
+    out.that(Cast(world=world, me=me, ref=plain).command(beast) is not None
+             or get(plain).summon.attack is None,
+             "and `Cast.command` still rolls its shared line")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -91758,6 +91878,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "summon_commands": (
+        a_summons_commands_are_rows,
+        "a summon's printed commands are rows, each aimed and costed as"
+        " itself (#1360)",
+    ),
     "lent_body": (
         a_lent_eye_travels_but_does_not_shoot,
         "c.see_from lends a body for SIGHT, follows it, and lends no"

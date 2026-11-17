@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     DAILY,
     DEFENCES,
     EACH_CREATURE,
@@ -19,6 +20,7 @@ from combat_engine.engine import (
     STANDARD,
     WILL,
     WIS,
+    ActionType,
     AreaBurst,
     Attack,
     Cast,
@@ -29,6 +31,7 @@ from combat_engine.engine import (
     DamageApplied,
     DamageType,
     Keyword,
+    Melee,
     Miss,
     Ranged,
     Summon,
@@ -431,11 +434,73 @@ def p11282(c: Cast) -> None:
         modes=("fly",),
         attack=Attack(WIS, vs=REF),
         damage=Damage("1d8", "wis", dtype=DamageType.FIRE),
+        commands=((STANDARD, "p3314c1"), (ActionType.OPPORTUNITY, "p3314c2")),
     ),
-    dropped=("dsl.Summon.commands",),
 )
 def p3314(c: Cast) -> None:
-    """Its standard command is a close burst 1 and its opportunity command a
-    melee 1 off the same numbers; `c.command` rolls one target, so the burst's
-    spread is dropped and the shared line is what the header carries."""
+    """**Each command is its own row now, which is what the shared line
+    could not say.** Its standard is a *close burst 1* and its opportunity
+    a *melee 1* off the same numbers; `c.command` rolls one target, so the
+    burst's spread was the dropped clause.
+
+    `dsl.Summon.commands` names the two rows and `c.summon_inline` grants
+    them into the creature's `Powers.known`, which is what lets
+    `actions._commands` offer each at its printed cost. `_aimings` reads
+    the named row's own reach, so the standard is aimed as a burst and the
+    opportunity as a melee without either being told which it is. #1360.
+
+    The refs are `p3314c1` and `p3314c2`: `dsl.entry_of` keeps a `c<n>`
+    suffix as its **own** entry, so a defective command does not defect
+    the summoning power -- the same convention a conjuration's rows use.
+    """
     c.summon_inline(get(c.ref).summon, at=c.origin)
+
+
+@power(
+    "p3314c1",
+    level=1,
+    cls="invoker",
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=CloseBurst(1),
+    # **`EACH_OTHER`, not `EACH_CREATURE`.** A close burst originates from
+    # the creature using it, so "each creature in the burst" is everybody
+    # but the angel -- `lint.py` names this exact substitution and caught
+    # the first draft of this row with it.
+    target=EACH_OTHER,
+    keywords=[Keyword.DIVINE, Keyword.FIRE, Keyword.IMPLEMENT],
+    attack=Attack(WIS, vs=REF),
+)
+def p3314c1(c: Cast) -> None:
+    """*"Standard Action: Close burst 1; targets each creature in the burst;
+    Wisdom vs. Reflex; 1d8 + Wisdom modifier fire damage."*
+
+    The summon's command, declared as a row so the burst is aimed as a
+    burst. It rolls **the summoner's** Wisdom without being told to: a
+    summon carries the summoner's `Stats` identically, measured, so
+    `Attack(WIS, vs=REF)` on the creature is the printed line.
+    """
+    if c.strike():
+        c.damage("1d8", c.wis_mod, dtype=DamageType.FIRE)
+
+
+@power(
+    "p3314c2",
+    level=1,
+    cls="invoker",
+    usage=AT_WILL,
+    action=ActionType.OPPORTUNITY,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    keywords=[Keyword.DIVINE, Keyword.FIRE, Keyword.IMPLEMENT],
+    attack=Attack(WIS, vs=REF),
+)
+def p3314c2(c: Cast) -> None:
+    """*"Opportunity Attack: Melee 1; targets one creature; Wisdom vs.
+    Reflex; 1d8 + Wisdom modifier fire damage."*
+
+    The same numbers as `p3314c1` and a different shape, which is the whole
+    reason the two are separate rows rather than one shared `summon=` line.
+    """
+    if c.strike():
+        c.damage("1d8", c.wis_mod, dtype=DamageType.FIRE)
