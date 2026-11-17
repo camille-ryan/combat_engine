@@ -3994,6 +3994,25 @@ _WANTS_STATE = (
     ("bloodied_foe", re.compile(r"bloodied (?:enemy|creature|foe)", re.I)),
     ("dying_ally", re.compile(r"dying ally", re.I)),
     ("marked_me", re.compile(r"you must be marked|^must be marked", re.I)),
+    # **A condition on the CASTER, which is the same wrong-side mistake
+    # the surge poses were.** `_pose_conditions` reads `Target.conditions`
+    # and lays them on an **enemy**, which is right for "targets a prone
+    # creature" and reaches none of the seven rows whose printed Trigger
+    # is *"you are dazed, stunned or weakened"*, *"you are surprised"*,
+    # *"an effect dazes, dominates, or stuns you"*. Those are about the
+    # caster.
+    #
+    # Matched out of the **trigger text**, which is the one place the
+    # states are named: a Trigger is a printed sentence rather than a
+    # declaration, so there is no `Target.conditions` to read and nothing
+    # to keep in step. `_pose_conditions`' own rule -- read the
+    # declaration -- does not apply where there is none.
+    ("condition_me", re.compile(
+        r"\byou are (?:dazed|stunned|weakened|surprised|grabbed|restrained"
+        r"|immobilized|slowed|dominated|blinded)"
+        r"|\byou are affected by a"
+        r"|dazes, dominates, or stuns you"
+        r"|(?:dazed|stunned|dominated) while you", re.I)),
     # **A fourth, because one row wants two of these at once.** `p9338`
     # prints "you must be marked, AND concealed from whoever marked you",
     # so marking it alone left it refused -- the pose has to satisfy the
@@ -4137,13 +4156,30 @@ def _pose_state(world, caster: int, declared) -> None:  # noqa: ANN001
     from combat_engine.engine.query import enemies as _enemies
     from combat_engine.engine.types import Condition as _Cond
 
-    req = getattr(declared, "requires_text", "") or ""
+    # **The Requirement AND the printed Trigger.** The first four states
+    # here are Requirements; `condition_me` is a *trigger* sentence --
+    # "you are surprised", "an effect dazes, dominates, or stuns you" --
+    # and reading `requires_text` alone made that pose fire for nothing,
+    # measured at 0 of 7.
+    req = " ".join(
+        x for x in (
+            getattr(declared, "requires_text", "") or "",
+            getattr(declared, "trigger", "") or "",
+        ) if x
+    )
     if not req:
         return
     for what, pattern in _WANTS_STATE:
         if not pattern.search(req):
             continue
-        if _usable(world, caster, declared, board=True)[0]:
+        # **The "already satisfied" gate is for a REQUIREMENT, not for a
+        # trigger.** A triggered row reports usable whenever its other
+        # gates pass -- its Trigger is answered by an event, not by
+        # `usable` -- so skipping on it skipped `condition_me` every
+        # time, measured at 0 of 7.
+        if what != "condition_me" and _usable(
+            world, caster, declared, board=True
+        )[0]:
             continue
         if what == "bloodied_foe":
             for foe in _enemies(world, caster):
@@ -4165,6 +4201,30 @@ def _pose_state(world, caster: int, declared) -> None:  # noqa: ANN001
                     _Cond.DYING, on=mate, until=When.ENCOUNTER
                 )
                 break
+        elif what == "condition_me":
+            # Every state the sentence names, in one hold -- a creature is
+            # in a set of conditions and one `c.condition` call is what a
+            # card lays, which is `_pose_conditions`' own reasoning.
+            # **Verb forms as well as adjectives.** `p8244`'s Trigger is
+            # "an effect DAZES, DOMINATES, or STUNS you", so a table of
+            # past participles alone found nothing in it and the row
+            # stayed unusable while the other six moved.
+            words = {
+                "dazes": _Cond.DAZED, "stuns": _Cond.STUNNED,
+                "dominates": _Cond.DOMINATED, "weakens": _Cond.WEAKENED,
+                "immobilizes": _Cond.IMMOBILIZED, "slows": _Cond.SLOWED,
+                "blinds": _Cond.BLINDED, "restrains": _Cond.RESTRAINED,
+                "dazed": _Cond.DAZED, "stunned": _Cond.STUNNED,
+                "weakened": _Cond.WEAKENED, "surprised": _Cond.SURPRISED,
+                "grabbed": _Cond.GRABBED, "restrained": _Cond.RESTRAINED,
+                "immobilized": _Cond.IMMOBILIZED, "slowed": _Cond.SLOWED,
+                "dominated": _Cond.DOMINATED, "blinded": _Cond.BLINDED,
+            }
+            named = [c for w, c in words.items() if w in req.lower()]
+            if named:
+                _Cast(world, caster, getattr(declared, "ref", "")).condition(
+                    *named, on=caster, until=When.ENCOUNTER
+                )
         elif what == "concealed_me":
             _Cast(world, caster, getattr(declared, "ref", "")).conceal(
                 until=When.ENCOUNTER
