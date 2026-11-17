@@ -149,9 +149,17 @@ def _heavy_thrown(world: World, eid: int) -> bool:
     saying yes. All 12 are pure ranged weapons with no melee line at all:
     bows, crossbows and a sling. So the rows gated this way were offered to
     an archer holding a weapon nobody throws. #824.
+
+    **And `gear.held` rather than `gear.main`**, the correction all three
+    copies of this predicate needed: `main` is "the first weapon that can
+    be swung", so a warlord holding a longsword and a javelin answers
+    *longsword* and a printed "wielding a heavy thrown weapon" came back
+    false for a character wielding one.
     """
     gear = world.get(eid, Gear)
-    return bool(gear and gear.main and "heavy thrown" in gear.main.properties)
+    if gear is None:
+        return False
+    return any("heavy thrown" in w.properties for w in gear.held)
 
 
 def _reach_weapon(world: World, eid: int) -> bool:
@@ -588,6 +596,13 @@ def p2594(c: Cast) -> None:
     requires_text="needs a heavy thrown weapon",
     trigger=_ENEMY_CLOSES,
     on=Trigger(MoveEnd, when=_enemy_closes(3), text=_ENEMY_CLOSES),
+    # **A thrown row, which it never said.** Its Requirement is a
+    # heavy thrown weapon, and without this `Power.can_branch` takes
+    # the fired branch -- `gear.ranged is None` -> False -- because a
+    # javelin is thrown and not fired. So the row was refused to the
+    # exact character its Requirement describes. `warlord/level_5_b`
+    # and four ranger rows already declare it. #1341.
+    thrown_by_hand=True,
 )
 def p4571(c: Cast) -> None:
     """`MoveEnd`, not `MoveStart`: a reaction declared on the start resolves

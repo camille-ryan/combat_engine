@@ -154,9 +154,20 @@ def _heavy_thrown(world: World, eid: int) -> bool:
     saying yes. All 12 are pure ranged weapons with no melee line at all:
     bows, crossbows and a sling. So the rows gated this way were offered to
     an archer holding a weapon nobody throws. #824.
+
+    **And `gear.held` rather than `gear.main`, which is the second
+    correction this predicate needed.** `main` is "the first weapon that
+    can be swung", so a warlord holding a longsword and a javelin answers
+    *longsword* -- and the printed "you must be wielding a heavy thrown
+    weapon" came back false for a character wielding one. Measured on
+    `p2328`'s own board: both in `held`, the javelin carrying the
+    property, the Requirement refusing, and `p2328` and `p4571` both
+    UNUSED for it. The card says "wielding", which is any hand.
     """
     gear = world.get(eid, Gear)
-    return bool(gear and gear.main and "heavy thrown" in gear.main.properties)
+    if gear is None:
+        return False
+    return any("heavy thrown" in w.properties for w in gear.held)
 
 
 def _shield(world: World, eid: int) -> bool:
@@ -355,6 +366,13 @@ def _send_in(c: Cast, friend: int, barred: set[int | None]) -> None:
     attack=Attack(STR, vs=AC),
     requires=_heavy_thrown,
     requires_text="needs a heavy thrown weapon",
+    # **A thrown row, which it never said.** Its Requirement is a
+    # heavy thrown weapon, and without this `Power.can_branch` takes
+    # the fired branch -- `gear.ranged is None` -> False -- because a
+    # javelin is thrown and not fired. So the row was refused to the
+    # exact character its Requirement describes. `warlord/level_5_b`
+    # and four ranger rows already declare it. #1341.
+    thrown_by_hand=True,
 )
 def p2328(c: Cast) -> None:
     """The errata'd Hit line: a *weapon* attack, which the damage context can

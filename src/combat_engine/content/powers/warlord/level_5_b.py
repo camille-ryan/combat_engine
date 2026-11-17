@@ -89,8 +89,22 @@ def _stand(c: Cast, who: int) -> bool:
 
 
 def _weapon_has(world: World, eid: int, prop: str) -> bool:
+    """Is any weapon in hand carrying that printed property?
+
+    **`gear.held` and not `gear.main`, which is the correction.** `main` is
+    "the first weapon that can be swung", so a warlord holding a longsword
+    and a javelin answers *longsword* -- and every printed "you must be
+    wielding a heavy thrown weapon" was false for a character wielding one,
+    as long as something swingable was listed ahead of it.
+
+    Measured on `p2328`'s own board: both weapons in `held`, the javelin
+    carrying `heavy thrown`, and the Requirement refusing. The card says
+    "wielding", which is any hand, and `held` is the field that answers it.
+    """
     gear = world.get(eid, Gear)
-    return bool(gear and gear.main and prop in gear.main.properties)
+    if gear is None:
+        return False
+    return any(prop in w.properties for w in gear.held)
 
 
 def _reach_weapon(world: World, eid: int) -> bool:
