@@ -162,6 +162,41 @@ the AI policy without running anything — and **the body is code** against a
 
 Plus `out_of_combat=True` for a row that is complete and inert in a fight.
 
+## An at-will may be up before the fight starts. An encounter or daily may not
+
+Camille, asked directly, 2026-11-17:
+
+> *"as a rule, I think we can assume that characters can activate at-will
+> abilities before combat, but not encounter/daily ones."*
+
+So a clause whose only meaning is *before* the first roll is **writable on
+an at-will row** and is not on an encounter or daily one. `p13591` is the
+worked case: an at-will stance granting *"a +4 power bonus to initiative
+checks"*, which was marked unwritable on the reasoning that a stance cannot
+precede the encounter. Under the ruling it can, and the clause means what
+it says.
+
+**Hang it on the event, not on the body.** The distinction is not a gate on
+how the row was used -- it is where the clause is written:
+
+* in the body, `c.initiative(4)` takes effect immediately, so a stance
+  assumed on turn one re-splices the initiative order *mid-fight*, which is
+  stronger than a card that modifies a check already over;
+* on a `c.watch(InitiativeRolled, ...)`, it pays out exactly when the
+  stance preceded the roll -- the ruling's case -- and does nothing when it
+  did not, which is print's case.
+
+One mechanism, both readings correct, and nothing has to ask which happened.
+The same shape fits any before-the-fight clause: find the event the card's
+moment really is, and arm it.
+
+**What the ruling does not say.** It is about what a character may *have
+done*, not about a pre-combat phase existing in this engine -- nothing
+calls a row before `Encounter.start()`. So an at-will clause written this
+way is correct and may still be unreached until something assumes it
+earlier. That is a story-engine question and belongs on an issue, not in a
+marker on the row.
+
 ## What `usage=` means on an `action=NONE` trait, which is less than it looks
 
 Measured on **2026-10-15**, after I corrected eight rows on a premise that

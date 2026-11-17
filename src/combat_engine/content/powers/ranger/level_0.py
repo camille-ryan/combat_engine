@@ -39,6 +39,7 @@ from combat_engine.engine import (
     Effect,
     Gear,
     Hit,
+    InitiativeRolled,
     Keyword,
     Melee,
     Miss,
@@ -342,7 +343,6 @@ def p13590(c: Cast) -> None:
 
 @power(
     "p13591",
-    dropped=("story.stance_before_combat",),
     level=0,
     cls="ranger",
     usage=AT_WILL,
@@ -361,20 +361,25 @@ def p13591(c: Cast) -> None:
     names that verb as the replacement for the unread `"initiative"` key.
     So the verb exists and `c.initiative_bonus()` named nothing missing.
 
-    **The real gap is that a stance cannot precede the encounter.** This
-    one is **at-will**, costs a minor, and its second benefit reads "during
-    your first turn in an encounter" -- so the card expects it to be
-    assumed before the fight and carried in, which is when a +4 to
-    *initiative checks* means anything. `When.STANCE` ends with the
-    encounter and `turns.arm_traits` arms at its start, so there is no
-    before to assume it in.
+    **And an at-will stance IS assumed before the fight**, which is
+    Camille's ruling and is what makes the clause mean anything. Asked
+    directly, 2026-11-17:
 
-    **And writing it anyway would be stronger than print**, which is why it
-    stays dropped rather than being laid at stance time: `c.initiative`
-    takes effect immediately, so a stance assumed on turn one would
-    re-splice the order mid-fight, where the card gives a bonus to a check
-    that is already over. Hence `story.stance_before_combat` -- one gap, in
-    the component that owns between-scene state.
+      > *"as a rule, I think we can assume that characters can activate
+      > at-will abilities before combat, but not encounter/daily ones."*
+
+    This one is at-will and costs a minor, and its second benefit reads
+    "during your first turn in an encounter" -- so the card expects it
+    carried in, which is when a +4 to *initiative checks* applies.
+
+    **So the bonus is laid on `InitiativeRolled` rather than at stance
+    time, and that is what keeps it from being stronger than print.**
+    `c.initiative` takes effect the moment it is called, so laying it in
+    the body would re-splice the order for a stance assumed on turn one --
+    where the card modifies a check that is already over. Hung on the event
+    instead, it pays out exactly when the stance precedes the roll (the
+    ruling's case) and does nothing when it does not (print's case). One
+    mechanism, both readings correct, and no gate on which it was.
 
     "During your first turn" is read as the first round, and "opportunity
     attacks you provoke by moving" as any opportunity attack -- the attack
@@ -390,6 +395,13 @@ def p13591(c: Cast) -> None:
                 when=lambda ctx: bool(ctx.get("opportunity")),
             )
     _hold(c, held, "attack", 2, when=lambda ctx: c.world.round <= 1)
+
+    def rolled(ev: InitiativeRolled) -> None:
+        if getattr(ev, "actor", 0) == c.me:
+            c.initiative(4, on=c.me)
+
+    c.watch(InitiativeRolled, rolled, until=When.STANCE, on=c.me,
+            label=c.ref)
 
 
 @power(
