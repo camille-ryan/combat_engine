@@ -303,14 +303,35 @@ def p13648(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[*ARCANE, Keyword.SHADOW],
+    dropped=("c.dismount(from_=)",),
 )
 def p13885(c: Cast) -> None:
     """Ending the step inside an enemy's space is `share=True`, and being
     carried along when it moves is the mount relation -- which is what
     `c.ride` does and is the only thing on the surface that says it.
 
-    "At the start of your next turn you appear in the nearest unoccupied
-    square" is not written: nothing evicts a rider on a clock.
+    **"Nothing evicts a rider on a clock" was false**, and the clause is
+    still dropped for a narrower reason. `c.dismount` is `c.ride`'s
+    inverse and says so in its own docstring; it **moves** rather than
+    only clearing the relation, because "a carried rider is deliberately
+    absent from the occupancy index, so a rider left where the mount is
+    standing would be nowhere the grid can see" -- and with no `to=` the
+    world picks among the free squares beside the mount, which is exactly
+    what "the nearest unoccupied square" asks for. So the eviction exists
+    and a `TurnStart` watch is the clock.
+
+    **What is missing is saying *which* mount.** `c.mount()` is
+    `relations.sources(RIDDEN_BY, me)` and hands back `found[0]` -- the
+    first of however many -- and `c.dismount` takes no argument naming
+    one. Written and controlled: with the clause in and a `TurnStart`
+    posed, `mount()` answered **8**, an ally the board had already
+    mounted this warlock on, so the row stepped off the *ally*, left the
+    enemy still ridden, and put the caster at (3, 8) with the enemy at
+    (7, 9).
+
+    That is why the clause is not here. It would have fired, audited
+    green, and moved the warlock to the wrong square -- worse than the
+    gap, and invisible to every instrument.
     """
     c.no_provoke(until=When.EOT)
     c.shift(2, share=True)

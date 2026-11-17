@@ -493,11 +493,28 @@ def p13877(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.SHADOW],
     attack=Attack(CHA, vs=WILL),
+    dropped=("c.endable(on_check=)",),
 )
 def p13878(c: Cast) -> None:
-    """The second way out -- a move action and an opposed check against you
-    -- is not written: no check is rolled here and nothing spends a target's
-    action to end an effect. The saving throw remains."""
+    """The second way out is still dropped and **both halves of the old
+    reason were wrong.** It said "no check is rolled here and nothing
+    spends a target's action to end an effect".
+
+    `c.check(skill, dc, against=)` rolls an opposed check -- `p9311` makes
+    one against a creature -- and `c.endable` is exactly "let whoever
+    holds this effect end it deliberately, for an action", aimed by whose
+    effect it is, with `by=` for the rows where the printed line names
+    somebody other than the holder. The burn sits on the target, so the
+    target is already the one who would be offered it.
+
+    What is missing is the **shape**: the card spends the move action
+    whether or not the check succeeds, and `c.endable` ends the effect
+    when the action is taken. `when=` gates whether the drop is *offered*,
+    which would leak the roll and cost nothing on a failure, and `then=`
+    pays out *after* a successful ending rather than deciding it. So the
+    gap is one argument wide.
+
+    The saving throw remains."""
     if c.strike():
         c.damage("3d8", c.cha_mod, dtype=DamageType.FORCE)
         c.ongoing(5, DamageType.FORCE)
