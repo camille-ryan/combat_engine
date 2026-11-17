@@ -422,19 +422,49 @@ def p5842(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p5843(c: Cast) -> None:
-    """The rider is rolled; the Cosmic Magic clause that lets it be chosen
-    instead goes with the fork. "The power gains the radiant keyword" is a
-    header field and cannot be turned on mid-run, so the burn is radiant and
-    the keyword line is not written."""
+    """**The Cosmic Magic clause is written now, and "goes with the fork"
+    was false.** `chargen.BUILDS["sorcerer"]` carries `cosmic`, and
+    `cf:sorcerer-f0s0`'s own spec text is the one about the sun, the moon
+    and the stars -- so the ref maps to the leg by reading rather than by
+    guessing. This is the same mistake `#1303` found and corrected for
+    `wild`: a missing class-feature row read as a missing build. #1351.
+
+    "**You choose the benefit instead of rolling**" is a replacement, so
+    the die is not rolled at all on that leg -- rolling and then letting
+    the choice override would spend a roll the card never makes, which
+    matters because `p5845` lets a sorcerer declare a roll's parity and
+    reads real rolls off the `Cast`.
+
+    The three outcomes are named rather than offered as numbers, because
+    `c.choose` reaches the wire and the AI policy, and "1-2" is not a
+    thing a player picks -- the ongoing damage is.
+
+    "The power gains the radiant keyword" is still **not** written: that
+    is a header field and cannot be turned on mid-run. The burn is
+    radiant either way, so what is missing is the keyword's own
+    consequences -- a resistance that reads it -- and not the damage.
+    """
     if c.strike():
         c.damage("2d8", c.cha_mod, dtype=DamageType.PSYCHIC)
     else:
         c.half_damage("2d8", c.cha_mod, dtype=DamageType.PSYCHIC)
 
-    face = c.roll("1d6")
-    if face <= 2:
+    picked = ""
+    if c.build("cosmic"):
+        picked = c.choose(
+            ["the radiant burn", "slowed", "dazed"],
+            f"{c.ref}: which benefit the stars grant",
+        ) or ""
+    if not picked:
+        face = c.roll("1d6")
+        picked = (
+            "the radiant burn" if face <= 2
+            else "slowed" if face <= 4
+            else "dazed"
+        )
+    if picked == "the radiant burn":
         c.ongoing(5, DamageType.RADIANT)
-    elif face <= 4:
+    elif picked == "slowed":
         c.slowed(until=When.SAVE_ENDS)
     else:
         c.dazed(until=When.SAVE_ENDS)
