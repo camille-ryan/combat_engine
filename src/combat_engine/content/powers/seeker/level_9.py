@@ -29,6 +29,7 @@ from combat_engine.engine import (
     Keyword,
     MeleeOrRanged,
     Ranged,
+    SavingThrow,
     UpTo,
     When,
     power,
@@ -168,13 +169,19 @@ def p16602(c: Cast) -> None:
     target=UpTo(2),
     keywords=PRIMAL_WEAPON,
     attack=Attack(WIS, vs=AC),
-    dropped=("c.boost_save()",),
 )
 def p9521(c: Cast) -> None:
     """"Can't move to a square that isn't adjacent to the other" is enforced
     by dragging the strayer back, there being no way to refuse one
-    destination and allow another. The optional "take 10 damage for +5 to the
-    saving throw" is dropped: nothing can bid on a save in progress."""
+    destination and allow another.
+
+    **The optional "take 10 damage for +5 to the saving throw" is written
+    and the marker's premise was false.** It said *"nothing can bid on a
+    save in progress"*; `items.waist._boost_save` has been doing exactly
+    that from a live row -- the `SavingThrow` event carries `natural`,
+    `bonus` and `saved` and is announced before it is acted on. See `_bind`
+    below for the match and for why the bid is offered only when it would
+    change the outcome."""
     if c.strike():
         c.damage(c.w(), c.wis_mod + extra_dice(c, "1d8"))
     else:
@@ -205,8 +212,43 @@ def _bind(c: Cast, who: int, mate: int) -> None:
             c.slide(20, on=who, to=spot[0])
 
     watching = c.watch(MoveEnd, strayed, until=When.ENCOUNTER)
+
+    def bid(ev: SavingThrow) -> None:
+        """"The target can take 10 damage to gain a +5 bonus to the save."
+
+        **The bid is made on the announced throw**, which is the technique
+        `items.waist._boost_save` records: the event carries `natural`,
+        `bonus` and `saved` and is heard before it is acted on, so the
+        total is rewritten here the way a `SkillCheck` is rewritten by
+        `c.boost_check`. The marker said *"nothing can bid on a save in
+        progress"*; that helper has been doing it from a live row.
+
+        `against` is the effect's own repr, so the throw is matched to
+        **this** hold rather than to any save the creature makes.
+
+        **Offered only when it would change the outcome**, which is not a
+        narrowing of the card: a save that already succeeded needs no bid,
+        and 10 damage that cannot flip a failure is a cost no player would
+        pay. With no policy installed `c.may` takes its default, so
+        offering it unconditionally would spend the hit points every time
+        and make a clause the card offers read as a clause it imposes.
+        """
+        if hold is None or hold.ended or ev.actor != who:
+            return
+        if ev.against != str(hold) or ev.saved:
+            return
+        if ev.natural + ev.bonus + 5 < 10:
+            return
+        if not c.may("take 10 damage for a +5 bonus to the save", who=who):
+            return
+        c.flat(10, on=who)
+        ev.bonus += 5
+        ev.saved = ev.natural + ev.bonus >= 10
+
+    bidding = c.watch(SavingThrow, bid, until=When.ENCOUNTER)
     if hold is not None:
         hold.on_end.append(lambda: c.world.effects.end(watching, "saved"))
+        hold.on_end.append(lambda: c.world.effects.end(bidding, "saved"))
 
 
 @power(

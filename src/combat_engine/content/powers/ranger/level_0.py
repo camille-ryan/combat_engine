@@ -342,7 +342,7 @@ def p13590(c: Cast) -> None:
 
 @power(
     "p13591",
-    dropped=("c.initiative_bonus()",),
+    dropped=("story.stance_before_combat",),
     level=0,
     cls="ranger",
     usage=AT_WILL,
@@ -352,11 +352,33 @@ def p13590(c: Cast) -> None:
     keywords=PRIMAL_STANCE,
 )
 def p13591(c: Cast) -> None:
-    """Two judgements. The initiative bonus is dropped: nothing reads an
-    "initiative" modifier, and the roll is made before anybody takes a
-    stance anyway. "During your first turn" is read as the first round, and
-    "opportunity attacks you provoke by moving" as any opportunity attack --
-    the attack context says whether a swing is one, not what caused it."""
+    """Two judgements, and the initiative marker is re-pointed.
+
+    **"Nothing reads an initiative modifier" was the wrong reason.**
+    `c.initiative` hands its amount to `Encounter.adjust_initiative`, which
+    moves the creature in the order -- `p10605` and `p9329` both write an
+    initiative bonus that way, and `lint.py`'s `UNREAD_MODIFIER_KEYS`
+    names that verb as the replacement for the unread `"initiative"` key.
+    So the verb exists and `c.initiative_bonus()` named nothing missing.
+
+    **The real gap is that a stance cannot precede the encounter.** This
+    one is **at-will**, costs a minor, and its second benefit reads "during
+    your first turn in an encounter" -- so the card expects it to be
+    assumed before the fight and carried in, which is when a +4 to
+    *initiative checks* means anything. `When.STANCE` ends with the
+    encounter and `turns.arm_traits` arms at its start, so there is no
+    before to assume it in.
+
+    **And writing it anyway would be stronger than print**, which is why it
+    stays dropped rather than being laid at stance time: `c.initiative`
+    takes effect immediately, so a stance assumed on turn one would
+    re-splice the order mid-fight, where the card gives a bonus to a check
+    that is already over. Hence `story.stance_before_combat` -- one gap, in
+    the component that owns between-scene state.
+
+    "During your first turn" is read as the first round, and "opportunity
+    attacks you provoke by moving" as any opportunity attack -- the attack
+    context says whether a swing is one, not what caused it."""
     held = c.stance()
     if c.wis_mod > 0:
         for defence in (AC, FORT, REF, WILL):

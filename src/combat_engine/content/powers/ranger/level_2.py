@@ -214,7 +214,6 @@ def p922(c: Cast) -> None:
 
 @power(
     "p10605",
-    dropped=("c.initiative_bonus()",),
     level=2,
     cls="ranger",
     usage=DAILY,
@@ -226,13 +225,27 @@ def p922(c: Cast) -> None:
     on=Trigger(InitiativeRolled, when=about_me, text=_ROLLED_INITIATIVE),
 )
 def p10605(c: Cast) -> None:
-    """The +2 to the initiative check itself is not written: the roll has
-    already been made and placed in the order by the time the event carrying
-    it is announced, and nothing re-reads a modifier afterwards.
+    """All three clauses play.
+
+    **The initiative bonus is written and the marker's premise was false.**
+    It said *"the roll has already been made and placed in the order by the
+    time the event carrying it is announced, and nothing re-reads a modifier
+    afterwards"* -- the first half is true and the conclusion is not.
+    `c.initiative` hands the amount to `Encounter.adjust_initiative`, which
+    **moves the creature in the order**, so a bonus laid after the roll is
+    the only thing the number is for. `p9329` in this tree does exactly
+    this, and `lint.py`'s `UNREAD_MODIFIER_KEYS` already names
+    `c.initiative(amount, on=)` as the replacement for the unread
+    `"initiative"` modifier key -- which is the mistake the marker was
+    avoiding and not the one it described.
+
+    So `c.bonus("initiative", 2)` would have been the trap; the verb is
+    not.
 
     "Until it is no longer your quarry" is the rest of the fight, which is
     what `c.quarry` holds for.
     """
+    c.initiative(2, on=c.me)
     foe = c.choose(c.enemies(), "p10605: which enemy is named quarry")
     if foe is None:
         return
