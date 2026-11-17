@@ -4043,6 +4043,60 @@ _WANTS_SOLITUDE = re.compile(
 )
 
 
+#: Three Requirements the board never produces, each the *caster's* own
+#: state rather than an enemy's. The grab one is the mirror of
+#: `_WANTS["grab"]`, which spawns a dummy the caster is holding -- the
+#: opposite direction, and the tree's own note calls that "the same
+#: wrong-side mistake as the surge and condition poses".
+_WANTS_HELD = re.compile(r"you (?:must be|are) grabbed|while grabbed", re.I)
+_WANTS_WINDED = re.compile(r"used (?:your )?second wind", re.I)
+_WANTS_A_KILL = re.compile(r"dropped (?:a|an) (?:real )?enemy", re.I)
+
+
+def _pose_own_history(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Put the caster into a state its own Requirement asks for.
+
+    Three gates, each about something the caster has done or had done to
+    it, and none of them posed anywhere:
+
+    * **"you must be grabbed"** -- `_grabbed_by_a_foe` exists and was
+      reached by one pass only. `_WANTS["grab"]` poses the other
+      direction, a dummy the caster is holding, which is right for "a
+      creature it has grabbed" and reaches this not at all.
+    * **"must have used your second wind during this encounter"** --
+      `c.second_wind` is the verb and the board never spends one.
+    * **"must have dropped an enemy this turn"** -- one `world.damage`
+      past a foe's remaining hit points.
+
+    Posed at board time rather than provoked, which is the whole reason
+    they needed anything: all three are **Requirements**, so `usable`
+    refuses the row before any provocation runs and the passes that
+    produce these events later cannot help.
+    """
+    said = " ".join((
+        getattr(declared, "requires_text", "") or "",
+        getattr(declared, "trigger", "") or "",
+    ))
+    if _NEGATED.search(getattr(declared, "requires_text", "") or ""):
+        return
+    if _WANTS_HELD.search(said):
+        _grabbed_by_a_foe(world, caster)
+    if _WANTS_WINDED.search(said):
+        from combat_engine.engine.cast import Cast as _Cast
+        with contextlib.suppress(Exception):
+            _Cast(world, caster, "audit:provoke").second_wind()
+    if _WANTS_A_KILL.search(said):
+        from combat_engine.engine import Health as _Health
+        from combat_engine.engine.query import enemies as _foes
+
+        for foe in _foes(world, caster):
+            hurt = world.get(foe, _Health)
+            if hurt is None or not alive(world, foe):
+                continue
+            world.damage(caster, foe, hurt.hp + hurt.max_hp)
+            break
+
+
 def _stand_alone(world, caster: int, declared) -> None:  # noqa: ANN001
     """Clear the ground around the caster, for a row whose gate is that.
 
@@ -4612,6 +4666,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
         if not _usable(world, caster, declared, board=True)[0]:
             _put_in_hand(world, caster, _TWO_HANDED_REACH)
     _stand_alone(world, caster, declared)
+    _pose_own_history(world, caster, declared)
     _pose_state(world, caster, declared)
     _pose_beast(world, caster, declared)
     for what, pattern in _WANTS:
