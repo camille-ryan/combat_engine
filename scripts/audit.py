@@ -2499,7 +2499,25 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
     # character happened to be holding a shield reported one UNUSED, which is
     # indistinguishable from a row that cannot work at all. That is the same
     # argument `_grip_for` gives for existing.
-    if "hand free" in wanted and gear is not None:
+    # **A shield, and a holy symbol**, neither of which the board carries and
+    # both of which a Requirement names. `chargen.HOLY_SYMBOL` is a constant
+    # written for exactly this absence -- "the two implements nobody was
+    # carrying" -- and appending to `gear.weapons` is enough to hold it,
+    # because `Gear.held` is the weapons that are not stowed.
+    #
+    # Before the empty-hand branch below, and skipped when that one matches:
+    # "wielding a shield" and "nothing in the other hand" are opposite
+    # sentences and a row saying the second must not be handed the first.
+    if gear is not None and not _EMPTY_HAND.search(wanted):
+        if _WANTS_SYMBOL.search(wanted) and not any(
+            w.ref == chargen.HOLY_SYMBOL.ref for w in gear.weapons
+        ):
+            gear.weapons.append(_replace(chargen.HOLY_SYMBOL))
+        if _WANTS_SHIELD.search(wanted) and not gear.shield:
+            # 1 is a light shield -- the number is the printed AC and Reflex
+            # bonus, which `Gear.shield`'s own note records.
+            gear.shield = 1
+    if _EMPTY_HAND.search(wanted) and gear is not None:
         gear.shield = False
         kept = next((w for w in gear.melee if not w.two_handed), None)
         gear.weapons = [w for w in gear.weapons if w is kept] if kept else []
@@ -3980,6 +3998,24 @@ def board(ref: str, seed: int, pose: bool = False,
 _WANTS_TWO_HANDS = re.compile(
     r"two-handed|in two hands|both hands", re.I
 )
+
+#: **"A weapon in one hand and nothing in the other", said three ways.**
+#: `_hand_it_the_weapon` matched the bare phrase "hand free" and two rows say
+#: it differently -- `p14285`'s "one-handed melee weapon, other hand empty"
+#: and `f2544`'s "a weapon in one hand and nothing in the other" -- so each
+#: reported UNUSED on a board holding two weapons.
+_EMPTY_HAND = re.compile(
+    r"hand free|other hand (?:empty|free)|nothing in the other", re.I
+)
+
+#: A row whose gate is a shield. The board's characters carry none, so
+#: `Gear.shield` is 0 and five rows are refused for it. Not matched when the
+#: row wants a hand *empty*, which is the opposite sentence.
+_WANTS_SHIELD = re.compile(r"\bshield\b", re.I)
+
+#: A holy symbol, which `chargen` has a constant for and deals to nobody the
+#: board fields. The cleric chassis here carries a greataxe.
+_WANTS_SYMBOL = re.compile(r"holy symbol", re.I)
 
 #: What `_WANTS_TWO_HANDS` reaches for. A ref and not a group, because the
 #: Requirement is about the grip rather than the family.
