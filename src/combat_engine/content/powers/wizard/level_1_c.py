@@ -419,6 +419,7 @@ def p16274(c: Cast) -> None:
     target=NO_TARGET,
     keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
+    dropped=("Zone.height",),
 )
 def p16275(c: Cast) -> None:
     """A wall is not a shape a `Range` can be, so it is built the way
@@ -426,11 +427,16 @@ def p16275(c: Cast) -> None:
     square it was pointed at, which is the only placement the caller is not
     being asked to describe square by square.
 
-    Its height has nowhere to go, and the reason is **not** the one
+    Its height is the dropped clause, and the reason is **not** the one
     `p5804` used to give. A *creature's* height is modelled --
     `falling.lift`, `height`, `drop` -- but a **wall** is squares on the
     grid with no vertical extent, so "wall 6" is a length and nothing
-    else. #1341.
+    else.
+
+    `Zone.height` rather than `Zone.depth`, which exists and is a
+    different need: depth is how far a creature falls through a region
+    (`x2_130`), height is how much of one a wall occupies above the floor.
+    One change would not land both. #1341.
 
     The anchors are ranked by how many creatures the wall would catch, the
     way `c.overrun` ranks a trample. Offered in plain sorted order the first

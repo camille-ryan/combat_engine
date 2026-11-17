@@ -424,8 +424,9 @@ def p14387(c: Cast) -> None:
     skill-check form. This takes the skill form, because that is the action
     the card names and the engine now has all three. It is the weaker
     reading in a fight -- a +2 to a check against +2 to a swing -- and it is
-    the one the words support; the row previously laid an attack bonus with
-    nothing to hang it on, which is the other reading made silently.
+    the one the words support; the row previously laid an attack bonus
+    that no printed clause asked for, which is the other reading made
+    silently.
 
     How much is no longer written here: `c.aid_another` reads
     `MANOEUVRE_AID`, so an item or feat raising what this character grants

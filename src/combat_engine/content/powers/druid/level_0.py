@@ -330,13 +330,18 @@ def p15857(c: Cast) -> None:
 def p15858(c: Cast) -> None:
     """The class printing. `summon_of_your_aspect` holds the body.
 
-    **It used to drop the dismissal and carry no marker for it.** The
-    docstring said *"dismissing it as a minor action is dropped with the
-    other dismissals; see the report"* while the header declared no
-    `dropped=` -- so the row reported finished, `blocked.py` could not see
-    it, and the one instrument that would have is the marker census. The
-    clause is printed plainly: *"Otherwise, it lasts until you dismiss it
-    as a minor action or until the end of the encounter."*
+    **It used to give up the dismissal and carry no marker for it.** The
+    docstring admitted as much, in the phrasing the marker census matches,
+    while the header declared no `dropped=` -- so the row reported
+    finished, `blocked.py` could not see it, and the one instrument that
+    would have is that census. The clause is printed plainly:
+    *"Otherwise, it lasts until you dismiss it as a minor action or until
+    the end of the encounter."*
+
+    The old sentence is described rather than quoted here, because
+    `blocked.py --prose` matches a substring and a note reproducing the
+    admission in order to say it is paid reads exactly like one that still
+    owes it.
 
     Nothing had to be built to pay it. `f3648b` -- the feat printing of
     **this same card**, specs byte-identical -- had the dismissal written

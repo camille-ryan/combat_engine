@@ -708,8 +708,8 @@ def p15891(c: Cast) -> None:
 def p15892(c: Cast) -> None:
     """The mark, the payout and the sustain are all written.
 
-    A sustain cost is stored beside an effect and `c.mark` has nowhere to
-    put one -- but it does not need one. A "Sustain Minor" mark is a
+    A sustain cost is stored beside an effect and `c.mark` takes no such
+    argument -- and does not need to. A "Sustain Minor" mark is a
     *sustained effect whose payout re-lays the mark*, which is the shape
     `m958a3` already uses to re-roll an attack every time its hold is
     sustained: `c.effect(sustain=)` holds the cost, `c.on_sustain` holds
