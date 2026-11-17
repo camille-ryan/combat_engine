@@ -626,8 +626,20 @@ def p3716(c: Cast) -> None:
     opposite sentence and would have made this row help the creature it is
     aimed at. #1341.
 
-    The Dragon Magic concealment goes with the fork.
+    **The Dragon Magic concealment is written now**, and "goes with the
+    fork" was the premise `#1303` refuted for `wild`: a missing class-feature
+    row read as a missing build. `BUILDS["sorcerer"]` carries all four
+    sources, and the printed ref maps to its leg off its own spec text.
+    #1351.
+
+    `c.conceal` defaults `on=` to the **caster**, which is right here --
+    "**you** gain concealment" -- and is the one thing about that verb
+    easy to get backwards. Laid once per use, not once per creature in
+    the blast.
     """
     if c.strike():
         c.damage("2d6", c.cha_mod, dtype=DamageType.ACID)
         c.no_advantage(gains=True, on=c.target, until=When.EONT)
+    if c.build("dragon") and not getattr(c, "dragon_veil", False):
+        c.dragon_veil = True
+        c.conceal(until=When.EONT)

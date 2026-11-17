@@ -62,14 +62,26 @@ def p10320(c: Cast) -> None:
     square is named rather than left to `c.teleport`'s own offer -- which
     takes anything within the range.
 
-    The Chaos Sorcerer clause -- choosing d4, d6 or d8 -- goes with the fork.
+    **The Chaos Sorcerer clause is written now** -- choosing d4, d6 or d8
+    -- and "goes with the fork" was the premise `#1303` refuted for `wild`: a missing class-feature
+    row read as a missing build. `BUILDS["sorcerer"]` carries all four
+    sources, and the printed ref maps to its leg off its own spec text.
+    #1351. Chaos Sorcerer is the `wild` leg,
+    which is the one `#1303` already proved `c.build` answers.
+
+    The choice is made **before** the roll and replaces which die is
+    rolled, not its result: "you can choose to roll a d4, a d6, or a d8"
+    is about the die, and a chosen distance would be a different card.
     """
     victim = c.target
     if not c.strike():
         return
     c.damage("1d8", c.cha_mod)
 
-    far = c.roll("1d6")
+    die = "1d6"
+    if c.build("wild"):
+        die = c.choose(["1d4", "1d6", "1d8"], f"{c.ref}: which die") or "1d6"
+    far = c.roll(die)
     was = c.there
     room = sorted(
         sq
@@ -156,7 +168,18 @@ def p16511(c: Cast) -> None:
 )
 def p3010(c: Cast) -> None:
     """The second bite is hung off the target's own next turn start rather
-    than dealt now. The Dragon Magic splash goes with the fork."""
+    than dealt now.
+
+    **The Dragon Magic splash is written now**, and "goes with the fork"
+    was the premise `#1303` refuted for `wild`: a missing class-feature
+    row read as a missing build. `BUILDS["sorcerer"]` carries all four
+    sources, and the printed ref maps to its leg off its own spec text.
+    #1351.
+
+    It lands on the neighbours **now** rather than with the delayed bite:
+    the printed clause is a rider on the Hit line, and the target's
+    neighbours a turn later are not the ones the card names.
+    """
     victim = c.target
     if not c.strike():
         return
@@ -168,6 +191,15 @@ def p3010(c: Cast) -> None:
             c.flat(bite, dtype=DamageType.ACID, on=victim)
 
     c.watch(TurnStart, later, until=When.EOTNT, on=victim, once=True, label=c.ref)
+    if c.build("dragon"):
+        for near in c.within(1, of=victim):
+            if near != victim:
+                c.flat(
+                    max(0, c.str_mod),
+                    dtype=DamageType.ACID,
+                    on=near,
+                    from_attack=False,
+                )
 
 
 @power(
@@ -182,11 +214,39 @@ def p3010(c: Cast) -> None:
     attack=Attack(CHA, vs=FORT),
 )
 def p3012(c: Cast) -> None:
-    """The Storm Magic clause -- a flight bought by declining every slide --
-    goes with the fork."""
+    """**The Storm Magic clause is written now** -- a flight bought by
+    declining every slide -- and "goes with the fork" was the premise
+    `#1303` refuted for `wild`: a missing class-feature row read as a
+    missing build. `BUILDS["sorcerer"]` carries `storm`. #1351.
+
+    "**If you choose not to slide ANY targets**" is the hard part, and it
+    is why the slide becomes an offer rather than a certainty on this
+    leg: the clause is paid for by declining, so the row has to ask, and
+    it has to remember across every creature in the blast. The memo is on
+    the `Cast` -- one per use, which is the unit the sentence is about --
+    and the flight is granted on `c.last`, when there is nobody left who
+    might still be slid.
+
+    **Only on the storm leg is the slide optional.** Off it the card
+    prints no choice, so asking would invent one and let any sorcerer
+    decline a slide the page makes automatic.
+
+    `c.hover` is both halves at once: it lifts the creature and marks it
+    as moving airborne, which is what "a fly speed ... and you can hover"
+    needs and what keeps `falling.ground` from setting it back down.
+    """
+    storm = c.build("storm")
     if c.strike():
         c.damage("1d10", c.cha_mod, dtype=DamageType.THUNDER)
-        c.slide(c.dex_mod)
+        # One `if`, and `and` short-circuits, so the slide is still only
+        # reached when the guard passes -- declining it must not move
+        # anybody.
+        if (not storm or c.may(f"{c.ref}: slide it", who=c.me)) and c.slide(
+            c.dex_mod
+        ):
+            c.storm_slid = True
+    if c.last and storm and not getattr(c, "storm_slid", False):
+        c.hover(1 + max(0, c.dex_mod), until=When.EONT)
 
 
 @power(

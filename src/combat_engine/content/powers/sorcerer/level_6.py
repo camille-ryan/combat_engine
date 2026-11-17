@@ -277,10 +277,21 @@ def p5276(c: Cast) -> None:
 def p5277(c: Cast) -> None:
     """`once=True` spends the bonus on the first roll made against the
     sorcerer, and an interrupt resolves before that roll -- so the one it
-    lands on is the attack that provoked it. The Dragon Magic clause, which
-    sizes the bonus off Strength, goes with the fork."""
+    lands on is the attack that provoked it.
+
+    **The Dragon Magic clause is written now** and "goes with the fork"
+    was the premise `#1303` refuted for `wild`: a missing class-feature
+    row read as a missing build. `BUILDS["sorcerer"]` carries all four
+    sources, and the printed ref maps to its leg off its own spec text.
+    #1351.
+
+    It **replaces** the 4 rather than adding to it -- "the bonus to all
+    defenses **equals** 3 + your Strength modifier" -- so it is one
+    number chosen before the loop, not a second bonus laid on top.
+    """
+    amount = 3 + c.str_mod if c.build("dragon") else 4
     for d in (AC, FORT, REF, WILL):
-        c.bonus(d, 4, on=c.me, until=When.EOT, kind="untyped", once=True)
+        c.bonus(d, amount, on=c.me, until=When.EOT, kind="untyped", once=True)
 
 
 @power(

@@ -336,8 +336,18 @@ def p5265(c: Cast) -> None:
     attack=Attack(CHA, vs=REF),
 )
 def p5266(c: Cast) -> None:
-    """The Dragon Magic clause -- 5 lightning on top of the shove -- goes
-    with the fork."""
+    """**The Dragon Magic clause is written now** -- 5 lightning on top of
+    the shove -- and "goes with the fork" was the premise `#1303`
+    refuted for `wild`: a missing class-feature
+    row read as a missing build. `BUILDS["sorcerer"]` carries all four
+    sources, and the printed ref maps to its leg off its own spec text.
+    #1351.
+
+    It rides inside the recoil watcher, because the printed sentence is a
+    rider on that clause: "the enemy **also** takes 5 lightning damage"
+    is about the enemy the shove pushed, so it pays only when the shove
+    does.
+    """
     if c.strike():
         c.damage("3d8", c.cha_mod, dtype=DamageType.LIGHTNING)
     else:
@@ -351,6 +361,13 @@ def p5266(c: Cast) -> None:
         p = get(ev.power)
         if ev.target == me and p is not None and p.reach.kind == "melee":
             c.push(1, on=ev.attacker, anchor=c.here)
+            if c.build("dragon"):
+                c.flat(
+                    5,
+                    dtype=DamageType.LIGHTNING,
+                    on=ev.attacker,
+                    from_attack=False,
+                )
 
     c.watch(Hit, shove, until=When.EONT, on=me, label=f"{c.ref} recoil")
 
@@ -403,11 +420,25 @@ def p5841(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p5842(c: Cast) -> None:
-    """"Cannot shift" is `c.cannot_shift` rather than immobilised -- the target
-    still walks. The Cosmic Magic attack penalty goes with the fork."""
+    """"Cannot shift" is `c.cannot_shift` rather than immobilised -- the
+    target still walks.
+
+    **The Cosmic Magic penalty is written now** and "goes with the fork"
+    was the premise `#1303` refuted for `wild`: a missing class-feature
+    row read as a missing build. `BUILDS["sorcerer"]` carries all four
+    sources, and the printed ref maps to its leg off its own spec text.
+    #1351.
+
+    `until=When.EOTNT` is the card's clock -- "the end of **its** next
+    turn", the target's, which is the same one the shift ban above uses
+    and a different one from the caster's `EONT`.
+    """
+    victim = c.target
     if c.strike():
         c.damage("2d6", c.cha_mod, dtype=DamageType.COLD)
         c.cannot_shift(until=When.EOTNT)
+        if c.build("cosmic") and victim is not None:
+            c.penalty("attack", 1, on=victim, until=When.EOTNT)
 
 
 @power(
