@@ -4028,6 +4028,76 @@ _WANTS_SHIELD = re.compile(r"\bshield\b", re.I)
 #: board fields. The cleric chassis here carries a greataxe.
 _WANTS_SYMBOL = re.compile(r"holy symbol", re.I)
 
+#: **A row that wants the caster on its own.** Five rows gate on nobody
+#: being near -- "no ally within 5 squares", "no creature may be within 3
+#: squares", "at least 5 squares away from your allies", "not adjacent to
+#: any of your allies" -- and the board packs its party around the caster,
+#: so three of the five were refused for the arrangement and not for
+#: themselves. The inverse of every other pose here, and the same shape as
+#: `_hand_it_the_weapon`'s "hand free" branch, which empties a grip for
+#: the fifteen rows that ask for one.
+_WANTS_SOLITUDE = re.compile(
+    r"no all(?:y|ies)\b|no creature (?:may be |is )?within"
+    r"|at least \d+ squares? away from|not adjacent to any",
+    re.I,
+)
+
+
+def _stand_alone(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Clear the ground around the caster, for a row whose gate is that.
+
+    Everybody else goes to the squares **furthest from the caster** that
+    the grid has, which on a 24x16 board is comfortably outside any radius
+    these cards name -- the widest is 5.
+
+    **Through `Grid.lift`/`Grid.place`, never `Position.square` alone**,
+    which is the correction `_stand_off` carries for the same reason: the
+    occupant index is a separate map and writing the component without
+    re-indexing leaves one creature in two places for every pass after
+    this one.
+
+    A companion goes too. The printed lines say "no creature" and "no
+    ally", and a spirit companion is both.
+    """
+    from combat_engine.engine.components import Position as _Position
+    from combat_engine.engine.query import creatures as _creatures
+
+    said = " ".join((
+        getattr(declared, "requires_text", "") or "",
+        getattr(declared, "trigger", "") or "",
+    ))
+    if not _WANTS_SOLITUDE.search(said):
+        return
+    spot = world.get(caster, _Position)
+    if spot is None:
+        return
+    here = spot.square
+    # `Grid` carries `width`/`height` and no iterator over its squares --
+    # `squares_of` answers a *creature's* footprint, which is a different
+    # question and is what the first draft reached for. It raised on all
+    # three rows, which `audit.py`'s raise count named immediately.
+    room = sorted(
+        (
+            (x, y)
+            for x in range(world.grid.width)
+            for y in range(world.grid.height)
+            if world.grid.passable((x, y))
+            and world.grid.occupant((x, y)) is None
+        ),
+        key=lambda sq: -max(abs(sq[0] - here[0]), abs(sq[1] - here[1])),
+    )
+    for other in sorted(_creatures(world)):
+        if other == caster or not room:
+            continue
+        seat = world.get(other, _Position)
+        if seat is None:
+            continue
+        where = room.pop(0)
+        world.grid.lift(other)
+        seat.square = where
+        world.grid.place(other, frozenset({where}))
+
+
 #: **An item a Requirement says is on your person.** Three theme rows gate
 #: on `ref in Gear.carried` and the board deals the character nothing, so
 #: all three were refused for a bag rather than for anything they do. The
@@ -4541,6 +4611,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
 
         if not _usable(world, caster, declared, board=True)[0]:
             _put_in_hand(world, caster, _TWO_HANDED_REACH)
+    _stand_alone(world, caster, declared)
     _pose_state(world, caster, declared)
     _pose_beast(world, caster, declared)
     for what, pattern in _WANTS:
