@@ -5677,12 +5677,34 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         if _mates_c:
             _runs.append((_mates_c[0], foes[0]))
         _runs.append((foes[0], caster))
-        for _runner, _victim in _runs:
-            if not alive(world, _runner) or not alive(world, _victim):
-                continue
-            Cast(world=world, me=_runner, ref="audit:charge").charge_at(_victim)
-            if probe():
-                return True
+        # **A loaded face, because three of these rows trigger on the
+        # charge *landing*.** "You hit a creature with a charge attack" is
+        # a `Hit` with `charge=True` on it, and an unloaded charge misses
+        # as often as not -- so `p14145`, `p14312` and `p16402` reported
+        # UNUSED while the pass that exists for them ran every time and
+        # produced `MoveStart`, a miss, and nothing to answer.
+        #
+        # Measured: a hand charge at a loaded 20 fires all three. 20 first
+        # and 3 second, because one row of the family triggers on the miss
+        # instead, and `_rolls_saves` gives both faces for the same reason.
+        _was_face = getattr(world.rng, "loaded", None)
+        try:
+            for _runner, _victim in _runs:
+                if not alive(world, _runner) or not alive(world, _victim):
+                    continue
+                for _face in (20, 3):
+                    world.rng.loaded = _face
+                    Cast(
+                        world=world, me=_runner, ref="audit:charge"
+                    ).charge_at(_victim)
+                    if probe():
+                        return True
+        finally:
+            if _was_face is None:
+                if hasattr(world.rng, "loaded"):
+                    world.rng.loaded = None
+            else:
+                world.rng.loaded = _was_face
 
     # An opportunity attack, swung by hand in both directions. Walking out
     # of reach opens the window and nothing comes of it: the engine never
