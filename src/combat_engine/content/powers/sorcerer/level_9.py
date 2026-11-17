@@ -160,15 +160,35 @@ def p3039(c: Cast) -> None:
     target=UpTo(3),
     keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.CONJURATION],
     attack=Attack(CHA, vs=REF),
-    dropped=("Conjuration.defences",),
 )
 def p3041(c: Cast) -> None:
-    """The stalagmite's own numbers -- AC 5, Reflex 5, Fortitude 21, resist
-    cold 10, 40 hit points -- are still not written: a conjuration is an
-    entity with a position and no health or defences, so there is nothing
-    for an attack against it to read. That is the marker, and `Zone` has
-    the same gap under its own name -- `Zone.defences` and
-    `Zone.breach_hp` are two rows waiting on the zone half of it.
+    """The stalagmite's own numbers are written: AC 5, Reflex 5, Fortitude
+    21, resist cold 10, 40 hit points.
+
+    **The marker's premise had stopped being true.** It said *"a
+    conjuration is an entity with a position and no health or defences, so
+    there is nothing for an attack against it to read"*, and `c.conjure`
+    has taken `defences=`/`defences_of=` -- with a hit point and
+    `dies_at_zero` -- since the four rows its own docstring names. What was
+    missing here was narrower: this card gives the four defences
+    **different** numbers, where the verb took one value for all of them.
+    `defences_each=` is that, and the rest of the gap was never a gap.
+
+    **The Will defence is not printed and is not invented.** PHB2 p221's
+    Appendix entry for CONJURATION governs what a card does not say: *"If a
+    conjuration can be attacked or physically affected, it uses your
+    defenses."* So `defences_of=c.me` sets all four and `defences_each`
+    overrides the three the card prints, leaving Will the sorcerer's own.
+    Filling it with 5 or 21 to match a neighbour would be the fabrication
+    this repo keeps warning about.
+
+    `resist cold 10` is `c.resist` laid on the spike rather than a
+    parameter: the verb already takes `on=`, and a conjuration is an entity
+    like any other once it has defences.
+
+    `Zone` still has the same gap under its own name -- `Zone.defences` and
+    `Zone.breach_hp` are two rows waiting on the zone half of it, which is
+    a different component and a different symbol.
 
     **Dismissing it as a free action is written now, and "has no door" was
     wrong.** `c.endable` is the door -- "let whoever holds this effect end
@@ -190,8 +210,10 @@ def p3041(c: Cast) -> None:
         return
 
     spike = c.conjure(
-        at=was, label=c.ref, until=When.ENCOUNTER, sustain=None, aura=1
+        at=was, label=c.ref, until=When.ENCOUNTER, sustain=None, aura=1,
+        defences_of=c.me, defences_each={AC: 5, REF: 5, FORT: 21}, hp=40,
     )
+    c.resist(10, DamageType.COLD, on=spike, until=When.ENCOUNTER)
     bite = c.cha_mod
 
     def chill(ev: TurnStart) -> None:

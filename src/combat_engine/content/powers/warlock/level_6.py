@@ -375,28 +375,42 @@ def p13886(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.CONJURATION, Keyword.TELEPORTATION, Keyword.SHADOW],
-    dropped=("c.cast_from(optional=)", "Conjuration.defences"),
 )
 def p13956(c: Cast) -> None:
     """The shade occupies its square, which is the clause only a conjuration
     can say.
 
-    **"Nothing on the surface moves a row's origin" was false twice
-    over.** `c.strike(from_=)` moves it for one swing and takes a
-    conjuration -- `p1195` swings its hand that way -- and `c.cast_from`
-    is the standing version. What the card asks for is neither: *"you can
-    use your space **or** the shade's space as the origin of your
-    attacks"* is a choice made per attack, and `c.cast_from` replaces the
-    origin for as long as it is held. Writing it with the verb as it
-    stands would take the choice away and leave the warlock casting from
-    the shade even where its own square is better.
+    **Both halves of this row's marker named things that already existed**,
+    which is the commonest kind of gap filed here.
 
-    The other half is the shade being attackable at all: *"it uses your
-    defenses, and it is destroyed if it takes any damage"*. A conjuration
-    has a position and no health or defences, which is the same gap
-    `p3041` carries and the same symbol. The aftereffect teleport waits on
-    it -- there is no destruction to answer until something can damage the
-    shade.
+    *"It uses your defenses, and it is destroyed if it takes any damage"* is
+    `c.conjure(defences_of=)`, and the one hit point that verb gives every
+    attackable conjuration is the card's own sentence rather than an
+    approximation: a hit dealing any damage at all destroys the thing, and
+    an attack with no damage line leaves it standing. The marker said
+    `Conjuration.defences` and the note under it said *"a conjuration has a
+    position and no health or defences"*, which had stopped being true --
+    `c.conjure`'s own docstring records the four rows it was built for.
+
+    *"You can use your space **or** the shade's space as the origin of your
+    attacks"* is the other half, and there the marker was **nearly** right:
+    `c.cast_from` existed and *replaced* the origin, which takes the choice
+    away and leaves the warlock casting from the shade even where its own
+    square is better. What was missing was one word -- `optional=True` --
+    and `dsl.origins` returning both squares, which every reader downstream
+    already handles because the shaman's two spirits made it so.
+
+    So the shade is conjured with the caster's four defences, the origin is
+    offered rather than imposed, and **the aftereffect can finally be
+    written**: the note above was right that there was no destruction to
+    answer until something could damage the shade. `c.aftereffect` hangs it
+    on the insubstantial hold, which the card clocks to the same end -- "the
+    shade ... lasts until the end of your next turn", "while the shade
+    persists, you are insubstantial".
+
+    `c.may` on the teleport because the card says *"you **can** teleport"*,
+    and the square is the one the shade stood in: `speed=0`, so it is the
+    square it was conjured into and nothing can have moved it.
     """
     room = sorted(
         sq
@@ -405,8 +419,15 @@ def p13956(c: Cast) -> None:
     )
     if not room:
         return
-    c.conjure(at=room[0], label=c.ref, until=When.EONT, sustain=None)
-    c.insubstantial(on=c.me, until=When.EONT)
+    where = room[0]
+    shade = c.conjure(at=where, label=c.ref, until=When.EONT, sustain=None,
+                      defences_of=c.me)
+    if not shade:
+        return
+    c.cast_from(shade, optional=True, until=When.EONT)
+    held = c.insubstantial(on=c.me, until=When.EONT)
+    c.aftereffect(held, lambda: c.may("teleport to the shade's square")
+                  and c.teleport(5, who=c.me, to=where))
 
 
 @power(

@@ -20,6 +20,7 @@ from combat_engine.engine import (
     AttackDeclared,
     Cast,
     DamageRolled,
+    Dropped,
     Effect,
     Healed,
     Hit,
@@ -144,15 +145,49 @@ def p13327(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.PSIONIC, Keyword.CONJURATION],
-    dropped=("c.cast_from(optional=)", "Conjuration.defences"),
+    narrative=("skill:perception",),
 )
 def p13328(c: Cast) -> None:
     """The prism goes on the board and can be pushed about at Intelligence
-    modifier squares a turn. Three clauses are dropped: attacking as though
-    you stood in its space (there is no standing grant for `c.strike(from_=)`),
-    its hit points and the daze when it is destroyed, and the Perception
-    bonus, which is not a combat effect."""
-    c.conjure(until=When.ENCOUNTER, sustain=None, speed=c.int_mod)
+    modifier squares a turn.
+
+    **The three dropped clauses are written, and the "+4 bonus to all
+    defenses" needed the page to read correctly.** PHB2 p221's Appendix
+    entry for CONJURATION is the governing rule and `c.conjure`'s docstring
+    quotes it: *"If a conjuration can be attacked or physically affected,
+    it uses your defenses."* So the caster's four are the **baseline** and
+    the card's +4 is on top of them -- `defences_plus=4`. Read as an
+    absolute it would have given the prism defences of 4, which is lower
+    than anything on the board and the opposite of what the card does.
+
+    *"Hit points equal to your healing surge value"* is `hp=c.surge_value()`.
+
+    *"If the prism drops to 0 hit points, it is destroyed and you are dazed
+    until the end of your next turn"* is a `Dropped` watch on the prism's
+    own entity. `_check_down` emits that for anything with `Health` that
+    reaches zero, creature or not, so the conjuration announces its own
+    destruction and nothing had to be added for it.
+
+    *"You can use your attack powers as if you were in the prism's space"*
+    is `c.cast_from(optional=True)`: the card says *can*, so it is the
+    choice form rather than the replacement -- a psion forced to cast from
+    the prism would be worse off than the card leaves them.
+
+    The Perception bonus is the one clause with no combat meaning, so it is
+    `narrative=` rather than dropped: +3 while the prism is adjacent, and
+    nothing in a fight reads it.
+    """
+    prism = c.conjure(until=When.ENCOUNTER, sustain=None, speed=c.int_mod,
+                      defences_of=c.me, defences_plus=4, hp=c.surge_value())
+    if not prism:
+        return
+    c.cast_from(prism, optional=True, until=When.ENCOUNTER)
+
+    def shattered(ev: Dropped) -> None:
+        if ev.actor == prism:
+            c.dazed(on=c.me, until=When.EONT)
+
+    c.watch(Dropped, shattered, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(

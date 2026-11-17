@@ -3484,6 +3484,32 @@ def origins(world: World, actor: int, r: Range) -> list[int]:
     conjures a second.
     """
     if r.from_ != "companion":
+        # **A borrowed origin the card offers as a *choice*.**
+        # `c.cast_from(optional=True)` writes `"optional"` into the
+        # relation's `via`, and a row printing *"you can use your space or
+        # the shade's space as the origin of your attacks"* means both
+        # squares are available per attack. Returning both is the whole of
+        # it: every caller of this function already takes the best of the
+        # list rather than the first, because the shaman's two spirits made
+        # it do so.
+        #
+        # The plain `c.cast_from` is unchanged and still **replaces** the
+        # origin, which is what "rather than from yourself" says.
+        if r.kind in ("ranged", "area_burst", "wall"):
+            from .components import Position as _Pos
+            from .types import Relation as _Rel
+
+            lent = [
+                lender
+                for lender in world.relations.targets(_Rel.CASTS_FROM, actor)
+                if world.get(lender, _Pos)
+                and line_of_effect(world, actor, lender)
+            ]
+            if any(
+                world.relations.via(_Rel.CASTS_FROM, actor, lender) == "optional"
+                for lender in lent
+            ):
+                return [actor, *lent]
         return [measured_from(world, actor, r)]
     from .components import Companion, Position
 

@@ -23580,6 +23580,150 @@ def another_legs_option(out: Result) -> None:
                  f"usable said {why!r}")
 
 
+def a_conjuration_uses_the_casters_defences(out: Result) -> None:
+    """A conjuration that can be attacked uses the caster's defences. #1358.
+
+    The printed rule, PHB2 page 221, the Appendix's CONJURATION entry,
+    read off the PDF in `resources/`:
+
+      > *"A conjuration you create uses these rules, unless a power
+      > description says otherwise. ... **Your Defenses:** Normally, a
+      > conjuration cannot be attacked or physically affected. If a
+      > conjuration can be attacked or physically affected, it uses your
+      > defenses."*
+
+    So the caster's four are the **baseline** and a card's numbers are the
+    "unless a power description says otherwise" half. Three rows print
+    three different shapes of that and this drives all three, because the
+    reading is what the shapes turn on rather than the arithmetic:
+
+    * `p13956` -- *"it uses your defenses, and it is destroyed if it takes
+      any damage"*: the rule verbatim, so all four match exactly and one
+      hit point makes any damage fatal;
+    * `p13328` -- *"a +4 bonus to all defenses and hit points equal to your
+      healing surge value"*: a card **modifying** the rule, so every
+      defence is the caster's +4. Read as an absolute it would have given
+      the prism defences of 4, lower than anything on the board;
+    * `p3041` -- *"AC 5, Reflex 5, Fortitude 21 ... and 40 hit points"*: a
+      card replacing three of the four and saying nothing about Will, so
+      **Will stays the caster's** under the general rule. Filling it in to
+      match a neighbour would be an invented number.
+
+    The negative control is the one that matters here: a conjuration no
+    card made attackable must have **no** `Health` and **no** `Defenses`,
+    because the same page says it "cannot be attacked or physically
+    affected" by default. That is what stops `defences_plus` and `hp` from
+    quietly making every conjuration a target.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conjuration, Defenses, Health
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import defence, surge_value
+    from combat_engine.engine.types import DamageType, Defense
+
+    FOUR = (Defense.AC, Defense.FORT, Defense.REF, Defense.WILL)
+
+    def conjured(ref: str, seed: int = 1) -> tuple:
+        world, caster, _ = _audit.board(ref, seed, pose=True)
+        use(world, caster, ref)
+        made = [e for e, c in world.each(Conjuration) if c.ref == ref]
+        return world, caster, (made[0] if made else 0)
+
+    # -- p13956: the rule verbatim ---------------------------------------
+    world, me, shade = conjured("p13956")
+    if not shade:
+        out.skip("p13956 conjured nothing on this board")
+    else:
+        same = [defence(world, shade, d) - defence(world, me, d) for d in FOUR]
+        out.that(same == [0, 0, 0, 0],
+                 "p13956's shade uses the warlock's four defences exactly",
+                 f"differences were {same}")
+        hp = world.get(shade, Health)
+        out.that(hp is not None and hp.max_hp == 1 and hp.dies_at_zero,
+                 "and one hit point, so any damage destroys it",
+                 f"got {hp}")
+
+    # -- p13328: the rule modified ---------------------------------------
+    world, me, prism = conjured("p13328")
+    if not prism:
+        out.skip("p13328 conjured nothing on this board")
+    else:
+        plus = [defence(world, prism, d) - defence(world, me, d) for d in FOUR]
+        out.that(plus == [4, 4, 4, 4],
+                 "p13328's prism is the psion's four defences PLUS 4",
+                 f"differences were {plus}")
+        hp = world.get(prism, Health)
+        want = surge_value(world, me)
+        out.that(hp is not None and hp.max_hp == want,
+                 "and its hit points are the psion's healing surge value",
+                 f"got {hp.max_hp if hp else None}, surge value {want}")
+        # "If the prism drops to 0 hit points ... you are dazed"
+        out.that(not _is_dazed(world, me),
+                 "the psion is not dazed while the prism stands")
+        foes = [f for f in _audit._foes(world, me) if _audit.alive(world, f)]
+        if not foes:
+            out.skip("no foe to break the prism with")
+        else:
+            Cast(world=world, me=foes[0], ref="drivers-break").flat(
+                (hp.max_hp if hp else 1) + 5, on=prism
+            )
+            out.that(_is_dazed(world, me),
+                     "breaking the prism dazes the psion")
+
+    # -- p3041: the rule replaced, in part -------------------------------
+    world, me, spike = conjured("p3041")
+    if not spike:
+        out.skip("p3041 conjured nothing on this board -- its attack missed")
+    else:
+        got = {d: defence(world, spike, d) for d in FOUR}
+        for d, want, why in (
+            (Defense.AC, 5, "AC 5 as printed"),
+            (Defense.REF, 5, "Reflex 5 as printed"),
+            (Defense.FORT, 21, "Fortitude 21 as printed"),
+        ):
+            out.that(got[d] == want,
+                     f"p3041's stalagmite has {why}",
+                     f"got {got[d]}")
+        out.that(got[Defense.WILL] == defence(world, me, Defense.WILL),
+                 "and its Will is the SORCERER'S, because the card prints none"
+                 " and the page says a conjuration uses your defenses",
+                 f"got {got[Defense.WILL]}, sorcerer has"
+                 f" {defence(world, me, Defense.WILL)}")
+        hp = world.get(spike, Health)
+        out.that(hp is not None and hp.max_hp == 40,
+                 "and 40 hit points as printed",
+                 f"got {hp.max_hp if hp else None}")
+        res = Cast(world=world, me=me, ref="drivers").resistances(on=spike)
+        out.that(res.get(DamageType.COLD) == 10,
+                 "and resist cold 10 as printed", f"got {res}")
+
+    # -- the negative control --------------------------------------------
+    #
+    # A conjuration no card made attackable gets neither component, which
+    # is the same page's default: "normally, a conjuration cannot be
+    # attacked or physically affected".
+    world, me, _ = conjured("p13956")
+    plain = Cast(world=world, me=me, ref="drivers-plain").conjure(
+        label="drivers-plain", sustain=None,
+    )
+    out.that(plain != 0, "the control conjuration went on the board")
+    out.that(world.get(plain, Health) is None,
+             "a conjuration with no printed defences has NO Health",
+             f"got {world.get(plain, Health)}")
+    out.that(world.get(plain, Defenses) is None,
+             "and no Defenses, so nothing can aim at it",
+             f"got {world.get(plain, Defenses)}")
+
+
+def _is_dazed(world, eid: int) -> bool:  # noqa: ANN001
+    from combat_engine.engine.query import is_
+    from combat_engine.engine.types import Condition
+
+    return bool(is_(world, eid, Condition.DAZED))
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -91154,6 +91298,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "conjuration_defences": (
+        a_conjuration_uses_the_casters_defences,
+        "a conjuration that can be attacked uses the caster's defences,"
+        " PHB2 p221 (#1358)",
+    ),
     "no_invis_aura": (
         an_aura_strips_invisibility_on_arrival,
         "c.no_invisibility_in catches a creature that walks in (#774)",

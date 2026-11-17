@@ -18,7 +18,7 @@ line and the unusual case still one line.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Collection, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
@@ -7544,6 +7544,9 @@ class Cast:
         solid: bool = False,
         defences: int = 0,
         defences_of: int | None = None,
+        defences_plus: int = 0,
+        defences_each: Mapping[Defense, int] | None = None,
+        hp: int = 0,
     ) -> int:
         """Put a conjuration on the board and return its entity id.
 
@@ -7576,6 +7579,39 @@ class Cast:
         here watches for a `Hit`: `resolve.deal_damage` returns 0 before
         emitting anything for a target with no `Health`, so a watcher was
         the only option *until* the hit point made the real pipeline work.
+
+        **`defences_plus` and `hp`, and the printed rule they sit under.**
+        PHB2 page 221, the Appendix's CONJURATION entry, verbatim:
+
+          > *"A conjuration you create uses these rules, unless a power
+          > description says otherwise. ... **Your Defenses:** Normally, a
+          > conjuration cannot be attacked or physically affected. If a
+          > conjuration can be attacked or physically affected, it uses
+          > your defenses. Unless an attack specifically targets
+          > conjurations, only the attack's damage (not including ongoing
+          > damage) affects the conjuration."*
+
+        So `defences_of=the caster` is not a special case -- it is the
+        general rule, and the flat `defences` form is the "unless a power
+        description says otherwise" half. `defences_plus` is for a card
+        that modifies the rule rather than replacing it: *"it has a +4
+        bonus to all defenses"*, which is +4 over **the caster's**, since
+        the caster's is what the page says it starts from. `p13328` is the
+        row, and reading that +4 as an absolute would have given a prism
+        defences of 4.
+
+        `hp` is for a card that prints a real total -- *"hit points equal
+        to your healing surge value"* -- and defaults to the one hit point
+        above, which is the commoner printed shape.
+
+        **One clause of that rule is not implemented and this is the
+        honest note about it**: *"only the attack's damage (not including
+        ongoing damage) affects the conjuration"*. The thing gets a real
+        `Health`, so ongoing damage reaches it through the ordinary path
+        and would destroy it where the page says it cannot. No row in the
+        tree lays ongoing damage on a conjuration today, so nothing is
+        wrong in play; it is written down here rather than discovered
+        later. `#1358`.
 
         **Side without turn, which is the whole trick and is not new.**
         `query.allies` already says it about a wall: *"A wall you raised
@@ -7630,11 +7666,21 @@ class Cast:
         # afterwards, which makes the effective total the right thing to
         # store and the two equal. #846.
         if defences_of is not None:
-            borrowed = {d: _defence_of(self.world, defences_of, d)
+            borrowed = {d: _defence_of(self.world, defences_of, d) + defences_plus
                         for d in DEFENCES}
         else:
-            borrowed = dict.fromkeys(DEFENCES, defences)
-        if defences or defences_of is not None:
+            borrowed = dict.fromkeys(DEFENCES, defences + defences_plus)
+        # **`defences_each` is the card naming them one at a time**, and
+        # what it leaves out is covered by the rule rather than by a guess:
+        # PHB2 p221 says a conjuration that can be attacked "uses your
+        # defenses", so a card printing three of the four has said
+        # otherwise about three and nothing about the fourth. `p3041` gives
+        # AC 5, Reflex 5 and Fortitude 21 and no Will, so Will stays
+        # whatever `defences_of` put there.
+        if defences_each:
+            borrowed.update(defences_each)
+        if (defences or defences_of is not None or defences_plus
+                or defences_each):
             parts += [
                 Defenses(values=borrowed, scale="none"),
                 # **`Team.NEUTRAL` and not `Team.ALLY`, which does not
@@ -7648,8 +7694,9 @@ class Cast:
                 # being invented as the caster's. #722.
                 Side(team=_side_of(self.world, self.me) or Team.NEUTRAL),
                 # One hit point, which **is** the printed "no hit points,
-                # destroyed by a damaging hit" -- see the docstring.
-                Health(hp=1, max_hp=1, dies_at_zero=True),
+                # destroyed by a damaging hit" -- see the docstring. `hp`
+                # overrides it for the cards that print a real total.
+                Health(hp=hp or 1, max_hp=hp or 1, dies_at_zero=True),
             ]
         eid = self.world.spawn(*parts)
         if solid:
@@ -15586,7 +15633,8 @@ class Cast:
         )
 
     def cast_from(
-        self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER
+        self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER,
+        optional: bool = False,
     ) -> Effect | None:
         """"Determine line of sight and effect for your ranged and area
         attacks from the target rather than from yourself."
@@ -15602,9 +15650,29 @@ class Cast:
         lines carry rather than an approximation of them.
 
         Yours, so it defaults to the **caster** borrowing.
+
+        **`optional` is "or", where the default is "rather than".** Two
+        rows print a *choice* -- *"you can use your space **or** the
+        shade's space as the origin of your attacks"* -- and the plain
+        form takes the choice away: it replaces the origin for as long as
+        it is held, so the warlock casts from the shade even where its own
+        square is better. `p13956` carried a marker for exactly that and
+        the marker said the verb was missing; the verb was here and the
+        word "or" was not.
+
+        Written on the **relation's `via`** rather than as a second
+        relation, because a borrower may hold only the one -- and `via` is
+        what `Relations` already carries to say *which card* a relation
+        answers to. `dsl.origins` is the reader: it returns the borrower's
+        own square **and** the lender's when this is set, where it returns
+        the lender's alone otherwise. Everything downstream already takes
+        the best of a list, because the shaman's two spirits made it do so.
         """
         borrower = on if on is not None else self.me
-        self.world.relations.set(Relation.CASTS_FROM, borrower, who)
+        self.world.relations.set(
+            Relation.CASTS_FROM, borrower, who,
+            via="optional" if optional else "",
+        )
 
         def undo() -> None:
             self.world.relations.clear(Relation.CASTS_FROM, borrower, who)
