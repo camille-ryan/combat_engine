@@ -426,16 +426,58 @@ def _ally_hits_in_melee(world: World, me: int, ev: Event) -> bool:
     on=Trigger(Hit, when=_ally_hits_in_melee, text=_ALLY_HITS_IN_MELEE),
 )
 def p7264(c: Cast) -> None:
-    """Only the surge half is written. The other branch is "make two damage
-    rolls for the attack and use either result", and the damage has not been
-    rolled yet -- there is no way to say reroll-and-keep-the-better. See the
-    report.
+    """**Both printed branches are written now.** The Effect line offers the
+    triggering ally a healing surge *or* "two damage rolls for the attack,
+    and use either result".
+
+    The old note dropped the second branch on two grounds and the first is
+    the reason the second does not hold: *"the damage has not been rolled
+    yet"*. `c.reroll_damage` -- "roll the damage twice and use the higher
+    result" -- is read **where the dice come up**, not off `DamageRolled`,
+    so a hold laid here on the `Hit` is in place for exactly the roll that
+    follows. `f1706b` is the worked precedent and its docstring makes the
+    same point from the other side: a row *declared* on `DamageRolled`
+    would answer after the only moment it could act.
+
+    "Either result" rather than "the higher" is the player's pick, and
+    nothing here can hand two totals back to choose between. The higher is
+    what that choice comes to, so this is the faithful reading rather than
+    a generous one.
+
+    **Bounded to the one roll, not to the turn.** `f1706b` takes
+    `until=When.EOT`, which is right for a free action spent before one's
+    own swing. Here the ally could roll damage again on the same turn --
+    an action point, a second attack -- and the card says "for the
+    attack", so the hold is ended on the roll it was laid for.
+
+    **The surge branch is offered on `Health.surges`, not on `c.may`.**
+    `c.may` is consent and not a resource test: measured, it answers True
+    for an ally with **0** surges, so gating the choice on it offered a
+    branch that could not be taken and hid the other one. The `c.may` call
+    stays where it was -- asking before spending is right -- and the
+    offer is gated on there being one to spend.
     """
     friend = getattr(c.trigger, "attacker", None)
     if friend is None:
         return
-    if c.may("spend a healing surge", who=friend):
+    offered = ["two damage rolls"]
+    spare = c.world.get(friend, Health)
+    if spare is not None and spare.surges > 0:
+        offered.insert(0, "a healing surge")
+    if c.choose(offered, c.ref) == "a healing surge" and c.may(
+        "spend a healing surge", who=friend
+    ):
         c.surge(on=friend)
+        return
+    hold = c.reroll_damage(on=friend, until=When.EOT, keyword=Keyword.MELEE)
+    if hold is None:
+        return
+
+    def rolled(ev: DamageRolled) -> None:
+        if ev.source == friend:
+            c.world.effects.end(hold, "the two rolls are made")
+
+    c.watch(DamageRolled, rolled, until=When.EOT, once=True)
 
 
 _ALLY_HIT_IN_SIGHT = "an enemy hits your ally within your line of sight"

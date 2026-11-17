@@ -24,6 +24,7 @@ from combat_engine.engine import (
     EACH_OTHER,
     ENCOUNTER,
     FORT,
+    FREE,
     ONE_CREATURE,
     REACTION,
     REF,
@@ -48,6 +49,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import DamageRolled
+from combat_engine.engine.zones import Zone
 
 from . import wild_even
 from .ground import ringing
@@ -517,9 +519,13 @@ def p5844(c: Cast) -> None:
     turn starts: the printed line bites only on a creature *starting* its
     turn adjacent, where `c.burns` would also bite on arrival.
 
-    "You can dismiss the effect as a free action" is not written -- nothing
-    offers ending one's own effect except `drop_cost`, which `c.aura` does
-    not take.
+    **"You can dismiss the effect as a free action" is written now.** The
+    old note was right that `c.aura` takes no `drop_cost` and wrong that
+    nothing else can set one: `c.endable` does, on any effect handed to
+    it, and `c.aura` returns a zone id whose hold is `Zone.effect` -- the
+    same route `p15852` takes. `FREE` because that is the action the card
+    prints; `c.endable`'s cost defaults to a minor, which would be a
+    different line.
     """
     if c.strike():
         c.damage("3d6", c.cha_mod, dtype=DamageType.LIGHTNING)
@@ -527,7 +533,10 @@ def p5844(c: Cast) -> None:
 
     if not c.first:
         return
-    c.aura(1, label=c.ref, until=When.ENCOUNTER)
+    ring = c.aura(1, label=c.ref, until=When.ENCOUNTER)
+    standing = c.world.get(ring, Zone)
+    if standing is not None:
+        c.endable(standing.effect, FREE)
     me, bite = c.me, c.dex_mod
 
     def crackle(ev: TurnStart) -> None:
