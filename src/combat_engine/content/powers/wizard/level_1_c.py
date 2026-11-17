@@ -424,8 +424,13 @@ def p16275(c: Cast) -> None:
     """A wall is not a shape a `Range` can be, so it is built the way
     `level_6.py:p1548` builds one -- across the line from the wizard to the
     square it was pointed at, which is the only placement the caller is not
-    being asked to describe square by square. Its height has nowhere to go:
-    the board is flat.
+    being asked to describe square by square.
+
+    Its height has nowhere to go, and the reason is **not** the one
+    `p5804` used to give. A *creature's* height is modelled --
+    `falling.lift`, `height`, `drop` -- but a **wall** is squares on the
+    grid with no vertical extent, so "wall 6" is a length and nothing
+    else. #1341.
 
     The anchors are ranked by how many creatures the wall would catch, the
     way `c.overrun` ranks a trample. Offered in plain sorted order the first

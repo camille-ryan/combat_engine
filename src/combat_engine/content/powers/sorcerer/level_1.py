@@ -47,6 +47,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Melee,
+    Miss,
     Ranged,
     TurnStart,
     UpTo,
@@ -59,6 +60,7 @@ from combat_engine.engine.query import creatures, distance_between
 from . import wild_even
 from .ground import beside
 from .knives import dagger
+from .souls import soul_damage, soul_of
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
 
@@ -230,14 +232,52 @@ def p12467(c: Cast) -> None:
     requires_text="needs a dagger",
 )
 def p13425(c: Cast) -> None:
-    """The riposte is the whole Spell Source clause -- its size *and* its
-    damage type both come off the fork -- and the fork is not modelled, so
-    it is dropped and the weapon damage stands. "You can use this power in
-    place of a melee basic attack" is a property of the creature rather
-    than a header field; see p10319.
+    """**The riposte is written now, and "the fork is not modelled" was
+    false.** `BUILDS["sorcerer"]` carries all four sources and `souls.py`
+    implements two of them in full -- which is also where both numbers
+    this clause needs already live. #1351, #1341.
+
+    Its **size** is `soul_damage(c.level)` plus the leg's ability, which
+    is exactly what `sorcerer_soul` lays as its own damage bonus -- so
+    the riposte reads the same ladder rather than inventing a second one.
+    Dragon adds Strength, wild adds Dexterity, which is the only
+    difference between the two legs there.
+
+    Its **type** is `soul_of(c)`, the type the sorcerer is currently
+    sworn to: the card says "a single type to which you have resistance
+    arising from your `cf:sorcerer-f0`", and that function answers it by
+    reading the marker `wear_soul` laid. With no soul worn there is no
+    type, so the riposte does not fire -- which is right, since a
+    sorcerer on neither implemented leg has no extra damage either.
+
+    "You can use this power in place of a melee basic attack" is still a
+    property of the creature rather than a header field; see `p10319`.
     """
-    if c.strike():
-        c.damage(c.w(), c.cha_mod)
+    victim = c.target
+    if not c.strike():
+        return
+    c.damage(c.w(), c.cha_mod)
+    kind = soul_of(c)
+    if victim is None or kind is None:
+        return
+    ability = c.str_mod if c.build("dragon") else c.dex_mod
+    bite = max(0, ability + soul_damage(c.level))
+    me = c.me
+    paid = [False]
+
+    def riposte(ev: object) -> None:
+        if paid[0] or getattr(ev, "target", None) != me:
+            return
+        swung = get(getattr(ev, "power", "") or "")
+        if swung is None or swung.reach is None or swung.reach.kind != "melee":
+            return
+        paid[0] = True
+        c.flat(bite, dtype=kind, on=getattr(ev, "attacker", me),
+               from_attack=False)
+
+    # "hits OR misses you", so both events, sharing one latch.
+    c.watch(Hit, riposte, until=When.SOTNT, on=me)
+    c.watch(Miss, riposte, until=When.SOTNT, on=me)
 
 
 @power(
@@ -282,7 +322,15 @@ def p13426(c: Cast) -> None:
 )
 def p3005(c: Cast) -> None:
     """The Storm Magic clause -- moving the Storm Power bonus from one
-    packet to the other -- is dropped with the fork."""
+    packet to the other -- is still dropped, and **the reason is narrower
+    than "with the fork"**. `c.build("storm")` answers, and
+    `features/sorcerer.py` already gates a row on that leg.
+
+    What is missing is the bonus itself: `souls.sorcerer_soul` dispatches
+    on `dragon` and `wild` and implements those two in full, and no leg
+    lays a Storm Power bonus for this clause to move. A row cannot
+    reassign a number nothing grants. #1351.
+    """
     victim = c.target
     if not c.strike():
         return
