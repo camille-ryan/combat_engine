@@ -24,10 +24,12 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     Condition,
+    DamageType,
     Health,
     Keyword,
     Melee,
     Target,
+    When,
     power,
 )
 
@@ -135,7 +137,7 @@ def p9318(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=ANY_CREATURE,
-    todo=("c.immune(dtype=)",),
+    dropped=("durations.Effects.apply(keyword=)",),
 )
 def p11549(c: Cast) -> None:
     """The whole printed Effect is an immunity nothing can be granted.
@@ -156,12 +158,24 @@ def p11549(c: Cast) -> None:
     undo and all, so the shape is already in the tree one field over.
     `c.ignore_resistance(immunity=)` is the attacker's side and not this.
 
-    Still `todo=` rather than `dropped=`: the immunity *is* the whole
-    Effect, so with no door the body does nothing. When one lands this
-    becomes a `dropped=` row -- the non-damage half of "immune to poison",
-    the conditions a poison power imposes, is `i3538p1`'s gap and is a
-    second and smaller one. #1224.
+    **The door landed, so this is a `dropped=` row now, exactly as the
+    paragraph above predicted.** `c.immune(dtype=)` writes
+    `Defences.immune` for the duration and takes it off again when the
+    hold ends -- **only what it added**, so a creature with printed
+    immunity to the same type keeps it. The damage half of the sentence is
+    the bulk of it and is written.
+
+    What is left is the half this row already named: the non-damage side
+    of "immune to poison", which is the conditions a poison *power*
+    imposes. That is `durations.Effects.apply(keyword=)`, which is
+    `i3538p1`'s own marker and the right symbol to share -- one gap, one
+    symbol, and a door onto the same place.
+
+    `when=` cannot gate the damage half and does not need to here:
+    `Defences.immune` is a bare set with no context to evaluate against,
+    and this card prints no condition on the immunity. #1224.
     """
+    c.immune(dtype=DamageType.POISON, until=When.EONT)
 
 
 @power(

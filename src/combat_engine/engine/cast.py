@@ -6515,6 +6515,7 @@ class Cast:
     def immune(
         self, *conditions: Condition, until: When = When.EONT, on: int | None = None,
         when: Callable[[dict[str, Any]], bool] | None = None,
+        dtype: DamageType | Sequence[DamageType] = (),
     ) -> Effect | None:
         """"You cannot be marked or slowed until the end of your next turn."
 
@@ -6526,10 +6527,73 @@ class Cast:
         `durations.Effects.apply` drops the condition on the way in and
         `relations.set` refuses the mark outright, so the rest of an effect
         -- its damage, its other conditions -- still lands.
+
+        **`dtype` is the damage half of the same word**, and it is a
+        different field with a different reader. *"The target is immune to
+        poison until the end of your next turn"* -- `p11549` -- names a
+        thing that is **both** a `DamageType` and a `Keyword`, and only one
+        of the two is enforced:
+
+            Defences.immune            read twice in `resolve.deal_damage`,
+                                       so the blow and the ongoing tick
+                                       alike simply do not land
+            Defences.immune_keywords   read only by `query.immune_to`, and
+                                       nothing asks it when a
+                                       keyword-tagged effect arrives
+
+        So the damage set is the one to write, which is what that row's own
+        docstring worked out before this existed.
+
+        **It is a plain `set` on the component, not a `Mod`**, which has two
+        consequences worth stating rather than discovering. It is put back
+        by hand when the hold ends -- and **only what this call added**,
+        because a creature with printed immunity to the same type must keep
+        it afterwards. And `when=` cannot gate it: a set has no context to
+        evaluate against, so a gated damage immunity is not expressible this
+        way and no row prints one.
         """
+        # **`Defences`, not `Defenses`.** Two components one letter apart:
+        # the American spelling holds the four defence *values* and the
+        # British one holds `resist`, `vulnerable` and `immune`. Reaching
+        # for the wrong one raises `AttributeError: 'Defenses' object has
+        # no attribute 'immune'`, which the audit caught on the first run.
+        from .components import Defences as _Defences
+
         who = self._who(on)
         if who is None:
             return None
+        kinds: tuple[DamageType, ...] = (
+            (dtype,) if isinstance(dtype, DamageType) else tuple(dtype)
+        )
+        added: list[DamageType] = []
+        if kinds:
+            # **Made if it is not there**, which is `c.resist`'s own idiom
+            # two hundred lines down and for the same reason: a character
+            # dealt by `chargen` has no `Defences` at all -- it is the
+            # component carrying resistances and most creatures have none.
+            # With a plain `get` the immunity was quietly not laid and the
+            # row reported finished; measured on `p11549`'s own board, the
+            # cleric took the full 10 poison damage with the hold standing.
+            # `need` is the wrong tool here -- it raises rather than making
+            # one.
+            defences = (self.world.get(who, _Defences)
+                        or self.world.add(who, _Defences()))
+            added = [t for t in kinds if t not in defences.immune]
+            defences.immune.update(added)
+
+        def restore() -> None:
+            defences = self.world.get(who, _Defences)
+            if defences is not None:
+                defences.immune.difference_update(added)
+
+        if kinds and not conditions:
+            return self.world.effects.apply(
+                who, self.me, until,
+                label=f"{self.ref} immune to "
+                      f"{', '.join(t.value for t in kinds)}",
+                on_end=[restore] if added else [],
+                by=self.ref,
+            )
         # `when` rides on the `Mod`, where `Mods.total` already evaluates it through
         # `applies(ctx)`. `query.immune_to` used to hand that call an empty dict, so a
         # gate could only ever answer from what it closed over -- the context it needs
@@ -6546,6 +6610,9 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} immune to {', '.join(c.value for c in conditions)}",
             mods=mods,
+            # Both halves on one hold when a card names a condition and a
+            # damage type together, so they end at the same moment.
+            on_end=[restore] if added else [],
             by=self.ref,
         )
 

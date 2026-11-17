@@ -23867,6 +23867,121 @@ def a_bar_lasts_one_creatures_turn(out: Result) -> None:
              " back what was there, not the unspent value")
 
 
+def immunity_to_a_damage_type(out: Result) -> None:
+    """"The target is immune to poison until the end of your next turn."
+
+    `p11549`, and the interesting part is which of two fields the sentence
+    means. The printed word is **both** a `DamageType` and a `Keyword`, and
+    only one of the two is enforced:
+
+        Defences.immune            read twice in `resolve.deal_damage`, so
+                                   the blow and the ongoing tick alike
+                                   simply do not land
+        Defences.immune_keywords   read only by `query.immune_to`, and
+                                   nothing asks it when a keyword-tagged
+                                   effect arrives
+
+    So `c.immune(dtype=)` writes the damage set, which is the bulk of what
+    the card is for. The keyword half is a second and smaller gap, shared
+    with `i3538p1` under `durations.Effects.apply(keyword=)`.
+
+    **Three things make this more than a one-liner, and each is an
+    assertion below.** The component is made if it is absent -- a character
+    dealt by `chargen` has no `Defences` at all, so a plain `get` laid
+    nothing and the row reported finished while the cleric took full
+    damage. Only the **named type** is stopped. And what comes off at the
+    end is **only what this call added**, so a creature with printed
+    immunity to the same type still has it afterwards.
+
+    Health is restored before each blow, because a dying ally reads as
+    immune: hit points cannot fall past the floor, so the damage dealt
+    measures 0 and the assertion passes for the wrong reason. That cost a
+    probe one wrong answer before it was noticed.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import alive
+    from combat_engine.engine.query import enemies as _enemies
+    from combat_engine.engine.types import DamageType
+
+    world, caster, _ = _audit.board("p11549", 1, pose=True)
+    mates = [a for a in _audit._allies_of(world, caster) if a != caster]
+    if not mates:
+        out.skip("no ally on this board to make immune")
+        return
+    ally = mates[0]
+
+    def hit(amount: int, dtype: DamageType) -> int:
+        health = world.get(ally, Health)
+        if health is None:
+            return -1
+        health.hp = health.max_hp
+        Cast(world=world, me=caster, ref="drivers-hit").flat(
+            amount, dtype=dtype, on=ally,
+        )
+        after = world.get(ally, Health)
+        return health.max_hp - (after.hp if after else 0)
+
+    out.that(world.get(ally, Defences) is None,
+             "the ally starts with NO Defences component at all -- which is"
+             " why `c.immune(dtype=)` has to make one, and why a plain"
+             " `get` laid nothing and reported finished")
+    out.that(hit(10, DamageType.POISON) == 10,
+             "poison lands for 10 before the immunity")
+
+    held = Cast(world=world, me=caster, ref="drivers").immune(
+        dtype=DamageType.POISON, until=When.EONT, on=ally,
+    )
+    out.that(held is not None, "the immunity returns a hold")
+    out.that(hit(10, DamageType.POISON) == 0,
+             "and poison lands for nothing while it stands")
+    out.that(hit(10, DamageType.FIRE) == 10,
+             "while FIRE still lands for 10 -- only the named type is"
+             " stopped, which is what makes this an immunity and not a"
+             " blanket")
+
+    if held is not None:
+        world.effects.end(held)
+    out.that(hit(10, DamageType.POISON) == 10,
+             "and poison lands again once the hold ends")
+
+    # -- printed immunity survives the hold ------------------------------
+    world2, caster2, _ = _audit.board("p11549", 1, pose=True)
+    foes = [f for f in _enemies(world2, caster2) if alive(world2, f)]
+    if not foes:
+        out.skip("no creature to give printed immunity to")
+        return
+    born = foes[0]
+    # **A DIFFERENT type from the one the hold grants**, and that is the
+    # whole of why this assertion can see anything. Giving it printed
+    # immunity to the same type makes `added` empty, so no restore is
+    # registered at all -- and then a `restore` that wiped the entire set
+    # would still pass, which is exactly how this read green with
+    # `difference_update(added)` replaced by `clear()`.
+    (world2.get(born, Defences) or world2.add(born, Defences())).immune.add(
+        DamageType.FIRE,
+    )
+    held2 = Cast(world=world2, me=caster2, ref="drivers").immune(
+        dtype=DamageType.POISON, until=When.EONT, on=born,
+    )
+    out.that(DamageType.FIRE in world2.need(born, Defences).immune
+             and DamageType.POISON in world2.need(born, Defences).immune,
+             "a creature with printed immunity holds both while the"
+             " granted one stands")
+    if held2 is not None:
+        world2.effects.end(held2)
+    kept = world2.need(born, Defences).immune
+    out.that(DamageType.FIRE in kept,
+             "**and keeps its PRINTED one once the hold ends** -- the"
+             " restore takes off only what this call added",
+             f"immune is now {sorted(t.value for t in kept)}")
+    out.that(DamageType.POISON not in kept,
+             "while the granted one is gone")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -91441,6 +91556,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "immune_dtype": (
+        immunity_to_a_damage_type,
+        "c.immune(dtype=) writes Defences.immune and puts back only what"
+        " it added (p11549)",
+    ),
     "bar_one_turn": (
         a_bar_lasts_one_creatures_turn,
         "'cannot take actions during your turn' is off on every other turn"
