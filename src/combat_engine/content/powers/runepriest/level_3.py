@@ -11,10 +11,12 @@ from combat_engine.engine import (
     FORT,
     INTERRUPT,
     ONE_CREATURE,
+    REF,
     STANDARD,
     STR,
     Attack,
     AttackDeclared,
+    AttackRolled,
     Cast,
     CloseBurst,
     DamageType,
@@ -27,6 +29,7 @@ from combat_engine.engine import (
     power,
     targets_my_side,
 )
+from combat_engine.engine.query import defence as defence_of
 
 DIVINE_WEAPON = [Keyword.DIVINE, Keyword.WEAPON]
 
@@ -62,17 +65,58 @@ def _rune(c: Cast, which: str) -> bool:
     attack=Attack(STR, vs=AC),
 )
 def p11382(c: Cast) -> None:
-    """The rune clause -- the ally's next attack goes against Reflex if that
-    is lower than AC -- is dropped: nothing can move an attack's defence."""
+    """**The rune clause is written now, and "nothing can move an attack's
+    defence" was false.** `c.attacks_defence` is the standing form of
+    exactly that sentence -- its docstring opens *"your weapon attacks
+    target Reflex instead of AC"* and notes that "the engine has always
+    allowed this and the rows said it did not". `c.retarget_defence` is
+    the in-flight form, for an interrupt. #1341.
+
+    Three parts of the printed clause, each its own argument rather than
+    folded together:
+
+    * "**if the ally's next attack ... is against AC**" is `from_=AC`,
+      so an attack already aimed elsewhere is left alone;
+    * "**if that defence is lower**" is asked of the target at read time,
+      because a Reflex that is only lower while something else holds
+      should stop qualifying when that ends;
+    * "**against the target**" is the `when=` gate, so the ally's swing at
+      somebody else keeps its own defence.
+
+    "**Next**" is latched by ending the hold on the ally's first attack
+    roll -- `c.attacks_defence` takes no `once=`, and without the latch
+    the clause would move every attack the ally made until the end of the
+    turn rather than one.
+    """
     victim = c.target
-    _rune(c, _DESTRUCTION)
+    destruction = _rune(c, _DESTRUCTION)
     if not c.strike() or victim is None:
         return
     c.damage(c.w(), c.str_mod, dtype=DamageType.RADIANT)
     near = [a for a in c.allies() if c.adjacent_to(victim, a)]
     hidden = c.choose(near, "the ally it loses sight of") if near else None
-    if hidden is not None:
-        c.invisible(on=hidden, to=victim, until=When.EONT)
+    if hidden is None:
+        return
+    c.invisible(on=hidden, to=victim, until=When.EONT)
+    if not destruction:
+        return
+    moved = c.attacks_defence(
+        REF,
+        from_=AC,
+        on=hidden,
+        until=When.EONT,
+        when=lambda ctx: ctx.get("target") == victim
+        and defence_of(c.world, victim, REF)
+        < defence_of(c.world, victim, AC),
+    )
+    if moved is None:
+        return
+
+    def spend(ev: AttackRolled) -> None:
+        if ev.attacker == hidden:
+            c.world.effects.end(moved, "the next attack was made")
+
+    moved.subs.append(c.world.bus.on(AttackRolled, spend, owner=c.me))
 
 
 @power(
