@@ -11,19 +11,23 @@ ARCANE_WEAPON = [Keyword.ARCANE, Keyword.WEAPON]
 MISFORTUNES = ("slowed", "psychic damage", "combat advantage")
 
 
-def _no_opportunities(c: Cast, victim: int, until: When) -> None:
+def _no_opportunities(c: Cast, victim: int, until: When) -> Effect | None:
     """"The target can't take opportunity actions."
 
     Vetoed at the window rather than by taking a row away: an opportunity
     attack is whichever row the creature uses, and `c.no_provoke` is the other
     end of the same sentence -- it protects a mover, not this.
+
+    **Returns the hold**, which it did not: `p5000`'s printed Aftereffect
+    has to hang off this one's `on_end`, and a helper returning `None`
+    gave it nothing to hang on. Every other caller ignores the value.
     """
 
     def veto(ev: OpportunityWindow) -> None:
         if ev.actor == victim:
             ev.cancel("the target cannot take opportunity actions")
 
-    c.watch(
+    return c.watch(
         OpportunityWindow, veto, until=until, window=Window.BEFORE, on=victim,
         label=f"{c.ref} no opportunities",
     )
@@ -162,15 +166,32 @@ def p4999(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p5000(c: Cast) -> None:
-    """The aftereffect is dropped -- a hold that begins when another one is
-    saved against has nowhere to be declared."""
+    """**The aftereffect is written now**, and "a hold that begins when
+    another one is saved against has nowhere to be declared" was false:
+    an `Effect` carries `on_end`, and a hold laid from inside it begins
+    exactly when the first one finishes. `p11305` and `p11387` use the
+    same shape. #1341.
+
+    It hangs on the **opportunity** hold rather than the attack penalty,
+    because that is the clause the Aftereffect repeats -- the card ends
+    both on one save and then brings only the opportunity ban back.
+
+    `on_end` fires however the hold finished, which is right here: the
+    printed Aftereffect follows the save, and a creature whose effect
+    ran out some other way has still stopped being able to take
+    opportunity actions for the same reason.
+    """
     victim = c.target
     if victim is None:
         return
     if c.strike():
         c.damage("3d8", c.cha_mod, dtype=DamageType.PSYCHIC)
         c.penalty("attack", 2, on=victim, until=When.SAVE_ENDS)
-        _no_opportunities(c, victim, When.SAVE_ENDS)
+        held = _no_opportunities(c, victim, When.SAVE_ENDS)
+        if held is not None:
+            held.on_end.append(
+                lambda: _no_opportunities(c, victim, When.SAVE_ENDS)
+            )
     else:
         c.half_damage("3d8", c.cha_mod, dtype=DamageType.PSYCHIC)
         _no_opportunities(c, victim, When.EONT)

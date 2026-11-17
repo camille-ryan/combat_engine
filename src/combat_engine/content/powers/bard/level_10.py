@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from combat_engine.engine import *
+from combat_engine.engine.dsl import keywords_of
 
 DEFENCES = (AC, FORT, REF, WILL)
 
@@ -72,8 +73,17 @@ def p11111(c: Cast) -> None:
 )
 def p14471(c: Cast) -> None:
     """`ConditionApplied` names its subject `target`, so the guard reads that
-    and not `actor`. The keyword half of the bonus is dropped: an effect
-    carries no keywords."""
+    and not `actor`.
+
+    **The keyword half is written now.** The old note said an effect
+    carries no keywords -- true of `Effect` itself, and beside the
+    point: `ConditionApplied` carries `power`, the row that laid it, and
+    `dsl.keywords_of` reads that row's keywords. #1341.
+
+    "**Instead**", so the two bonuses are exclusive rather than added:
+    the tier replaces the +3 rather than stacking on it, which is what
+    the printed word means and the opposite of what adding would do for
+    a high-Charisma bard."""
     mate = c.target
     if mate is None:
         return
@@ -84,8 +94,17 @@ def p14471(c: Cast) -> None:
         # member was False on every event this row ever saw -- armed, read
         # right, and dead. `races/powers_b.py` carries a note about the same
         # trap.
-        if ev.target == mate and ev.duration == When.SAVE_ENDS.value:
-            c.save(on=mate, bonus=3)
+        if ev.target != mate or ev.duration != When.SAVE_ENDS.value:
+            return
+        # **The keyword tier.** `ConditionApplied.power` is the row that
+        # laid the effect -- its own docstring says four rows need it --
+        # so the keywords come off that rather than off the `Effect`,
+        # which carries none. The old note said there were none to read.
+        words = keywords_of(c.world, mate, get(ev.power or "")) \
+            if ev.power else frozenset()
+        tiered = {Keyword.ARCANE, Keyword.CHARM, Keyword.FEAR,
+                  Keyword.ILLUSION} & set(words)
+        c.save(on=mate, bonus=c.cha_mod if tiered else 3)
 
     c.watch(ConditionApplied, relief, until=When.ENCOUNTER, on=mate, once=True, label="p14471")
 
