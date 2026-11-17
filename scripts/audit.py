@@ -5494,12 +5494,64 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
                 )
 
             _start = _beside_now(_was)
-            for sq in sorted(world.reachable_squares(foe, 2)):
-                if _beside_now(sq) == _start:
-                    continue
-                if walk(world, foe, [sq]) and probe():
-                    return True
-                place(world, foe, _was)
+            # **And it has to be the foe's OWN turn.** The commonest
+            # predicate in this group reads *"an adjacent enemy marked by
+            # you moves without shifting **on its turn**"*, and it asks
+            # `world.turn == ev.actor` -- 49 content predicates do. The
+            # board sets `world.turn = caster` once at setup and no pass
+            # below ever moves it, so every walk this loop produced was a
+            # walk on the *caster's* turn and the clause was false by its
+            # last conjunct, however perfectly the first four were posed.
+            #
+            # Measured on the three battlemind stances, parent laid and a
+            # marked foe walking: 0 of 3 fire with the turn as it was, 3 of
+            # 3 with it set to the walker, same squares and same seeds.
+            #
+            # Put back in a `finally`, for the reason `_ends_a_turn_at`
+            # records: every pass after this one needs the caster's turn to
+            # be current, and leaving it elsewhere refuses their actions
+            # rather than this one's.
+            _turn_was = world.turn
+            world.turn = foe
+            try:
+                for sq in sorted(world.reachable_squares(foe, 2)):
+                    if _beside_now(sq) == _start:
+                        continue
+                    if walk(world, foe, [sq]) and probe():
+                        return True
+                    place(world, foe, _was)
+                # **And once from beside the caster**, because half these
+                # clauses say *"an **adjacent** enemy ... moves"* and the
+                # adjacency is read at `MoveStart` -- which is to say where
+                # the foe **starts**, not where it ends. The loop above
+                # walks each foe from wherever the board left it, so that
+                # conjunct was satisfied only by luck, and an earlier pass
+                # killing whichever foe happened to stand beside the caster
+                # removed the luck for every row behind it.
+                #
+                # Measured on `p2623b` with the stance up and the turn set:
+                # foes 3 and 5 are alive and marked and **neither is
+                # adjacent**, so every square they can reach keeps the same
+                # neighbours and the prune above skips all of them -- the
+                # pass runs, walks nobody who matters, and the row reports
+                # unusable.
+                #
+                # `_stand_off(.., 1)` is the same helper the displaced legs
+                # use, and `_back_to` puts the foe home whether or not the
+                # row fired -- the loop above is careful about that for the
+                # reason #1337 records, and this inherits it.
+                if not _beside_now(_was) and _stand_off(world, caster, foe, 1):
+                    _near = world.get(foe, Position)
+                    _from = _near.square if _near is not None else _was
+                    for sq in sorted(world.reachable_squares(foe, 2)):
+                        if sq == _from:
+                            continue
+                        if walk(world, foe, [sq]) and probe():
+                            return True
+                        place(world, foe, _from)
+                    _back_to(world, foe, _was)
+            finally:
+                world.turn = _turn_was
 
     # **A charge, which nothing on this board had ever run.** 29 rows print
     # a trigger about charging -- *"you hit a creature with a charge
@@ -7988,10 +8040,30 @@ def _grip_for(world, caster: int, ref: str) -> None:  # noqa: ANN001
         return
     if power.can_branch(world, caster):
         return
+    # **Put the original grip back if no weapon helped.** This loop used to
+    # run off the end still holding the last weapon it tried, and a row
+    # whose `can_branch` is False for a reason that has nothing to do with
+    # weapons -- an unmet Requirement, most often -- can never be satisfied
+    # by any of them, so that is the *normal* exit rather than a corner.
+    #
+    # The board deals a longsword and a crossbow. The crossbow is
+    # two-handed, so trying it stows the blade, and the caster spends the
+    # whole of the rest of the provocation holding a bow it was never
+    # given for this row. That refuses every melee weapon row after this
+    # call -- including, for a second card, **its own parent**, which is
+    # what the sibling pass exists to lay.
+    #
+    # Measured on `p2623b`: before the call the stance parent `p2623` is
+    # usable and after it is `(False, 'requirement not met')`; re-gripping
+    # the blade by hand makes it usable again. `held` derives from
+    # `stowed`, so one set restores the grip exactly.
+    was_stowed = set(gear.stowed)
     for weapon in gear.weapons:
         gear.wield(weapon)
         if power.can_branch(world, caster):
             return
+    gear.stowed.clear()
+    gear.stowed |= was_stowed
 
 
 def _aims_at(world, caster: int, ref: str) -> list[Square]:  # noqa: ANN001
