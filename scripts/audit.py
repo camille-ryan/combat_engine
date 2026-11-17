@@ -4055,7 +4055,17 @@ _WANTS_STATE = (
         r"|immobilized|slowed|dominated|blinded)"
         r"|\byou are affected by a"
         r"|dazes, dominates, or stuns you"
-        r"|(?:dazed|stunned|dominated) while you", re.I)),
+        r"|(?:dazed|stunned|dominated) while you"
+        # **"You must be prone", which is the caster's own state and is not
+        # what `_pose_conditions` poses.** That one reads
+        # `Target.conditions` and lays them on an **enemy**, which is right
+        # for "targets a prone creature" and the wrong side entirely for a
+        # row whose Requirement is that *you* have something to stand up
+        # from. `p9295` is the acrobatic stand and was UNUSED for it.
+        #
+        # Anchored on "you", so "a prone creature" stays with the
+        # enemy-side pose where it belongs.
+        r"|\byou (?:must be|are) prone", re.I)),
     # **A fourth, because one row wants two of these at once.** `p9338`
     # prints "you must be marked, AND concealed from whoever marked you",
     # so marking it alone left it refused -- the pose has to satisfy the
@@ -4302,6 +4312,7 @@ def _pose_state(world, caster: int, declared) -> None:  # noqa: ANN001
                 "grabbed": _Cond.GRABBED, "restrained": _Cond.RESTRAINED,
                 "immobilized": _Cond.IMMOBILIZED, "slowed": _Cond.SLOWED,
                 "dominated": _Cond.DOMINATED, "blinded": _Cond.BLINDED,
+                "prone": _Cond.PRONE,
             }
             named = [c for w, c in words.items() if w in req.lower()]
             if named:

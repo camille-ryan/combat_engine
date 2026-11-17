@@ -174,6 +174,7 @@ def p12205(c: Cast) -> None:
     keywords=[*DIVINE_WEAPON, Keyword.RADIANT, Keyword.RANGED],
     attack=Attack(WIS, vs=AC),
     requires=_has_bow,
+    requires_text="you must be wielding a bow",
 )
 def p12298(c: Cast) -> None:
     """No `requires_text`, deliberately: `chargen.build_for` looks for the

@@ -140,6 +140,7 @@ def p10248(c: Cast) -> None:
     keywords=[*DIVINE_WEAPON, Keyword.RANGED],
     attack=Attack(CHA, vs=AC),
     requires=_has_bow,
+    requires_text="you must be wielding a bow",
 )
 def p12304(c: Cast) -> None:
     if c.strike():

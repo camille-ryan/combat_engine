@@ -398,6 +398,7 @@ def p16479(c: Cast) -> None:
     keywords=[*DIVINE_IMPLEMENT, Keyword.RADIANT],
     attack=Attack(CHA, vs=WILL),
     requires=_no_friends_near,
+    requires_text="no ally within 5 squares",
 )
 def p2260(c: Cast) -> None:
     """No `requires_text`: `chargen.build_for` reads the word "requirement"

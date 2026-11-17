@@ -1992,6 +1992,7 @@ def _within_5_of(spot: tuple[int, int]) -> set[tuple[int, int]]:
     trigger="an enemy enters a square adjacent to you",
     on=Trigger(AdjacencyGained, _enemy_closed, "an enemy moves adjacent to you"),
     requires=_carrying("i390"),
+    requires_text="you must have a i390 on your person",
 )
 def p16442(c: Cast) -> None:
     """Aimed off `AdjacencyGained.mover` rather than off `ev.targets`: an
@@ -2014,6 +2015,7 @@ def p16442(c: Cast) -> None:
     target=SELF,
     keywords=ARCANE,
     requires=_carrying("i390"),
+    requires_text="you must have a i390 on your person",
 )
 def p16443(c: Cast) -> None:
     """The trap is a zone five squares across that springs on the first
@@ -2049,6 +2051,7 @@ def p16443(c: Cast) -> None:
     target=SELF,
     keywords=ARCANE,
     requires=_carrying("i390"),
+    requires_text="you must have a i390 on your person",
 )
 def p16444(c: Cast) -> None:
     """One save-ends effect per creature, not two: the prone half is a watch

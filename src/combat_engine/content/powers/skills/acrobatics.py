@@ -103,6 +103,7 @@ def _too_short_to_hurt(world: World, me: int, ev: Fell) -> bool:
     reach=PERSONAL,
     target=SELF,
     requires=_is_prone,
+    requires_text="you must be prone",
 )
 def p9295(c: Cast) -> None:
     """Standing up is the end of the prone effect and nothing else --

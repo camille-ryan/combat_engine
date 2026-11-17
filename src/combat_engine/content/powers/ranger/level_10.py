@@ -518,6 +518,7 @@ def p4413(c: Cast) -> None:
     target=SELF,
     keywords=MARTIAL,
     requires=_is_marked,
+    requires_text="you must be marked",
 )
 def p4415(c: Cast) -> None:
     """Every mark on the ranger goes, whoever laid it. A mark is a relation
