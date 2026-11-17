@@ -197,12 +197,20 @@ def p16243(c: Cast) -> None:
     reach=CloseBurst(10),
     target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    dropped=("Zone.defences",),
 )
 def p3056(c: Cast) -> None:
     """The attack half -- destroying a fire conjuration or zone by beating
     its creator's Will -- is not written: a zone is not a creature, nothing
     targets one, and there is no dispel. The resistance is the half that
-    every use of this row gets."""
+    every use of this row gets.
+
+    `Zone.defences` is the symbol two other rows already wait on
+    (`x2_129`, whose card prints "a ranged attack against the thing
+    itself, whose defences are level + 5"), so this joins them rather
+    than naming a synonym. `p3041` wants the conjuration half of the same
+    gap and has its own symbol, because a zone and a conjuration are
+    different components and one change does not land both."""
     if c.first:
         c.resist(c.cha_mod, DamageType.FIRE, on=c.me, until=When.ENCOUNTER)
     friend = c.target

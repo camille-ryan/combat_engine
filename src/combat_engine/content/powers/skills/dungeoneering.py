@@ -197,8 +197,17 @@ def p9311(c: Cast) -> None:
     own level, which is the common case. If a rarity ever lands, this is the
     line to change.
 
-    "One ally who can hear you" is dropped to "one ally": hearing is not
-    modelled, and three other rows already wait on the same symbol.
+    **"One ally who can hear you" is written, and this paragraph used to
+    say it was dropped** -- while the body three lines below it already
+    called `c.can_hear`, and the comment beside that call already said
+    "`query.can_hear` is the reader; it landed with this row and three
+    others". So the admission and its refutation sat in the same
+    docstring, and `blocked.py --prose` counted the row as unfinished on
+    the strength of the stale half.
+
+    The narrowing is real and is the whole clause: the caster is always in
+    the pool, because a card reading "you or one ally who can hear you"
+    does not ask you to hear yourself, and `c.can_hear` filters the rest.
     """
     foe = c.target
     if foe is None:

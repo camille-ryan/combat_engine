@@ -21,6 +21,7 @@ from combat_engine.engine import (
     EACH_ENEMY,
     EACH_OTHER,
     FORT,
+    FREE,
     MOVE,
     ONE_CREATURE,
     REF,
@@ -40,6 +41,7 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.components import Conjuration
 from combat_engine.engine.events import MoveEnd
 from combat_engine.engine.query import distance_between
 
@@ -158,13 +160,26 @@ def p3039(c: Cast) -> None:
     target=UpTo(3),
     keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.CONJURATION],
     attack=Attack(CHA, vs=REF),
+    dropped=("Conjuration.defences",),
 )
 def p3041(c: Cast) -> None:
     """The stalagmite's own numbers -- AC 5, Reflex 5, Fortitude 21, resist
-    cold 10, 40 hit points -- are not written: a conjuration is an entity
-    with a position and no health or defences, so there is nothing for an
-    attack against it to read. Dismissing it as a free action has no door
-    either; it lasts the encounter.
+    cold 10, 40 hit points -- are still not written: a conjuration is an
+    entity with a position and no health or defences, so there is nothing
+    for an attack against it to read. That is the marker, and `Zone` has
+    the same gap under its own name -- `Zone.defences` and
+    `Zone.breach_hp` are two rows waiting on the zone half of it.
+
+    **Dismissing it as a free action is written now, and "has no door" was
+    wrong.** `c.endable` is the door -- "let whoever holds this effect end
+    it deliberately, for an action" -- and a conjuration's hold is reached
+    through `Conjuration.effect`, which is an **id to look up** where
+    `Zone.effect` is the `Effect` itself. `p1195` takes the same route to
+    sustain its hand.
+
+    `FREE` because that is what the card prints; the verb defaults to a
+    minor. Measured: all three stalagmites come out carrying
+    `drop_cost=free`.
     """
     if not c.strike():
         return
@@ -186,6 +201,9 @@ def p3041(c: Cast) -> None:
     c.watch(
         TurnStart, chill, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} rime"
     )
+    standing = c.world.get(spike, Conjuration)
+    if standing is not None:
+        c.endable(c.world.effects.live.get(standing.effect), FREE)
 
 
 @power(
