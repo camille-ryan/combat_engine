@@ -5106,6 +5106,13 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     if probe():
         return True
 
+    # **Before the generic swinging**, not after it. A row that answers a
+    # shaped attack is answered by nothing the basic passes produce, so
+    # placement costs nothing here -- but #1149's lesson is that a pass
+    # appended after one that already fires the row buys zero, and the
+    # cheapest place to be right is beside the pass it resembles.
+    if _throws_a_shaped_attack(world, caster, ref, cursor):
+        return True
     if _rolls_checks(world, caster, ref, cursor):
         return True
 
@@ -7034,6 +7041,55 @@ def _release(world, caster: int) -> None:  # noqa: ANN001
 
     for holder in list(world.relations.sources(Relation.GRABBED_BY, caster)):
         world.relations.clear(Relation.GRABBED_BY, holder, caster)
+
+
+#: A printed Trigger answering an attack of a SHAPE the board never makes.
+#: Every swing this harness throws is a basic -- its own note says "`mba` is
+#: all it has" -- so "you are hit by a close or an area attack" could not
+#: happen, however many basics went past. Six rows read it. #1341.
+_WANTS_SHAPED_ATTACK = re.compile(
+    r"close or an? area attack|area or a close attack"
+    r"|hit by an? (?:close|area)|(?:close|area) attack hits", re.I
+)
+
+#: One close burst and one area burst, both proven to catch the board's
+#: caster from the first enemy's square. Refs rather than a search, because
+#: the search is the expensive half and the answer does not move.
+_SHAPED_ATTACKS = ("p12949", "p10188")
+
+
+def _throws_a_shaped_attack(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Have an enemy make a close or an area attack, not a basic.
+
+    Gated on the row's printed Trigger naming one, because granting a row
+    to a foe and firing it is expensive and six rows want it.
+
+    **Granted to the foe rather than swung bare.** `dsl.use` refuses a row
+    the creature does not know -- measured, it returns False -- so the ref
+    goes into its `Powers.known` first. That is the same bargain
+    `_rolls_checks` makes when it rolls a skill nobody trained.
+    """
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.query import enemies as _foes
+
+    declared = get(ref)
+    if declared is None or not _WANTS_SHAPED_ATTACK.search(
+        getattr(declared, "trigger", "") or ""
+    ):
+        return False
+    foes = [f for f in _foes(world, caster) if alive(world, f)]
+    if not foes:
+        return False
+    for shape in _SHAPED_ATTACKS:
+        known = world.get(foes[0], Powers)
+        if known is None:
+            continue
+        if shape not in known.known:
+            known.known.append(shape)
+        use(world, foes[0], shape)
+        if _fired(world, ref, cursor):
+            return True
+    return False
 
 
 def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
