@@ -138,6 +138,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
 
 ## refusals
 
+- `c.cannot_act(self, *, during: 'int', on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+  - "The target cannot take actions **during your turn**."
 - `c.cannot_attack(self, *, on: 'int | None' = None, against: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - Bar a creature from attacking -- everything, or one creature.
 - `c.cannot_be_flanked(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`

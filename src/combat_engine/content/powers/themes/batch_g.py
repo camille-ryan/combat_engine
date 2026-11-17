@@ -2316,12 +2316,25 @@ def p16672(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=EACH_ENEMY,
-    todo=("c.cannot_act(during=)",),
 )
 def p16673(c: Cast) -> None:
-    """The check is sayable and its consequence is not: "cannot take actions
-    **during your turn**" is a bar that is on for one creature's turn and
-    off for the rest, which is neither stunned nor dazed nor
-    `c.cannot_attack`. With the consequence gone there is no half of this
-    row left that does anything."""
-    ...
+    """A Diplomacy check against each target's passive Insight, and the bar
+    it wins.
+
+    **The consequence has a verb now and it is narrower than a condition.**
+    "Cannot take actions **during your turn**" is on for one creature's
+    turn and off for every other, which is neither stunned nor dazed nor
+    `c.cannot_attack` -- all three of those are on continuously.
+    `c.cannot_act(during=)` writes the two stamps `Encounter.can_spend`
+    reads at the start of the caster's turn, because during somebody
+    else's turn the only actions a creature has are an immediate and an
+    opportunity. `m193a3` is the precedent, writing the same stamp the
+    other way to refresh one.
+
+    The check is the `f2092` idiom -- `c.check` against
+    `c.passive("insight", of=...)` -- and the body runs once per target, so
+    each enemy is contested separately, which is what "against each
+    target's passive Insight" says.
+    """
+    if c.check("diplomacy", c.passive("insight", of=c.target)):
+        c.cannot_act(during=c.me, until=When.EONT)

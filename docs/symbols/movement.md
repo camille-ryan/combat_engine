@@ -13,7 +13,7 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Run at somebody and swing, with the swing marked as a charge.
 - `c.charge_through(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Let this creature's **charge** pass straight through one body.
-- `c.dismount(self, *, to: 'Square | None' = None) -> 'bool'`
+- `c.dismount(self, *, to: 'Square | None' = None, from_: 'int | None' = None) -> 'bool'`
   - Get off, into an adjacent square. `c.ride`'s missing inverse.
 - `c.flee(self, squares_: 'int', *, on: 'int | None' = None) -> 'int'`
   - The target runs, under its own power, as far from you as it can.
@@ -33,7 +33,7 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Get on. The mount carries you when it moves.
 - `c.rise(self, squares_: 'int', *, on: 'int | None' = None) -> 'int'`
   - Go up, and stay there. Yours, so it defaults to the caster.
-- `c.run_at(self, victim: 'int', *, who: 'int | None' = None) -> 'bool'`
+- `c.run_at(self, victim: 'int', *, who: 'int | None' = None, kind: 'str' = 'walk') -> 'bool'`
   - Walk into reach of a named creature, the way a charge's move does.
 - `c.running_start(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Count as having run up to a jump without having run up.

@@ -397,6 +397,11 @@ CATEGORIES: dict[str, dict] = {
                 "guard", "guarding", "is_guarded",
             ]),
             ("refusals", [
+                # `cannot_act` first because it is the odd one: the rest
+                # of this list is on continuously and it is on for ONE
+                # creature's turn, which is why it is neither a condition
+                # nor `cannot_attack`. #p16673.
+                "cannot_act",
                 "cannot_attack", "cannot_be_flanked",
                 # Beside `cannot_be_flanked` and not folded into it:
                 # that one is about being flanked and this is about

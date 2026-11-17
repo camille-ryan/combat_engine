@@ -23724,6 +23724,149 @@ def _is_dazed(world, eid: int) -> bool:  # noqa: ANN001
     return bool(is_(world, eid, Condition.DAZED))
 
 
+def a_bar_lasts_one_creatures_turn(out: Result) -> None:
+    """"The target cannot take actions during your turn." `p16673`.
+
+    A bar that is on for one creature's turn and off for every other,
+    which is none of the conditions -- stunned, dazed and
+    `c.cannot_attack` are all on continuously. During somebody else's turn
+    the only actions a creature has are an immediate and an opportunity,
+    and `Encounter.can_spend` gates both on a stamp, so `c.cannot_act`
+    writes those two as already spent at the start of `during`'s turn.
+
+    **The restore is the half this drives hardest, because the first
+    version did not have it.** `immediate_round` is compared against the
+    *round* and not the turn, so stamping it and walking away barred the
+    immediate for every remaining turn of the round -- the card says the
+    bar is over when the turn is. `opportunity_turn` never had the fault:
+    its stamp carries the turn index and stops matching on its own, which
+    is why only one of the two was visibly wrong.
+
+    And what goes back is **what was there**, not the unspent value. A
+    creature that really spent its immediate earlier in the round must
+    still have it spent after the bar lifts; restoring `-1` would hand it
+    back, which is strictly better than the rules and a gift this card
+    does not give. That is the last assertion here and the one a careless
+    fix fails.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import TurnEnd, TurnStart
+    from combat_engine.engine.query import alive
+    from combat_engine.engine.query import enemies as _enemies
+    from combat_engine.engine.types import ActionType
+
+    IMM, OPP = ActionType.IMMEDIATE_INTERRUPT, ActionType.OPPORTUNITY
+
+    world, caster, _ = _audit.board("p16673", 1, pose=True)
+    foes = [f for f in _enemies(world, caster) if alive(world, f)]
+    if len(foes) < 2:
+        out.skip("needs two enemies -- one barred and one control")
+        return
+    barred, control = foes[0], foes[1]
+    fight = world.encounter
+    if fight is None:
+        out.skip("no encounter on this board")
+        return
+
+    def can(who: int, what: ActionType) -> bool:
+        return bool(fight.can_spend(who, what))
+
+    def turn(ev) -> None:  # noqa: ANN001
+        world.bus.emit(ev)
+
+    Cast(world=world, me=caster, ref="drivers").cannot_act(
+        during=caster, on=barred,
+    )
+    out.that(can(barred, IMM) and can(barred, OPP),
+             "the bar is OFF before the caster's turn begins")
+
+    world.turn = caster
+    turn(TurnStart(actor=caster, round=world.round))
+    out.that(not can(barred, IMM),
+             "no immediate action during the caster's turn")
+    out.that(not can(barred, OPP),
+             "and no opportunity action either")
+    out.that(can(control, IMM) and can(control, OPP),
+             "while the OTHER enemy keeps both -- the bar is laid per"
+             " target, not on the board")
+
+    turn(TurnEnd(actor=caster, round=world.round))
+    out.that(can(barred, IMM),
+             "the immediate comes back when the caster's turn ENDS --"
+             " `immediate_round` is compared against the round, so a stamp"
+             " left standing would bar it for the whole round")
+    out.that(can(barred, OPP), "and so does the opportunity")
+
+    turn(TurnStart(actor=caster, round=world.round))
+    out.that(not can(barred, IMM) and not can(barred, OPP),
+             "and the bar is back on the caster's next turn, because the"
+             " budget refreshes each round and one write would lapse")
+    turn(TurnEnd(actor=caster, round=world.round))
+
+    # -- ANOTHER creature's turn, which is the whole of "during YOUR
+    # turn" and was not distinguished at all by the assertions above.
+    #
+    # **On its own board held for the ENCOUNTER, for the reason the
+    # restore below is too.** Written against the world above it passed
+    # even with `shut` firing on EVERY actor's `TurnStart` -- the default
+    # `EONT` hold had expired after two of the caster's turns, so the
+    # broken version simply never ran and read as correct. Two plants in
+    # this one rule failed that way, which is `#1337`'s lesson arriving
+    # twice: a plant that does not go red is a finding about the
+    # assertion.
+    w3, caster3, _ = _audit.board("p16673", 1, pose=True)
+    foes3 = [f for f in _enemies(w3, caster3) if alive(w3, f)]
+    fight3 = w3.encounter
+    if len(foes3) < 2 or fight3 is None:
+        out.skip("no third board for the other-creature's-turn check")
+        return
+    theirs, mover = foes3[0], foes3[1]
+    Cast(world=w3, me=caster3, ref="drivers").cannot_act(
+        during=caster3, on=theirs, until=When.ENCOUNTER,
+    )
+    w3.turn = mover
+    w3.bus.emit(TurnStart(actor=mover, round=w3.round))
+    out.that(fight3.can_spend(theirs, IMM) and fight3.can_spend(theirs, OPP),
+             "**and NOT during another creature's turn** -- the card bars"
+             " actions during YOUR turn and no other")
+
+    # -- a real spend survives a bar cycle -------------------------------
+    #
+    # **On its own board, and that is not tidiness.** Written against the
+    # world above it passed with the restore replaced by `-1`, which is
+    # the bug it exists to catch: by then the `EONT` hold had expired, so
+    # the restore never ran and a broken one looked identical to a correct
+    # one. A fresh bar held `ENCOUNTER` is live when the assertion reads
+    # it. The memory is `a-plant-must-target-the-case-the-assertion-can-see`.
+    world2, caster2, _ = _audit.board("p16673", 1, pose=True)
+    foes2 = [f for f in _enemies(world2, caster2) if alive(world2, f)]
+    fight2 = world2.encounter
+    if not foes2 or fight2 is None:
+        out.skip("no second board to test the restore on")
+        return
+    mark = foes2[0]
+    Cast(world=world2, me=caster2, ref="drivers").cannot_act(
+        during=caster2, on=mark, until=When.ENCOUNTER,
+    )
+    spent = world2.get(mark, Budget)
+    if spent is None:
+        out.skip("the barred creature has no Budget")
+        return
+    spent.immediate_round = world2.round
+    out.that(not fight2.can_spend(mark, IMM),
+             "a creature that spends its own immediate has none left")
+    world2.turn = caster2
+    world2.bus.emit(TurnStart(actor=caster2, round=world2.round))
+    world2.bus.emit(TurnEnd(actor=caster2, round=world2.round))
+    out.that(not fight2.can_spend(mark, IMM),
+             "**and a bar cycle does not hand it back** -- the restore puts"
+             " back what was there, not the unspent value")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -91298,6 +91441,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "bar_one_turn": (
+        a_bar_lasts_one_creatures_turn,
+        "'cannot take actions during your turn' is off on every other turn"
+        " (p16673)",
+    ),
     "conjuration_defences": (
         a_conjuration_uses_the_casters_defences,
         "a conjuration that can be attacked uses the caster's defences,"

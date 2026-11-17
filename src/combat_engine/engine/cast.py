@@ -11441,6 +11441,101 @@ class Cast:
         result = getattr(ev, "result", None) if ev is not None else None
         return bool(result and result.advantage)
 
+    def cannot_act(
+        self,
+        *,
+        during: int,
+        on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """"The target cannot take actions **during your turn**."
+
+        A bar that is on for one creature's turn and off for every other,
+        which is none of the conditions: not stunned, not dazed, and not
+        `c.cannot_attack`, all of which are on continuously. `p16673` is
+        the row and its own note is the specification -- *"with the
+        consequence gone there is no half of this row left that does
+        anything"*.
+
+        **During somebody else's turn, the only actions a creature has are
+        an immediate and an opportunity**, and `Encounter.can_spend` gates
+        both on a stamp:
+
+            immediate     refused while `budget.immediate_round == round`
+            opportunity   refused while `budget.opportunity_turn == stamp`
+
+        So the bar is those two stamps written as *already spent* at the
+        start of `during`'s turn. That is narrower than any condition and
+        exactly what the sentence asks.
+
+        **`m193a3` is the precedent and it runs the other way**, which is
+        why the shape is known to work: the two-headed solo writes
+        `immediate_round = -1` at the top of each of its turns to *refresh*
+        an immediate the rules would refuse. Same stamp, same `TurnStart`
+        hook, opposite value -- and its note carries the timing that
+        matters here too, that `_begin` emits `TurnStart` **after** the
+        budget is refreshed rather than before, so a stamp written on that
+        event is not undone.
+
+        Re-stamped every turn rather than once, because the budget is
+        refreshed each round and a single write would lapse after one.
+
+        **And it is put back at the end of that turn, which the first
+        version did not do.** `immediate_round` is compared against the
+        *round*, not the turn, so stamping it and walking away barred the
+        immediate for every remaining turn of the round -- measured:
+        `can_spend(IMMEDIATE)` still False on the next creature's turn,
+        where the card says the bar is over. `opportunity_turn` did not
+        have the fault, because its stamp carries the turn index and stops
+        matching on its own.
+
+        What goes back is **what was there**, not `-1`: restoring the
+        unspent value would refresh an immediate the creature had really
+        spent earlier in the round, which is strictly better than the
+        rules and a gift the card does not give.
+
+        Not a condition, so nothing cures it and nothing saves against it;
+        it ends when the hold does, which is what the card says.
+        """
+        from .components import Budget as _Budget
+        from .events import TurnEnd as _TurnEnd
+        from .events import TurnStart as _TurnStart
+
+        who = self._who(on)
+        if who is None:
+            return None
+        #: What the stamps were before the bar wrote them, so the end of
+        #: the turn restores rather than refreshes.
+        was: dict[str, int] = {}
+
+        def shut(ev: _TurnStart) -> None:
+            if getattr(ev, "ghost", False) or ev.actor != during:
+                return
+            budget = self.world.get(who, _Budget)
+            if budget is None:
+                return
+            was["immediate"] = budget.immediate_round
+            was["opportunity"] = budget.opportunity_turn
+            budget.immediate_round = self.world.round
+            fight = self.world.encounter
+            if fight is not None:
+                budget.opportunity_turn = fight._turn_stamp()
+
+        def open_again(ev: _TurnEnd) -> None:
+            if getattr(ev, "ghost", False) or ev.actor != during or not was:
+                return
+            budget = self.world.get(who, _Budget)
+            if budget is None:
+                return
+            budget.immediate_round = was.pop("immediate")
+            budget.opportunity_turn = was.pop("opportunity")
+
+        held = self.watch(
+            _TurnStart, shut, until=until, on=who, label=self.ref,
+        )
+        self.watch(_TurnEnd, open_again, until=until, on=who, label=self.ref)
+        return held
+
     def cannot_attack(
         self,
         *,
