@@ -7247,6 +7247,7 @@ def _an_ally_attacks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa
     """
     import contextlib as _ctx
 
+    from combat_engine.engine.components import Position
     from combat_engine.engine.query import enemies as _foes
 
     declared = get(ref)
@@ -7271,6 +7272,30 @@ def _an_ally_attacks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa
         victims.append(caster)
     spread = any(w in said for w in ("close", "area", "burst", "blast"))
 
+    def _rearm() -> None:
+        """Give the caster its immediate action back between swings.
+
+        **One immediate action per round is the printed rule**, and this
+        pass runs last -- after the ordinary provocations have each had a
+        go -- so the caster's is long spent by the time an ally throws
+        anything. Every row here is an immediate action answering what the
+        ally did, so without this the event fired and the row was refused
+        for the budget rather than for itself.
+
+        Measured on `p10941`: the ally's `p146` close burst announces an
+        `AttackDeclared` the row's own predicate accepts, and the row
+        still did not fire. `_does_the_ordinary_things` carries the same
+        two lines and the same argument -- "every row is fired on a board
+        of its own, in isolation, and the one being measured is the one
+        that matters".
+        """
+        from combat_engine.engine import Budget
+
+        budget = world.get(caster, Budget)
+        if budget is not None:
+            budget.immediate_round = -1
+            budget.opportunity_turn = -1
+
     was = getattr(world.rng, "loaded", None)
     try:
         for mate in mates:
@@ -7278,8 +7303,61 @@ def _an_ally_attacks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa
             for face in (faces or [18, 3]):
                 for victim in victims:
                     _revive_everyone(world, caster)
+                    _rearm()
                     world.rng.loaded = face
                     for swung in rows:
+                        # Before **each** swing, not once per arrangement:
+                        # the rows loop inside it and the first swing
+                        # spends what the rest need.
+                        _rearm()
+                        # **An area power needs an aim, and a close burst
+                        # needs the ally standing somewhere useful.**
+                        # `_swing_from_reach` points one creature at
+                        # another, which is right for a melee or ranged
+                        # row and does nothing for a spread: `p12608` came
+                        # out as `PowerUsed`/`PowerResolved` with no
+                        # `AttackDeclared` at all, because the burst
+                        # caught nobody and the row had no target to
+                        # strike. So "an ally makes a close or an area
+                        # attack" could not happen however many of the
+                        # ally's own powers were thrown.
+                        shape = getattr(get(swung).reach, "kind", "")
+                        if shape in ("close_blast", "area_burst"):
+                            for aim in (_aims_at(world, mate, swung)
+                                        or [None])[:2]:
+                                with _ctx.suppress(Exception):
+                                    _use(world, mate, swung, spend=False,
+                                         origin=aim)
+                                if _fired(world, ref, cursor):
+                                    return True
+                            continue
+                        if shape == "close_burst":
+                            # Centred on the thrower, so the thrower is
+                            # what has to move -- but **from where it
+                            # stands first**, because the board sometimes
+                            # already put it in reach and `_stand_off`
+                            # fails whenever the square beside the foe is
+                            # taken. The first draft swung only after a
+                            # successful stand-off and `continue`d
+                            # otherwise, so `p146` -- an ally close burst
+                            # that declares an attack perfectly well where
+                            # it starts -- was never thrown at all.
+                            with _ctx.suppress(Exception):
+                                _use(world, mate, swung, spend=False)
+                            if _fired(world, ref, cursor):
+                                return True
+                            spot = world.get(mate, Position)
+                            home = spot.square if spot is not None else None
+                            if home is not None and _stand_off(
+                                world, victim, mate, 1
+                            ):
+                                with _ctx.suppress(Exception):
+                                    _use(world, mate, swung, spend=False)
+                                fired = _fired(world, ref, cursor)
+                                _back_to(world, mate, home)
+                                if fired:
+                                    return True
+                            continue
                         with _ctx.suppress(Exception):
                             _swing_from_reach(world, mate, victim, swung)
                         if _fired(world, ref, cursor):
