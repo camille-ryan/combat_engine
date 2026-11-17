@@ -45,6 +45,7 @@ from combat_engine.engine import (
     Attack,
     AttackDeclared,
     Cast,
+    Dropped,
     Effect,
     Hit,
     Keyword,
@@ -221,14 +222,33 @@ def p12660(c: Cast) -> None:
     rows have something to ask about; `aura_ring` puts the penalty on
     whoever walks in and takes it off again on the way out.
 
-    "Until you end it as a minor action" is dropped -- nothing takes an aura
-    down early, and the printed second clause, falling unconscious, is not
-    something a fighter chooses. See the report.
+    **"Until you end it as a minor action or fall unconscious" is written
+    now, and the note saying it was dropped was wrong on both halves.**
+
+    `c.endable` is the first: *"let whoever holds this effect end it
+    deliberately, for an action"*, aimed by whose effect it is -- and this
+    hold sits on the fighter, so no `on=` is wanted. The old note said
+    "nothing takes an aura down early", which was a claim about the engine
+    and one `vocab.py --find dismiss` away from being checked.
+
+    The second half it dismissed on a different ground -- that falling
+    unconscious "is not something a fighter chooses" -- which is true and
+    is not a reason to drop it. It is not a choice, it is a second way the
+    aura ends, and `Dropped` is that moment: *"went to 0 hit points or
+    below -- dying, or dead outright"*, which is what the printed line
+    means by unconscious.
     """
     me = c.me
     hold = c.effect(AURA, until=When.ENCOUNTER, on=me)
     if hold is None:
         return
+    c.endable(hold, MINOR)
+
+    def collapse(ev: Dropped) -> None:
+        if ev.actor == me:
+            c.world.effects.end(hold, "you fell unconscious")
+
+    c.watch(Dropped, collapse, until=When.ENCOUNTER, on=me)
 
     def give(who: int) -> list[Effect | None]:
         def gate(ctx: dict[str, Any]) -> bool:

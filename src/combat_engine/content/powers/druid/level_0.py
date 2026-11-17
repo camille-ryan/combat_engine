@@ -49,6 +49,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.query import distance_between
 from combat_engine.engine.query import squares as squares_of
+from combat_engine.engine.zones import Zone
 
 PRIMAL = [Keyword.PRIMAL]
 PRIMAL_WEAPON = [Keyword.PRIMAL, Keyword.WEAPON]
@@ -186,15 +187,26 @@ def p15852(c: Cast) -> None:
     `c.ignores_difficult(<word>)` is the druid stepping over it. A bare
     `difficult=True` would slow the caster too.
 
-    Dismissing the zone as a minor action is dropped -- `sustain=` holds a
-    zone up, and nothing takes one down early. See the report.
+    **Dismissing it as a minor action is written now**, and the note saying
+    it was dropped reasoned from the wrong verb: `sustain=` is indeed about
+    holding a zone *up*, but `c.endable` is the one that takes an effect
+    down -- *"let whoever holds this effect end it deliberately, for an
+    action"*.
+
+    A zone's hold is `Zone.effect`, and it is the `Effect` itself rather
+    than an id to look up -- `Conjuration.effect` is the id, which is what
+    `p1195` looks up, and reaching for that shape here raised
+    `unhashable type: 'Effect'` on the first run.
     """
     aim = c.origin or c.here
     if aim is None:
         return
     size = 3 if c.level >= 21 else 2 if c.level >= 11 else 1
-    c.zone(spread({aim}, size), until=When.ENCOUNTER, difficult=c.ref)
+    laid = c.zone(spread({aim}, size), until=When.ENCOUNTER, difficult=c.ref)
     c.ignores_difficult(c.ref, on=c.me, until=When.ENCOUNTER)
+    standing = c.world.get(laid, Zone)
+    if standing is not None:
+        c.endable(standing.effect, MINOR)
 
 
 @power(
