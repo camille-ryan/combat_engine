@@ -156,6 +156,7 @@ def p4147(c: Cast) -> None:
         attack=Attack(INT, vs=AC, plus=2),
         damage=Damage("1d8", "int"),
     ),
+    dropped=("dsl.Summon.commands",),
 )
 def p7657(c: Cast) -> None:
     """The extra die is read off the landing: `c.had_advantage(ev)` is whether
@@ -163,7 +164,9 @@ def p7657(c: Cast) -> None:
     one-shot grant has already been spent.
 
     The standard command's "and the servant shifts 2" is dropped -- the header
-    carries one attack line and `c.command` rolls it."""
+    carries one attack line and `c.command` rolls it. `dsl.Summon` has one
+    `attack` field, so a second printed command has nowhere to be declared;
+    the same symbol `p7641` and `p11842` wait on."""
     servant = c.summon_inline(get(c.ref).summon, at=c.origin)
     if not servant:
         return

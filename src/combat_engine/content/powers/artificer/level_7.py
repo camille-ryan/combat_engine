@@ -78,11 +78,21 @@ def p10202(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.THUNDER],
     attack=Attack(INT, vs=WILL),
+    dropped=("c.cast_from(square=)",),
 )
 def p10203(c: Cast) -> None:
-    """Firing from a chosen square for the rest of the turn has no hold to
-    live in -- `from_=` reaches one use of one power -- so that half of the
-    Hit line is dropped."""
+    """Still dropped, and "no hold to live in" was false: `c.cast_from` is
+    the standing version of `from_=` and its docstring says so outright.
+
+    The gap here is narrower and is in the **kind of origin**. This card
+    picks "a square adjacent to the target", and `c.cast_from(who: int)`
+    borrows from a **creature**: it files `Relation.CASTS_FROM` between two
+    entities and `dsl.measured_from` hands back the lender's id for
+    `Position` to be read off it. A bare square is nobody, so there is
+    nothing to relate to and nothing to look up.
+
+    `p10193` is the sibling and wants the other missing piece -- a distance
+    proviso -- which is why these are two symbols and not one."""
     if c.strike():
         c.damage("2d10", c.int_mod, dtype=DamageType.THUNDER)
 

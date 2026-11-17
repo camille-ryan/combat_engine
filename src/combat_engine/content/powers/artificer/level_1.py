@@ -157,11 +157,26 @@ def p10191(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.WEAPON],
     attack=Attack(INT, vs=AC),
+    dropped=("c.cast_from(within=)",),
 )
 def p10193(c: Cast) -> None:
-    """The Effect line -- firing from the ally's square for the rest of the
-    encounter -- has no hold to live in and is dropped; `c.strike(from_=)`
-    only reaches as far as one use."""
+    """The Effect line is still dropped and **the reason it used to give is
+    the one `c.cast_from` was written to answer.** That verb's docstring:
+
+        `c.strike(from_=)` is one swing and nothing held it, so the
+        standing version of the line -- and the stat block trait that says
+        the same thing about a servant -- had no way to be written.
+
+    So "no hold to live in" was false. What is missing is one proviso: the
+    card gives two, *"if the ally is within 10 squares of you and you have
+    line of effect to the ally"*, and `dsl.measured_from` checks the second
+    (`line_of_effect`, plus the lender still having a square) and carries
+    no distance limit at all.
+
+    Written with a bare `c.cast_from` the artificer would borrow an origin
+    at any distance with line of effect, which reaches further than the
+    card allows -- silently stronger than print, which is the reading this
+    tree refuses. Hence the symbol rather than the clause."""
     if c.strike():
         c.damage(c.w(3), c.int_mod)
     else:
@@ -552,6 +567,7 @@ def p7638(c: Cast) -> None:
         attack=Attack(INT, vs=AC, plus=2),
         damage=Damage("1d10", "int"),
     ),
+    dropped=("dsl.Summon.commands",),
 )
 def p7641(c: Cast) -> None:
     """"Any marked enemy" is the condition rather than a mark of the caster's,
@@ -559,7 +575,13 @@ def p7641(c: Cast) -> None:
 
     The opportunity command's mark rider is dropped: the header carries one
     attack line and `c.command` rolls it, and the two printed commands differ
-    only in that rider."""
+    only in that rider.
+
+    Checked rather than assumed, and it holds: `dsl.Summon`'s fields are
+    `hp, speed, defences, per_defence, size, attack, damage, modes,
+    instinctive, label` -- one `attack`, so a second printed command line
+    has nowhere to be declared. Same symbol as `p11842` and `p7657`, which
+    want the same field for the same reason."""
     servant = c.summon_inline(get(c.ref).summon, at=c.origin)
     if not servant:
         return
