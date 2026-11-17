@@ -5131,6 +5131,9 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     if _an_ally_attacks(world, caster, ref, cursor):
         return True
 
+    if _hit_against_a_defence(world, caster, ref, cursor):
+        return True
+
     if _does_the_ordinary_things(world, caster, ref, cursor):
         return True
 
@@ -7177,6 +7180,97 @@ def _an_ally_attacks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa
                             _swing_from_reach(world, mate, victim, swung)
                         if _fired(world, ref, cursor):
                             return True
+    finally:
+        if was is None:
+            if hasattr(world.rng, "loaded"):
+                world.rng.loaded = None
+        else:
+            world.rng.loaded = was
+    return False
+
+
+#: A printed trigger names a defence in propcase -- *"an enemy hits your
+#: Will"* -- and the lowercase word is the ordinary verb. Matching the
+#: lowercase form admits 42 rows where this admits 33, and the nine extra
+#: are sentences like "an ally will be adjacent"; same reasoning the tree
+#: already applies to a power name being propcase in the source.
+_NAMED_DEFENCE = re.compile(r"\b(Will|Fortitude|Reflex)\b")
+
+#: Plain low-level monster attacks that target something other than AC, to
+#: lend a foe that has none. Every board foe holds exactly **one** attack
+#: row and all of them are `vs ac`, so without this no provocation on this
+#: board can produce a hit against another defence at all.
+_DEFENCE_SWINGS = {
+    "Will": ("m235a2", "m238a2", "m4991a2"),
+    "Fortitude": ("m3054a1", "m376a1", "m235a1"),
+    "Reflex": ("m4881a2", "m668a1", "m150a2"),
+}
+
+
+def _hit_against_a_defence(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Have a foe hit the caster against the defence its trigger names.
+
+    *"An enemy hits your Will with an attack"*, *"an enemy attack targets
+    your Will"*, *"an enemy hits your Fortitude, Reflex or Will"* -- 33
+    rows print one of these and none of them could ever fire, for a reason
+    that is one line to check and was never checked: **every foe this
+    board fields holds exactly one attack row, and all of them are `vs
+    ac`.** The basic attack is `vs ac` too, so no arrangement of swinging
+    on this board produces a hit against another defence.
+
+    So the foe is lent one, which is `_range_lenders`' idiom in the same
+    file and for the same kind of reason -- the board cannot field every
+    shape a trigger names, and borrowing one row is cheaper and more
+    honest than building a creature to carry it. Put back afterwards
+    whether or not it fired.
+
+    **Only the defences the sentence names.** A row reading "your Will"
+    gets the Will swings and nothing else, so the common case is three
+    swings rather than nine.
+
+    Measured over nine rows in this family that no pass could reach: six
+    fire. The three that do not are asking for something else --
+    `p12364` wants no ally adjacent, `p9969` a melee attack specifically,
+    `p1043` a hit read off `AttackRolled`.
+    """
+    import contextlib as _ctx
+
+    from combat_engine.engine.query import enemies as _foes
+
+    declared = get(ref)
+    if declared is None or not declared.triggers:
+        return False
+    said = declared.trigger or ""
+    wanted = set(_NAMED_DEFENCE.findall(said))
+    if not wanted:
+        return False
+
+    foes = [f for f in _foes(world, caster) if alive(world, f)]
+    if not foes:
+        return False
+    known = world.get(foes[0], Powers)
+    if known is None:
+        return False
+
+    was = getattr(world.rng, "loaded", None)
+    try:
+        for defence in sorted(wanted):
+            for lend in _DEFENCE_SWINGS.get(defence, ()):
+                lent = lend not in known.known
+                if lent:
+                    known.known.append(lend)
+                try:
+                    for face in (18, 3):
+                        world.rng.loaded = face
+                        _revive_everyone(world, caster)
+                        with _ctx.suppress(Exception):
+                            _swing_from_reach(world, foes[0], caster, lend)
+                        if _fired(world, ref, cursor):
+                            return True
+                finally:
+                    if lent:
+                        with _ctx.suppress(ValueError):
+                            known.known.remove(lend)
     finally:
         if was is None:
             if hasattr(world.rng, "loaded"):
