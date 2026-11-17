@@ -5187,6 +5187,31 @@ def _decisions_are_honoured() -> list[str]:
 _CLASS_SWINGS = 8
 
 
+#: A row whose trigger names an encounter or a daily attack, which is the
+#: one case the class pass has to reach past its at-wills for. Four rows
+#: print it -- `p11050` asks `p.usage in (ENCOUNTER, DAILY)` outright.
+_WANTS_A_BIG_SWING = re.compile(r"\bencounter\b|\bdaily\b", re.I)
+
+
+def _a_class_big_swing(row: object) -> bool:
+    """An encounter or daily class attack, on a standard action.
+
+    `_a_class_at_will`'s sibling, and the usage half of `#668`. That issue
+    fixed "every swing the harness made was a basic carrying `cls=\"\"`"
+    and left the usage: `class_attacks` offers at-wills only, so a row
+    whose trigger names an **encounter or daily** attack could never be
+    provoked however many swings went past.
+    """
+    return bool(
+        row is not None
+        and getattr(row, "cls", "") not in ("", "item")
+        and getattr(row, "attack", None) is not None
+        and getattr(row, "usage", None) in (Usage.ENCOUNTER, Usage.DAILY)
+        and getattr(row, "action", None) is ActionType.STANDARD
+        and not getattr(row, "triggers", None)
+    )
+
+
 def _a_class_at_will(row: object) -> bool:
     """An at-will attack belonging to a class, usable on a standard action.
 
@@ -5282,12 +5307,25 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         known = world.get(eid, Powers)
         if known is None:
             return []
-        mine = [r for r in known.known if _a_class_at_will(get(r))]
+        # **The at-wills, plus the bigger usages when the row asks for
+        # them.** Gated on the row under test rather than offered always:
+        # an encounter or daily swing is a real spend and only four rows
+        # print a trigger naming one.
+        declared = get(ref)
+        bigger = bool(
+            declared is not None
+            and _WANTS_A_BIG_SWING.search(getattr(declared, "trigger", "") or "")
+        )
+
+        def wanted(row: object) -> bool:
+            return _a_class_at_will(row) or (bigger and _a_class_big_swing(row))
+
+        mine = [r for r in known.known if wanted(get(r))]
         dealt = getattr(world, "audit_cls", "")
         if dealt:
             borrowed = [r for r in sorted(REGISTRY)
                         if (lambda row: row is not None and row.cls == dealt
-                            and _a_class_at_will(row))(get(r))]
+                            and wanted(row))(get(r))]
             mine += [r for r in borrowed if r not in mine][:_CLASS_SWINGS]
         return mine
 
