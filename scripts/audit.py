@@ -5125,15 +5125,6 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     if _rolls_saves(world, caster, ref, cursor):
         return True
 
-    if _starts_a_turn_held(world, caster, ref, cursor):
-        return True
-
-    if _an_ally_attacks(world, caster, ref, cursor):
-        return True
-
-    if _hit_against_a_defence(world, caster, ref, cursor):
-        return True
-
     if _does_the_ordinary_things(world, caster, ref, cursor):
         return True
 
@@ -5187,6 +5178,9 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         # with a melee attack" are both printed triggers, and whether the
         # swing hits or misses is what the seed sweep in `_attempts` is for.
         pairs += [(foes[0], mate), (mate, foes[0])]
+    #: Pairs this loop could not play because somebody in them was
+    #: dead. Replayed at the bottom, after every ordinary provocation.
+    unplayed: list[tuple[int, int]] = []
     for attacker, target in pairs:
         if not alive(world, target):
             continue
@@ -5212,30 +5206,24 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         # reported UNUSED for nine bard rows while the pass meant to
         # produce it ran every time. #1353.
         #
-        # **The pass below warns against exactly this and the warning does
-        # not reach here.** It records that substituting a living attacker
-        # "fixed `p5910` and four others and broke `f2470` -- a pinned
-        # verdict -- because the extra attack shifts the die stream and the
-        # class-attack pass then stops landing the critical that row
-        # needs". That pass runs *after* the class attacks; this loop runs
-        # after them too, so the stream it shifts is already spent.
+        # **It is paid in a trailing pass rather than here, and the pass
+        # below says why.** It records that substituting a living attacker
+        # *in this loop* "fixed `p5910` and four others and broke `f2470`
+        # -- a pinned verdict -- because the extra attack shifts the die
+        # stream and the class-attack pass then stops landing the critical
+        # that row needs".
         #
-        # Checked rather than assumed, because the warning is specific:
-        # `f2470` and `p5910` both still fire, and a `--sample 700` run
-        # reports 0 raise and 0 newly silent. If either ever goes red here,
-        # this is the paragraph to read first.
-        if not alive(world, attacker):
-            attacker = next(
-                (f for f in foes if alive(world, f) and f != target), 0
-            )
-            if not attacker:
-                continue
-        if not alive(world, target):
-            target = next(
-                (f for f in foes if alive(world, f) and f != attacker), 0
-            )
-            if not target:
-                continue
+        # That warning was read as being about `f2470` and checked against
+        # `f2470`, which passed. It is about a **class**: substituting here
+        # cost 8 further rows their verdict, and the wide sweep at
+        # `77fda14f` is the only thing that saw them. Three `--sample 700`
+        # runs reported 0 newly silent each.
+        #
+        # So the pair is remembered and replayed at the bottom of this
+        # function, where the stream it shifts is already spent.
+        if not alive(world, attacker) or not alive(world, target):
+            unplayed.append((attacker, target))
+            continue
         _swing_from_reach(world, attacker, target, basic(attacker))
         if probe():
             return True
@@ -5696,6 +5684,75 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         world.damage(killer, victim, health.hp + health.max_hp)
         if probe():
             return True
+
+    # **The three arrangements below run LAST, and the placement is the
+    # whole of what keeps them honest.** Each perturbs the board in a way
+    # the plainer passes cannot undo: `_starts_a_turn_held` emits a
+    # `TurnStart`, `_an_ally_attacks` swings real attacks and revives the
+    # fallen between arrangements, `_hit_against_a_defence` lends a foe a
+    # row and swings it. None of that is reversible the way a walk or a
+    # shift is.
+    #
+    # They sat above `_does_the_ordinary_things` when written, and the wide
+    # sweep at `77fda14f` is what found the cost: **10 rows went from
+    # firing to SILENT and 11 more into UNUSED**, none of them anything to
+    # do with the clauses these passes exist for. Three `--sample 700`
+    # runs had each reported 0 raise and 0 newly silent, so only the corpus
+    # could catch it.
+    #
+    # The pass at the bottom of the basic loop already records this rule
+    # for the same reason -- "every pass above sees exactly the board it
+    # saw before, and this runs only if none of them fired the row" -- and
+    # `f2470` is the row that taught it. This is that rule applied to three
+    # new passes rather than learnt a third time.
+    #
+    # It also keeps the ordering `_attempts` argues for: a row that can
+    # show itself on the plainest provocation must never be credited by a
+    # more elaborate one.
+    # **The pairs the basic loop could not play, replayed on a board where
+    # everybody is standing.** `foes` is filtered for life once at the top
+    # and `foes[0]` is read at 35 sites, so an earlier pass killing it took
+    # every pair naming it -- as attacker *and* as target -- and the ally
+    # pairs are the ones that never happen. "An enemy hits your ally"
+    # reported UNUSED for nine bard rows while the pass meant to produce it
+    # ran every time. #1353.
+    #
+    # **Revived rather than substituted**, which is the correction the wide
+    # sweep forced and is better than what it replaces for two separate
+    # reasons:
+    #
+    # * substituting inside the loop shifts the die stream every later pass
+    #   draws from -- 8 rows lost their verdict to that, see the loop;
+    # * and a foe substituted into an **ally** slot changes what the pair
+    #   means. `(foes[0], mate)` is "an enemy hits your ally"; with a dead
+    #   `mate` replaced by a foe it becomes "an enemy hits an enemy", which
+    #   is a different printed trigger and would have credited the wrong
+    #   rows.
+    #
+    # Reviving asks the original question on a board that can answer it,
+    # and costs nothing anywhere else because this runs only if no pass
+    # above fired the row.
+    if unplayed:
+        _revive_everyone(world, caster)
+        if caster_health is not None and caster_health.hp <= 0:
+            caster_health.hp = was
+        for attacker, target in unplayed:
+            if attacker == target:
+                continue
+            if not alive(world, attacker) or not alive(world, target):
+                continue
+            _swing_from_reach(world, attacker, target, basic(attacker))
+            if probe():
+                return True
+
+    if _starts_a_turn_held(world, caster, ref, cursor):
+        return True
+
+    if _an_ally_attacks(world, caster, ref, cursor):
+        return True
+
+    if _hit_against_a_defence(world, caster, ref, cursor):
+        return True
 
     return _fired(world, ref, cursor)
 
