@@ -347,12 +347,29 @@ def p13886(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.CONJURATION, Keyword.TELEPORTATION, Keyword.SHADOW],
+    dropped=("c.cast_from(optional=)", "Conjuration.defences"),
 )
 def p13956(c: Cast) -> None:
     """The shade occupies its square, which is the clause only a conjuration
-    can say. Attacking from its space is not written -- nothing on the
-    surface moves a row's origin -- and neither is the aftereffect
-    teleport, which waits on the shade being destroyed."""
+    can say.
+
+    **"Nothing on the surface moves a row's origin" was false twice
+    over.** `c.strike(from_=)` moves it for one swing and takes a
+    conjuration -- `p1195` swings its hand that way -- and `c.cast_from`
+    is the standing version. What the card asks for is neither: *"you can
+    use your space **or** the shade's space as the origin of your
+    attacks"* is a choice made per attack, and `c.cast_from` replaces the
+    origin for as long as it is held. Writing it with the verb as it
+    stands would take the choice away and leave the warlock casting from
+    the shade even where its own square is better.
+
+    The other half is the shade being attackable at all: *"it uses your
+    defenses, and it is destroyed if it takes any damage"*. A conjuration
+    has a position and no health or defences, which is the same gap
+    `p3041` carries and the same symbol. The aftereffect teleport waits on
+    it -- there is no destruction to answer until something can damage the
+    shade.
+    """
     room = sorted(
         sq
         for sq in spread({c.here}, 5)

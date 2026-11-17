@@ -45,7 +45,7 @@ from combat_engine.engine import (
     power,
     spread,
 )
-from combat_engine.engine.events import Hit, ZoneExited
+from combat_engine.engine.events import Dropped, Hit, ZoneExited
 from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.query import team
 
@@ -73,13 +73,30 @@ GUARDIAN = "p15848"
 def barbarian_aura(c: Cast) -> None:
     """An aura 1 that costs an enemy inside it 2 to attack anybody else.
 
-    "Until you end it" is dropped for the same reason `p12660` drops it:
-    nothing takes an aura down early and no barbarian would.
+    **"Until you end it" is written now, and the reason it was dropped has
+    been refuted at its source.** This said it went "for the same reason
+    `p12660` drops it: nothing takes an aura down early" -- `p12660` does
+    not drop it any more, because `c.endable` takes an aura down and
+    `Dropped` is the printed second way out. So a note deferring to
+    another row's reasoning outlived the reasoning.
+
+    `p12660` is also the authority for the action, and not a guess:
+    `cf:barbarian-aura` is a hand-minted ref with no row in
+    `class_feature`, and `p15848`'s own printed trigger names **`p12660`**
+    as the aura it is subject to. Same aura, same card lineage, same minor
+    action.
     """
     me = c.me
     hold = c.effect(AURA, until=When.ENCOUNTER, on=me)
     if hold is None:
         return
+    c.endable(hold, MINOR)
+
+    def collapse(ev: Dropped) -> None:
+        if ev.actor == me:
+            c.world.effects.end(hold, "you fell unconscious")
+
+    c.watch(Dropped, collapse, until=When.ENCOUNTER, on=me)
 
     def give(who: int) -> list[Effect | None]:
         def gate(ctx: dict[str, Any]) -> bool:

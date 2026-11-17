@@ -37,9 +37,41 @@ def _shifts_in_my_aura(world: World, me: int, ev: MoveStart) -> bool:
     return ev.kind_ == "shift" and _in_my_aura(world, me, ev)
 
 
+def _guarded_by_a_defender(world: World, who: int | None) -> bool:
+    """"...or an ally who has an active defender aura."
+
+    **`has_defender_aura` is named for exactly this question** and
+    `p15848` used to say nothing could ask it. That helper covers the
+    fighter's half; the barbarian's own aura wears a different label, so
+    both are asked and each is read from the constant that defines it
+    rather than re-spelt here -- one name, one claimant.
+
+    Imported inside the function because `fighter.level_0` is a sibling
+    module and a top-level import between two class files is how a cycle
+    starts; the tree does this in several places for the same reason.
+    """
+    if who is None:
+        return False
+    from combat_engine.content.powers.barbarian.aura import AURA as RAGE_AURA
+    from combat_engine.content.powers.fighter.level_0 import has_defender_aura
+
+    if has_defender_aura(world, who):
+        return True
+    return any(e.label == RAGE_AURA for e in world.effects.of(who))
+
+
 def _swings_past_me(world: World, me: int, ev: AttackDeclared) -> bool:
-    """...and makes an attack that targets an ally of yours, not you."""
+    """...and makes an attack that targets an ally of yours, not you.
+
+    **"...or an ally who has an active defender aura" is written now.** The
+    printed trigger excludes two creatures and not one: the barbarian
+    itself, which `leaves_me_out` already answers, and a defender ally
+    whose own aura is up -- the clause being that a defender does not need
+    rescuing.
+    """
     if not _in_my_aura(world, me, ev) or not leaves_me_out(world, me, ev):
+        return False
+    if _guarded_by_a_defender(world, ev.target):
         return False
     return team(world, ev.target) is team(world, me)
 
@@ -60,8 +92,11 @@ def _swings_past_me(world: World, me: int, ev: AttackDeclared) -> bool:
     ),
 )
 def p15848(c: Cast) -> None:
-    """The printed "...or an ally who has an active defender aura" is dropped:
-    nothing on the chassis says which allies have one."""
+    """The printed "...or an ally who has an active defender aura" is
+    written, in `_swings_past_me`; the note calling it dropped said
+    "nothing on the chassis says which allies have one", and
+    `fighter.level_0.has_defender_aura` is a function named for that
+    question. See `_guarded_by_a_defender` above."""
     ev = c.trigger
     victim = getattr(ev, "actor", None) or getattr(ev, "attacker", None)
     if victim is None:
