@@ -491,22 +491,32 @@ def p4126(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
     trigger=_AN_ALLY_HEALS_ME,
     on=Trigger(Healed, when=_ally_healed_me, text=_AN_ALLY_HEALS_ME),
-    dropped=("Health.dies_at_failures",),
 )
 def p4288(c: Cast) -> None:
-    """**The claim is true and now carries the marker.** Checked rather
-    than assumed, and the near miss is on the same component: `Health`
-    has `dies_at_zero`, so a per-creature death rule is a shape this
-    engine already has -- it simply has no `dies_at_failures` beside it.
+    """Both halves are written: the extra surge-worth of hit points, and
+    the drawback that pays for it.
 
-    `Health.failures` is compared against a literal `3` in `Cast`, in the
-    one place that reads it, and nothing else in `engine/` reads the
-    field at all. So there is no modifier, no field and no second reader
-    to aim at; it is a number in a comparison. #1341.
+    **The old note's diagnosis was right and its count was wrong, which is
+    what made this a field rather than an edit.** The near miss it named is
+    real -- `Health.dies_at_zero` sits one line above, so a per-creature
+    death rule is a shape this component already has -- but it said the
+    literal `3` was read "in `Cast`, in the one place that reads it, and
+    nothing else in `engine/` reads the field at all". `turns._death_save`
+    reads it too, and that is the read that **kills**; `Cast` only caps the
+    counter. A threshold honoured by the cap and not by the killer would
+    have left this row's whole drawback inert while reporting finished.
 
-    The healing half plays.
+    Both engine readers take it from `Health.dies_at_failures` now, so this
+    is `c.dies_at_failures(2)`. `items/implement_d.py` keeps its own literal
+    deliberately: that 3 is a limit printed on that item rather than the
+    death rule, and moving it with this field would retune the card.
+
+    `When.ENCOUNTER` is the printed "until the end of the encounter", and
+    the hold restores whatever the threshold was rather than the default 3
+    -- two such holds must not have the inner one hand back print.
     """
     c.heal(c.surge_value(), on=c.me)
+    c.dies_at_failures(2, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

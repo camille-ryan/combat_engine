@@ -786,7 +786,9 @@ class Encounter:
                 self.world.heal(ev.actor, ev.actor, surge_value(self.world, ev.actor))
             return
         health.failures += 1
-        if health.failures >= 3:
+        # `Health.dies_at_failures`, not a literal 3: one card moves the
+        # threshold to 2 for an encounter, and this is the read that kills.
+        if health.failures >= health.dies_at_failures:
             from .resolve import _die
 
             _die(self.world, ev.actor)

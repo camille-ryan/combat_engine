@@ -235,6 +235,28 @@ class Health:
     #: taken to -19, which is half again the hit points on its card, on
     #: every monster in the game. Set by `loader.spawn`.
     dies_at_zero: bool = False
+    #: **How many failed death saves kill this creature.** Three is the
+    #: printed rule and the default.
+    #:
+    #: One card moves it -- *"until the end of the encounter, you die after
+    #: failing your second, rather than third, death saving throw"* -- and
+    #: `p4288` carried the marker for it. Its note had the shape right:
+    #: `dies_at_zero` sits one line up, so a per-creature death rule is
+    #: something this component already does.
+    #:
+    #: **That note said the literal `3` was read in one place and it is read
+    #: in three**, which is the reason this is a field rather than three
+    #: edits. `turns._death_save` is the one that kills; `Cast.death_save`
+    #: caps the counter so a creature already dead takes no fourth failure;
+    #: and `items/implement_d.py` reads it as **its own card's** limit,
+    #: which is deliberately left at a literal -- that number is printed on
+    #: the item, not derived from the death rule, and moving with this field
+    #: would silently retune the card.
+    #:
+    #: A threshold honoured by the killer and not by the cap is the shape
+    #: `engine/CLAUDE.md` calls this component's commonest bug, so both
+    #: engine readers take it from here. Written by `c.dies_at_failures`.
+    dies_at_failures: int = 3
 
     def __post_init__(self) -> None:
         if self.hp == 0:

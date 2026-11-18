@@ -577,6 +577,9 @@ CATEGORIES: dict[str, dict] = {
                 # way others spend a surge -- and not a state anything
                 # reads about. #1222.
                 "death_save_failure",
+                # `dies_at_failures` moves the THRESHOLD, where
+                # `death_save_failure` above spends one failure against it.
+                "dies_at_failures",
                 "dailies_per_day",
                 "regain_surge", "second_wind", "spend_surge",
                 # `surge_from` lends a whole POOL, where the five around it

@@ -56,6 +56,7 @@ from combat_engine.engine import (
     UpTo,
     When,
     Window,
+    ZoneEntered,
     distance,
     power,
     spread,
@@ -347,7 +348,6 @@ def p12745(c: Cast) -> None:
         *ARCANE_IMPLEMENT, Keyword.NECROTIC, Keyword.ZONE, Keyword.NECROMANCY, Keyword.SHADOW,
     ],
     attack=Attack(INT, vs=FORT),
-    dropped=("Relation.GRANTS_ADVANTAGE_TO_ALL",),
 )
 def p13987(c: Cast) -> None:
     """The zone lasts exactly as long as the hold that made it, so it is torn
@@ -357,9 +357,25 @@ def p13987(c: Cast) -> None:
     keyword goes through, and the +2 for trying again is a gated bonus that
     only pays against the same creature with the same row.
 
-    "Grants combat advantage while in the zone" is granted to the caster's
-    side: the relation names beneficiaries and there is no way to say
-    "everybody".
+    **"Grants combat advantage" prints no "to whom", and that is the whole
+    of the old marker.** Every word `c.grants_advantage` took named a slice
+    of somebody's side -- `"me"`, `"ally"`, `"team"`, `"enemies"` -- and the
+    bare printed sentence names none: a creature that grants combat
+    advantage grants it to whoever attacks it. This was written `to="team"`,
+    the caster's side only, so an enemy of the zone's victim attacked it
+    without the advantage the card gives. `to="all"` is everybody but the
+    grantor.
+
+    **And it is re-granted on arrival, which it was not.** The card says
+    *"while in the zone"*; `exposed` ran once at cast time, so a creature
+    that walked in afterwards granted nothing. It watches `ZoneEntered` too
+    now, and the subscription hangs off the zone's own effect so it dies
+    with the zone -- which is the hold's clock rather than an encounter.
+
+    `drivers.granted_to_all` asserts this on the **relation** rather than on
+    `query.has_combat_advantage`: this row's own board leaves the victim
+    already granting to everybody, so the derived answer is True before the
+    row runs and could not show the clause landing.
     """
     victim = c.target
     if victim is None:
@@ -390,11 +406,12 @@ def p13987(c: Cast) -> None:
     def exposed(ev: object) -> None:
         for standing in c.world.zones.occupants(zone):
             if standing != me:
-                c.grants_advantage(on=standing, until=When.EOTNT, to="team")
+                c.grants_advantage(on=standing, until=When.EOTNT, to="all")
 
     zone_held = c.world.get(zone, Zone)
     if zone_held is not None and zone_held.effect is not None:
         zone_held.effect.subs.append(c.world.bus.on(TurnEnd, dusk))
+        zone_held.effect.subs.append(c.world.bus.on(ZoneEntered, exposed))
     if held is not None:
         held.on_end.append(lambda: c.world.zones.end(zone, "the hold ended"))
     exposed(None)

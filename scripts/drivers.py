@@ -14059,6 +14059,201 @@ def immunity_to_a_keyword(out: Result) -> None:
                  f"{sorted(k.value for k in shields.immune_keywords) if shields else None}")
 
 
+def granted_to_all(out: Result) -> None:
+    """*"It grants combat advantage while in the zone"* -- `p13987` -- and
+    *"you die after failing your second, rather than third, death saving
+    throw"* -- `p4288`. Two rows, two fields, one shape: a number or a side
+    that every reader has to agree about.
+
+    **`to="all"` is the printed sentence with no "to whom" in it.** Every
+    word `c.grants_advantage` took named a slice of somebody's side, and a
+    creature that grants combat advantage grants it to whoever attacks it.
+    `p13987` was written `to="team"` for want of the word, which is the
+    caster's side only -- so an enemy of the zone's victim attacked it
+    without the advantage the card gives.
+
+    **Asserted on the relation, not on `query.has_combat_advantage`**, and
+    that is forced rather than chosen: this row's own board leaves the
+    victim already granting combat advantage to everybody, so the derived
+    answer is True before the row runs. Reading
+    `Relation.GRANTS_CA_TO` counts beneficiaries instead, which is
+    board-independent -- 3 under `to="team"`, 9 under `to="all"`, and the
+    six that appear are the ones **not** on the caster's side.
+
+    **`p4288`'s field is the other half of the same lesson.** Its note said
+    the literal `3` was read "in `Cast`, in the one place that reads it, and
+    nothing else in `engine/` reads the field at all". `turns._death_save`
+    reads it too, and that is the read that *kills* -- `Cast` only caps the
+    counter. A threshold honoured by the cap and not by the killer leaves
+    the whole drawback inert while the row reports finished, which is this
+    component's named failure mode. Both readers are asserted here.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Died, TurnEnd
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Condition, Relation
+
+    # -- to="all" against to="team", on the relation ----------------------
+    counts: dict[str, tuple[int, int]] = {}
+    for word in ("team", "all"):
+        world, me, _ = _board("p13987", 1)
+        foes = sorted(enemies(world, me))
+        out.that(bool(foes), f"to={word}: the board deals a victim", f"{foes}")
+        if not foes:
+            return
+        victim = foes[0]
+        Cast(world=world, me=me, ref="probe").grants_advantage(
+            on=victim, until=When.EONT, to=word)
+        got = set(world.relations.targets(Relation.GRANTS_CA_TO, victim))
+        ours = {me, *allies(world, me)}
+        counts[word] = (len(got), len(got - ours))
+    out.that(counts["all"][0] > counts["team"][0],
+             'to="all" names more beneficiaries than to="team" -- the word'
+             " that could not be spelled before",
+             f"team {counts['team'][0]}, all {counts['all'][0]}")
+    out.that(counts["team"][1] == 0,
+             'and to="team" names NOBODY off the caster\'s side, which is'
+             " what made it the wrong word for a bare printed grant",
+             f"{counts['team'][1]}")
+    out.that(counts["all"][1] > 0,
+             'while to="all" does -- those are the creatures the card gives'
+             " the advantage to and the old spelling left out",
+             f"{counts['all'][1]} off the caster's side")
+
+    # -- and p13987 asks for it, which is the row arm ---------------------
+    world, me, _ = _board("p13987", 1)
+    foes = sorted(enemies(world, me))
+    if not foes:
+        return
+    victim = foes[0]
+    c = Cast(world=world, me=me, ref="p13987")
+    c.target = victim
+    REGISTRY["p13987"].body(c)
+    ours = {me, *allies(world, me)}
+    wide = [
+        who for who in sorted(enemies(world, me))
+        if set(world.relations.targets(Relation.GRANTS_CA_TO, who)) - ours
+    ]
+    out.that(bool(wide),
+             "p13987's own body grants it to creatures off the caster's side"
+             " -- the row arm, and the plant that matters is putting"
+             ' `to="team"` back',
+             f"{wide}")
+
+    # -- p4288: BOTH readers take the threshold from the field ------------
+    world, me, _ = _board("p4288", 1)
+    health = world.get(me, Health)
+    out.that(health is not None, "the caster has Health", f"{health}")
+    if health is None:
+        return
+    out.that(health.dies_at_failures == 3,
+             "three failed death saves is the printed default",
+             f"{health.dies_at_failures}")
+    c = Cast(world=world, me=me, ref="p4288")
+    REGISTRY["p4288"].body(c)
+    out.that(health.dies_at_failures == 2,
+             "p4288 moves it to two, which is its printed drawback -- the row"
+             " arm",
+             f"{health.dies_at_failures}")
+
+    # The CAP reader: a row may not charge a failure past the threshold.
+    health.failures = 1
+    got = Cast(world=world, me=me, ref="probe").death_save_failure(on=me)
+    out.that(got == 2, "a failure is charged up to the threshold", f"{got}")
+    again = Cast(world=world, me=me, ref="probe").death_save_failure(on=me)
+    out.that(again == 2,
+             "and refused past it -- the CAP reader honours the moved number,"
+             " where a literal 3 would have taken a third failure from a"
+             " creature that is already dead at two",
+             f"{again}")
+
+    # -- the KILLER reader, driven rather than read out of the source -----
+    #
+    # **Four arms, because one cannot tell the threshold moving from the
+    # death rule being broken.** `turns._death_saves` runs on `TurnEnd` for
+    # a dying creature, so the whole thing is drivable: load a failed save,
+    # end the turn, and ask whether `Died` was announced. A source-text
+    # check for the field would redden on a reformat and say nothing about
+    # behaviour.
+    def dying_turn(run_row: bool, failures_before: int) -> tuple[int, bool]:
+        world, me, _ = _board("p4288", 1)
+        health = must(world.get(me, Health), "the caster has Health")
+        if run_row:
+            REGISTRY["p4288"].body(Cast(world=world, me=me, ref="p4288"))
+        threshold = health.dies_at_failures
+        gone: list[int] = []
+        world.bus.on(Died, lambda ev: gone.append(ev.actor))
+        probe = Cast(world=world, me=me, ref="probe")
+        health.hp = -1
+        probe.condition(Condition.DYING, on=me)
+        health.failures = failures_before
+        world.rng.loaded = 1          # a death save that fails
+        world.bus.emit(TurnEnd(actor=me, round=world.round))
+        return threshold, me in gone
+
+    plain_one = dying_turn(False, 1)
+    moved_one = dying_turn(True, 1)
+    moved_none = dying_turn(True, 0)
+    plain_two = dying_turn(False, 2)
+
+    out.that(plain_one == (3, False),
+             "with the printed threshold, a second failed save does NOT kill"
+             " -- the premise, and the arm that would catch a death rule"
+             " broken in the other direction",
+             f"{plain_one}")
+    out.that(moved_one == (2, True),
+             "and with p4288's threshold a second failed save DOES -- the"
+             " clause, driven through `turns._death_saves` rather than read"
+             " off the source",
+             f"{moved_one}")
+    out.that(moved_none == (2, False),
+             "p4288 does not kill early either: one failure with the"
+             " threshold at two leaves the caster standing, so the row moved"
+             " a number rather than shortening the count",
+             f"{moved_none}")
+    out.that(plain_two == (3, True),
+             "and three failures still kill a caster who never used the row"
+             " -- the control that says these arms are about the field and"
+             " not about death having stopped working",
+             f"{plain_two}")
+
+    # -- two holds, and the inner one hands back the OUTER number ---------
+    #
+    # The restore closes over whatever the threshold was rather than the
+    # printed 3, and this is the only arm that can tell the difference: with
+    # one hold the two answers are the same number. A plant restoring 3
+    # passed until this existed.
+    world, me, _ = _board("p4288", 1)
+    health = must(world.get(me, Health), "the caster has Health")
+    out.that(health.dies_at_failures == 3, "starting from the printed three",
+             f"{health.dies_at_failures}")
+    outer = Cast(world=world, me=me, ref="probe-outer").dies_at_failures(
+        2, on=me, until=When.ENCOUNTER)
+    out.that(health.dies_at_failures == 2, "the outer hold moves it to two",
+             f"{health.dies_at_failures}")
+    inner = Cast(world=world, me=me, ref="probe-inner").dies_at_failures(
+        1, on=me, until=When.ENCOUNTER)
+    out.that(health.dies_at_failures == 1, "the inner hold moves it to one",
+             f"{health.dies_at_failures}")
+    out.that(inner is not None and outer is not None,
+             "both holds were really applied", f"{inner} {outer}")
+    if inner is not None:
+        world.effects.end(inner, why="probe")
+    out.that(health.dies_at_failures == 2,
+             "and ending the inner one hands back **two**, not the printed"
+             " three -- the restore closes over what it found rather than"
+             " over print, which one hold on its own cannot distinguish",
+             f"{health.dies_at_failures}")
+    if outer is not None:
+        world.effects.end(outer, why="probe")
+    out.that(health.dies_at_failures == 3,
+             "and ending the outer one gets print back", f"{health.dies_at_failures}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -96523,6 +96718,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "granted_to_all": (granted_to_all,
+                       "a bare printed grant names no side, and a death-save"
+                       " threshold both readers must agree about"),
     "keyword_immunity": (immunity_to_a_keyword,
                          "immunity to a power's KEYWORD refuses the"
                          " conditions it imposes; 744 creatures carry one"),

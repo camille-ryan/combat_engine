@@ -11,6 +11,8 @@ Things a creature spends, and the budget it spends them from.
   - "Each day you can use only one bard attack power." Returns the
 - `c.death_save_failure(self, *, on: 'int | None' = None) -> 'int'`
   - Charge a failed death save as a price. Returns the new count.
+- `c.dies_at_failures(self, failures: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Move how many failed death saves kill this creature.
 - `c.regain_surge(self, count: 'int' = 1, *, on: 'int | None' = None) -> 'int'`
   - "Each target regains a healing surge." Returns how many it now has.
 - `c.second_wind(self, *, on: 'int | None' = None, cost: 'ActionType' = <ActionType.STANDARD: 'standard'>, heal: 'bool' = True) -> 'bool'`

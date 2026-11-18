@@ -14003,6 +14003,8 @@ class Cast:
         a side, and four rows written `to="side"` had been doing exactly
         that. A `KeyError` is the same answer `c.within` gives.
         """
+        from .query import creatures as _creatures
+
         who = self._who(on)
         if who is None:
             return None
@@ -14027,6 +14029,17 @@ class Cast:
                 # id -- so the relation has always accepted enemies as
                 # beneficiaries and only the side word was missing.
                 "enemies": self.enemies(),
+                # **"Grants combat advantage", with no "to whom" printed.**
+                # Every word above names a side, and the bare printed
+                # sentence names none: a creature that grants combat
+                # advantage grants it to whoever attacks it. `p13987` was
+                # written `to="team"` for want of this, which is the
+                # caster's side only -- so an enemy of the zone's victim
+                # attacked it without the advantage the card gives.
+                #
+                # Everybody except the grantor, which is not a slice of
+                # anybody's side and so could not be spelled before.
+                "all": [e for e in _creatures(self.world) if e != who],
             }[to]
         if when is None:
             granted = self.world.effects.apply(
@@ -18897,6 +18910,55 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             skill=asked, was=was, by=self.ref))
         return True
 
+    def dies_at_failures(
+        self, failures: int, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Move how many failed death saves kill this creature.
+
+        *"Until the end of the encounter, you die after failing your second,
+        rather than third, death saving throw."* -- `p4288`, and the only
+        printed line that moves it.
+
+        **Defaults to the caster**, unlike most of this class, because the
+        one card that prints it is a drawback the character takes on itself
+        in exchange for the hit points above it. Pass `on=` for a row that
+        inflicts it on somebody else; none does today.
+
+        Both engine readers take the threshold from the field, so a creature
+        that dies at 2 is killed at 2 by `turns._death_save` **and** cannot
+        be handed a third failure by `c.death_save_failure` below. A
+        threshold honoured by one and not the other is this component's
+        commonest bug.
+
+        Put back when the hold ends, and put back to **whatever it was**
+        rather than to 3 -- two such holds on one creature must not have the
+        inner one restore the printed default.
+        """
+        who = self._who(on) or self.me
+        health = self.world.get(who, Health)
+        if health is None:
+            return None
+        if failures < 1:
+            raise ValueError(
+                f"{self.ref}: dies_at_failures({failures}) would kill before "
+                f"a save is ever failed"
+            )
+        before = health.dies_at_failures
+        health.dies_at_failures = failures
+
+        def _off() -> None:
+            health.dies_at_failures = before
+
+        def _on() -> None:
+            health.dies_at_failures = failures
+
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} dies at {failures} failed saves",
+            on_suspend=[_off], on_resume=[_on], by=self.ref,
+        )
+
     def death_save_failure(self, *, on: int | None = None) -> int:
         """Charge a failed death save as a price. Returns the new count.
 
@@ -18930,7 +18992,9 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         who = self._who(on) or self.me
         health = self.world.get(who, Health)
-        if health is None or health.failures >= 3:
+        # The same threshold the killer uses, so a creature that dies at 2
+        # cannot be handed a third failure by a row.
+        if health is None or health.failures >= health.dies_at_failures:
             return health.failures if health is not None else 0
         health.failures += 1
         # Said, because the price is otherwise invisible: nothing announces
