@@ -161,8 +161,15 @@ def _at(world, eid: int) -> tuple[int, int]:  # noqa: ANN001
     return here.square
 
 
-def _board(ref: str = "m145a0", seed: int = 1):  # noqa: ANN202
+def _board(ref: str = "m145a0", seed: int = 1, **how):  # noqa: ANN202, ANN003
     """A legal world, borrowed from the auditor rather than built again.
+
+    **`**how` forwards `audit.board`'s own knobs** -- `pose=True` above
+    all, which is off by default there and is what runs the per-row poses
+    (`_pose_rest`, `_pose_flanking`, `_put_in_hand` and the rest). A rule
+    asserting that the board can pose its row's printed Requirement has to
+    ask for them, and the alternative -- importing `audit.board` directly
+    -- is the order-dependence `#1037` is about.
 
     **The draw flag is pinned off for the build and put back.** `#1037`.
     `audit.py` sets `chargen.SCORED_CHOICES = False` at module level
@@ -193,7 +200,7 @@ def _board(ref: str = "m145a0", seed: int = 1):  # noqa: ANN202
 
     chargen.SCORED_CHOICES = False
     try:
-        return board(ref, seed)
+        return board(ref, seed, **how)
     finally:
         chargen.SCORED_CHOICES = was
 
@@ -16620,6 +16627,84 @@ def a_penalty_that_ends_on_a_quiet_turn(out: Result) -> None:
              " penalty too -- the save-ends half, which no assertion above"
              " touches",
              f"recovered {saved} of {wis}")
+
+
+def a_rest_requirement_refuses_mid_fight(out: Result) -> None:
+    """*"Requirement: You must be taking a short rest."* -- `p9307` and
+    `p11540`, and 26 printed rows across every spec table.
+
+    **Both rows declared the text and no predicate**, so each was offered
+    in the middle of a fight, which is the one thing that Requirement
+    forbids. The marker said "nothing in the engine can be asked whether a
+    creature is resting", and gave the reason: `turns.short_rest` was a
+    call that left no state.
+
+    It leaves one now. `World.resting` is an **interval** rather than the
+    moment `ShortRested` announces -- a requirement is asked when a row is
+    offered, which is never during the one function call that does the
+    resting. `turns.short_rest` opens it and `turns.Encounter.start`
+    closes it, which is the sequence `turns.py`'s own note describes.
+
+    **Three states, because the closing half is as load-bearing as the
+    opening one.** A flag that was never cleared would leave every row in
+    the tree thinking the party was resting for the whole fight, and the
+    arm that catches it is the one asserting the fight clears it.
+
+    Then the row: refused mid-fight, allowed when resting. The board poses
+    the window itself through `audit._pose_rest`, so the row is reachable
+    as well as correct -- which is the other half, and the reason the
+    audit arm is here rather than taken on trust.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import turns
+    from combat_engine.engine.dsl import get, usable
+    from combat_engine.engine.query import resting
+
+    REF = "p9307"
+    row = must(get(REF), REF)
+    out.that("rest" in (row.requires_text or "").lower(),
+             f"{REF} prints a rest requirement -- the premise",
+             f"{row.requires_text!r}")
+
+    # -- the interval ----------------------------------------------------
+    world, me, _ = _board(REF, 1)
+    out.that(not resting(world, me),
+             "a board mid-fight is not resting -- `Encounter.start` has"
+             " closed the window",
+             f"{resting(world, me)}")
+    turns.short_rest(world)
+    out.that(resting(world, me),
+             "a short rest opens it", f"{resting(world, me)}")
+    turns.Encounter(world).start()
+    out.that(not resting(world, me),
+             "and starting a fight closes it again -- the assertion a flag"
+             " that is set and never cleared fails, which would leave every"
+             " row in the tree resting for the whole fight",
+             f"{resting(world, me)}")
+
+    # -- the Requirement -------------------------------------------------
+    fighting, _fme, _ = _board(REF, 1)
+    fighting.resting = ""
+    out.that(not usable(fighting, _fme, row, board=True)[0],
+             "with the window shut the row is REFUSED -- the printed"
+             " Requirement, and the wrong offer this closes",
+             f"{usable(fighting, _fme, row, board=True)}")
+    fighting.resting = "short"
+    out.that(usable(fighting, _fme, row, board=True)[0],
+             "and allowed once it is open",
+             f"{usable(fighting, _fme, row, board=True)}")
+
+    # -- and the board poses it, so the row stays reachable --------------
+    posed, pme, _ = _board(REF, 1, pose=True)
+    out.that(resting(posed, pme),
+             "the audit board opens the window for a row that prints the"
+             " requirement -- `audit._pose_rest`, keyed off `requires_text`"
+             " alone. Without it the row is correct and unreachable, which"
+             " is half an answer",
+             f"{posed.resting!r}")
+    out.that(usable(posed, pme, row, board=True)[0],
+             "so the row is usable on the board it will be audited on",
+             f"{usable(posed, pme, row, board=True)}")
 
 
 def compelled_walk(out: Result) -> None:
@@ -99095,6 +99180,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "rest_requirement": (a_rest_requirement_refuses_mid_fight,
+                         "a rest requirement that refuses mid-fight, and a"
+                         " board that poses the window anyway"),
     "quiet_turn": (a_penalty_that_ends_on_a_quiet_turn,
                    "a penalty with two enders: a save, and a turn finished"
                    " without an attack"),

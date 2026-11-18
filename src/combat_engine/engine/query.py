@@ -4156,6 +4156,27 @@ def turn_began_at(world: World, eid: int) -> int:
     return -1
 
 
+def resting(world: World, eid: int | None = None) -> bool:
+    """Is the party between fights, having rested?
+
+    *"Requirement: You must be taking a short rest"* -- 26 printed rows,
+    two of them powers that carried `dropped=("query.resting()",)`. Both
+    were offered in the middle of a fight, which their cards forbid, so
+    this closes a wrong offer rather than opening a new one.
+
+    **`eid` is accepted and ignored, deliberately.** A rest is a property
+    of the party's situation rather than of one creature -- the whole group
+    stops for five minutes -- so there is no per-creature answer to give.
+    The parameter is here because every `requires=` predicate is called
+    with a creature, and a reader whose signature lied about that would be
+    the next thing somebody worked around.
+
+    True for an extended rest as well as a short one: every printed line
+    this answers says *a* rest, and an extended one is a superset.
+    """
+    return bool(world.resting)
+
+
 def attacked_during_own_turn(world: World, eid: int) -> bool:
     """Has this creature declared an attack since its own turn began?
 

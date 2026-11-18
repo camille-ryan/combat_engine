@@ -140,6 +140,23 @@ class World:
         #:
         #: Read through the attack context, never directly from a row.
         self.provocation: Any = None
+        #: Whether the party is between fights, having just rested --
+        #: `"short"`, `"extended"` or `""`.
+        #:
+        #: **An interval, not the moment `ShortRested` announces.** 26
+        #: printed rows carry *"Requirement: you must be taking a short
+        #: rest"*, and a requirement is a question asked when the row is
+        #: offered, which is never during the one function call that does
+        #: the resting. `turns.short_rest` opens it and
+        #: `turns.Encounter.start` closes it, which is the sequence
+        #: `turns.py`'s own note describes: "`short_rest(world)` and only
+        #: then `encounter.start()`".
+        #:
+        #: Read through `query.resting`. `p9307` and `p11540` both carried
+        #: `dropped=("query.resting()",)` for want of it, and both were
+        #: being offered in the middle of a fight, which their cards
+        #: forbid.
+        self.resting: str = ""
         #: Creatures their own **allies** provoke opportunity attacks from,
         #: each mapped to the effects holding that open.
         #:

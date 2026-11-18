@@ -249,6 +249,9 @@ class Encounter:
         # can hear the opening ones. Arming after meant the only initiative
         # rolls a row could ever answer were rerolls, which is not what any
         # printed line says.
+        # The rest is over the moment the fight starts -- see
+        # `World.resting`, which `short_rest` opens.
+        self.world.resting = ""
         self.triggers.arm()
         self._refresh_pools()
         self.order = self._roll_initiative()
@@ -896,6 +899,10 @@ def short_rest(world: World, *, surges: bool = True) -> None:
     from .dsl import get
     from .events import ShortRested
 
+    # **Opened here and closed by `Encounter.start`**, so a row printing
+    # "you must be taking a short rest" has an interval to be offered in.
+    # See `World.resting`.
+    world.resting = "short"
     rested: list[int] = []
     for eid, powers in world.each(Powers):
         for ref in list(powers.used):

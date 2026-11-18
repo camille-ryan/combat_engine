@@ -4797,6 +4797,49 @@ _READS_FLOORED = re.compile(
 _NEGATED = re.compile(r"\bmust not\b|\bno longer\b|\bwithout\b|\bis not\b", re.I)
 
 
+#: A printed rest requirement, read off `requires_text` and nothing else.
+#: 26 rows across every spec table carry one; two of them are powers.
+_WANTS_REST = re.compile(r"taking (?:a|an) (?:short|extended) rest"
+                         r"|during (?:a|an) (?:short|extended) rest", re.I)
+
+
+def _pose_rest(world, caster: int, declared) -> None:  # noqa: ANN001
+    """Open the between-fights window for a row that prints a rest.
+
+    *"Requirement: You must be taking a short rest"* -- `p9307` and
+    `p11540`. `World.resting` is the interval those read through
+    `query.resting`, opened by `turns.short_rest` and closed by
+    `Encounter.start`; a board has just started an encounter, so without
+    this the Requirement is false and the row is never usable here.
+
+    **Off `requires_text` alone, not the body**, which is the reasoning
+    `_WANTS_TWO_HANDS` records a few lines down: a row that merely mentions
+    a rest in a comment is not a row that needs one.
+
+    **Set after `Encounter.start()`, which is where every pose runs** --
+    see `_pose`'s own note. Start clears the flag, so the order is doing
+    the work rather than being got away with.
+
+    A fighting board where the party is also mid-rest is not a dealt
+    situation, and this file already says that about the hand it composes:
+    the board's job is to pose the printed Requirement so the row can be
+    measured, not to be a position anybody could reach.
+    """
+    if declared is None:
+        return
+    asking = getattr(declared, "requires_text", "") or ""
+    if not _WANTS_REST.search(asking):
+        return
+    # **A row can want the state ABSENT**, and posing it then turns a
+    # measurable row into a refused one -- the `_WANTS` loop carries the
+    # same guard and the note explaining what it cost there. No printed row
+    # says "must not be resting" today; the guard is here because the loop
+    # below proves the shape is real and the check is one line.
+    if _NEGATED.search(asking):
+        return
+    world.resting = "short"
+
+
 def _pose_beast(world, caster: int, declared) -> None:  # noqa: ANN001
     """Give the caster's companion the category its Requirement names.
 
@@ -5141,6 +5184,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
     _pose_rage(world, caster, declared)
     _pose_state(world, caster, declared)
     _pose_beast(world, caster, declared)
+    _pose_rest(world, caster, declared)
     for what, pattern in _WANTS:
         if not pattern.search(asking):
             continue

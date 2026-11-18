@@ -5,10 +5,14 @@ five of the seven hand a bonus, a heal or a rescue to an ally, so almost
 nothing here is written `on=c.me`. The two rerolls are the exceptions and
 both answer a check of the character's own.
 
-Two rows print "Requirement: you must be taking a short rest" and nothing
-in the engine can be asked whether a creature is resting -- `turns.
-short_rest` is a call and leaves no state -- so both carry the same
-`dropped=` symbol. Their payouts are written and play.
+Two rows print "Requirement: you must be taking a short rest", and both
+used to carry the text with no predicate behind it -- so each was offered
+in the middle of a fight, which is the one thing that Requirement forbids.
+The old note said "nothing in the engine can be asked whether a creature
+is resting" and gave the reason: `turns.short_rest` was a call that left no
+state. It leaves one now. `World.resting` is an **interval** -- opened
+there, closed by `turns.Encounter.start` -- and `query.resting` reads it.
+26 printed rows across every table carry a rest requirement.
 
 `cls` is the skill and not a class, which is the module's own convention;
 see `__init__.py`.
@@ -47,12 +51,23 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Stats
 from combat_engine.engine.events import AttackDeclared, Healed, Hit, SkillCheck, SurgeSpent
-from combat_engine.engine.query import adjacent, bloodied, distance_between, team
+from combat_engine.engine.query import (
+    adjacent,
+    bloodied,
+    distance_between,
+    resting,
+    team,
+)
 
 #: The lowest Intelligence score p11541's target line allows.
 _BRIGHT = 5
 
 _DISLIKED = "you make a diplomacy check and dislike the result"
+#: Both rows printing it carried `dropped=("query.resting()",)` and the
+#: text with no predicate behind it, so each was offered in the middle of a
+#: fight -- which is the one thing the Requirement forbids. `World.resting`
+#: is the interval now: `turns.short_rest` opens it and
+#: `turns.Encounter.start` closes it.
 _RESTING = "you must be taking a short rest"
 
 
@@ -129,7 +144,7 @@ def p12830(c: Cast) -> None:
     reach=CloseBurst(5),
     target=EACH_ALLY,
     requires_text=_RESTING,
-    dropped=("query.resting()",),
+    requires=resting,
 )
 def p9307(c: Cast) -> None:
     """"One or more healing surges" is one payout, not one per surge, so the
@@ -163,7 +178,7 @@ def p9307(c: Cast) -> None:
     reach=CloseBurst(5),
     target=EACH_ALLY,
     requires_text=_RESTING,
-    dropped=("query.resting()",),
+    requires=resting,
 )
 def p11540(c: Cast) -> None:
     """"+1 bonus" with no type word in front of it is untyped, so `kind=` is
