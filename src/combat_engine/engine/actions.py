@@ -1859,9 +1859,25 @@ def _dropping(world: World, encounter: Encounter, actor: int) -> list[Action]:
     for held in world.effects.live.values():
         if held.drop_by == actor and held not in mine:
             mine.append(held)
+    # **A second ender, at its own cost.** One printed line gives two --
+    # `p11273`'s caster ends it as a free action and the held creature as
+    # a minor -- and `drop_cost`/`drop_by` is a single pair. Collected
+    # here so the loop below offers both without knowing which it has.
+    seconds = {
+        held.id: held.drop_also[0]
+        for held in world.effects.live.values()
+        if held.drop_also is not None and held.drop_also[1] == actor
+    }
+    for held in world.effects.live.values():
+        if held.id in seconds and held not in mine:
+            mine.append(held)
     out: list[Action] = []
     for eff in sorted(mine, key=lambda e: e.id):
-        if eff.drop_cost is None or not encounter.can_spend(actor, eff.drop_cost):
+        # The second ender's cost when this actor is that ender, and the
+        # row's own otherwise -- so one effect can be free to its caster
+        # and a minor to its victim.
+        cost = seconds.get(eff.id, eff.drop_cost)
+        if cost is None or not encounter.can_spend(actor, cost):
             continue
         # **The condition gates the offer, not the payout.** `Effects.drop`
         # ends the effect before `drop_then` runs, so a payout that refused
@@ -1870,7 +1886,7 @@ def _dropping(world: World, encounter: Encounter, actor: int) -> list[Action]:
         if eff.drop_when is not None and not eff.drop_when(world, actor):
             continue
         out.append(
-            Action(kind="drop", cost=eff.drop_cost, subject=eff.id, ref=eff.label)
+            Action(kind="drop", cost=cost, subject=eff.id, ref=eff.label)
         )
     return out
 

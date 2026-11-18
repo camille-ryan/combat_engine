@@ -2109,6 +2109,7 @@ class Cast:
         then: Callable[[], None] | None = None,
         by: int | None = None,
         when: Callable[[Any, int], bool] | None = None,
+        also: tuple[ActionType, int] | None = None,
     ) -> Effect | None:
         """Let whoever holds this effect end it deliberately, for an action.
 
@@ -2129,6 +2130,17 @@ class Cast:
         the clock and not for a saving throw -- because a payout owed for
         choosing is not owed for waiting.
 
+        **`also=` is a SECOND ender at its own cost**, for the printed line
+        that gives two. `p11273` is the row: *"you can end this effect as
+        a free action ... if the target is a creature, it can end the
+        effect as a minor action"* -- the caster free, the held creature
+        for a minor. `drop_cost`/`drop_by` is one pair, so only one of the
+        two could be declared and that row carried a marker for the other.
+
+        `(cost, who)`. `actions._dropping` offers whichever applies to the
+        actor asking, so one effect is free to its caster and a minor to
+        its victim without either reader knowing about the other.
+
         **`by=` is the creature the printed line actually names**, for the
         two rows where that is not the holder: `p13861`'s domination is
         ended by the *caster's* minor action, and `m6109a3`'s swallowing by
@@ -2146,6 +2158,8 @@ class Cast:
         """
         if effect is not None:
             effect.drop_cost = cost
+            if also is not None:
+                effect.drop_also = also
             effect.drop_then = then
             if by is not None:
                 effect.drop_by = by

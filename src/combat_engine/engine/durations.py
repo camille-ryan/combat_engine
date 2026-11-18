@@ -137,6 +137,17 @@ class Effect:
     #: that -- "reverting to your normal form is a minor action". Distinct
     #: from `sustain_cost`: one keeps a thing alive, the other kills it.
     drop_cost: ActionType | None = None
+    #: **A second creature who may end it, at its own cost.** One printed
+    #: line gives two: `p11273`'s *"you can end this effect as a free
+    #: action ... if the target is a creature, it can end the effect as a
+    #: minor action"* -- the caster free, the held creature for a minor.
+    #: `drop_cost`/`drop_by` is one pair, so only one of the two could be
+    #: declared and the row carried a marker for the other.
+    #:
+    #: `(cost, who)`, and `None` for the overwhelming majority that name
+    #: one ender. Read by the same loop in `actions._dropping`, so a
+    #: second ender needs no second reader.
+    drop_also: tuple[ActionType, int] | None = None
     #: What ending it deliberately *buys*, when the printed line offers a
     #: trade rather than a dismissal -- "the ally can end the effect as a
     #: free action to teleport", "the target can end the effect by taking

@@ -7,6 +7,7 @@ from combat_engine.engine import (
     DAILY,
     ENCOUNTER,
     FORT,
+    FREE,
     MINOR,
     MOVE,
     NO_TARGET,
@@ -51,7 +52,6 @@ PSIONIC = [Keyword.PSIONIC]
         label="One ally, helpless enemy, or object of 400 pounds or less",
     ),
     keywords=PSIONIC,
-    dropped=("c.endable(also=)",),
 )
 def p11273(c: Cast) -> None:
     """Held aloft: the immobilisation is refreshed each time the hold is
@@ -83,13 +83,17 @@ def p11273(c: Cast) -> None:
     **Marked for the one printed line that cannot be written: two creatures
     may end this effect, at two different costs.** *"You can end this
     effect as a free action ... If the target is a creature, it can end the
-    effect as a minor action."* An `Effect` carries a single `drop_cost`
-    and a single `drop_by`, so only one of the two can be declared. The
-    hold sits on the **target** -- `c.effect` defaults `on` to `c.target`
-    -- and `actions.legal` offers a `drop` to the owner, so the target's
-    minor action is the half that comes for free and is written. The
-    caster's free action is the half that is missing, and `c.endable(also=)`
-    is what an author would reach for. #1327.
+    effect as a minor action."* An `Effect` carried a single `drop_cost`
+    and a single `drop_by`, so only one of the two could be declared --
+    and `c.endable(also=)` is exactly what this note said an author would
+    reach for, so that is what it is.
+
+    The hold sits on the **target** -- `c.effect` defaults `on` to
+    `c.target` -- and `actions.legal` offers a `drop` to the owner, so the
+    target's minor action is the half that comes for free. `also=(FREE,
+    c.me)` is the caster's, and `actions._dropping` offers whichever
+    applies to whoever is asking: free to the psion, a minor to the
+    creature held aloft, from one effect. #1327.
 
     **"400 pounds or less" is declared now**, as `max_weight=400` -- a
     printed number on this card, where `p11358`'s *"you can lift"* is a
@@ -118,7 +122,7 @@ def p11273(c: Cast) -> None:
     # drop to an effect's owner, so this needs no `by=`. The caster's
     # free-action half wants a second dropper at a second cost and is what
     # the marker names.
-    c.endable(spine, MINOR)
+    c.endable(spine, MINOR, also=(FREE, c.me))
 
     # "It ends if you end your turn out of range of the target." Measured
     # against the printed Ranged 10 at the moment the caster's turn ends,

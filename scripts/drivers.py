@@ -24726,6 +24726,74 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def one_effect_two_enders(out: Result) -> None:
+    """"You can end this as a free action ... it can end it as a minor."
+
+    `p11273` prints both, and `Effect` carried a single `drop_cost` with a
+    single `drop_by` -- so only one of the two could be declared and the
+    row had a marker for the other. Its note named the parameter an author
+    would reach for, `c.endable(also=)`, and that is what it is.
+
+    `drop_also` is `(cost, who)`, and `actions._dropping` offers whichever
+    applies to whoever is asking. **The two costs are what make this more
+    than a second `drop_by`**: free to the psion, a minor to the creature
+    held aloft, off one effect.
+
+    The timing arm matters as much as the cost. A minor is only spendable
+    on your own turn, so the held creature is correctly offered **nothing**
+    while the caster is acting -- which is the assertion that would look
+    like a bug if it were not stated.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.actions import legal
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.types import ActionType
+
+    world, me, _ = _audit.board("p11273", 1, pose=True)
+    mates = [a for a in _audit._allies_of(world, me) if a != me]
+    if not mates:
+        out.skip("no ally to lift")
+        return
+    aloft = mates[0]
+    use(world, me, "p11273", targets=[aloft])
+
+    held = [e for e in world.effects.live.values() if e.label == "p11273"]
+    carrying = [e for e in held if e.drop_also is not None]
+    out.that(bool(carrying),
+             "the hold carries a second ender",
+             f"{[(e.drop_cost, e.drop_also) for e in held]}")
+    if not carrying:
+        return
+    spine = carrying[0]
+    out.that(spine.drop_cost is ActionType.MINOR
+             and spine.drop_also[0] is ActionType.FREE,
+             "at the two printed costs -- a minor for the holder, free for"
+             " the caster -- which one `drop_cost` could not say",
+             f"drop_cost={spine.drop_cost}, also={spine.drop_also}")
+
+    def drops(who: int) -> list:
+        return [
+            a.cost.value for a in legal(world, world.encounter, who)
+            if a.kind == "drop" and a.ref == "p11273"
+        ]
+
+    out.that(drops(me) == ["free"],
+             "**the caster is offered it free**, which is the half the"
+             " single pair had no room for",
+             f"offered {drops(me)}")
+    out.that(drops(aloft) == [],
+             "and the creature held is offered nothing while somebody else"
+             " is acting -- a minor is only spendable on your own turn, so"
+             " this arm would read as a bug if it were not stated",
+             f"offered {drops(aloft)}")
+
+    world.turn = aloft
+    out.that(drops(aloft) == ["minor"],
+             "**and a minor on its own turn**, off the same effect",
+             f"offered {drops(aloft)}")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -92303,6 +92371,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "two_enders": (
+        one_effect_two_enders,
+        "c.endable(also=) gives one effect two enders at their own printed"
+        " costs (p11273, #1327)",
+    ),
     "shove_or_slide": (
         a_printed_choice_between_a_slide_and_a_longer_shove,
         "p11221 lengthens its own shove INSTEAD of sliding, never both",
