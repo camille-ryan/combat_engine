@@ -4284,26 +4284,96 @@ def _pose_the_parent_power(world, caster: int, declared) -> None:  # noqa: ANN00
         return
     said = getattr(declared, "requires_text", "") or ""
     found = _WANTS_A_PARENT.search(said)
-    if not found:
+    # **The conjured-weapon case skips the `usable` gate below**, and the
+    # distinction is the whole reason it is a separate branch. A
+    # Requirement naming a parent makes `usable` answer False, so that
+    # gate is a cheap "is anything actually wrong". A **trigger** naming
+    # the weapon leaves `usable` perfectly happy -- the row is an
+    # `action=NONE` interrupt -- and what is missing is a weapon in hand
+    # for the provocation to swing with. Gated on `usable` these two rows
+    # went on reading UNUSED.
+    sibling = "" if found else _conjuring_sibling(declared)
+    parent = found.group(1) if found else sibling
+    if not parent:
         return
-    parent = found.group(1)
     if parent == getattr(declared, "ref", ""):
         return
     # Only when the row is actually refused -- a Requirement naming a
     # parent the board happens to have dealt needs nothing doing, and
     # using the parent anyway would spend a turn and credit the child with
     # whatever the parent emitted.
-    if _usable(world, caster, declared, board=True)[0]:
+    if not sibling and _usable(world, caster, declared, board=True)[0]:
         return
     known = world.get(caster, Powers)
     if known is None:
         return
     if parent not in known.known:
         known.known.append(parent)
+    if sibling:
+        # **A hand has to be free, or the conjuring row refuses.** `p15895`
+        # prints *"Requirement: you must have a hand free"* and the board
+        # arms the caster -- so the pose granted the row, `use` answered
+        # the Requirement, and both children went on reading UNUSED with a
+        # weapon in hand and none conjured.
+        #
+        # Stowed rather than discarded: `Gear.held` is `weapons` minus
+        # `stowed`, so this frees the hand without taking anything away,
+        # and the conjured weapon's own teardown puts the board back.
+        from combat_engine.engine.components import Gear as _Gear
+
+        gear = world.get(caster, _Gear)
+        if gear is not None:
+            gear.stowed.update(w.ref for w in gear.held)
     with _ctx.suppress(Exception):
         _use(world, caster, parent)
     _free_the_immediate(world, caster)
     _refresh_actions(world, caster)
+
+
+#: A trigger that names a weapon the character had to conjure first.
+#:
+#: `p15899` and `p15900` print *"you hit an enemy ... using your <theme>
+#: weapon"*, and the weapon comes from a **sibling row of the same
+#: theme** rather than from a Requirement naming a ref. So
+#: `_WANTS_A_PARENT` cannot match it -- there is no ref in the sentence --
+#: and both rows read UNUSED the moment their trigger was narrowed
+#: correctly: before the narrowing they fired on any hit, which is the
+#: looser direction and the reason the clause was dropped.
+_WANTS_A_CONJURED_WEAPON = re.compile(
+    r"using your (?:\w+[- ])?weapon", re.I,
+)
+
+
+def _conjuring_sibling(declared) -> str:  # noqa: ANN001
+    """The row of this one's class that conjures the weapon it names.
+
+    Found off the **corpus** rather than from a table, because the link is
+    "same class, and that one calls `c.conjure_weapon`" -- there is no ref
+    in the printed trigger to read. One match or none: a theme that
+    conjured two weapons would be ambiguous, and `""` is then the honest
+    answer rather than a guess.
+    """
+    import inspect
+
+    from combat_engine.engine.dsl import REGISTRY
+
+    said = getattr(declared, "trigger", "") or ""
+    if not _WANTS_A_CONJURED_WEAPON.search(said):
+        return ""
+    mine = getattr(declared, "cls", "")
+    if not mine:
+        return ""
+    found = []
+    for ref, row in REGISTRY.items():
+        if ref == getattr(declared, "ref", "") or getattr(row, "cls", "") != mine:
+            continue
+        try:
+            body = inspect.getsource(row.body)
+        except (OSError, TypeError):
+            continue
+        if "conjure_weapon(" in body:
+            found.append(ref)
+    return found[0] if len(found) == 1 else ""
 
 
 def _refresh_actions(world, caster: int) -> None:  # noqa: ANN001

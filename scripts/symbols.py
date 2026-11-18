@@ -658,6 +658,7 @@ CATEGORIES: dict[str, dict] = {
                 # `stored_row` reads the ref back, and until #1233
                 # nothing fired one. Somebody looking for any of the
                 # three wants all three.
+                "conjure_weapon",
                 "grant_armor",
                 # Beside `grant_row` because both hand a creature
                 # something it did not have, and next to nothing else:
@@ -1012,6 +1013,11 @@ READERS: dict[str, list[str]] = {
         # `terrain` note above already declined. #1307.
         "drag_limit", "lift_limit",
         "hindering_at",
+        # Beside the ground readers because it is the same kind of
+        # question -- what the printed table holds, asked of the board
+        # rather than of a creature. `c.conjure_weapon` offers these
+        # shapes where a card prints none. #1341.
+        "conjurable_weapons",
         # Beside `hindering_at` because they are the pair of questions
         # about what the ground costs a mover: that one is "is this square
         # forbidden", this one "does this creature pay for rough going at

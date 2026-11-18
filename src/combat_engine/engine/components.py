@@ -2712,6 +2712,25 @@ class Weapon:
     #: plain -- the number is here so that the rows that *reduce* it have
     #: something to reduce, and so that a weapon with one runs hotter.
     enhancement: int = 0
+    #: An **explicit** critical-hit die, for a weapon whose card prints one
+    #: rather than carrying the printed "high crit" property.
+    #:
+    #: `cast._high_crit_dice` pays `damage` for a high-crit weapon -- one
+    #: extra `[W]`, which is what the 18 printed ones get. A conjured
+    #: weapon is the other shape: `p15895` prints *"+1 enhancement bonus
+    #: ... and it deals 1d8 extra damage on a critical hit"*, a die of its
+    #: own and not its damage die, so there was nowhere to put it.
+    #:
+    #: `Mods` was the obvious home and cannot be: its values are `int` and
+    #: this is a dice expression.
+    #:
+    #: **`repr=False`, following `Swung`'s own argument.** `replay`'s
+    #: fixtures record `str(event)` and `Event.wire` drops un-repr'd
+    #: fields, so a declared-but-unrepr'd field stays out of the
+    #: regression net and off the wire. No fixture carries a `Weapon`
+    #: repr today -- measured, 0 of 8 -- and this keeps that true whatever
+    #: starts carrying one.
+    crit: str = field(default="", repr=False)
     #: What this weapon's damage *is*. `None` is the ordinary case -- a
     #: sword deals whatever the power says, which is usually untyped -- and
     #: a type here is a weapon that has been made of something: a flaming

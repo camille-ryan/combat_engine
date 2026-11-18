@@ -11,6 +11,8 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
   - "Choose a 1st-level at-will attack power from <another class>."
 - `c.borrowed_rows(self, of: 'int', *, at_will: 'bool' = True, melee: 'bool' = True) -> 'list[str]'`
   - That creature's attack rows, for a power that copies one.
+- `c.conjure_weapon(self, *, enhancement: 'int' = 0, crit: 'str' = '', hands: 'str' = 'one-handed', shape: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You call to your hand a weapon that lasts until you dismiss it."
 - `c.expend_row(self, ref: 'str', *, on: 'int | None' = None) -> 'bool'`
   - "You can expend your p1449 racial power to mark each enemy."
 - `c.expended(self, *, group: 'str' = '', on: 'int | None' = None) -> 'list[str]'`

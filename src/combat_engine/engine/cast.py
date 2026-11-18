@@ -3425,7 +3425,17 @@ class Cast:
         if p is None or Keyword.WEAPON not in self.keywords_of(p):
             return 0
         weapon = self._swinging()
-        if weapon is None or "high crit" not in weapon.properties:
+        if weapon is None:
+            return self._granted_high_crit_dice()
+        # **An explicit die wins over the property's one extra `[W]`.** A
+        # conjured weapon prints its crit rider outright -- `p15895`'s
+        # "1d8 extra damage on a critical hit" -- which is a die of its own
+        # and not its damage die. Asked before the property, because a
+        # weapon may carry both and the printed number is the narrower
+        # statement.
+        if weapon.crit:
+            return weapon.crit
+        if "high crit" not in weapon.properties:
             return self._granted_high_crit_dice()
         return weapon.damage
 
@@ -15525,6 +15535,116 @@ class Cast:
                 when=when, dice=dice, dtype=dtype,
             ),
             side,
+        )
+
+    def conjure_weapon(
+        self,
+        *,
+        enhancement: int = 0,
+        crit: str = "",
+        hands: str = "one-handed",
+        shape: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You call to your hand a weapon that lasts until you dismiss it."
+
+        `c.grant_armor` above is the same shape one slot over, and the same
+        two halves: build the thing, and take it away again when the hold
+        ends. A weapon is the harder half because it is an **entry** in
+        `Gear.weapons` plus a wield, where armour is one word.
+
+        **The shape is chosen from the printed table and nothing is
+        invented**, which is the whole design question `p15895` raised. Its
+        card conjures *"a shadow-wrought weapon"* and prints **no weapon
+        type and no damage die** -- only the enhancement bonus and the
+        critical rider. So the die is the player's, exactly as *"a type of
+        armor with which you have proficiency"* is: `query.conjurable_weapons`
+        reads the 56 one-handed melee shapes out of `game.db` and `c.choose`
+        asks. Naming a die here would have been a guess against a silent
+        card, which `CLAUDE.md` forbids and which is the one thing this verb
+        is careful about.
+
+        `crit` is the printed critical rider and goes on `Weapon.crit`,
+        read by `cast._high_crit_dice` ahead of the "high crit" property --
+        a die of its own rather than one extra `[W]`.
+
+        `shape` names a slug outright for a card that prints one; without
+        it the choice is offered. Returns the hold, and the weapon goes
+        with it -- the previous wield is restored, so a creature that had
+        something in hand gets it back.
+        """
+
+        from .components import Gear, Weapon
+        from .query import conjurable_weapons
+
+        # **Defaults to the CASTER and not through `c.target`.** "You call
+        # to your hand" is always about yourself, as on `c.second_wind` and
+        # `c.considered_bloodied`; every card printing this is personal.
+        # `self._who(None)` follows the target, which is nobody on a
+        # personal row -- so the verb returned `None` and laid nothing.
+        who = self.me if on is None else on
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return None
+        shapes = conjurable_weapons(hands)
+        if not shapes:
+            return None
+        if shape:
+            picked = next((row for row in shapes if row[1] == shape), None)
+        else:
+            slugs = [row[1] for row in shapes]
+            want = self.choose(slugs, f"{self.ref}: what shape it takes")
+            picked = next((row for row in shapes if row[1] == want), None)
+        if picked is None:
+            return None
+        _ref, slug, damage, group, props, proficiency = picked
+        import json as _json
+
+        try:
+            properties = frozenset(_json.loads(props or "[]"))
+        except ValueError:
+            properties = frozenset()
+        made = Weapon(
+            # **Keyed on the row, not on the printed shape.** `p15899` and
+            # `p15900` trigger on hitting *"using your shadow-wrought
+            # weapon"*, so the thing needs a ref a sibling can name -- and
+            # two conjurings by different rows must not answer to each
+            # other's trigger.
+            ref=f"w:{self.ref}",
+            slug=slug,
+            damage=damage,
+            proficiency=int(proficiency or 0),
+            reach=1,
+            group=group,
+            hands=hands,
+            properties=properties,
+            enhancement=enhancement,
+            crit=crit,
+        )
+        was = gear.main
+        # **Appending is what puts it in hand**, which is worth saying
+        # because it reads as though the wield does: `Gear.held` is
+        # `weapons` minus `stowed`, so a fresh weapon is held the moment it
+        # is in the list. A plant removing the `wield` below therefore
+        # cannot go red for a one-hander, and that is a fact about the
+        # model rather than a hole in the rule.
+        #
+        # The call stays because it is load-bearing for the cases this verb
+        # will meet: a two-handed shape has to put everything else away,
+        # and a ref that was stowed has to come back out.
+        gear.weapons.append(made)
+        gear.wield(made)
+
+        def banish() -> None:
+            if made in gear.weapons:
+                gear.weapons.remove(made)
+            if was is not None and was in gear.weapons:
+                gear.wield(was)
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} weapon",
+            on_end=[banish], by=self.ref,
         )
 
     def grant_armor(

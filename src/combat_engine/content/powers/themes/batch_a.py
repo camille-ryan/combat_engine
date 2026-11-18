@@ -371,8 +371,46 @@ def p12409(c: Cast) -> None:
 SHADOW = [Keyword.ARCANE, Keyword.SHADOW]
 #: "using your shadow-wrought weapon", on both riders. The weapon does not
 #: exist, so what is left is "you hit with a melee or a ranged attack".
+#: The row that conjures this theme's weapon, and so the `Gear` ref it
+#: carries. Built from the ref rather than written out, so the two rows
+#: that trigger on hitting *with* it cannot drift from the row that lays
+#: it -- `c.conjure_weapon` keys the weapon on the conjuring row for that
+#: reason.
+SHADOW_WEAPON = "p15895"
+
+
+def _with_the_conjured_weapon(world: World, me: int, ev: Event) -> bool:
+    """"You hit an enemy ... **using your <theme> weapon**."
+
+    The narrowing both `p15899` and `p15900` were missing: `by_me` alone
+    fires on every hit the character lands, so the rider paid out on a
+    thrown dagger as readily as on the conjured blade.
+
+    `AttackResult.weapon` is the exact weapon the attack was made with --
+    `resolve.attack` stamps it and puts it on all four attack events --
+    and the fallback reads what is in hand, for an event that carries no
+    result.
+    """
+    if getattr(ev, "attacker", None) != me:
+        return False
+    wanted = f"w:{SHADOW_WEAPON}"
+    # **`AttackResult.weapon` is the REF, not the weapon.** Reading it as
+    # an object and asking for `.ref` gave `""` on every hit, so the
+    # narrowing refused the conjured weapon it was written to admit and
+    # both rows read UNUSED -- a plant could not have found that, because
+    # the clause was wrong in the direction that says "no".
+    used = getattr(getattr(ev, "result", None), "weapon", None)
+    if used:
+        return str(used) == wanted
+    gear = world.get(me, Gear)
+    held = gear.main if gear is not None else None
+    return held is not None and held.ref == wanted
+
+
 SHADOW_BLADE = Trigger(
-    Hit, by_me, "you hit an enemy with a melee attack or a ranged attack"
+    Hit,
+    _with_the_conjured_weapon,
+    "you hit an enemy with a melee or a ranged attack using your weapon",
 )
 
 
@@ -385,15 +423,45 @@ SHADOW_BLADE = Trigger(
     reach=PERSONAL,
     target=SELF,
     keywords=SHADOW,
-    todo=("c.conjure_weapon()",),
     requires=_a_hand_free,
     requires_text="must have a hand free",
 )
 def p15895(c: Cast) -> None:
-    """The whole printed Effect is a weapon: its enhancement bonus and its
-    critical die are the weapon's columns, not the caster's modifiers, and
-    laying them on the character instead would improve whatever they already
-    hold. Nothing conjures a weapon, so there is no half to keep."""
+    """"You call to your hand a weapon that lasts until you dismiss it as a
+    free action or until you use this power again."
+
+    `c.conjure_weapon` is the facility, and the old note was right that the
+    enhancement and the critical die *"are the weapon's columns, not the
+    caster's modifiers"* -- laying them on the character would improve
+    whatever it already held.
+
+    **The card prints no weapon type and no damage die**, only the
+    enhancement and the crit rider, so the shape is chosen from the printed
+    table: `query.conjurable_weapons` offers the 56 one-handed melee ones
+    and the die is whichever is picked. Naming one here would have been a
+    guess against a silent card.
+
+    Two of the three printed enders are written. The dismissal is
+    `c.endable` at a **free** action, which is what the card says rather
+    than the minor `c.endable` defaults to; *"until you use this power
+    again"* is the row ending its own earlier hold, found by `by` on the
+    effect. The third -- the hold simply running out -- is the encounter.
+
+    **The level line is two bands, not six.** The card scales at 6, 11, 16,
+    21 and 26; `etl.MAX_POWER_LEVEL` stops at 10, so a character this
+    engine builds sees `+1/1d8` and `+2/2d8` and nothing above. Written as
+    a comparison rather than a table for that reason.
+    """
+    # "Until you use this power again" -- the earlier weapon goes first.
+    for standing in list(c.world.effects.of(c.me)):
+        if standing.by == c.ref:
+            c.end_effect(standing, on=c.me, why="called again")
+    plus = 2 if c.level >= 6 else 1
+    hold = c.conjure_weapon(
+        enhancement=plus, crit=f"{plus}d8", until=When.ENCOUNTER,
+    )
+    if hold is not None:
+        c.endable(hold, FREE)
 
 
 @power(
@@ -465,7 +533,6 @@ def p15898(c: Cast) -> None:
     keywords=[*SHADOW, Keyword.COLD, Keyword.NECROTIC],
     trigger="you hit an enemy with a melee or ranged attack using your weapon",
     on=SHADOW_BLADE,
-    dropped=("c.conjure_weapon()",),
 )
 def p15899(c: Cast) -> None:
     """Two types on one blow, which `dtypes` says and two `c.damage` calls
@@ -488,7 +555,6 @@ def p15899(c: Cast) -> None:
     keywords=[*SHADOW, Keyword.COLD, Keyword.NECROTIC],
     trigger="you hit an enemy with a melee or ranged attack using your weapon",
     on=SHADOW_BLADE,
-    dropped=("c.conjure_weapon()",),
 )
 def p15900(c: Cast) -> None:
     """"Each Failed Saving Throw" is the `escalate` hook, which is handed the

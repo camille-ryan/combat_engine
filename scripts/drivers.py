@@ -24763,6 +24763,178 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_weapon_is_conjured_and_its_siblings_know_it(out: Result) -> None:
+    """"You call to your hand a weapon ... +1 enhancement bonus ... 1d8
+    extra damage on a critical hit."
+
+    Three rows of one theme: `p15895` conjures the weapon and was
+    **refused in play**; `p15899` and `p15900` trigger on hitting *"using
+    your <theme> weapon"* and dropped the narrowing, so `by_me` alone paid
+    their riders out on any hit the character landed.
+
+    **The card prints no weapon type and no damage die** -- only the
+    enhancement and the crit rider -- so the shape is chosen from the
+    printed table rather than invented. `query.conjurable_weapons` reads
+    the 56 one-handed melee ones out of `game.db`, which this layer
+    already does five times over for races and skills.
+
+    The crit rider is `Weapon.crit`, a die of its own: `_high_crit_dice`
+    pays `damage` for a printed high-crit weapon -- one extra `[W]` -- and
+    that is the wrong number for a card naming `1d8`. `Mods` could not
+    hold it, its values being `int`.
+
+    **One plant is deliberately out of this rule's reach**, said here so
+    the next reader does not hunt for it: changing `Weapon.crit`'s
+    **default** moves nothing measured below, because `c.conjure_weapon`
+    passes `crit=` explicitly and every weapon on these boards is one it
+    built -- the row's own Requirement is a free hand, so the board arms
+    this caster with nothing else. A changed default is a statement about
+    the other 117 printed weapons, and the wide audit and the replay
+    fixtures are what would move on it.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import events as _ev
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import conjurable_weapons, enemies
+
+    out.that(len(conjurable_weapons()) > 20,
+             "the printed table offers a choice of shapes, read out of"
+             " `game.db` rather than named in code",
+             f"{len(conjurable_weapons())} one-handed melee shapes")
+
+    world, me, _ = _audit.board("p15895", 1)
+    gear = world.get(me, Gear)
+    if gear is None:
+        out.skip("p15895's caster has no Gear to put a weapon in")
+        return
+    out.that(gear.main is None,
+             "the caster starts with a hand free, which is the row's own"
+             " Requirement and what makes the next line about the row",
+             f"in hand {getattr(gear.main, 'ref', None)!r}")
+
+    out.that(use(world, me, "p15895", targets=[me], spend=False),
+             "the row is usable, which it was not at all while refused")
+    made = gear.main
+    laid_it = made is not None and made.ref == "w:p15895"
+    out.that(laid_it,
+             "**a weapon is in hand, keyed on the row that called it** --"
+             " which is what lets a sibling name it and what stops two"
+             " conjurings answering to each other's trigger",
+             f"in hand {getattr(made, 'ref', None)!r}")
+    out.that(made is not None and made.enhancement == 1
+             and made.crit == "1d8",
+             "**with the printed +1 and the printed 1d8 crit rider** -- the"
+             " crit being a die of its own and not the weapon's damage,"
+             " which is what `Weapon.crit` exists for",
+             f"enh {getattr(made, 'enhancement', None)},"
+             f" crit {getattr(made, 'crit', None)!r},"
+             f" damage {getattr(made, 'damage', None)!r}")
+    out.that(made is not None and made.damage,
+             "and a damage die off the printed table rather than invented",
+             f"damage {getattr(made, 'damage', None)!r}")
+    if not laid_it:
+        # **Returns rather than running on**, because every line below
+        # reads the weapon: a plant removing the row's own call raised an
+        # `AttributeError` three arms later, which is a worse report than
+        # a red line -- it hides which assertion was load-bearing and
+        # counts one failure where five were owed.
+        return
+
+    # -- the crit rider is PAID, not merely stored -----------------------
+    #
+    # **The field and the reader are two assertions.** Checking
+    # `made.crit == "1d8"` says the verb stored it; a plant deleting the
+    # `weapon.crit` branch from `_high_crit_dice` passed against that,
+    # because nothing asked what a critical would pay. `WEAPON_ROW` is any
+    # row carrying the keyword -- the reader refuses to answer for a row
+    # without it, which is its first test.
+    WEAPON_ROW = "p10274"
+    asking = Cast(world=world, me=me, ref=WEAPON_ROW)
+    out.that(asking._high_crit_dice() == "1d8",
+             "**a critical pays the printed 1d8** -- read through"
+             " `_high_crit_dice`, which pays a high-crit weapon's `damage`"
+             " (one extra `[W]`) and has to prefer an explicit die over it",
+             f"dice {asking._high_crit_dice()!r}")
+
+    # -- the narrowing both siblings were missing ------------------------
+    foe = sorted(enemies(world, me))[0]
+    hit = _ev.Hit(attacker=me, target=foe, power="drivers", critical=False)
+    for ref in ("p15899", "p15900"):
+        out.that(REGISTRY[ref].on.when(world, me, hit),
+                 f"{ref}'s trigger fires with the conjured weapon in hand",
+                 f"{REGISTRY[ref].on.when(world, me, hit)}")
+
+    # **The primary path: the weapon the attack was made with.**
+    # `resolve.attack` stamps `AttackResult.weapon` and puts it on all four
+    # attack events, so that is what the predicate reads first; a
+    # hand-built `Hit` carries no result, which is why the arms above
+    # exercised only the fallback.
+    #
+    # **The field holds the REF and not the weapon**, and both this
+    # stand-in and the row itself had it as an object at first -- so the
+    # narrowing refused the very weapon it was written to admit, and the
+    # audit caught it where no plant could: a clause wrong in the
+    # direction that says "no" reads as a row that cannot fire.
+    from types import SimpleNamespace
+
+    swung_with_it = _ev.Hit(attacker=me, target=foe, power="drivers",
+                            critical=False)
+    swung_with_it.result = SimpleNamespace(weapon=made.ref)
+    for ref in ("p15899", "p15900"):
+        out.that(REGISTRY[ref].on.when(world, me, swung_with_it),
+                 f"{ref} fires on an attack whose result names the"
+                 " conjured weapon",
+                 f"{REGISTRY[ref].on.when(world, me, swung_with_it)}")
+
+    # **A different weapon, with the conjured one put away first.** A
+    # one-hander does not displace another one-hander -- `Gear.wield` keeps
+    # both, which is a ranger fighting with two blades -- so conjuring a
+    # second left `gear.main` reading the first and the arm proved nothing.
+    for standing in list(world.effects.of(me)):
+        if standing.by == "p15895":
+            world.effects.end(standing, "drivers: dismissed")
+    Cast(world=world, me=me, ref="drivers-other").conjure_weapon(
+        shape="club", until=When.ENCOUNTER)
+    other = gear.main
+    out.that(other is not None and other.ref == "w:drivers-other",
+             "another weapon is in hand once the conjured one is dismissed",
+             f"in hand {getattr(other, 'ref', None)!r}")
+    # **And it pays no crit rider**, which is the control the arm above
+    # cannot be: that one asks with a weapon whose `crit` was set to
+    # "1d8" on purpose, so a changed **default** on every weapon in the
+    # game is invisible to it. A plant defaulting `Weapon.crit` to a die
+    # passed until this line existed.
+    out.that(Cast(world=world, me=me, ref=WEAPON_ROW)._high_crit_dice() == 0,
+             "**an ordinary weapon pays no explicit crit die** -- the rider"
+             " belongs to the card that printed it and not to weapons at"
+             " large",
+             f"dice"
+             f" {Cast(world=world, me=me, ref=WEAPON_ROW)._high_crit_dice()!r}")
+    swung_with_other = _ev.Hit(attacker=me, target=foe, power="drivers",
+                               critical=False)
+    swung_with_other.result = SimpleNamespace(weapon=other.ref)
+    for ref in ("p15899", "p15900"):
+        out.that(not REGISTRY[ref].on.when(world, me, swung_with_other)
+                 and not REGISTRY[ref].on.when(world, me, hit),
+                 f"**and {ref} fires on neither reading** -- not on the"
+                 " result naming another weapon, nor on what is in hand."
+                 " That is the narrowing the row dropped: `by_me` alone"
+                 " paid the rider out on any hit the character landed",
+                 f"by result"
+                 f" {REGISTRY[ref].on.when(world, me, swung_with_other)},"
+                 f" by hand {REGISTRY[ref].on.when(world, me, hit)}")
+
+    for ref in ("p15895", "p15899", "p15900"):
+        out.that(not REGISTRY[ref].todo and not REGISTRY[ref].dropped,
+                 f"{ref} carries no marker in either column",
+                 f"todo {REGISTRY[ref].todo!r},"
+                 f" dropped {REGISTRY[ref].dropped!r}")
+
+
 def a_sense_can_be_taken_away(out: Result) -> None:
     """"The target loses blindsight and tremorsense until the end of your
     next turn."
@@ -94808,6 +94980,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "conjure_weapon": (
+        a_weapon_is_conjured_and_its_siblings_know_it,
+        "a weapon is conjured from the printed table and two sibling rows"
+        " narrow on it (p15895 p15899 p15900)",
+    ),
     "lose_sense": (
         a_sense_can_be_taken_away,
         "a sense can be taken away by a key rather than by arithmetic, so"

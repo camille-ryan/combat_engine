@@ -2175,6 +2175,45 @@ def grants_ca(world: World, eid: int) -> bool:
     return any(rules_for(world, eid, c).grants_ca for c in active(world, eid))
 
 
+@cache
+def conjurable_weapons(hands: str = "one-handed") -> tuple[tuple[str, ...], ...]:
+    """The printed melee weapons a row may conjure, as `(ref, slug, damage,
+    group, properties)`.
+
+    Read out of `game.db`'s `weapon` table, which this module already
+    reaches five times over for races and skills -- `db.py` sits below
+    every component and that is what it is for. **Not `chargen.PRINTED`**,
+    which holds the same table and lives where `engine/` may not reach:
+    four function-local leaks are allowed and `engine/CLAUDE.md` says not
+    to add a fifth.
+
+    `p15895` is why this exists. Its card conjures *"a shadow-wrought
+    weapon"* and prints no weapon type and no damage die -- only the
+    enhancement bonus and the critical rider -- so the shape is the
+    player's choice, exactly as `c.grant_armor` reads *"a type of armor
+    with which you have proficiency"*. Offering the printed shapes
+    invents nothing; naming a die would have.
+
+    Cached, because the table does not change within a process and this is
+    asked once per conjuring.
+    """
+    from combat_engine.db import game
+
+    # **`grp` and `melee`, which are the column names.** The table calls
+    # the weapon group `grp` -- `group` is reserved -- and says melee with
+    # a flag rather than by a null range: `w3594` is melee **and** carries
+    # a thrown range, so filtering on the range would have dropped it.
+    try:
+        rows = game().execute(
+            "SELECT ref, slug, damage, grp, properties, proficiency "
+            "FROM weapon WHERE hands = ? AND melee = 1 ORDER BY ref",
+            (hands,),
+        ).fetchall()
+    except Exception:
+        return ()
+    return tuple(tuple("" if v is None else str(v) for v in row) for row in rows)
+
+
 def threatened_by(world: World, eid: int) -> list[int]:
     """Every enemy whose reach covers this creature right now.
 

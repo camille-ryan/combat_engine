@@ -74,6 +74,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Next to each other -- **or joined by a link.**
 - `query.charging(world: 'World', eid: 'int') -> 'bool'`
   - Is this creature in the middle of a charge?
+- `query.conjurable_weapons(hands: 'str' = 'one-handed') -> 'tuple[tuple[str, ...], ...]'`
+  - The printed melee weapons a row may conjure, as `(ref, slug, damage,
 - `query.distance_between(world: 'World', a: 'int', b: 'int') -> 'int'`
   - (no docstring)
 - `query.drag_limit(world: 'World', eid: 'int') -> 'int'`
