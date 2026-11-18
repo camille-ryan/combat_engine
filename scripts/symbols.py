@@ -187,7 +187,8 @@ CATEGORIES: dict[str, dict] = {
                 "steps_over",
                 "ignores_hazards", "immovable", "movement_tax",
                 "no_charge", "no_walk", "phasing",
-                "may_enter", "resist_forced", "rideable", "shares_space",
+                "may_enter", "occupy_also", "resist_forced", "rideable",
+                "shares_space",
                 "speed_of", "squares_for", "squeeze_through",
             ]),
             # **Two attack modifiers, filed under movement on purpose.**
@@ -451,6 +452,10 @@ CATEGORIES: dict[str, dict] = {
                 # flanking, which are different creatures' clauses
                 # and read at different ends. #1299.
                 "cannot_flank",
+                # The other side of the same test: `cannot_flank`
+                # takes a creature out of it, this one lets a
+                # creature in two squares be both flankers.
+                "flanks_alone",
                 # And beside both for the same reason: `cannot_flank` is
                 # about joining a flank, this is about laying a mark, and
                 # a creature forbidden one is not forbidden the other.

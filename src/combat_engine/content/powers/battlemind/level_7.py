@@ -36,6 +36,7 @@ from combat_engine.engine import (
     hits_me,
     leaves_me_out,
     power,
+    spread,
     targets_my_side,
 )
 
@@ -241,7 +242,7 @@ def p12425(c: Cast) -> None:
 
 @power(
     "p13051",
-    dropped=("Position.second_square",),
+    augments=(Augment(1), Augment(2)),
     level=7,
     cls="battlemind",
     usage=AT_WILL,
@@ -252,12 +253,55 @@ def p12425(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p13051(c: Cast) -> None:
-    """Standing in two squares at once is dropped -- a creature has one
-    `Position` -- and both augments are built on that same double: which
-    square you keep when it ends, and putting the second one five squares
-    away. With no double to speak of there is nothing for either to say."""
-    if c.strike():
-        c.damage(c.w())
+    """**The double is written, and "a creature has one `Position`" was the
+    wrong half of the fact.** It has one, and one `Position` can span
+    several squares: `Position.squares` answers `self.spans or
+    footprint(square, size)`, which is how a Large creature covers four,
+    and `movement.step` already translates a spanning footprint when it
+    moves. `c.occupy_also` is the verb.
+
+    Three of the card's sentences then need nothing of their own. *"You can
+    attack from either square"* because reach is measured off `squares()`;
+    *"you can be targeted in either square"* because the grid indexes both;
+    *"close and area attacks that affect both squares target you only
+    once"* because it is still one creature.
+
+    Both augments are the same double with one thing added each --
+    `keep_choice` for *"when the effect ends, you choose whether to occupy
+    your original square or your double's square"*, and a square within 5
+    rather than adjacent to the target for Augment 2, which also doubles
+    the damage.
+
+    **`declined_clause`, not `dropped`: "you can flank with yourself."**
+    `query.flanked_by` asks whether two *different* creatures stand
+    opposite, so one creature flanking alone is a rule about the flanking
+    test rather than about this row. One clause of one card, paying out
+    only when an enemy happens to stand between the two squares, and
+    nobody is coming back for it -- which is what that marker is for.
+    Claude's call, 2026-11-18; recorded because a scope decision is meant
+    to outlive its symbol.
+    """
+    if not c.strike():
+        return
+    c.damage(c.w(2 if c.augment == 2 else 1))
+    here = c.there
+    mine = c.world.get(c.me, Position)
+    if here is None or mine is None:
+        return
+    # Augment 2 is "any square within 5 squares of you"; the base card and
+    # Augment 1 are "a square adjacent to the target".
+    pool = spread(mine.squares, 5) if c.augment == 2 else spread({here}, 1)
+    spots = sorted(
+        sq for sq in pool
+        if c.world.grid.inside(sq) and sq not in mine.squares
+    )
+    spot = c.choose(spots, f"{c.ref}: where the double stands") if spots else None
+    if spot is not None:
+        c.occupy_also(spot, keep_choice=c.augment > 0, until=When.SONT)
+        # "You can flank from either square and can flank with yourself."
+        # The first half falls out of the span -- `flanked_by` walks the
+        # attacker's squares already -- and the second is the flag.
+        c.flanks_alone(until=When.SONT)
 
 
 @power(

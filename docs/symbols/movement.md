@@ -94,6 +94,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - "The target cannot charge." It may still walk, run and shift.
 - `c.no_walk(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - "It cannot use move actions to walk or run." It may still shift.
+- `c.occupy_also(self, square: 'Square', *, keep_choice: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.SONT: "start of source's next turn">) -> 'Effect | None'`
+  - "You occupy that square in addition to your normal square."
 - `c.phasing(self, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None) -> 'Effect | None'`
   - Move through earth, rock and anything else in the way.
 - `c.resist_forced(self, squares_: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`

@@ -22847,6 +22847,96 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         conj = self.world.get(thing, Conjuration)
         return conj.by if conj is not None else None
 
+    def flanks_alone(
+        self, *, on: int | None = None, until: When = When.SONT,
+    ) -> Effect | None:
+        """"You can flank with yourself."
+
+        One printed card says it -- `p13051`, whose double puts one
+        creature in two squares -- and `query.flanked_by` reads the flag
+        before its partner loop, where the two flankers being one creature
+        would otherwise have to be special-cased against every other
+        reader of `flankers`.
+
+        **A flag rather than a consequence of spanning**, because a Large
+        creature covers four squares and does not flank by itself. Nothing
+        is granted unless a row that prints the permission lays it.
+
+        Worth nothing on its own: a creature standing in one square can
+        never satisfy the test, so this is laid beside `c.occupy_also` and
+        for the same duration.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("flank_alone", 1, on=who, until=until,
+                          stacks=False)
+
+    def occupy_also(
+        self, square: Square, *, keep_choice: bool = False,
+        on: int | None = None, until: When = When.SONT,
+    ) -> Effect | None:
+        """"You occupy that square in addition to your normal square."
+
+        `p13051`'s whole card, and the marker said it could not be said
+        because "a creature has one `Position`". It has one, and **one
+        `Position` can span several squares**: `Position.squares` answers
+        `self.spans or footprint(square, size)`, which is how a Large
+        creature covers four, and `movement.step` already translates a
+        spanning footprint when it moves.
+
+        So the clauses the card spends three sentences on fall out of the
+        span rather than needing anything of their own -- *"you can attack
+        from either square"* because reach is measured off `squares()`,
+        *"you can be targeted in either square"* because the grid indexes
+        both, and *"close and area attacks that affect both squares target
+        you only once"* because it is still one entity.
+
+        **`keep_choice` is Augment 1**: *"when the effect ends, you choose
+        whether to occupy your original square or your double's square."*
+        Without it the creature goes back where it was, which is what the
+        unaugmented line leaves implied by saying nothing.
+
+        The grid is re-indexed on the way in and on the way out. `lift`
+        before `place`, because `Grid.place` never overwrites another
+        occupant and a stale index is the fault its own docstring records:
+        `squares_of` went empty while `Position` still named the square.
+        """
+        from .components import Position
+        from .grid import footprint
+
+        who = on if on is not None else self.me
+        pos = self.world.get(who, Position)
+        if pos is None or square in pos.squares:
+            return None
+        was_square, was_spans = pos.square, pos.spans
+        held = self.effect(f"{self.ref} double", until=until, on=who)
+        if held is None:
+            return None
+
+        def stand_in(where: frozenset[Square]) -> None:
+            self.world.grid.lift(who)
+            pos.spans = where
+            self.world.grid.place(who, pos.squares)
+
+        stand_in(frozenset(pos.squares | footprint(square, pos.size)))
+
+        def shrink() -> None:
+            """Back to one square when the double ends."""
+            keep = was_square
+            if keep_choice:
+                picked = self.choose(
+                    sorted({was_square, square}),
+                    f"{self.ref}: which square to stay in",
+                )
+                if picked is not None:
+                    keep = picked
+            self.world.grid.lift(who)
+            pos.spans = was_spans
+            pos.square = keep
+            self.world.grid.place(who, pos.squares)
+
+        held.on_end.append(shrink)
+        return held
+
     def beast_kind(self, *, of: int | None = None) -> str:
         """Which category this creature's beast companion belongs to, or "".
 

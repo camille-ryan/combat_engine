@@ -2411,6 +2411,24 @@ def flanked_by(
     # of the partner list; this is the barred creature's own swing. #1299.
     if _barred_from_flanking(world, attacker):
         return False
+    # **"You can flank from either square and can flank with yourself."**
+    # `p13051` prints it, and it is the one case where the two flankers are
+    # one creature -- so it is asked before the partner loop rather than
+    # inside it, where `mate == attacker` would have to be special-cased
+    # against every other reader of `flankers`.
+    #
+    # **Gated on a modifier and not on spanning**, which is the whole care
+    # needed here: a Large creature covers four squares and does *not*
+    # flank by itself. Only a row that prints the permission lays the flag.
+    if len(squares(world, attacker)) > 1:
+        mods = world.get(attacker, Mods)
+        if mods is not None and mods.items \
+                and mods.total("flank_alone", {}) > 0:
+            mine = sorted(squares(world, attacker))
+            for n, a in enumerate(mine):
+                for b in mine[n + 1:]:
+                    if world.grid.flanks(a, b, space):
+                        return True
     for mate in flankers(world, attacker):
         # **`can_act` needs no exception for a conjuration**, and a plant
         # is what established that: a waiver was written here on the

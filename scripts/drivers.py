@@ -16707,6 +16707,123 @@ def a_rest_requirement_refuses_mid_fight(out: Result) -> None:
              f"{usable(posed, pme, row, board=True)}")
 
 
+def a_creature_standing_in_two_squares(out: Result) -> None:
+    """*"Choose a square adjacent to the target. You occupy that square in
+    addition to your normal square until the start of your next turn...
+    You can flank from either square and can flank with yourself."*
+    -- `p13051`, whose body was one line of damage out of a card this long.
+
+    **The marker said "a creature has one `Position`", which is true and
+    was the wrong half of the fact.** One `Position` can span several
+    squares: `Position.squares` answers `self.spans or footprint(square,
+    size)` -- how a Large creature covers four -- and `movement.step`
+    already translates a spanning footprint. `c.occupy_also` is the verb.
+
+    Three printed sentences then need nothing of their own, and this rule
+    asserts them rather than asserting the field: the creature is **in**
+    both squares, the **grid** indexes both, and a creature beside the
+    double is adjacent to it.
+
+    **The flanking flag is gated and the middle arm is why.** A Large
+    creature covers four squares and does not flank by itself, so spanning
+    alone must not grant it -- asserted directly, with the flag off.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies, flanked_by, squares
+    from combat_engine.engine.types import Size
+
+    # -- the span --------------------------------------------------------
+    world, me, _ = _board("p13051", 1)
+    c = Cast(world=world, me=me, ref="p13051")
+    here = must(world.get(me, Position), "the battlemind stands").square
+    double = (here[0] + 2, here[1])
+    out.that(sorted(squares(world, me)) == [here],
+             "the creature starts in one square", f"{sorted(squares(world, me))}")
+    held = c.occupy_also(double, until=When.SONT)
+    out.that(held is not None, "the double is laid", f"{held}")
+    out.that(double in squares(world, me) and here in squares(world, me),
+             "and it now occupies BOTH -- which is what 'you can be"
+             " targeted in either square' and 'you can attack from either"
+             " square' both come to, since reach and targeting are measured"
+             " off this set",
+             f"{sorted(squares(world, me))}")
+    out.that(world.grid.occupant(double) == me,
+             "the grid indexes the double, so the square is really taken"
+             " rather than only named on the component",
+             f"{world.grid.occupant(double)}")
+    if held is not None:
+        c.end_effect(held)
+    out.that(sorted(squares(world, me)) == [here]
+             and world.grid.occupant(double) is None,
+             "and when it ends the creature is back in one square with the"
+             " grid cleaned up -- the half a stale index would leave broken",
+             f"{sorted(squares(world, me))},"
+             f" grid {world.grid.occupant(double)}")
+
+    # -- flanking with yourself, and the gate ----------------------------
+    def flanks(span: bool, flag: bool, large: bool = False) -> bool:
+        w, mine, _ = _board("p13051", 1)
+        spot = must(w.get(mine, Position), "the battlemind stands")
+        foes = sorted(enemies(w, mine))
+        if not foes:
+            return False
+        foe = foes[0]
+        fpos = must(w.get(foe, Position), "the enemy stands")
+        w.grid.lift(foe)
+        fpos.square = (spot.square[0] + 1, spot.square[1])
+        w.grid.place(foe, fpos.squares)
+        cc = Cast(world=w, me=mine, ref="p13051")
+        if large:
+            w.grid.lift(mine)
+            spot.size = Size.LARGE
+            w.grid.place(mine, spot.squares)
+        if span:
+            cc.occupy_also((spot.square[0] + 2, spot.square[1]),
+                           until=When.SONT)
+        if flag:
+            cc.flanks_alone(until=When.SONT)
+        return flanked_by(w, foe, mine)
+
+    out.that(not flanks(span=False, flag=True),
+             "a creature in ONE square never flanks alone, flag or no flag"
+             " -- there is no second square to be opposite from",
+             f"{flanks(span=False, flag=True)}")
+    out.that(not flanks(span=True, flag=False),
+             "and a creature spanning two squares does NOT flank itself"
+             " without the printed permission -- the gate, and the reason a"
+             " Large creature is untouched by this",
+             f"{flanks(span=True, flag=False)}")
+    out.that(flanks(span=True, flag=True),
+             "with both, it flanks the enemy between its two squares -- the"
+             " printed clause",
+             f"{flanks(span=True, flag=True)}")
+    out.that(not flanks(span=False, flag=False, large=True),
+             "and a LARGE creature, which really does cover four squares,"
+             " flanks nobody by itself -- the control in the real case the"
+             " gate exists for",
+             f"{flanks(span=False, flag=False, large=True)}")
+
+    # -- and the row does it ---------------------------------------------
+    world2, me2, _ = _board("p13051", 1)
+    c2 = Cast(world=world2, me=me2, ref="p13051")
+    foes2 = sorted(enemies(world2, me2))
+    out.that(bool(foes2), "there is a target to hit", f"{foes2}")
+    if foes2:
+        c2.target = foes2[0]
+        world2.decider = (lambda a, k, o, prompt="":
+                          o[0] if o else None)
+        world2.rng.loaded = 20
+        REGISTRY["p13051"].body(c2)
+        out.that(len(squares(world2, me2)) == 2,
+                 "the ROW puts the battlemind in two squares on a hit --"
+                 " the clause end to end, not the verb in isolation",
+                 f"{sorted(squares(world2, me2))}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -99180,6 +99297,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "two_squares": (a_creature_standing_in_two_squares,
+                    "one creature in two squares, flanking with itself, and"
+                    " a Large creature that still cannot"),
     "rest_requirement": (a_rest_requirement_refuses_mid_fight,
                          "a rest requirement that refuses mid-fight, and a"
                          " board that poses the window anyway"),
