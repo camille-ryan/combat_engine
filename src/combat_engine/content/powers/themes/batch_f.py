@@ -1219,7 +1219,6 @@ def p14203(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL, Keyword.ZONE],
-    dropped=("c.no_healing(temp_hp=)",),
 )
 def p14204(c: Cast) -> None:
     """`Healed` is a `Decision` so the healing half is refused outright.
@@ -1245,9 +1244,24 @@ def p14204(c: Cast) -> None:
     waiting on one must not go green on the other. #1232 is the second of
     the two and says so in its title; this row is not on it.
 
-    The zone-gated shape stays hand-written either way: `c.no_healing`
-    takes no `when=`, so it cannot be narrowed to whoever is standing
-    inside, and `_inside` is what the printed sentence asks."""
+    **The temporary-pool half is written now and the note above was right
+    about why it could not be.** It said `TempHP` *"is a plain
+    notification announced after the points have landed, so the other half
+    of the same sentence cannot be refused at all"* -- true of a listener,
+    and the refusal turned out not to need one: `resolve.temp_hp` already
+    reads a `Mods` term on the **receiver**, so the clause is a key on the
+    creature rather than a moment to cancel. `no_temp_hp`, read before the
+    non-stacking test so a refused grant cannot displace a standing pool.
+
+    The zone gate stays the row's own either way, which the note also
+    called: `c.no_temp_hp(when=)` is handed `_inside`, the same test the
+    `Healed` watcher below uses, because a hold laid on a creature is the
+    wrong shape for a sentence about where it is standing.
+
+    **The warning in the paragraph above still stands and is not what
+    landed.** `TempHP.swallowed` -- telling "no pool offered" from "a pool
+    offered and lost to a bigger one" -- is a different change and `#1232`
+    is still open on it. Nothing here makes the losing pool observable."""
     zid = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER)
 
     def deny(ev: Healed) -> None:
@@ -1260,6 +1274,11 @@ def p14204(c: Cast) -> None:
 
     c.watch(Healed, deny, until=When.ENCOUNTER, window=Window.BEFORE)
     c.watch(TurnEnd, shelter, until=When.ENCOUNTER)
+    for foe in c.enemies():
+        c.no_temp_hp(
+            on=foe, until=When.ENCOUNTER,
+            when=lambda ctx, who=foe: _inside(c, zid, who),
+        )
 
 
 # -- x7_916 -----------------------------------------------------------------

@@ -166,7 +166,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Take away what this creature's basic attack *is*, not the ability.
 - `c.no_coup_de_grace(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "Enemies cannot perform a coup de grace against you." A standing
-- `c.no_healing(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.no_healing(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, temp_hp: 'bool' = False) -> 'Effect | None'`
   - "The creature cannot heal."
 - `c.no_immediate(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "The target cannot take immediate actions."
@@ -176,6 +176,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "It cannot run." The walk is left alone.
 - `c.no_surges(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "The target cannot spend healing surges."
+- `c.no_temp_hp(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - "The target cannot gain temporary hit points."
 - `c.refuses_forced_attack(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You cannot be forced to attack an ally under any circumstances."
 - `c.shares_feat_bonus(self, *refs: 'str', on: 'int | None' = None) -> 'None'`

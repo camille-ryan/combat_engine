@@ -24505,6 +24505,61 @@ def a_grab_can_be_sustained(out: Result) -> None:
                  f"absorb(raw={raw}): {label} -- 12 becomes {want}",
                  f"took {got}")
 
+    # -- `c.no_temp_hp`: "cannot gain temporary hit points" -------------
+    #
+    # Three rows print it and none could say it: `TempHP` is a plain
+    # notification emitted **after** `health.temp` is written, so a
+    # listener heard about points that were already there. The refusal is
+    # a `Mods` key on the receiver instead, read beside the `temp_hp` term
+    # that was always there.
+    #
+    # **The ordering assertion is the one that matters.** The key is read
+    # *before* the non-stacking test, so a refused grant cannot displace a
+    # pool the creature already holds -- the other order lets a 0
+    # overwrite a standing 5, which is a bug that would read as the clause
+    # working.
+    guarded = world.get(mark, Health)
+    if guarded is None:
+        out.skip("no health on the creature to bar")
+        return
+    guarded.temp = 0
+    taker.temp_hp(7, on=mark)
+    out.that(guarded.temp == 7, "temporary hit points land before the bar")
+
+    guarded.temp = 0
+    barred = taker.no_temp_hp(on=mark, until=When.ENCOUNTER)
+    taker.temp_hp(7, on=mark)
+    out.that(guarded.temp == 0,
+             "and are refused while it stands", f"temp={guarded.temp}")
+
+    guarded.temp = 5
+    taker.temp_hp(7, on=mark)
+    out.that(guarded.temp == 5,
+             "**a refused grant leaves a standing pool alone** -- the key"
+             " is read before the non-stacking test, where the other"
+             " order lets a 0 overwrite a standing 5",
+             f"temp={guarded.temp}")
+
+    if barred is not None:
+        world.effects.end(barred, "drivers")
+    guarded.temp = 0
+    taker.temp_hp(7, on=mark)
+    out.that(guarded.temp == 7, "and land again once the hold ends")
+
+    # the zone-gated form `p14204` needs
+    allow = [False]
+    taker.no_temp_hp(on=mark, until=When.ENCOUNTER,
+                     when=lambda ctx: allow[0])
+    guarded.temp = 0
+    taker.temp_hp(7, on=mark)
+    out.that(guarded.temp == 7,
+             "a gated bar lets them through while the gate is shut --"
+             " which is what a zone-gated clause needs")
+    allow[0] = True
+    guarded.temp = 0
+    taker.temp_hp(7, on=mark)
+    out.that(guarded.temp == 0, "and refuses them once it opens")
+
 
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.

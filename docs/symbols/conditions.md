@@ -44,7 +44,7 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Take charge of a map feature, and put it back when you let go.
 - `c.dominate(self, *, on: 'int | None' = None, by: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - Dominate a creature, relation and condition together.
-- `c.grab(self, *, on: 'int | None' = None, by: 'int | None' = None, dc: 'int' = 0) -> 'Effect | None'`
+- `c.grab(self, *, on: 'int | None' = None, by: 'int | None' = None, dc: 'int' = 0, sustain: 'ActionType | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - `by=` names the grabber when it is not the caster, as `c.mark`
 - `c.grab_attempt(self, *, on: 'int | None' = None) -> 'bool'`
   - The grab **anybody** may try, as opposed to one a row applies.

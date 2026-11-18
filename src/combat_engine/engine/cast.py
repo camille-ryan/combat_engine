@@ -11349,12 +11349,28 @@ class Cast:
         return True
 
     def no_healing(
-        self, *, on: int | None = None, until: When = When.ENCOUNTER
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+        temp_hp: bool = False,
     ) -> Effect | None:
         """"The creature cannot heal."
 
         `Healed` is a `Decision`, so this refuses it outright where
         `c.half_healing` only shrinks it.
+
+        **`temp_hp` is the other half of the printed sentence**, which
+        three rows carry and none could say: *"enemies in the zone cannot
+        regain hit points **or gain temporary hit points**"* -- `p14204`,
+        `i3337p1` and `m5496a0`. `TempHP` is a plain notification emitted
+        *after* `health.temp` is written, so a listener heard about points
+        that were already there and had nothing to refuse.
+
+        So it is a `Mods` key, `no_temp_hp`, read in `resolve.temp_hp`
+        beside the `temp_hp` term that was already there -- and read
+        **before** the non-stacking test, so a refused grant cannot
+        displace a pool the creature already holds.
+
+        Off by default: the commoner printed clause is healing alone, and
+        a card that stops both says so.
         """
         from .events import Healed
 
@@ -11366,10 +11382,60 @@ class Cast:
             if ev.target == who:
                 ev.cancel("cannot heal")
 
-        return self.watch(
+        held = self.watch(
             Healed, refuse, until=until, window=Window.BEFORE, on=who,
             label=f"{self.ref} cannot heal",
         )
+        if temp_hp and held is not None:
+            # **On the same hold**, so both halves of one printed sentence
+            # end at the same moment. `resolve.temp_hp` reads this key on
+            # the receiver, which is who the clause is about.
+            mods = self.world.get(who, Mods) or self.world.add(who, Mods())
+            entry = Mod(what="no_temp_hp", value=1, kind=self.ref,
+                        label=self.ref)
+            mods.items.append(entry)
+            held.on_end.append(
+                lambda: entry in mods.items and mods.items.remove(entry)
+            )
+        return held
+
+    def no_temp_hp(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"The target cannot gain temporary hit points."
+
+        The temporary-pool half of `c.no_healing(temp_hp=True)` **on its
+        own**, because one card bars the pool and does not bar healing:
+        `m5496a0` prints *"cannot gain temporary hit points **and regains
+        5 fewer hit points than normal** from healing effects"* -- a dock,
+        not a refusal. Laying it through `no_healing` would have cancelled
+        `Healed` outright, which is strictly stronger than that card.
+
+        Writes `no_temp_hp`, which `resolve.temp_hp` reads on the
+        **receiver** beside the `temp_hp` term already there, and reads
+        **before** the non-stacking test so a refused grant cannot
+        displace a pool the creature already holds.
+
+        **`when` is what makes a zone-gated clause sayable.** `p14204`
+        prints *"enemies **in the zone** cannot regain hit points or gain
+        temporary hit points"*, and a hold laid on a creature is the wrong
+        shape for a condition about where it is standing -- the row keeps
+        its own `_inside` test and hands it here, which is the same
+        arrangement its `Healed` watcher already uses. `Mods.total`
+        evaluates it with the damage-side context, which carries `target`
+        and `power`.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        held = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} no temp hp",
+            mods=[(who, Mod(what="no_temp_hp", value=1, kind=self.ref,
+                            label=self.ref, when=when))],
+            by=self.ref,
+        )
+        return held
 
     def no_surges(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,

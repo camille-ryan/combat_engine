@@ -1933,6 +1933,26 @@ def temp_hp(
     mods = world.get(target, Mods)
     if mods is not None and mods.items:
         amount += mods.total("temp_hp", {"target": target, "power": power})
+    # **A refusal, read off the receiver like the term above it.** Three
+    # rows print *"cannot ... gain temporary hit points"* -- `p14204`,
+    # `i3337p1` and `m5496a0` -- and `TempHP` is a plain notification
+    # emitted *after* `health.temp` is written, so a listener could not
+    # refuse one: by the time it heard, the points were already there.
+    # `c.no_healing` has `Healed` to cancel because that one is a
+    # `Decision`; this had nothing of the kind.
+    #
+    # A `Mods` key rather than a second event, because that is what the
+    # `temp_hp` term one block up already is, and because the printed
+    # clause is a standing state of the creature rather than a moment:
+    # the three cards all say "cannot", for a duration.
+    #
+    # Checked **before** the non-stacking test, so a refused grant cannot
+    # displace a pool the creature already has -- the opposite order would
+    # let a 0 overwrite a standing 5.
+    if mods is not None and mods.items and mods.total(
+        "no_temp_hp", {"target": target, "power": power}
+    ) > 0:
+        return
     # The non-stacking rule is applied *after* the term, so a raised pool
     # can beat a standing one -- checking first would have thrown the
     # bonus away whenever the unraised number happened to tie.

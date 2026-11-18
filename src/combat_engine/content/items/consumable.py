@@ -2408,29 +2408,34 @@ def i3293p1(c: Cast) -> None:
 @power("i3337p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(1), target=EACH_ENEMY,
        keywords=[Keyword.COLD, Keyword.NECROTIC],
-       attack=Attack(vs=WILL, printed=13),
-       dropped=("c.no_healing(temp_hp=)",))
+       attack=Attack(vs=WILL, printed=13))
 def i3337p1(c: Cast) -> None:
     """Two damage types, so two burns: ongoing damage of one type does not
     stack but different types do, which is what the card wants. Barring
     *temporary* hit points is the clause with nothing to set.
 
-    **Checked rather than assumed, because the marker names a parameter on
-    a verb that exists.** `c.no_healing` works by cancelling `Healed`,
-    which is a `Decision`; `TempHP` is a plain `Event` and
-    `resolve.temp_hp` emits it *after* writing `health.temp`, so there is
-    no moment to refuse and nothing a row can do from the outside. A
-    watcher putting the pool back by hand is the shape this project calls
-    hand-writing state the engine derives -- and it would fight the
-    non-stacking rule, which is the same function's whole job. So the gap
-    is one layer down: `TempHP` wants to be a `Decision`, as `Healed` and
-    `SurgeSpent` both are. `m5496a0` waits on the same symbol."""
+    **The analysis below was right and the fix went the other way, which
+    is worth keeping.** It said `TempHP` *"wants to be a `Decision`"*
+    because `resolve.temp_hp` emits it after writing `health.temp`, so
+    there is no moment to refuse -- all true. But the refusal does not
+    need an event at all: `temp_hp` already reads a `Mods` term on the
+    **receiver** two lines above, so the clause is a key on the same
+    creature rather than a cancellable moment. `no_temp_hp`, checked
+    before the non-stacking test so a refused grant cannot displace a pool
+    the creature already holds.
+
+    That also keeps the warning the note gives: nothing here puts a pool
+    back by hand, which is the state-the-engine-derives shape it names.
+
+    `c.no_healing(temp_hp=True)` lays both halves of the printed sentence
+    on one hold, so they end together. `p14204` and `m5496a0` print the
+    same clause."""
     if not c.strike():
         return
     victim = c.target
     c.ongoing(5, DamageType.COLD)
     c.ongoing(5, DamageType.NECROTIC)
-    c.no_healing(until=When.SAVE_ENDS)
+    c.no_healing(until=When.SAVE_ENDS, temp_hp=True)
     c.grants_advantage(until=When.SAVE_ENDS)
     if victim is not None:
         c.on_attack(lambda ev: c.penalty("save", 2, on=victim, once=True),

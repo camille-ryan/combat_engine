@@ -7,7 +7,7 @@ Points off and points back on, and the dice behind them.
 
 ## dealing it
 
-- `c.absorb(self, ev: 'Any' = None, *, on: 'int | None' = None) -> 'int'`
+- `c.absorb(self, ev: 'Any' = None, *, on: 'int | None' = None, raw: 'bool' = False) -> 'int'`
   - Take damage somebody else was about to suffer.
 - `c.apply_poison(self, bite: 'Callable[[Any], None]', *, weapon: 'Weapon | None' = None, groups: 'Sequence[str]' = (), until: 'When' = <When.ENCOUNTER: 'end of encounter'>, once: 'bool' = True) -> 'Effect | None'`
   - Coat a weapon in hand. `bite(ev)` runs on the next hit with it.

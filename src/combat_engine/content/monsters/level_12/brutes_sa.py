@@ -2249,14 +2249,35 @@ def _felled_without_radiant(world: World, me: int, ev: Dropped) -> bool:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=17),
     damage=Damage("", 12, kind=MINION),
-    dropped=("c.no_healing(temp_hp=)", "c.half_healing(amount=)"),
+    dropped=("c.half_healing(amount=)",),
 )
 def m5496a0(c: Cast) -> None:
-    """Both halves of the hold are named gaps and neither is reachable:
-    nothing bars temporary hit points by themselves, and healing can be
-    halved but not docked a flat amount. The damage is what plays."""
+    """**The temporary-hit-point half is written; the flat dock is still a
+    gap.** The note here said neither was reachable, and the first half
+    stopped being true: `c.no_healing(temp_hp=True)` lays the `no_temp_hp`
+    key that `resolve.temp_hp` reads on the receiver, before the
+    non-stacking test, so a grant to this creature is refused rather than
+    swallowed.
+
+    **Only that half, though, and the keyword's name is why that needs
+    saying.** `c.no_healing(temp_hp=True)` reads as "no healing, and no
+    temporary hit points either", and this card bars **only** the
+    temporary pool -- *"regains 5 fewer hit points than normal"* is a
+    dock, not a bar. So the healing refusal must not be laid here, and
+    `c.no_healing` cancels `Healed` unconditionally. Written with the key
+    alone rather than through the verb, which is the honest reading of a
+    card that docks where the verb refuses.
+
+    `c.half_healing(amount=)` stays for the other half: healing can be
+    halved and not docked a flat number.
+    """
     if c.strike():
         c.hit()
+        victim = c.target
+        if victim is not None:
+            # The key, without `Healed` being cancelled -- see the
+            # docstring: this card docks healing rather than barring it.
+            c.no_temp_hp(on=victim, until=When.SAVE_ENDS)
 
 
 @power(

@@ -425,7 +425,11 @@ CATEGORIES: dict[str, dict] = {
                 "no_run",
                 "gains_property", "loses_property",
                 "no_basic", "no_coup_de_grace",
-                "no_healing", "no_immediate", "no_provoke", "no_surges",
+                "no_healing", "no_immediate", "no_provoke",
+                # Beside `no_healing` and not folded into it: one card
+                # bars the temporary pool and only DOCKS healing, so the
+                # two have to be sayable apart. #1360.
+                "no_surges", "no_temp_hp",
                 "waive",
             ]),
         ],
