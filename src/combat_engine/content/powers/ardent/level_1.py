@@ -20,9 +20,12 @@ from combat_engine.engine import (
     DAILY,
     EACH_OTHER,
     FORT,
+    FREE,
     MINOR,
     ONE_CREATURE,
+    PERSONAL,
     REF,
+    SELF,
     STANDARD,
     WILL,
     Attack,
@@ -219,12 +222,19 @@ def p10277(c: Cast) -> None:
         Keyword.ZONE,
     ],
     attack=Attack(CHA, vs=AC),
-    dropped=("c.grant_action_row()",),
 )
 def p10278(c: Cast) -> None:
     """The last printed sentence -- "once per round as a free action you can
-    teleport a creature within the zone 3 squares" -- is an untriggered free
-    action with no event behind it, so it is dropped."""
+    teleport a creature within the zone 3 squares" -- is `p10278c0`, declared
+    below and granted for as long as the zone stands.
+
+    **The old note called it "an untriggered free action with no event
+    behind it", and that is a description of a ROW rather than of a gap.**
+    `actions.legal` offers a free-action row with no trigger the same way
+    it offers a standard one; what was missing was something to offer.
+    The once-per-round is `c.latch`, which is where a cadence belongs --
+    the zone's duration cannot say it, because the zone outlives the round.
+    """
     victim = c.target
     if victim is None:
         return
@@ -239,7 +249,11 @@ def p10278(c: Cast) -> None:
     if ally is not None:
         c.grant_attack(ally, on=victim)
 
-    c.zone({vacated}, until=When.EONT)
+    # **Labelled, because the granted row has to find it.** A zone laid
+    # with no label is anonymous and `p10278c0` could not tell this one
+    # from any other standing on the board.
+    c.zone({vacated}, label=c.ref, until=When.EONT)
+    c.grant_row("p10278c0", on=c.me, until=When.EONT)
     pull_range = spread({vacated}, 3)
 
     def tug(ev: TurnStart) -> None:
@@ -797,3 +811,62 @@ def p13780(c: Cast) -> None:
             c.watch(MoveEnd, followed, until=When.EONT, on=victim, label=c.ref)
     if c.first:
         c.note(f"{c.ref}: telepathic contact with the target out to 5 squares")
+
+
+@power(
+    "p10278c0",
+    level=1,
+    cls="",
+    usage=AT_WILL,
+    action=FREE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.PSIONIC, Keyword.TELEPORTATION],
+)
+def p10278c0(c: Cast) -> None:
+    """"Once per round as a free action, you can teleport a creature within
+    the zone 3 squares."
+
+    `p10278`'s last sentence -- as amended, the errata replaces *"as a free
+    action"* with *"once per round as a free action"* and the row takes the
+    amended wording. Granted while the zone stands, `cls=""` so it joins no
+    ardent draw.
+
+    **The cadence is a latch and not a duration.** The zone lasts until the
+    end of the caster's next turn, which spans two rounds, so a grant with
+    `uses=1` would have allowed one teleport for the whole zone and a bare
+    grant unlimited ones. `c.latch` is keyed on the payment window, which
+    is what "once per round" names.
+
+    *Within the zone*, not within 3 squares of it -- that is the pull
+    clause's range and a different sentence. The teleport is 3 squares and
+    the creature may be anybody's: the card says "a creature".
+    """
+    if c.latched(c.ref):
+        return
+    mine = _zone_of(c)
+    if mine < 0:
+        return
+    inside = [who for who in c.world.zones.occupants(mine) if who != c.me]
+    if not inside:
+        return
+    victim = c.choose(inside, f"{c.ref}: who the zone throws")
+    if victim is None:
+        return
+    c.latch(c.ref)
+    c.teleport(3, who=victim)
+
+
+def _zone_of(c: Cast) -> int:
+    """The zone `p10278` laid, by entity id.
+
+    `Zones.all` answers a list of `(eid, Zone)` and not a mapping, and
+    `Zones.occupants` takes that **entity** id -- not the id of the effect
+    carrying the zone, which is the mistake a reader makes once: keyed on
+    the effect the set is always empty and the row refuses every teleport
+    while looking finished.
+    """
+    for eid, zone in c.world.zones.all():
+        if zone.owner == c.me and zone.label == "p10278":
+            return eid
+    return -1

@@ -35,8 +35,10 @@ from combat_engine.engine import (
     FORT,
     MINOR,
     ONE_CREATURE,
+    PERSONAL,
     REACTION,
     REF,
+    SELF,
     STANDARD,
     WILL,
     Attack,
@@ -735,13 +737,13 @@ def p7402(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=ARCANE_IMPLEMENT,
     attack=Attack(CHA, vs=FORT),
-    dropped=("c.grant_action_row()",),
 )
 def p7428(c: Cast) -> None:
     """Sustaining squeezes whatever is still held. The minor action the
-    printed line offers *after* sustaining -- one more attack on a creature
-    beside somebody already caught -- is a second action on the same turn
-    and has nowhere to go here.
+    printed line offers *after* sustaining is `p7428c0`, declared below and
+    granted by the sustain rather than by the use -- the card says *"after
+    you sustain this power"*, so a grant laid when the power is first used
+    would hand out an extra attack a turn early.
 
     "Use your Fortitude or Reflex to escape" is the grab's own arithmetic
     and is not reachable from a row.
@@ -756,8 +758,63 @@ def p7428(c: Cast) -> None:
         for foe in c.enemies():
             if c.is_(Condition.GRABBED, foe):
                 c.damage("1d6", c.cha_mod, on=foe)
+        # **Granted here and not above**, because the printed line is
+        # "after you sustain this power". Until the end of the turn: the
+        # minor is offered on the turn the sustain was paid for and not
+        # banked for a later one.
+        c.grant_row("p7428c0", on=c.me, until=When.EOT)
 
     hold = c.world.effects.apply(
         c.me, c.me, When.SUSTAIN, label=c.ref, sustain_cost=STANDARD
     )
     c.on_sustain(hold, squeeze)
+
+
+@power(
+    "p7428c0",
+    level=1,
+    cls="",
+    usage=AT_WILL,
+    action=MINOR,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=ARCANE_IMPLEMENT,
+    attack=Attack(CHA, vs=FORT),
+)
+def p7428c0(c: Cast) -> None:
+    """"After you sustain this power, you can use a minor action to use this
+    power's attack on one target the power doesn't have grabbed within 2
+    squares of a target the power does have grabbed."
+
+    `p7428`'s minor, declared as its own row and granted by the sustain.
+    `cls=""` so it joins no warlock draw.
+
+    **The target line cannot go in the header and that is the whole reason
+    this row looks unusual.** "Within 2 squares of a target the power does
+    have grabbed" is measured from a *third* creature, not from the caster
+    and not from a square the caster names, so no `reach=` can express it
+    and `dsl.candidates` cannot narrow to it. The row is declared personal
+    and picks in the body, which costs the policy its view of the attack
+    and is the only arrangement that gets the printed rule right.
+
+    The attack line **is** in the header, so `c.strike(on=)` rolls the same
+    Charisma against Fortitude the parent row does -- one declaration, so
+    the two can never disagree.
+    """
+    held = [f for f in c.enemies() if c.is_(Condition.GRABBED, f)]
+    if not held:
+        return
+    near = [
+        f for f in c.enemies()
+        if not c.is_(Condition.GRABBED, f)
+        and any(distance_between(c.world, f, caught) <= 2
+                for caught in held)
+    ]
+    if not near:
+        return
+    victim = c.choose(near, f"{c.ref}: who the grasp reaches for next")
+    if victim is None:
+        return
+    if c.strike(on=victim):
+        c.damage("1d6", c.cha_mod, on=victim)
+        c.grab(on=victim)

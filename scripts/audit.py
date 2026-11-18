@@ -1013,6 +1013,20 @@ KNOWN_SILENT = {
     # no hold to free and does nothing, correctly.
     "i2393p1": "needs a sustained grab of its own to relieve; the board"
                " lays none",
+    # **A ONE-SQUARE zone with somebody standing in it**, which is the
+    # board's limit rather than the row's. `p10278` lays its zone in the
+    # square its target just vacated -- and the target was teleported out
+    # of it, so nobody is inside at the end of the use. In play the zone's
+    # own pull clause drags creatures in over the following round, which no
+    # single use can show.
+    #
+    # Driven, so the row is proven where the board cannot reach it:
+    # `drivers.granted_rows` stands a creature in the zone with
+    # `movement.place`, throws it, puts it back and asks again -- a throw,
+    # a refusal in the same round and a second throw in the next.
+    "p10278c0": "needs a creature standing in a one-square zone whose own"
+                " pull clause is what puts one there, over a round the"
+                " board does not play; driven by drivers.granted_rows",
     "i3527p1": "wants an adjacent non-minion killed; the board's deaths are neither",
     "i2304p1": "the same sentence as i1927p1, off a rod rather than a symbol",
     # Driven by hand too: with a `CHANNEL_DIVINITY` row spent, `Powers.used`

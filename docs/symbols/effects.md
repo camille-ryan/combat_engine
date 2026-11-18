@@ -9,7 +9,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
 
 - `c.area(self) -> 'frozenset[Square]'`
   - The squares this power is covering, for the ones that leave
-- `c.aura(self, radius: 'int', *, label: 'str' = '', until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, sustain: 'ActionType | None' = None, difficult: 'bool | str' = False) -> 'int'`
+- `c.aura(self, radius: 'int', *, label: 'str' = '', until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, sustain: 'ActionType | None' = None, difficult: 'bool | str' = False, obscured: 'str' = '', obscured_for: 'str' = '') -> 'int'`
   - An aura around a creature -- or around anything with a position.
 - `c.barrier(self, zone: 'int') -> 'int | None'`
   - The attackable body of a wall, given the zone `c.wall` returned.
@@ -53,7 +53,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Is this creature standing in dim light or darkness? Defaults to the
 - `c.wall(self, size: 'int' = 0, *, at: 'Square | None' = None, hp: 'int' = 0, blocks_sight: 'bool' = False, solid: 'bool' = True, difficult: 'bool | str' = False, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None, label: 'str' = '') -> 'int'`
   - Raise a barrier: `size` contiguous squares that stop a creature.
-- `c.zone(self, area: 'Iterable[Square]', *, label: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, difficult: 'bool | str' = False, blocks_sight: 'bool' = False, obscured: 'str' = '', obscured_for: 'str' = '', no_light: 'bool' = False, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = None, hindering: 'str' = '', hindering_type: 'DamageType' = <DamageType.UNTYPED: 'untyped'>) -> 'int'`
+- `c.zone(self, area: 'Iterable[Square]', *, label: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, difficult: 'bool | str' = False, blocks_sight: 'bool' = False, obscured: 'str' = '', obscured_for: 'str' = '', no_light: 'bool' = False, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = None, sustain_inside: 'bool' = False, hindering: 'str' = '', hindering_type: 'DamageType' = <DamageType.UNTYPED: 'untyped'>) -> 'int'`
   - `obscured=Light.DIM` is "lightly obscured", `Light.DARK` is
 
 ## laid on a creature
@@ -107,7 +107,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Destroy a zone or a conjuration, and unwind what it was holding.
 - `c.end_effect(self, effect: 'Effect | None' = None, *, on: 'int | None' = None, against: 'str' = '', save_ends: 'bool' = False, carrying: 'Condition | None' = None, why: 'str' = '') -> 'Effect | None'`
   - Take a live effect off early, before its duration runs out.
-- `c.endable(self, effect: 'Effect | None', cost: 'ActionType' = <ActionType.MINOR: 'minor'>, *, then: 'Callable[[], None] | None' = None, by: 'int | None' = None, when: 'Callable[[Any, int], bool] | None' = None) -> 'Effect | None'`
+- `c.endable(self, effect: 'Effect | None', cost: 'ActionType' = <ActionType.MINOR: 'minor'>, *, then: 'Callable[[], None] | None' = None, by: 'int | None' = None, when: 'Callable[[Any, int], bool] | None' = None, also: 'tuple[ActionType, int] | None' = None, on_check: 'Callable[[Any, int], bool] | None' = None) -> 'Effect | None'`
   - Let whoever holds this effect end it deliberately, for an action.
 - `c.extend_effect(self, effect: 'Effect', *, until: 'When', clock: 'int | None' = None) -> 'bool'`
   - Push a standing effect's clock on. False if it already runs that

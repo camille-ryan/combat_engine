@@ -24726,6 +24726,242 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_row_may_grant_a_second_action_row(out: Result) -> None:
+    """"Until the stance ends, you can move ... as a move action."
+
+    Four power rows print an extra action the holder may take while
+    something of theirs stands -- a stance, a zone, a sustain -- and all
+    four carried `dropped=("c.grant_action_row()",)`.
+
+    **There was no missing verb.** `c.grant_row` has existed the whole
+    time; what was missing was a **row to grant**, and `dsl.entry_of`
+    keeping a `c<n>` suffix as its own entry is what lets one be declared
+    without a second compendium entry. That is the convention
+    `Summon.commands` established, reused. Each granted row takes `cls=""`
+    so it joins no class draw -- nine summon commands declared with a
+    `cls` moved three classes' draws and cost an unrelated feat its
+    verdict.
+
+    What the four grants hang on is the thing worth asserting, because each
+    is a different moment:
+
+    | row | granted while |
+    |---|---|
+    | `p12423c0` | the stance stands |
+    | `p13621c0` | the stance stands, **and** a bloodied enemy is up |
+    | `p10278c0` | the zone stands, once per round |
+    | `p7428c0`  | the turn the power was **sustained**, not used |
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.query import distance_between, enemies
+    from combat_engine.engine.types import ActionType
+
+    def offers(world: object, who: int, ref: str) -> list[str]:
+        return [
+            str(a.cost) for a in
+            _actions.legal(world, world.encounter, who) if a.ref == ref
+        ]
+
+    # ---- p12423c0: speed + 1d4, and odd rolls do not provoke -----------
+    def ride(seed: int) -> tuple[int, int, bool]:
+        world, me, _ = _audit.board("p12423", seed)
+        foe = enemies(world, me)[0]
+        use(world, me, "p12423", targets=[foe], spend=False)
+        here = world.get(me, Position).square
+
+        # The farthest offered square, so the distance is observable at
+        # all: `c.move` hands its destinations to the decider and the
+        # default takes the first in sorted order, which is usually one
+        # step. Which square the AI would pick is a policy question.
+        def decide(_a: object, _k: str, options: list, _p: str = "") -> object:
+            try:
+                return max(options, key=lambda o: max(
+                    abs(o[0] - here[0]), abs(o[1] - here[1])))
+            except (TypeError, IndexError):
+                return options[0]
+
+        world.decider = decide
+        mark = len(world.bus.log)
+        use(world, me, "p12423c0", targets=[], spend=False)
+        gone = world.get(me, Position).square
+        far = max(abs(gone[0] - here[0]), abs(gone[1] - here[1]))
+        d4 = next(
+            (r.total for r in reversed(world.rng.rolls) if r.expr == "1d4"), 0,
+        )
+        free = any(
+            "no provoke" in str(getattr(e, "label", ""))
+            for e in world.bus.log[mark:]
+        )
+        # Still standing when the move is over, which is the half a
+        # "was it laid" check cannot see.
+        left = any(
+            "no provoke" in str(getattr(e, "label", ""))
+            for e in world.effects.of(me)
+        )
+        return far, d4, free, left
+
+    world, me, _ = _audit.board("p12423", 1)
+    foe = enemies(world, me)[0]
+    out.that(not offers(world, me, "p12423c0"),
+             "**p12423c0 is not offered before the stance is assumed** --"
+             " which is what makes it the stance's action and not a second"
+             " card the character holds",
+             f"offered {offers(world, me, 'p12423c0')}")
+    use(world, me, "p12423", targets=[foe], spend=False)
+    out.that(offers(world, me, "p12423c0") == [str(ActionType.MOVE)],
+             "and is offered at a MOVE cost once it is",
+             f"offered {offers(world, me, 'p12423c0')}")
+
+    speed = REGISTRY["p12423"] and 6
+    standing = [ride(seed) for seed in (1, 2, 3, 4, 5, 6)]
+    rides = [(far, d4, free) for far, d4, free, _ in standing]
+    out.that(all(far > 0 for far, _, _ in rides),
+             "every ride moves the caster",
+             f"distances {[f for f, _, _ in rides]}")
+    out.that(any(far > speed for far, _, _ in rides),
+             "**and at least one goes further than a speed**, which is the"
+             " +1d4 the card prints -- asserted as a reach rather than an"
+             " exact distance, because the destination is the decider's"
+             " and the d4 is rolled per movement",
+             f"distances {[f for f, _, _ in rides]}, speed {speed}")
+    out.that(all(free == bool(d4 % 2) for _, d4, free in rides),
+             "**the immunity is laid exactly on the odd rolls** -- read off"
+             " `rng.rolls` rather than forced, since `rng.loaded` steers"
+             " only a d20, and asserted as an iff over six seeds so neither"
+             " arm can be the one that never ran",
+             f"{[(d4, free) for _, d4, free in rides]}")
+    out.that({bool(d4 % 2) for _, d4, _ in rides} == {True, False},
+             "and six seeds reach both arms, which is what stops the line"
+             " above holding vacuously",
+             f"rolls {[d4 for _, d4, _ in rides]}")
+    out.that(all(not left for _, _, _, left in standing),
+             "**and the immunity does not outlive the movement** -- it is"
+             " laid and ended around the step, so a later move in the same"
+             " turn provokes normally. `c.no_provoke` with a duration would"
+             " have made the whole turn free, which is `f3224b`'s known"
+             " over-reach and the thing this row declines to copy",
+             f"{[(d4, left) for _, d4, _, left in standing]}")
+
+    # ---- p13621c0: the stance, AND something bloodied to close on ------
+    world, me, _ = _audit.board("p13621", 1)
+    use(world, me, "p13621", targets=[me], spend=False)
+    out.that(not offers(world, me, "p13621c0"),
+             "**p13621c0 is refused with the stance up and nothing"
+             " bloodied** -- its Requirement is declared, so the move is"
+             " not offered as an action that would do nothing",
+             f"offered {offers(world, me, 'p13621c0')}")
+    quarry = sorted(enemies(world, me))[-1]
+    hurt = world.need(quarry, Health)
+    hurt.hp = max(1, hurt.max_hp // 2 - 1)
+    out.that(offers(world, me, "p13621c0") == [str(ActionType.MOVE)],
+             "and offered the moment one is, at a MOVE cost",
+             f"offered {offers(world, me, 'p13621c0')}")
+    was = distance_between(world, me, quarry)
+    use(world, me, "p13621c0", targets=[], spend=False)
+    now = distance_between(world, me, quarry)
+    out.that(now < was or now <= 1,
+             "and the shift closes on the bloodied one rather than moving"
+             " anywhere -- `toward=` is what says the printed destination",
+             f"distance {was} -> {now}")
+
+    # ---- p10278c0: the zone, and once per round ------------------------
+    world, me, _ = _audit.board("p10278", 1)
+    foe = sorted(enemies(world, me))[0]
+    out.that(not offers(world, me, "p10278c0"),
+             "p10278c0 is not offered before the zone is laid",
+             f"offered {offers(world, me, 'p10278c0')}")
+    use(world, me, "p10278", targets=[foe], spend=False)
+    out.that(offers(world, me, "p10278c0") == [str(ActionType.FREE)],
+             "**and is offered as a FREE action with no trigger** -- the"
+             " shape the old note called 'an untriggered free action with"
+             " no event behind it', which `actions.legal` offers as readily"
+             " as a standard one",
+             f"offered {offers(world, me, 'p10278c0')}")
+
+    # Somebody standing in the zone, which is what the pull clause does
+    # over a round and no single use can.
+    mine = next(
+        (eid for eid, z in world.zones.all()
+         if z.owner == me and z.label == "p10278"), -1)
+    out.that(mine >= 0, "the zone is findable by its label",
+             f"zone {mine}")
+    # **`movement.place`, not `Position.square =`.** Setting the field
+    # leaves the grid's own index pointing at the old square, so
+    # `Zones.refresh` recomputes `inside` from the grid and the creature
+    # is nowhere near the zone -- which is exactly how this assertion
+    # first read `skip`.
+    from combat_engine.engine.movement import place as _place
+
+    squares = next(
+        (z.squares for eid, z in world.zones.all() if eid == mine), frozenset())
+    square = next(iter(squares), None)
+    victim = sorted(enemies(world, me))[-1]
+    if square is not None:
+        _place(world, victim, square)
+    world.zones.refresh()
+    inside = world.zones.occupants(mine)
+    if victim not in inside:
+        out.skip("could not stand a creature in the one-square zone")
+    else:
+        where = world.need(victim, Position).square
+        use(world, me, "p10278c0", targets=[], spend=False)
+        out.that(world.need(victim, Position).square != where,
+                 "**the zone throws whoever is standing in it 3 squares**"
+                 " -- `Zones.occupants` keyed on the zone's ENTITY id, which"
+                 " is the read a row gets wrong once: keyed on the effect"
+                 " carrying the zone the set is always empty and the row"
+                 " refuses every teleport while looking finished",
+                 f"{where} -> {world.need(victim, Position).square}")
+        # **Stood back in the zone before asking again**, and that is
+        # the whole assertion rather than a tidy-up. Asking straight after
+        # the throw proves nothing: the creature has been teleported 3
+        # squares and is no longer inside, so the row returns early
+        # whether or not a latch exists -- deleting the latch left this
+        # rule green until the creature was put back.
+        _place(world, victim, square)
+        world.zones.refresh()
+        back = world.need(victim, Position).square
+        out.that(world.zones.occupants(mine) == [victim],
+                 "the thrown creature can be stood back in the zone, which"
+                 " is what makes the next line about the latch",
+                 f"occupants {world.zones.occupants(mine)}")
+        use(world, me, "p10278c0", targets=[], spend=False)
+        out.that(world.need(victim, Position).square == back,
+                 "**and only once in a round** -- the errata's wording, and"
+                 " a latch rather than a duration: the zone spans two rounds,"
+                 " so `uses=1` would have allowed one throw for the whole"
+                 " zone and a bare grant unlimited ones",
+                 f"second throw moved it to"
+                 f" {world.need(victim, Position).square}")
+        world.round += 1
+        use(world, me, "p10278c0", targets=[], spend=False)
+        out.that(world.need(victim, Position).square != back,
+                 "and it throws again in the NEXT round, which is the half"
+                 " of 'once per round' that a one-use grant would have got"
+                 " wrong in the other direction",
+                 f"third throw moved it to"
+                 f" {world.need(victim, Position).square}")
+
+    # ---- p7428c0: granted by the SUSTAIN, not by the use ---------------
+    world, me, _ = _audit.board("p7428", 1)
+    foes = sorted(enemies(world, me))
+    world.rng.loaded = 20
+    use(world, me, "p7428", targets=foes, spend=False)
+    out.that(not offers(world, me, "p7428c0"),
+             "**p7428c0 is not offered on the turn the power is used** --"
+             " the card says 'after you sustain this power', so a grant laid"
+             " with the attack would hand out an extra attack a turn early",
+             f"offered {offers(world, me, 'p7428c0')}")
+    known = world.get(me, Powers)
+    out.that(known is not None and "p7428c0" not in (known.known or []),
+             "and it is not a card the warlock holds either -- `cls=\"\"`,"
+             " so it joins no draw and is reachable only through the grant")
+
+
 def an_aspect_lends_its_augment_to_a_whole_class(out: Result) -> None:
     """"While in this aspect you can use the following augmentation with your
     battlemind at-will attack powers that are augmentable."
@@ -92911,6 +93147,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "granted_rows": (
+        a_row_may_grant_a_second_action_row,
+        "a row may grant a second action row for as long as its stance,"
+        " zone or sustain stands (p12423 p13621 p10278 p7428)",
+    ),
     "class_augment": (
         an_aspect_lends_its_augment_to_a_whole_class,
         "c.lend_augment(every=True) lends an aspect's Augment 1 to a whole"

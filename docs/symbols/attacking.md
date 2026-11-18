@@ -13,7 +13,7 @@ Making an attack, and what the attack turns out to be.
   - "You can use <this row> in place of a melee basic attack."
 - `c.as_implement(self, *, on: 'int | None' = None) -> 'None'`
   - This weapon counts as an implement for its wielder's powers.
-- `c.as_ranged(self, squares_: 'int' = 10, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+- `c.as_ranged(self, squares_: 'int' = 10, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, weapon: 'str' = '') -> 'Effect | None'`
   - "The next melee attack you make becomes a ranged attack with a
 - `c.as_though_hit_by(self, ref: 'str', *, on: 'int | None' = None, by: 'int | None' = None) -> 'bool'`
   - "The target is subject to effects as though hit by the chosen attack."
@@ -45,7 +45,7 @@ Making an attack, and what the attack turns out to be.
   - Take a creature **off** the use this one is nested inside.
 - `c.flurry_of_blows(self, *, on: 'int | None' = None) -> 'str'`
   - Which flurry of blows **this** monk has, as a ref. Empty for anyone else.
-- `c.grant_attack(self, who: 'int', *, on: 'int | None' = None, ref: 'str' = '', damage_bonus: 'int' = 0, damage_type: 'DamageType | None' = None, attack_bonus: 'int' = 0, trigger: 'Any' = None, reentrant: 'bool' = False) -> 'bool'`
+- `c.grant_attack(self, who: 'int', *, on: 'int | None' = None, ref: 'str' = '', damage_bonus: 'int' = 0, damage_type: 'DamageType | None' = None, attack_bonus: 'int' = 0, trigger: 'Any' = None, reentrant: 'bool' = False, ignoring: 'Condition | None' = None) -> 'bool'`
   - Let somebody else make an attack, now, out of turn.
 - `c.hit(self, *, on: 'int | None' = None, half: 'bool' = False) -> 'int'`
   - Deal the damage the header declared.

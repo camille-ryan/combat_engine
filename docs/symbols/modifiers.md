@@ -71,7 +71,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "The target loses any immunity to this power's damage type."
 - `c.resist(self, amount: 'int', dtype: 'DamageType | None' = None, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Shrugs off `amount` of every hit, or of one damage type.
-- `c.resist_in(self, zone: 'int', amount: 'int', dtype: 'DamageType | None' = None, *, side: 'str' = 'team') -> 'None'`
+- `c.resist_in(self, zone: 'int', amount: 'int', dtype: 'DamageType | None' = None, *, side: 'str' = 'team', when: 'Callable[[int], bool] | None' = None) -> 'None'`
   - "While within the zone you and your allies gain resist N."
 - `c.resistances(self, *, on: 'int | None' = None) -> 'dict[DamageType, int]'`
   - What the creature shrugs off, by type, right now.

@@ -5,12 +5,16 @@ from __future__ import annotations
 from combat_engine.content.powers.augment import one_hit_rider
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     CON,
     DAILY,
     EACH_ENEMY,
     FREE,
+    MOVE,
     ONE_CREATURE,
+    PERSONAL,
     REACTION,
+    SELF,
     STANDARD,
     WILL,
     Attack,
@@ -117,7 +121,6 @@ def p11166(c: Cast) -> None:
 
 @power(
     "p12423",
-    dropped=("c.grant_action_row()",),
     level=5,
     cls="battlemind",
     usage=DAILY,
@@ -128,9 +131,15 @@ def p11166(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p12423(c: Cast) -> None:
-    """The stance's move-action power shares this id and cannot be a second
-    `@power`; a speed + 1d4 move that sometimes ignores opportunity attacks is
-    also not a thing `Cast` can grant, so it is dropped."""
+    """The stance's move-action power is `p12423c0`, declared below and
+    granted while the stance stands.
+
+    **It could not be a second `@power` on this id and it does not have to
+    be.** `dsl.entry_of` keeps a `c<n>` suffix as its own entry, which is
+    the convention `Summon.commands` established, and `c.grant_row` has
+    existed the whole time -- the old note said "not a thing `Cast` can
+    grant", and what was missing was a row to grant rather than a verb.
+    """
     victim = c.target
     if c.strike():
         c.damage(c.w(2), c.con_mod, dtype=DamageType.FORCE)
@@ -141,7 +150,9 @@ def p12423(c: Cast) -> None:
     if c.last:
         if victim is not None:
             shift_beside(c, max(1, c.speed_of() // 2), victim)
-        c.stance()
+        held = c.stance()
+        if held is not None:
+            c.grant_row("p12423c0", on=c.me, until=When.STANCE)
 
 
 @power(
@@ -320,3 +331,38 @@ def p2631(c: Cast) -> None:
             c.slide(1, on=ev.actor)
 
     c.watch(TurnStart, tug, until=When.ENCOUNTER, on=c.me)
+
+
+@power(
+    "p12423c0",
+    level=5,
+    cls="",
+    usage=AT_WILL,
+    action=MOVE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.PSIONIC],
+)
+def p12423c0(c: Cast) -> None:
+    """"Until the stance ends, you can move a number of squares equal to
+    your speed + 1d4 as a move action. You roll a d4 each time you begin
+    the movement. If the result is odd, the movement doesn't provoke
+    opportunity attacks."
+
+    `p12423`'s stance half, declared as its own row because that is what
+    an extra action on the turn is -- `cls=""` so it joins no draw, and
+    granted by `c.grant_row` for as long as the stance stands.
+
+    **The d4 is rolled per movement and not once for the stance**, which
+    the card says twice over, so it is rolled here in the body rather than
+    recorded when the stance is assumed.
+
+    The immunity is laid and ended around the step, so it is exactly as
+    long as the move. `c.no_provoke` with a duration would have made every
+    later step of the turn free as well.
+    """
+    rolled = c.roll("1d4")
+    free = c.no_provoke(on=c.me) if rolled % 2 else None
+    c.move(c.speed_of() + rolled, who=c.me)
+    if free is not None:
+        c.end_effect(free)

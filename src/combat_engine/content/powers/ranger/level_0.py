@@ -25,6 +25,7 @@ from combat_engine.engine import (
     FREE,
     MELEE,
     MINOR,
+    MOVE,
     ONE_CREATURE,
     PERSONAL,
     RANGED,
@@ -54,6 +55,20 @@ from combat_engine.engine import (
     spread,
 )
 from combat_engine.engine.query import squares
+
+
+def _a_bloodied_enemy(world: World, eid: int) -> bool:
+    """"to a square adjacent to a bloodied enemy" -- there has to be one.
+
+    `p13621c0`'s Requirement. Declared rather than left to the body so the
+    row is not offered as a move action that does nothing, and paired with
+    a `requires_text` so the audit board can pose it.
+    """
+    from combat_engine.engine.query import bloodied as _bloodied
+    from combat_engine.engine.query import enemies as _enemies
+
+    return any(_bloodied(world, f) for f in _enemies(world, eid))
+
 
 MARTIAL = [Keyword.MARTIAL]
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
@@ -570,7 +585,6 @@ def p13620(c: Cast) -> None:
 
 @power(
     "p13621",
-    dropped=("c.grant_action_row()",),
     level=0,
     cls="ranger",
     usage=AT_WILL,
@@ -580,9 +594,17 @@ def p13620(c: Cast) -> None:
     keywords=PRIMAL_STANCE,
 )
 def p13621(c: Cast) -> None:
-    """The move action that shifts you to a bloodied enemy is dropped: a
-    stance cannot add an action to the turn, only `c.grant_row` can, and
-    there is no row to grant. Swimming is a skill."""
+    """The move action that shifts you to a bloodied enemy is `p13621c0`,
+    declared below and granted while the stance stands.
+
+    **The old note had the diagnosis right and stopped one step short.** It
+    said "only `c.grant_row` can, and there is no row to grant" -- so the
+    missing thing was the row, not a verb, and the `c<n>` suffix convention
+    `Summon.commands` established is what lets one be declared without a
+    second entry in the compendium.
+
+    Swimming is a skill.
+    """
     held = c.stance()
 
     def hurt(ctx: dict[str, Any]) -> bool:
@@ -590,6 +612,7 @@ def p13621(c: Cast) -> None:
         return _is_basic(ctx) and foe is not None and c.bloodied(on=foe)
 
     _hold(c, held, "attack", 2, when=hurt)
+    c.grant_row("p13621c0", on=c.me, until=When.STANCE)
 
 
 @power(
@@ -607,3 +630,46 @@ def p13622(c: Cast) -> None:
     the creature; cover is worked out inside `resolve.attack` from the
     board, and only a power's own `ignore_cover` argument turns it off."""
     _hold(c, c.stance(), "speed", 2)
+
+
+@power(
+    "p13621c0",
+    level=0,
+    cls="",
+    usage=AT_WILL,
+    action=MOVE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=PRIMAL_STANCE,
+    requires=_a_bloodied_enemy,
+    requires_text="a bloodied enemy is standing",
+)
+def p13621c0(c: Cast) -> None:
+    """"You can take a move action to shift up to 3 squares to a square
+    adjacent to a bloodied enemy."
+
+    `p13621`'s second bullet, declared as its own row because an extra
+    action on the turn is what a row is. `cls=""` so it joins no ranger
+    draw -- it is reachable only through the stance's `c.grant_row`.
+
+    **The destination is the constraint and `toward=` is how it is said.**
+    `c.shift` ranks destinations by nearness to the named creature, so the
+    step ends beside the bloodied enemy when three squares are enough and
+    as near as they reach when they are not. Writing it as a square list
+    instead would refuse the row outright whenever nothing is in range,
+    and the printed line says *up to* 3.
+
+    **The requirement is declared and not only tested in the body**, and
+    both halves are load-bearing. `requires=` refuses the row in the menu
+    when there is nothing to close on, so it is not offered as an action
+    that does nothing. `requires_text=` is what `audit.board`'s
+    `bloodied_foe` pose matches on -- every board knob reads text, so a
+    `requires=` with no sentence beside it is invisible to all of them and
+    the row would report silent while being correct.
+    """
+    hurt = [f for f in c.enemies() if c.bloodied(on=f)]
+    if not hurt:
+        return
+    quarry = c.choose(hurt, f"{c.ref}: which bloodied enemy to close on")
+    if quarry is not None:
+        c.shift(3, who=c.me, toward=quarry)
