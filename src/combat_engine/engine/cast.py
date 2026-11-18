@@ -5550,6 +5550,7 @@ class Cast:
         squares_: int = 1,
         toward: int | None = None,
         beside: int | None = None,
+        in_zone: int | None = None,
         on: int | None = None,
         until: When = When.STANCE,
     ) -> Effect | None:
@@ -5611,7 +5612,15 @@ class Cast:
         who = self._who(on)
         if who is None:
             return None
-        for word, anchor in (("toward", toward), ("beside", beside)):
+        # **`in_zone` rides the same companion-modifier mechanism and is
+        # not a third spelling of `toward`.** A zone is an entity, so
+        # `toward=zone` would store and read back perfectly -- and
+        # `_anchored` would then measure a *distance* to it, because that is
+        # what "toward" means there. Its own guard only accepts `toward`
+        # and `beside`, so a separate word is invisible to it and says what
+        # it means. `actions._granted_zone` is the reader.
+        for word, anchor in (("toward", toward), ("beside", beside),
+                             ("in_zone", in_zone)):
             if anchor is not None:
                 # **The anchor's entity id as the value**, which works
                 # because `Mods` holds ints and an id is one. `+1` so an

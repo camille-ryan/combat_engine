@@ -15704,6 +15704,143 @@ def an_ally_provokes_from_the_stancer(out: Result) -> None:
                      f"{len(for_me)} window(s) for the stancer")
 
 
+def a_free_hop_inside_the_zone(out: Result) -> None:
+    """*"When you or an ally starts his or her turn in the zone, that
+    character can move from one square in the zone to another as a free
+    action."* -- `p16590`.
+
+    **A word in `GRANTABLE` with its reader, which is what that set is
+    for.** `move_zone` was the near-miss and does the opposite -- it
+    translates the zone, the monster line "as a minor action it can move
+    the zone up to 3 squares" -- so this is a second word rather than a
+    reuse. `c.grant_action(in_zone=)` ties the grant to **this** zone, on
+    the companion-modifier mechanism `toward` and `beside` already use.
+
+    **Four things asserted, and the turn-start pair is the load-bearing
+    one.** The permission is printed as per-turn, not standing, so an offer
+    that is there before anybody starts a turn in the zone would be a row
+    reading more generous than its card. Then: the destination is inside
+    the zone, performing it actually moves the creature, and the cost is
+    free.
+
+    The reading is recorded rather than asserted as fact: the walk is
+    bounded by speed because "move from one square to another" does not say
+    whether it is a relocation, the phrasing is unique in the corpus, and
+    the conservative half was built.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.movement import reachable
+    from combat_engine.engine.query import speed
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+    from combat_engine.engine.zones import Zone
+
+    world, me, _ = _board("p16590", 1)
+    enc = Encounter(world)
+    world.encounter = enc
+    c = Cast(world=world, me=me, ref="p16590")
+    REGISTRY["p16590"].body(c)
+
+    mine = [z for z, _held in world.zones.all()
+            if me in world.zones.occupants(z)]
+    out.that(bool(mine),
+             "the row lays a zone the caster is standing in -- the premise,"
+             " since the printed grant is for a character who starts a turn"
+             " IN it",
+             f"{len(mine)} zone(s) holding the caster")
+    if not mine:
+        return
+
+    def hops() -> list:
+        return [a for a in actions.legal(world, enc, me)
+                if a.kind == "move_in_zone"]
+
+    out.that(not hops(),
+             "before anybody starts a turn there the menu offers NO hop --"
+             " the card grants it on a turn start, so a standing offer"
+             " would be more generous than the print",
+             f"{len(hops())} offer(s)")
+
+    world.bus.emit(TurnStart(actor=me, round=world.round))
+    offered = hops()
+    out.that(bool(offered),
+             "and starting a turn in the zone puts it on the menu",
+             f"{len(offered)} offer(s)")
+    out.that(all(a.cost is ActionType.FREE for a in offered),
+             "as a FREE action, which is the printed cost",
+             f"{sorted({a.cost.value for a in offered})}")
+
+    # **Read the zone off the GRANT, not off the board.** The caster stands
+    # in more than one -- the audit board lays its own regions -- and an
+    # earlier draft of this rule compared destinations against the first
+    # zone it found and failed on a correct engine.
+    named = actions._granted_zone(world, me, "move_in_zone", ActionType.FREE)
+    out.that(named >= 0,
+             "the grant names a zone, which is what `in_zone` carries",
+             f"zone {named}")
+    region = must(world.get(named, Zone), "the granted zone")
+    out.that(all(a.dest in region.squares for a in offered),
+             "every destination is a square OF THAT ZONE",
+             f"{len(offered)} offer(s), all inside: "
+             f"{all(a.dest in region.squares for a in offered)}")
+
+    # **A second zone, staged rather than borrowed, and it is the whole
+    # argument for `in_zone`.** The audit board lays regions of its own and
+    # the caster already stands in one -- but it sits entirely inside the
+    # granted zone, so "destinations are in a zone" and "destinations are in
+    # THE zone" are the same claim on that board and the control had no
+    # teeth. This one covers the caster's square and squares the granted
+    # burst does not reach, each near enough to walk to: so a grant keyed on
+    # "any zone I stand in" would offer them and this reds.
+    here = must(world.get(me, Position), "the caster stands").square
+    outside = frozenset(
+        {(here[0] + dx, here[1] + dy) for dx, dy in
+         ((3, 0), (0, 3), (3, 3), (-3, 0))}
+    )
+    spare = Cast(world=world, me=me, ref="drivers:spare").zone(
+        outside | {here}, difficult=False, until=When.ENCOUNTER)
+    out.that(spare is not None,
+             "a second zone is laid over the caster, reaching squares the"
+             " granted burst does not -- the control that makes the"
+             " narrowing measurable",
+             f"zone {spare}")
+    wrong = outside - frozenset(region.squares)
+    out.that(bool(wrong),
+             "and it has squares of its own outside the granted zone, so"
+             " there is somewhere wrong to offer",
+             f"{len(wrong)} square(s) outside the granted zone")
+    walkable = wrong & reachable(world, me, speed(world, me),
+                                 kind="walk").keys()
+    out.that(bool(walkable),
+             "at least one of which the caster could walk to, so an offer"
+             " there would not be refused for distance -- the premise that"
+             " keeps the line below from passing vacuously",
+             f"{len(walkable)} of {len(wrong)} walkable")
+    after_spare = [a for a in actions.legal(world, enc, me)
+                   if a.kind == "move_in_zone"]
+    out.that(not any(a.dest in wrong for a in after_spare),
+             "none of them is offered -- the grant is tied to the zone that"
+             " laid it rather than to standing in any zone",
+             f"{sum(a.dest in wrong for a in after_spare)} wrong offer(s)"
+             f" of {len(after_spare)}")
+
+    was = must(world.get(me, Position), "the caster stands").square
+    ran = actions.perform(world, enc, me, offered[0])
+    now = must(world.get(me, Position), "the caster stands").square
+    out.that(ran, "performing the offer succeeds", f"{ran}")
+    out.that(now != was and now in region.squares,
+             "and the creature actually moves, to a square still inside the"
+             " zone -- the clause, rather than an offer that draws and does"
+             " nothing",
+             f"{was} -> {now}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -90394,6 +90531,15 @@ UNNAMED_KINDS_OWED = frozenset(
         "aid_attack",
         "aid_defence",
         "bull_rush",
+        # **Owed and not priced, which is the same call as the three above
+        # and not a new judgement.** `move_in_zone` is `p16590`'s free hop
+        # inside its own zone (`#1098`'s rule: a declared 0.0 claims the
+        # kind was priced at nothing, where the truth is that it has not
+        # been priced). What it is worth is a positional question -- the
+        # zone is difficult terrain for the other side, so repositioning
+        # inside it is worth more than the squares suggest -- and pricing
+        # that is the deferred capability `#293` is about.
+        "move_in_zone",
         # **Here by Camille's call on `#1098`, not by never having been
         # priced.** It *was* priced -- `is_disable` at -0.5 with a
         # `trap_in_the_way` predicate paying +2.0 -- and both numbers were
@@ -98168,6 +98314,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "zone_hop": (a_free_hop_inside_the_zone,
+                 "a free move between two squares of the zone that granted"
+                 " it, offered only on the turn start it is printed for"),
     "ally_provokes": (an_ally_provokes_from_the_stancer,
                       "a stance that turns the side test round, at both"
                       " provocation sites"),

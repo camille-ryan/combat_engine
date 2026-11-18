@@ -1298,6 +1298,47 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
             for dest in sorted(step):
                 out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
 
+    # **Repositioning inside a zone that granted it.** `p16590`: "that
+    # character can move from one square in the zone to another as a free
+    # action". Bounded two ways -- the destination is a square of **the
+    # zone named by the grant**, and it has to be somewhere an ordinary
+    # walk could reach, so this is a cheaper move action and not a
+    # teleport.
+    #
+    # **The second bound is a reading, and the card does not settle it.**
+    # "Move from one square to another" could mean an unbounded relocation
+    # within the zone; the phrasing is unique in the corpus, so nothing
+    # else settles it either. The conservative reading is taken and the
+    # question is filed: a walk provokes and pays for terrain, where a
+    # relocation would do neither, and the generous reading can be widened
+    # later without taking anything back.
+    if can_move(world, actor):
+        for (what, cost), _n in sorted(_granted(world, actor).items()):
+            if what != "move_in_zone":
+                continue
+            if not encounter.can_spend(actor, cost):
+                continue
+            from .zones import Zone as _Region
+
+            zone = _granted_zone(world, actor, what, cost)
+            region = world.get(zone, _Region) if zone >= 0 else None
+            if region is None:
+                continue
+            spot = world.get(actor, Position)
+            if spot is None or not (spot.squares & region.squares):
+                # The grant is for a character standing **in** it; one that
+                # has since left has nothing to move between.
+                continue
+            # `.keys()` because `reachable` answers square -> cost, and
+            # what is wanted here is the set of squares it priced.
+            inside = region.squares & reachable(
+                world, actor, speed(world, actor), kind="walk",
+            ).keys()
+            for dest in sorted(inside - spot.squares):
+                out.append(Action(kind="move_in_zone", cost=cost,
+                                  ref="move_in_zone", dest=dest,
+                                  path=(dest,)))
+
     # **Dragging what you already hold, which is a granted action and not a
     # flag on the grab.** `f970b` prints "while you have the target grabbed
     # you can pull it 1 square as a minor action", and the marker for it
@@ -1428,6 +1469,14 @@ GRANTABLE = frozenset({
     "aid_attack", "aid_defence", "command", "dismount", "escape",
     "instinctive", "mount", "move_zone", "pull_grabbed", "second_wind",
     "shift",
+    # **`move_in_zone` moves the CREATURE; `move_zone` moves the zone.**
+    # Two words because they are opposite operations that read alike:
+    # `move_zone` is the monster line "as a minor action it can move the
+    # zone up to 3 squares", and `p16590` prints "that character can move
+    # from one square in the zone to another as a free action", which
+    # leaves the zone where it is. Its reader is `_granted_zone` plus the
+    # offer below, in this file, which is what this set is for.
+    "move_in_zone",
     # **The two granted slides arrived with their reader**, which is the
     # rule this set exists to enforce -- see `_movement` above. They are two
     # words rather than one because the victim comes off a different
@@ -1614,6 +1663,35 @@ def granted_in_window(
             )
     return out
 
+
+
+def _granted_zone(
+    world: World, actor: int, what: str, cost: ActionType
+) -> int:
+    """Which zone a granted action was tied to, or -1.
+
+    `c.grant_action(in_zone=)` lays a companion modifier keyed
+    `"<what> as <cost> in_zone"` holding the zone's entity id `+1`, the way
+    `toward` and `beside` do -- and for the same reason `_anchored` records:
+    `Mods` holds ints and an entity id is one, with the `+1` so a zone that
+    happens to be entity 0 is not read as "no zone".
+
+    **A separate word rather than `toward`**, which would have stored and
+    read back perfectly and then been measured as a distance by `_anchored`.
+
+    Returns -1 rather than 0 for "no zone", because 0 is a legal entity id.
+    `granted_actions` partitions its key on `" as "`, so the cost half
+    arrives as `"free in_zone"` -- invisible to `_granted`, readable here.
+    """
+    from .query import granted_actions
+
+    for (key, word), raw in granted_actions(world, actor).items():
+        if key != what or raw <= 0:
+            continue
+        spend, _, anchor_word = word.partition(" ")
+        if spend == cost.value and anchor_word == "in_zone":
+            return raw - 1
+    return -1
 
 
 def _granted(world: World, actor: int) -> dict[tuple[str, ActionType], int]:
@@ -3314,6 +3392,27 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # this neither duplicates the destination search nor trusts the
         # menu's view of a board that may have moved since it was drawn.
         return Cast(world=world, me=actor, ref="move_zone").move_zone(zone, reach)
+
+    if action.kind == "move_in_zone":
+        from .movement import walk as _walk
+        from .zones import Zone as _Region
+
+        # **Re-checked here rather than trusted from the menu**, the way the
+        # `terrain` branch below is and for the same reason: the board may
+        # have moved since the offer was drawn -- the zone can have ended,
+        # or somebody acting first can have taken the square.
+        zone = _granted_zone(world, actor, "move_in_zone", action.cost)
+        region = world.get(zone, _Region) if zone >= 0 else None
+        if region is None or action.dest is None:
+            return False
+        if action.dest not in region.squares:
+            return False
+        spot = world.get(actor, Position)
+        if spot is None or not (spot.squares & region.squares):
+            return False
+        # A walk, so it provokes and pays for terrain -- see the offer's
+        # note on which reading of the card this is.
+        return _walk(world, actor, [action.dest]) > 0
 
     if action.kind == "terrain":
         from .dsl import use as _use

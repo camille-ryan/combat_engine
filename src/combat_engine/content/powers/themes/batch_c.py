@@ -1361,8 +1361,7 @@ def p16589(c: Cast) -> None:
 
 @power("p16590", level=6, cls="x7_1004", usage=ENCOUNTER, action=MINOR,
        reach=CloseBurst(2), target=NO_TARGET,
-       keywords=[Keyword.ARCANE, Keyword.ZONE],
-       dropped=("actions.move_in_zone()",))
+       keywords=[Keyword.ARCANE, Keyword.ZONE])
 def p16590(c: Cast) -> None:
     """"Difficult for your enemies" is the zone being rough plus the
     caster's side exempted inside it; `c.ignores_difficult` alone would
@@ -1378,12 +1377,39 @@ def p16590(c: Cast) -> None:
     the existing word is not a spelling of this one. `shift` is the other
     near-miss and is a square, not "any square in the zone".
 
-    So what is missing is a word in `GRANTABLE` with its reader -- whose
-    own note is that the two "land in one file", which is `actions.py`, and
-    is why the marker names that module. It resolves False through
-    `blocked._one` with `actions.legal()` True beside it."""
+    **The word and its reader are both in `actions.py` now**, which is what
+    `GRANTABLE`'s own note asks for -- `move_in_zone`, the offer that draws
+    it and the `perform` branch that runs it. `c.grant_action(in_zone=)`
+    ties the grant to **this** zone rather than to any zone the character
+    happens to stand in, on the same companion-modifier mechanism `toward`
+    and `beside` use.
+
+    **One reading is taken rather than guessed at silently.** "Move from one
+    square in the zone to another" could be an unbounded relocation inside
+    the zone or a cheaper ordinary move that has to end in it; the phrasing
+    is unique in the corpus, so nothing else settles it. The conservative
+    one is built -- a walk, which provokes and pays for terrain, bounded by
+    the character's speed -- and the question is filed, because the
+    generous reading can be widened later without taking anything back.
+
+    The grant is laid on the turn start it is printed for and lasts that
+    turn: "when you or an ally starts his or her turn in the zone, that
+    character can..." is a per-turn permission, not a standing one, so
+    `When.EOT` rather than the zone's own clock."""
     zone = c.zone(c.area(), difficult=True, until=When.EONT)
     c.ignores_difficult_in(zone, side="team")
+
+    def repositions(ev: TurnStart) -> None:
+        """Grant the free hop to whoever starts a turn standing in it."""
+        who = getattr(ev, "actor", None)
+        if who is None or who not in c.world.zones.occupants(zone):
+            return
+        if who != c.me and who not in c.allies():
+            return
+        c.grant_action("move_in_zone", ActionType.FREE, in_zone=zone,
+                       on=who, until=When.EOT)
+
+    c.watch(TurnStart, repositions, until=When.EONT)
 
 
 @power("p16591", level=10, cls="x7_1004", usage=DAILY, action=MINOR,
