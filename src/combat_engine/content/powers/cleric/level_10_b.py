@@ -241,7 +241,7 @@ def p12620(c: Cast) -> None:
     run = [sq for sq in run if c.world.grid.inside(sq)]
     if not run:
         return
-    wall = c.zone(run, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
+    wall = c.zone(run, label=c.ref, until=When.SUSTAIN, sustain=MINOR, height=4)
     shelter = spread(set(run), 1)
     held = c.world.get(wall, Zone)
     given: dict[int, Effect] = {}

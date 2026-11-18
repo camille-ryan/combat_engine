@@ -3898,7 +3898,7 @@ def m5784a4(c: Cast) -> None:
     tick is the half written to spare an ally."""
     if c.first:
         _rearms_when_bloodied(c)
-        ring = c.zone(c.area(), difficult=True, until=When.ENCOUNTER, label=c.ref)
+        ring = c.zone(c.area(), difficult=True, until=When.ENCOUNTER, label=c.ref, height=4)
         squares_ = frozenset(c.area())
         me = c.me
 

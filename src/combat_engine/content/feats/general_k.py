@@ -1749,7 +1749,8 @@ def f1713b(c: Cast) -> None:
     if c.familiar() is not None:
         c.dismiss_companion()
     barrier = c.wall(8, difficult=True, solid=False, until=When.EONT,
-                     sustain=MINOR)
+                     sustain=MINOR,
+                     height=4,)
 
     def herd(ev: Any) -> None:
         if ev.ghost or team(c.world, ev.actor) == team(c.world, c.me):

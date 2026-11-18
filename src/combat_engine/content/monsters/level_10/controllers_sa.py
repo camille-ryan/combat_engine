@@ -1569,7 +1569,7 @@ def m2507a3(c: Cast) -> None:
     keywords=[Keyword.CONJURATION, Keyword.IMPLEMENT],
 )
 def m2507a4(c: Cast) -> None:
-    zone = c.wall(5, hp=0, difficult=True, until=When.SUSTAIN, sustain=MINOR, label=c.ref)
+    zone = c.wall(5, hp=0, difficult=True, until=When.SUSTAIN, sustain=MINOR, label=c.ref, height=2)
     zc = c.world.get(zone, Zone)
     squares = frozenset(zc.squares) if zc is not None else frozenset()
 

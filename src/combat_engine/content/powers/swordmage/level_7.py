@@ -165,6 +165,7 @@ def p1787(c: Cast) -> None:
         c.hazard(
             line, "1d8", DamageType.FIRE, label=c.ref,
             until=When.SONT, sustain=None,
+            height=1,
         )
 
 

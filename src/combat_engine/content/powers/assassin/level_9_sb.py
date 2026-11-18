@@ -44,7 +44,7 @@ from combat_engine.engine import (
     ],
 )
 def p9438(c: Cast) -> None:
-    wall = c.wall(blocks_sight=True, until=When.SUSTAIN, sustain=MINOR)
+    wall = c.wall(blocks_sight=True, until=When.SUSTAIN, sustain=MINOR, height=2)
     if not wall:
         return
     bite = "1d6"

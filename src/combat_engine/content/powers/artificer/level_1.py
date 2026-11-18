@@ -379,7 +379,8 @@ def p4201(c: Cast) -> None:
     origin = c.origin or c.here
     wall = frozenset((origin[0] + i, origin[1]) for i in range(5))
     zone = c.zone(
-        wall, difficult=True, blocks_sight=True, until=When.SUSTAIN, sustain=MINOR
+        wall, difficult=True, blocks_sight=True, until=When.SUSTAIN, sustain=MINOR,
+        height=2,
     )
     reach = spread(wall, 1)
 

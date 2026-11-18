@@ -850,7 +850,7 @@ def m3643a2(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m3643a3(c: Cast) -> None:
-    c.zone({c.here}, blocks_sight=True, until=When.EONT, label=c.ref)
+    c.zone({c.here}, blocks_sight=True, until=When.EONT, label=c.ref, height=4)
 
 
 # ==========================================================================

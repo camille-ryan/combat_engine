@@ -419,7 +419,6 @@ def p16274(c: Cast) -> None:
     target=NO_TARGET,
     keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
-    dropped=("Zone.height",),
 )
 def p16275(c: Cast) -> None:
     """A wall is not a shape a `Range` can be, so it is built the way
@@ -427,16 +426,30 @@ def p16275(c: Cast) -> None:
     square it was pointed at, which is the only placement the caller is not
     being asked to describe square by square.
 
-    Its height is the dropped clause, and the reason is **not** the one
-    `p5804` used to give. A *creature's* height is modelled --
-    `falling.lift`, `height`, `drop` -- but a **wall** is squares on the
-    grid with no vertical extent, so "wall 6" is a length and nothing
-    else.
+    **The marker came off and this card has no height to declare**, which
+    the page settles rather than my reading of it. `Zone.height` exists now
+    -- `#1365` -- and 24 rows that print a vertical extent carry one. This
+    is not among them, and the reason is in the Wall area definition, PHB
+    p273:
+
+        Wall: A wall fills a specified number of contiguous squares within
+          range, starting from an origin square. Each square of the wall
+          must share a side -- not just a corner -- with at least one other
+          square of the wall, but a square can share no more than two sides
+          with other squares in the wall (this limitation does not apply
+          when stacking squares on top of each other). You can shape the
+          wall however you like within those limitations.
+
+    So "wall 6" is a budget of **six squares**, which the caster may shape
+    and may stack; the parenthetical is the only place height enters, and
+    it is a permission rather than a number. A card that wants a limit says
+    so in its own text -- *"up to 4 squares high"* -- and this one does
+    not. There is nothing dropped here, so nothing to mark.
 
     `Zone.height` rather than `Zone.depth`, which exists and is a
     different need: depth is how far a creature falls through a region
     (`x2_130`), height is how much of one a wall occupies above the floor.
-    One change would not land both. #1341.
+    One change would not land both. #1341, #1365.
 
     The anchors are ranked by how many creatures the wall would catch, the
     way `c.overrun` ranks a trample. Offered in plain sorted order the first

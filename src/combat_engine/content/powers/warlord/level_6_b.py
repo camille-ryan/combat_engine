@@ -353,7 +353,7 @@ def p10931(c: Cast) -> None:
     instead: `c.bonus` cannot carry a sustain cost, so a `When.SUSTAIN` mod
     lapses after one round however faithfully the wall is kept up.
     """
-    wall = c.zone(_wall_from(c, 8), label=c.ref, until=When.SUSTAIN, sustain=MINOR)
+    wall = c.zone(_wall_from(c, 8), label=c.ref, until=When.SUSTAIN, sustain=MINOR, height=1)
     inside = c.world.zones.inside
 
     for friend in [c.me, *c.allies()]:

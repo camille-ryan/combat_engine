@@ -210,7 +210,7 @@ def p1548(c: Cast) -> None:
     ]
     wall = [sq for sq in run if c.world.grid.inside(sq)]
     if wall:
-        c.zone(wall, label=c.ref, until=When.SUSTAIN, sustain=MINOR, blocks_sight=True)
+        c.zone(wall, label=c.ref, until=When.SUSTAIN, sustain=MINOR, blocks_sight=True, height=4)
 
 
 @power(
@@ -493,7 +493,7 @@ def p16283(c: Cast) -> None:
     # belongs to the zone entity, which has no `Health`, so `Effects.bereave`
     # leaves it standing -- and a wall of stone does not fall down because the
     # wizard did.
-    wall = c.zone(laid, label=c.ref, until=When.ENCOUNTER)
+    wall = c.zone(laid, label=c.ref, until=When.ENCOUNTER, height=1)
     held = c.world.get(wall, Zone)
     if held is not None and held.effect is not None:
         held.effect.on_end.append(demolish)

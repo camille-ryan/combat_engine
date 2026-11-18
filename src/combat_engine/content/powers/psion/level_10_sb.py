@@ -39,7 +39,7 @@ from combat_engine.engine.query import squares
 def p13344(c: Cast) -> None:
     """"Phasing creatures cannot move through it" comes free: phasing reads
     `Grid.blocking` like everything else and the wall is in it."""
-    wall = c.wall(hp=50, until=When.SUSTAIN, sustain=MINOR)
+    wall = c.wall(hp=50, until=When.SUSTAIN, sustain=MINOR, height=3)
     if not wall:
         return
     body = c.barrier(wall)

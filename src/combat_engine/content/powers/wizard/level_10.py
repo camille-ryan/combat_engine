@@ -510,6 +510,7 @@ def p13993(c: Cast) -> None:
         sustain=MINOR,
         difficult=True,
         blocks_sight=True,
+        height=4,
     )
     me = c.me
     unseeing: dict[int, Effect] = {}
@@ -571,6 +572,7 @@ def p14561(c: Cast) -> None:
         until=When.ENCOUNTER,
         difficult=True,
         blocks_sight=True,
+        height=4,
     )
 
     def caught(ev: MoveStart) -> None:
@@ -665,6 +667,7 @@ def p16292(c: Cast) -> None:
         sustain=MINOR,
         blocks_sight=True,
         extra_cost=2,
+        height=4,
     )
     wall = frozenset(squares_)
     beside = spread(wall, 1)
@@ -761,7 +764,7 @@ def p3222(c: Cast) -> None:
     squares_ = _wall(c, 20, 8)
     if not squares_:
         return
-    c.zone(squares_, label=c.ref, until=When.SUSTAIN, sustain=MINOR, blocks_sight=True)
+    c.zone(squares_, label=c.ref, until=When.SUSTAIN, sustain=MINOR, blocks_sight=True, height=4)
     c.note(f"{c.ref}: the wall should block sight for enemies only, and cover is not per creature")
 
 

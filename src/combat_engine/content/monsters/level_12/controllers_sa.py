@@ -2673,6 +2673,8 @@ def m2090a4(c: Cast) -> None:
         blocks_sight=True,
         solid=False,
         extra_cost=3,
+        # "(4 high)", printed in the area line itself rather than in prose.
+        height=4,
         until=When.EONT,
         sustain=MINOR,
         label=c.ref,

@@ -10717,6 +10717,32 @@ class Cast:
                 laid.append(held)
         return laid
 
+    def steps_over(
+        self, squares_: int = 1, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"It can move over obstacles N squares high."
+
+        A **third** reader of `Zone.height`, after the flier and the
+        climber `#1365`'s ruling names, and it only became sayable when
+        that field landed: `m4325a6` prints *"He ignores difficult terrain
+        and can move over obstacles 1 square high"* and the second half had
+        nowhere to go, unmarked, beside an `ignores_difficult` that worked.
+
+        **Crossing costs nothing extra**, unlike the climber's toll. The
+        printed line is "move over", not "climb" -- a creature long-legged
+        enough to step over a low wall is not starting at the bottom of it.
+
+        Only walls that **state** a height, like the other two readers. A
+        creature allowed over 1-square obstacles still cannot walk through
+        rock, because rock states nothing.
+        """
+        who = on if on is not None else self.me
+        if squares_ <= 0:
+            return None
+        return self.bonus("step_over", squares_, on=who, until=until,
+                          stacks=False)
+
     def provoked_by_allies(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -15746,6 +15772,7 @@ class Cast:
         hindering: str = "",
         hindering_type: DamageType = DamageType.UNTYPED,
         extra_cost: int = 0,
+        height: int = 0,
         extra_cost_on: str = "enter",
         extra_cost_for: str = "",
         extra_cost_if_difficult: bool = False,
@@ -15846,7 +15873,8 @@ class Cast:
             sustain_inside=sustain_inside,
             hindering=hindering, hindering_type=hindering_type.value,
             burn=burn if hindering else None,
-            extra_cost=extra_cost, extra_cost_on=extra_cost_on,
+            extra_cost=extra_cost, height=height,
+            extra_cost_on=extra_cost_on,
             extra_cost_for=extra_cost_for,
             extra_cost_if_difficult=extra_cost_if_difficult,
             closed_to=closed_to, closed_to_for=closed_to_for,
@@ -15994,6 +16022,7 @@ class Cast:
         until: When = When.SUSTAIN,
         difficult: bool = False,
         blocks_sight: bool = False,
+        height: int = 0,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = ActionType.MINOR,
     ) -> int:
@@ -16008,7 +16037,7 @@ class Cast:
 
         zone = self.zone(
             area, label=label, until=until, difficult=difficult,
-            blocks_sight=blocks_sight, exempt=exempt,
+            blocks_sight=blocks_sight, height=height, exempt=exempt,
             sustain=sustain if until is When.SUSTAIN else None,
         )
         self.burns(zone, amount, dtype)
@@ -22504,6 +22533,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         sustain: ActionType | None = None,
         label: str = "",
         extra_cost: int = 0,
+        height: int = 0,
     ) -> int:
         """Raise a barrier: `size` contiguous squares that stop a creature.
 
@@ -22517,6 +22547,15 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         Returns the zone, because that is what the rest of `Cast` takes --
         `c.grants_in`, `c.burns`, `c.cover_in`, `c.resist_in`.
+
+        **`height=N` is the printed vertical extent**, which 29 rows state
+        and which nothing could record until `#1365`. It does not change
+        what the wall blocks for anybody on foot; what reads it is two
+        narrow waivers in `movement`, on Camille's ruling: a flier crosses
+        a wall that states a height, and a creature with a climb speed
+        crosses it and pays the height in squares. A wall with no stated
+        height is impassable exactly as before, which is what keeps
+        ordinary rock and a sealed room out of it.
 
         **`extra_cost=N` is what a non-solid wall charges to step into**, and
         it is the only way to price one: `difficult=` is the sole roughness a
@@ -22585,7 +22624,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         zone = self.zone(
             laid, label=label or self.ref, until=until,
             blocks_sight=blocks_sight, difficult=difficult, sustain=sustain,
-            extra_cost=extra_cost,
+            extra_cost=extra_cost, height=height,
         )
         standing: list[int] = []
         if hp:

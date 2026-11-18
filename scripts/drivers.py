@@ -15991,6 +15991,206 @@ def a_doubled_range_is_proportional(out: Result) -> None:
              f"{reach(ranged)} (printed {before[0]})")
 
 
+def a_stated_wall_height_stops_only_the_grounded(out: Result) -> None:
+    """*"...a wall of ice up to 4 squares high."* -- 29 printed rows state a
+    vertical extent and nothing could record one until `#1365`.
+
+    **Camille's ruling, asked whether to model it properly:**
+
+    > *"The most accurate version would be that if a wall is X high, a
+    > flying creature must start movement at least X squares away to not
+    > have to spend extra movement to get over it. That seems too fiddly to
+    > me. I think we can say flyers can pass over walls regardless of
+    > height, but climbers can be assumed to start at the bottom and the
+    > height does matter for climbing."*
+
+    So two readers, and this measures both as **cost to get past**, which
+    is the only thing a board can see:
+
+        wall height    flier    climber
+                  1        5          5
+                  2        5          6
+                  4        5          8
+
+    The flier's column is flat -- "regardless of height" -- and the
+    climber's rises with it, starting at the bottom.
+
+    **Measured as the cheapest budget that reaches the far side, through a
+    gap that IS the wall.** Asking whether the wall square itself is
+    reachable is the wrong question and an earlier draft asked it: the
+    flier search *"passes over occupied squares but will not offer one as a
+    destination"*, its own docstring says, because a flier has to come down
+    at the end of its turn. Passing over is the clause; landing on top is
+    not.
+
+    **A wall with NO stated height is the control**, and it is what keeps
+    this from being a change to blocking terrain generally: everybody walks
+    the long way round it, flier included. Nothing seals a room with a
+    printed "4 squares high", which is why `drivers.sealed_space` is
+    untouched.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement, Position
+    from combat_engine.engine.durations import When
+
+    #: What `cheapest` answers when no budget in its range gets past.
+    #: **A number and not `None`**, because every assertion below compares
+    #: two of these -- `climbing[4] > flying[4]` -- and `None` makes each
+    #: comparison a latent `TypeError` that only fires on the board where
+    #: the search fails. Chosen above the search range so "never got past"
+    #: loses every cheaper-than comparison on its own.
+    UNREACHED = 99
+
+    def cheapest(mode: str | None, tall: int) -> int:
+        """The smallest budget that gets past a wall that is the only gap.
+
+        `mode` takes `"fly+climb"` as well, because a creature with both is
+        the only one the "flying wins" branch is about -- a plant removing
+        it changed nothing while every arm here held a single mode.
+
+        Answers `UNREACHED` rather than `None` -- see above.
+        """
+        for budget in range(1, 20):
+            world, me, _ = _board("p2702", 1)
+            at = must(world.get(me, Position), "the caster stands").square
+            mv = must(world.get(me, Movement), "the caster moves")
+            mv.modes = dict(mv.modes)
+            for m in ("fly", "climb"):
+                mv.modes.pop(m, None)
+            for m in (mode or "").split("+"):
+                if m:
+                    mv.modes[m] = mv.speed
+            x, y = at
+            gap = (x + 2, y)
+            # A sealed line with one hole in it, and the hole is the wall --
+            # so "got past" cannot be satisfied by walking round.
+            for dy in range(-6, 7):
+                sq = (x + 2, y + dy)
+                if sq != gap:
+                    world.grid.blocking.add(sq)
+            Cast(world=world, me=me, ref="drivers:wall").wall(
+                1, at=gap, solid=True, height=tall, until=When.ENCOUNTER)
+            far = (x + 4, y)
+            world.grid.blocking.discard(far)
+            if far in movement.reachable(world, me, budget, kind="walk"):
+                return budget
+        return UNREACHED
+
+    # -- the control: no stated height, so nobody crosses -----------------
+    plain_walk = cheapest(None, 0)
+    plain_fly = cheapest("fly", 0)
+    out.that(plain_walk < UNREACHED and plain_fly < UNREACHED,
+             "a solid wall with no stated height can still be got round, so"
+             " the control measures a detour rather than an impossibility",
+             f"walker {plain_walk}, flier {plain_fly}")
+    out.that(plain_walk == plain_fly,
+             "and a flier pays exactly what a walker pays for it -- the"
+             " control, and what keeps this a change to walls that PRINT a"
+             " height rather than to blocking terrain",
+             f"walker {plain_walk}, flier {plain_fly}")
+
+    # -- the flier's column is flat ---------------------------------------
+    flying = {tall: cheapest("fly", tall) for tall in (1, 2, 4)}
+    out.that(all(v < UNREACHED for v in flying.values()),
+             "a flier gets past a wall that states a height",
+             f"{flying}")
+    out.that(len(set(flying.values())) == 1,
+             "and pays the SAME whatever the height -- 'regardless of"
+             " height', the first half of the ruling",
+             f"{flying}")
+    out.that(flying[4] < plain_fly < UNREACHED,
+             "and less than the detour round a wall of no stated height, so"
+             " the waiver is doing something rather than being absorbed",
+             f"over a stated wall {flying[4]} against {plain_fly} round one")
+
+    # -- the climber's rises with it --------------------------------------
+    climbing = {tall: cheapest("climb", tall) for tall in (1, 2, 4)}
+    out.that(all(v < UNREACHED for v in climbing.values()),
+             "a climber gets past one too", f"{climbing}")
+    out.that(climbing[1] == flying[1],
+             "a wall one square high costs a climber what it costs a flier"
+             " -- one square is the ordinary step, so there is nothing extra"
+             " to charge",
+             f"climber {climbing[1]}, flier {flying[1]}")
+    out.that(climbing[2] == climbing[1] + 1 and climbing[4] == climbing[1] + 3,
+             "and each extra square of height costs a climber one more --"
+             " 'starting at the bottom', the second half of the ruling, and"
+             " the assertion a height-blind cost cannot pass",
+             f"{climbing}")
+    out.that(climbing[4] > flying[4],
+             "so a tall wall is cheaper to fly over than to climb, which is"
+             " the whole difference the ruling draws between the two",
+             f"climber {climbing[4]}, flier {flying[4]}")
+
+    # -- a creature with BOTH modes flies, and pays nothing for height ----
+    #
+    # The one case the "flying wins" branch in `World._wall_tolls` decides.
+    # Every arm above holds a single mode, so a plant deleting that branch
+    # changed nothing and passed -- the code was right and the plant could
+    # not reach it. Plenty of printed creatures fly and climb.
+    both = {tall: cheapest("fly+climb", tall) for tall in (1, 4)}
+    out.that(all(v < UNREACHED for v in both.values()),
+             "a creature with a fly speed AND a climb speed gets past too",
+             f"{both}")
+    out.that(both[4] == flying[4] and both[1] == flying[1],
+             "and pays the FLIER's price, not the climber's: flying is the"
+             " better answer and the height is charged for starting at the"
+             " bottom, which it does not do",
+             f"both {both}, flier {flying}, climber {climbing}")
+    out.that(both[4] < climbing[4],
+             "so it is strictly cheaper than climbing the same wall -- the"
+             " assertion a toll that ignored flight cannot pass",
+             f"both {both[4]}, climber {climbing[4]}")
+
+    # -- a third reader: "can move over obstacles 1 square high" ----------
+    #
+    # `m4325a6` prints it beside an `ignores_difficult` that worked, and the
+    # clause was dropped with no marker because a wall had no height to
+    # compare against. It is not one of the ruling's two cases: this is
+    # about a creature's reach rather than how it travels, so it crosses a
+    # LOW wall and a tall one still stops it -- where a flier crosses
+    # either. That contrast is the assertion.
+    def stepping(tall: int) -> int:
+        for budget in range(1, 20):
+            world, me, _ = _board("p2702", 1)
+            at = must(world.get(me, Position), "the caster stands").square
+            mv = must(world.get(me, Movement), "the caster moves")
+            mv.modes = dict(mv.modes)
+            for m in ("fly", "climb"):
+                mv.modes.pop(m, None)
+            c = Cast(world=world, me=me, ref="drivers:step")
+            c.steps_over(1, on=me, until=When.ENCOUNTER)
+            x, y = at
+            gap = (x + 2, y)
+            for dy in range(-6, 7):
+                sq = (x + 2, y + dy)
+                if sq != gap:
+                    world.grid.blocking.add(sq)
+            c.wall(1, at=gap, solid=True, height=tall, until=When.ENCOUNTER)
+            far = (x + 4, y)
+            world.grid.blocking.discard(far)
+            if far in movement.reachable(world, me, budget, kind="walk"):
+                return budget
+        return UNREACHED
+
+    low, tall_one = stepping(1), stepping(2)
+    out.that(low < UNREACHED,
+             "a creature that steps over 1-square obstacles gets past a wall"
+             " ONE square high -- the clause `m4325a6` printed and dropped",
+             f"{low}")
+    out.that(low == flying[1],
+             "at a flier's price, because the card says 'move over' and not"
+             " 'climb' -- nothing is charged for starting at the bottom",
+             f"stepping {low}, flier {flying[1]}")
+    out.that(tall_one > low,
+             "and a wall TWO high still stops it, or costs it the long way"
+             " round -- the line between this and flight, which a reader"
+             " ignoring the number could not draw",
+             f"1 high: {low}, 2 high: {tall_one}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -98464,6 +98664,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "wall_height": (a_stated_wall_height_stops_only_the_grounded,
+                    "a wall that prints a height: a flier crosses it for"
+                    " free, a climber pays the height, a walker goes round"),
     "doubled_range": (a_doubled_range_is_proportional,
                       "a proportional range change: the `within` doubles,"
                       " the radius does not, and reading it does not spend"

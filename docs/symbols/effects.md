@@ -25,7 +25,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Lay ground where the ground is against you: a bridge, a plank.
 - `c.grow(self, squares_: 'int' = 1, *, on: 'int | None' = None) -> 'bool'`
   - Spread a map feature into the clear ground beside it.
-- `c.hazard(self, area: 'Iterable[Square]', amount: 'str | int', dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, difficult: 'bool' = False, blocks_sight: 'bool' = False, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'int'`
+- `c.hazard(self, area: 'Iterable[Square]', amount: 'str | int', dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, difficult: 'bool' = False, blocks_sight: 'bool' = False, height: 'int' = 0, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'int'`
   - A zone that hurts whoever is standing in it.
 - `c.illuminate(self, *settings: 'tuple[Light, int] | None', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Bright (10 squares), dim (5 squares), or off" -- one of a printed
@@ -57,9 +57,9 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Is the fight being had in that sort of place? `c.terrain("aquatic")`.
 - `c.unlit(self, *, on: 'int | None' = None, square: 'Square | None' = None) -> 'bool'`
   - Is this creature standing in dim light or darkness? Defaults to the
-- `c.wall(self, size: 'int' = 0, *, at: 'Square | None' = None, hp: 'int' = 0, blocks_sight: 'bool' = False, solid: 'bool' = True, difficult: 'bool | str' = False, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None, label: 'str' = '', extra_cost: 'int' = 0) -> 'int'`
+- `c.wall(self, size: 'int' = 0, *, at: 'Square | None' = None, hp: 'int' = 0, blocks_sight: 'bool' = False, solid: 'bool' = True, difficult: 'bool | str' = False, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None, label: 'str' = '', extra_cost: 'int' = 0, height: 'int' = 0) -> 'int'`
   - Raise a barrier: `size` contiguous squares that stop a creature.
-- `c.zone(self, area: 'Iterable[Square]', *, label: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, difficult: 'bool | str' = False, blocks_sight: 'bool' = False, obscured: 'str' = '', obscured_for: 'str' = '', no_light: 'bool' = False, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = None, sustain_inside: 'bool' = False, hindering: 'str' = '', hindering_type: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, extra_cost: 'int' = 0, extra_cost_on: 'str' = 'enter', extra_cost_for: 'str' = '', extra_cost_if_difficult: 'bool' = False, closed_to: 'frozenset[str] | set[str] | None' = None, closed_to_for: 'str' = '') -> 'int'`
+- `c.zone(self, area: 'Iterable[Square]', *, label: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, difficult: 'bool | str' = False, blocks_sight: 'bool' = False, obscured: 'str' = '', obscured_for: 'str' = '', no_light: 'bool' = False, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = None, sustain_inside: 'bool' = False, hindering: 'str' = '', hindering_type: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, extra_cost: 'int' = 0, height: 'int' = 0, extra_cost_on: 'str' = 'enter', extra_cost_for: 'str' = '', extra_cost_if_difficult: 'bool' = False, closed_to: 'frozenset[str] | set[str] | None' = None, closed_to_for: 'str' = '') -> 'int'`
   - `obscured=Light.DIM` is "lightly obscured", `Light.DARK` is
 
 ## laid on a creature

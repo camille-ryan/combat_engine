@@ -335,6 +335,63 @@ def _line(a: Square, b: Square) -> list[Square]:
     return out
 
 
+def over_a_wall(world: World, eid: int, square: Square) -> int:
+    """How tall a stated wall this creature may cross here, or 0.
+
+    **Camille's ruling on `#1365`, and it names exactly two cases**:
+
+    > *"I think we can say flyers can pass over walls regardless of height,
+    > but climbers can be assumed to start at the bottom and the height
+    > does matter for climbing."*
+
+    So a flier crosses any wall that states a height, and a creature with a
+    **climb speed** crosses it too and pays the height -- `World.crossing`
+    is where that price is charged. Everybody else is blocked exactly as
+    before.
+
+    **A climb SPEED, not an Athletics climb**, and that is a narrowing
+    rather than an oversight. The page lets any creature climb, so reading
+    "can it climb" would make every stated wall passable by everyone and
+    turn a barrier into a toll -- a far bigger change than the ruling asks
+    for, and one that would move every tactical board in the tree. The
+    creatures the ruling is about are the ones that climb as a matter of
+    course.
+
+    **Keyed on a stated height, so rock is still rock.** A zone with no
+    `height` answers 0 and the square stays impassable, which is why
+    `drivers.sealed_space` is unaffected: nothing seals a room with a
+    printed "4 squares high".
+
+    Returns the height rather than a bool so the caller can price it; 0
+    means "not crossable by this creature", which is also the answer for a
+    square with no wall in it at all.
+    """
+    from .components import Movement
+
+    tall = world.zones.height_at(square)
+    if tall <= 0:
+        return 0
+    mv = world.get(eid, Movement)
+    if mv is None:
+        return 0
+    if mv.modes.get("fly"):
+        return tall
+    if mv.modes.get("climb"):
+        return tall
+    # **"Can move over obstacles N squares high"** -- `c.steps_over`, which
+    # is a third case and not one of the ruling's two: it is about a
+    # creature's reach rather than how it travels, so it crosses a LOW wall
+    # and is stopped by a tall one, where a flier crosses either.
+    from .components import Mods
+
+    mods = world.get(eid, Mods)
+    if mods is not None and mods.items:
+        over = mods.total("step_over", {})
+        if over > 0 and tall <= over:
+            return tall
+    return 0
+
+
 def _clear(
     world: World,
     eid: int,
@@ -358,7 +415,13 @@ def _clear(
         # `Grid.porous` records which blockers have a gap and
         # `c.squeeze_through` is the permission. #674.
         if (not world.grid.passable(sq) and not ghost
-                and not _may_squeeze(world, eid, sq)):
+                and not _may_squeeze(world, eid, sq)
+                # A wall that states a height is crossable by a flier and by
+                # a climber -- `#1365`. Asked last of the three waivers
+                # because it is the newest and the narrowest: it needs a
+                # zone with `height` set, which nothing but a printed "N
+                # squares high" supplies.
+                and not over_a_wall(world, eid, sq)):
             return False
         who = world.grid.occupant(sq)
         if who is None or who == eid:

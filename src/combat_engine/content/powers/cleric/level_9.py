@@ -97,7 +97,8 @@ def p60(c: Cast) -> None:
     if not blades:
         return
     wall = c.zone(
-        blades, label=c.ref, until=When.SUSTAIN, sustain=MINOR, difficult=True
+        blades, label=c.ref, until=When.SUSTAIN, sustain=MINOR, difficult=True,
+        height=2,
     )
     struck: dict[int, int] = {}
 

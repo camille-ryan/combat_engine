@@ -1060,6 +1060,21 @@ def m4795a3(c: Cast) -> None:
     `Summon` is the shape that has them, so each square is spawned as a
     companion: it stands in its square and therefore blocks the way, it
     takes no turn, and it has no vote on whether the fight is over.
+
+    **"The wall can be up to 3 squares high" needs nothing here, and that
+    is worth saying because `Zone.height` landed and this row did not get
+    one.** `#1365` gave walls a vertical extent, read by `movement` for a
+    flier, a climber and a creature that steps over low obstacles -- but
+    every one of those readers asks `Zones.height_at`, and this wall is not
+    a zone. Its squares are occupied by **creatures**.
+
+    Which is why the clause is already honoured for the case it decides: a
+    flier passes over an occupied square today, because `_clear` waives the
+    occupant check for an overhead mover, and it has done so since long
+    before heights existed. Climbing a summoned creature is not a thing the
+    page describes. So the printed number changes nothing on this row, and
+    giving it a zone purely to carry a height would be a second wall
+    standing in the same squares as the first.
     `defences` is an offset from its maker's, so the printed "the wall has
     the m4795's defenses" is the default and is left alone.
 

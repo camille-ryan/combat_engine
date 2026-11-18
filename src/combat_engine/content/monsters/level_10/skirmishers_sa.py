@@ -2759,7 +2759,21 @@ def m4325a5(c: Cast) -> None:
     target=SELF,
 )
 def m4325a6(c: Cast) -> None:
+    """Both halves of the printed line, and the second one was dropped
+    without a marker until `Zone.height` existed.
+
+    *"He ignores difficult terrain and can move over obstacles 1 square
+    high."* The first clause worked and the second had nowhere to go: a
+    wall was squares on the grid with no vertical extent, so "1 square
+    high" named nothing to compare against. `#1365` gave walls a height and
+    `c.steps_over` is the reader -- so this creature crosses a wall that
+    prints a height of 1 and is stopped by a taller one, which is the
+    distinction the card draws and nothing could draw before.
+
+    `When.EOT` on both, because the move action is what carries them.
+    """
     c.ignores_difficult(on=c.me, until=When.EOT)
+    c.steps_over(1, on=c.me, until=When.EOT)
     c.shift(3)
 
 

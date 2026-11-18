@@ -180,6 +180,7 @@ def p722(c: Cast) -> None:
         sustain=MINOR,
         difficult=True,
         blocks_sight=True,
+        height=4,
     )
     c.burns(wall, f"3d6+{c.int_mod}", DamageType.FIRE)
     beside = spread(frozenset(squares_), 1) - frozenset(squares_)

@@ -1819,7 +1819,7 @@ def i1481p1(c: Cast) -> None:
     through a wall or zone found four, and none of the other three wants
     this. So it stays marked under #468's >=3 threshold rather than having
     a mechanism built for one row."""
-    c.wall(8, difficult=True, solid=False, until=When.EONT, sustain=MINOR)
+    c.wall(8, difficult=True, solid=False, until=When.EONT, sustain=MINOR, height=4)
 
 
 @power("i1597x1", level=9, cls=ITEM, action=ActionType.NONE,

@@ -218,6 +218,31 @@ class Zone:
     #: `World.crossing` takes the larger of the two and never adds them. A row
     #: wanting both would be charged 3 for a square the card prices at 2.
     extra_cost: int = 0
+    #: How many squares tall this region is, where a card prints it: *"a
+    #: wall ... up to 4 squares high"*. 29 printed rows state one.
+    #:
+    #: **Not a length and not `depth`.** The squares are the wall's
+    #: footprint; this is its vertical extent. `Zone.depth` answers a
+    #: different question -- how far a creature falls *through* a region --
+    #: and `p16275`'s note, the only place this gap was reasoned about,
+    #: draws that line.
+    #:
+    #: **What reads it is Camille's ruling on `#1365`, and it is narrower
+    #: than the page.** Asked whether to model it properly:
+    #:
+    #:     "The most accurate version would be that if a wall is X high, a
+    #:     flying creature must start movement at least X squares away to
+    #:     not have to spend extra movement to get over it. That seems too
+    #:     fiddly to me. I think we can say flyers can pass over walls
+    #:     regardless of height, but *climbers* can be assumed to start at
+    #:     the bottom and the height does matter for climbing."
+    #:
+    #: So: a flier crosses a wall square whatever its height, and a climber
+    #: pays the height in squares. Both readers are in `movement`, and both
+    #: are gated on this field being set -- so ordinary rock and a sealed
+    #: room are untouched. Keying the waiver on a **printed height** rather
+    #: than on blocking terrain is what keeps `drivers.sealed_space` true.
+    height: int = 0
     #: Which crossing is taxed -- `"enter"` or `"leave"`, from
     #: `EXTRA_COST_ON`. Entering is the common case and the default; one row
     #: taxes the way **out**, and that is a different square at a different
@@ -374,6 +399,7 @@ class Zones:
         power_uses: int = 0,
         power_reach: int = 1,
         extra_cost: int = 0,
+        height: int = 0,
         extra_cost_on: str = "enter",
         extra_cost_for: str = "",
         extra_cost_if_difficult: bool = False,
@@ -442,6 +468,8 @@ class Zones:
             )
         if extra_cost < 0:
             raise ValueError(f"extra_cost={extra_cost} cannot be negative")
+        if height < 0:
+            raise ValueError(f"height={height} cannot be negative")
         # **The vocabulary is asked of `movement`, not copied here.** A
         # second list of the move kinds is a list that drifts, and a kind
         # spelled wrong bars nobody while reading as a working zone. Imported
@@ -482,6 +510,7 @@ class Zones:
             power_uses=power_uses,
             power_reach=power_reach,
             extra_cost=extra_cost,
+            height=height,
             extra_cost_on=extra_cost_on,
             extra_cost_for=extra_cost_for,
             extra_cost_if_difficult=extra_cost_if_difficult,
@@ -794,6 +823,30 @@ class Zones:
 
     def occupants(self, eid: int) -> list[int]:
         return sorted(self.inside.get(eid, set()))
+
+    def wall_heights(self) -> dict[Square, int]:
+        """Every square a live zone states a height for, and how tall.
+
+        The **tallest** where regions overlap, because two walls crossing
+        make the taller one the thing to get over.
+
+        Only squares whose zone sets `height` -- so ordinary rock, a sealed
+        room and every zone laid before this field existed answer nothing,
+        which is what keeps the two waivers in `movement` from turning all
+        blocking terrain into something a flier crosses. `#1365`.
+        """
+        out: dict[Square, int] = {}
+        for _, zone in self.all():
+            if zone.height <= 0:
+                continue
+            for sq in zone.squares:
+                if zone.height > out.get(sq, 0):
+                    out[sq] = zone.height
+        return out
+
+    def height_at(self, square: Square) -> int:
+        """How tall the wall in that square is, or 0 for no stated height."""
+        return self.wall_heights().get(square, 0)
 
     def difficult_squares(self) -> dict[Square, str]:
         """Rough squares from live zones, each with its label."""

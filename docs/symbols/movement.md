@@ -108,6 +108,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - How far this row moves this creature, after anything lengthening it.
 - `c.squeeze_through(self, *gaps: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Can enter and move through a porous obstacle that would otherwise
+- `c.steps_over(self, squares_: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "It can move over obstacles N squares high."
 
 ## what running costs
 

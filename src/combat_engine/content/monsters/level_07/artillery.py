@@ -309,6 +309,7 @@ def m2987a3(c: Cast) -> None:
         until=When.SUSTAIN,
         blocks_sight=True,
         sustain=MINOR,
+        height=2,
     )
     c.burns(blaze, c.roll("2d6") + 3, DamageType.FIRE)
     beside = spread({start}, 1) - {start}

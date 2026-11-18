@@ -95,6 +95,7 @@ def p2702(c: Cast) -> None:
     wall = c.zone(
         line, label=c.ref, until=When.SUSTAIN, sustain=MINOR,
         blocks_sight=True, extra_cost=3,
+        height=4,
     )
     struck: dict[int, int] = {}
 

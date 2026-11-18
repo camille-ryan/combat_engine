@@ -36,7 +36,7 @@ def p2860(c: Cast) -> None:
     """One square high is nothing on a flat board. The temporary hit points
     are a watch rather than a zone feature: `c.grants_in` carries a modifier
     and there is no standing-in-a-zone payout at the start of a turn."""
-    wall = c.wall(until=When.SUSTAIN, sustain=MINOR)
+    wall = c.wall(until=When.SUSTAIN, sustain=MINOR, height=1)
     if not wall:
         return
     c.grants_in(wall, AC, 1, side="ally", kind="power")

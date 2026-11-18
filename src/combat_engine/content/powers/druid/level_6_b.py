@@ -185,7 +185,12 @@ def p7393(c: Cast) -> None:
     leaves = [sq for sq in run if c.world.grid.inside(sq)]
     if not leaves:
         return
-    wall = c.zone(leaves, label=c.ref, until=When.ENCOUNTER)
+    # **The height goes on the wall and not on the edge ring below.**
+    # "The wall can be up to 4 squares high"; `near` is the adjacency
+    # this row derives to find who stands beside it, and giving that a
+    # height would let a flier cross the square NEXT to the wall as
+    # though it were the wall.
+    wall = c.zone(leaves, label=c.ref, until=When.ENCOUNTER, height=4)
     c.conceal_in(wall, side="team")
     near = c.zone(spread(leaves, 1), label=f"{c.ref} edge", until=When.ENCOUNTER)
     foes = set(c.enemies())

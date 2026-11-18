@@ -180,6 +180,11 @@ CATEGORIES: dict[str, dict] = {
                 "any_size_manoeuvre", "blocks_entry", "difficult_for",
                 "extend_every",
                 "extend_move", "forces", "ignores_difficult", "ignores_difficult_in",
+                # Beside the two `ignores_difficult` verbs because it is the
+                # other half of one printed line -- "ignores difficult
+                # terrain **and** can move over obstacles 1 square high" --
+                # and an author who finds one wants the other.
+                "steps_over",
                 "ignores_hazards", "immovable", "movement_tax",
                 "no_charge", "no_walk", "phasing",
                 "may_enter", "resist_forced", "rideable", "shares_space",

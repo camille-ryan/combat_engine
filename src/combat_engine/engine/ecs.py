@@ -356,6 +356,34 @@ class World:
             )
         } | imposed
 
+    def _wall_tolls(self, for_: int) -> dict[Any, int]:
+        """What each stated wall costs this creature to climb, by square.
+
+        Empty for everybody the ruling does not name -- `#1365`:
+
+        > *"flyers can pass over walls regardless of height, but climbers
+        > can be assumed to start at the bottom and the height does matter
+        > for climbing."*
+
+        So a **flier pays nothing extra** and gets an empty table, which is
+        the half that would be easy to get wrong by charging anything that
+        can cross. A creature with a climb speed pays the height. One with
+        both flies, because flying is the better answer and the card
+        charges for starting at the bottom.
+
+        Hoisted out of the per-step closure like `difficult` and the taxing
+        zones, for the reason `crossing`'s own docstring gives.
+        """
+        from .components import Movement
+
+        heights = self.zones.wall_heights()
+        if not heights:
+            return {}
+        mv = self.get(for_, Movement)
+        if mv is None or mv.modes.get("fly") or not mv.modes.get("climb"):
+            return {}
+        return dict(heights)
+
     def crossing(self, for_: int, kind: str = "walk") -> Callable[[Any, Any], int]:
         """What one step of a move costs this creature, step by step.
 
@@ -398,7 +426,12 @@ class World:
         rough = self.difficult(for_, kind)
         taxes = self._taxes_on(for_)
         toward = self._taxes_toward(for_)
-        if not taxes and not toward:
+        # **In the fast path's condition as well as the closure**, because a
+        # wall toll with no taxing zone on the board would otherwise be
+        # skipped entirely -- the shape of bug `Zone.extra_cost`'s own note
+        # is about, one square cheaper than the card and nothing saying so.
+        climb = self._wall_tolls(for_)
+        if not taxes and not toward and not climb:
             return lambda _frm, to: 2 if to in rough else 1
 
         def cost(frm: Any, to: Any) -> int:
@@ -431,6 +464,13 @@ class World:
                 after = min(_distance(to, sq) for sq in near)
                 if after < before:
                     extra = max(extra, n)
+            # **Climbing a stated wall costs its height**, so a 4-high wall
+            # is four squares of movement and a 1-high one is the ordinary
+            # single square. The larger of this and anything above, for the
+            # same "instead of, not on top of" reason.
+            tall = climb.get(to, 0)
+            if tall > 1:
+                extra = max(extra, tall - 1)
             return 1 + extra
 
         return cost
