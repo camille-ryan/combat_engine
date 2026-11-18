@@ -481,7 +481,7 @@ _ASPECTS = {
 
 
 @power("f3304", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.extra_target()",))
+       reach=PERSONAL, target=SELF, dropped=("actions.aim_per_creature()",))
 def f3304(c: Cast) -> None:
     """A rider per aspect, on the row that aspect sharpens.
 
@@ -491,10 +491,32 @@ def f3304(c: Cast) -> None:
     `c.race_option()` was already stale -- the choice *is* recorded, as one of
     the three in `Powers.known`.
 
-    Two of the three clauses are here. The third -- a burst gaining one more
-    target -- has no verb and cannot have a rider: targets are settled before
-    any rider is reached, which is a different mechanism from adding to a
-    blow after it lands.
+    Two of the three clauses are here. The third -- `p10438` gaining one
+    more target in the burst -- is still out, and **re-pointed, because the
+    verb it named now exists and does not reach this card.**
+
+    `c.extra_target(ref=)` was built for `p7462` and does the widening
+    properly: it lays an effect carrying the row's own printed target line
+    with the count raised, which `dsl.target_of` applies. Measured here,
+    `p10438`'s per-creature door goes **1 -> 2** on the call.
+
+    What that does not move is the **offer**. `p10438` is a minor action, so
+    it reaches the board through `actions.legal`, and that path reads
+    `Power.target_of` -- the printed line. `dsl.target_of`'s own note says
+    it is *"read in `_auto_targets` and nowhere else, deliberately"* and
+    calls pointing the offer path at it *"a fair next step"*. Until that
+    lands, this clause would be an effect nobody consults: the door says
+    two and the menu still offers one.
+
+    So the symbol is `actions.aim_per_creature()` -- the offer path reading
+    the per-creature door -- and not the verb, which is here. **Not spelled
+    `actions.target_of()`**, which is the obvious name and reports ARRIVED:
+    `blocked._one` falls back to matching the last component anywhere in
+    `engine/`, deliberately, so it finds `dsl.target_of` and calls the gap
+    filled. The old note was
+    right that targets are settled before a rider is reached and wrong that
+    this therefore needs a rider; it needs the settling itself to read one
+    more field. `#712`.
     """
     me = c.me
 

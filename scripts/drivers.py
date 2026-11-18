@@ -15351,6 +15351,156 @@ def a_printed_hazard_is_softened_like_a_trap(out: Result) -> None:
              f"25 -> {creature[1]}")
 
 
+def one_additional_creature_with_the_feature(out: Result) -> None:
+    """*"Until the end of your next turn, you can target one additional
+    creature in range with your [feature] power."* -- `p7462`.
+
+    **A marker came off, and it had been pointing at the wrong component.**
+    `dropped=("spec.feature_ref()")` said the feature had "no id in the
+    spec". The ids exist: five printed build options, `FLURRIES` in
+    `monk/level_0.py`, and `p11215` already reads that list. The clause the
+    engine owed was a widening of another row's **target line**, which
+    `dsl.target_of` has been the per-creature door for since `#712`.
+
+    **Driven through the row and then through the feature**, not through
+    `c.extra_target`. The verb being right is not the clause working: what
+    the card promises is that the *feature* lands on one more creature, so
+    the assertion is the feature's own target count, measured by using it.
+
+    The no-widen arm is the control. Without it "the feature hit 2" is
+    equally consistent with a board that simply offers two targets, which
+    is the reading that would have made a broken row look finished.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.powers.monk.level_0 import FLURRIES
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, get, target_of
+    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.query import adjacent, enemies
+
+    REF = "p7448"
+
+    def play(fire_the_row: bool) -> tuple[int, int, int]:
+        """Stand two enemies adjacent, optionally use p7462, then flurry."""
+        world, me, _ = _board("p7462", 1)
+        at = must(world.get(me, Position), "the monk stands").square
+        foes = sorted(enemies(world, me))
+        for n, foe in enumerate(foes[:2]):
+            spot = world.get(foe, Position)
+            if spot is not None:
+                spot.square = (at[0] + 1, at[1] + n)
+        near = len([f for f in foes if adjacent(world, me, f)])
+        c = Cast(world=world, me=me, ref="p7462")
+        if fire_the_row:
+            REGISTRY["p7462"].body(c)
+        door = target_of(world, me, must(get(REF), "the feature"), 0).count
+        landed: list[int] = []
+        world.bus.on(PowerUsed, lambda ev: landed.append(len(ev.targets))
+                     if ev.power == REF else None)
+        world.rng.loaded = 20
+        dsl.use(world, me, REF, trigger=None)
+        return near, door, (landed[-1] if landed else -1)
+
+    plain = play(False)
+    fired = play(True)
+
+    out.that(plain[0] >= 2,
+             "the board stands at least two enemies next to the monk -- the"
+             " premise, since a second target cannot be shown without a"
+             " second legal one",
+             f"{plain[0]} adjacent")
+    out.that(must(get(REF), "the feature").target_of(0).count == 1,
+             "the feature's PRINTED line is one creature, so the widening"
+             " has somewhere to go",
+             f"{must(get(REF), 'the feature').target_of(0).count}")
+    out.that(plain[1] == 1,
+             "with the row unused the per-creature door still answers one",
+             f"{plain[1]}")
+    out.that(plain[2] == 1,
+             "and the feature lands on exactly one creature -- the control,"
+             " and the reading that makes the pair below about this row"
+             " rather than about how many enemies the board dealt",
+             f"{plain[2]} target(s)")
+    out.that(fired[1] == 2,
+             "after the row runs, the door answers TWO for the feature",
+             f"{fired[1]}")
+    out.that(fired[2] == 2,
+             "and the feature lands on two creatures -- the printed clause,"
+             " end to end",
+             f"{fired[2]} target(s)")
+
+    # -- the widening is the row's own, and is spent on the right card -----
+    world, me, _ = _board("p7462", 1)
+    c = Cast(world=world, me=me, ref="p7462")
+    held = [f for f in FLURRIES if c.knows(f)]
+    out.that(bool(held),
+             "the board deals the monk at least one of the five printed"
+             " variants, which is what the loop is written for",
+             f"{len(held)} of {len(FLURRIES)}")
+    REGISTRY["p7462"].body(c)
+    other = next((r for r in sorted(REGISTRY)
+                  if r.startswith("p") and r[1:].isdigit()
+                  and r not in FLURRIES
+                  and (row := get(r)) is not None
+                  and row.target is not None
+                  and not row.target.everyone
+                  and row.target.count == 1), "")
+    out.that(bool(other), "a single-target row outside the family to compare",
+             f"{other}")
+    if other:
+        out.that(target_of(world, me, must(get(other), "other"), 0).count == 1,
+                 "which is NOT widened -- the effect is gated to the"
+                 " feature's ref, so the row does not hand every"
+                 " single-target power in the hand a free second creature",
+                 f"{other}: "
+                 f"{target_of(world, me, must(get(other), 'o'), 0).count}")
+
+    # -- the widened line keeps the REST of the printed target line -------
+    #
+    # 297 single-target rows in the tree carry at least two non-default
+    # fields, so a widening built as `UpTo(count + 1)` would keep the count
+    # and drop the constraints -- turning "one additional bloodied enemy" into
+    # one additional anybody. Asserted on a row that HAS constraints, because
+    # the family this row widens prints a bare "one creature" and cannot
+    # show the difference.
+    import dataclasses
+
+    from combat_engine.engine.dsl import Target
+
+    plain_line = Target("enemy", 1)
+    picky = next(
+        (r for r in sorted(REGISTRY)
+         if (row := get(r)) is not None and row.target is not None
+         and not row.target.everyone and row.target.count == 1
+         and len([f.name for f in dataclasses.fields(Target)
+                  if f.name != "count"
+                  and getattr(row.target, f.name)
+                  != getattr(plain_line, f.name)]) >= 2),
+        "")
+    out.that(bool(picky),
+             "the tree has a single-target row with real constraints on its"
+             " target line to widen",
+             f"{picky}")
+    if picky:
+        world2, me2, _ = _board("p7462", 1)
+        printed = must(get(picky), "the picky row").target_of(0)
+        Cast(world=world2, me=me2, ref="drivers").extra_target(ref=picky)
+        widened = target_of(world2, me2, must(get(picky), "picky"), 0)
+        moved = [f.name for f in dataclasses.fields(Target)
+                 if getattr(widened, f.name) != getattr(printed, f.name)]
+        out.that(widened.count == printed.count + 1,
+                 f"{picky}'s count goes up by one",
+                 f"{printed.count} -> {widened.count}")
+        out.that(moved == ["count"],
+                 "and COUNT IS THE ONLY FIELD THAT MOVED -- the assertion a"
+                 " widening built from `UpTo(count + 1)` fails, because it"
+                 " keeps the number and silently drops the side, the"
+                 " conditions and the kinds the card demands",
+                 f"moved: {moved}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -97815,6 +97965,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "extra_target": (one_additional_creature_with_the_feature,
+                     "one more creature with a named row, measured on that"
+                     " row and gated to its ref"),
     "hazard_softened": (a_printed_hazard_is_softened_like_a_trap,
                         "a printed hazard is a trap-table row, so the row's"
                         " existing gate already answers for it"),

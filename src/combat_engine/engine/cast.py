@@ -8842,6 +8842,79 @@ class Cast:
             retarget=retarget,
         )
 
+    def extra_target(
+        self,
+        n: int = 1,
+        *,
+        ref: str,
+        on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """*"You can target one additional creature with your X power."*
+
+        Widens **another named row's** target line by `n` for as long as
+        this lasts, leaving every other thing the line says alone.
+
+        **`replace` on the printed line rather than a fresh `Target`**, and
+        that is the whole reason this is a verb instead of a call to
+        `c.reshape_area(lambda r: r, retarget=UpTo(2))`. `Target` carries
+        **37** fields -- the side, the conditions it demands and forbids,
+        `kinds`, `max_size`, `flanked`, `nearest`, `hit_by_me_this_turn` --
+        so building one from `UpTo(count + 1)` keeps the count and silently
+        drops the rest, turning "one additional *bloodied* enemy adjacent to
+        you" into one additional anybody. The count is the only field the
+        printed clause moves.
+
+        It also reads the count off the row **being widened** rather than
+        taking a number, so a card printing "one or two creatures" widens to
+        three and one printing "one creature" widens to two, from the same
+        call.
+
+        **The shape is deliberately untouched.** `c.reshape_area` carries
+        `retarget` as a passenger because a card that turns an attack into a
+        burst says in the same breath that everything in it is a target;
+        the clause here says nothing about the area, and an identity
+        `into=` would be a reshape in the log that no card asked for.
+
+        Gated to one `ref`, which is a deliberate narrowing rather than a
+        missing feature: the widened line is **that row's** printed line
+        plus `n`, so two rows cannot share one effect without one of them
+        getting the other's constraints. A caster whose feature has several
+        build variants -- the five in `monk.level_0.FLURRIES` -- calls this
+        once per ref it holds, and each effect carries the line that
+        belongs to it.
+
+        Reaches the board through `dsl.target_of`, the per-creature door,
+        which `_auto_targets` reads. That is enough for a triggered
+        no-action row, which never reaches the action menu; a widened
+        **menu** offer would need the offer path pointed at the same door,
+        which `target_of`'s own note already calls a fair next step. So a
+        row whose widened power is one the player picks from the menu is
+        **not** finished by this call -- check which path the target of the
+        widening takes before using it. #712.
+        """
+        from .dsl import REGISTRY
+
+        row = REGISTRY.get(ref)
+        if row is None or n <= 0:
+            return None
+        printed = row.target_of(0)
+        if printed.everyone:
+            # "Each creature in the burst" is already everybody in reach;
+            # there is no additional one to add, and `count` is not what
+            # that line is written with.
+            return None
+        who = on if on is not None else self.me
+
+        def gate(ctx: dict[str, Any]) -> bool:
+            return ctx.get("power") == ref
+
+        return self.world.effects.apply(
+            who, self.me, until, label=self.ref, by=self.ref,
+            reshape_when=gate,
+            retarget=replace(printed, count=printed.count + n),
+        )
+
     def shares_space(
         self,
         *,

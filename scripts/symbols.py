@@ -73,7 +73,8 @@ CATEGORIES: dict[str, dict] = {
         "blurb": "Making an attack, and what the attack turns out to be.",
         "sections": [
             ("", [
-                "add_target", "drop_target", "also_hits", "as_basic", "as_implement",
+                "add_target", "drop_target", "extra_target",
+                "also_hits", "as_basic", "as_implement",
                 "as_ranged", "as_though_hit_by", "as_weapon", "attack",
                 "attack_with", "attacks_defence", "autohit", "basic",
                 "becomes_burst",

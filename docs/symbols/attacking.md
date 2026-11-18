@@ -43,6 +43,8 @@ Making an attack, and what the attack turns out to be.
   - Knock a weapon out of a hand. It lands in that creature's square.
 - `c.drop_target(self, who: 'int') -> 'bool'`
   - Take a creature **off** the use this one is nested inside.
+- `c.extra_target(self, n: 'int' = 1, *, ref: 'str', on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+  - *"You can target one additional creature with your X power."*
 - `c.flurry_of_blows(self, *, on: 'int | None' = None) -> 'str'`
   - Which flurry of blows **this** monk has, as a ref. Empty for anyone else.
 - `c.grant_attack(self, who: 'int', *, on: 'int | None' = None, ref: 'str' = '', damage_bonus: 'int' = 0, damage_type: 'DamageType | None' = None, attack_bonus: 'int' = 0, trigger: 'Any' = None, reentrant: 'bool' = False, ignoring: 'Condition | None' = None) -> 'bool'`

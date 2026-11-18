@@ -44,6 +44,8 @@ from combat_engine.engine.events import (
     TurnEnd,
 )
 
+from .level_0 import FLURRIES
+
 # Psionic is printed on every one of these cards and the constant
 # omitted it, so 28 rows declared half their keyword line -- the
 # `MARTIAL_WEAPON` idiom the fighter files use, missing its source.
@@ -432,14 +434,41 @@ def p7461(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=REF),
-    dropped=("spec.feature_ref()",),
 )
 def p7462(c: Cast) -> None:
-    """The Effect line widens the monk's Flurry of Blows, a class feature
-    with no id in the spec, so it is not written."""
+    """**The marker said the feature had "no id in the spec", and the ids
+    were there all along.** The Effect line widens the class feature, which
+    the spec names in prose -- but the feature is five printed build
+    options with five refs, written down as `FLURRIES` in `level_0.py` and
+    mirrored as `cf:monk-f0c0`..`c4`. `p11215` already reads that list to
+    tell which row the feature is on the creature in front of it. So this
+    was never a spec gap, and the symbol pointed at `etl` for a clause the
+    engine owed.
+
+    **And it was not the facility gap the re-pointing would have named
+    either.** `f3304` waits on `c.extra_target()` and `f3793`'s note argues
+    that verb is not owed at all -- `c.add_target` appends to a use already
+    running, and what it cannot do is reach one that has not started. That
+    is the right diagnosis and the wrong conclusion for this card: the
+    printed clause moves the **target line**, not a running use, and
+    `dsl.target_of` has been the per-creature door for that since `#712`.
+
+    So the Effect is one call per variant held. Driven end to end at a
+    board with four adjacent enemies, the feature lands on **1** target
+    plain and **2** after this row, which is the whole clause.
+
+    One variant on a dealt monk; the audit board composes a hand by hand
+    and deals all five, so the loop lays five effects there, each gated to
+    its own ref. Harmless and deliberate -- an effect for a row the
+    creature cannot use is never consulted.
+    """
     if c.strike():
         c.damage("3d8", c.dex_mod)
         c.push(2)
     else:
         c.half_damage("3d8", c.dex_mod)
         c.push(1)
+    # "Until the end of your next turn" -- the caster's, so EONT.
+    for flurry in FLURRIES:
+        if c.knows(flurry):
+            c.extra_target(ref=flurry, until=When.EONT)
