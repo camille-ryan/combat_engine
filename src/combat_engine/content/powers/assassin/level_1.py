@@ -89,7 +89,6 @@ def p9404(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=SHADOW_WEAPON,
     attack=Attack(DEX, vs=AC),
-    dropped=("c.spend_shrouds(optional=)",),
 )
 def p9405(c: Cast) -> None:
     """**The old note was wrong about the reason and the clause is still
@@ -107,13 +106,41 @@ def p9405(c: Cast) -> None:
     reads the count after the strike is dead code that always pays nothing
     -- which is what the first attempt at it was.
 
-    "If you didn't invoke your shrouds on the target" is a *choice* the
-    card offers and `p9400` does not model, so this is a question about the
-    shroud mechanic rather than about this row. Marked and referred up
-    rather than approximated. #1341.
+    **The clause is written, and the referral was the right call: the fix
+    was in `p9400` rather than here.** That row invoked the shrouds on
+    every attack and its note said the printed "all or none" choice
+    *"is always taken -- declining wins nothing"*, which is true of that
+    row alone and false of the class, because this row rewards declining.
+    So the count was always 0 by the time this clause could look.
+
+    `p9400` asks `c.may("invoke your shrouds")` before the roll now, as
+    its card says, and the count survives a decline -- which is what makes
+    this readable.
+
+    **Read AFTER the strike, and a guard on "were they still there" would
+    be dead code.** The first draft held the count before the attack and
+    paid only if the shrouds survived it -- which reads as the careful
+    version and is untestable: `p9400`'s watch clears the count *during*
+    `c.strike()`, so by the time the clause looks, the count is 0 on the
+    invoked arm whether or not anything guards it. Planting the guard away
+    changed **nothing** -- blows `[7, 9, 6]` either way, measured -- which
+    is the tell that it was belt-and-braces rather than a rule.
+
+    So the count is simply read after the strike. It is the number of
+    shrouds *still on the target*, which is zero exactly when they were
+    invoked and the printed count when they were not -- the sentence "if
+    you didn't invoke your shrouds ... 1 extra damage for each of your
+    shrouds on it" stated once rather than twice.
     """
+    victim = c.target
     if c.strike():
         c.damage(c.w(), c.dex_mod)
+        # Zero when `p9400`'s watch invoked them during the strike, the
+        # printed count when the choice was declined. No guard needed --
+        # see the docstring.
+        left = c.shrouds(victim) if victim is not None else 0
+        if victim is not None and left:
+            c.flat(left, on=victim)
 
 
 @power(

@@ -153,8 +153,23 @@ def _killed_beside_me(world: World, me: int, ev: Event) -> bool:
 def p9400(c: Cast) -> None:
     """Invoking is armed once as a watch on my own attacks against whoever
     currently carries the shrouds: hit or miss the dice land, one die fewer
-    on a miss, and the count clears. The printed "all or none" choice is
-    always taken -- declining wins nothing and costs the shrouds nothing.
+    on a miss, and the count clears.
+
+    **The printed "all or none" choice is asked now, and the note that used
+    to say it never needed asking was true only in isolation.** It read
+    *"the printed choice is always taken -- declining wins nothing and
+    costs the shrouds nothing"*, which was right about this row alone and
+    wrong about the class: `p9405` prints *"if you didn't invoke your
+    shrouds on the target, it takes 1 extra damage for each of your
+    shrouds on it"*, so declining pays. With the choice hard-wired that
+    row's whole clause was unreachable -- it looked at a count this watch
+    had already zeroed, measured at 0 every time.
+
+    `c.may` is the ask, and it is asked **before the roll** as the card
+    says -- *"before you make an attack roll ... you choose"* -- which is
+    `Window.BEFORE` on the watch. With no policy installed `c.may` takes
+    its default, so the engine keeps invoking and nothing about today's
+    behaviour moves; a policy that declines now has somewhere to say so.
 
     The count itself is `c.shroud`/`c.shrouds`, so a later row reading "for
     each shroud on that enemy" has something to ask; it is cleared **after**
@@ -174,6 +189,10 @@ def p9400(c: Cast) -> None:
 
     def invoke(ev: Any) -> None:
         if ev.attacker != c.me or c.shrouds(ev.target) <= 0:
+            return
+        # **The printed choice, all or none.** `p9405` rewards declining,
+        # so this cannot be hard-wired -- see the docstring.
+        if not c.may("invoke your shrouds"):
             return
         count = c.shrouds(ev.target) - (1 if isinstance(ev, Miss) else 0)
         if count > 0:

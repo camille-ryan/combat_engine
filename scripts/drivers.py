@@ -24630,6 +24630,101 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
              " really was a choice",
              f"{len(pushed)} ForcedMove(s)")
 
+    # -- the assassin's shrouds: the other printed all-or-none choice ----
+    #
+    # `p9400` prints *"before you make an attack roll ... you choose to
+    # invoke either all your shrouds on it or none of them"*, and invoked
+    # them unconditionally -- its note said the choice *"is always taken
+    # -- declining wins nothing"*, which is true of that row alone and
+    # false of the class: `p9405` prints *"if you didn't invoke your
+    # shrouds ... it takes 1 extra damage for each"*, so declining pays.
+    # With the choice hard-wired that clause read a count already zeroed.
+    #
+    # Both arms, for `shove_or_slide`'s reason: either alone passes an
+    # implementation that only ever does one thing.
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.components import Health as _Health
+
+    def shrouded(decline: bool) -> tuple:
+        """One `p9405` attack with the shroud choice steered.
+
+        Returns the shrouds before, the shrouds after, the damage taken and
+        **how many blows landed** -- that last one is what the gate
+        assertion reads, because a count cannot be moved by a die.
+        """
+        board, caster, _ = _audit.board("p9405", 1, pose=True)
+        mark = next(
+            (f for f in _audit._foes(board, caster)
+             if _audit.alive(board, f)), 0,
+        )
+        if not mark:
+            return 0, 0, -1, 0
+        asker = _Cast(world=board, me=caster, ref="drivers")
+        for _ in range(4):
+            use(board, caster, "p9400", targets=[mark])
+        had = asker.shrouds(mark)
+        health = board.get(mark, _Health)
+        if health is None:
+            return had, had, -1, 0
+        health.hp = health.max_hp
+        was_may = _Cast.may
+        _Cast.may = lambda self, what, **kw: not decline
+        board.rng.loaded = 20
+        from_here = len(board.bus.log)
+        try:
+            use(board, caster, "p9405", targets=[mark])
+        finally:
+            _Cast.may = was_may
+            board.rng.loaded = None
+        blows = sum(
+            1 for e in board.bus.log[from_here:]
+            if type(e).__name__ == "DamageApplied"
+            and getattr(e, "target", 0) == mark
+        )
+        return had, asker.shrouds(mark), health.max_hp - health.hp, blows
+
+    had_in, left_in, took_in, blows_in = shrouded(decline=False)
+    had_out, left_out, took_out, blows_out = shrouded(decline=True)
+    if took_in < 0 or took_out < 0:
+        out.skip("no creature to shroud on this board")
+    else:
+        out.that(had_in and left_in == 0,
+                 "invoking the shrouds spends them",
+                 f"{had_in} -> {left_in}")
+        out.that(had_out and left_out == had_out,
+                 "**declining keeps them**, which is what `p9405` reads --"
+                 " with the choice hard-wired the count was always 0 by"
+                 " the time its clause could look",
+                 f"{had_out} -> {left_out}")
+        out.that(took_in != took_out,
+                 "and the two arms deal different damage, so the choice"
+                 " reaches the board rather than only the count",
+                 f"invoked {took_in}, declined {took_out}")
+
+        # **The gate on `p9405`'s own clause, counted off the LOG rather
+        # than differenced out of a total.**
+        #
+        # Two attempts at this failed and both are worth recording. A
+        # comparison of the two arms' damage cannot see the gate: on the
+        # invoke arm the shrouds are already gone, so a clause paying
+        # "either way" pays nothing there and the totals differ anyway --
+        # a plant removing the gate passed. And a no-shrouds control is
+        # not available: `audit.board` arms `p9400` itself, so the target
+        # always carries at least one, measured.
+        #
+        # What is unambiguous is **how many blows the row lands**. Its
+        # per-shroud bonus is a `c.flat` of its own, so the declined arm
+        # has one more `DamageApplied` than the invoked arm. That is a
+        # count rather than a sum, so no die and no shroud total can move
+        # it.
+        out.that(blows_out == blows_in + 1,
+                 "**p9405's per-shroud bonus is a blow of its own and lands"
+                 " only on the declined arm** -- counted off the log,"
+                 " because the two arms' totals differ either way and no"
+                 " no-shrouds control exists: `audit.board` arms p9400"
+                 " itself",
+                 f"invoked {blows_in} blow(s), declined {blows_out}")
+
 
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
