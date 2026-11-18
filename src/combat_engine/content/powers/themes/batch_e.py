@@ -859,8 +859,34 @@ def p14125(c: Cast) -> None:
     What is left is a **moment**, and it is fatal on its own: the trigger is
     `AttackDeclared`, which the engine emits per target already chosen, and
     `PowerUsed` is no earlier -- its own note in `items/implement_b` says
-    "the targets are chosen by then". So a modifier laid here widens the
-    *next* use of that power and not the one that fired this.
+    "the targets are chosen by then".
+
+    **And a pre-targeting event would not be enough, which is the half this
+    note was missing.** `dsl.use` settles its targets before announcing
+    anything, so a `Targeting` emit there is buildable -- but for a
+    character using a power from the menu, `actions.options` has already
+    priced the offer with the targets the **printed** range reaches. A
+    target 7 squares off is never offered for a ranged 5 power, so doubling
+    the range inside `use` would let an explicitly-passed target through and
+    change nothing a player can choose. Half-building it would report as
+    working.
+
+    **Two coherent designs, and they need different facilities.** Reactive
+    -- the card's own wording -- needs the moment *and* the menu to
+    re-price. Proactive, a free action taken before the attack, needs no new
+    moment but cannot say "double": `_stretched` reads `"range"` as a flat
+    number and the power is not known yet, so the base cannot be read. The
+    arithmetic the old note calls solved is solved only for the reactive
+    shape.
+
+    **Not a one-row question.** `cf:sword-marshal` prints *"Free Action,
+    Trigger: you use a power that targets your allies but not you. Effect:
+    you are also targeted by the power"* -- the same trigger shape, also
+    altering targeting -- and `p12236`'s `Power.effect_before` wants a line
+    run above the per-target loop. Referred up rather than guessed: #1366.
+
+    A modifier laid in the body therefore widens the *next* use of that
+    power and not the one that fired this.
 
     **Re-pointed off `events.PowerAimed`, because no event can be the
     answer.** That symbol asked for an announcement "after the range is
