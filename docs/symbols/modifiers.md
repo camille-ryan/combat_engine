@@ -104,7 +104,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Did *that* attack have combat advantage? Reads the event.
 - `c.hide(self, *, from_: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, check: 'bool' = False, skill: 'str' = 'stealth') -> 'Effect | None'`
   - Go unseen, and stay that way until something gives you away.
-- `c.hides_with_cover(self, *, after_moving: 'int' = 0, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.hides_with_cover(self, *, after_moving: 'int' = 0, ally: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Hide with any cover, if you moved far enough from where you were.
 - `c.ignore_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, once: 'bool' = False, concealment_only: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "You ignore cover and concealment when attacking."

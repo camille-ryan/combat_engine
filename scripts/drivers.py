@@ -24726,6 +24726,110 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def an_allys_body_is_cover_for_hiding(out: Result) -> None:
+    """"You can use cover granted by your allies both to become hidden and
+    to remain hidden."
+
+    Two rows print it -- `p14032` and `p14213` -- and `query.cover_between`
+    could not say it: it counts creature bodies **only for a ranged
+    attack**, and only the target's own side, because *"somebody in your
+    way is cover your side gave you"*. `actions._hiding` asks with
+    `ranged=False`, so an ally standing in the line was never cover for a
+    hide check and there was no knob that made it.
+
+    **Two keys and not one, which `p14032`'s own note insisted on.** Both
+    rows print the lowered threshold as well, so a single symbol would
+    have reported them finished with half of each written. The probe below
+    is what settles that they are separable: with the threshold lowered and
+    the ally clause off, the hide is still refused.
+
+    `cf:rogue-scoundrel-f1s2` prints the opposite -- *"except for cover
+    provided by intervening allies"* -- and keeps today's behaviour, which
+    is why this is opt-in rather than a change to the default.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import allies, cover_between, enemies
+    from combat_engine.engine.types import Cover
+
+    def pose(ally_flag: bool | None, *, run_the_row: str = "") -> tuple:
+        world, me, _ = _audit.board("p14032", 1)
+        mates = [a for a in allies(world, me) if a != me]
+        foes = sorted(enemies(world, me))
+        if not mates or not foes:
+            return ()
+        mate, foe = mates[0], foes[0]
+        # The ally directly between the hider and the enemy, which is the
+        # only arrangement the printed clause is about.
+        place(world, me, (5, 5))
+        place(world, foe, (5, 9))
+        place(world, mate, (5, 7))
+        budget = world.get(me, Budget)
+        if budget is not None:
+            budget.minor = 1
+        world.turn = me
+        if run_the_row:
+            REGISTRY[run_the_row].body(Cast(
+                world=world, me=me, ref=run_the_row, targets=[me]))
+        elif ally_flag is not None:
+            Cast(world=world, me=me, ref="drivers-hide").hides_with_cover(
+                ally=ally_flag, on=me, until=When.ENCOUNTER)
+        offered = [
+            a for a in _actions.legal(world, world.encounter, me)
+            if a.kind == "hide"
+        ]
+        return (cover_between(world, foe, me),
+                cover_between(world, foe, me, ranged=True),
+                bool(offered))
+
+    bare = pose(None)
+    if not bare:
+        out.skip("the board fielded no ally to stand in the line")
+        return
+    melee, ranged, offered = bare
+    out.that(melee < Cover.PARTIAL <= ranged,
+             "**an ally in the line is cover for a ranged attack and not"
+             " for anything else**, which is the rule this clause bends --"
+             " so a hide check, which asks the melee question, saw nothing",
+             f"cover melee {melee!r}, ranged {ranged!r}")
+    out.that(not offered,
+             "and no hide is offered with nothing granted",
+             f"offered={offered}")
+
+    _, _, offered = pose(False)
+    out.that(not offered,
+             "**nor with the threshold lowered and the ally clause off** --"
+             " which is what makes these two keys and not one: `p14032`'s"
+             " note refused to join the symbols for exactly this reason,"
+             " and one key would have reported both rows finished with half"
+             " of each written",
+             f"offered={offered}")
+
+    _, _, offered = pose(True)
+    out.that(offered,
+             "**and offered once the ally clause is on** -- `_hiding` asks"
+             " `cover_between` with `ranged=` set from the key, so the"
+             " ally's body counts",
+             f"offered={offered}")
+
+    for ref in ("p14032", "p14213"):
+        _, _, offered = pose(None, run_the_row=ref)
+        out.that(offered,
+                 f"**and {ref} itself asks for it** -- run through its own"
+                 " body, which the arms above do not say: they call"
+                 " `c.hides_with_cover` directly",
+                 f"offered={offered}")
+        out.that(not REGISTRY[ref].dropped,
+                 f"{ref} carries no marker",
+                 f"marks {REGISTRY[ref].dropped!r}")
+
+
 def a_shove_may_refuse_a_square(out: Result) -> None:
     """"You push each target 1 square, but not into hindering terrain."
 
@@ -94088,6 +94192,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "ally_cover": (
+        an_allys_body_is_cover_for_hiding,
+        "an ally's body can be cover for becoming hidden, which is a"
+        " separate clause from the lowered threshold (p14032 p14213)",
+    ),
     "push_avoid": (
         a_shove_may_refuse_a_square,
         "c.push(avoid=) forbids a destination as a rule rather than as"

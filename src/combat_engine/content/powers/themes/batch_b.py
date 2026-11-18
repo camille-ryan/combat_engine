@@ -1303,14 +1303,15 @@ def p14212(c: Cast) -> None:
         both(about_me, by_keyword(Keyword.TELEPORTATION)),
         "you use a teleportation power",
     ),
-    dropped=("c.hide(cover=)", "c.hide(ally_cover=)"),
 )
 def p14213(c: Cast) -> None:
     """The three states and their "until you attack" end are exact.
 
-    **The note that said the any-cover half "needs nothing" was reading a
-    version of `actions._hiding` that no longer exists, and the symbol it
-    dropped has been put back.** It claimed the hide is offered to anybody
+    **Both hiding clauses are written now, and the history is worth
+    keeping because this note has been wrong in both directions.** It once
+    said the any-cover half "needs nothing", reading a version of
+    `actions._hiding` that no longer existed; the symbol was then put
+    back. It claimed the hide is offered to anybody
     with "any cover and any concealment, partial included, with no
     superior-cover test anywhere". `_hiding` has required
     `cover_between(...) is Cover.SUPERIOR or concealment_of(...) is
@@ -1355,6 +1356,13 @@ def p14213(c: Cast) -> None:
     def ends(ev: object) -> None:
         for eff in held:
             c.end_effect(eff, on=c.me, why="attacked")
+
+    # **Both hiding clauses, and they are two keys.** The threshold --
+    # "Stealth checks to become hidden if you have any cover or
+    # concealment" -- and the ally clause, which `query.cover_between`
+    # could not say at all: it counts creature bodies only for a ranged
+    # attack, so an ally standing in the line was never cover for a hide.
+    held.append(c.hides_with_cover(ally=True, on=c.me, until=When.EONT))
 
     c.on_attack(ends, by=c.me, once=True, until=When.EONT)
 

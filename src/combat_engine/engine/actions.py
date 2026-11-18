@@ -379,12 +379,23 @@ def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # its own clause, not a bigger number here.
     need = max(Cover.PARTIAL,
                Cover.SUPERIOR - _mods(world, actor, HIDE_COVER, {}))
+    # **"You can use cover granted by your allies to become hidden."**
+    # `cover_between` counts creature bodies only for a *ranged* attack --
+    # its own note says somebody in your way is cover your side gave you --
+    # so an ally's body could never contribute to a hide check and there
+    # was no knob that made it. Two rows print the clause and a third
+    # prints the opposite and gets today's behaviour for free, which is why
+    # this is a key rather than a change to the default.
+    #
+    # It is **not** the same gap as the threshold, and lowering that alone
+    # would have reported both rows ready with this still unsayable.
+    bodies = _mods(world, actor, HIDE_ALLY_COVER, {}) > 0
     hideable = [
         e
         for e in sorted(enemies(world, actor))
         if alive(world, e)
         and e not in unseeing
-        and (cover_between(world, e, actor) >= need
+        and (cover_between(world, e, actor, ranged=bodies) >= need
              or concealment_of(world, actor) >= need)
     ]
     if not hideable:
@@ -404,6 +415,21 @@ def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
 #: this pointed: that verb lays the held state or rolls the check, and
 #: neither consults a degree.
 HIDE_COVER = "hide:cover"
+
+#: Whether an **ally's body** counts as cover for becoming hidden.
+#:
+#: `query.cover_between` counts creature bodies only for a ranged attack,
+#: and only the target's own side -- *"somebody in your way is cover your
+#: side gave you"*. So a hide check, which asks with `ranged=False`, never
+#: saw an ally in the way. Two rows print *"you can use cover granted by
+#: your allies both to become hidden and to remain hidden"*; one prints
+#: *"except for cover provided by intervening allies"* and wants the
+#: default.
+#:
+#: A separate key from `HIDE_COVER` because they are separate clauses:
+#: both of the rows printing this print the lowered threshold too, and one
+#: key would have reported them finished with half of each written. #1331.
+HIDE_ALLY_COVER = "hide:ally-cover"
 
 #: How many squares **less** than printed a creature must end its move
 #: away from where it started, to use a lowered hide threshold.

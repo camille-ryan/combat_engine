@@ -2438,6 +2438,7 @@ class Cast:
         self,
         *,
         after_moving: int = 0,
+        ally: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -2494,14 +2495,38 @@ class Cast:
         the clause is about ending a **move** and a creature that has not
         moved has not met it however much is subtracted.
 
+        **`ally=True` is the second printed clause**, *"you can use cover
+        granted by your allies both to become hidden and to remain
+        hidden"*. It is a separate key because it is a separate sentence:
+        `query.cover_between` counts creature bodies only for a ranged
+        attack -- *"somebody in your way is cover your side gave you"* --
+        so a hide check never saw an ally standing in the line, and
+        lowering the threshold alone leaves that unsayable.
+
+        `cf:rogue-scoundrel-f1s2` prints the opposite -- *"except for
+        cover provided by intervening allies"* -- and gets today's
+        behaviour for free, which is why this is opt-in rather than a
+        change to the default.
+
         Defaults to the caster, like `c.cover` and `c.conceal`: every
         printed line that grants this says "you".
         """
-        from .actions import HIDE_COVER, HIDE_DISPLACEMENT
+        from .actions import HIDE_ALLY_COVER, HIDE_COVER, HIDE_DISPLACEMENT
         from .resolve import _mods
         from .types import Cover
 
         who = on if on is not None else self.me
+        if ally:
+            # **A second clause and so a second key.** Both rows printing
+            # "you can use cover granted by your allies" print the lowered
+            # threshold as well, and one key for the pair would have
+            # reported them finished with half of each written -- which is
+            # why `p14032`'s own note refused to join the two symbols.
+            #
+            # `query.cover_between` counts creature bodies only for a
+            # ranged attack, so a hide check never saw an ally in the way;
+            # `actions._hiding` asks it with `ranged=` set from this.
+            self.bonus(HIDE_ALLY_COVER, 1, on=who, until=until)
         gate = None
         if after_moving:
             def far_enough(_ctx: dict[str, Any], eid: int = who,

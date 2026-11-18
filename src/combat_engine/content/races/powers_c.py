@@ -1309,7 +1309,6 @@ def p14016(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW],
-    dropped=("c.hides_with_cover(ally=)",),
 )
 def p14032(c: Cast) -> None:
     """"You can make Stealth checks to become hidden when you have any cover
@@ -1338,18 +1337,22 @@ def p14032(c: Cast) -> None:
 
     `When.EONT` is the printed duration.
 
-    **Still dropped: the ally half.** *"In addition, you can use cover from
-    your allies to become hidden or to remain hidden."* `_hiding` calls
-    `query.cover_between` with `ranged=False`, and that function counts
-    creature bodies **only for a ranged attack** -- so an ally's body can
-    never contribute cover to a hide check, and there is no knob that makes
-    it. `c.hides_with_cover`'s docstring records the same fact from the
-    other side, where it is load-bearing for a *different* card:
-    `cf:rogue-scoundrel-f1s2` prints *"except for cover provided by
-    intervening allies"* and gets that for free. This row wants the
-    opposite and `p14213` is the second claimant. #1331.
+    **The ally half is written, as `ally=True`.** *"In addition, you can
+    use cover from your allies to become hidden or to remain hidden."*
+    `_hiding` called `query.cover_between` with `ranged=False`, and that
+    function counts creature bodies **only for a ranged attack** -- so an
+    ally's body could never contribute cover to a hide check and there was
+    no knob that made it.
+
+    **A second key and not a parameter on the first**, which this row's
+    own note insisted on and was right to: both rows printing the ally
+    clause print the lowered threshold too, so one symbol would have
+    reported them finished with half of each written.
+    `cf:rogue-scoundrel-f1s2` prints the opposite -- *"except for cover
+    provided by intervening allies"* -- and keeps today's behaviour,
+    which is why this is opt-in. #1331.
     """
-    c.hides_with_cover(until=When.EONT)
+    c.hides_with_cover(ally=True, until=When.EONT)
 
 
 # -- r53 --------------------------------------------------------------------
