@@ -25575,12 +25575,16 @@ def a_parameter_the_printed_line_needed(out: Result) -> None:
     from combat_engine.engine import events as _events
     from combat_engine.engine.actions import legal
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget as _Budget
     from combat_engine.engine.components import Health, Position
     from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.dsl import usable as _usable
     from combat_engine.engine.durations import When
     from combat_engine.engine.grid import distance
     from combat_engine.engine.movement import place
     from combat_engine.engine.query import allies, enemies, granted_actions, is_
+    from combat_engine.engine.query import can_act as _can_act
+    from combat_engine.engine.query import distance_between as _distance_between
     from combat_engine.engine.types import Condition, DamageType, Size
 
     # ---- Target.max_size_relative: an OFFSET, which is why two rows ----
@@ -25613,23 +25617,59 @@ def a_parameter_the_printed_line_needed(out: Result) -> None:
                  f" {refuses.name} allowed={barred}")
 
     # ---- c.grant_action(beside=): p3464's ally arrives at the bard ------
-    world, me, _ = _audit.board("p3464", 1)
-    foe = sorted(enemies(world, me))[0]
+    # **Armed, because `p3464` is a WEAPON row and the production draw
+    # does not arm this bard.** This arm went red in the suite and green
+    # alone, and the cause is not order -- it is `chargen.SCORED_CHOICES`.
+    # `drivers.main` sets it True for every rule; `import audit` turns it
+    # off as a side effect, so the FIRST rule in a run to import `audit`
+    # gets the unscored draw and every rule after it gets the production
+    # one. Measured on this board:
+    #
+    #     SCORED_CHOICES=False   the bard holds w3610, w3631, w:rod
+    #     SCORED_CHOICES=True    w:ki-focus, w3678, w3631
+    #
+    # A ki focus is an implement, so the main hand holds no weapon and
+    # `usable` answers "requirement not met" -- which reads exactly like a
+    # grant that never landed. `w3593` is a printed one-handed melee
+    # weapon, which is all this row's Requirement wants.
+    world, me, _ = _audit.board("p3464", 1, arm="w3593")
     world.rng.loaded = 20
-    use(world, me, "p3464", targets=[foe], spend=False)
+    # **The nearest enemy, not the lowest-numbered one.** `p3464` is melee,
+    # so `usable()` refuses it against a foe out of reach -- and which
+    # enemy sorts first is not a fact about this row.
+    foe = min(sorted(enemies(world, me)),
+              key=lambda e: _distance_between(world, me, e))
+    why = _usable(world, me, REGISTRY["p3464"])
+    used = use(world, me, "p3464", targets=[foe], spend=False)
+    out.that(used,
+             "p3464 is usable against the nearest enemy, which is what the"
+             " arm below is about -- a row refused for any reason reads"
+             " exactly like a grant that did not land, so the refusal is"
+             " named here rather than inferred from the arm below",
+             f"used={used}, usable={why}, foe {foe} at"
+             f" {_distance_between(world, me, foe)} squares")
     mine = world.get(me, Position).squares
     offered = []
+    saw = []
     for friend in [a for a in allies(world, me) if a != me]:
         world.turn = friend
         spots = [a.dest for a in legal(world, world.encounter, friend)
                  if a.kind == "teleport"]
+        budget = world.get(_Budget, friend) if False else world.get(friend, _Budget)
+        saw.append(
+            f"ally {friend}: move={budget and budget.move} "
+            f"can_act={_can_act(world, friend)} "
+            f"dist={_distance_between(world, me, friend)} "
+            f"grants={dict(granted_actions(world, friend))} "
+            f"offered={len(spots)}"
+        )
         if spots:
             offered.append((friend, spots))
     out.that(bool(offered),
              "**p3464's chosen ally is offered the teleport** -- on its own"
              " turn, because a move action is budget and `can_spend` asks"
              " whose turn it is",
-             f"{len(offered)} ally(ies) offered it")
+             "; ".join(saw))
     if offered:
         friend, spots = offered[0]
         astray = [d for d in spots
