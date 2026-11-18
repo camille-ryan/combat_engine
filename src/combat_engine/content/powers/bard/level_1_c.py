@@ -115,7 +115,6 @@ def p5676(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(CHA, vs=FORT),
-    dropped=("c.no_hide()",),
 )
 def p5677(c: Cast) -> None:
     """**The concealment and cover half is written; "cannot become hidden"
@@ -140,6 +139,11 @@ def p5677(c: Cast) -> None:
         c.damage("2d6", c.cha_mod, dtype=DamageType.THUNDER)
     c.ongoing(5, DamageType.THUNDER, until=When.SAVE_ENDS)
     c.no_cover(on=c.target, partial=True, until=When.SAVE_ENDS)
+    # **"Cannot become hidden" is a prohibition, not the end of a hide.**
+    # `c.unhide` on a watcher was the approximation available before, and
+    # it is wrong in the window that matters: the creature is hidden until
+    # the next event fires. `c.hide` reads this and refuses.
+    c.no_hide(on=c.target, until=When.SAVE_ENDS)
 
 
 @power(

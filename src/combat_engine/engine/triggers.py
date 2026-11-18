@@ -293,11 +293,16 @@ class Triggers:
                         # `rolled=0` because no die brought it back -- the
                         # printed condition did, and that zero is how a
                         # reader tells the two paths apart. #605.
-                        known.restore(ref)
                         from .events import PowerRecharged
 
+                        # **The restore is the callback here too.** Minting
+                        # a proposal on one path and honouring it on the
+                        # other is the bug shape `#605`'s own note names:
+                        # a row written against it would be right in half
+                        # the game and silently wrong in the other half.
                         self.world.bus.emit(
-                            PowerRecharged(actor=eid, ref=ref, rolled=0)
+                            PowerRecharged(actor=eid, ref=ref, rolled=0),
+                            lambda ev, k=known: k.restore(ev.ref),
                         )
                         break
 

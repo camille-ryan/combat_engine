@@ -2264,6 +2264,16 @@ class Cast:
         rolling for all of them would make every lurker in the game able to
         fail at its own printed trait. #784.
         """
+        # **Refused for a creature under a "cannot become hidden" clause**,
+        # and asked here rather than in the row for the reason
+        # `query.flanked_by`'s own note gives: a copy in a content file is
+        # a second answer to one question, and the prohibition has to hold
+        # wherever the hiding is attempted.
+        from .components import Mods as _Mods
+
+        mods = self.world.get(self.me, _Mods)
+        if mods is not None and mods.items and mods.total("no_hide", {}) > 0:
+            return None
         if check:
             return self._stealth_hide(from_=from_, until=until, skill=skill)
         return self.invisible(to=from_, until=until)
@@ -9518,6 +9528,35 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} revealed", by=self.ref,
         )
+
+    def no_hide(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"The target cannot become hidden."
+
+        A **prohibition**, which is the thing neither `c.hide` nor
+        `c.unhide` could say: the first makes a creature hidden and the
+        second ends a hide that has happened, and `p5677` forbids one from
+        being made in the first place. `c.unhide` on a watcher is the
+        approximation, and it is wrong in the window that matters -- the
+        creature is hidden for as long as it takes the next event to fire.
+
+        Read by `c.hide`, which refuses and says so, so the prohibition
+        holds wherever the hiding is attempted rather than only where a row
+        remembered to ask.
+
+        **It does not end a hide already standing**, deliberately: "cannot
+        become hidden" is about becoming, and the printed lines that strip
+        an existing one say so separately. A row wanting both calls
+        `c.unhide` as well.
+
+        Follows `c.target`, because every printed line of this shape is
+        about somebody else.
+        """
+        return self.bonus("no_hide", 1, on=on, until=until, kind=self.ref)
 
     def no_cover(
         self,

@@ -3476,10 +3476,18 @@ def recharge(world: World, actor: int) -> None:
         if not back and p.recharge_while is not None:
             back = p.recharge_while(world, actor)
         if back:
-            known.restore(ref)
-            # **Announced, on both paths.** A row whose printed clause ends
-            # "until it recharges this ability" had no moment to end on --
-            # `m1032a1` is the case and there is no `When` for it. #605.
+            # **Announced BEFORE the restore, and the restore is the
+            # callback.** `PowerRecharged` is a proposal now -- `p2975`
+            # prints "the power instead does not recharge" -- and it used
+            # to be announced after `known.restore(ref)`, so a listener
+            # could read it and could not stop it. `Decision`'s own rule
+            # is that the work goes in `emit`'s second argument, "so
+            # reading the agreed answer is the natural thing to write and
+            # the stale local is not in scope".
+            #
+            # A row whose printed clause ends "until it recharges this
+            # ability" had no moment to end on -- `m1032a1` is the case
+            # and there is no `When` for it. #605.
             #
             # **`by_die` and not `back`**, which the first draft had: a row
             # printing both a die and a condition rolls the die either way
@@ -3491,5 +3499,8 @@ def recharge(world: World, actor: int) -> None:
             from .events import PowerRecharged
 
             world.bus.emit(
-                PowerRecharged(actor=actor, ref=ref, rolled=rolled if by_die else 0)
+                PowerRecharged(
+                    actor=actor, ref=ref, rolled=rolled if by_die else 0,
+                ),
+                lambda ev: known.restore(ev.ref),
             )

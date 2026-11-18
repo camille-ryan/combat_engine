@@ -24726,6 +24726,134 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_recharge_can_be_refused_and_a_hide_forbidden(out: Result) -> None:
+    """Two prohibitions, which is a thing this engine was short of.
+
+    `p2975` prints *"the next time the target would recharge a power, the
+    power instead does not recharge"*. `PowerRecharged` existed and was a
+    **notification**, announced after `known.restore(ref)` on both paths --
+    so a listener could read it and could not stop it. It is a `Decision`
+    now, announced before the restore with the restore as `emit`'s
+    callback, which is `Decision`'s own rule: *"a proposal is refused by a
+    listener and honoured by the emitter"*.
+
+    `p5677` prints *"cannot become hidden"*. `c.hide` makes a creature
+    hidden and `c.unhide` ends a hide that has happened; neither forbids
+    one from being made, and the `c.unhide`-on-a-watcher approximation is
+    wrong in exactly the window that matters -- the creature is hidden
+    until the next event fires.
+
+    **Both are `Window.BEFORE` lessons.** A listener that cancels has to
+    run before the work, and a cancel skips the AFTER window entirely, so
+    `p2975`'s two printed halves have to live in one listener.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine import events as _ev
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Usage
+
+    out.that(issubclass(_ev.PowerRecharged, _ev.Decision),
+             "**`PowerRecharged` is a proposal, not a notification** --"
+             " which is what makes a 'the power instead does not recharge'"
+             " clause sayable at all")
+
+    #: A monster ability with a printed recharge die, so both paths of the
+    #: recharge are reachable. Named rather than searched for.
+    SPENT = "m4881a2"
+
+    def recharge(hold_it_back: bool) -> tuple[int, list]:
+        world, me, _ = _audit.board("p2975", 1)
+        victim = sorted(enemies(world, me))[0]
+        known = world.get(victim, Powers)
+        known.known.append(SPENT)
+        known.used[SPENT] = 1
+        if hold_it_back:
+            world.rng.loaded = 20
+            use(world, me, "p2975", targets=[victim], spend=False)
+        world.rng.loaded = None
+        # The printed die comes up, whatever it is: `recharge` rolls 1d6
+        # and compares against `p.recharge`, so the largest face restores
+        # every row of the shape.
+        world.rng.die = lambda faces: faces
+        mark = len(world.bus.log)
+        _actions.recharge(world, victim)
+        said = [e for e in world.bus.log[mark:]
+                if isinstance(e, _ev.PowerRecharged)]
+        return known.used.get(SPENT, 0), said
+
+    spent, said = recharge(False)
+    out.that(spent == 0 and len(said) == 1 and not said[0].cancelled,
+             "**the control: a spent row comes back on its die** and the"
+             " proposal is not refused",
+             f"uses still spent {spent}, cancelled"
+             f" {[e.cancelled for e in said]}")
+    spent, said = recharge(True)
+    out.that(spent == 1,
+             "**and with p2975 standing it stays spent** -- the refusal is"
+             " honoured by the emitter, which is the half that could not be"
+             " written while the announcement came after the restore",
+             f"uses still spent {spent}")
+    out.that(len(said) == 1 and said[0].cancelled,
+             "and the event itself records the refusal",
+             f"cancelled {[e.cancelled for e in said]}")
+
+    # ---- p2975's second half, in the same listener ---------------------
+    world, me, _ = _audit.board("p2975", 1)
+    victim = sorted(enemies(world, me))[0]
+    known = world.get(victim, Powers)
+    known.known.append(SPENT)
+    known.used[SPENT] = 1
+    mine = world.get(me, Powers)
+    theirs = [
+        r for r in mine.known
+        if getattr(REGISTRY.get(r), "usage", None) is Usage.ENCOUNTER
+    ]
+    if not theirs:
+        out.skip("the bard holds no encounter row to be handed back")
+    else:
+        mine.used[theirs[0]] = 1
+        world.rng.loaded = 20
+        use(world, me, "p2975", targets=[victim], spend=False)
+        world.rng.loaded = None
+        world.rng.die = lambda faces: faces
+        mark = len(world.bus.log)
+        _actions.recharge(world, victim)
+        back = [e for e in world.bus.log[mark:]
+                if isinstance(e, _ev.UseRestored)]
+        out.that(mine.used.get(theirs[0], 0) == 0 and back,
+                 "**and the bard gets an encounter power back in the same"
+                 " breath** -- both printed halves in one listener, because"
+                 " a cancel in the BEFORE window skips the AFTER window"
+                 " entirely and a repayment listening there would never"
+                 " run",
+                 f"restored {[(e.power, e.who) for e in back]}")
+
+    # ---- p5677: cannot become hidden -----------------------------------
+    world, me, _ = _audit.board("p5677", 1)
+    victim = sorted(enemies(world, me))[0]
+    free = Cast(world=world, me=victim, ref="drivers-p5677").hide(from_=me)
+    out.that(free is not None,
+             "**the control: the creature can hide before the row lands**,"
+             " which is what makes the next line about the prohibition",
+             f"hide gave {free and free.label!r}")
+
+    world, me, _ = _audit.board("p5677", 1)
+    victim = sorted(enemies(world, me))[0]
+    world.rng.loaded = 20
+    use(world, me, "p5677", targets=[victim], spend=False)
+    barred = Cast(world=world, me=victim, ref="drivers-p5677").hide(from_=me)
+    out.that(barred is None,
+             "**and cannot once it has** -- read by `c.hide` itself, so the"
+             " prohibition holds wherever the hiding is attempted rather"
+             " than only where a row remembered to ask",
+             f"hide gave {barred!r}")
+
+
 def a_conjuration_flanks_and_a_penalty_is_clipped(out: Result) -> None:
     """Two rows, two clauses nothing could say, and both markers named the
     right gap one level too high.
@@ -93636,6 +93764,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "refusals": (
+        a_recharge_can_be_refused_and_a_hide_forbidden,
+        "a recharge can be refused and a hide forbidden, which are two"
+        " prohibitions nothing could say (p2975 p5677)",
+    ),
     "conjured_flank": (
         a_conjuration_flanks_and_a_penalty_is_clipped,
         "a conjuration can hold the far side of a flank, and a penalty can"

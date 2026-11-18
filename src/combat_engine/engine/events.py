@@ -1046,7 +1046,7 @@ class Bloodied(Event):
 
 
 @dataclass
-class PowerRecharged(Event):
+class PowerRecharged(Decision):
     """A spent row came back, on its die or on its printed condition.
 
     **Nothing announced it, and `triggers.py` said so in its own comment**:
@@ -1066,6 +1066,19 @@ class PowerRecharged(Event):
     `rolled` is the die that brought it back, or 0 when the printed
     condition did -- which is also how a reader tells the two apart without
     a second field for it.
+
+    **A proposal rather than a notification, which it was not and had to
+    become.** `p2975` prints *"the next time the target would recharge a
+    power, the power instead does not recharge"*, and this was announced
+    **after** `known.restore(ref)` on both paths -- so a listener could
+    read it and could not stop it: cancelling would have left the power
+    back anyway.
+
+    Both emitters now announce before restoring and honour the answer,
+    which is `Decision`'s own rule: *"a proposal is refused by a listener
+    and honoured by the emitter"*. Moving the announcement earlier costs
+    nothing to the readers it already had -- the restore is the next
+    statement, and nothing between them reads `Powers`.
     """
 
     actor: int

@@ -86,7 +86,6 @@ def p2370(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(CHA, vs=WILL),
-    dropped=("PowerRecharged.cancel",),
 )
 def p2975(c: Cast) -> None:
     """**Half of the Effect is written now; the other half really is
@@ -130,6 +129,13 @@ def p2975(c: Cast) -> None:
     def repaid(ev: PowerRecharged) -> None:
         if spent_once or ev.actor != victim:
             return
+        # **The refusal first, and in the same listener as the repayment.**
+        # `PowerRecharged` is a proposal now and the restore is `emit`'s
+        # callback, so cancelling in the BEFORE window is what stops the
+        # power coming back -- and a cancel skips the AFTER window
+        # entirely, so a repayment listening there would never run. One
+        # listener, both halves, which is also how the card reads them.
+        ev.cancel(f"{c.ref} holds the recharge back")
         for who in (c.me, *c.allies()):
             # `c.expended` is "the rows this creature has used up, for one
             # that hands a use back", and the card names an ENCOUNTER
@@ -146,8 +152,12 @@ def p2975(c: Cast) -> None:
                 spent_once.append(True)
                 return
 
-    c.watch(PowerRecharged, repaid, until=When.ENCOUNTER, on=c.me,
-            label=f"{c.ref} repays")
+    # **`Window.BEFORE`, and the default would be silently inert** -- the
+    # same trap `c.pass_on`'s docstring records for a re-aimed attack. An
+    # AFTER listener runs once the restore has already happened, so the
+    # cancel would change nothing.
+    c.watch(PowerRecharged, repaid, until=When.ENCOUNTER, window=Window.BEFORE,
+            on=c.me, label=f"{c.ref} holds a recharge back")
 
 
 @power(
