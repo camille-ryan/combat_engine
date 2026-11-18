@@ -35,6 +35,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - The squares a straight run from one square to another covers.
 - `c.move_zone(self, zone: 'int', squares_: 'int', *, to: 'Square | None' = None) -> 'bool'`
   - Move a zone or a conjuration, keeping its shape.
+- `c.multiply_range(self, times: 'int' = 2, *, when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'list[Effect]'`
+  - "You double the range of the triggering power."
 - `c.no_douse(self, *, zone: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, side: 'str' = '') -> 'Effect | None'`
   - Hold a fire open: nobody may put it out while this stands.
 - `c.origin: Square | None`

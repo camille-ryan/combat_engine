@@ -1102,7 +1102,11 @@ def _long_range(
         return 0
     normal = weapon.ranged[0] + _stretched(
         world, attacker, "ranged",
-        {**ctx, "power": power, "range_kind": "ranged"}
+        {**ctx, "power": power, "range_kind": "ranged"},
+        # The weapon's own short range is the base a doubling scales, so
+        # the long-range penalty moves with the card rather than being
+        # worked out from the printed number while the attack uses another.
+        printed=weapon.ranged[0],
     )
     if distance_between(world, attacker, target) <= normal:
         return 0

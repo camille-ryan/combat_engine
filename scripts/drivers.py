@@ -15556,7 +15556,7 @@ def an_ally_provokes_from_the_stancer(out: Result) -> None:
         world.grid.lift(mate)
         must(world.get(mate, Position), "the ally stands").square = (
             at[0] + 1, at[1])
-        world.grid.place(mate, (at[0] + 1, at[1]))
+        world.grid.place(mate, frozenset({(at[0] + 1, at[1])}))
         if fire_the_row:
             REGISTRY["p16539"].body(Cast(world=world, me=me, ref="p16539"))
         seen: list[OpportunityWindow] = []
@@ -15691,7 +15691,8 @@ def an_ally_provokes_from_the_stancer(out: Result) -> None:
             world3.grid.lift(foe)
             must(world3.get(foe, Position), "the enemy stands").square = (
                 at3[0] - 1, at3[1])
-            world3.grid.place(foe, (at3[0] - 1, at3[1]))
+            world3.grid.place(foe,
+                              frozenset({(at3[0] - 1, at3[1])}))
             del seen3[:]
             movement.step(world3, foe, (at3[0] - 3, at3[1] - 2))
             for_me = [w for w in seen3 if w.actor == me3]
@@ -15839,6 +15840,155 @@ def a_free_hop_inside_the_zone(out: Result) -> None:
              " zone -- the clause, rather than an offer that draws and does"
              " nothing",
              f"{was} -> {now}")
+
+
+def a_doubled_range_is_proportional(out: Result) -> None:
+    """*"You double the range of the triggering power. For example, a
+    ranged 5 power becomes a ranged 10 power, and a power with a range of
+    'area burst 2 within 10' becomes area burst 2 within 20."* -- `p14125`,
+    the last power row refused in play.
+
+    **Built proactively on Camille's ruling**, `#1366`:
+
+    > *"I think B is easier here. My experience playing the combats so far
+    > has been that attacks aren't offered unless they have valid targets.
+    > Doing A means the power wouldn't allow targeting creatures within the
+    > new range."*
+
+    **The card's own example is the test.** Both halves of it: a ranged
+    line doubles, and an area burst's `within` doubles while its radius
+    does not. Scaling the radius instead would turn 25 squares into 81,
+    which is a different and much stronger clause -- so the burst size is
+    asserted unchanged rather than left unmeasured.
+
+    Three controls: a non-arcane attack power, an arcane power that is not
+    an attack, and the spend. The first two are what `when` is for; the
+    third is asserted by reading the range five times and checking it is
+    still doubled, because a hold spent on being *read* would be gone
+    before a power was chosen -- the action menu reads every offer's range.
+
+    **Five plants: four red a line each, and the fifth raises instead.**
+    Making `_stretched` ignore the factor reds both worked examples;
+    scaling `blast_size` too reds the footprint; dropping the row's `when`
+    reds both keyword controls; never spending the hold reds the spend.
+    The fifth -- `once=True` on the bonus -- cannot red anything, because
+    `c.bonus` **refuses** it: a `"<key> times"` entry has no known spend
+    moment, and its error says passing it "would be spent by the next
+    attack roll instead". An API refusal is a better gate than an
+    assertion, so it is recorded here rather than tested around.
+
+    **One assertion was wrong first.** The footprint arm read
+    `reach_of(...).size` -- the *printed* radius, which never moves -- so
+    the `blast_size` plant sailed through with the factor laid and read as
+    2. It counts squares out of `area_of` now, which is also what the
+    clause is about: 25 into 81.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, get, within_of
+    from combat_engine.engine.events import PowerResolved
+    from combat_engine.engine.types import Keyword
+
+    world, me, _ = _board("p14125", 1)
+
+    def choose(kind: str, *, arcane: bool, attack: bool) -> str:
+        """A row with that shape, so each control is a real printed card."""
+        for ref, row in sorted(REGISTRY.items()):
+            if row.reach is None or row.reach.kind != kind:
+                continue
+            if row.reach.size <= 0:
+                continue
+            if (row.attack is not None) is not attack:
+                continue
+            if (Keyword.ARCANE in row.keywords) is not arcane:
+                continue
+            return ref
+        return ""
+
+    ranged = choose("ranged", arcane=True, attack=True)
+    area = choose("area_burst", arcane=True, attack=True)
+    plain = choose("ranged", arcane=False, attack=True)
+    quiet = choose("ranged", arcane=True, attack=False)
+    out.that(all((ranged, area, plain, quiet)),
+             "the corpus has an arcane ranged attack, an arcane area"
+             " attack, a non-arcane attack and an arcane non-attack to"
+             " stand the four arms up with",
+             f"{ranged} / {area} / {plain} / {quiet}")
+    if not all((ranged, area, plain, quiet)):
+        return
+
+    def reach(ref: str) -> int:
+        row = must(get(ref), ref)
+        return dsl._reach_of(world, me, row.reach, ref)
+
+    def within(ref: str) -> int:
+        row = must(get(ref), ref)
+        return within_of(world, me, row.reach,
+                         {"power": ref, "range_kind": "area_burst"})
+
+    def footprint(ref: str) -> int:
+        """How many squares the burst actually covers.
+
+        **`area_of`, not `reach_of(...).size`.** The printed radius is what
+        `reach_of` answers and it never moves, so an earlier draft asserted
+        on it and a plant scaling `blast_size` sailed through: the factor
+        was laid, read as 2, and the assertion was reading a constant. The
+        square count is also what the clause is about -- 25 into 81.
+        """
+        row = must(get(ref), ref)
+        return len(dsl.area_of(world, me, row, (10, 10), 0, 0))
+
+    before = (reach(ranged), within(area), footprint(area), reach(plain),
+              reach(quiet))
+    out.that(before[2] > 1,
+             "the area row covers more than one square before anything is"
+             " laid -- the premise, since a one-square footprint could not"
+             " show a radius change either way",
+             f"{before[2]} square(s)")
+    REGISTRY["p14125"].body(Cast(world=world, me=me, ref="p14125"))
+    after = (reach(ranged), within(area), footprint(area), reach(plain),
+             reach(quiet))
+
+    out.that(before[0] > 0 and after[0] == before[0] * 2,
+             "an arcane RANGED attack power's range doubles -- the card's"
+             " first worked example",
+             f"{before[0]} -> {after[0]}")
+    out.that(before[1] > 0 and after[1] == before[1] * 2,
+             "an arcane AREA attack power's `within` doubles -- the card's"
+             " second worked example",
+             f"within {before[1]} -> {after[1]}")
+    out.that(after[2] == before[2],
+             "and that burst covers the SAME NUMBER OF SQUARES. The printed"
+             " example keeps it an area burst 2, so scaling the radius"
+             " would turn 25 squares into 81 -- a different clause, and the"
+             " one a `blast_size` factor would have written",
+             f"{before[2]} -> {after[2]} square(s)")
+    out.that(after[3] == before[3],
+             "a NON-ARCANE attack power is untouched -- the keyword half of"
+             " the printed line",
+             f"{before[3]} -> {after[3]}")
+    out.that(after[4] == before[4],
+             "and so is an arcane power that is not an ATTACK -- the other"
+             " half, which a gate reading only the keyword would miss",
+             f"{before[4]} -> {after[4]}")
+
+    # -- the hold survives being read, and is spent by the power ----------
+    for _ in range(5):
+        reach(ranged)
+    out.that(reach(ranged) == before[0] * 2,
+             "reading the range five times leaves it doubled -- the"
+             " assertion `once=True` fails, because it spends when the"
+             " value is READ and drawing the action menu reads every"
+             " offer's range",
+             f"{reach(ranged)}")
+
+    world.bus.emit(PowerResolved(actor=me, power=ranged, targets=[],
+                                 rolls=[], trigger=None))
+    out.that(reach(ranged) == before[0],
+             "and resolving a qualifying power spends it, back to the"
+             " printed range -- 'the triggering power', one power",
+             f"{reach(ranged)} (printed {before[0]})")
 
 
 def compelled_walk(out: Result) -> None:
@@ -98314,6 +98464,10 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "doubled_range": (a_doubled_range_is_proportional,
+                      "a proportional range change: the `within` doubles,"
+                      " the radius does not, and reading it does not spend"
+                      " it"),
     "zone_hop": (a_free_hop_inside_the_zone,
                  "a free move between two squares of the zone that granted"
                  " it, offered only on the turn start it is printed for"),

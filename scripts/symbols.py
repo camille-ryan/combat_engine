@@ -306,6 +306,13 @@ CATEGORIES: dict[str, dict] = {
                 # another row's area: that one changes a size, this one
                 # changes the shape. #614.
                 "reshape_area",
+                # Beside `reshape_area` because it is the same kind of
+                # thing -- changing another named row's range line for as
+                # long as a hold lasts -- and because the two are easy to
+                # reach for wrongly: that one changes the SHAPE and carries
+                # a target line with it, this one scales the DISTANCE and
+                # leaves the shape alone.
+                "multiply_range",
                 # `grow` spreads a map feature into the clear ground
                 # beside it. It was under `size` with `contract` and
                 # `resize`, on its name rather than its meaning.

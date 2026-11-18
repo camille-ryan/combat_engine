@@ -10648,6 +10648,75 @@ class Cast:
         return self.bonus("no_second_wind_heal", 1, on=who, until=until,
                           stacks=False)
 
+    def multiply_range(
+        self,
+        times: int = 2,
+        *,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+        on: int | None = None,
+        until: When = When.EOT,
+    ) -> list[Effect]:
+        """"You double the range of the triggering power."
+
+        A **proportional** change where `c.bonus("range", n)` is a flat one,
+        which is the whole of why it needs a verb: `p14125`'s card works the
+        example both ways -- *"a ranged 5 power becomes a ranged 10 power,
+        and a power with a range of 'area burst 2 within 10' becomes area
+        burst 2 within 20"* -- so no number of squares says it. The factor
+        goes under a `"<key> times"` entry and `dsl._stretched` turns it
+        into `printed * (times - 1)` against whatever base it is measuring.
+
+        **Two keys, and the third is deliberately left out.** `"range"` for
+        a ranged line and `"within"` for where an area may be placed --
+        both of the card's examples. **Not `"blast_size"`**: the printed
+        example doubles the *within* of an area burst 2 and leaves it a
+        burst 2, so scaling the radius would turn 25 squares into 81 and is
+        a different clause.
+
+        `when` gates it the way `c.bonus` does, on a context carrying
+        `power` and `range_kind`, because "a ranged or area **arcane**
+        attack power" is a restriction on which row it applies to.
+
+        **Spending it is the caller's job, and `PowerResolved` is the event
+        for it.** This lays a hold; it does not decide when the hold is
+        used up. `c.reshape_area`'s own note has the measurement -- the
+        order inside one use is `PowerUsed`, `AttackDeclared`,
+        `DamageApplied`, `PowerResolved` -- and a range is read *earlier
+        than any of them*, during targeting, and again in
+        `resolve._long_range`.
+
+        **`once=True` is not merely wrong here, it is refused**, and the
+        refusal is `c.bonus`'s rather than anything added for this: a
+        `"<key> times"` entry is not in its list of keys with a known spend
+        moment, so it raises and says that passing it "would be spent by
+        the next attack roll instead -- which is the bug this refusal
+        replaces". Worth knowing before reaching for it: the plain `range`
+        key *is* on that list, so the two keys behave differently and only
+        one of them may carry `once=`.
+
+        Returns both effects so a caller can end them together.
+        """
+        if times <= 1:
+            return []
+        # **`on if on is not None else self.me`, not `self._who(on)`.**
+        # `_who` resolves the row's *target* and answers None when there is
+        # none -- right for `c.provokes`, whose card is "the **target**
+        # provokes", and wrong here: this card is about the caster, and
+        # `_who` made the verb lay nothing at all on a `Personal` row.
+        who = on if on is not None else self.me
+        laid: list[Effect] = []
+        for key in ("range", "within"):
+            # `stacks=False` and no `kind=`: the two are refused together,
+            # because `stacks=False` already buckets under this row's ref.
+            # A factor renews rather than adds -- laying "double" twice is
+            # still double, where a stacking pair would read as a factor of
+            # four.
+            held = self.bonus(f"{key} times", times, on=who, until=until,
+                              when=when, stacks=False)
+            if held is not None:
+                laid.append(held)
+        return laid
+
     def provoked_by_allies(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -10683,9 +10752,11 @@ class Cast:
         is a separate thing -- removing the choice rather than creating it
         -- with no facility here.
         """
-        who = self._who(on)
-        if who is None:
-            return None
+        # Self-defaulting for the same reason `c.multiply_range` is: the
+        # card is "**your** allies provoke ... from **you**", so the holder
+        # is the caster unless a row says otherwise, and `_who` answers
+        # None on a `Personal` row.
+        who = on if on is not None else self.me
         hold = self.effect(f"{self.ref} allies provoke", until=until, on=who)
         if hold is None:
             return None

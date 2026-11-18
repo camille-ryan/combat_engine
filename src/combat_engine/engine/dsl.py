@@ -2840,7 +2840,8 @@ def area_of(
         for eye in origins(world, actor, r, p):
             mine |= squares(world, eye)
     stretch = _stretched(world, actor, r.kind,
-                         {"power": p.ref, "range_kind": r.kind})
+                         {"power": p.ref, "range_kind": r.kind},
+                         printed=r.size)
     # **Not applied to a melee or ranged range here**, because those go
     # through `_reach_of` below and it derives its own answer from the
     # weapon -- so a size raised here was read, overwritten and lost. See
@@ -2928,6 +2929,11 @@ def _reach_of(
                 "range_kind": r.kind,
                 "weapon": getattr(held, "ref", ""),
             },
+            # The printed number this row states, which is what a
+            # proportional line doubles. The by-weapon branch below derives
+            # its own reach and does not scale -- "double the range" is
+            # printed on ranged and area rows, never on "Melee weapon".
+            printed=r.size,
         )
     # **What the range itself adds**, fixed and by ability, folded into
     # `stretch` so it reaches **both** returns below. A reach increase means
@@ -3431,7 +3437,8 @@ def target_of(
 
 
 def _stretched(
-    world: World, actor: int, kind: str, ctx: dict[str, Any] | None = None
+    world: World, actor: int, kind: str, ctx: dict[str, Any] | None = None,
+    printed: int = 0,
 ) -> int:
     """How much longer than printed this creature's reach or range is.
 
@@ -3460,6 +3467,19 @@ def _stretched(
     `ctx` carries the row being measured, so "the range of your **arcane**
     powers" is a gate on the modifier rather than a blanket stretch of
     everything the creature can throw.
+
+    **`printed` is what a PROPORTIONAL line needs**, and it is why this
+    takes a base it otherwise has no use for. *"You double the range of the
+    triggering power"* (`p14125`) is not a number of squares -- a ranged 5
+    becomes a ranged 10 and a ranged 20 becomes a ranged 40 -- so a `Mods`
+    entry holding `+5` cannot say it. `c.multiply_range` lays the factor
+    under a `"<key> times"` entry, read here, and the extra it is worth is
+    `printed * (factor - 1)` added to whatever flat stretches apply.
+
+    Folded in here rather than at the four call sites so a multiplier
+    cannot apply at three of them -- the drift this function's own first
+    paragraph is about. Callers that genuinely have no base to scale pass
+    none, and a factor then changes nothing rather than guessing one.
     """
     from .components import Mods
 
@@ -3467,15 +3487,25 @@ def _stretched(
     if mods is None or not mods.items:
         return 0
     ctx = ctx or {}
-    if kind == "melee":
-        return max(0, mods.total("reach", ctx))
-    if kind == "ranged":
-        return max(0, mods.total("range", ctx))
-    if kind in ("close_burst", "close_blast", "area_burst"):
-        return max(0, mods.total("blast_size", ctx))
-    if kind == "within":
-        return max(0, mods.total("within", ctx))
-    return 0
+    keys = {
+        "melee": "reach",
+        "ranged": "range",
+        "close_burst": "blast_size",
+        "close_blast": "blast_size",
+        "area_burst": "blast_size",
+        "within": "within",
+    }
+    key = keys.get(kind)
+    if key is None:
+        return 0
+    extra = max(0, mods.total(key, ctx))
+    # **A factor of 0 means "nobody laid one", not "multiply by nothing".**
+    # `Mods.total` answers 0 for an absent key, and a row doubling a range
+    # lays 2 -- so anything at or below 1 leaves the printed value alone.
+    times = mods.total(f"{key} times", ctx)
+    if times > 1 and printed > 0:
+        extra += printed * (times - 1)
+    return extra
 
 
 def within_of(
@@ -3496,7 +3526,8 @@ def within_of(
     stretch missing from it would light up a square the action then
     declined.
     """
-    return max(0, r.within + _stretched(world, actor, "within", ctx))
+    return max(0, r.within + _stretched(world, actor, "within", ctx,
+                                        printed=r.within))
 
 
 def _lenders(world: World, actor: int, r: Range,

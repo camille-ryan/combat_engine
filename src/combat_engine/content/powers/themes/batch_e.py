@@ -72,6 +72,7 @@ from combat_engine.engine import (
     MoveEnd,
     MoveStart,
     Pick,
+    PowerResolved,
     Ranged,
     Relation,
     RelationSet,
@@ -835,82 +836,78 @@ def p14124(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE],
+    # **The printed Trigger is kept as text and not declared as an `on=`,
+    # which is the whole of Camille's ruling on `#1366`.** Declaring it
+    # would make this an immediate reaction to `AttackDeclared`, by which
+    # time the targets are chosen and the menu has already been priced
+    # with the printed range.
     trigger="you use a ranged or area arcane attack power",
-    on=Trigger(
-        AttackDeclared, by_me, "you use a ranged or area arcane attack power"
-    ),
-    todo=("actions.before_targeting()",),
 )
 def p14125(c: Cast) -> None:
-    """Targeting is already done by the time this could fire, which is the
-    same wall the header-side augments hit.
+    """**Built proactively, on Camille's ruling.** Asked which of two
+    designs to take -- `#1366` -- she answered:
 
-    The *rewriting* half is no longer a gap: `dsl.area_of` hands
-    `_stretched` a context carrying the row's ref, so `c.bonus("range", n,
-    when=...)` lengthens one named row.
+    > *"I think B is easier here. My experience playing the combats so far
+    > has been that attacks aren't offered unless they have valid targets.
+    > Doing A means the power wouldn't allow targeting creatures within the
+    > new range."*
 
-    **One of the two remaining holds is gone, and it is the arithmetic
-    one.** "Double" is proportional where a modifier is a fixed number, so
-    the base had to be read -- and `c.reach(ref)` reads it, answering a
-    ranged row's range because `dsl._reach_of` does. The old marker
-    `c.reach_of(power=)` named no verb at all and sent five other rows
-    hunting for three different things.
+    That is the reactive design's real defect, stated from play: the menu
+    is priced before a reaction can interpose, so a target at 7 squares is
+    never offered for a ranged 5 power and doubling the range inside `use`
+    would change nothing a player can choose.
 
-    What is left is a **moment**, and it is fatal on its own: the trigger is
-    `AttackDeclared`, which the engine emits per target already chosen, and
-    `PowerUsed` is no earlier -- its own note in `items/implement_b` says
-    "the targets are chosen by then".
+    So the printed Trigger is read as a restriction on **when it may be
+    used** rather than a claim that resolution interleaves -- PHB p268,
+    *"you can take as many free actions as you want"*, and p270, *"you can
+    take your actions in any order"*. It is kept as text above and
+    deliberately not declared as an `on=`.
 
-    **And a pre-targeting event would not be enough, which is the half this
-    note was missing.** `dsl.use` settles its targets before announcing
-    anything, so a `Targeting` emit there is buildable -- but for a
-    character using a power from the menu, `actions.options` has already
-    priced the offer with the targets the **printed** range reaches. A
-    target 7 squares off is never offered for a ranged 5 power, so doubling
-    the range inside `use` would let an explicitly-passed target through and
-    change nothing a player can choose. Half-building it would report as
-    working.
+    **"Double" needed a facility and now has one.** `c.bonus("range", n)`
+    is a flat number of squares and the card is proportional, working the
+    example both ways -- a ranged 5 becomes a ranged 10, and an area burst
+    2 within 10 becomes an area burst 2 within 20. `c.multiply_range` lays
+    the factor and `dsl._stretched` turns it into `printed * (times - 1)`
+    against whichever base it is measuring. The burst's **radius** is left
+    alone, which is what the printed example does.
 
-    **Two coherent designs, and they need different facilities.** Reactive
-    -- the card's own wording -- needs the moment *and* the menu to
-    re-price. Proactive, a free action taken before the attack, needs no new
-    moment but cannot say "double": `_stretched` reads `"range"` as a flat
-    number and the power is not known yet, so the base cannot be read. The
-    arithmetic the old note calls solved is solved only for the reactive
-    shape.
+    **Spent on the next qualifying power, at `PowerResolved`.** Not
+    `once=True`: that spends when the value is *read*, and a range is read
+    while the action menu is drawn, so the hold would be gone before the
+    power was chosen. Not `PowerUsed` either -- `c.reshape_area`'s note has
+    the measured order, and the range is read earlier than any of the four
+    events in a use, as well as again in `resolve._long_range` for the
+    long-range penalty.
 
-    **Not a one-row question.** `cf:sword-marshal` prints *"Free Action,
-    Trigger: you use a power that targets your allies but not you. Effect:
-    you are also targeted by the power"* -- the same trigger shape, also
-    altering targeting -- and `p12236`'s `Power.effect_before` wants a line
-    run above the per-target loop. Referred up rather than guessed: #1366.
+    This row was the last power refused in play. Un-refusing it makes it
+    drawable, so the chargen draw and the party fixtures move -- recorded
+    in its own commit.
+    """
+    def qualifies(ref: str) -> bool:
+        """A ranged or area arcane attack power, which is the printed line."""
+        row = get(ref)
+        if row is None or row.attack is None:
+            return False
+        if Keyword.ARCANE not in row.keywords:
+            return False
+        return row.reach is not None and row.reach.kind in (
+            "ranged", "area_burst")
 
-    A modifier laid in the body therefore widens the *next* use of that
-    power and not the one that fired this.
+    held = c.multiply_range(
+        2,
+        when=lambda ctx: qualifies(str(ctx.get("power") or "")),
+        until=When.EOT,
+    )
 
-    **Re-pointed off `events.PowerAimed`, because no event can be the
-    answer.** That symbol asked for an announcement "after the range is
-    known and before the power is aimed", and there is nowhere in `use` to
-    put one: `_auto_targets` runs before `cast.used()` emits `PowerUsed`,
-    and for an action the player picks, the targets were settled before
-    `use` was entered at all -- `actions.options` enumerates every offer
-    with its resolved targets. An event minted anywhere inside `use` is
-    therefore already too late by construction, which is the one thing a
-    marker must not name.
+    def spend(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me:
+            return
+        if not qualifies(str(getattr(ev, "power", "") or "")):
+            return
+        for effect in held:
+            c.end_effect(effect)
 
-    What is missing is an **action window** between choosing a power and
-    choosing its targets. The card's free action is spent at exactly that
-    moment, and the tree has no such moment for anything.
-
-    For whoever rules on it: everything else this row needs is live, so a
-    *pre-armed* reading is writable today -- ask which arcane ranged or
-    area attack power is meant, read its range with `c.reach(ref)`, and
-    lay a gated `c.bonus("range", ...)` for the turn, which is the shape
-    `p5267` already has. Not taken here. It drops the printed Trigger for
-    a standing modifier, which this component keeps apart on purpose, and
-    it would clear a `todo=` -- so the row becomes drawable and the party
-    fixtures move. That is a ruling and a baseline write, neither of which
-    belongs in an authoring pass."""
+    c.watch(PowerResolved, spend, until=When.EOT, once=True)
 
 
 @power(
