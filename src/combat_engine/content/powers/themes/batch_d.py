@@ -2080,7 +2080,7 @@ def _hit_while_bloodied(world: World, me: int, ev: object) -> bool:
         Trigger(Bloodied, about_me, "an attack bloodies you"),
         Trigger(Hit, _hit_while_bloodied, "you are hit while bloodied"),
     ),
-    dropped=("c.provoke(allies=)",),
+    dropped=("c.must_take_opportunities()",),
 )
 def p16539(c: Cast) -> None:
     """Both printed triggers are declared -- half of an "or" declared looks
@@ -2099,13 +2099,39 @@ def p16539(c: Cast) -> None:
     afresh per attack, and `c.bonus`'s `dice` is rolled every time the
     modifier applies.
 
-    Still dropped: "your allies provoke opportunity attacks from you" turns
-    the side test in the opportunity window around, which nothing can ask
-    for."""
+    **"Your allies provoke opportunity attacks from you" is written now,
+    and the old note had the diagnosis exactly right** -- it does turn the
+    side test around, and there are **two** of them: `movement.step`
+    filters an already side-agnostic `watchers` set with `if other not in
+    foes`, and the ranged-power provocation in `dsl` iterates
+    `enemies(world, actor)`. One condition at each, both reading
+    `query.provoked_by_allies`, because a stance covering a walk and not a
+    ranged power is half a clause reporting finished.
+
+    `c.provoked_by_allies()` rather than the `c.provoke(allies=)` the
+    marker named: `c.provoke` opens one window for one attacker a row
+    names, now, and this is a standing change to a test -- so it punishes
+    openings nobody enumerated, including ones made after the stance was
+    assumed.
+
+    **Still dropped, and it is the next printed sentence rather than this
+    one: "you must make every opportunity attack that you can."** That
+    removes the choice instead of creating the opening, and nothing here
+    compels an attack -- `c.refuses_forced_attack` is the only thing in the
+    neighbourhood and it refuses one. Marked
+    `c.must_take_opportunities()`.
+
+    It is a **rules** compulsion and not an AI preference, which is why it
+    is marked rather than left to the policy: the window must stop being
+    declinable, and what a chooser would have preferred does not come into
+    it."""
     c.stance(label=c.ref)
     c.bonus("attack", 2, kind="power", on=c.me, until=When.STANCE)
     c.bonus("damage", 0, dice="1d6", on=c.me, until=When.STANCE,
             when=lambda ctx: _beast_form_power(ctx))
+    # "Until your p16535 ends" -- the stance's own clock, which is what
+    # `When.STANCE` holds to.
+    c.provoked_by_allies(on=c.me, until=When.STANCE)
 
 
 # -- x7_1010: the trickster --------------------------------------------------

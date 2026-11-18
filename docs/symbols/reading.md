@@ -49,6 +49,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Does this character stand on that leg of its class's fork?
 - `query.printed_kinds() -> 'frozenset[str]'`
   - Every type word the corpus prints, from the database.
+- `query.provoked_by_allies(world: 'World', watcher: 'int', mover: 'int') -> 'bool'`
+  - Does `watcher` take opportunity attacks against its own `mover` ally?
 - `query.race_of(world: 'World', eid: 'int') -> 'str'`
   - A character's race, by ref -- `r4` -- or `""` for anything without one.
 - `query.race_sizes() -> 'dict[str, str]'`

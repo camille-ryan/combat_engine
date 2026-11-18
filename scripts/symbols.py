@@ -94,6 +94,13 @@ CATEGORIES: dict[str, dict] = {
                 # that one names the attacker, this one means everyone who
                 # threatens. `query.threatened_by` is the set. #1341.
                 "provokes",
+                # Third in the same place and for the same reason: the
+                # author's question is "who gets the opening". `provoke`
+                # names the attacker, `provokes` means everyone who
+                # threatens this creature, and this one changes who may
+                # punish an opening somebody ELSE left -- the only one of
+                # the three that is about a side rather than a set.
+                "provoked_by_allies",
                 "redirect", "retarget_defence",
                 "returns_to_hand", "strike",
                 "target",
@@ -991,6 +998,7 @@ READERS: dict[str, list[str]] = {
     "who, and whose side": [
         "active", "alive", "allies", "combatants", "conscious", "creatures",
         "enemies", "feat_categories", "feats_of", "is_", "is_conjuration",
+        "provoked_by_allies",
         "is_minion", "is_trap", "kind_waived", "kinds_of", "level_term",
         "living",
         "on_build",

@@ -44,7 +44,15 @@ from .events import (
 )
 from .grid import Square, distance, footprint, neighbours, spread
 from .grid import distance as grid_distance
-from .query import adjacent, alive, can_move, creatures, enemies, squares
+from .query import (
+    adjacent,
+    alive,
+    can_move,
+    creatures,
+    enemies,
+    provoked_by_allies,
+    squares,
+)
 from .types import Forced, Relation, Size
 
 if TYPE_CHECKING:
@@ -164,7 +172,13 @@ def step(
         after_reach = spread(target, 1)
         foes = enemies(world, eid)
         for other in sorted(watchers):
-            if other not in foes:
+            # **`watchers` is already side-agnostic and this line is the
+            # side test**, which is why "your allies provoke opportunity
+            # attacks from you" is one condition here rather than a second
+            # loop. `provoked_by_allies` fast-paths on an empty dict, so
+            # the per-watcher-per-step cost this loop's note is about is
+            # one `dict.get` when nobody holds the trait.
+            if other not in foes and not provoked_by_allies(world, other, eid):
                 continue
             reach = _threat(world, other, eid)
             if reach == 1:

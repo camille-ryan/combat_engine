@@ -15501,6 +15501,209 @@ def one_additional_creature_with_the_feature(out: Result) -> None:
                  f"moved: {moved}")
 
 
+def an_ally_provokes_from_the_stancer(out: Result) -> None:
+    """*"Until your p16535 ends, your allies provoke opportunity attacks
+    from you."* -- `p16539`, a stance a bloodied creature assumes.
+
+    **Two side tests, so two arms.** `movement.step` filters an
+    already-side-agnostic `watchers` set with `if other not in foes`, and
+    `dsl._survive_provoking` -- the ranged-power provocation -- iterates
+    `enemies(world, actor)`. A stance that covered the walk and not the
+    ranged power would be half a clause reporting finished, which is the
+    shape this rule exists to catch.
+
+    Driven through the ROW, not through `c.provoked_by_allies`: the verb
+    working is not the clause working.
+
+    **Three controls, because "a window opened" is a weak reading.** The
+    enemy's window must still be there without the stance -- otherwise the
+    arms measure provocation existing at all. Another ally, not holding the
+    stance, must get nothing -- the opt-in is per creature. And the stancer
+    must not provoke from its own action.
+
+    **What the plants cover, and what they do not.** Three red a line each:
+    taking the call out of the row reds both widened arms, and reverting
+    either side test reds only its own arm -- which is the pair this rule
+    exists for. Two more passed, and both times the code was right and the
+    plant unreachable: a `watcher == mover` guard in
+    `query.provoked_by_allies` turned out to be dead (`query.allies`
+    excludes the creature itself, asserted below so the deletion stays
+    safe), and forcing the ally test to `True` cannot double-open a window
+    because `movement.step` short-circuits on the ordinary side test and
+    `_survive_provoking` unions into a `set`. Said here rather than left as
+    five plants and a green run.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import OpportunityWindow
+    from combat_engine.engine.query import allies, enemies
+
+    Staged = tuple[World, int, int, tuple[int, int],
+                   list[OpportunityWindow]] | None
+
+    def staged(fire_the_row: bool) -> Staged:
+        """The stancer with an ally beside it, the row optionally run."""
+        world, me, _ = _board("p16539", 1)
+        at = must(world.get(me, Position), "the stancer stands").square
+        mates = sorted(allies(world, me))
+        if not mates:
+            return None
+        mate = mates[0]
+        world.grid.lift(mate)
+        must(world.get(mate, Position), "the ally stands").square = (
+            at[0] + 1, at[1])
+        world.grid.place(mate, (at[0] + 1, at[1]))
+        if fire_the_row:
+            REGISTRY["p16539"].body(Cast(world=world, me=me, ref="p16539"))
+        seen: list[OpportunityWindow] = []
+        world.bus.on(OpportunityWindow, seen.append)
+        return world, me, mate, at, seen
+
+    # -- arm one: the ally walks out of reach -----------------------------
+    def walked(fire_the_row: bool) -> tuple[list[int], int]:
+        got = staged(fire_the_row)
+        if got is None:
+            return [], -1
+        world, me, mate, at, seen = got
+        movement.step(world, mate, (at[0] + 2, at[1] + 1))
+        return sorted({w.actor for w in seen}), me
+
+    plain_walk, me_id = walked(False)
+    stance_walk, _ = walked(True)
+    out.that(me_id != -1, "the board deals the stancer an ally to stand by",
+             f"stancer {me_id}")
+    # The premise a deleted guard rested on: `provoked_by_allies` asks only
+    # "is the mover my ally", so a creature asking about its OWN move is
+    # answered by `allies` excluding it. If that ever changes, the guard has
+    # to come back -- so it is asserted rather than assumed.
+    _world, _me, _ = _board("p16539", 1)
+    out.that(_me not in allies(_world, _me),
+             "`query.allies` excludes the creature itself, which is what"
+             " makes a separate `watcher == mover` guard dead code rather"
+             " than a missing check",
+             f"{_me} in {sorted(allies(_world, _me))}")
+    out.that(me_id not in plain_walk,
+             "with no stance the stancer gets NO window when its own ally"
+             " walks off -- the ordinary side test",
+             f"windows for {plain_walk}")
+    out.that(bool(plain_walk),
+             "while somebody does get one -- the mover's enemies -- so the"
+             " arm below is about the side test and not about whether"
+             " walking provokes at all",
+             f"windows for {plain_walk}")
+    out.that(me_id in stance_walk,
+             "after the row runs, the stancer DOES get a window for its own"
+             " ally walking off: the printed clause, at `movement.step`",
+             f"windows for {stance_walk}")
+
+    # -- arm two: the ally uses a ranged power beside it ------------------
+    def ranged(fire_the_row: bool) -> list[int]:
+        got = staged(fire_the_row)
+        if got is None:
+            return []
+        world, _me, mate, _at, seen = got
+        dsl._survive_provoking(world, mate, "drivers:ranged")
+        return sorted({w.actor for w in seen})
+
+    plain_ranged = ranged(False)
+    stance_ranged = ranged(True)
+    out.that(me_id not in plain_ranged,
+             "the same with a ranged power: no stance, no window for the"
+             " ally's own side",
+             f"windows for {plain_ranged}")
+    out.that(me_id in stance_ranged,
+             "and the stance reaches the SECOND site too --"
+             " `dsl._survive_provoking`, the half a one-site fix would have"
+             " left reporting finished",
+             f"windows for {stance_ranged}")
+
+    # -- control: another ally does not inherit it ------------------------
+    got = staged(True)
+    out.that(got is not None, "the staged board came up", f"{got is not None}")
+    if got is not None:
+        world, me, mate, at, seen = got
+        others = [a for a in sorted(allies(world, me)) if a != mate]
+        out.that(bool(others),
+                 "there is a second ally to compare -- the control that makes"
+                 " this about the creature holding the stance",
+                 f"{others}")
+        if others:
+            spare = others[0]
+            out.that(spare not in world.ally_provokers,
+                     "which has NOT opted in", f"{sorted(world.ally_provokers)}")
+            del seen[:]
+            movement.step(world, mate, (at[0] + 2, at[1] + 1))
+            woken = sorted({w.actor for w in seen})
+            out.that(spare not in woken,
+                     "and gets no window from the same ally's move, so the"
+                     " stance is held per creature rather than per side",
+                     f"windows for {woken}")
+            out.that(me in woken,
+                     "while the stancer on the same board does -- the pair,"
+                     " so a reader cannot pass by opening nothing at all",
+                     f"windows for {woken}")
+
+    # -- control: the stancer does not provoke from itself ----------------
+    #
+    # **Driven at the RANGED site, which is where the guard is reachable.**
+    # `movement.step` builds its watchers from the mover's neighbours and a
+    # creature is not its own neighbour, so moving the stancer can never ask
+    # about itself -- a plant removing `watcher == mover` passed against a
+    # movement-only version of this control. `_survive_provoking` takes its
+    # candidates from the opt-in dict, which the stancer is in.
+    got2 = staged(True)
+    if got2 is not None:
+        world2, me2, _mate2, _at2, seen2 = got2
+        foes = sorted(enemies(world2, me2))
+        del seen2[:]
+        dsl._survive_provoking(world2, me2, "drivers:own-ranged")
+        mine = sorted({w.actor for w in seen2})
+        out.that(me2 not in mine,
+                 "the stancer using a ranged power does not provoke from"
+                 " ITSELF -- the `watcher == mover` guard, and the one case"
+                 ' where "my ally moved" is trivially true',
+                 f"windows for {mine}")
+        out.that(bool(foes) and any(f in mine for f in foes),
+                 "while its enemies are provoked normally by that same"
+                 " power, so the line above is about the guard and not about"
+                 " a power that provokes nobody",
+                 f"{len(foes)} enem(ies), windows for {mine}")
+
+    # -- control: an ENEMY's move opens exactly ONE window, not two -------
+    #
+    # `provoked_by_allies` asks whether the mover really is the watcher's
+    # ally. Without that question any creature holding the stance would be
+    # woken by *everyone*, enemies included -- and the ordinary side test
+    # already wakes it for those, so the window would open **twice**. Every
+    # assertion above reads a set of actors, which collapses a double open
+    # and cannot see it. This one counts.
+    got3 = staged(True)
+    if got3 is not None:
+        world3, me3, _mate3, at3, seen3 = got3
+        foes3 = sorted(enemies(world3, me3))
+        out.that(bool(foes3), "there is an enemy to move", f"{foes3}")
+        if foes3:
+            foe = foes3[0]
+            world3.grid.lift(foe)
+            must(world3.get(foe, Position), "the enemy stands").square = (
+                at3[0] - 1, at3[1])
+            world3.grid.place(foe, (at3[0] - 1, at3[1]))
+            del seen3[:]
+            movement.step(world3, foe, (at3[0] - 3, at3[1] - 2))
+            for_me = [w for w in seen3 if w.actor == me3]
+            out.that(len(for_me) == 1,
+                     "an enemy walking off the stancer's reach opens exactly"
+                     " ONE window for it -- not two. The second would come"
+                     " from the opt-in matching a creature that is not an"
+                     " ally, which is the check a set-valued assertion"
+                     " cannot see",
+                     f"{len(for_me)} window(s) for the stancer")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -97965,6 +98168,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "ally_provokes": (an_ally_provokes_from_the_stancer,
+                      "a stance that turns the side test round, at both"
+                      " provocation sites"),
     "extra_target": (one_additional_creature_with_the_feature,
                      "one more creature with a named row, measured on that"
                      " row and gated to its ref"),

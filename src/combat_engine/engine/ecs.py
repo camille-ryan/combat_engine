@@ -140,6 +140,26 @@ class World:
         #:
         #: Read through the attack context, never directly from a row.
         self.provocation: Any = None
+        #: Creatures their own **allies** provoke opportunity attacks from,
+        #: each mapped to the effects holding that open.
+        #:
+        #: A dict rather than a set so suspension is readable: the held
+        #: effect is the authority, and `durations.suspend` leaves an effect
+        #: in place with `suspended` set rather than removing it. A set
+        #: would say "yes" for a trait that had been lifted.
+        #:
+        #: **Here rather than scanned out of `effects`** because the reader
+        #: is the per-watcher-per-step branch in `movement.step`, and that
+        #: loop's own note records asking each watcher a question turning an
+        #: audit from 84 seconds into 331.
+        #:
+        #: Measured, because that note is the reason this is a dict:
+        #: `query.provoked_by_allies` costs **33 ns** when nobody holds the
+        #: trait -- one `dict.get` returning nothing -- and **3.8 us** for a
+        #: creature that does, which is the `query.allies` scan behind it.
+        #: So the cost falls only on the creatures in this dict, and it is
+        #: empty in every fight where no row laid the trait.
+        self.ally_provokers: dict[int, list[Any]] = {}
         #: What each row has already done once on this board. Read and
         #: written only through `Cast.latch`.
         #:

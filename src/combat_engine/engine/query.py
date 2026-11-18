@@ -2888,6 +2888,48 @@ def printed_kind(ref: str) -> str:
     return _printed_kinds().get(ref, "")
 
 
+def provoked_by_allies(world: World, watcher: int, mover: int) -> bool:
+    """Does `watcher` take opportunity attacks against its own `mover` ally?
+
+    *"Your allies provoke opportunity attacks from you"* -- `p16539`, a
+    stance a bloodied creature assumes. The ordinary rule is that only an
+    enemy's opening is yours to punish, and both provocation sites say so
+    in one line: `movement.step` filters its already-side-agnostic
+    `watchers` with `if other not in foes`, and `dsl._survive_provoking`
+    -- the ranged-power provocation -- iterates `enemies(world, actor)`.
+
+    Two conditions: the watcher holds the trait live, and `mover` really is
+    its ally.
+
+    The held effect is the authority on "live", not the dict key: an effect
+    suspended by `durations.suspend` stays in place with its flag set, and
+    a membership test alone would read a lifted trait as held.
+
+    **A `watcher == mover` guard was written here and then deleted as dead
+    code**, which a plant proved rather than suggested: removing it changed
+    no assertion, because `query.allies` excludes the creature itself, so
+    the ally test below already answers False for a creature asking about
+    its own move. Two spellings of one rule is the drift this module keeps
+    paying for.
+
+    **And the ally test is a narrowing no plant can red on a two-side
+    board**, which is worth saying rather than implying coverage. Forcing
+    it to `True` leaves every assertion green, because neither caller can
+    double-open: `movement.step` reads `if other not in foes and not
+    provoked_by_allies(...)`, so the ordinary side test short-circuits ahead
+    of this for an enemy, and `_survive_provoking` unions this into a `set`.
+    It is kept because what it excludes is a mover on **neither** side,
+    which those two structures do not cover and a printed "your allies" does
+    not include.
+    """
+    holds = world.ally_provokers.get(watcher)
+    if not holds:
+        return False
+    if not any(not eff.suspended and not eff.ended for eff in holds):
+        return False
+    return mover in allies(world, watcher)
+
+
 def knowledge_skill(world: World, eid: int) -> str:
     """Which knowledge skill identifies that creature, or "".
 

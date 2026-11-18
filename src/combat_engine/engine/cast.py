@@ -10639,6 +10639,62 @@ class Cast:
         return self.bonus("no_second_wind_heal", 1, on=who, until=until,
                           stacks=False)
 
+    def provoked_by_allies(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Your allies provoke opportunity attacks from you."
+
+        A stance a cornered creature assumes -- `p16539` -- that stops the
+        ordinary side test from protecting its own side. Opposite in
+        direction from everything near it: `c.provokes` makes **this**
+        creature leave openings, `c.no_provoke` stops it leaving them, and
+        this one changes who may punish an opening somebody **else** leaves.
+
+        **Not a widening of `c.provoke`, which the marker named.** That verb
+        opens one window for one attacker a row names, now, and 30-odd rows
+        print that. This is a standing change to a test, so a row holding it
+        punishes openings nobody enumerated -- including ones made after it
+        was laid, which an `allies=` argument on a one-shot could not reach.
+
+        **Both provocation sites or neither.** `movement.step` and the
+        ranged-power provocation in `dsl` each carry their own side test,
+        and a stance that covered a walk and not a ranged power would be
+        half a clause reporting finished. `query.provoked_by_allies` is the
+        single reader both use.
+
+        Registered on the world as well as held as an effect, and the effect
+        stays the authority: the dict is the fast path for a loop whose own
+        note records a per-watcher question turning an audit from 84 seconds
+        into 331, and `durations.suspend` leaves a lifted effect in place
+        with a flag, so membership alone would read a suspended trait as
+        held.
+
+        It does **not** compel the attack. *"You must make every opportunity
+        attack that you can"* is the next printed sentence on that card and
+        is a separate thing -- removing the choice rather than creating it
+        -- with no facility here.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        hold = self.effect(f"{self.ref} allies provoke", until=until, on=who)
+        if hold is None:
+            return None
+        self.world.ally_provokers.setdefault(who, []).append(hold)
+
+        def forget() -> None:
+            left = [
+                eff for eff in self.world.ally_provokers.get(who, [])
+                if eff is not hold
+            ]
+            if left:
+                self.world.ally_provokers[who] = left
+            else:
+                self.world.ally_provokers.pop(who, None)
+
+        hold.on_end.append(forget)
+        return hold
+
     def refuses_forced_attack(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
     ) -> Effect | None:

@@ -5429,7 +5429,21 @@ def _survive_provoking(world: World, actor: int, ref: str) -> bool:
     from .query import squares as occupies
 
     reach = spread(occupies(world, actor), 1)
-    for foe in sorted(enemies(world, actor)):
+    # **The other side test, and it has to move with `movement.step`'s.**
+    # A stance reading "your allies provoke opportunity attacks from you"
+    # that covered a walk and not a ranged power would be half a clause
+    # looking finished -- so the watcher set is built the same way here:
+    # everyone who threatens, filtered by side, plus whoever has opted in.
+    from .query import provoked_by_allies
+
+    watching = set(enemies(world, actor)) | {
+        # The opt-in dict rather than every creature on the board: it names
+        # exactly the candidates and is empty almost always, where
+        # `creatures(world)` would be a full scan on every ranged use.
+        watcher for watcher in world.ally_provokers
+        if provoked_by_allies(world, watcher, actor)
+    }
+    for foe in sorted(watching):
         pos = world.get(foe, Position)
         if pos is not None and pos.squares & reach:
             # `by` is the ranged power being used, and the window is parked
