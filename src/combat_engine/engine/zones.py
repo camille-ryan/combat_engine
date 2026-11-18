@@ -233,6 +233,34 @@ class Zone:
     #: rough the ground up, it makes rough ground rougher. Laying it flat
     #: would tax the open floor of the burst as well, which the card does not.
     extra_cost_if_difficult: bool = False
+    #: **Kinds of move whose path may not include these squares** -- a
+    #: refusal, where `extra_cost` above is a price.
+    #:
+    #: One row prints it: *"when any enemy charges, its movement cannot
+    #: include any square of the zone"*. No price says that, and the two
+    #: near things each say something else. `extra_cost` of any size is
+    #: still payable by a creature with enough movement, and the card does
+    #: not make the charge expensive -- it makes the route illegal, so a
+    #: charge with 12 squares in hand must still go round. `c.may_enter` is
+    #: the **mover's** permission and this is the ground's refusal, which is
+    #: the distinction that left the clause unwritten: that verb is granted
+    #: per creature and cannot be aimed at a kind of move at all.
+    #:
+    #: **Kinds, not a bool**, because the card names one. `movement.
+    #: PRICED_KINDS` is the vocabulary (`"walk"`, `"shift"`, `"charge"`,
+    #: `"run"`) and `Zones.create` refuses anything outside it -- a
+    #: misspelled kind bars nobody and plays as an ordinary zone, which is
+    #: this component's named failure mode.
+    #:
+    #: Read by `World.barred`, which `movement.reachable` and
+    #: `movement.step` both consult -- the search so the square is never
+    #: offered, and the step so a shove or a scripted move cannot sneak
+    #: through the one the search refused.
+    closed_to: frozenset[str] = frozenset()
+    #: Who the refusal applies to -- `""` everybody, `"enemies"` the
+    #: owner's opposing side, which is what the one printed row says. Same
+    #: vocabulary and same reasoning as `extra_cost_for`.
+    closed_to_for: str = ""
     #: A row **any** creature in or adjacent to this region may use, as its
     #: own action. The board's power rather than anybody's -- "a terrain
     #: power", the book's name for it -- and the one thing on this dataclass
@@ -349,6 +377,8 @@ class Zones:
         extra_cost_on: str = "enter",
         extra_cost_for: str = "",
         extra_cost_if_difficult: bool = False,
+        closed_to: frozenset[str] | set[str] | None = None,
+        closed_to_for: str = "",
     ) -> int:
         if obscured:
             # **Checked, because the alternative is silent.** `difficult=`
@@ -412,6 +442,30 @@ class Zones:
             )
         if extra_cost < 0:
             raise ValueError(f"extra_cost={extra_cost} cannot be negative")
+        # **The vocabulary is asked of `movement`, not copied here.** A
+        # second list of the move kinds is a list that drifts, and a kind
+        # spelled wrong bars nobody while reading as a working zone. Imported
+        # inside the function for this module's usual reason -- `movement`
+        # reaches back into geometry, and a module-level import would cycle.
+        from .movement import PRICED_KINDS
+
+        bars = frozenset(closed_to or ())
+        unknown = sorted(bars - PRICED_KINDS)
+        if unknown:
+            raise ValueError(
+                f"closed_to={unknown} is not among {sorted(PRICED_KINDS)}"
+            )
+        if closed_to_for and closed_to_for not in EXTRA_COST_FOR:
+            raise ValueError(
+                f"closed_to_for={closed_to_for!r} is not one of "
+                f"{sorted(EXTRA_COST_FOR)}"
+            )
+        # A side with nothing to refuse, the mirror of the check above.
+        if closed_to_for and not bars:
+            raise ValueError(
+                "closed_to_for= needs closed_to= as well: a side with no kind "
+                "of move to refuse bars nobody"
+            )
         zone = Zone(
             owner=owner,
             label=label,
@@ -431,6 +485,8 @@ class Zones:
             extra_cost_on=extra_cost_on,
             extra_cost_for=extra_cost_for,
             extra_cost_if_difficult=extra_cost_if_difficult,
+            closed_to=bars,
+            closed_to_for=closed_to_for,
         )
         made = self._spawn(zone, when, sustain, sustain_inside)
         if hindering:

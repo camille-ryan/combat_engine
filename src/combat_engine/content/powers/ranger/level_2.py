@@ -376,7 +376,6 @@ def p10699(c: Cast) -> None:
 
 @power(
     "p13598",
-    dropped=("Zone.closed_to",),
     level=2,
     cls="ranger",
     usage=DAILY,
@@ -390,20 +389,29 @@ def p13598(c: Cast) -> None:
     this row's ref, and everybody on the ranger's side is excused that one
     label. `world.difficult(for_=)` reads exactly that exemption.
 
-    The second sentence -- an enemy charge cannot path through the zone
-    -- is not written, and **the old reason for that was false**. It said
-    nothing distinguishes a charge's movement from a walk once the squares
-    are being costed; `movement.PRICED_KINDS` holds `"charge"` beside
-    `"walk"` and the costing path has been handed `kind="charge"` since
-    `#301`.
+    The second sentence is written too. The old note had the diagnosis
+    right twice over: the charge *is* distinguishable -- `movement.
+    PRICED_KINDS` holds `"charge"` beside `"walk"` and the costing path
+    has been handed `kind="charge"` since `#301` -- and what was missing
+    was on the **zone**, which could be difficult, hindering, sight-
+    blocking or exempting and could not refuse one kind of move.
+    `closed_to={"charge"}` is that refusal.
 
-    What is missing is on the **zone** rather than in the movement: a
-    `Zone` can be `difficult`, `difficult_for`, `hindering`,
-    `blocks_sight` or `exempt`, and none of those refuses entry to one
-    kind of move. `c.may_enter` is the mover's permission and this is the
-    ground's refusal. #1341.
+    **A refusal and not a price, which the card settles.** The zone is
+    already difficult for these same enemies, and a charge could simply
+    pay that; the printed sentence says its movement *cannot include* the
+    square, so an enemy with twelve squares in hand must still go round.
+    `extra_cost=` would have read as the same clause and played as a
+    surchargeable one.
+
+    **Not `c.may_enter`**, which is the mover's permission: it is granted
+    per creature and cannot name a kind of move, so it would have barred
+    the walk as well.
     """
-    c.zone(c.area(), until=When.ENCOUNTER, difficult=c.ref, label=c.ref)
+    c.zone(
+        c.area(), until=When.ENCOUNTER, difficult=c.ref, label=c.ref,
+        closed_to={"charge"}, closed_to_for="enemies",
+    )
     for friend in (c.me, *c.allies()):
         c.ignores_difficult(c.ref, on=friend, until=When.ENCOUNTER)
 

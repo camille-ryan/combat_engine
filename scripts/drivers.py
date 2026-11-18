@@ -13104,7 +13104,7 @@ def zone_crossing_tax(out: Result) -> None:
     """
     import combat_engine.content  # noqa: F401
     from audit import board as _posed
-    from combat_engine.engine import dsl
+    from combat_engine.engine import dsl, movement
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Position
     from combat_engine.engine.dsl import REGISTRY
@@ -13112,7 +13112,7 @@ def zone_crossing_tax(out: Result) -> None:
     from combat_engine.engine.events import Hit
     from combat_engine.engine.grid import distance as _gap
     from combat_engine.engine.grid import neighbours
-    from combat_engine.engine.query import enemies
+    from combat_engine.engine.query import allies, enemies
     from combat_engine.engine.types import ActionType
     from combat_engine.engine.zones import Zone
 
@@ -13390,6 +13390,106 @@ def zone_crossing_tax(out: Result) -> None:
         except ValueError:
             out.that(True, f"{why} is refused at `Zones.create` -- it would"
                            " otherwise charge nobody and read as a working zone")
+
+    # -- p13598: a refusal, which no price can say ------------------------
+    #
+    # **The zone is already difficult for these same enemies**, so a tax
+    # would have been payable and the printed sentence is that the charge's
+    # movement *cannot include* the square. Asserted as walk-reaches /
+    # charge-reaches-nothing on one board, because a surcharge
+    # implementation passes any test that only counts squares reached.
+    world, me, _ = _posed("p13598", 1)
+    foes = sorted(enemies(world, me))
+    mates = sorted(allies(world, me))
+    out.that(bool(foes), "p13598: the board deals an enemy to refuse", f"{foes}")
+    if foes:
+        foe = foes[0]
+        dsl.use(world, me, "p13598")
+        shut = [z for _e, z in world.each(Zone) if z.closed_to and z.owner == me]
+        out.that(len(shut) == 1,
+                 "p13598 lays one zone that refuses a kind of move -- the row"
+                 " arm, and the plant is deleting `closed_to=` from its body",
+                 f"{len(shut)}")
+        if shut:
+            zone = shut[0]
+            out.that(zone.closed_to == frozenset({"charge"}),
+                     "p13598 refuses the CHARGE and names no other kind, which"
+                     " is what the card prints",
+                     f"{sorted(zone.closed_to)}")
+            barred = {k: len(world.barred(foe, k))
+                      for k in ("walk", "shift", "charge", "run")}
+            out.that(barred["charge"] == len(zone.squares),
+                     "p13598: every square of the zone is shut to an enemy"
+                     " charge",
+                     f"{barred}")
+            out.that(barred["walk"] == 0 and barred["shift"] == 0
+                     and barred["run"] == 0,
+                     "p13598: and none of them is shut to a walk, a shift or a"
+                     " run -- the zone is difficult for these enemies, not"
+                     " closed, so a kinds-blind refusal would strand them",
+                     f"{barred}")
+            out.that(len(world.barred(me, "charge")) == 0,
+                     "p13598: the ranger may charge through it", "0")
+            out.that(bool(mates), "p13598: an ally to check the side with",
+                     f"{mates}")
+            if mates:
+                out.that(len(world.barred(mates[0], "charge")) == 0,
+                         "p13598: and so may an ally -- the card says *enemy*",
+                         f"{len(world.barred(mates[0], 'charge'))}")
+            # Through a real search, and then through `step` -- both, because
+            # a route built any other way would otherwise walk through the
+            # square the search refused.
+            at = must(world.get(foe, Position), "the enemy stands").square
+            movement.place(world, foe, at)
+            walked = len(set(movement.reachable(world, foe, 12, kind="walk"))
+                         & zone.squares)
+            charged = len(set(movement.reachable(world, foe, 12, kind="charge"))
+                          & zone.squares)
+            out.that(walked > 0,
+                     "p13598: walking with 12 reaches squares inside the zone"
+                     " -- the premise, since a zone nothing can reach would"
+                     " pass the line below for the wrong reason",
+                     f"{walked}")
+            out.that(charged == 0,
+                     "p13598: and charging with the same 12 reaches none of"
+                     " them. 12 is deliberate -- a tax implementation lets a"
+                     " charge in at this budget, which is what separates a"
+                     " refusal from a price",
+                     f"{charged}")
+            edge = [(o, i) for i in sorted(zone.squares)
+                    for o in sorted(neighbours(i))
+                    if o not in zone.squares and world.grid.inside(o)]
+            out.that(bool(edge), "p13598: the zone has an edge to step over",
+                     f"{len(edge)}")
+            if edge:
+                outside, inside = edge[0]
+                movement.place(world, foe, outside)
+                charge_step = movement.step(world, foe, inside, kind="charge",
+                                            mode="walk")
+                movement.place(world, foe, outside)
+                walk_step = movement.step(world, foe, inside, kind="walk",
+                                          mode="walk")
+                out.that(not charge_step,
+                         "p13598: `step` itself refuses the charge, so a"
+                         " scripted route cannot go where the search would"
+                         " not",
+                         f"{charge_step}")
+                out.that(walk_step,
+                         "p13598: and allows the walk over the same edge",
+                         f"{walk_step}")
+
+    for kwargs, why in (
+        ({"closed_to": {"sprint"}}, "a misspelled kind of move"),
+        ({"closed_to": {"charge"}, "closed_to_for": "allies"},
+         "a misspelled side on the refusal"),
+        ({"closed_to_for": "enemies"}, "a side with no kind of move to refuse"),
+    ):
+        try:
+            world.zones.create(me, "bad", one, When.ENCOUNTER, **kwargs)
+            out.that(False, f"{why} is refused at `Zones.create`", "accepted")
+        except ValueError:
+            out.that(True, f"{why} is refused at `Zones.create` -- it would"
+                           " otherwise bar nobody and read as a working zone")
 
 
 def compelled_walk(out: Result) -> None:

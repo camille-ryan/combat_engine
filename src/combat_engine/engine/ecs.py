@@ -415,6 +415,42 @@ class World:
 
         return cost
 
+    def barred(self, for_: int, kind: str = "walk") -> frozenset[Any]:
+        """Squares this creature's path may not include, moving like this.
+
+        **A refusal, where `crossing` next door is a price**, and the two
+        cannot stand in for each other. A price of any size is payable by a
+        creature with enough movement left, and the one card printing this
+        does not make the route expensive -- it makes it illegal, so a charge
+        with twelve squares in hand must still go round.
+
+        Empty on every board that does not lay such a zone, which is almost
+        all of them, so both callers pay one set construction per search.
+
+        Consulted by `reachable`, so the square is never offered, **and** by
+        `step`, so a scripted move or a route built some other way cannot go
+        through the square the search refused. Both, for the reason
+        `World.difficult` gives for living here: a rule honoured by one of
+        them and not the other reads correct and plays wrong.
+        """
+        from .query import team
+
+        mine = team(self, for_)
+        out: set[Any] = set()
+        for _eid, zone in self.zones.all():
+            if kind not in zone.closed_to:
+                continue
+            if zone.closed_to_for == "enemies":
+                theirs = team(self, zone.owner)
+                # Both sides known and equal is the only waiver, for the
+                # reason `_taxes_on` spells out: `team` answers None for
+                # anything without a `Side`, and a bare `==` would read two
+                # unknowns as allies and let the refused creature through.
+                if mine is not None and theirs is not None and theirs == mine:
+                    continue
+            out |= zone.squares
+        return frozenset(out)
+
     def _taxes_toward(self, for_: int) -> list[tuple[int, int]]:
         """Anchors this creature pays extra to approach, and by how much.
 

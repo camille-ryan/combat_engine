@@ -129,6 +129,14 @@ def step(
     overhead = mode in OVERHEAD or through
     if not _clear(world, eid, target, overhead=overhead):
         return False
+    # **Asked here as well as in the search, and the second place is the one
+    # that matters.** A route built any other way -- a scripted path, a
+    # policy's own choice -- would otherwise walk through the square
+    # `reachable` refused to offer. `World.barred` is empty on every board
+    # that lays no such zone, so this costs a set construction per step
+    # there and nothing else.
+    if target & world.barred(eid, kind):
+        return False
 
     before = _neighbours(world, eid)
     # Everyone who *threatens* the mover, which is not the same as everyone
@@ -1262,6 +1270,9 @@ def reachable(
     # waivers and the taxing zones once for the whole search and leaves a
     # membership test per step.
     price = world.crossing(eid, kind)
+    # Ground that refuses this kind of move outright, which is a different
+    # question from what it costs -- see `World.barred`.
+    shut = world.barred(eid, kind)
     start = pos.square
     threat = _threatened_from(world, eid)
 
@@ -1278,6 +1289,8 @@ def reachable(
         # asked whether a destination was adjacent to where the mover stood,
         # so the search is the only place a rift has to be known about.
         for nxt in sorted(set(neighbours(here)) | world.grid.links.get(here, frozenset())):
+            if nxt in shut:
+                continue
             if not _clear(world, eid, footprint(nxt, pos.size),
                           overhead=overhead or share):
                 continue

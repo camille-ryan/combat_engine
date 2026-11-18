@@ -15281,6 +15281,8 @@ class Cast:
         extra_cost_on: str = "enter",
         extra_cost_for: str = "",
         extra_cost_if_difficult: bool = False,
+        closed_to: frozenset[str] | set[str] | None = None,
+        closed_to_for: str = "",
     ) -> int:
         """`obscured=Light.DIM` is "lightly obscured", `Light.DARK` is
         "heavily obscured" or a zone of darkness.
@@ -15344,6 +15346,19 @@ class Cast:
         Every narrowing is refused without a number, and both words are
         refused if misspelled -- a zone whose tax matches nobody charges
         nothing and plays as an ordinary zone. See `Zone.extra_cost`.
+
+        **`closed_to={"charge"}` refuses a kind of move outright**, which no
+        price can say:
+
+            c.zone(area, closed_to={"charge"}, closed_to_for="enemies")
+
+        *"When any enemy charges, its movement cannot include any square of
+        the zone."* A tax of any size is still payable by a creature with
+        movement to spare, and this card does not make the charge expensive
+        -- it makes the route illegal. **Not `c.may_enter`**, which is the
+        mover's permission and cannot be aimed at a kind of move at all.
+
+        The kinds are `movement.PRICED_KINDS` and anything else is refused.
         """
         # **The burn is wired by `Zones`, and the policy is passed in.**
         # It used to be `Cast._hinders`, which only a row could reach, so a
@@ -15366,6 +15381,7 @@ class Cast:
             extra_cost=extra_cost, extra_cost_on=extra_cost_on,
             extra_cost_for=extra_cost_for,
             extra_cost_if_difficult=extra_cost_if_difficult,
+            closed_to=closed_to, closed_to_for=closed_to_for,
         )
 
     def aura(
