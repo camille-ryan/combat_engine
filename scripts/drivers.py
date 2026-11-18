@@ -23912,25 +23912,55 @@ def immunity_to_a_damage_type(out: Result) -> None:
     if not mates:
         out.skip("no ally on this board to make immune")
         return
-    ally = mates[0]
-
-    def hit(amount: int, dtype: DamageType) -> int:
-        health = world.get(ally, Health)
+    def lands(amount: int, dtype: DamageType, who: int) -> int:
+        health = world.get(who, Health)
         if health is None:
             return -1
         health.hp = health.max_hp
         Cast(world=world, me=caster, ref="drivers-hit").flat(
-            amount, dtype=dtype, on=ally,
+            amount, dtype=dtype, on=who,
         )
-        after = world.get(ally, Health)
+        after = world.get(who, Health)
         return health.max_hp - (after.hp if after else 0)
+
+    # **The ally that can actually take poison, not the first one.** This
+    # arm named `mates[0]` and went red in the full suite while passing
+    # alone: under the production draw that ally's dealt kit resists
+    # poison outright, so a 10-point blow landed for **0** and "poison
+    # lands before the immunity" was false before the hold existed. Which
+    # draw a rule gets depends on whether it is the first in the run to
+    # import `audit` -- `#1362`.
+    #
+    # Chosen rather than stripped, because a creature the dealer armed
+    # against poison is a fact about the party and not something this rule
+    # should undo.
+    ally = next((m for m in mates if lands(10, DamageType.POISON, m) > 0), -1)
+    if ally < 0:
+        out.skip("every ally on this board already resists poison")
+        return
+
+    def hit(amount: int, dtype: DamageType) -> int:
+        return lands(amount, dtype, ally)
 
     out.that(world.get(ally, Defences) is None,
              "the ally starts with NO Defences component at all -- which is"
              " why `c.immune(dtype=)` has to make one, and why a plain"
              " `get` laid nothing and reported finished")
-    out.that(hit(10, DamageType.POISON) == 10,
-             "poison lands for 10 before the immunity")
+    # **What lands is compared against itself, not against 10.** This arm
+    # read `== 10` and went red in the full suite while passing alone and
+    # passing second: the blow is dealt by the CASTER, whose dealt kit
+    # under the production draw adds to it -- and which draw a rule gets
+    # depends on whether it is the first in the run to import `audit`
+    # (`#1362`). The printed rule is "takes no poison damage", which is a
+    # statement about the difference the hold makes and not about a
+    # number, so that is what is asserted.
+    # **No assertion here, deliberately.** "Poison lands before the
+    # immunity" is now true *by construction* -- the ally was chosen for
+    # it a dozen lines up -- so asserting it would be a line that cannot
+    # fail. The premise is reported by the `skip` above when no ally
+    # qualifies, which is the honest place for it; `before` is kept only
+    # as the baseline the three assertions below compare against.
+    before = hit(10, DamageType.POISON)
 
     held = Cast(world=world, me=caster, ref="drivers").immune(
         dtype=DamageType.POISON, until=When.EONT, on=ally,
@@ -23938,15 +23968,21 @@ def immunity_to_a_damage_type(out: Result) -> None:
     out.that(held is not None, "the immunity returns a hold")
     out.that(hit(10, DamageType.POISON) == 0,
              "and poison lands for nothing while it stands")
-    out.that(hit(10, DamageType.FIRE) == 10,
-             "while FIRE still lands for 10 -- only the named type is"
-             " stopped, which is what makes this an immunity and not a"
-             " blanket")
+    fire = hit(10, DamageType.FIRE)
+    out.that(fire == before,
+             "while FIRE still lands, for exactly what poison landed before"
+             " -- only the named type is stopped, which is what makes this"
+             " an immunity and not a blanket",
+             f"fire {fire}, poison was {before}")
 
     if held is not None:
         world.effects.end(held)
-    out.that(hit(10, DamageType.POISON) == 10,
-             "and poison lands again once the hold ends")
+    again = hit(10, DamageType.POISON)
+    out.that(again == before,
+             "and poison lands again once the hold ends, for what it landed"
+             " before it -- the restore puts back exactly what the call"
+             " took away",
+             f"{again} after, {before} before")
 
     # -- printed immunity survives the hold ------------------------------
     world2, caster2, _ = _audit.board("p11549", 1, pose=True)
