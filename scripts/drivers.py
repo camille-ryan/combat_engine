@@ -13103,7 +13103,6 @@ def zone_crossing_tax(out: Result) -> None:
     could not tell that from a plain tax -- see the note on the pair below.
     """
     import combat_engine.content  # noqa: F401
-    from audit import board as _posed
     from combat_engine.engine import dsl, movement
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Position
@@ -13143,7 +13142,7 @@ def zone_crossing_tax(out: Result) -> None:
         ("p16292", 2, "enter", False),
         ("p16653", 4, "enter", True),
     ):
-        world, me, _ = _posed(ref, 1)
+        world, me, _ = _board(ref, 1)
         foes = sorted(enemies(world, me))
         out.that(bool(foes), f"{ref}: the board deals an enemy to charge", f"{foes}")
         if not foes:
@@ -13207,7 +13206,7 @@ def zone_crossing_tax(out: Result) -> None:
     # area is equally consistent with a plain tax, so the flat square is the
     # fixture that fails only if `extra_cost_if_difficult=` is dropped, and
     # the rough one is the fixture that fails only if `extra_cost=` is.
-    world, me, _ = _posed("p3217", 1)
+    world, me, _ = _board("p3217", 1)
     foes = sorted(enemies(world, me))
     out.that(bool(foes), "p3217: the board deals an enemy", f"{foes}")
     if foes:
@@ -13258,7 +13257,7 @@ def zone_crossing_tax(out: Result) -> None:
     # that moves AWAY and the step that keeps the range -- so a rule
     # asserting the approach alone could not tell the two implementations
     # apart. See the rows' own notes.
-    world, me, _ = _posed("i1822x1", 1)
+    world, me, _ = _board("i1822x1", 1)
     foes = sorted(enemies(world, me))
     out.that(bool(foes), "i1822x1: the board deals an enemy", f"{foes}")
     if foes:
@@ -13320,7 +13319,7 @@ def zone_crossing_tax(out: Result) -> None:
                      f"{world.crossing(spare)(sat, _closer(sat, here))}")
 
     # -- i1249p1: the same tax, and the range that ends it ----------------
-    world, me, _ = _posed("i1249p1", 1)
+    world, me, _ = _board("i1249p1", 1)
     foes = sorted(enemies(world, me))
     out.that(bool(foes), "i1249p1: the board deals an enemy", f"{foes}")
     if foes:
@@ -13348,7 +13347,7 @@ def zone_crossing_tax(out: Result) -> None:
                      f"{held[0].sustain_cost}")
 
     # -- m2090a4: a wall priced at three, not at difficult's one ----------
-    world, me, _ = _posed("m2090a4", 1)
+    world, me, _ = _board("m2090a4", 1)
     REGISTRY["m2090a4"].body(Cast(world=world, me=me, ref="m2090a4"))
     zone = laid(world, me)
     out.that(zone is not None, "m2090a4 lays its wall as a taxing zone", f"{zone}")
@@ -13372,7 +13371,7 @@ def zone_crossing_tax(out: Result) -> None:
                      f"{world.crossing(foes[0])(outside, inside)}")
 
     # -- the refusals: a tax that matches nobody charges nothing ----------
-    world, me, _ = _posed("p11386", 1)
+    world, me, _ = _board("p11386", 1)
     one = frozenset({world.need(me, Position).square})
     for kwargs, why in (
         ({"extra_cost": 1, "extra_cost_on": "exit"}, "a misspelled direction"),
@@ -13398,7 +13397,7 @@ def zone_crossing_tax(out: Result) -> None:
     # movement *cannot include* the square. Asserted as walk-reaches /
     # charge-reaches-nothing on one board, because a surcharge
     # implementation passes any test that only counts squares reached.
-    world, me, _ = _posed("p13598", 1)
+    world, me, _ = _board("p13598", 1)
     foes = sorted(enemies(world, me))
     mates = sorted(allies(world, me))
     out.that(bool(foes), "p13598: the board deals an enemy to refuse", f"{foes}")
@@ -13530,7 +13529,6 @@ def chosen_die_face(out: Result) -> None:
     only reading that can fail.
     """
     import combat_engine.content  # noqa: F401
-    from audit import board as _posed
     from combat_engine.engine import query
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Defences, Mods, Powers
@@ -13549,7 +13547,7 @@ def chosen_die_face(out: Result) -> None:
         the die itself proves the verb and says nothing about whether the
         row asks.
         """
-        world, me, _ = _posed("p16399", 1)
+        world, me, _ = _board("p16399", 1)
         world.decider = (
             lambda actor, kind, options, prompt="":
             options[-1] if face is None
@@ -13731,7 +13729,6 @@ def lent_surge_pool(out: Result) -> None:
     says nothing about where the surge came from.
     """
     import combat_engine.content  # noqa: F401
-    from audit import board as _posed
     from combat_engine.engine import resolve
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health
@@ -13741,7 +13738,7 @@ def lent_surge_pool(out: Result) -> None:
 
     def pact():  # noqa: ANN202
         """Pose, run the row on an ally, and hand back both pools."""
-        world, me, _ = _posed("p15888", 1)
+        world, me, _ = _board("p15888", 1)
         mates = sorted(allies(world, me))
         if not mates:
             return world, me, None, [], None, None
@@ -13814,7 +13811,7 @@ def lent_surge_pool(out: Result) -> None:
              f"{[(e.actor, e.pool) for e in fresh]}")
 
     # -- the control: without the lend, dry is dry ------------------------
-    world2, me2, _ = _posed("p15888", 1)
+    world2, me2, _ = _board("p15888", 1)
     bare = world2.get(me2, Health)
     out.that(bare is not None and bare.surges_from == 0,
              "the control caster has been lent nothing", f"{bare}")
@@ -13885,7 +13882,6 @@ def immunity_to_a_keyword(out: Result) -> None:
     card prints.
     """
     import combat_engine.content  # noqa: F401
-    from audit import board as _posed
     from combat_engine.engine import query
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Conditions, Defences
@@ -13915,7 +13911,7 @@ def immunity_to_a_keyword(out: Result) -> None:
         return
 
     def arena(immune_to_what: tuple[Keyword, ...] = ()):  # noqa: ANN202
-        world, me, _ = _posed("p11549", 1)
+        world, me, _ = _board("p11549", 1)
         foes = sorted(enemies(world, me))
         if not foes:
             return world, me, None
@@ -14047,7 +14043,7 @@ def immunity_to_a_keyword(out: Result) -> None:
     # field, so the arm reports a skip rather than a pass. `out.that(True,
     # ...)` would increment `passed` while the message admitted it was
     # asserting nothing, which is the failure `Result.skip` exists for.
-    world, me, _ = _posed("i3538p1", 1)
+    world, me, _ = _board("i3538p1", 1)
     pets = sorted(Cast(world=world, me=me, ref="probe").companions())
     if not pets:
         out.skip("i3538p1: the board fields no summoned companion, so its"
