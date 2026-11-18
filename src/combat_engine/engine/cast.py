@@ -5007,9 +5007,24 @@ class Cast:
         anchor: Square | None = None,
         to: Square | None = None,
         by: int | None = None,
+        avoid: Callable[[Any, Square], bool] | None = None,
     ) -> int:
         """`to` names the destination outright, for a row that does.
-        `by` names who is doing the moving, when it is not the caster."""
+        `by` names who is doing the moving, when it is not the caster.
+
+        **`avoid` is a square the card forbids**, handed `(world, square)`
+        -- `query.hindering_at` is the one the printed lines name:
+        *"push the target 3 squares, but not into hindering terrain"*. The
+        filter runs in `movement._forced_square`, before the decider is
+        asked, because the card forbids the square as a **rule** and not as
+        advice: leaving it to the policy would let a player or a headless
+        run break the printed line. With every square forbidden the shove
+        stops where it stands, which is what forced movement already does
+        against a square it cannot enter.
+
+        Ignored with `to=`, since a row naming its destination is not
+        asking which squares are allowed.
+        """
         who = self._who(on)
         if who is None:
             return 0
@@ -5030,6 +5045,7 @@ class Cast:
         return forced(
             self.world, mover, who,
             Forced.PUSH, squares_, anchor=anchor, to=to, power=self.ref,
+            avoid=avoid,
         )
 
     def pull(

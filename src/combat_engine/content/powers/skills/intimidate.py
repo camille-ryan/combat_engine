@@ -43,6 +43,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.durations import Effect
 from combat_engine.engine.events import CheckDeclared, Hit, Miss
+from combat_engine.engine.query import hindering_at
 
 _HIT_IN_MELEE = "you hit an enemy with a melee attack"
 _DIPLOMATIC = "you would make a diplomacy check"
@@ -137,20 +138,23 @@ def p9326(c: Cast) -> None:
     reach=CloseBlast(3),
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
-    dropped=("c.push(avoid=query.hindering_at)",),
 )
 def p11582(c: Cast) -> None:
     """The push plays; the constraint on where it may land does not.
 
-    `dropped=`: "but not into hindering terrain" is a filter on the
-    destination, and the destination belongs to `World.decide` -- `c.push`
-    takes `to=` for a row that names one square outright, which is a
-    different sentence. `query.hindering_at` is already the reader, so what
-    is missing is the square filter and not the question. Enforcing it in
-    the policy would be the wrong layer: the card forbids the square as a
-    rule, not as advice.
+    "But not into hindering terrain" is `c.push(avoid=)`, and this row's
+    note had the layering argument right: the card forbids the square as a
+    **rule**, so leaving it to the policy would let a player or a headless
+    decider break the printed line. The filter runs in
+    `movement._forced_square`, before the decider is asked, and
+    `query.hindering_at` was already the reader.
+
+    With every square forbidden the shove stops where it stands, which is
+    what forced movement already does against a square it cannot enter --
+    so "not into hindering terrain" costs the push rather than redirecting
+    it, which is the printed reading.
     """
-    c.push(1)
+    c.push(1, avoid=hindering_at)
 
 
 @power(

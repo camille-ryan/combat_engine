@@ -1336,7 +1336,7 @@ def p16058(c: Cast) -> None:
     keywords=[Keyword.ELEMENTAL],
     trigger="you make an attack roll and miss",
     on=Trigger(Miss, by_me, "you miss with an attack"),
-    dropped=("c.must_take_openings()",),
+    dropped=("policy.must_take_openings()",),
 )
 def p16059(c: Cast) -> None:
     """"Use either result" is `keep="best"`. The price half plays now.
@@ -1361,8 +1361,15 @@ def p16059(c: Cast) -> None:
 
     Still dropped: "you must make every opportunity attack you can". That
     takes the choice away from whoever is deciding, and nothing content
-    writes reaches into how an opening is answered -- it is a `policy/`
-    sentence, not a `Cast` one.
+    writes reaches into how an opening is answered.
+
+    **Re-pointed to say so.** The marker read `c.must_take_openings()`,
+    which is a `Cast` verb, and this row's own next sentence had already
+    worked out that it is a `policy/` sentence instead -- the two
+    disagreed, and the symbol is what `blocked.py` groups by. A `Cast`
+    verb could lay the compulsion and nothing would read it: how an
+    opening is answered is decided in `policy/`, which is the one place
+    content does not reach.
     """
     c.reroll_attack(keep="best")
     mine = c.me

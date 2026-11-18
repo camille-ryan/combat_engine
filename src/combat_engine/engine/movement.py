@@ -48,6 +48,8 @@ from .query import adjacent, alive, can_move, creatures, enemies, squares
 from .types import Forced, Relation, Size
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .ecs import World
 
 #: Moves that never provoke an opportunity attack.
@@ -1036,6 +1038,7 @@ def forced(
     anchor: Square | None = None,
     to: Square | None = None,
     power: str = "",
+    avoid: Callable[[World, Square], bool] | None = None,
 ) -> int:
     """Push, pull or slide `target` up to `amount` squares.
 
@@ -1046,6 +1049,11 @@ def forced(
 
     Forced movement never provokes, and stops dead the first square it cannot
     enter rather than trying to route around it.
+
+    `avoid` is a destination the printed line forbids -- see
+    `_forced_square`. It is **not** consulted when `to` names the square
+    outright: a row that says where the creature ends up is not asking
+    which squares are allowed, and no card prints both.
     """
     pos = world.get(target, Position)
     if pos is None or amount <= 0:
@@ -1111,7 +1119,7 @@ def forced(
         return moved
     moved = 0
     for _ in range(amount):
-        nxt = _forced_square(world, source, target, anchor, how)
+        nxt = _forced_square(world, source, target, anchor, how, avoid)
         if nxt is None or _over_an_edge(world, target, nxt, power):
             break
         if not step(world, target, nxt, kind=how.value):
@@ -1175,7 +1183,8 @@ def forced_squares(
 
 
 def _forced_square(
-    world: World, source: int, target: int, anchor: Square, how: Forced
+    world: World, source: int, target: int, anchor: Square, how: Forced,
+    avoid: Callable[[World, Square], bool] | None = None,
 ) -> Square | None:
     """Where this step of a forced move goes, asking whoever is pushing.
 
@@ -1183,8 +1192,17 @@ def _forced_square(
     through `world.decide` like any other. The first version picked the
     straightest square and never asked, which quietly turned every push in
     the game into a single fixed line.
+
+    **`avoid` is a square the card forbids, and it is filtered here rather
+    than left to the decider.** *"But not into hindering terrain"* is a
+    rule and not advice: enforcing it in the policy would let any other
+    decider -- a player, a headless run -- break the printed line. With
+    every option forbidden the step stops, which is what forced movement
+    does against any square it cannot enter.
     """
     options = forced_squares(world, target, anchor, how)
+    if avoid is not None:
+        options = [sq for sq in options if not avoid(world, sq)]
     if not options:
         return None
     if len(options) == 1:

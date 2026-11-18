@@ -24726,6 +24726,108 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_shove_may_refuse_a_square(out: Result) -> None:
+    """"You push each target 1 square, but not into hindering terrain."
+
+    `p11582`, and its note had the layering argument right before the
+    facility existed: the card forbids the square as a **rule**, so
+    leaving it to the policy would let a player or a headless decider
+    break the printed line. `query.hindering_at` was already the reader.
+
+    `c.push(avoid=)` filters in `movement._forced_square`, before the
+    decider is asked. **With every square forbidden the shove stops where
+    it stands**, which is what forced movement already does against a
+    square it cannot enter -- so the clause costs the push rather than
+    redirecting it, which is the printed reading.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.grid import spread
+    from combat_engine.engine.query import enemies, hindering_at
+    from combat_engine.engine.types import DamageType
+
+    def shove(ring_it: bool, *, filtered: bool = True) -> tuple:
+        world, me, _ = _audit.board("p11582", 1)
+        victim = sorted(enemies(world, me))[0]
+        here = world.get(victim, Position).square
+        ring = sorted(spread({here}, 1) - {here})
+        laid = 0
+        if ring_it:
+            Cast(world=world, me=me, ref="drivers-hinder").zone(
+                set(ring), label="drivers-fire", until=When.ENCOUNTER,
+                # **Dice, not a label.** `hindering=` is the damage the
+                # ground deals and `hindering_type` is its type; a word
+                # here raises inside `c.burn` the moment anybody steps in,
+                # which is exactly what the unfiltered arm below does.
+                hindering="1d6", hindering_type=DamageType.FIRE,
+            )
+            laid = sum(1 for sq in ring if hindering_at(world, sq))
+        moved = Cast(world=world, me=me, ref="p11582").push(
+            1, on=victim,
+            avoid=hindering_at if filtered else None,
+        )
+        return here, world.get(victim, Position).square, moved, laid, len(ring)
+
+    was, now, moved, _, _ = shove(False)
+    out.that(moved == 1 and now != was,
+             "**the control: the shove lands on open ground**",
+             f"{was} -> {now}, moved {moved}")
+
+    was, now, moved, laid, ringed = shove(True)
+    out.that(laid == ringed,
+             "every square the shove could reach is hindering, which is"
+             " what makes the next line about the filter and not about a"
+             " lucky destination",
+             f"{laid} of {ringed} squares hindering")
+    out.that(moved == 0 and now == was,
+             "**and stops dead when every destination is forbidden** --"
+             " not redirected, which is the printed reading: 'but not into"
+             " hindering terrain' costs the push",
+             f"{was} -> {now}, moved {moved}")
+
+    was, now, moved, laid, ringed = shove(True, filtered=False)
+    out.that(moved == 1,
+             "**and without the filter it walks straight into it** -- the"
+             " negative control, and the thing the policy could not be"
+             " trusted with: any decider may pick any legal square",
+             f"{was} -> {now}, moved {moved} with avoid=None")
+
+    # **Through the ROW's own body**, which the arms above do not say:
+    # they call `c.push(avoid=)` directly, so deleting `avoid=` from
+    # `p11582` left this rule green. The facility was asserted and the row
+    # was not -- the same hole `p13442`'s flag had two commits ago.
+    world, me, _ = _audit.board("p11582", 1)
+    victim = sorted(enemies(world, me))[0]
+    here = world.get(victim, Position).square
+    ring = sorted(spread({here}, 1) - {here})
+    Cast(world=world, me=me, ref="drivers-hinder").zone(
+        set(ring), label="drivers-fire", until=When.ENCOUNTER,
+        hindering="1d6", hindering_type=DamageType.FIRE,
+    )
+    REGISTRY["p11582"].body(Cast(
+        world=world, me=me, ref="p11582", target=victim, targets=[victim],
+    ))
+    out.that(world.get(victim, Position).square == here,
+             "**and p11582 itself refuses the square** -- run through its"
+             " own body, ringed by hindering ground",
+             f"{here} -> {world.get(victim, Position).square}")
+
+    out.that(not REGISTRY["p11582"].dropped,
+             "p11582 carries no marker",
+             f"marks {REGISTRY['p11582'].dropped!r}")
+    out.that(REGISTRY["p16059"].dropped == ("policy.must_take_openings()",),
+             "**and `p16059`'s marker names `policy/` rather than a `Cast`"
+             " verb** -- its own note had already worked out that 'you must"
+             " make every opportunity attack you can' is decided where"
+             " content does not reach, while the symbol said otherwise, and"
+             " the symbol is what `blocked.py` groups by",
+             f"marks {REGISTRY['p16059'].dropped!r}")
+
+
 def being_bloodied_is_a_question_with_an_asker(out: Result) -> None:
     """"Enemy attacks never treat you as being bloodied."
 
@@ -93986,6 +94088,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "push_avoid": (
+        a_shove_may_refuse_a_square,
+        "c.push(avoid=) forbids a destination as a rule rather than as"
+        " advice, and stops the shove dead (p11582)",
+    ),
     "unbloodied": (
         being_bloodied_is_a_question_with_an_asker,
         "being bloodied is a question with an asker, so a card can hide it"
