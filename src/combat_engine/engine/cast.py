@@ -4189,6 +4189,82 @@ class Cast:
         was, held.count = held.count, 0
         return was
 
+    def provokes(
+        self,
+        *occasions: str,
+        on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """"The target provokes opportunity attacks when shifting or making
+        melee attacks."
+
+        The inverse of `c.no_provoke(when=)`, and **not** `c.provoke`:
+        that one opens a window for an attacker the row **names**, which
+        30-odd rows print. This card names nobody, so "provokes" means
+        *from whatever threatens it* -- `query.threatened_by` is that set,
+        and adjacency is not a substitute because a reach-2 creature
+        covering the square would be left out.
+
+        `movement._SAFE` is the other half of why this is an addition
+        rather than a widening: a shift is in it, so the engine opens no
+        window for one and there is nothing to narrow.
+
+        The occasions are printed words -- `"shift"` and `"melee"` are the
+        two any card uses. An unrecognised one **raises**, for the reason
+        `c.grant_action` does: a word no watcher looks for is a hold that
+        costs nothing and does nothing, and the row would audit green.
+
+        Windows open in `query.threatened_by`'s order, which is sorted, so
+        a replayed fight opens them the same way twice.
+        """
+        from .events import Hit, Miss, MoveEnd
+
+        known = {"shift", "melee"}
+        unknown = {o.lower() for o in occasions} - known
+        if unknown:
+            raise ValueError(
+                f"{self.ref}: c.provokes({', '.join(sorted(unknown))}) names "
+                f"no occasion a watcher looks for, so the hold would cost "
+                f"nothing and do nothing. Known: {sorted(known)}."
+            )
+        wanted = {o.lower() for o in occasions} or known
+        victim = self._who(on)
+        if victim is None:
+            return None
+        hold = self.effect(f"{self.ref} open guard", until=until, on=victim)
+        if hold is None:
+            return None
+
+        def openings(why: str) -> None:
+            from .query import threatened_by
+
+            for foe in threatened_by(self.world, victim):
+                self.provoke(foe, on=victim, why=f"{self.ref}: {why}")
+
+        def swung(ev: Hit | Miss) -> None:
+            # **`by_melee_only`, not `by_melee`.** That one answers "melee
+            # or close", which is right for the four rows reading it and
+            # wrong here: a close burst is a close attack and not a melee
+            # one, so the wider reader would open windows on a blast. Its
+            # own docstring draws the line.
+            from .triggers import by_melee_only
+
+            if ev.attacker == victim and by_melee_only(self.world, victim, ev):
+                openings("a melee attack")
+
+        def stepped(ev: MoveEnd) -> None:
+            if ev.actor == victim and ev.kind_ == "shift":
+                openings("a shift")
+
+        watching: list[tuple[type, Any]] = []
+        if "melee" in wanted:
+            watching += [(Hit, swung), (Miss, swung)]
+        if "shift" in wanted:
+            watching.append((MoveEnd, stepped))
+        for kind, fn in watching:
+            hold.subs.append(self.world.bus.on(kind, fn, owner=victim))
+        return hold
+
     def provoke(self, attacker: int, *, on: int | None = None, why: str = "") -> None:
         """Open an opportunity window for a named creature against a target.
 

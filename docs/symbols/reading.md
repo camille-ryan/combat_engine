@@ -118,6 +118,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - How far this creature's telepathy reaches, in squares. 0 for none.
 - `query.terrain(world: 'World', word: 'str') -> 'bool'`
   - Does the board declare that word? The reading behind `c.terrain`.
+- `query.threatened_by(world: 'World', eid: 'int') -> 'list[int]'`
+  - Every enemy whose reach covers this creature right now.
 
 ## seeing and being seen
 

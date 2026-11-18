@@ -87,7 +87,13 @@ CATEGORIES: dict[str, dict] = {
                 "disarm",
                 "flurry_of_blows", "grant_attack", "hit", "hit_becomes",
                 "landed", "oversized",
-                "provoke", "redirect", "retarget_defence",
+                "provoke",
+                # Beside `provoke` and not beside `no_provoke`, because the
+                # pair that matters to an author is "who gets the opening":
+                # that one names the attacker, this one means everyone who
+                # threatens. `query.threatened_by` is the set. #1341.
+                "provokes",
+                "redirect", "retarget_defence",
                 "returns_to_hand", "strike",
                 "target",
             ]),
@@ -986,7 +992,13 @@ READERS: dict[str, list[str]] = {
         # question about *where the fight is* rather than where anybody
         # stands in it -- "is this fight underwater". A section of its own
         # would hold one entry. #1209.
-        "adjacent", "charging", "distance_between", "has_running_start",
+        "adjacent", "charging",
+        # **A distance question, which is why it sits here.** "Who
+        # threatens this creature" walks each enemy's reach rather than
+        # the ring beside it -- `c.threatens(2)` exists, so adjacency is
+        # the wrong answer -- and it is the set a printed "provokes
+        # opportunity attacks" means when it names nobody. #1341.
+        "threatened_by", "distance_between", "has_running_start",
         # `lift_limit` and `drag_limit` are here and not under a section of
         # their own: they are PHB p223's one rule in two of its three
         # numbers, and the question they answer is about *weight* rather

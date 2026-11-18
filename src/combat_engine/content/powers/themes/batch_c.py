@@ -309,33 +309,31 @@ def p11789(c: Cast) -> None:
 @power("p11790", level=7, cls="x7_643", usage=ENCOUNTER, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.WEAPON],
-       attack=Attack(Pick.PRIMARY, vs=AC),
-       dropped=("c.provokes(when=)",))
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p11790(c: Cast) -> None:
-    """The second branch of the either/or -- "the target provokes
-    opportunity attacks when shifting or making melee attacks" -- is the
-    inverse of `c.no_provoke(when=)` and there is no verb for it, so only
-    the +4 branch is written and the choice is not offered.
+    """**Both branches of the either/or play, and the choice is offered.**
+    The second -- *"the target provokes opportunity attacks when shifting
+    or making melee attacks"* -- is `c.provokes`, the inverse of
+    `c.no_provoke(when=)`.
 
-    **`c.provoke` was checked and does not cover it.** That verb opens a
-    window for a **named** attacker (`c.provoke(attacker, on=victim)`) and
-    30-odd rows use it, `p5340` with this exact pair of occasions -- a
-    `MoveEnd` whose `kind_` is "shift" and a `Hit`/`Miss` by the creature.
-    But every one of those prints *who* gets the opening, and this card
-    prints nobody: "provokes opportunity attacks" means from whatever
-    threatens it. Reproducing that needs the threatening set, which is
-    `movement._threat` and `movement._reachers` -- both private, and
-    adjacency is not a substitute because `c.threatens(2)` exists and a
-    reach-2 watcher would be left out. `movement._SAFE` is the other half:
-    a shift is in it, so the engine opens no window for one and there is
-    nothing to widen, only something to add.
+    **`c.provoke` was checked and does not cover it**, which is the note
+    worth keeping. That verb opens a window for a **named** attacker and
+    30-odd rows use it, `p5340` with this exact pair of occasions. But
+    every one of those prints *who* gets the opening, and this card prints
+    nobody: "provokes opportunity attacks" means from whatever threatens
+    it. That set is `query.threatened_by` now -- public for this, because
+    `movement._threat` and `_reachers` are not, and because adjacency is
+    no substitute: `c.threatens(2)` exists and a reach-2 creature covering
+    the square would be left out.
 
-    So the gap is a verb that makes a creature provoke on named occasions,
-    from everyone who threatens -- which is what the marker says.
-    `c.provokes(when=)` resolves False through `blocked._one` with
-    `c.no_provoke(when=)` True beside it. The choice is not offered because
-    the branch that would be chosen does nothing: a menu entry for it would
-    be strictly worse than the +4 the row lays now."""
+    `movement._SAFE` is the other half of why this is an addition rather
+    than a widening: a shift is in it, so the engine opens no window for
+    one and there is nothing to narrow.
+
+    The guard is offered first, which is `content.powers.augment`'s rule
+    about option order: a +4 to AC is worth something on every board,
+    where the openings are worth nothing if nothing threatens the target.
+    """
     foe = c.target
     if not c.strike(plus=_best(c) - c.attack_mod):
         return
@@ -343,7 +341,20 @@ def p11790(c: Cast) -> None:
     victims = [w for w in c.within(1, of=foe) if w != foe]
     if victims:
         c.grant_attack(foe, on=c.choose(victims, "whom it swings at"))
-    c.bonus(AC, 4, kind="power", on=c.me, until=When.EONT)
+    # **The printed either/or is a choice now.** The second branch had no
+    # verb, so the row laid the +4 unconditionally -- right about one half
+    # of the card and silent about the other.
+    #
+    # The guard is offered first, which is `content.powers.augment`'s rule
+    # about option order: `World.decide` takes the first with nobody
+    # installed, and a +4 to AC is worth something on every board where
+    # the openings are worth nothing if nothing threatens the target.
+    guard = "a +4 to your AC"
+    if c.choose([guard, "it provokes while shifting or swinging"],
+                f"{c.ref}: which half of the either/or") == guard:
+        c.bonus(AC, 4, kind="power", on=c.me, until=When.EONT)
+    elif foe is not None:
+        c.provokes("shift", "melee", on=foe, until=When.EONT)
 
 
 @power("p11793", level=9, cls="x7_643", usage=DAILY, action=STANDARD,

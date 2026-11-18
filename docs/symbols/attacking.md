@@ -59,6 +59,8 @@ Making an attack, and what the attack turns out to be.
   - Wield a weapon made for a creature this many sizes larger.
 - `c.provoke(self, attacker: 'int', *, on: 'int | None' = None, why: 'str' = '') -> 'None'`
   - Open an opportunity window for a named creature against a target.
+- `c.provokes(self, *occasions: 'str', on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+  - "The target provokes opportunity attacks when shifting or making
 - `c.redirect(self, *, to: 'int | None' = None, by: 'int | None' = None) -> 'bool'`
   - Point the attack you are interrupting at somebody else.
 - `c.retarget_defence(self, defence: 'Defense') -> 'bool'`

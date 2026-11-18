@@ -24763,6 +24763,171 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_creature_can_be_made_to_provoke(out: Result) -> None:
+    """"The target provokes opportunity attacks when shifting or making
+    melee attacks."
+
+    `p11790` printed an either/or and laid only the first half -- the +4
+    to AC -- because the second had no verb. `c.provokes` is the inverse
+    of `c.no_provoke(when=)`, and it is **not** `c.provoke`: that one
+    opens a window for an attacker the row names, which 30-odd rows
+    print. This card names nobody, so "provokes" means *from whatever
+    threatens it*.
+
+    **Adjacency is not that set**, which is the whole reason a public
+    reader was needed. `c.threatens(2)` exists, so a reach-2 creature
+    covering the square threatens and is not adjacent;
+    `query.threatened_by` walks the reach.
+
+    `movement._SAFE` is why this is an addition rather than a widening: a
+    shift is in it, so the engine opens no window for one at all.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import events as _ev
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import place, shift
+    from combat_engine.engine.query import alive, can_act, enemies, threatened_by
+
+    def board() -> tuple[World, int, int, Square] | None:
+        world, me, _ = _audit.board("p11790", 1)
+        live = [f for f in sorted(enemies(world, me))
+                if alive(world, f) and can_act(world, f)]
+        if not live:
+            return None
+        here = world.need(me, Position).square
+        place(world, live[0], (here[0] + 1, here[1]))
+        return world, me, live[0], here
+
+    def openings(world: World, fn: object) -> list:
+        mark = len(world.bus.log)
+        fn()
+        return [e for e in world.bus.log[mark:]
+                if isinstance(e, _ev.OpportunityWindow)]
+
+    posed = board()
+    if posed is None:
+        out.skip("p11790's board fielded no living, able enemy")
+        return
+    world, me, foe, here = posed
+    out.that(threatened_by(world, foe) == [me],
+             "the caster threatens the foe and nobody else does",
+             f"threatened_by {threatened_by(world, foe)}")
+
+    got = openings(world, lambda: shift(world, foe, (here[0] + 1, here[1] + 1)))
+    out.that(not got,
+             "**a shift opens no window on its own** -- it is in"
+             " `movement._SAFE`, so there is nothing to narrow here and"
+             " something to add",
+             f"{len(got)} window(s)")
+
+    # -- the hold, on a fresh pose so the shift has somewhere to go -----
+    posed = board()
+    world, me, foe, here = posed
+    Cast(world=world, me=me, ref="drivers-provokes").provokes(
+        "shift", "melee", on=foe, until=When.ENCOUNTER)
+    got = openings(world, lambda: shift(world, foe, (here[0] + 1, here[1] + 1)))
+    out.that(len(got) == 1 and got[0].actor == me,
+             "**and one window for the creature that threatens it once the"
+             " hold stands** -- named, so a second threatener would be a"
+             " second window rather than a louder one",
+             f"{[(e.actor, e.why) for e in got]}")
+
+    # -- the reach-2 discrimination, which adjacency would miss ---------
+    posed = board()
+    world, me, foe, here = posed
+    far = [f for f in sorted(enemies(world, foe))
+           if f != me and alive(world, f) and can_act(world, f)]
+    if not far:
+        out.skip("no second creature to give a long reach to")
+    else:
+        reacher = far[0]
+        place(world, reacher, (here[0] + 3, here[1]))
+        Cast(world=world, me=reacher, ref="drivers-reach").threatens(
+            2, on=reacher, until=When.ENCOUNTER)
+        out.that(reacher in threatened_by(world, foe),
+                 "**a creature two squares off with reach 2 threatens** --"
+                 " which an adjacency test would leave out, and that is why"
+                 " the reader walks the reach",
+                 f"threatened_by {threatened_by(world, foe)},"
+                 f" reacher {reacher}")
+
+    # -- an occasion no watcher looks for raises ------------------------
+    posed = board()
+    world, me, foe, _ = posed
+    raised = False
+    try:
+        Cast(world=world, me=me, ref="drivers-bad").provokes(
+            "teleport", on=foe)
+    except ValueError:
+        raised = True
+    out.that(raised,
+             "**an unrecognised occasion raises** rather than laying a hold"
+             " no watcher reads -- the same refusal `c.grant_action` makes,"
+             " and for the reason that cost nine rows: a word nothing looks"
+             " for costs nothing and does nothing, and the row audits green")
+
+    # -- the ROW's own second branch, steered to it ---------------------
+    #
+    # **Asserted through the body, which the arms above do not do**: they
+    # call `c.provokes` directly, so deleting the row's own call left this
+    # rule green -- the third time in this batch that the facility was
+    # driven and the row was not.
+    posed = board()
+    world, me, foe, _ = posed
+    world.rng.loaded = 20
+
+    def take_the_second(
+        _a: object, _k: str, options: list, _p: str = "",
+    ) -> object:
+        # The printed either/or offers the guard first, so the branch
+        # under test is the last option. Everything else the body asks --
+        # whom the free attack swings at -- takes the first.
+        return options[-1] if len(options) == 2 else options[0]
+
+    world.decider = take_the_second
+    REGISTRY["p11790"].body(Cast(
+        world=world, me=me, ref="p11790", target=foe, targets=[foe]))
+    laid = [e.label for e in world.effects.of(foe) if e.by == "p11790"]
+    out.that(any("open guard" in label for label in laid),
+             "**p11790 itself lays the provoking hold when the second half"
+             " is chosen** -- and the +4 is not laid, since the card is an"
+             " either/or and not a both",
+             f"holds on the target {laid}")
+    mine = [e.label for e in world.effects.of(me) if e.by == "p11790"]
+    out.that(not any("ac+" in label.lower() for label in mine),
+             "and the guard half is absent on that branch",
+             f"holds on the caster {mine}")
+
+    # **And the other branch, which is what makes it an either/OR.** The
+    # arm above cannot see a row that lays both: on the provoking branch
+    # the guard is not laid in either version. A plant turning the `elif`
+    # into an `if` passed until this arm existed.
+    posed = board()
+    world, me, foe, _ = posed
+    world.rng.loaded = 20
+    world.decider = lambda _a, _k, options, _p="": options[0]
+    REGISTRY["p11790"].body(Cast(
+        world=world, me=me, ref="p11790", target=foe, targets=[foe]))
+    guarded = [e.label for e in world.effects.of(me) if e.by == "p11790"]
+    opened = [e.label for e in world.effects.of(foe) if e.by == "p11790"]
+    out.that(any("ac+" in label.lower() for label in guarded),
+             "choosing the guard lays the +4",
+             f"holds on the caster {guarded}")
+    out.that(not any("open guard" in label for label in opened),
+             "**and NOT the provoking hold** -- the card is an either/or,"
+             " and a row laying both would be strictly stronger than print",
+             f"holds on the target {opened}")
+
+    out.that(not REGISTRY["p11790"].dropped,
+             "p11790 carries no marker, and both halves of its either/or"
+             " are offered",
+             f"dropped {REGISTRY['p11790'].dropped!r}")
+
+
 def armour_is_conjured_onto_a_creature(out: Result) -> None:
     """"You instantly don +1 magic armor of a type you have proficiency
     with."
@@ -94510,6 +94675,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "provokes": (
+        a_creature_can_be_made_to_provoke,
+        "a creature can be made to provoke on named occasions, from"
+        " everyone who threatens it (p11790)",
+    ),
     "grant_armor": (
         armour_is_conjured_onto_a_creature,
         "armour is conjured onto a creature, with the AC difference the"

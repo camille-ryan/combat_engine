@@ -2175,6 +2175,33 @@ def grants_ca(world: World, eid: int) -> bool:
     return any(rules_for(world, eid, c).grants_ca for c in active(world, eid))
 
 
+def threatened_by(world: World, eid: int) -> list[int]:
+    """Every enemy whose reach covers this creature right now.
+
+    The **public** reader for what `movement._threat` answers one pair at a
+    time, and the set a printed *"provokes opportunity attacks"* needs:
+    that phrase names nobody, so it means whoever threatens, and
+    `c.provoke` can only open a window for an attacker a row names.
+
+    **Adjacency is not a substitute**, which is why this walks the reach
+    rather than the ring: `c.threatens(2)` exists and a reach-2 creature
+    covering the square would be left out of an adjacency test. `p11790`'s
+    note is where that was worked out.
+
+    Sorted, because the windows open in this order and a fight that
+    replays has to open them the same way twice.
+    """
+    from .movement import _threat
+
+    return sorted(
+        foe
+        for foe in enemies(world, eid)
+        if alive(world, foe) and can_act(world, foe)
+        and spread(squares(world, foe), _threat(world, foe, eid))
+        & squares(world, eid)
+    )
+
+
 def ignores_difficult(
     world: World, eid: int, *, kind: str = "", when: str = "",
 ) -> bool:
