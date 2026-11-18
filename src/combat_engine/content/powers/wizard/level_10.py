@@ -646,8 +646,14 @@ def p16292(c: Cast) -> None:
     """`blocks_sight` is the only door to cover from ground and it is not
     selective: this wall shelters everyone from every kind of attack, where the
     printed line gives superior cover against ranged weapon attacks passing
-    through it. Difficult terrain is a fixed one extra square, where the
-    printed cost is two.
+    through it. That half is still wider than the card.
+
+    The crossing cost is written: `extra_cost=2` is the printed *"moving
+    through a square of the wall costs 2 extra squares"*, and it charges every
+    wall square entered rather than only the first -- which is what "moving
+    through" says, and what `difficult=True` could not have priced at two.
+    The two are not laid together, since the tax replaces difficult's one
+    square instead of stacking with it.
     """
     squares_ = _wall(c, 10, 8)
     if not squares_:
@@ -657,8 +663,8 @@ def p16292(c: Cast) -> None:
         label=c.ref,
         until=When.SUSTAIN,
         sustain=MINOR,
-        difficult=True,
         blocks_sight=True,
+        extra_cost=2,
     )
     wall = frozenset(squares_)
     beside = spread(wall, 1)
@@ -675,7 +681,6 @@ def p16292(c: Cast) -> None:
     standing = c.world.get(zone, Zone)
     if standing is not None and standing.effect is not None:
         standing.effect.subs.append(c.world.bus.on(TurnStart, dawn))
-    c.note(f"{c.ref}: the wall costs 2 extra squares to cross, and difficult ground is 1")
 
 
 @power(

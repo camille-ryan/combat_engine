@@ -41,19 +41,32 @@ DIVINE_WEAPON = [Keyword.DIVINE, Keyword.WEAPON]
     target=EACH_ENEMY,
     keywords=[*DIVINE_WEAPON, Keyword.RADIANT, Keyword.ZONE],
     attack=Attack(STR, vs=WILL),
-    dropped=("Zone.exit_cost",),
 )
 def p11386(c: Cast) -> None:
-    """"Leaving the zone costs enemies 2 extra squares" is dropped: a zone is
-    difficult for everybody or nobody, and difficult ground is not the same
-    cost. The rest of the zone -- the exposure -- is watched."""
+    """The exit tax is written now, and the old note's reasoning was sound as
+    far as it went: a zone was difficult for everybody or nobody, and
+    difficult ground is worth one square where this card prints two.
+
+    `extra_cost_on="leave"` is the half that needed the engine, and it is
+    narrower than a price on the squares. Leaving is a step from inside to
+    outside, so moving *within* the zone is free and only the way out is
+    charged -- a creature that walks the length of it pays once, at the edge.
+    `extra_cost_for="enemies"` leaves the caster's own side to walk out
+    normally, which is the printed narrowing.
+
+    No `difficult=` beside it: the tax replaces difficult's one square rather
+    than adding to it, so laying both would charge the same 2 and read as if
+    the row meant them to stack."""
     if c.strike():
         c.damage(c.w(2), c.str_mod, dtype=DamageType.RADIANT)
     else:
         c.half_damage(c.w(2), c.str_mod, dtype=DamageType.RADIANT)
     if not c.first:
         return
-    zid = c.zone(c.area(), until=When.EONT, sustain=MINOR)
+    zid = c.zone(
+        c.area(), until=When.EONT, sustain=MINOR,
+        extra_cost=2, extra_cost_on="leave", extra_cost_for="enemies",
+    )
 
     def expose(ev: Any, z: int = zid) -> None:
         inside = c.world.zones.occupants(z)

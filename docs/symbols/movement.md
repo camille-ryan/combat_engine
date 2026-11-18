@@ -88,6 +88,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Cannot be pushed, pulled or slid. The counterpart of `c.no_provoke`.
 - `c.may_enter(self, *, sizes: 'Sequence[Size]' = (), side: 'str' = '', when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Can enter enemies' spaces during its movement" -- the mover's
+- `c.movement_tax(self, extra: 'int' = 1, *, toward: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.EOTNT: "end of target's next turn">, sustain: 'ActionType | None' = None) -> 'Effect | None'`
+  - Charge a creature extra for every square it moves **closer**.
 - `c.no_charge(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - "The target cannot charge." It may still walk, run and shift.
 - `c.no_walk(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`

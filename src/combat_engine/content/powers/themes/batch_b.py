@@ -2747,7 +2747,7 @@ def p16652(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.ZONE],
-    dropped=("resolve.ctx(origin=)", "c.zone(cost=)"),
+    dropped=("resolve.ctx(origin=)",),
 )
 def p16653(c: Cast) -> None:
     """The defence bonus is laid whole, which is wider than printed: the card gives
@@ -2761,9 +2761,14 @@ def p16653(c: Cast) -> None:
     Asking the attacker's position would be right most of the time and wrong exactly
     where the card is interesting.
 
-    Four extra squares to enter is not difficult terrain either -- that word is worth
-    one square."""
-    zone = c.zone(c.area(), until=When.SUSTAIN, sustain=MINOR)
+    The entry tax is written. Four extra squares is not difficult terrain -- that
+    word is worth one -- so it is `extra_cost=4`, narrowed to `"enemies"` as the
+    card narrows it: the caster's own side walks in for nothing, which is the point
+    of a zone they are meant to stand in."""
+    zone = c.zone(
+        c.area(), until=When.SUSTAIN, sustain=MINOR,
+        extra_cost=4, extra_cost_for="enemies",
+    )
     for d in (AC, FORT, REF, WILL):
         c.grants_in(zone, d, 4, side="team", kind="power")
 

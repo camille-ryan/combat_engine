@@ -2671,6 +2671,88 @@ class Cast:
             by=self.ref,
         )
 
+    def movement_tax(
+        self,
+        extra: int = 1,
+        *,
+        toward: int | None = None,
+        on: int | None = None,
+        until: When = When.EOTNT,
+        sustain: ActionType | None = None,
+    ) -> Effect | None:
+        """Charge a creature extra for every square it moves **closer**.
+
+        *"Each square the target moves toward you costs it 1 extra square of
+        movement."* `c.difficult_for` next door is the same arithmetic in
+        every direction, and both rows printing this clause recorded why that
+        is not good enough: it charges the creature for **backing away**,
+        which is strictly stronger than print on a clause whose whole point
+        is to slow an approach.
+
+        **The amount was never the gap and neither was the verb.** One extra
+        square is exactly what difficult terrain costs, so `c.difficult_for`
+        had the number right; what was missing was that `World.difficult`
+        answered with a *set of squares*, and a square cannot carry a
+        direction. `World.crossing` answers with a function of the crossing,
+        so it can.
+
+        `toward` is who the approach is measured to, defaulting to the
+        caster, since that is what *"toward you"* means. `on` is who pays,
+        defaulting to the target like everything else here -- and that
+        default is right for both cards, which name the creature just hit or
+        pushed.
+
+        **A step that keeps the distance is free.** The test is strictly
+        closer, so a creature may circle at its current range for nothing,
+        which is what the printed word "toward" says and is the difference
+        this verb exists to hold.
+
+        An anchor that leaves the board taxes nobody, rather than taxing from
+        the square it fell on.
+        """
+        from .components import Movement
+
+        who = self._who(on)
+        if who is None:
+            return None
+        anchor = self.me if toward is None else toward
+        if anchor == who:
+            # A creature cannot approach itself, and a row aiming the anchor
+            # at the payer has almost certainly passed the wrong argument --
+            # it would lay a tax that can never be charged and read as
+            # working.
+            raise ValueError(
+                f"{self.ref}: movement_tax toward the creature paying it "
+                f"({who}) can never be charged"
+            )
+        if extra <= 0:
+            raise ValueError(f"{self.ref}: movement_tax of {extra} charges nothing")
+        moves = self.world.get(who, Movement)
+        if moves is None:
+            return None
+        before = moves.harder_toward.get(anchor, 0)
+        # The larger of two taxes toward the same anchor, never the sum: two
+        # rows slowing an approach to one creature are not cumulative, for
+        # the reason two typed bonuses of a kind are not.
+        moves.harder_toward[anchor] = max(before, extra)
+
+        def _off() -> None:
+            if before:
+                moves.harder_toward[anchor] = before
+            else:
+                moves.harder_toward.pop(anchor, None)
+
+        def _on() -> None:
+            moves.harder_toward[anchor] = max(
+                moves.harder_toward.get(anchor, 0), extra
+            )
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} slow approach",
+            on_suspend=[_off], on_resume=[_on], by=self.ref,
+            sustain_cost=sustain,
+        )
+
     def ignores_hazards(
         self,
         kind: str = "",
@@ -15195,6 +15277,10 @@ class Cast:
         sustain_inside: bool = False,
         hindering: str = "",
         hindering_type: DamageType = DamageType.UNTYPED,
+        extra_cost: int = 0,
+        extra_cost_on: str = "enter",
+        extra_cost_for: str = "",
+        extra_cost_if_difficult: bool = False,
     ) -> int:
         """`obscured=Light.DIM` is "lightly obscured", `Light.DARK` is
         "heavily obscured" or a zone of darkness.
@@ -15232,6 +15318,32 @@ class Cast:
         `obscured=`, because a direction with no grade darkens nothing and
         reads exactly like a correct zone. `Zones.obscuring_for` is the
         reader. #424.
+
+        **`extra_cost=N` is "costs N extra squares of movement", which
+        `difficult=` cannot say** -- that word is worth exactly one extra
+        square, and five cards print a number:
+
+            c.zone(area, extra_cost=3)                       enter, everybody
+            c.zone(area, extra_cost=4, extra_cost_for="enemies")
+            c.zone(area, extra_cost=2, extra_cost_on="leave",
+                   extra_cost_for="enemies")
+            c.zone(area, extra_cost=2, extra_cost_for="enemies",
+                   extra_cost_if_difficult=True)
+
+        **Do not reach for `difficult=` beside it.** The tax *replaces*
+        difficult's one square rather than adding to it -- the page says "2
+        extra **instead of** the normal 1 extra" -- so `World.crossing` takes
+        the larger of the two. Laying both charges the printed number anyway
+        and makes the row look like it meant to stack them.
+
+        `extra_cost_if_difficult=True` is the one card that does not rough
+        the ground up but makes rough ground rougher; it taxes only the
+        squares that were already difficult, and a creature that ignores
+        difficult terrain pays nothing, which the clause implies.
+
+        Every narrowing is refused without a number, and both words are
+        refused if misspelled -- a zone whose tax matches nobody charges
+        nothing and plays as an ordinary zone. See `Zone.extra_cost`.
         """
         # **The burn is wired by `Zones`, and the policy is passed in.**
         # It used to be `Cast._hinders`, which only a row could reach, so a
@@ -15251,6 +15363,9 @@ class Cast:
             sustain_inside=sustain_inside,
             hindering=hindering, hindering_type=hindering_type.value,
             burn=burn if hindering else None,
+            extra_cost=extra_cost, extra_cost_on=extra_cost_on,
+            extra_cost_for=extra_cost_for,
+            extra_cost_if_difficult=extra_cost_if_difficult,
         )
 
     def aura(
@@ -21681,6 +21796,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         until: When = When.EONT,
         sustain: ActionType | None = None,
         label: str = "",
+        extra_cost: int = 0,
     ) -> int:
         """Raise a barrier: `size` contiguous squares that stop a creature.
 
@@ -21694,6 +21810,13 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         Returns the zone, because that is what the rest of `Cast` takes --
         `c.grants_in`, `c.burns`, `c.cover_in`, `c.resist_in`.
+
+        **`extra_cost=N` is what a non-solid wall charges to step into**, and
+        it is the only way to price one: `difficult=` is the sole roughness a
+        wall used to carry and it is worth exactly one square, where the cards
+        print three. Only meaningful with `solid=False` -- a solid wall's
+        squares are in `Grid.blocking`, so nothing can enter them at any
+        price. See `Zone.extra_cost`.
         """
         from .components import Barrier, Defenses, Ident, Position, Side
         from .events import Dropped, ZoneEnded
@@ -21755,6 +21878,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         zone = self.zone(
             laid, label=label or self.ref, until=until,
             blocks_sight=blocks_sight, difficult=difficult, sustain=sustain,
+            extra_cost=extra_cost,
         )
         standing: list[int] = []
         if hp:

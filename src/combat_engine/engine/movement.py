@@ -864,10 +864,21 @@ def walk(
         # or blocked still started somewhere and the two must agree.
         start = world.get(eid, Position)
         mv.went_from = start.square if start is not None else None
+    # **Hoisted, and it was being rebuilt per square.** `world.difficult`
+    # was called inside this loop, so a creature's waivers and every live
+    # zone were re-resolved for every square it walked. `crossing` resolves
+    # them once and prices the step, which is also what lets a tax on the way
+    # *out* be charged here: the loop never knew which square it was leaving.
+    price = world.crossing(eid, kind)
+    frm = mv.went_from if mv is not None else None
+    if frm is None:
+        at = world.get(eid, Position)
+        frm = at.square if at is not None else None
     for sq in path:
         if not step(world, eid, sq, kind=kind, mode=mode):
             break
-        spent += 2 if sq in world.difficult(eid, kind) else 1
+        spent += price(frm, sq)
+        frm = sq
         # Squares entered, not budget spent -- `spent` charges 2 for rough
         # ground and the printed penalty counts squares.
         if mv is not None:
@@ -1246,9 +1257,11 @@ def reachable(
     overhead = mode_of(world, eid, mode) in OVERHEAD
     # Priced as the sort of move it is. A creature exempt from difficult
     # terrain only while shifting reaches a square at one square of cost that
-    # it cannot reach at one while walking, and this is the only place that
-    # difference can be read -- the exemption is spent here, not in `step`.
-    rough = world.difficult(eid, kind)
+    # it cannot reach at one while walking, and `World.crossing` is where that
+    # difference is read -- hoisted out of the loop, since it resolves the
+    # waivers and the taxing zones once for the whole search and leaves a
+    # membership test per step.
+    price = world.crossing(eid, kind)
     start = pos.square
     threat = _threatened_from(world, eid)
 
@@ -1268,7 +1281,7 @@ def reachable(
             if not _clear(world, eid, footprint(nxt, pos.size),
                           overhead=overhead or share):
                 continue
-            step_cost = 2 if nxt in rough else 1
+            step_cost = price(here, nxt)
             score = (spent + step_cost, risked + _provokes_step(threat, here, nxt, pos.size))
             if score[0] > budget:
                 continue
@@ -1448,8 +1461,12 @@ def costs(
     pos = world.get(eid, Position)
     if pos is None:
         return {}
-    rough = world.difficult(eid, kind)
+    price = world.crossing(eid, kind)
     out: dict[Square, int] = {}
     for sq, path in reachable(world, eid, budget, mode=mode, kind=kind).items():
-        out[sq] = sum(2 if step in rough else 1 for step in path)
+        # Paired with the square each step leaves, since a tax can be on the
+        # way out -- `pos.square` is where the first step starts from.
+        out[sq] = sum(
+            price(frm, to) for frm, to in zip([pos.square, *path], path, strict=False)
+        )
     return out

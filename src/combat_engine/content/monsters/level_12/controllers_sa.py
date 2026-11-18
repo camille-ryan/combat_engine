@@ -2648,15 +2648,18 @@ def m2090a3(c: Cast) -> None:
     reach=Wall(8, 10),
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION, Keyword.FIRE],
-    dropped=("c.wall(cost=)",),
 )
 def m2090a4(c: Cast) -> None:
     """A wall of fire, and three different tolls.
 
     `c.wall(solid=False)` is a barrier a creature can step into, which is
-    what this one is: the printed cost of entering is three extra squares and
-    `difficult` is the only roughness a wall carries, so the exact price is
-    the dropped clause.
+    what this one is, and the printed three extra squares are charged:
+    `extra_cost=3` rather than `difficult=True`, because that word is worth
+    exactly one square and was the whole of the old dropped clause.
+
+    The two are not laid together -- the tax replaces difficult's square
+    instead of adding to it, so the printed 3 would still be 3 and the row
+    would read as if it meant them to stack.
 
     The three payouts are the three printed moments and are watched
     separately: adjacent at the start of a turn is the small one, inside at
@@ -2669,7 +2672,7 @@ def m2090a4(c: Cast) -> None:
         size=8,
         blocks_sight=True,
         solid=False,
-        difficult=True,
+        extra_cost=3,
         until=When.EONT,
         sustain=MINOR,
         label=c.ref,

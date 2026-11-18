@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .events import Bus
     from .grid import Grid
     from .rng import Rng
+    from .zones import Zone
 
 
 class World:
@@ -334,6 +335,140 @@ class World:
                 )
             )
         } | imposed
+
+    def crossing(self, for_: int, kind: str = "walk") -> Callable[[Any, Any], int]:
+        """What one step of a move costs this creature, step by step.
+
+        Returns a function of `(from_square, to_square)` giving the squares
+        of movement charged for that step -- 1 ordinarily, 2 across difficult
+        ground, more where a zone taxes the crossing.
+
+        **Here for the reason `difficult` is here**, which that docstring
+        states: three places charge for movement, and a surcharge honoured by
+        some of them and ignored by the rest is a rule that reads correct and
+        plays wrong. `step`, `reachable` and `costs` all take their price from
+        this, so they cannot disagree.
+
+        **A function rather than a set, because a tax is on the crossing and
+        not on the square.** `difficult` can answer with a set because rough
+        ground costs the same however you arrive; *"leaving the zone costs 2
+        extra"* is a property of the pair, and the same square is free to
+        enter and expensive to leave. Returning a closure keeps the one-owner
+        property without costing the search anything: the zone list and the
+        rough set are computed once, here, and the per-step call is a
+        membership test.
+
+        **The fast path is the common one.** Nothing in most fights taxes a
+        crossing, so with no taxing zone this hands back exactly the
+        expression the three sites used to inline, and a move search pays one
+        extra function call for the whole search rather than per square.
+
+        **A difficult-terrain waiver does not waive a tax, and that is a
+        reading rather than an oversight.** The printed lines price a wall or
+        a warded zone, not rough going -- *"entering a wall square costs 3
+        extra squares"* says nothing about difficult terrain -- so a creature
+        that crosses mud for free still pays the wall. The exception is
+        `extra_cost_if_difficult`, whose clause is explicitly *about*
+        difficult terrain (*"difficult terrain in the area costs 2 extra
+        instead of the normal 1"*): a creature with nothing to pay there has
+        nothing to pay extra, so the waiver carries through.
+        """
+        from .grid import distance as _distance
+
+        rough = self.difficult(for_, kind)
+        taxes = self._taxes_on(for_)
+        toward = self._taxes_toward(for_)
+        if not taxes and not toward:
+            return lambda _frm, to: 2 if to in rough else 1
+
+        def cost(frm: Any, to: Any) -> int:
+            # **The larger of the two, never the sum.** `p3217` prints "2
+            # extra **instead of** the normal 1 extra", so a tax replaces
+            # difficult's surcharge; adding them would charge 3 for a square
+            # the card prices at 2. See `Zone.extra_cost`.
+            extra = 1 if to in rough else 0
+            for zone in taxes:
+                if zone.extra_cost_if_difficult and to not in rough:
+                    continue
+                if zone.extra_cost_on == "leave":
+                    # Leaving is a step from inside to outside. A step from
+                    # one of the zone's squares to another is movement
+                    # *within* it and is not what the card charges for.
+                    if frm not in zone.squares or to in zone.squares:
+                        continue
+                elif to not in zone.squares:
+                    continue
+                extra = max(extra, zone.extra_cost)
+            # **A step closer, which is what no set of squares could say.**
+            # Measured against the nearer square of the anchor, and `<` not
+            # `<=`: a step that keeps the distance is not an approach, which
+            # is what lets a creature circle at its current range for free.
+            for anchor, n in toward:
+                near = self._anchor_squares(anchor)
+                if not near:
+                    continue
+                before = min(_distance(frm, sq) for sq in near)
+                after = min(_distance(to, sq) for sq in near)
+                if after < before:
+                    extra = max(extra, n)
+            return 1 + extra
+
+        return cost
+
+    def _taxes_toward(self, for_: int) -> list[tuple[int, int]]:
+        """Anchors this creature pays extra to approach, and by how much.
+
+        Read off the mover rather than off the anchor, because that is where
+        the printed clause puts it -- *"each square moved toward you costs
+        **it** 1 extra"* is a burden on the one creature the row named, and
+        the two rows that print it each name one.
+        """
+        from .components import Movement
+
+        moves = self.get(for_, Movement)
+        if moves is None or not moves.harder_toward:
+            return []
+        return sorted(moves.harder_toward.items())
+
+    def _anchor_squares(self, anchor: int) -> frozenset[Any]:
+        """Where the anchor is standing, or nothing if it has left the board.
+
+        An anchor that is gone taxes nobody rather than taxing from the
+        square it died on, which is the reading the cards imply: the clause
+        is *"toward you"*, and there is no "you" to approach.
+        """
+        from .query import squares
+
+        return frozenset(squares(self, anchor))
+
+    def _taxes_on(self, for_: int) -> list[Zone]:
+        """Live zones that charge `for_` extra to cross them.
+
+        The side is resolved here, when somebody moves, rather than frozen
+        when the zone was laid -- `Zone.extra_cost_for`'s own note has why.
+        A zone whose owner has since left the board still taxes: a warded
+        floor does not stop being warded because the caster fell over.
+
+        **An unknown side pays**, which is the branch worth spelling out.
+        `query.team` answers `None` for anything without a `Side`, so a bare
+        `==` would have read two unknowns as allies and waived the tax --
+        exactly the all-False gate this engine keeps producing. The waiver
+        needs both sides *known* and equal; anything else is charged.
+        """
+        live = [zone for _eid, zone in self.zones.all() if zone.extra_cost]
+        if not live:
+            return []
+        from .query import team
+
+        mine = team(self, for_)
+
+        def exempt(zone: Zone) -> bool:
+            if zone.extra_cost_for != "enemies":
+                return False
+            theirs = team(self, zone.owner)
+            return mine is not None and theirs is not None and theirs == mine
+
+        return [zone for zone in live if not exempt(zone)]
 
     def _imposed_on(self, for_: int, moves: Any) -> set[Any]:
         """Squares that are rough for this creature and for nobody else.

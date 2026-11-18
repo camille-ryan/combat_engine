@@ -410,6 +410,30 @@ class Movement:
     #: called once per square examined during a move search. Written by
     #: `c.difficult_for`. #831.
     harder_everywhere: bool = False
+    #: **Extra squares this creature pays to move *closer* to somebody** --
+    #: the anchor's entity id, against the number of extra squares.
+    #:
+    #: **The one shape `harder_everywhere` above cannot hold, and the
+    #: difference is a direction.** Two rows print *"each square moved toward
+    #: you costs 1 extra"* and *"each square closer costs an extra square"*,
+    #: and both docstrings recorded the same correct diagnosis: the amount was
+    #: exact (one extra square is what difficult terrain costs) and the verb
+    #: was there, but `World.difficult` answered with a **set of squares**, so
+    #: a step was never asked where it came from. Laying the flat version
+    #: charged the creature for backing away, which is strictly stronger than
+    #: print on a clause whose whole point is to slow an approach -- so both
+    #: rows named the gap and left it.
+    #:
+    #: `World.crossing` answers with a function of `(from, to)` since the
+    #: movement tax landed, so the direction is in hand and this is readable.
+    #:
+    #: **Keyed by anchor rather than a single pair**, because two rows may
+    #: each slow an approach to a different creature and a creature walking
+    #: between them pays both. Measured against the nearer square of a
+    #: multi-square anchor, which is how every other distance here is taken.
+    #:
+    #: Written by `c.movement_tax`, read in `World.crossing`.
+    harder_toward: dict[int, int] = field(default_factory=dict)
     #: What this creature crosses **without taking its damage**, by the same
     #: tokens `ignores` uses: a `DIFFICULT_LABELS` word, or `"*"` for the
     #: blanket form.

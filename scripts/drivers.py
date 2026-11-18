@@ -13062,6 +13062,336 @@ def difficult_aura(out: Result) -> None:
              f" -- the 'for enemies' half ({mine.ignores if mine else None})")
 
 
+def zone_crossing_tax(out: Result) -> None:
+    """*"Leaving the zone costs enemies 2 extra squares of movement."*
+
+    **Five rows print a number and `difficult=` is worth exactly one square**,
+    so none of them could be said. Four of the five reported *finished*:
+    `p11386` and `p16653` carried a marker, and `p2702`, `p3217` and `p16292`
+    laid a plain difficult zone, wrote the printed cost into a `c.note` and
+    charged one -- a wall priced at 4 to enter cost 2, with nothing saying so.
+    That is what makes this a field rather than a note.
+
+    The printed axes, which is why there are four kwargs and not one:
+
+    | | printed | |
+    |---|---|---|
+    | `p2702` | 3 extra to enter | everybody |
+    | `p16292` | 2 extra to move through | everybody |
+    | `p16653` | 4 extra to move into | enemies |
+    | `p11386` | 2 extra to **leave** | enemies |
+    | `p3217` | 2 **instead of** the normal 1 | enemies, where already rough |
+
+    **`World.crossing` and not a set of squares**, which is this rule's one
+    structural claim. `World.difficult` can answer with a set because rough
+    ground costs the same however you arrive; a tax on *leaving* is a
+    property of the pair, and the same square is free to enter and expensive
+    to leave. Both directions are asserted on every row for that reason -- a
+    tax that charged the square rather than the crossing would pass the
+    first assertion of each pair and fail the second.
+
+    **"Instead of", not "on top of".** `p3217` prints *"2 extra squares
+    instead of the normal 1 extra"*, so the tax replaces difficult's own
+    square and a rough square inside its area costs **3, not 4**. That is
+    asserted as a number rather than as "more than before", because adding
+    the two is the plausible wrong implementation and it is only one square
+    away.
+
+    `p3217` needs two fixtures and gets them: its clause does not rough the
+    ground up, it makes rough ground rougher, so a flat square inside its
+    own area must be **untaxed** and a difficult one taxed. One fixture
+    could not tell that from a plain tax -- see the note on the pair below.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.grid import distance as _gap
+    from combat_engine.engine.grid import neighbours
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import ActionType
+    from combat_engine.engine.zones import Zone
+
+    def _closer(frm: Square, to: Square) -> Square:
+        """One step from `frm` in the direction of `to`."""
+        step = tuple((b > a) - (b < a) for a, b in zip(frm, to, strict=True))
+        return (frm[0] + step[0], frm[1] + step[1])
+
+    def laid(world: World, me: int) -> Zone | None:
+        """The taxing zone this row put down, or None."""
+        found = [z for _e, z in world.each(Zone) if z.extra_cost and z.owner == me]
+        return found[0] if len(found) == 1 else None
+
+    def border(world: World, zone: Zone) -> list[tuple[Square, Square]]:
+        """(outside, inside) pairs on the zone's edge, both squares on the grid."""
+        pairs: list[tuple[Square, Square]] = []
+        for inside in sorted(zone.squares):
+            for out_ in sorted(neighbours(inside)):
+                if out_ not in zone.squares and world.grid.inside(out_):
+                    pairs.append((out_, inside))
+                    break
+        return pairs
+
+    # -- the four flat taxes ----------------------------------------------
+    for ref, want, direction, sided in (
+        ("p11386", 2, "leave", True),
+        ("p2702", 3, "enter", False),
+        ("p16292", 2, "enter", False),
+        ("p16653", 4, "enter", True),
+    ):
+        world, me, _ = _posed(ref, 1)
+        foes = sorted(enemies(world, me))
+        out.that(bool(foes), f"{ref}: the board deals an enemy to charge", f"{foes}")
+        if not foes:
+            continue
+        foe = foes[0]
+        dsl.use(world, me, ref, targets=[foe])
+        zone = laid(world, me)
+        out.that(zone is not None,
+                 f"{ref} lays exactly one taxing zone -- the row arm, and the"
+                 " plant that matters is deleting `extra_cost=` from its body",
+                 f"{zone}")
+        if zone is None:
+            continue
+        out.that((zone.extra_cost, zone.extra_cost_on) == (want, direction),
+                 f"{ref} asks for {want} extra on {direction}, which is what"
+                 " the card prints",
+                 f"{zone.extra_cost} on {zone.extra_cost_on}")
+        pairs = border(world, zone)
+        out.that(bool(pairs), f"{ref}: the zone has an edge to cross", f"{len(pairs)}")
+        if not pairs:
+            continue
+        outside, inside = pairs[0]
+        # The crossing the card charges for, and the same crossing reversed.
+        taxed = (inside, outside) if direction == "leave" else (outside, inside)
+        free = (outside, inside) if direction == "leave" else (inside, outside)
+        price = world.crossing(foe, "walk")
+        out.that(price(*taxed) == 1 + want,
+                 f"{ref}: an enemy pays {1 + want} squares to cross -- 1 for the"
+                 f" step and {want} for the zone",
+                 f"{price(*taxed)}")
+        out.that(price(*free) == 1,
+                 f"{ref}: and 1 the other way, which is what makes this a tax on"
+                 " the crossing rather than on the square -- a set of squares"
+                 " could not tell these two apart",
+                 f"{price(*free)}")
+        # Clear of the zone entirely: the tax is local, not board-wide.
+        xs = [x for x, _ in zone.squares]
+        ys = [y for _, y in zone.squares]
+        probe = (max(xs) + 3, max(ys) + 3)
+        beyond = (probe[0] + 1, probe[1])
+        on_grid = world.grid.inside(probe) and world.grid.inside(beyond)
+        out.that(on_grid,
+                 f"{ref}: the control pair is on the board -- asserted, because"
+                 " two off-grid squares price 1 whatever the zone does and the"
+                 " control would pass vacuously",
+                 f"{probe} {beyond}")
+        if on_grid:
+            out.that(price(probe, beyond) == 1,
+                     f"{ref}: a crossing clear of the zone costs 1", f"{price(probe, beyond)}")
+        mine = world.crossing(me, "walk")
+        out.that(mine(*taxed) == (1 if sided else 1 + want),
+                 f"{ref}: the caster pays "
+                 + ("nothing extra -- the card taxes enemies only, and the plant"
+                    " is deleting `extra_cost_for=`" if sided else
+                    "the same as anybody, since the card names no side"),
+                 f"{mine(*taxed)}")
+
+    # -- p3217: rough ground made rougher, which is two fixtures ----------
+    #
+    # **One pair cannot test this clause.** A single taxed square inside the
+    # area is equally consistent with a plain tax, so the flat square is the
+    # fixture that fails only if `extra_cost_if_difficult=` is dropped, and
+    # the rough one is the fixture that fails only if `extra_cost=` is.
+    world, me, _ = _posed("p3217", 1)
+    foes = sorted(enemies(world, me))
+    out.that(bool(foes), "p3217: the board deals an enemy", f"{foes}")
+    if foes:
+        foe = foes[0]
+        dsl.use(world, me, "p3217")
+        zone = laid(world, me)
+        out.that(zone is not None, "p3217 lays its taxing zone", f"{zone}")
+        if zone is not None:
+            pairs = border(world, zone)
+            out.that(len(pairs) >= 2,
+                     "p3217: two separate squares inside the area to compare",
+                     f"{len(pairs)}")
+            if len(pairs) >= 2:
+                flat_out, flat_in = pairs[0]
+                mud_out, mud_in = pairs[-1]
+                out.that(world.crossing(foe)(flat_out, flat_in) == 1,
+                         "p3217: before any rough ground, entering the area is"
+                         " free -- the premise, since this row taxes nothing on"
+                         " a flat floor",
+                         f"{world.crossing(foe)(flat_out, flat_in)}")
+                # One square inside the area made genuinely difficult. Owned by
+                # the enemy so the rough ground is nobody's favour.
+                world.zones.create(foe, "probe-rough", frozenset({mud_in}),
+                                   When.ENCOUNTER, difficult=True)
+                price = world.crossing(foe)
+                out.that(price(mud_out, mud_in) == 3,
+                         "p3217: a rough square inside the area costs 3 -- the"
+                         ' printed "2 extra **instead of** the normal 1", so the'
+                         " tax replaces difficult's square and does not add to"
+                         " it. 4 is the plausible wrong answer",
+                         f"{price(mud_out, mud_in)}")
+                out.that(price(flat_out, flat_in) == 1,
+                         "p3217: and a FLAT square inside the same area still"
+                         " costs 1 -- this row does not rough the ground up, it"
+                         " makes rough ground rougher, and this is the only"
+                         " assertion that can tell those apart",
+                         f"{price(flat_out, flat_in)}")
+                out.that(world.crossing(me)(mud_out, mud_in) == 2,
+                         "p3217: the caster crosses the same rough square for 2,"
+                         " paying difficult's square and not the tax",
+                         f"{world.crossing(me)(mud_out, mud_in)}")
+
+    # -- the directional tax: toward is not the same as everywhere ---------
+    #
+    # **Three fixtures, because the clause has three cases and a flat tax
+    # passes one of them.** `c.difficult_for` was the near miss on both rows
+    # that print this, and it differs from the right answer only on the step
+    # that moves AWAY and the step that keeps the range -- so a rule
+    # asserting the approach alone could not tell the two implementations
+    # apart. See the rows' own notes.
+    world, me, _ = _posed("i1822x1", 1)
+    foes = sorted(enemies(world, me))
+    out.that(bool(foes), "i1822x1: the board deals an enemy", f"{foes}")
+    if foes:
+        foe = foes[0]
+        here = must(world.get(me, Position), "the wearer stands somewhere").square
+        REGISTRY["i1822x1"].body(Cast(world=world, me=me, ref="i1822x1"))
+        at = must(world.get(foe, Position), "the enemy stands somewhere").square
+        out.that(world.crossing(foe)(at, _closer(at, here)) == 1,
+                 "i1822x1: before the row's power lands, approaching is free --"
+                 " the premise, and the control for the three lines below",
+                 f"{world.crossing(foe)(at, _closer(at, here))}")
+        # The property keys on p1457 landing, so the hit is what arms it.
+        world.bus.emit(Hit(attacker=me, target=foe, power="p1457", critical=False))
+        price = world.crossing(foe)
+        by_distance: dict[int, set[int]] = {}
+        for nxt in neighbours(at):
+            if not world.grid.inside(nxt):
+                continue
+            moved = _gap(nxt, here) - _gap(at, here)
+            by_distance.setdefault(moved, set()).add(price(at, nxt))
+        out.that(by_distance.get(-1) == {2},
+                 "i1822x1: a step CLOSER to the wearer costs 2 -- one for the"
+                 " step and one for the printed tax",
+                 f"{sorted(by_distance.get(-1) or ())}")
+        out.that(by_distance.get(1) == {1},
+                 "i1822x1: a step AWAY still costs 1, which is the whole"
+                 " difference from `c.difficult_for` -- that verb charges in"
+                 " every direction and would make this row stronger than print",
+                 f"{sorted(by_distance.get(1) or ())}")
+        out.that(by_distance.get(0) == {1},
+                 "i1822x1: and a step that KEEPS the range costs 1, so the"
+                 ' creature may circle for nothing -- which is what "toward"'
+                 " says and the second thing a flat tax gets wrong",
+                 f"{sorted(by_distance.get(0) or ())}")
+        out.that(world.crossing(me)(here, _closer(here, at)) == 1,
+                 "i1822x1: the wearer's own approach is untaxed", "1")
+        # **Hit by a DIFFERENT power, which is the case the gate is about.**
+        # The first draft simply left the spare alone and asserted it was
+        # untaxed -- and a plant widening the gate to every power the wearer
+        # hits with passed that, because an untouched creature is untaxed
+        # either way. The assertion has to swing at the spare with something
+        # else for the `ev.power` clause to be load-bearing.
+        out.that(len(foes) > 1,
+                 "i1822x1: a second enemy to swing at with another power",
+                 f"{len(foes)}")
+        if len(foes) > 1:
+            spare = foes[1]
+            sat = must(world.get(spare, Position), "the spare stands").square
+            out.that(world.crossing(spare)(sat, _closer(sat, here)) == 1,
+                     "i1822x1: an enemy nothing has hit approaches freely --"
+                     " the premise for the line below",
+                     f"{world.crossing(spare)(sat, _closer(sat, here))}")
+            world.bus.emit(Hit(attacker=me, target=spare, power="p1333",
+                               critical=False))
+            out.that(world.crossing(spare)(sat, _closer(sat, here)) == 1,
+                     "i1822x1: and still free after the wearer hits it with a"
+                     " DIFFERENT power -- the property names one row, so a gate"
+                     " on the attacker alone would tax the whole board",
+                     f"{world.crossing(spare)(sat, _closer(sat, here))}")
+
+    # -- i1249p1: the same tax, and the range that ends it ----------------
+    world, me, _ = _posed("i1249p1", 1)
+    foes = sorted(enemies(world, me))
+    out.that(bool(foes), "i1249p1: the board deals an enemy", f"{foes}")
+    if foes:
+        foe = foes[0]
+        here = must(world.get(me, Position), "the wearer stands somewhere").square
+        c = Cast(world=world, me=me, ref="i1249p1")
+        c.target = foe
+        REGISTRY["i1249p1"].body(c)
+        at = must(world.get(foe, Position), "the target stands somewhere").square
+        taxed = world.crossing(foe)(at, _closer(at, here))
+        out.that(taxed == 2,
+                 "i1249p1: the target pays 2 to close after the hit -- the row"
+                 " runs its own strike, so a miss is the board's business and"
+                 " this asserts the hit path",
+                 f"{taxed}")
+        held = [e for e in world.effects.of(foe) if "slow approach" in e.label]
+        out.that(len(held) == 1,
+                 "i1249p1: exactly one hold carries it, so sustaining extends"
+                 " the tax rather than laying a second",
+                 f"{[e.label for e in world.effects.of(foe)]}")
+        if held:
+            out.that(held[0].sustain_cost is ActionType.STANDARD,
+                     "i1249p1: and the printed Sustain is a STANDARD on that"
+                     " same hold",
+                     f"{held[0].sustain_cost}")
+
+    # -- m2090a4: a wall priced at three, not at difficult's one ----------
+    world, me, _ = _posed("m2090a4", 1)
+    REGISTRY["m2090a4"].body(Cast(world=world, me=me, ref="m2090a4"))
+    zone = laid(world, me)
+    out.that(zone is not None, "m2090a4 lays its wall as a taxing zone", f"{zone}")
+    if zone is not None:
+        out.that(zone.extra_cost == 3,
+                 "m2090a4: three extra squares to enter, which is the printed"
+                 " number and the one `difficult=True` could not say -- that"
+                 " word is worth 1",
+                 f"{zone.extra_cost}")
+        out.that(not zone.difficult,
+                 "m2090a4: and `difficult` is NOT also set -- the tax replaces"
+                 " it rather than stacking, so laying both would read as if"
+                 " the row meant 4",
+                 f"{zone.difficult}")
+        foes = sorted(enemies(world, me))
+        pairs = border(world, zone)
+        if foes and pairs:
+            outside, inside = pairs[0]
+            out.that(world.crossing(foes[0])(outside, inside) == 4,
+                     "m2090a4: so stepping into the wall costs 4",
+                     f"{world.crossing(foes[0])(outside, inside)}")
+
+    # -- the refusals: a tax that matches nobody charges nothing ----------
+    world, me, _ = _posed("p11386", 1)
+    one = frozenset({world.need(me, Position).square})
+    for kwargs, why in (
+        ({"extra_cost": 1, "extra_cost_on": "exit"}, "a misspelled direction"),
+        ({"extra_cost": 1, "extra_cost_for": "allies"}, "a misspelled side"),
+        ({"extra_cost_for": "enemies"}, "a side with no number"),
+        ({"extra_cost": 1, "extra_cost_on": "leave", "extra_cost_if_difficult": True,
+          "extra_cost_for": ""}, None),
+        ({"extra_cost": -1}, "a negative tax"),
+    ):
+        if why is None:
+            continue
+        try:
+            world.zones.create(me, "bad", one, When.ENCOUNTER, **kwargs)
+            out.that(False, f"{why} is refused at `Zones.create`", "accepted")
+        except ValueError:
+            out.that(True, f"{why} is refused at `Zones.create` -- it would"
+                           " otherwise charge nobody and read as a working zone")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -95526,6 +95856,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "zone_tax": (zone_crossing_tax,
+                 "five rows print a movement cost a zone could not name;"
+                 " four of them reported finished"),
     "harder_for_one": (ground_made_harder_for_one_creature,
                        "rough ground imposed on one creature, and it"
                        " follows the creature it is measured from (#831)"),

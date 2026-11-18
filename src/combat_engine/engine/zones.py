@@ -43,6 +43,16 @@ if TYPE_CHECKING:
 #: for why this is two words rather than a predicate or a set of ids.
 OBSCURED_FOR = frozenset({"enemies", "outside"})
 
+#: Which crossing `Zone.extra_cost` taxes. Two words, and the printed lines
+#: use exactly two: *"entering"* / *"moving into"* / *"moving through"* a
+#: square, and *"leaving"* the zone.
+EXTRA_COST_ON = frozenset({"enter", "leave"})
+
+#: Who pays `Zone.extra_cost`. `""` is everybody; `"enemies"` is the
+#: owner's opposing side, the only narrowing printed. Spelled the way
+#: `OBSCURED_FOR` is and resolved when somebody moves, for the same reason.
+EXTRA_COST_FOR = frozenset({"enemies"})
+
 
 @dataclass
 class Zone:
@@ -179,6 +189,50 @@ class Zone:
     #:
     #: Written by `c.difficult_for`, read in `World.difficult`. #831.
     difficult_for: set[int] = field(default_factory=set)
+    #: **Extra squares of movement crossing these squares costs**, instead
+    #: of the one that ordinary difficult ground charges. 0 is no tax.
+    #:
+    #: **Five rows print this and `difficult` cannot say any of them**, because
+    #: that word is worth exactly one extra square and the page names a
+    #: number:
+    #:
+    #: | | printed | |
+    #: |---|---|---|
+    #: | `p2702` | 3 extra to enter | everybody |
+    #: | `p16292` | 2 extra to move through | everybody |
+    #: | `p16653` | 4 extra to move into | enemies |
+    #: | `p11386` | 2 extra to **leave** | enemies |
+    #: | `p3217` | 2 extra **instead of** the normal 1 | enemies, and only
+    #:   where the ground is already difficult |
+    #:
+    #: **Four of those five reported finished.** `p11386` and `p16653` carried
+    #: a marker; the other three laid a plain `difficult` zone, wrote the
+    #: printed number into a `c.note` and charged one square -- so a wall
+    #: costing 4 to enter cost 2, and nothing said so. That is this
+    #: component's named failure mode with a number attached, which is why
+    #: these are a field rather than a note.
+    #:
+    #: **"Instead of", not "on top of", and the page settles it.** `p3217`
+    #: prints *"costs 2 extra squares instead of the normal 1 extra"*, so the
+    #: tax replaces difficult's surcharge rather than stacking with it --
+    #: `World.crossing` takes the larger of the two and never adds them. A row
+    #: wanting both would be charged 3 for a square the card prices at 2.
+    extra_cost: int = 0
+    #: Which crossing is taxed -- `"enter"` or `"leave"`, from
+    #: `EXTRA_COST_ON`. Entering is the common case and the default; one row
+    #: taxes the way **out**, and that is a different square at a different
+    #: moment, so it cannot be folded into the other.
+    extra_cost_on: str = "enter"
+    #: Who pays -- `""` everybody, `"enemies"` the owner's opposing side.
+    #: A named direction rather than a set of ids, for the reason
+    #: `obscured_for` is one: a side is resolved when somebody moves, and a
+    #: set frozen at lay time would be wrong as soon as anything changed.
+    extra_cost_for: str = ""
+    #: Whether the tax applies **only where the ground is already difficult**.
+    #: One row, `p3217`, and it is the whole of that row's clause: it does not
+    #: rough the ground up, it makes rough ground rougher. Laying it flat
+    #: would tax the open floor of the burst as well, which the card does not.
+    extra_cost_if_difficult: bool = False
     #: A row **any** creature in or adjacent to this region may use, as its
     #: own action. The board's power rather than anybody's -- "a terrain
     #: power", the book's name for it -- and the one thing on this dataclass
@@ -291,6 +345,10 @@ class Zones:
         power: str = "",
         power_uses: int = 0,
         power_reach: int = 1,
+        extra_cost: int = 0,
+        extra_cost_on: str = "enter",
+        extra_cost_for: str = "",
+        extra_cost_if_difficult: bool = False,
     ) -> int:
         if obscured:
             # **Checked, because the alternative is silent.** `difficult=`
@@ -325,6 +383,35 @@ class Zones:
                 "obscured_for= needs obscured= as well: a direction with no "
                 "grade darkens nothing"
             )
+        # **The same closed-set check again, and the stakes are a number.**
+        # A misspelled direction here is not a zone that taxes the wrong
+        # side, it is a zone that taxes *nobody*: `World.crossing` matches
+        # the word, so `extra_cost_on="exit"` charges nothing and plays as
+        # an ordinary zone. That is the uniformly-dead gate this component
+        # keeps producing, with the row still reporting finished.
+        if extra_cost_on not in EXTRA_COST_ON:
+            raise ValueError(
+                f"extra_cost_on={extra_cost_on!r} is not one of "
+                f"{sorted(EXTRA_COST_ON)}"
+            )
+        if extra_cost_for and extra_cost_for not in EXTRA_COST_FOR:
+            raise ValueError(
+                f"extra_cost_for={extra_cost_for!r} is not one of "
+                f"{sorted(EXTRA_COST_FOR)}"
+            )
+        # A side, a direction or an "only where difficult" with no number
+        # taxes nothing and reads exactly like a row that priced its squares.
+        # The mirror of `obscured_for`-without-`obscured` one check up, and
+        # the reason is the same: no card narrows a tax it never charges.
+        if not extra_cost and (
+            extra_cost_for or extra_cost_if_difficult or extra_cost_on != "enter"
+        ):
+            raise ValueError(
+                "extra_cost_for=/extra_cost_on=/extra_cost_if_difficult= need "
+                "extra_cost= as well: narrowing a tax of nothing charges nobody"
+            )
+        if extra_cost < 0:
+            raise ValueError(f"extra_cost={extra_cost} cannot be negative")
         zone = Zone(
             owner=owner,
             label=label,
@@ -340,6 +427,10 @@ class Zones:
             power=power,
             power_uses=power_uses,
             power_reach=power_reach,
+            extra_cost=extra_cost,
+            extra_cost_on=extra_cost_on,
+            extra_cost_for=extra_cost_for,
+            extra_cost_if_difficult=extra_cost_if_difficult,
         )
         made = self._spawn(zone, when, sustain, sustain_inside)
         if hindering:

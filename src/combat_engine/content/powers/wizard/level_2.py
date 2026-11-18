@@ -503,11 +503,22 @@ def p16279(c: Cast) -> None:
     ],
 )
 def p3217(c: Cast) -> None:
-    """Two halves, and only one of them can be said.
+    """Both halves are written now.
 
-    Difficult terrain costs a fixed one extra square and there is nowhere to
-    name a different number, so "2 extra instead of 1" is a note -- the same
-    wall `level_9.py:p722` ran into from the other side.
+    **This row does not rough the ground up -- it makes rough ground
+    rougher**, which is why it is `extra_cost_if_difficult=True` and not a
+    plain tax. The printed line is *"difficult terrain in the area costs 2
+    extra instead of the normal 1"*, so the open floor of the burst is
+    untouched and only the squares that were already difficult are charged.
+    Laying `difficult=True` here would tax the whole area, which is a much
+    bigger zone than the card.
+
+    **"Instead of", so 3 a square and not 4.** `World.crossing` takes the
+    larger of the tax and difficult's own square rather than adding them,
+    which is the arithmetic the printed "instead of" asks for.
+
+    And an enemy that ignores difficult terrain pays nothing extra here,
+    correctly: there is no "normal 1 extra" of its own for this to replace.
 
     The traps' half is writable: a trap is an entity that attacks, so it takes
     a gated attack bonus that pays only against the caster's enemies. The zone
@@ -516,7 +527,10 @@ def p3217(c: Cast) -> None:
     area = c.area()
     if not area:
         return
-    c.zone(area, label=c.ref, until=When.ENCOUNTER)
+    c.zone(
+        area, label=c.ref, until=When.ENCOUNTER,
+        extra_cost=2, extra_cost_for="enemies", extra_cost_if_difficult=True,
+    )
     foes = c.enemies()
     for eid, _trap in c.world.each(Trap):
         pos = c.world.get(eid, Position)
@@ -526,7 +540,6 @@ def p3217(c: Cast) -> None:
             "attack", c.int_mod, on=eid, until=When.ENCOUNTER, kind="untyped",
             when=lambda ctx: ctx.get("target") in foes,
         )
-    c.note(f"{c.ref}: rough going here should cost 2 extra squares, and it costs 1")
 
 
 @power(

@@ -98,6 +98,7 @@ from combat_engine.engine import (
     SurgeSpent,
     Target,
     Trigger,
+    TurnEnd,
     TurnStart,
     Usage,
     When,
@@ -2399,36 +2400,46 @@ def i1142p1(c: Cast) -> None:
     reach=Ranged(5),
     target=Target(side="enemy", count=1, max_size=Size.LARGE),
     attack=Attack(vs=FORT, printed=13),
-    dropped=("c.movement_tax()",),
 )
 def i1249p1(c: Cast) -> None:
-    """The push is the whole of what lands. "Each square closer costs an
-    extra square" is a cost on one direction of movement and nothing
-    charges for direction; sustaining it goes with it.
+    """All three clauses are written: the push, the tax on approaching, and
+    the range the effect cannot outlive.
 
-    **The symbol reads as a general absence and that reading is false.**
-    `c.difficult_for(on=target)` is exactly "this creature pays an extra
-    square", board-wide, through `Movement.harder_everywhere`, and
-    `i520x1`'s note settles that one extra square to enter *is* what
-    difficult terrain costs -- so the amount is exact and the verb is
-    there. Only the word "closer" is missing, and laying it anyway would
-    charge this target for backing away, which is strictly stronger than
-    print on a clause whose whole point is to slow an approach.
+    **The old note's diagnosis was exactly right and the door it wanted
+    exists now.** `c.difficult_for` was the near miss -- the right
+    arithmetic in every direction, since one extra square to enter is what
+    difficult terrain costs -- and laying it would have charged this target
+    for *backing away*, which is strictly stronger than print on a clause
+    whose whole point is to slow an approach. What was missing was that
+    `World.difficult` answered with a set of squares, so a step was never
+    asked where it came from; `World.crossing` answers with a function of
+    the crossing, and `c.movement_tax` is the verb over it.
 
-    **The information exists and the door does not**, which is the narrower
-    statement worth recording: `movement.reachable`'s search holds the
-    square left and the square entered in the same frame and prices the
-    step `2 if nxt in rough else 1`, where `rough` is `world.difficult`'s
-    **set of squares** for a creature and a kind of going. A set cannot
-    carry a direction, so the two are indistinguishable by the time the
-    charge is made.
+    `until=When.SOTNT` is the printed *"until the start of your next
+    turn"*, and `sustain=STANDARD` is the printed Sustain -- both on the
+    one hold, so sustaining extends the tax rather than laying a second.
 
-    Not re-pointed, deliberately. `i1822x1` prints this sentence from the
-    other side, carries the full argument, and waits on the same symbol --
-    renaming it here alone would split one gap into two synonyms, which is
-    the thing a marker is not allowed to do."""
-    if c.strike():
-        c.push(2)
+    **The range clause ends the hold rather than refusing the Sustain**,
+    which is a distinction `Effect.sustain_when` cannot make: that gates the
+    *offer*, and the card says the effect **ends** if the wearer finishes a
+    turn more than 5 squares off. Under the gate it would merely stop being
+    extendable and run to the start of the next turn anyway. Measured from
+    the wearer at the moment their own turn ends, which is the sentence."""
+    if not c.strike():
+        return
+    c.push(2)
+    held = c.movement_tax(1, until=When.SOTNT, sustain=STANDARD)
+    if held is None:
+        return
+    victim = c.target
+
+    def apart(ev: TurnEnd) -> None:
+        if ev.ghost or ev.actor != c.me:
+            return
+        if c.distance(victim) > 5:
+            c.world.effects.end(held, why=f"{c.ref}: out of range")
+
+    c.watch(TurnEnd, apart, until=When.SOTNT)
 
 
 @power("i1315x1", level=8, cls=ITEM, action=ActionType.NONE,

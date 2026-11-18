@@ -66,9 +66,16 @@ BEAST_FORM = "you must be in beast form"
     keywords=[*PRIMAL_IMPLEMENT, Keyword.AREA, Keyword.CONJURATION],
 )
 def p2702(c: Cast) -> None:
-    """Rough going costs a fixed one extra square and there is nowhere to
-    name a different number, so the printed three extra is one. The wall's
-    height has nowhere to go either: the board is flat.
+    """The printed three extra squares are charged now. The wall's height
+    still has nowhere to go: the board is flat.
+
+    **`extra_cost=3` rather than `difficult=True`, and the card decides
+    which.** It prints a cost and never the words "difficult terrain", so the
+    squares are not that category -- which matters in both directions: a
+    creature that crosses rough ground for nothing still pays the vines, and
+    a row asking whether its target stands in difficult terrain does not find
+    this. The two cannot be laid together anyway, since the tax replaces
+    difficult's one square instead of adding to it.
 
     Line of sight through it is `blocks_sight`, which shelters what is
     behind it rather than sparing whoever is standing next to a square.
@@ -87,7 +94,7 @@ def p2702(c: Cast) -> None:
         return
     wall = c.zone(
         line, label=c.ref, until=When.SUSTAIN, sustain=MINOR,
-        difficult=True, blocks_sight=True,
+        blocks_sight=True, extra_cost=3,
     )
     struck: dict[int, int] = {}
 
@@ -113,7 +120,6 @@ def p2702(c: Cast) -> None:
     ]
     if held is not None and held.effect is not None:
         held.effect.subs.extend(subs)
-    c.note(f"{c.ref}: entering costs three extra squares, and rough going costs one")
 
 
 @power(

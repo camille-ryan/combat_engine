@@ -2610,38 +2610,36 @@ def i1821p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.movement_tax()",),
 )
 def i1822x1(c: Cast) -> None:
-    """Re-aimed: `p1457` is a ref now, so the naming gap is closed and was
-    never the hold. "Each square moved toward you costs 1 extra" is
-    difficult terrain that follows one creature and only in one
-    direction; `c.zone` is laid on squares and `c.slowed` caps a whole
-    move instead.
+    """Written: every square a creature under the wearer's `p1457` spends
+    approaching costs it one extra.
 
-    **Three quarters of this clause is already writable, and the missing
-    quarter is the word "toward".** Searched for the mechanic rather than
-    the name, which is what this file's traps list asks for, and the
-    sibling is there: `c.aura(1, difficult=c.ref)` is "one extra square to
-    enter a square beside me" and `c.difficult_for(zone=)` is the same
-    clause for one named creature. `i520x1` and `f1341` are the two worked
-    examples, and `i520x1`'s own note settles the arithmetic -- "one extra
-    square to enter is what difficult terrain costs" -- so the *amount* is
-    exact rather than approximate.
+    **The missing quarter was the word "toward", and the old note said
+    exactly where the gap was.** `c.aura(1, difficult=c.ref)` and
+    `c.difficult_for(zone=)` had the arithmetic right -- one extra square to
+    enter is what difficult terrain costs, which `i520x1` settles -- and
+    neither could carry a direction, because `World.difficult` answers with a
+    set of squares and a square is never asked what was stepped off.
+    `World.crossing` answers with a function of the crossing now, and
+    `c.movement_tax` is the verb over it.
 
-    What none of them can say is the direction, and the pricing is where
-    that is decided: `movement.walk` charges
-    `spent += 2 if sq in world.difficult(eid, kind) else 1`, and
-    `world.difficult` hands back a **set of squares** for a creature and a
-    kind of going. The step being paid for is not asked where it came from,
-    so a tax on approaching cannot be told from a tax on retreating. Laid
-    anyway it would charge this creature for backing away, which is
-    strictly stronger than print on the row's only clause -- so `todo=`
-    rather than `dropped=`.
+    **Hung on the hit rather than on a membership test**, which is what
+    *"a target affected by your p1457"* comes to: that row's rider is laid on
+    a hit and runs to the end of the target's next turn, so the tax is laid
+    at the same moment with the same duration and the two cannot drift apart.
+    A miss lays neither.
 
-    `i1249p1` prints the same sentence from the other side ("each square
-    closer costs an extra square") and shares this symbol for that
-    reason."""
+    `toward=c.me` is explicit even though it is the default, because the
+    printed sentence is "toward **you**" and the wearer is the one creature
+    this property is about."""
+
+    def tagged(ev: Hit) -> None:
+        if ev.attacker != c.me or ev.power != "p1457":
+            return
+        c.movement_tax(1, on=ev.target, toward=c.me, until=When.EOTNT)
+
+    c.watch(Hit, tagged, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} approach")
 
 
 @power(
