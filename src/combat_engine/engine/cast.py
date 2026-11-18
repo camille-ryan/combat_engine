@@ -10297,13 +10297,28 @@ class Cast:
         )
         return spared
 
-    def absorb(self, ev: Any = None, *, on: int | None = None) -> int:
+    def absorb(self, ev: Any = None, *, on: int | None = None,
+               raw: bool = False) -> int:
         """Take damage somebody else was about to suffer.
 
         Reads the `DamageRolled` off `c.trigger` by default, zeroes it, and
         deals it to the absorber instead. Moving damage already dealt was not
         possible at all before this: the event carried the number and nothing
         could take it over.
+
+        **`raw` is "this damage ignores your immunities and resistances"**,
+        which `p13555` prints and three other redirects print in the same
+        breath. It passes `resolve.deal_damage`'s `unpreventable`, which
+        already skips the resistance and immunity block whole -- that flag
+        exists for ten cards about damage a character takes **on purpose**,
+        and a paladin stepping in front of a blow is exactly that shape.
+
+        Not `c.ignore_resistance`, and that is the thing easiest to get
+        backwards here: that verb is **attacker-side** -- *"your fire
+        powers ignore the target's fire resistance"* -- and its own
+        docstring says so. Here the absorber is the creature being hurt
+        and it is his **own** resistances that must not apply, which is
+        the other end of the same sentence.
         """
         ev = ev if ev is not None else self.trigger
         taken = max(0, getattr(ev, "amount", 0)) if ev is not None else 0
@@ -10314,6 +10329,7 @@ class Cast:
             self.world, getattr(ev, "source", self.me), on or self.me, taken,
             getattr(ev, "dtype", DamageType.UNTYPED), f"{self.ref} (absorbed)",
             from_attack=False,
+            unpreventable=raw,
         )
 
     def reduce(self, amount: int, ev: Any = None) -> int:

@@ -200,7 +200,6 @@ def p13554(c: Cast) -> None:
         ally_within(3),
         "an ally within 3 squares of you is damaged by an attack",
     ),
-    dropped=("c.absorb(raw=)",),
 )
 def p13555(c: Cast) -> None:
     """`DamageRolled` rather than `DamageApplied`: `c.absorb` moves a number
@@ -215,11 +214,15 @@ def p13555(c: Cast) -> None:
     backwards". Here the paladin is the creature being hurt, and it is his
     own resistances that must not apply.
 
-    `c.absorb(ev, on=)` takes no flag for it: it reads the `DamageRolled`,
-    zeroes it and deals it to the absorber through the ordinary path,
-    resistances and all. So the marker names `c.absorb(raw=)`. #1341.
+    `c.absorb(raw=True)` is the flag, and it reaches a mechanism that was
+    already there: `resolve.deal_damage`'s `unpreventable` skips the
+    resistance and immunity block whole. That flag exists for ten cards
+    about damage a character takes **on purpose** -- paying hit points to
+    redirect a blow, to heal an ally -- and a paladin stepping in front of
+    one is exactly that shape, so this needed the parameter rather than a
+    new path. #1341.
     """
-    c.absorb(c.trigger)
+    c.absorb(c.trigger, raw=True)
     c.bonus("attack", 2, until=When.EONT, on=c.me, kind="power")
 
 

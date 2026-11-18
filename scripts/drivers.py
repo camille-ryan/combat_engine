@@ -24409,6 +24409,7 @@ def a_grab_can_be_sustained(out: Result) -> None:
     import audit as _audit
     import combat_engine.content  # noqa: F401  -- fills the registry
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
     from combat_engine.engine.durations import When
     from combat_engine.engine.events import EffectSustained
     from combat_engine.engine.types import ActionType
@@ -24462,6 +24463,47 @@ def a_grab_can_be_sustained(out: Result) -> None:
                  "and carries the effect's label, so a row can tell a"
                  " sustained grab from a sustained zone",
                  f"what={ev.what!r}")
+
+    # -- `c.absorb(raw=)`: the victim's OWN resistance waived ------------
+    #
+    # `p13555` prints *"you take the damage of the triggering attack
+    # instead of the target. **This damage ignores your immunities and
+    # resistances.**"* -- and the waiver is the absorber's own, which is
+    # the end of the sentence easiest to get backwards:
+    # `c.ignore_resistance` is **attacker-side** and its own docstring
+    # says so.
+    #
+    # Measured on a monster rather than the caster, deliberately: the
+    # dealt caster already carries printed `resist fire 5`, so a probe
+    # that set 10 on top of it read 0 and 9 instead of 2 and 12 and the
+    # flag looked half-working. A clean creature is what makes the two
+    # numbers legible.
+    from combat_engine.engine.components import Defences
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.types import DamageType
+
+    mark = foes[0]
+    guards = world.get(mark, Defences) or world.add(mark, Defences())
+    guards.resist[DamageType.FIRE] = 10
+    guards.immune.add(DamageType.COLD)
+    taker = Cast(world=world, me=mark, ref="drivers")
+    for label, dtype, raw, want in (
+        ("resist 10 applies", DamageType.FIRE, False, 2),
+        ("resist 10 waived", DamageType.FIRE, True, 12),
+        ("immunity applies", DamageType.COLD, False, 0),
+        ("immunity waived", DamageType.COLD, True, 12),
+    ):
+        health = world.get(mark, Health)
+        if health is None:
+            out.skip("no health on the absorber")
+            break
+        health.hp = health.max_hp
+        rolled = DamageRolled(source=me, target=mark, amount=12,
+                              dtype=dtype, detail="drivers")
+        got = taker.absorb(rolled, raw=raw)
+        out.that(got == want,
+                 f"absorb(raw={raw}): {label} -- 12 becomes {want}",
+                 f"took {got}")
 
 
 def defective_entry(out: Result) -> None:
