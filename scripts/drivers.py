@@ -67,6 +67,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 # not.
 if TYPE_CHECKING:
     from combat_engine.engine.ecs import World
+    from combat_engine.engine.grid import Square
     from combat_engine.engine.turns import Encounter
     from combat_engine.story import module as story_module
 
@@ -20941,7 +20942,7 @@ def a_charge_can_go_through_one_body(out: Result) -> None:
     )
     from combat_engine.engine.ecs import World
     from combat_engine.engine.events import Bus, Trampled
-    from combat_engine.engine.grid import Grid, Square
+    from combat_engine.engine.grid import Grid
     from combat_engine.engine.movement import walk
     from combat_engine.engine.rng import Rng
     from combat_engine.engine.turns import Encounter
@@ -24794,7 +24795,9 @@ def an_allys_body_is_cover_for_hiding(out: Result) -> None:
     from combat_engine.engine.query import allies, cover_between, enemies
     from combat_engine.engine.types import Cover
 
-    def pose(ally_flag: bool | None, *, run_the_row: str = "") -> tuple:
+    def pose(
+        ally_flag: bool | None, *, run_the_row: str = "",
+    ) -> tuple[Cover, Cover, bool] | tuple[()]:
         world, me, _ = _audit.board("p14032", 1)
         mates = [a for a in allies(world, me) if a != me]
         foes = sorted(enemies(world, me))
@@ -24890,7 +24893,7 @@ def a_shove_may_refuse_a_square(out: Result) -> None:
     from combat_engine.engine.query import enemies, hindering_at
     from combat_engine.engine.types import DamageType
 
-    def shove(ring_it: bool, *, filtered: bool = True) -> tuple:
+    def shove(ring_it: bool, *, filtered: bool = True) -> tuple[Square, Square, int, int, int]:
         world, me, _ = _audit.board("p11582", 1)
         victim = sorted(enemies(world, me))[0]
         here = world.get(victim, Position).square
@@ -25002,7 +25005,7 @@ def being_bloodied_is_a_question_with_an_asker(out: Result) -> None:
     #: before and after and proved nothing.
     HUNTER = "m5399a1"
 
-    def board() -> tuple[Any, int, int] | None:
+    def board() -> tuple[World, int, int] | None:
         world, me, _ = _audit.board(HUNTER, 1)
         prey = sorted(enemies(world, me))
         if not prey:
@@ -25019,7 +25022,7 @@ def being_bloodied_is_a_question_with_an_asker(out: Result) -> None:
     hurt = world.need(victim, Health)
     hurt.hp = max(1, hurt.max_hp // 2 - 1)
 
-    def in_pool(w: object, hunter: int, who: int) -> bool:
+    def in_pool(w: World, hunter: int, who: int) -> bool:
         return who in _dsl.candidates(w, hunter, aim, None, 0, 0)
 
     out.that(bloodied(world, victim) and in_pool(world, me, victim),
@@ -25351,7 +25354,7 @@ def a_conjuration_flanks_and_a_penalty_is_clipped(out: Result) -> None:
     from combat_engine.engine.query import enemies, flanked_by, flankers
 
     # ---- p13442: a conjuration holds the far side ----------------------
-    def pose(flanks: bool) -> tuple[Any, int, int, int, int] | None:
+    def pose(flanks: bool) -> tuple[World, int, int, int, int] | None:
         world, me, _ = _audit.board("p13442", 1)
         mates = [a for a in _audit._allies_of(world, me) if a != me]
         if not mates:
@@ -26114,6 +26117,7 @@ def an_aspect_lends_its_augment_to_a_whole_class(out: Result) -> None:
     import combat_engine.content  # noqa: F401  -- fills the registry
     from combat_engine.content.powers import augment as _augment
     from combat_engine.engine import events as _ev
+    from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import (
         Health,
         PowerPoints,
@@ -26242,13 +26246,16 @@ def an_aspect_lends_its_augment_to_a_whole_class(out: Result) -> None:
     foes2 = enemies(world2, me2)
     use(world2, me2, "p11158", targets=[foes2[0]], spend=False)
 
-    class _Ask:
-        """The two fields `_lenders` reads, so the test can be asked of a
-        row without playing it -- `augment()` is reached per use and the
-        question here is about the description, not about a use."""
+    def _Ask(ref: str) -> Cast:
+        """A `Cast` carrying the three fields `_lenders` reads, so the test
+        can be asked of a row without playing it -- `augment()` is reached
+        per use and the question here is about the printed description.
 
-        def __init__(self, ref: str) -> None:
-            self.ref, self.me, self.world = ref, me2, world2
+        A real `Cast` and not a shim with the same attributes: the shim
+        type-checked as the wrong argument and `ty` said so, which is fair
+        -- `_lenders` is annotated `Cast` and a duck is not one.
+        """
+        return Cast(world=world2, me=me2, ref=ref)
 
     out.that(bool(reached(_Ask(AT_WILL))),
              f"the class lend reaches {AT_WILL}, which answers every clause"

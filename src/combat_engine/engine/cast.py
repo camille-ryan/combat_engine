@@ -7400,10 +7400,20 @@ class Cast:
             # to the door `c.bonus` opened** -- and `until` must go with it,
             # because `c.bonus(onto=)` refuses a duration it would then be
             # claiming on somebody else's hold.
+            #
+            # Two calls rather than one with a `**{...}` spread: the spread
+            # was the same thing to read and `ty` cannot narrow it, so it
+            # inferred `onto`/`until` as candidates for `dice` and `label`
+            # and reported two `invalid-argument-type`s against a call that
+            # is correct. Written out, there is nothing to infer.
+            if onto is not None:
+                return self.bonus(
+                    what, amount, on=who, kind=f"{self.ref} resist",
+                    when=when, onto=onto,
+                )
             return self.bonus(
-                what, amount, on=who,
+                what, amount, on=who, until=until,
                 kind=f"{self.ref} resist", when=when,
-                **({"onto": onto} if onto is not None else {"until": until}),
             )
         kinds = [dtype] if dtype is not None else list(DamageType)
         defences = self.world.get(who, Defences) or self.world.add(who, Defences())
