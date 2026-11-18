@@ -441,9 +441,19 @@ class Zones:
         sustain: ActionType | None = None,
         *,
         difficult: bool | str = False,
+        obscured: str = "",
+        obscured_for: str = "",
     ) -> int:
         """An aura follows its owner. A power that says "enemies adjacent to
         you" is an aura 1 and gets no special mechanism of its own.
+
+        **`obscured` is the same story one field over.** `Zone.obscured`
+        and `obscured_for` have always existed and `create` has always
+        taken them; this did not pass them on, so *"squares inside the
+        zone are heavily obscured"* was sayable of a static zone and not
+        of one that follows its caster -- which `p11298` prints. The field
+        names and their meanings are `Cast.zone`'s: `Light.DIM` is lightly
+        obscured, `Light.DARK` heavily.
 
         **`difficult` was reachable through `create` and not through here**,
         which nine rows were marked blocked for. `Zone.difficult` has always
@@ -451,7 +461,9 @@ class Zones:
         the fact -- `_difficult_aura`'s docstring describes that workaround
         in as many words. Passed through instead. #507-era triage.
         """
-        zone = Zone(owner=owner, label=label, aura=radius, difficult=difficult)
+        zone = Zone(owner=owner, label=label, aura=radius,
+                    difficult=difficult, obscured=obscured,
+                    obscured_for=obscured_for)
         zone.squares = spread(squares(self.world, owner), radius)
         return self._spawn(zone, when, sustain)
 

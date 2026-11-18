@@ -25002,6 +25002,37 @@ def one_effect_two_enders(out: Result) -> None:
              " word could express",
              f"got {resisting(deafened)}")
 
+    # -- `c.aura(obscured=)`: the same story as `difficult`, one field over
+    #
+    # `Zone.obscured` has always existed and `Zones.create` has always
+    # taken it; `Zones.aura` did not pass it on, so *"squares inside the
+    # zone are heavily obscured"* was sayable of a static zone and not of
+    # one centred on its caster. Nine rows were once marked blocked for
+    # `difficult` for exactly this reason, which that function's own
+    # docstring records.
+    from combat_engine.engine.types import Light
+    from combat_engine.engine.zones import Zone as _Zone
+
+    board, caster, _ = _audit.board("p11298", 1, pose=True)
+    use(board, caster, "p11298")
+    rows_aura = [z for _e, z in board.each(_Zone) if z.aura]
+    out.that(any(z.obscured == Light.DARK for z in rows_aura),
+             "p11298's aura is heavily obscured, which is `Light.DARK` --"
+             " the printed clause the aura door could not pass on",
+             f"{[(z.aura, z.obscured) for z in rows_aura]}")
+
+    asker = Cast(world=board, me=caster, ref="drivers")
+    asker.aura(2, until=_When.ENCOUNTER, label="drivers-plain")
+    asker.aura(2, until=_When.ENCOUNTER, label="drivers-dark",
+               obscured=Light.DARK)
+    made = {z.label: z.obscured for _e, z in board.each(_Zone)}
+    out.that(made.get("drivers-dark") == Light.DARK,
+             "an aura given the field carries it")
+    out.that(not made.get("drivers-plain"),
+             "**and one not given it carries nothing** -- the control, or"
+             " every aura in the tree starts obscuring its squares",
+             f"got {made.get('drivers-plain')!r}")
+
 
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.

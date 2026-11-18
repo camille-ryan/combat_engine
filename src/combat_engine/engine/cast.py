@@ -14888,6 +14888,8 @@ class Cast:
         on: int | None = None,
         sustain: ActionType | None = None,
         difficult: bool | str = False,
+        obscured: str = "",
+        obscured_for: str = "",
     ) -> int:
         """An aura around a creature -- or around anything with a position.
 
@@ -14895,6 +14897,14 @@ class Cast:
         which is what made "each creature adjacent to the sphere" unsayable:
         `Zones.refresh` has always been willing to follow any entity with a
         `Position`, and only this signature insisted it be `self.me`.
+
+        **`obscured` is the same shape as `difficult` one field over.**
+        `Zone.obscured` and `obscured_for` have always existed and
+        `Zones.create` has always taken them; `Zones.aura` did not pass
+        them on, so *"squares inside the zone are heavily obscured"* was
+        sayable of a static zone and not of one centred on its caster --
+        which `p11298` prints. `Light.DIM` is lightly obscured and
+        `Light.DARK` heavily, as on `c.zone`.
 
         **`difficult` is "enemies treat squares in the aura as difficult
         terrain"**, which nine rows were marked blocked for while the field
@@ -14908,6 +14918,8 @@ class Cast:
         return self.world.zones.aura(
             owner, label or self.ref, radius, until, sustain,
             difficult=difficult,
+            obscured=obscured,
+            obscured_for=obscured_for,
         )
 
     def my_aura(self, label: str = "") -> int:

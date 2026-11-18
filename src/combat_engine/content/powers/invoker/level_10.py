@@ -40,6 +40,7 @@ from combat_engine.engine import (
     hits_me,
     power,
 )
+from combat_engine.engine.types import Light
 
 
 def _my_area_power(world: Any, me: int, ev: Any) -> bool:
@@ -61,7 +62,6 @@ def _my_area_power(world: Any, me: int, ev: Any) -> bool:
     reach=CloseBurst(3),
     target=NO_TARGET,
     keywords=[Keyword.DIVINE, Keyword.ZONE],
-    dropped=("c.aura(obscured=)",),
 )
 def p11298(c: Cast) -> None:
     """**A marker now, where the prose admitted the gap and declared
@@ -76,8 +76,18 @@ def p11298(c: Cast) -> None:
     reach, and `c.move_zone` refuses an aura for the same reason -- the
     printed rule is that an aura moves with its owner.
 
-    The dazing half plays. #1341."""
-    swarm = c.aura(3, until=When.SUSTAIN, sustain=MINOR)
+    **Both halves play now, and the gap was the same shape as
+    `difficult` one field over.** `Zone.obscured` has always existed and
+    `Zones.create` has always taken it; `Zones.aura` did not pass it on,
+    so *"squares inside the zone are heavily obscured"* was sayable of a
+    static zone and not of one centred on its caster. Nine rows were once
+    marked blocked for `difficult` for exactly this reason, and
+    `Zones.aura`'s own docstring records that history.
+
+    `Light.DARK` is "heavily obscured", which is `c.zone`'s own mapping --
+    `Light.DIM` would be "lightly". #1341."""
+    swarm = c.aura(3, until=When.SUSTAIN, sustain=MINOR,
+                   obscured=Light.DARK)
 
     def bite(ev: Bloodied, z: int = swarm) -> None:
         if ev.actor in c.world.zones.occupants(z):
