@@ -1551,13 +1551,46 @@ def p16116(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("c.grant_armor()",),
+    dropped=("c.strip_armor()",),
 )
 def p16411(c: Cast) -> None:
-    """Conjuring a suit of +1 armour onto a creature mid-fight: nothing puts
-    a worn item on anybody. `c.grant_weapon()` is the other half of the
-    same absence and is already a marker group."""
-    ...
+    """"You instantly don +1 magic armor of a type you have proficiency
+    with. It lasts until you dismiss it as a minor action, until it is
+    removed from you, or until you use this power again."
+
+    `c.grant_armor` is the swap, and the AC correction is the half worth
+    knowing about: a suit's bonus is baked into `Defences` at build time
+    and nothing recomputes it, so the difference between the two printed
+    numbers has to be laid by hand -- `c.destroy`'s armour branch records
+    the same fact from the other direction.
+
+    **Three printed enders, and they are three different mechanisms.**
+    The dismissal is `c.endable`; *"until you use this power again"* is
+    the row ending its own previous hold, which is what the label lookup
+    below does; *"until it is removed from you"* is not written, and the
+    marker says so, and it names the layer the gap is really on:
+    **nothing strips worn armour from a creature**. `c.destroy`'s armour
+    branch is the holder spending its own suit, not somebody taking it --
+    so the clause has no subject rather than no verb, which is why the
+    symbol is `c.strip_armor()` and not a parameter on the verb above.
+
+    The row **plays** without it, which is why the marker is `dropped=`
+    and the row is no longer refused: the donning, the AC, the dismissal
+    and the re-use ender are all live.
+
+    `c.grant_weapon()` remains a marker group of its own: a weapon is an
+    entry in `Gear.weapons` with a wield, not a single field.
+    """
+    # **"Until you use this power again" -- the row ends its own hold.**
+    # Found by label rather than remembered on the creature, because a
+    # stance-like hold laid by an earlier use is the only thing that
+    # answers to this one.
+    for standing in c.world.effects.of(c.me):
+        if standing.by == c.ref:
+            c.end_effect(standing, on=c.me, why="donned again")
+    hold = c.grant_armor(enhancement=1, on=c.me, until=When.ENCOUNTER)
+    if hold is not None:
+        c.endable(hold, MINOR)
 
 
 def _surprised_at_the_off(world: World, me: int, ev: RoundStart) -> bool:

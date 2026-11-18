@@ -24763,6 +24763,127 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def armour_is_conjured_onto_a_creature(out: Result) -> None:
+    """"You instantly don +1 magic armor of a type you have proficiency
+    with."
+
+    `p16411` was **refused in play** on the ground that *"nothing puts a
+    worn item on anybody"*. `Gear.armour` is a single word, so donning is
+    a swap -- and the half that makes it more than two lines is the
+    arithmetic: `chargen` is the only reader of `armour.ARMOUR`, so a
+    suit's bonus is baked into `Defences` at build time and **nothing
+    recomputes it**. `c.destroy`'s armour branch records the same fact
+    from the other direction. Setting the field alone leaves a creature in
+    plate with cloth AC.
+
+    **Proficiency is read off what the creature is wearing**, which
+    under-grants: `ClassLine.armour` is the page's answer and lives in
+    `chargen`, which this component may not reach.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.armour import ARMOUR, LADDER
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.query import defence
+    from combat_engine.engine.types import Defense
+
+    world, me, _ = _audit.board("p16411", 1)
+    gear = world.get(me, Gear)
+    if gear is None:
+        out.skip("p16411's caster has no Gear to don anything over")
+        return
+    worn, was = gear.armour or "cloth", defence(world, me, Defense.AC)
+
+    out.that(use(world, me, "p16411", targets=[], spend=False),
+             "the row is usable, which it was not at all while refused")
+    out.that(gear.armour == worn,
+             "**the conjured suit is the heaviest the creature may wear**,"
+             " which here is what it already had on. `LADDER` runs light to"
+             " heavy and `World.decide` takes `options[0]`, so offering it"
+             " in table order donned CLOTH over scale and cost 6 AC --"
+             " `content.powers.augment` states the same rule for power"
+             " points, richest first",
+             f"wore {worn}, now {gear.armour}")
+    out.that(defence(world, me, Defense.AC) == was + 1,
+             "**and the AC moves by exactly the printed +1** -- the"
+             " enhancement, plus the difference between two rows of the"
+             " printed table, which is 0 when the rung does not change."
+             " Nothing recomputes a suit's bonus, so this is laid by hand"
+             " or it is silently wrong",
+             f"{was} -> {defence(world, me, Defense.AC)}")
+
+    for standing in list(world.effects.of(me)):
+        if standing.by == "p16411":
+            world.effects.end(standing, "drivers")
+    out.that(gear.armour == worn and defence(world, me, Defense.AC) == was,
+             "**and both halves come back off together** -- the bonus is"
+             " pinned to the suit's own hold, so a save or a dispel cannot"
+             " take the AC off a creature still wearing the armour",
+             f"{gear.armour} at {defence(world, me, Defense.AC)},"
+             f" was {worn} at {was}")
+
+    # -- the rung difference, asked DOWN the ladder ---------------------
+    #
+    # **Down and not up, and the first attempt at this arm got it
+    # backwards.** It put the creature in cloth to make room for leather,
+    # and `trains_in("cloth", "leather")` is False -- proficiency is read
+    # off what is worn, so standing it in cloth strips the very permission
+    # the arm wanted to use, and the verb correctly refused. A lighter
+    # rung is always allowed, so the difference is tested that way and the
+    # expected figure is negative.
+    world, me, _ = _audit.board("p16411", 1)
+    gear = world.get(me, Gear)
+    heavy = gear.armour or "cloth"
+    if heavy == "cloth":
+        out.skip("the caster stands in cloth, so no lighter rung exists")
+    else:
+        was2 = defence(world, me, Defense.AC)
+        Cast(world=world, me=me, ref="drivers-armour").grant_armor(
+            "cloth", enhancement=1, on=me)
+        want = ARMOUR["cloth"] - ARMOUR[heavy] + 1
+        out.that(gear.armour == "cloth",
+                 "a named rung is donned without asking",
+                 f"wore {heavy}, now {gear.armour}")
+        out.that(defence(world, me, Defense.AC) == was2 + want,
+                 "**and the AC moves by the printed difference plus the"
+                 " enhancement** -- negative here, which is the only"
+                 " direction that proves the table is being read at all:"
+                 " donning the rung already worn moves it by the"
+                 " enhancement alone and would pass with `ARMOUR` ignored",
+                 f"{was2} -> {defence(world, me, Defense.AC)}, wanted"
+                 f" {was2 + want} ({heavy} {ARMOUR[heavy]} ->"
+                 f" cloth {ARMOUR['cloth']}, +1)")
+
+        # **The restore is asserted HERE and not on the arm above**, where
+        # the rung does not change: "put the old armour back" passes
+        # vacuously when the old and the new are the same word, and a
+        # plant gutting `restore()` proved it by staying green.
+        for standing in list(world.effects.of(me)):
+            if standing.by == "drivers-armour":
+                world.effects.end(standing, "drivers")
+        out.that(gear.armour == heavy
+                 and defence(world, me, Defense.AC) == was2,
+                 "**and ending the hold puts the heavier suit back, AC and"
+                 " all** -- the field and the arithmetic are one effect, so"
+                 " neither can outlive the other",
+                 f"{gear.armour} at {defence(world, me, Defense.AC)},"
+                 f" was {heavy} at {was2}")
+
+    out.that("plate" in LADDER and not REGISTRY["p16411"].todo,
+             "p16411 is no longer refused in play",
+             f"todo {REGISTRY['p16411'].todo!r},"
+             f" dropped {REGISTRY['p16411'].dropped!r}")
+    out.that(REGISTRY["p16411"].dropped == ("c.strip_armor()",),
+             "**and carries a `dropped=` for the one clause left** --"
+             " 'until it is removed from you'. Nothing strips worn armour"
+             " from a creature, so that clause has no subject rather than"
+             " no verb, which is why the symbol is not a parameter on the"
+             " verb this commit added",
+             f"dropped {REGISTRY['p16411'].dropped!r}")
+
+
 def a_passive_check_is_lent_across_creatures(out: Result) -> None:
     """"Allies who can see or hear you can use your passive Perception in
     place of their own while within 5 squares of you."
@@ -94389,6 +94510,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "grant_armor": (
+        armour_is_conjured_onto_a_creature,
+        "armour is conjured onto a creature, with the AC difference the"
+        " printed table names and nothing recomputes (p16411)",
+    ),
     "lend_passive": (
         a_passive_check_is_lent_across_creatures,
         "a passive check is lent across creatures, a different number to"

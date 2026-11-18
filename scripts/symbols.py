@@ -646,6 +646,12 @@ CATEGORIES: dict[str, dict] = {
                 # `stored_row` reads the ref back, and until #1233
                 # nothing fired one. Somebody looking for any of the
                 # three wants all three.
+                "grant_armor",
+                # Beside `grant_row` because both hand a creature
+                # something it did not have, and next to nothing else:
+                # `Gear.armour` is one word, so donning is a swap plus the
+                # AC difference `chargen` baked in and nothing recomputes.
+                # `c.destroy`'s armour branch is this verb backwards. #1341.
                 "grant_row", "recast", "spellbook", "store_row",
                 "stored_row", "use_stored",
                 "unspent", "use_power",

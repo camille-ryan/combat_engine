@@ -15451,6 +15451,85 @@ class Cast:
             side,
         )
 
+    def grant_armor(
+        self,
+        kind: str = "",
+        *,
+        enhancement: int = 0,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You instantly don +1 magic armor of a type you are proficient
+        with."
+
+        **Donning is a swap plus an arithmetic correction, and the second
+        half is the one that bites.** `c.destroy`'s armour branch states
+        it: `chargen` is the only reader of `armour.ARMOUR`, so a suit's
+        bonus is baked into `Defences` when the character is built and
+        **nothing recomputes it**. Setting `Gear.armour` alone would leave
+        a creature wearing plate with cloth AC -- silently false, which is
+        this component's documented failure mode. So the difference between
+        the two printed numbers is laid as a bonus, and `enhancement` on
+        top of it.
+
+        **Proficiency is read off what the creature is WEARING**, not off
+        its class page, and that is a deliberate under-grant.
+        `ClassLine.armour` holds the page's answer and lives in `chargen`,
+        which this component may not reach -- `engine/CLAUDE.md` allows
+        four function-local leaks and says not to add a fifth. What is
+        reachable is `Gear.armour`, and a creature was dealt armour its
+        page allows, so `armour.trains_in(worn, want)` admits that rung and
+        everything lighter. A character trained in plate but standing in
+        cloth is held to cloth, which is narrower than the card and the
+        direction this tree prefers.
+
+        `kind=""` offers every rung it may wear and asks, which is what
+        *"choose a type"* means. Returns the hold; the swap comes back off
+        with it, bonus and all.
+        """
+        from combat_engine.armour import ARMOUR, LADDER, trains_in
+
+        from .components import Gear
+
+        who = self._who(on)
+        if who is None:
+            return None
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return None
+        worn = gear.armour or "cloth"
+        # **Heaviest first, because the decider takes the first option.**
+        # `LADDER` runs light to heavy, and `World.decide` with nobody
+        # installed takes `options[0]` -- so the printed "choose a type"
+        # donned **cloth** on a creature standing in scale and cost it 6
+        # AC. `content.powers.augment` states the same rule for power
+        # points: the options run richest first, because that is the only
+        # ordering under which the headless default is the one a player
+        # would pick.
+        allowed = [r for r in reversed(LADDER) if trains_in(worn, r)]
+        want = kind.lower() if kind else self.choose(
+            allowed, f"{self.ref}: which armour to conjure",
+        )
+        if want is None or want not in allowed:
+            return None
+        gap = ARMOUR.get(want, 0) - ARMOUR.get(worn, 0)
+        gear.armour = want
+
+        def restore() -> None:
+            gear.armour = worn
+
+        held = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} armour",
+            on_end=[restore], by=self.ref,
+        )
+        total = gap + enhancement
+        if total and held is not None:
+            # **Pinned to the same hold**, so the suit and its arithmetic
+            # cannot come apart: two effects would let a save or a dispel
+            # take the AC off a creature still wearing the armour.
+            self.bonus(Defense.AC, total, on=who, onto=held, kind=self.ref)
+        return held
+
     def lend_passive(
         self,
         zone: int,

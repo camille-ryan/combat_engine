@@ -15,6 +15,8 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
   - "You can expend your p1449 racial power to mark each enemy."
 - `c.expended(self, *, group: 'str' = '', on: 'int | None' = None) -> 'list[str]'`
   - The rows this creature has used up, for one that hands a use back.
+- `c.grant_armor(self, kind: 'str' = '', *, enhancement: 'int' = 0, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You instantly don +1 magic armor of a type you are proficient
 - `c.grant_row(self, ref: 'str', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, uses: 'int' = 0) -> 'Effect | None'`
   - Let a creature use a row it does not know, for a while.
 - `c.recast(self, ref: 'str', *, action: 'ActionType' = <ActionType.MINOR: 'minor'>, per_turn: 'int' = 1, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None) -> 'Effect | None'`
