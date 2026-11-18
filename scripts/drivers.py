@@ -14901,6 +14901,76 @@ def a_monster_knowledge_check(out: Result) -> None:
              f"AC {missed[1]}, damage {missed[3]}")
 
 
+def a_feature_sized_resistance(out: Result) -> None:
+    """*"Resistance to all damage equal to the amount that your `x7_947`
+    level 5 feature normally grants. While you are bloodied, this resistance
+    increases by 2."* -- `p16083`, the last row refused in play for a
+    missing number rather than a missing mechanism.
+
+    **Its marker was right about the facility and wrong that this row needed
+    it.** `_theme_powers` reads a theme's id and name and nothing else, so no
+    table holds a theme feature -- true, and the general import is still
+    owed. This row needed **one number**, printed on its own theme's page,
+    which the main session may read: the level 5 feature grants **resist
+    2** at heroic tier, and its 11th and 21st lines are past
+    `etl.MAX_POWER_LEVEL`.
+
+    **The two halves are a flat resist and a gated one, and that is the
+    structural claim.** `Defences.resist` is a flat value per type and
+    resistances of a type do **not** stack -- the larger applies -- so
+    `c.resist(2)` written twice would still shrug off 2 and the printed
+    "increases by 2" would be lost. `resolve.damage` reads the gated form
+    through `_mods` after the flat one and adds it, which is why the pair
+    comes to 4. Asserted as damage actually taken rather than as the
+    numbers on the component, because the component cannot show the
+    addition.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import DamageType
+
+    def took(bloodied: bool, run_row: bool = True) -> int:
+        """20 damage, minus whatever is shrugged off."""
+        world, me, _ = _board("p16083", 1)
+        health = must(world.get(me, Health), "the caster has Health")
+        if run_row:
+            REGISTRY["p16083"].body(Cast(world=world, me=me, ref="p16083"))
+        health.hp = (health.max_hp // 2) if bloodied else health.max_hp
+        before = health.hp
+        world.damage(me, me, 20, DamageType.UNTYPED, detail="probe")
+        return before - health.hp
+
+    # **Deltas against a no-row baseline on the same board, not absolutes.**
+    # Two drafts asserted the damage taken outright and both failed on the
+    # premise: `_board` deals a character already shrugging off 10 of 20
+    # through a class feature, and that resistance is a **gated** `Mods`
+    # entry rather than `Defences.resist`, so clearing the component did not
+    # remove it either. The row's own contribution is the difference, and it
+    # is the thing the card is about.
+    whole = took(False, run_row=False) - took(False)
+    hurt = took(True, run_row=False) - took(True)
+    out.that(took(False, run_row=False) > 0,
+             "damage lands at all on the baseline board -- the premise, since"
+             " a target already immune would make both deltas 0",
+             f"{took(False, run_row=False)} of 20")
+    out.that(whole == 2,
+             "the row shrugs off 2 -- the amount its theme's level 5 feature"
+             " prints, read off the page rather than derived",
+             f"{whole}")
+    out.that(hurt == 4,
+             'and 4 while bloodied, which is the printed "increases by 2".'
+             " A flat resist plus a gated one: two flat resists of a type do"
+             " not stack, so writing `c.resist(2)` twice would still shrug"
+             " off 2 and this assertion is what tells the two apart",
+             f"{hurt}")
+    out.that(hurt > whole,
+             "so being bloodied shrugs off strictly more, which is the"
+             " direction the card gives and the one a sign error reverses",
+             f"{whole} -> {hurt}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -97365,6 +97435,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "feature_resist": (a_feature_sized_resistance,
+                       "a flat resist plus a gated one comes to 4, where two"
+                       " flat ones of a type would still be 2"),
     "monster_knowledge": (a_monster_knowledge_check,
                           "no action required, two printed DC tables, and"
                           " the skill is the creature's own"),

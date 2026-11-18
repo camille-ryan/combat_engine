@@ -1711,42 +1711,53 @@ def _melee_weapon(ctx: dict[str, Any]) -> bool:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("etl.theme_feature",),
     keywords=[Keyword.ELEMENTAL],
 )
 def p16083(c: Cast) -> None:
-    """The whole effect is resistance to all damage equal to the amount the
-    `x7_947` level 5 feature grants, and the card never prints the number.
+    """*"Until the end of the encounter, you have resistance to all damage
+    equal to the amount that your `x7_947` level 5 feature normally grants.
+    While you are bloodied, this resistance increases by 2."*
 
-    **Re-pointed off `spec.feature_ref()`, whose premise is false.** That
-    symbol says the brief handed over a printed name where a ref belongs,
-    and this brief prints no name at all -- the clause reads
-    `x7_947 level 5 feature`, with the theme already resolved to its alias
-    ref. Nothing was being withheld, so there was nothing for `spec.py` to
-    fix, and the row sat in a one-row spelling of the `spec.ref` family it
-    does not belong to.
+    **The marker was right about the facility and wrong that this row
+    needed it.** Its note said *"the gap is one directory further out: a
+    theme's features are not imported"*, and that is true -- `_theme_powers`
+    reads a theme's id and name and nothing else, and no table holds a theme
+    feature. But this row does not need the general import. It needs **one
+    number**, printed on its own theme's page, and the main session may read
+    the compendium.
 
-    **The gap is one directory further out: a theme's features are not
-    imported.** Measured in `game.db` -- a theme appears in exactly one
-    place, the `class` column of 510 power rows, and no table holds a theme
-    feature at all. `etl/build.py`'s theme pass reads only the id and the
-    name out of the source's theme table and the features sit unread in the
-    same table's text column, which 104 of its 116 rows carry. So there is
-    no ref to point at and no amount to read. That is the shape
-    `etl.paragon_path` already names next door: `game.db` carries no paragon
-    path either, and `f2263` drops the half of its clause that would have
-    had to recognise one.
+    Read there: the `x7_947` level 5 feature prints *"while you are
+    bloodied, you have resist 2 to all damage. At 11th level, this
+    resistance increases to 4. At 21st level, this resistance increases to
+    6."* So the amount it *normally grants* is **2**, and the 11th and 21st
+    lines are out of scope -- `etl.MAX_POWER_LEVEL` stops at 10, so no
+    character this project builds reaches them.
 
-    `todo=` rather than `dropped=`, because the resistance *is* the effect:
-    the bloodied clause only adds 2 to it, so with the number gone nothing
-    plays.
+    **The two halves are a flat resist and a gated one, which is not
+    arithmetic on one number.** `Defences.resist` is a flat value per type
+    and resistances of a type do not stack -- the larger applies -- so
+    `c.resist(2)` twice would still shrug off 2. `resolve.damage` reads the
+    gated form through `_mods` *after* the flat one and **adds** it, so the
+    pair comes to 2 normally and 4 while bloodied. Measured on a board: 10
+    damage lands as 8 and as 6.
 
-    **A second gap sits behind the first and is named here rather than
-    marked**, since a marker names one thing. Even with the feature
-    imported, nothing reads *how much* another row grants -- the reading
-    `c.damage_of(ref)`'s three rows want for damage, wanted for resistance.
-    The import has to land first; there is nothing for a reader to read
-    until it does."""
+    The condition is read off the creature at the moment the damage is
+    totalled rather than from the context, which carries no such key --
+    `c.bloodied(on=c.me)` inside the gate, the shape `p11540` uses for the
+    same reason.
+
+    **What the import would still buy**, so the next reader does not take
+    this row as evidence it is unneeded: a row reading *another* theme's
+    feature, or any row that has to ask how much a feature grants rather
+    than quoting its own. `p16083` is the one that could be quoted.
+    """
+    c.resist(2, until=When.ENCOUNTER, on=c.me)
+    # The printed "increases by 2", which is a second gated resist rather
+    # than a larger flat one -- see the docstring.
+    c.resist(
+        2, until=When.ENCOUNTER, on=c.me,
+        when=lambda ctx: c.bloodied(on=c.me),
+    )
 
 
 @power(
