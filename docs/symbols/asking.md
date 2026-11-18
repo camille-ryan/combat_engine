@@ -153,7 +153,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
 
 - `c.appears_unbloodied(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Enemy attacks never treat you as being bloodied."
-- `c.attacked_me_since(self, who: 'int | None' = None) -> 'bool'`
+- `c.attacked_me_since(self, who: 'int | None' = None, *, opportunity: 'bool' = False, this_turn: 'bool' = False) -> 'bool'`
   - "A target that has attacked you since the end of your last turn."
 - `c.bloodied(self, on: 'int | None' = None) -> 'bool'`
   - Is this creature bloodied -- by its hit points, or by a card.

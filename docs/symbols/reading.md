@@ -248,7 +248,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 ## what has already happened
 
-- `query.attacked_since(world: 'World', victim: 'int', by: 'int', *, since: 'int | None' = None) -> 'bool'`
+- `query.attacked_since(world: 'World', victim: 'int', by: 'int', *, since: 'int | None' = None, opportunity: 'bool' = False) -> 'bool'`
   - Has that creature attacked this one since the boundary?
 - `query.bloodied(world: 'World', eid: 'int', *, asked_by: 'int' = -1) -> 'bool'`
   - Is this creature bloodied -- by its hit points, or by a card saying so.
@@ -278,6 +278,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - What one healing surge is worth: a quarter of maximum, modified.
 - `query.taking_ongoing(world: 'World', eid: 'int', types: 'frozenset[DamageType]' = frozenset()) -> 'bool'`
   - Is this creature burning? Of any of `types`, or of any type at all.
+- `query.turn_began_at(world: 'World', eid: 'int') -> 'int'`
+  - The log position where this creature's own turn began, or -1.
 
 ## the companion
 

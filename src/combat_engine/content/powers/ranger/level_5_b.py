@@ -133,7 +133,6 @@ def _melee_row(ref: str) -> bool:
 
 @power(
     "p10156",
-    dropped=("c.opportunity_since()",),
     level=5,
     cls="ranger",
     usage=DAILY,
@@ -169,13 +168,29 @@ def p10156(c: Cast) -> None:
     out of its square. So the pool excludes the primary and the beast is
     aimed by `c.choose`.
 
-    **The Wisdom rider is NOT written and is the one thing here that
-    cannot be said.** It asks whether that enemy "attacked you with an
-    opportunity attack during your turn", and nothing records an
-    opportunity attack against a creature. `c.hurt_me_since` is the near
-    miss and is a different question -- it answers *damage* since the end
-    of your last turn, from any attack of any kind, so using it would pay
-    the bonus for a creature that merely hit the ranger normally.
+    **The Wisdom rider is written, and "nothing records an opportunity
+    attack against a creature" was false.** Every attack event in this
+    engine carries an `opportunity` flag -- `Hit`, `Miss`,
+    `AttackDeclared` and `AttackRolled` all have the field -- and the bus
+    log keeps them. What was missing was a reader that asked.
+
+    `c.attacked_me_since(who, opportunity=True, this_turn=True)` is it,
+    and both narrowings are new: the verb already read the log for "has
+    that creature attacked me", bounded at the end of my **last** turn.
+    The card wants it bounded at the start of my **current** one and
+    narrowed to opportunity attacks, which is two parameters rather than a
+    facility.
+
+    Worth noting where the old note was right: `c.hurt_me_since` is the
+    near miss and is a different question -- *damage* since the end of your
+    last turn, from any attack of any kind -- so using it would have paid
+    the bonus for a creature that merely hit the ranger normally. That is
+    exactly the mistake `#757` records about this verb's own existence:
+    two rows concluded nothing recorded an attack, when the log did.
+
+    The bonus is `kind="power"` as printed, and `once=True` on each half:
+    `attack` and `damage` are both keys `c.bonus` knows a spend moment for
+    -- the roll -- so the pair lands on this charge and no later one.
     """
     victim = c.target
     if victim is None:
@@ -193,7 +208,17 @@ def p10156(c: Cast) -> None:
         return
     prey = sorted(f for f in c.enemies() if f != victim)
     mark = c.choose(prey, f"{c.ref}: who the beast runs at") if prey else None
-    if mark is not None and c.charge_at(mark, who=pet):
+    if mark is None:
+        return
+    # "If that enemy attacked you with an opportunity attack during your
+    # turn" -- a power bonus to the beast's attack and damage on this
+    # charge, and this charge only. `once=True` spends each as it is read,
+    # which for `attack` and `damage` is the roll itself.
+    if c.attacked_me_since(mark, opportunity=True, this_turn=True):
+        for what in ("attack", "damage"):
+            c.bonus(what, c.wis_mod, kind="power", on=pet, until=When.EOT,
+                    once=True)
+    if c.charge_at(mark, who=pet):
         c.prone(on=mark)
 
 

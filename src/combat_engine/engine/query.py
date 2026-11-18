@@ -4133,14 +4133,46 @@ def since_turn_ended(world: World, eid: int) -> int:
     )
 
 
+def turn_began_at(world: World, eid: int) -> int:
+    """The log position where this creature's own turn began, or -1.
+
+    The boundary half of `since_turn_began`, which returns the events
+    themselves. Two readers wanted the number instead -- a predicate
+    bounded to "during your turn" has nothing to do with the list -- and
+    deriving it by taking the first event of that list is wrong on a turn
+    where nothing has happened yet: the list is empty and there is no
+    first.
+
+    -1 for a creature whose turn has not begun in the log, so a
+    `seq > mark` test reads the whole log rather than nothing. That is the
+    right direction to fail: a card asking "during your turn" on a board
+    with no turns is asking about everything that has happened.
+    """
+    from .events import TurnStart
+
+    for past in reversed(world.bus.log):
+        if isinstance(past, TurnStart) and past.actor == eid and not past.ghost:
+            return past.seq
+    return -1
+
+
 def attacked_since(
-    world: World, victim: int, by: int, *, since: int | None = None
+    world: World, victim: int, by: int, *, since: int | None = None,
+    opportunity: bool = False,
 ) -> bool:
     """Has that creature attacked this one since the boundary?
 
     `AttackDeclared` rather than `Hit`: the printed line is "a target that
     has **attacked** you", which a miss satisfies. Declared rather than
     rolled because a cancelled attack was still an attack made.
+
+    **`opportunity` narrows it to an opportunity attack**, which `p10156`
+    prints -- *"if that enemy attacked you with an opportunity attack
+    during your turn"* -- and whose note said "nothing records an
+    opportunity attack against a creature". Every attack event has carried
+    an `opportunity` flag all along; what was missing was this reader
+    asking about it. Same shape as the two rows `#757` found, which had
+    each concluded nothing recorded an attack at all.
     """
     mark = since_turn_ended(world, victim) if since is None else since
     return any(
@@ -4148,6 +4180,7 @@ def attacked_since(
         and e.kind == "AttackDeclared"
         and getattr(e, "attacker", None) == by
         and getattr(e, "target", None) == victim
+        and (not opportunity or getattr(e, "opportunity", False))
         for e in world.bus.log
     )
 

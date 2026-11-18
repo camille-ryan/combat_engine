@@ -16370,6 +16370,144 @@ def a_species_rider_pays_only_for_its_own_categories(out: Result) -> None:
     # `level_2_b` describes wrong, so which assertion covers it matters.
 
 
+def a_rider_keyed_on_an_opportunity_attack(out: Result) -> None:
+    """*"If that enemy attacked you with an opportunity attack during your
+    turn, your beast companion gains a power bonus equal to your Wisdom
+    modifier to the attack rolls and damage rolls on the secondary
+    attack."* -- `p10156`.
+
+    **The marker said this "cannot be said" and that nothing records an
+    opportunity attack against a creature.** Every attack event in the
+    engine carries an `opportunity` flag -- `Hit`, `Miss`,
+    `AttackDeclared`, `AttackRolled` -- and the bus log keeps them. What
+    was missing was a reader asking: `c.attacked_me_since` already walked
+    the log for "has that creature attacked me", bounded at the end of my
+    **last** turn, so the card needed two narrowings rather than a
+    facility.
+
+    **Four reader arms, because the two narrowings fail differently.** An
+    ordinary attack this turn must not count -- that is `opportunity=` --
+    and an opportunity attack **before** my turn began must not either,
+    which is `this_turn=`. A rule asserting only the positive case would
+    pass with either narrowing deleted, and `c.hurt_me_since` was the near
+    miss the row's old note correctly rejected for exactly that reason.
+
+    Then the row arm, because the reader working is not the clause working.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import (
+        AttackDeclared,
+        AttackRolled,
+        TurnStart,
+    )
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    def staged(when: str) -> bool:
+        """Ask the reader with an attack staged `when`."""
+        world, me, _ = _board("p10156", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return False
+        foe = foes[0]
+        c = Cast(world=world, me=me, ref="p10156")
+        if when == "before":
+            world.bus.emit(AttackDeclared(attacker=foe, target=me,
+                                          power="drivers", vs=Defense.AC,
+                                          opportunity=True))
+        world.bus.emit(TurnStart(actor=me, round=world.round))
+        if when == "opportunity":
+            world.bus.emit(AttackDeclared(attacker=foe, target=me,
+                                          power="drivers", vs=Defense.AC,
+                                          opportunity=True))
+        elif when == "ordinary":
+            world.bus.emit(AttackDeclared(attacker=foe, target=me,
+                                          power="drivers", vs=Defense.AC))
+        return c.attacked_me_since(foe, opportunity=True, this_turn=True)
+
+    out.that(staged("opportunity"),
+             "an opportunity attack on the ranger during its own turn"
+             " answers True -- the printed condition",
+             f"{staged('opportunity')}")
+    out.that(not staged("nothing"),
+             "with no attack at all it answers False", f"{staged('nothing')}")
+    out.that(not staged("ordinary"),
+             "an ORDINARY attack this turn answers False -- the"
+             " `opportunity=` narrowing, and the assertion `c.hurt_me_since`"
+             " would have failed",
+             f"{staged('ordinary')}")
+    out.that(not staged("before"),
+             "and an opportunity attack BEFORE the turn began answers False"
+             " -- the `this_turn=` narrowing, which the verb's old boundary"
+             " (the end of my last turn) would have counted",
+             f"{staged('before')}")
+
+    # -- and the row pays it on the beast's actual charge -----------------
+    #
+    # **Read off the beast's `AttackRolled`, not off `Mods` afterwards.**
+    # The bonus is laid `once=True`, so the charge's own roll spends it and
+    # a reading taken after the body has run finds zero -- which is the
+    # bonus working. An earlier draft asserted on `Mods.total` and failed
+    # against correct code.
+    def charged(with_opportunity: bool) -> tuple[int, int]:
+        """The beast's charge bonus, and what the victim lost."""
+        world, me, _ = _board("p10156", 1)
+        foes = sorted(enemies(world, me))
+        if len(foes) < 2:
+            return -1, -1
+        c = Cast(world=world, me=me, ref="p10156")
+        pet = c.companion()
+        if pet is None:
+            return -1, -1
+        world.bus.emit(TurnStart(actor=me, round=world.round))
+        # The beast is aimed at an enemy that is NOT the primary target --
+        # the card charges it at somebody else, and the row's pool says so.
+        c.target = foes[0]
+        mark = foes[1]
+        if with_opportunity:
+            world.bus.emit(AttackDeclared(attacker=mark, target=me,
+                                          power="drivers", vs=Defense.AC,
+                                          opportunity=True))
+        rolled: list[int] = []
+        world.bus.on(AttackRolled,
+                     lambda ev: rolled.append(ev.bonus)
+                     if ev.attacker == pet else None)
+        hurt = must(world.get(mark, Health), "the beast's prey")
+        before = hurt.hp
+        world.decider = (
+            lambda actor, kind, options, prompt="":
+            mark if mark in options else (options[0] if options else None)
+        )
+        world.rng.loaded = 20
+        REGISTRY["p10156"].body(c)
+        return (rolled[-1] if rolled else -1, before - hurt.hp)
+
+    cold = charged(False)
+    hot = charged(True)
+    probe_world, probe_me, _ = _board("p10156", 1)
+    probe = Cast(world=probe_world, me=probe_me, ref="p10156")
+    out.that(probe.wis_mod > 0,
+             "the ranger's Wisdom modifier is positive, so the bonus shows"
+             " as a difference rather than hiding in a zero",
+             f"+{probe.wis_mod}")
+    out.that(cold[0] > 0 and hot[0] > 0,
+             "the beast charges in both arms, so there is a roll to compare",
+             f"bonus {cold[0]} against {hot[0]}")
+    out.that(hot[0] - cold[0] == probe.wis_mod,
+             "and with the opportunity attack staged its charge rolls with"
+             " Wisdom MORE attack bonus -- the clause, end to end, as a"
+             " delta on one board",
+             f"{cold[0]} -> {hot[0]}, Wisdom {probe.wis_mod}")
+    out.that(hot[1] - cold[1] == probe.wis_mod,
+             "and the prey loses Wisdom more hit points -- the card gives"
+             " the bonus to attack AND damage rolls, and a body laying one"
+             " would pass the line above",
+             f"{cold[1]} -> {hot[1]} damage")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -98843,6 +98981,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "opportunity_rider": (a_rider_keyed_on_an_opportunity_attack,
+                          "a rider that pays only for an OPPORTUNITY attack"
+                          " and only for one made during your own turn"),
     "beast_rider": (a_species_rider_pays_only_for_its_own_categories,
                     "a Beast: rider that pays for its own categories and"
                     " not for owning any beast at all"),

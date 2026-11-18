@@ -1128,7 +1128,7 @@ READERS: dict[str, list[str]] = {
         "attacked_since", "bloodied", "damaged_since", "dropped_since",
         "hit_me_this_turn", "in_form", "granted_amount", "lingers",
         "my_hits_this_turn", "my_misses_this_turn", "shaped",
-        "since_turn_began", "since_turn_ended", "surge_value",
+        "since_turn_began", "turn_began_at", "since_turn_ended", "surge_value",
         "taking_ongoing",
     ],
     "the companion": [

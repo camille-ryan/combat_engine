@@ -22783,17 +22783,34 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         )
         return True
 
-    def attacked_me_since(self, who: int | None = None) -> bool:
+    def attacked_me_since(
+        self, who: int | None = None, *, opportunity: bool = False,
+        this_turn: bool = False,
+    ) -> bool:
         """"A target that has attacked you since the end of your last turn."
 
         Reads the bus log rather than a remembered set -- see
         `query.since_turn_ended`, which is where the two rows that wanted
         this had each concluded nothing recorded it. #757.
+
+        **Two narrowings, both off by default, so no caller moves.**
+        `opportunity=True` asks only about an opportunity attack, and
+        `this_turn=True` moves the boundary from the end of your **last**
+        turn to the start of your **current** one. `p10156` prints both at
+        once -- *"if that enemy attacked you with an opportunity attack
+        during your turn"* -- and its note had said "nothing records an
+        opportunity attack against a creature", which is the same mistake
+        `#757` records about this verb's own existence: the flag is on
+        every attack event and no reader asked.
         """
-        from .query import attacked_since
+        from .query import attacked_since, turn_began_at
 
         them = self._who(who)
-        return them is not None and attacked_since(self.world, self.me, them)
+        if them is None:
+            return False
+        mark = turn_began_at(self.world, self.me) if this_turn else None
+        return attacked_since(self.world, self.me, them, since=mark,
+                              opportunity=opportunity)
 
     def hurt_me_since(
         self, who: int | None = None, *, or_an_ally: bool = False
