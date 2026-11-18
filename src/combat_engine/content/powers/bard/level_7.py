@@ -201,7 +201,6 @@ def p14467(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
     trigger="an ally within 10 squares of you ends its turn without having attacked",
     on=Trigger(TurnEnd, _idle_ally, "an ally ends its turn without having attacked"),
-    dropped=("c.grant_attack(ignoring=)",),
 )
 def p14468(c: Cast) -> None:
     """**The claim is true and now carries the marker.**
@@ -214,8 +213,17 @@ def p14468(c: Cast) -> None:
     `reentrant`, and `c.charge_at` takes `victim`, `ref` and `who`.
     Neither forwards an `ignoring`.
 
-    So the gate is reachable and the door is not, which is a narrower gap
-    than "there is no way past it" and the marker says which. #1341.
+    **The door is open now, and the diagnosis above is why it was one
+    argument rather than a facility.** `ignoring=` threads
+    `c.grant_attack` and `c.charge_at` -> `dsl.use` -> `dsl.usable` ->
+    `query.can_act`, which has taken the argument all along.
+
+    `Condition.STUNNED` is passed, not dominated: `can_act` takes **one**
+    condition, and of the two the card names, stunned is the one that
+    stops a creature acting at all -- a dominated creature acts, under
+    somebody else's direction, so `can_act` does not refuse it. The card
+    lists both because a player reads the sentence; the engine only has to
+    look past the one that blocks. #1341.
     """
     mate = getattr(c.trigger, "actor", None)
     if mate is None:
@@ -228,9 +236,10 @@ def p14468(c: Cast) -> None:
         return
     extra = c.roll("1d10")
     if c.may("charge rather than swing from where it stands", who=mate):
-        c.charge_at(mark, who=mate)
+        c.charge_at(mark, who=mate, ignoring=Condition.STUNNED)
     else:
-        c.grant_attack(mate, on=mark, damage_bonus=extra)
+        c.grant_attack(mate, on=mark, damage_bonus=extra,
+                       ignoring=Condition.STUNNED)
 
 
 @power(

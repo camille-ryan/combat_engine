@@ -24857,6 +24857,57 @@ def one_effect_two_enders(out: Result) -> None:
                  f"spent on a failure={spent_hopeless},"
                  f" on a success={spent_certain}")
 
+    # -- `ignoring=`: a granted attack that looks past one condition -----
+    #
+    # `p14468` grants an attack *"even if the target is dominated or
+    # stunned"*. `query.can_act` has taken `ignoring` all along and no row
+    # could pass it, which is the narrower gap that row's marker named:
+    # *"the gate is reachable and the door is not."*
+    #
+    # **The control is the half that matters**: without the argument the
+    # stunned ally must still be refused, or every granted attack in the
+    # tree starts ignoring conditions.
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When as _When
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import can_act
+    from combat_engine.engine.types import Condition
+
+    board, caster, _ = _audit.board("p14468", 1, pose=True)
+    friends = [a for a in _audit._allies_of(board, caster) if a != caster]
+    marks = [f for f in _audit._foes(board, caster)
+             if _audit.alive(board, f)]
+    if not friends or not marks:
+        out.skip("p14468's board has no ally and foe pair")
+        return
+    friend, mark = friends[0], marks[0]
+    seat = board.get(mark, Position)
+    if seat is None or seat.square is None:
+        out.skip("the foe has no square to stand beside")
+        return
+    # Beside the foe, so reach is not the variable under test.
+    place(board, friend, (seat.square[0] + 1, seat.square[1]))
+    helper = Cast(world=board, me=caster, ref="drivers")
+    helper.condition(Condition.STUNNED, on=friend,
+                     until=_When.ENCOUNTER)
+
+    out.that(not can_act(board, friend)
+             and can_act(board, friend, ignoring=Condition.STUNNED),
+             "a stunned creature cannot act, and can when the stun is"
+             " looked past -- the reader this threads to",
+             f"plain={can_act(board, friend)},"
+             f" ignoring={can_act(board, friend, ignoring=Condition.STUNNED)}")
+
+    def granted(ignoring: Condition | None) -> bool:
+        return bool(helper.grant_attack(friend, on=mark, ignoring=ignoring))
+
+    out.that(not granted(None),
+             "**and a granted attack is still refused without the"
+             " argument** -- the control, or every grant in the tree starts"
+             " ignoring conditions")
+    out.that(granted(Condition.STUNNED),
+             "while `ignoring=` lets the printed 'even if stunned' through")
+
 
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.

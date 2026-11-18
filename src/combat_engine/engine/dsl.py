@@ -4115,7 +4115,7 @@ def keywords_of(world: Any, actor: int | None, p: Any) -> frozenset[Keyword]:
 def usable(
     world: World, actor: int, p: Power, *, dying: bool = False, spent_ok: bool = False,
     augment: int = 0, aimed: bool = False, borrowed: bool = False,
-    board: bool = False,
+    board: bool = False, ignoring: Condition | None = None,
 ) -> tuple[bool, str]:
     """Can this power be used, and if not, why not?
 
@@ -4170,7 +4170,14 @@ def usable(
     # one is armed at the start of the fight, and nothing should re-arm it on
     # a creature that cannot move.
     no_action = p.action is ActionType.NONE and bool(p.triggers)
-    if not dying and not no_action and not can_act(world, actor):
+    # **`ignoring` is one named condition the gate looks past**, for the
+    # printed line that says so: `p14468` grants an attack *"even if the
+    # target is dominated or stunned"*. `query.can_act` has taken the
+    # argument all along and nothing could pass it from a row, which is
+    # the narrower gap that row's marker named -- "the gate is reachable
+    # and the door is not".
+    if (not dying and not no_action
+            and not can_act(world, actor, ignoring=ignoring)):
         return False, "cannot act"
     # **The stance you are already in.** A stance ends whatever you were
     # in and starts itself, so re-taking the same one is a no-op that
@@ -4920,6 +4927,12 @@ def use(
     #: which is every caller but the board.
     source: frozenset[Square] | None = None,
     spend: bool = True,
+    #: **One condition the can-act gate looks past**, for the printed line
+    #: that says so: `p14468` grants an attack *"even if the target is
+    #: dominated or stunned"*. Handed to `usable`, which hands it to
+    #: `query.can_act` -- an argument that existed with no way to reach it
+    #: from a row. `None` for every other caller.
+    ignoring: Condition | None = None,
     trigger: Any = None,
     opportunity: bool = False,
     charge: bool = False,
@@ -4999,7 +5012,7 @@ def use(
     # `usable` that this turns off, and `_within_reach` further down, which is
     # the question that replaces it. #429.
     ok, _why = usable(world, actor, p, dying=dying, spent_ok=reentrant,
-                      borrowed=borrowed, board=board,
+                      borrowed=borrowed, board=board, ignoring=ignoring,
                       augment=augment, aimed=targets is not None)
     if not ok:
         return False

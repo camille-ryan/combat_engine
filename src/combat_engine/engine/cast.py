@@ -3821,6 +3821,7 @@ class Cast:
         attack_bonus: int = 0,
         trigger: Any = None,
         reentrant: bool = False,
+        ignoring: Condition | None = None,
     ) -> bool:
         """Let somebody else make an attack, now, out of turn.
 
@@ -3925,7 +3926,7 @@ class Cast:
                 self.world, who, chosen, targets=[target], spend=False,
                 trigger=trigger if trigger is not None else self.trigger,
                 granted_by=self.me, granted_via=self.ref,
-                reentrant=reentrant,
+                reentrant=reentrant, ignoring=ignoring,
             )
         finally:
             if lent and known is not None and chosen in known.known:
@@ -10418,7 +10419,8 @@ class Cast:
             walk(self.world, runner, list(best[2]), kind=kind)
         return adjacent(self.world, runner, victim)
 
-    def charge_at(self, victim: int, ref: str = "", *, who: int | None = None) -> bool:
+    def charge_at(self, victim: int, ref: str = "", *, who: int | None = None,
+                  ignoring: Condition | None = None) -> bool:
         """Run at somebody and swing, with the swing marked as a charge.
 
         `actions.perform` builds a charge out of a walk plus
@@ -10428,6 +10430,14 @@ class Cast:
         both modifier contexts, which is what every charge rider reads.
 
         Three content files had grown their own copy of this.
+
+        **`ignoring` is one condition the can-act gate looks past**, for
+        the printed line that says so -- `p14468`: *"the target can either
+        make a basic attack or charge an enemy as a free action, **even if
+        the target is dominated or stunned**"*. `query.can_act` has taken
+        that argument all along and no row could pass it, which is the
+        narrower gap that row's marker named: *"the gate is reachable and
+        the door is not"*. Threaded through `dsl.use` to `dsl.usable`.
         """
         from .components import Movement, Powers
         from .dsl import basic_options, use
@@ -10471,6 +10481,7 @@ class Cast:
             return use(
                 self.world, runner, ref, targets=[victim], spend=False,
                 charge=True, granted_by=self.me, granted_via=self.ref,
+                ignoring=ignoring,
             )
         finally:
             if mover is not None:
