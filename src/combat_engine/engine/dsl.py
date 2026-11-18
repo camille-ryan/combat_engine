@@ -4744,12 +4744,23 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
             return False
     if aim.bloodied is not None:
         from .components import Health
+        from .query import bloodied as _bloodied
 
         hp = world.get(target, Health)
         # A creature with no `Health` is scenery, and scenery is neither
         # bloodied nor unbloodied -- so it fails either way round rather than
         # defaulting into one of them.
-        if hp is None or hp.bloodied is not aim.bloodied:
+        #
+        # **Through `query.bloodied` and not off `Health.bloodied`**, which
+        # is what this read used to do -- so `c.considered_bloodied`'s "for
+        # all purposes" reached 585 `c.bloodied` callers and not a single
+        # target line. Its own docstring names that gap. With `actor` in
+        # hand the asker is free, which is also what lets `p16001`'s
+        # *"enemy attacks never treat you as being bloodied"* be said:
+        # the concealing hold is read only when somebody has asked.
+        if hp is None or _bloodied(world, target, asked_by=actor) is not (
+            aim.bloodied
+        ):
             return False
     if aim.hit_by_me_this_turn and target not in {
         # **`actor`, not the target.** "One creature **it** hit this turn"

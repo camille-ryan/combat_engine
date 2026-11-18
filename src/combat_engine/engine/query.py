@@ -611,8 +611,17 @@ def targetable(world: World, eid: int) -> bool:
 #: two places, so neither can drift from the other.
 COUNTS_AS_BLOODIED = "counts-as-bloodied"
 
+#: The hold `c.appears_unbloodied` lays -- `COUNTS_AS_BLOODIED` run
+#: backwards, and `p16001` is the card: *"enemy attacks never treat you as
+#: being bloodied"*.
+#:
+#: Read only when `bloodied` is given an `asked_by`, because the clause is
+#: about who is looking. A hold that answered the askerless question would
+#: hide the state from the creature's own rows as well, which no card says.
+HIDES_BLOODIED = "hides-bloodied"
 
-def bloodied(world: World, eid: int) -> bool:
+
+def bloodied(world: World, eid: int, *, asked_by: int = -1) -> bool:
     """Is this creature bloodied -- by its hit points, or by a card saying so.
 
     **`Health.bloodied` is the arithmetic and not the whole question.** Four
@@ -628,6 +637,23 @@ def bloodied(world: World, eid: int) -> bool:
     """
     from .components import Health
 
+    # **`asked_by` is who wants to know, and only one clause cares.**
+    # `p16001` prints *"enemy attacks never treat you as being bloodied"* --
+    # from the creature's own side it is bloodied as usual, and its own
+    # rows that need it to be go on working. So the default is "nobody
+    # asked": a reader that has an asker in hand passes one, and the 585
+    # that do not are unchanged.
+    #
+    # **`asked_by >= 0` is an early-out, not a second gate**, and a plant
+    # established that: removing it changes nothing, because the enemy
+    # test below cannot match `-1` either. It stays because this function
+    # is asked constantly and the test it skips walks every effect on the
+    # creature -- but the clause that decides is the enemy test, which is
+    # what the driver plants.
+    if asked_by >= 0 and any(
+        eff.label == HIDES_BLOODIED for eff in world.effects.of(eid)
+    ) and asked_by in enemies(world, eid):
+        return False
     health = world.get(eid, Health)
     if health is not None and health.bloodied:
         return True

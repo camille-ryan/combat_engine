@@ -1280,20 +1280,30 @@ def p16000(c: Cast) -> None:
         Trigger(Bloodied, about_me, "you are bloodied by an attack"),
         Trigger(DamageApplied, _hurt_while_bloodied, "you are damaged while bloodied"),
     ),
-    dropped=("c.appears_unbloodied()",),
 )
 def p16001(c: Cast) -> None:
     """The save bonus is narrowed off the hold's own keywords -- see
     `_saving_against`; the context carries them and the old note here was
     reading the event rather than the modifier's context.
 
-    **The dropped clause stays, and the reason it used to give was the
-    wrong one.** "Nothing hides a creature's bloodied state" reads as a
-    general absence, and the opposite direction is built and working:
-    `c.considered_bloodied` lays a hold that `query.bloodied` reads, so
-    being bloodied is already a *question* rather than only arithmetic on
-    `Health`. This clause is that mechanism run backwards, which is one
-    hold and not a mechanism.
+    **The last clause is written, and this row's own note is what worked
+    out that it was cheap.** "Nothing hides a creature's bloodied state"
+    read as a general absence and was not one: `c.considered_bloodied`
+    already lays a hold `query.bloodied` reads, so being bloodied was
+    already a *question*. `c.appears_unbloodied` is that mechanism run
+    backwards -- one hold.
+
+    **Scoped to who is asking**, which is the printed clause: *"enemy
+    attacks never treat you as being bloodied"*. From this creature's own
+    side it is bloodied as usual, so its own rows that need it to be go on
+    working, and `query.bloodied` consults the hold only when handed an
+    asker.
+
+    Routing the **target line** through that question is what makes the
+    clause visible at all, and it was a gap of its own:
+    `dsl._stands_right` read `Health.bloodied` directly, so
+    `c.considered_bloodied`'s "for all purposes" reached 585 `c.bloodied`
+    callers and not one of the 18 rows with a bloodied target line.
 
     What is genuinely in the way is one thing, and it is what the symbol
     stands for: the printed line is "**enemy** attacks never treat you as
@@ -1313,6 +1323,7 @@ def p16001(c: Cast) -> None:
         "save", 5, kind="power", on=c.me, until=When.ENCOUNTER,
         when=_saving_against(Keyword.CHARM, Keyword.FEAR),
     )
+    c.appears_unbloodied(on=c.me, until=When.ENCOUNTER)
 
 
 @power(

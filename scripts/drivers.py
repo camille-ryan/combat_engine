@@ -24726,6 +24726,116 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def being_bloodied_is_a_question_with_an_asker(out: Result) -> None:
+    """"Enemy attacks never treat you as being bloodied."
+
+    `p16001`, and its own note is what made this cheap: its first reason --
+    *"nothing hides a creature's bloodied state"* -- read as a general
+    absence and was not one. `c.considered_bloodied` already laid a hold
+    `query.bloodied` reads, so being bloodied was already a **question**.
+    `c.appears_unbloodied` is that mechanism run backwards.
+
+    **Scoped to the asker, which is the printed clause.** From the
+    creature's own side it is bloodied as usual, so its own rows that need
+    it to be go on working. 585 `c.bloodied` callers have nobody in hand
+    and are unchanged.
+
+    **And routing the target line through the question closed a second,
+    unmarked gap.** `dsl._stands_right` read `Health.bloodied` directly, so
+    `c.considered_bloodied`'s *"for all purposes"* reached those 585
+    callers and **not one** of the 18 rows with a bloodied target line.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.query import bloodied, enemies
+
+    #: A row whose target line is "one bloodied creature", aimed at an
+    #: enemy. The ally-aimed ones cannot show this: the creature doing the
+    #: hiding has to be in the asker's pool to begin with, and the first
+    #: fixture tried was `p9310` -- "You or one ally" -- which read False
+    #: before and after and proved nothing.
+    HUNTER = "m5399a1"
+
+    def board() -> tuple[Any, int, int] | None:
+        world, me, _ = _audit.board(HUNTER, 1)
+        prey = sorted(enemies(world, me))
+        if not prey:
+            return None
+        victim = prey[0]
+        return world, me, victim
+
+    pose = board()
+    if pose is None:
+        out.skip("the hunter's board fielded no prey")
+        return
+    world, me, victim = pose
+    aim = REGISTRY[HUNTER]
+    hurt = world.need(victim, Health)
+    hurt.hp = max(1, hurt.max_hp // 2 - 1)
+
+    def in_pool(w: object, hunter: int, who: int) -> bool:
+        return who in _dsl.candidates(w, hunter, aim, None, 0, 0)
+
+    out.that(bloodied(world, victim) and in_pool(world, me, victim),
+             "a bloodied creature is in the pool of a row that hunts one",
+             f"bloodied={bloodied(world, victim)},"
+             f" pooled={in_pool(world, me, victim)}")
+
+    Cast(world=world, me=victim, ref="drivers-p16001").appears_unbloodied(
+        on=victim)
+    out.that(not in_pool(world, me, victim),
+             "**and leaves it once the concealment stands** -- which is the"
+             " clause, and it is only visible because the target line goes"
+             " through `query.bloodied` rather than `Health.bloodied`",
+             f"pooled={in_pool(world, me, victim)}")
+    out.that(bloodied(world, victim),
+             "**while still reading bloodied to nobody in particular** --"
+             " 585 `c.bloodied` callers have no asker in hand and must be"
+             " unchanged, and the creature's own rows that need it to be"
+             " bloodied go on working",
+             f"askerless={bloodied(world, victim)}")
+    out.that(not bloodied(world, victim, asked_by=me),
+             "and False to the enemy that asked",
+             f"asked_by the hunter={bloodied(world, victim, asked_by=me)}")
+    out.that(bloodied(world, victim, asked_by=victim),
+             "**and True when it asks about itself** -- the asker has to be"
+             " an enemy, which is what stops this being a blanket"
+             " concealment",
+             f"asked_by itself={bloodied(world, victim, asked_by=victim)}")
+
+    # ---- the second gap, the other way round ---------------------------
+    pose = board()
+    world, me, victim = pose
+    healthy = world.need(victim, Health)
+    healthy.hp = healthy.max_hp
+    out.that(not in_pool(world, me, victim),
+             "a healthy creature is not in that pool",
+             f"pooled={in_pool(world, me, victim)}")
+    Cast(world=world, me=victim, ref="drivers-considered").considered_bloodied(
+        on=victim)
+    out.that(in_pool(world, me, victim),
+             "**and `c.considered_bloodied` now puts it there** -- the"
+             " second gap, unmarked and closed by the same routing:"
+             " 'considered bloodied for all purposes' reached 585"
+             " `c.bloodied` callers and none of the 18 bloodied target"
+             " lines",
+             f"pooled={in_pool(world, me, victim)}")
+    out.that(not REGISTRY["p16001"].dropped,
+             "and p16001 carries no marker",
+             f"marks {REGISTRY['p16001'].dropped!r}")
+    world, me, _ = _audit.board("p16001", 1)
+    use(world, me, "p16001", targets=[me], spend=False)
+    out.that(any(e.label == "hides-bloodied"
+                 for e in world.effects.of(me)),
+             "**and p16001 itself lays the hold when it is used**, which"
+             " the arms above do not say: they call the verb directly",
+             f"holds {[e.label for e in world.effects.of(me) if e.by == 'p16001']}")
+
+
 def a_recharge_held_shut_and_a_terrain_exemption_read(out: Result) -> None:
     """Two rows whose markers had already worked out what they cost.
 
@@ -93876,6 +93986,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "unbloodied": (
+        being_bloodied_is_a_question_with_an_asker,
+        "being bloodied is a question with an asker, so a card can hide it"
+        " from enemies only (p16001)",
+    ),
     "no_recharge": (
         a_recharge_held_shut_and_a_terrain_exemption_read,
         "c.no_recharge holds a recharge shut, and query.ignores_difficult"

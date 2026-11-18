@@ -234,7 +234,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 - `query.attacked_since(world: 'World', victim: 'int', by: 'int', *, since: 'int | None' = None) -> 'bool'`
   - Has that creature attacked this one since the boundary?
-- `query.bloodied(world: 'World', eid: 'int') -> 'bool'`
+- `query.bloodied(world: 'World', eid: 'int', *, asked_by: 'int' = -1) -> 'bool'`
   - Is this creature bloodied -- by its hit points, or by a card saying so.
 - `query.damaged_since(world: 'World', victim: 'int', by: 'int', *, since: 'int | None' = None, or_an_ally: 'bool' = False) -> 'bool'`
   - Has that creature dealt damage to this one since the boundary?

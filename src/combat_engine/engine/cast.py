@@ -1019,6 +1019,38 @@ class Cast:
         who = self._who(on)
         return who is not None and _bloodied(self.world, who)
 
+    def appears_unbloodied(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Enemy attacks never treat you as being bloodied."
+
+        `c.considered_bloodied` below run backwards, and one hold rather
+        than a mechanism -- which is what `p16001`'s own note worked out
+        after its first reason ("nothing hides a creature's bloodied
+        state") turned out to describe a general absence that was not one.
+
+        **Scoped to who is asking, which is the whole of the printed
+        clause.** From the creature's own side it is bloodied as usual and
+        its own rows that need it to be go on working; `query.bloodied`
+        reads this hold only when given an `asked_by`, and answers False
+        only when that asker is an enemy.
+
+        So it is weaker than a blanket concealment on purpose. A reader
+        with nobody in hand -- 585 `c.bloodied` callers -- is unchanged,
+        which is also why this cannot be said as a flag on `Health`.
+
+        Defaults to the caster, like `c.considered_bloodied`: every card
+        printing it is about the creature using it.
+        """
+        from .query import HIDES_BLOODIED
+
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.world.effects.apply(
+            who, self.me, until, label=HIDES_BLOODIED, by=self.ref,
+        )
+
     def considered_bloodied(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
     ) -> Effect | None:
