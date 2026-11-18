@@ -276,22 +276,34 @@ def p11470(c: Cast) -> None:
     `actions.GRANTABLE` and read by the action menu all along, and several
     monster rows grant it this way. #1342.
 
-    What remains is "the zone is rough going for creatures that fly too",
-    and the marker is **measured** rather than assumed -- the two near
-    misses were checked and neither reaches it.
+    What remains is "the zone is rough going for creatures that fly too".
 
-    `Zone.difficult_for` is a set of creature ids written by
-    `c.difficult_for`, and flight *is* askable (`Movement.modes` carries
-    `{"fly": n}`), so the clause looks constructible. It is not: flight
-    bypasses difficult ground before the adder is consulted. Driven on
-    this row's own board, squares reachable with 4 --
+    **The measurement this note used to carry was backwards, and the
+    marker survives for the opposite reason.** It said *"flight bypasses
+    difficult ground before the adder is consulted"*, with 15 / 17 / 17
+    reachable squares. That is a true statement about `c.difficult_for`,
+    the per-creature adder, and false about `c.zone(difficult=)` -- which
+    is what this row lays. Re-driven on this row's own board, squares
+    reachable with 4:
 
-        walking                              15
-        flying                               17
-        flying, after c.difficult_for        17
+        clear ground          walking 65    flying 69
+        this row's zone       walking 45    flying 57
 
-    -- so the adder moves nothing for a creature in the air, which is the
-    one case this clause is about."""
+    -- so a flier **is** slowed, by 12 squares of ground it is not
+    touching.
+
+    The clause therefore plays correctly today and does so **by
+    accident**: PHB prints the general rule that a flying creature is not
+    hampered by difficult terrain, and this engine does not have it, so
+    there is nothing for the printed exception to except. 447 of 3,142
+    monsters carry a `fly` mode and all of them are slowed by every rough
+    square in the game.
+
+    The marker stays because landing that general rule inverts this row:
+    the moment fliers are exempt, this zone stops catching them and the
+    printed sentence becomes false. The flag and the rule are one change
+    and `#1364` holds it, with the five sibling rows that print the same
+    exception."""
     if c.strike():
         c.damage(c.w(), c.wis_mod)
     c.slide(1)
