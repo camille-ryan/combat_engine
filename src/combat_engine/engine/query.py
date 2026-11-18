@@ -3009,6 +3009,25 @@ def _dimmed(world: World, square: Square) -> Light:
 UNLIMITED_SENSE = 100
 
 
+#: The prefix a **suppressed** sense is keyed under -- `"no blindsight"`.
+#:
+#: A separate key rather than arithmetic on the sense's own, and `p16486`'s
+#: note is the argument: the radius is summed through `Mods.total`, so
+#: subtracting `UNLIMITED_SENSE` works until something grants the sense
+#: twice and then the creature still has it. A suppressor cannot be
+#: out-voted that way.
+#:
+#: Read by both `sees_in` and `has_sense`, which are the two questions
+#: about a sense and have to agree -- that is the shape `#648` made a gate
+#: out of.
+NO_SENSE = "no "
+
+
+def _suppressed(mods: Mods, sense: str) -> bool:
+    """Has this sense been taken away, whatever its radius says?"""
+    return mods.total(f"{NO_SENSE}{sense}", {}) > 0
+
+
 #: The order the levels compare in. `Light` is a `StrEnum`, so `<` on it is
 #: alphabetical -- "bright" < "dark" < "dim" -- which is wrong twice over.
 _DARKER = {Light.BRIGHT: 0, Light.DIM: 1, Light.DARK: 2}
@@ -3042,6 +3061,8 @@ def sees_in(world: World, eid: int, level: Light, distance: int = 0) -> bool:
         absent. `UNLIMITED_SENSE` is what the verbs store when the card
         prints no range, so the comparison needs no second branch.
         """
+        if _suppressed(mods, key):
+            return False
         radius = mods.total(key, {})
         return radius > 0 and radius >= distance
 
@@ -3068,7 +3089,9 @@ def has_sense(world: World, eid: int, sense: str) -> bool:
     `"blindsight"`, `"tremorsense"`.
     """
     mods = world.get(eid, Mods)
-    return bool(mods is not None and mods.items and mods.total(sense, {}) > 0)
+    if mods is None or not mods.items or _suppressed(mods, sense):
+        return False
+    return mods.total(sense, {}) > 0
 
 
 def light_concealment(world: World, attacker: int, target: int) -> Cover:

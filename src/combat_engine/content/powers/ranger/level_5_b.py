@@ -481,7 +481,6 @@ def p16480(c: Cast) -> None:
 
 @power(
     "p16486",
-    dropped=("c.lose_sense()",),
     level=5,
     cls="ranger",
     usage=DAILY,
@@ -499,17 +498,23 @@ def p16486(c: Cast) -> None:
     `query.sees_in` reads them, and `query.has_sense` is the public
     per-key reader written for three rows that ask about one. #1341.
 
-    What is missing is the taking-away. Both are stored as modifier keys
-    whose value is the printed radius, so a penalty of
-    `query.UNLIMITED_SENSE` would zero one -- and **no row in the tree
-    does that**, this would be the first, and it is fragile in the way
-    that matters: a creature granted the sense twice would still have it.
-    So this wants `c.lose_sense`, the suppressor the pair never got,
-    rather than one row doing arithmetic on somebody else's key.
+The taking-away is `c.lose_sense`, and this row's own note is why it
+    is a **suppressing key** rather than arithmetic: the radius is summed
+    through `Mods.total`, so subtracting `query.UNLIMITED_SENSE` works
+    until something grants the sense twice and then the creature still has
+    it. A suppressor cannot be out-voted.
+
+    Both readers consult it -- `query.sees_in` for the light model and
+    `query.has_sense` for the three rows that ask whether a creature has
+    one at all. They have to agree: a sense suppressed for one and not the
+    other is the shape `#648` built a gate against.
     """
     if c.strike():
         c.damage(c.w(2), c.attack_mod)
         c.dazed(until=When.SAVE_ENDS)
     else:
         c.half_damage(c.w(2), c.attack_mod)
+    # **An Effect line, so it lands on a miss too** -- the daze above is
+    # the Hit half and this is not.
+    c.lose_sense("blindsight", "tremorsense", until=When.EONT)
 

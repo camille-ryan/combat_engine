@@ -24763,6 +24763,139 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_sense_can_be_taken_away(out: Result) -> None:
+    """"The target loses blindsight and tremorsense until the end of your
+    next turn."
+
+    `c.blindsight` and `c.tremorsense` store the printed radius in a
+    `Mods` key, and `p16486`'s note is the argument for why taking one
+    away is **not** arithmetic on that key: `Mods.total` sums, so
+    subtracting `query.UNLIMITED_SENSE` works until something grants the
+    sense twice and then the creature still has it.
+
+    So `c.lose_sense` is its own key, and **both** readers consult it --
+    `query.sees_in` for the light model and `query.has_sense` for the
+    rows that ask whether a creature has one at all. Those two have to
+    agree: `#648` made a gate out of a reader that existed and was not
+    consulted, and a sense suppressed for one and not the other is the
+    same fault.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import alive, enemies, has_sense, sees_in
+    from combat_engine.engine.types import Light
+
+    world, me, _ = _audit.board("p16486", 1)
+    foes = sorted(enemies(world, me))
+    if not foes:
+        out.skip("p16486's board fielded nobody to blind")
+        return
+    foe = foes[0]
+    # **Hit points enough to survive the row, and `alive` asserted below.**
+    # This arm measured a **corpse**: `p16486` hits for 2[W] + a modifier,
+    # the board's foe has 38, and a loaded 20 put it on 0 -- so its sense
+    # holds expired with it and `has_sense` read False whatever the
+    # suppressor did. Three of six plants passed for that reason alone.
+    hale = world.need(foe, Health)
+    hale.max_hp = 400
+    hale.hp = 400
+    # **Two grants from two DIFFERENT refs, no printed range, which is
+    # the only fixture where arithmetic really fails.** Measured:
+    #
+    #     one grant                100
+    #     twice from the same ref  100   -- `Mods.total` buckets a typed
+    #                                      bonus by kind, larger applies
+    #     plus a second ref        200
+    #
+    # `c.blindsight()` with no radius stores `UNLIMITED_SENSE`, so two
+    # sources total 200 and subtracting 100 leaves the sense **standing**
+    # -- the fragility `p16486`'s note claims and the reason the
+    # suppressor is its own key. Two grants from one ref do not double, so
+    # a plant swapping the key for arithmetic passed against that fixture.
+    Cast(world=world, me=foe, ref="drivers-senses").blindsight(
+        on=foe, until=When.ENCOUNTER)
+    Cast(world=world, me=foe, ref="drivers-senses-b").blindsight(
+        on=foe, until=When.ENCOUNTER)
+    Cast(world=world, me=foe, ref="drivers-senses").tremorsense(
+        on=foe, until=When.ENCOUNTER)
+
+    out.that(has_sense(world, foe, "blindsight")
+             and has_sense(world, foe, "tremorsense")
+             and sees_in(world, foe, Light.DARK, 3),
+             "**the creature has both senses, blindsight granted twice** --"
+             " which is what makes the next line about a suppressor rather"
+             " than about subtraction",
+             f"bs {has_sense(world, foe, 'blindsight')},"
+             f" ts {has_sense(world, foe, 'tremorsense')},"
+             f" dark {sees_in(world, foe, Light.DARK, 3)}")
+
+    world.rng.loaded = 20
+    use(world, me, "p16486", targets=[foe], spend=False)
+    out.that(alive(world, foe),
+             "**the target is still standing**, which every line below"
+             " depends on: a dead creature's sense holds expire with it and"
+             " `has_sense` then reads False whatever the suppressor did",
+             f"alive {alive(world, foe)}")
+    if not alive(world, foe):
+        return
+    out.that(not has_sense(world, foe, "blindsight")
+             and not has_sense(world, foe, "tremorsense"),
+             "**and `query.has_sense` says both are gone**, the doubled one"
+             " included",
+             f"bs {has_sense(world, foe, 'blindsight')},"
+             f" ts {has_sense(world, foe, 'tremorsense')}")
+    out.that(not sees_in(world, foe, Light.DARK, 3),
+             "**and `query.sees_in` agrees** -- the two questions a sense"
+             " has must answer together, which is the `#648` shape: a"
+             " reader that exists and is not consulted",
+             f"dark {sees_in(world, foe, Light.DARK, 3)}")
+
+    # -- it takes away only what the card names -------------------------
+    world, me, _ = _audit.board("p16486", 1)
+    foe = sorted(enemies(world, me))[0]
+    giver = Cast(world=world, me=foe, ref="drivers-senses")
+    giver.blindsight(5, on=foe, until=When.ENCOUNTER)
+    giver.darkvision(on=foe, until=When.ENCOUNTER)
+    Cast(world=world, me=me, ref="drivers-lose").lose_sense(
+        "blindsight", on=foe, until=When.ENCOUNTER)
+    out.that(not has_sense(world, foe, "blindsight")
+             and has_sense(world, foe, "darkvision"),
+             "**naming one sense takes away one sense** -- the keys are"
+             " separate because the printed ranges are, and a suppressor"
+             " that cleared the family would blind a creature the card"
+             " leaves seeing",
+             f"bs {has_sense(world, foe, 'blindsight')},"
+             f" dv {has_sense(world, foe, 'darkvision')}")
+
+    raised = False
+    try:
+        Cast(world=world, me=me, ref="drivers-bad").lose_sense(
+            "echolocation", on=foe)
+    except ValueError:
+        raised = True
+    out.that(raised,
+             "**a sense no reader looks for raises** rather than laying a"
+             " key nothing consults -- the refusal `c.grant_action` and"
+             " `c.provokes` both make")
+
+    raised = False
+    try:
+        Cast(world=world, me=me, ref="drivers-bad").lose_sense(on=foe)
+    except ValueError:
+        raised = True
+    out.that(raised,
+             "and so does naming none at all, which would be a hold that"
+             " takes nothing away")
+
+    out.that(not REGISTRY["p16486"].dropped,
+             "p16486 carries no marker",
+             f"dropped {REGISTRY['p16486'].dropped!r}")
+
+
 def a_creature_can_be_made_to_provoke(out: Result) -> None:
     """"The target provokes opportunity attacks when shifting or making
     melee attacks."
@@ -94675,6 +94808,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "lose_sense": (
+        a_sense_can_be_taken_away,
+        "a sense can be taken away by a key rather than by arithmetic, so"
+        " a double grant cannot out-vote it (p16486)",
+    ),
     "provokes": (
         a_creature_can_be_made_to_provoke,
         "a creature can be made to provoke on named occasions, from"

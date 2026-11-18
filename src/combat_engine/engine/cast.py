@@ -16202,6 +16202,60 @@ class Cast:
             on=on if on is not None else self.me, until=until, kind=self.ref,
         )
 
+    def lose_sense(
+        self, *senses: str, on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """"The target loses blindsight and tremorsense."
+
+        The suppressor the sense verbs never got. `c.blindsight` and
+        `c.tremorsense` below store the printed radius in a `Mods` key, and
+        `p16486`'s note says why taking one away is **not** arithmetic on
+        that key: `Mods.total` sums, so subtracting `UNLIMITED_SENSE` works
+        until something grants the sense twice and then the creature still
+        has it. A suppressor cannot be out-voted.
+
+        So it is its own key, `"no <sense>"`, read by **both** questions a
+        sense has -- `query.sees_in` and `query.has_sense`. Those two have
+        to agree: `#648` made a gate out of a reader that existed and was
+        not consulted, and a sense suppressed for the light model while
+        `has_sense` still answered True is the same fault.
+
+        The names are the modifier keys the sense verbs write --
+        `"blindsight"`, `"tremorsense"`, `"darkvision"`, `"low_light"`. An
+        unrecognised one **raises**: a key nothing reads is a hold that
+        costs nothing and does nothing.
+
+        `When.EONT` by default, which is what the two cards printing this
+        say; the senses themselves default to an encounter.
+        """
+        known = {"blindsight", "tremorsense", "darkvision", "low_light"}
+        wanted = {w.lower() for w in senses}
+        unknown = wanted - known
+        if unknown:
+            raise ValueError(
+                f"{self.ref}: c.lose_sense({', '.join(sorted(unknown))}) "
+                f"names no sense any reader looks for, so the hold would "
+                f"cost nothing and do nothing. Known: {sorted(known)}."
+            )
+        if not wanted:
+            raise ValueError(
+                f"{self.ref}: c.lose_sense() with no sense named takes "
+                f"nothing away. Name the ones the card prints."
+            )
+        from .query import NO_SENSE
+
+        who = self._who(on)
+        if who is None:
+            return None
+        first: Effect | None = None
+        for sense in sorted(wanted):
+            laid = self.bonus(
+                f"{NO_SENSE}{sense}", 1, on=who, until=until, kind=self.ref,
+            )
+            first = first or laid
+        return first
+
     def blindsight(
         self, radius: int = 0, *, on: int | None = None,
         until: When = When.ENCOUNTER,
