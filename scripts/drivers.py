@@ -25033,6 +25033,70 @@ def one_effect_two_enders(out: Result) -> None:
              " every aura in the tree starts obscuring its squares",
              f"got {made.get('drivers-plain')!r}")
 
+    # -- `c.zone(sustain_inside=)`: a Sustain that asks WHERE you are ----
+    #
+    # `p13804` prints *"Sustain Minor: ... you must be in the zone to
+    # sustain it"*, and `sustain_cost` is what the action costs and says
+    # nothing about where the sustainer stands -- so the minor was offered
+    # wherever they were. `Effect.sustain_when` gates the **offer**, which
+    # is `drop_when`'s reasoning: an offer taken and then refused would
+    # spend the action for nothing.
+    from combat_engine.engine.actions import _sustaining
+    from combat_engine.engine.movement import place
+
+    board, caster, _ = _audit.board("p13804", 1, pose=True)
+    use(board, caster, "p13804")
+    zid = next((e for e, z in board.each(_Zone) if z.label == "p13804"), 0)
+    seat = board.get(caster, Position)
+    if not zid or seat is None or seat.square is None:
+        out.skip("p13804 laid no zone on this board")
+        return
+    home = seat.square
+    # **A round on**, or the loop skips it as already sustained this round
+    # -- which read as the gate refusing and is not.
+    board.round += 1
+    budget = board.get(caster, Budget)
+
+    def offered() -> list:
+        if budget is not None:
+            budget.refresh()
+        board.turn = caster
+        return [a.ref for a in _sustaining(board, board.encounter, caster)]
+
+    out.that(offered() == ["zone p13804"],
+             "standing in the zone, the sustain is offered")
+    # **Moved and refreshed, not an emitted ZoneExited.** `Zones` emits
+    # that event, it does not consume one: `refresh` recomputes `inside`
+    # from positions, so a hand-emitted exit changes nothing and the probe
+    # reads "still offered" -- which looks like a broken gate.
+    place(board, caster, (home[0] + 15, home[1]))
+    board.zones.refresh()
+    out.that(offered() == [],
+             "**and refused once he steps out of it** -- the printed"
+             " clause, which `sustain_cost` alone could not express",
+             f"offered {offered()}")
+    place(board, caster, home)
+    board.zones.refresh()
+    out.that(offered() == ["zone p13804"],
+             "and offered again on stepping back in")
+
+    # **A sustained zone that does NOT ask**, which is the control: every
+    # zone in the assertions above sets the flag, so making the gate
+    # unconditional passed them all. An ordinary sustained zone must stay
+    # sustainable from anywhere.
+    asker = Cast(world=board, me=caster, ref="drivers-plain-zone")
+    asker.zone(
+        [(home[0] + 20, home[1])], label="drivers-far",
+        until=_When.SUSTAIN, sustain=ActionType.MINOR,
+    )
+    board.round += 1
+    out.that("drivers-far" in [r.removeprefix("zone ") for r in offered()],
+             "**an ordinary sustained zone is offered from anywhere** --"
+             " laid 20 squares away and still sustainable, which is what"
+             " makes `sustain_inside` a narrowing rather than a new rule"
+             " for every zone",
+             f"offered {offered()}")
+
 
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.

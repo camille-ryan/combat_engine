@@ -14820,6 +14820,7 @@ class Cast:
         no_light: bool = False,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
+        sustain_inside: bool = False,
         hindering: str = "",
         hindering_type: DamageType = DamageType.UNTYPED,
     ) -> int:
@@ -14875,6 +14876,7 @@ class Cast:
             difficult=difficult, blocks_sight=blocks_sight,
             obscured=obscured, obscured_for=obscured_for,
             no_light=no_light, exempt=exempt, sustain=sustain,
+            sustain_inside=sustain_inside,
             hindering=hindering, hindering_type=hindering_type.value,
             burn=burn if hindering else None,
         )

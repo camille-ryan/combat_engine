@@ -284,6 +284,7 @@ class Zones:
         no_light: bool = False,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
+        sustain_inside: bool = False,
         hindering: str = "",
         hindering_type: str = "",
         burn: Callable[[int, str, str], None] | None = None,
@@ -340,7 +341,7 @@ class Zones:
             power_uses=power_uses,
             power_reach=power_reach,
         )
-        made = self._spawn(zone, when, sustain)
+        made = self._spawn(zone, when, sustain, sustain_inside)
         if hindering:
             self._burns(made, hindering, hindering_type, burn)
         return made
@@ -467,7 +468,9 @@ class Zones:
         zone.squares = spread(squares(self.world, owner), radius)
         return self._spawn(zone, when, sustain)
 
-    def _spawn(self, zone: Zone, when: When, sustain: ActionType | None = None) -> int:
+    def _spawn(self, zone: Zone, when: When,
+               sustain: ActionType | None = None,
+               sustain_inside: bool = False) -> int:
         eid = self.world.spawn(zone, Ident(ref=f"z:{zone.label}"))
         zone.effect = self.world.effects.apply(
             eid,
@@ -476,6 +479,23 @@ class Zones:
             label=f"zone {zone.label}",
             on_end=[lambda: self.end(eid, "duration")],
             sustain_cost=sustain,
+            # **"You must be in the zone to sustain it"**, which one
+            # printed Sustain says and `sustain_cost` cannot: it is what
+            # the action costs and says nothing about where the sustainer
+            # stands. Gated on the offer in `actions._sustaining`.
+            # `p13804`.
+            # `eid` and not `zone.effect`: `self.inside` is keyed on the
+            # zone's **entity** id -- `inside[eid] = set()` two lines
+            # below -- and `occupants` reads it the same way. Keyed on the
+            # effect the set would always be empty and the gate would
+            # refuse every sustain, which is a plausible-looking way to
+            # break a row that looks implemented.
+            sustain_when=(
+                (lambda world, who, z=eid: who in (
+                    world.zones.inside.get(z) or set()
+                ))
+                if sustain_inside else None
+            ),
         )
         self.inside[eid] = set()
         if zone.obscured:

@@ -163,6 +163,19 @@ class Effect:
     #: whether the effect actually goes. The action is spent regardless,
     #: which is what the card says.
     drop_check: Callable[[Any, int], bool] | None = None
+    #: **A condition on being allowed to sustain it at all**, for the
+    #: printed Sustain that asks something of the sustainer beyond the
+    #: action. `p13804`: *"Sustain Minor: the zone persists, and **you must
+    #: be in the zone** to sustain it."*
+    #:
+    #: `sustain_cost` is what it costs and says nothing about where the
+    #: sustainer is standing, so `actions._sustaining` offered the action
+    #: wherever they were. Gated on the **offer** rather than on the
+    #: payout, which is `drop_when`'s reasoning one field up: an offer
+    #: taken and then refused would have spent the action for nothing.
+    #:
+    #: Handed the world and the sustainer, like `drop_when`.
+    sustain_when: Callable[[Any, int], bool] | None = None
     #: What ending it deliberately *buys*, when the printed line offers a
     #: trade rather than a dismissal -- "the ally can end the effect as a
     #: free action to teleport", "the target can end the effect by taking
@@ -482,6 +495,7 @@ class Effects:
         drop_cost: ActionType | None = None,
         drop_by: int = -1,
         drop_when: Callable[[Any, int], bool] | None = None,
+        sustain_when: Callable[[Any, int], bool] | None = None,
         reshape: Callable[[Any], Any] | None = None,
         reshape_when: Callable[[dict[str, Any]], bool] | None = None,
         retarget: Any = None,
@@ -569,6 +583,7 @@ class Effects:
             drop_cost=drop_cost,
             drop_by=drop_by,
             drop_when=drop_when,
+            sustain_when=sustain_when,
             reshape=reshape,
             reshape_when=reshape_when,
             retarget=retarget,

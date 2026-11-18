@@ -1820,6 +1820,13 @@ def _sustaining(world: World, encounter: Encounter, actor: int) -> list[Action]:
             continue  # already going this round
         if not encounter.can_spend(actor, eff.sustain_cost):
             continue
+        # **A printed Sustain may ask something beyond the action.**
+        # `p13804`: *"you must be in the zone to sustain it"* -- and
+        # `sustain_cost` says only what it costs. Gated on the offer, not
+        # the payout, which is `drop_when`'s reasoning: an offer taken and
+        # then refused would spend the action for nothing.
+        if eff.sustain_when is not None and not eff.sustain_when(world, actor):
+            continue
         out.append(
             Action(kind="sustain", cost=eff.sustain_cost, subject=eff.id, ref=eff.label)
         )

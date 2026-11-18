@@ -186,7 +186,6 @@ def p9429(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.SHADOW, Keyword.ZONE],
-    dropped=("c.zone(sustain_inside=)",),
 )
 def p13804(c: Cast) -> None:
     """Totally obscured, so `blocks_sight` rather than the concealment
@@ -205,11 +204,14 @@ def p13804(c: Cast) -> None:
     *grade* of obscurity a side rather than exempting anyone from a hard
     sight block.
 
-    The Sustain's "you must be in the zone" is the one real gap and now
-    carries the marker: sustaining asks for an action and never asks where
-    the sustainer is standing.
+    **The Sustain's "you must be in the zone" is written now, and the gap
+    was where the note said: `sustain_cost` is what the action costs and
+    says nothing about where the sustainer stands.** `Effect.sustain_when`
+    gates the **offer** -- `drop_when`'s reasoning one field up, since an
+    offer taken and then refused would spend the minor for nothing -- and
+    `c.zone(sustain_inside=True)` writes it.
     """
     c.zone(
         c.area(), label=c.ref, until=When.EONT, blocks_sight=True,
-        exempt={c.me}, sustain=MINOR,
+        exempt={c.me}, sustain=MINOR, sustain_inside=True,
     )
