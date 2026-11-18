@@ -157,6 +157,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - How well lit this square is.
 - `query.nearest_enemy(world: 'World', of: 'int') -> 'list[int]'`
   - Which enemies count as nearest to that creature.
+- `query.printed_kind(ref: 'str') -> 'str'`
+  - The word at the top of that card, lowercased, or "".
 - `query.revealed(world: 'World', who: 'int') -> 'bool'`
   - Has this creature been stripped of the benefit of invisibility? #774.
 - `query.sees_in(world: 'World', eid: 'int', level: 'Light', distance: 'int' = 0, *, against: 'int | None' = None) -> 'bool'`

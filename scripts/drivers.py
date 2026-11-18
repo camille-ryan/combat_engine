@@ -15145,6 +15145,119 @@ def a_save_against_a_traps_effect(out: Result) -> None:
                      f"{len(throws)} throw(s)")
 
 
+def a_card_knows_whether_it_is_a_utility(out: Result) -> None:
+    """*"Each target can regain one expended encounter **utility** power of
+    level 10 or lower."* -- `p12164`.
+
+    **The column was there and nothing read it.** `power.kind` holds the
+    word at the top of every card -- Attack 2457, Utility 1389, Theme 322,
+    Racial 155, Feature 73, Pact 5 -- and `dsl.Power` has no field for it,
+    so a row filtering on it had nothing to ask. `loader.py` reads a
+    *monster's* `kind` as its role, which is a different column of the same
+    name and is why this one looked read.
+
+    Without the filter the row handed back an encounter **attack** power as
+    readily as a utility, which is more generous than the card and reported
+    finished. That is the shape this rule asserts: an ally holding one
+    expended attack power and one expended utility must be offered only the
+    utility.
+
+    `printed_kind` takes no world, deliberately -- it is a header fact, and
+    two characters holding the same row hold the same card.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.query import allies
+    from combat_engine.engine.types import Usage
+
+    # -- the reader itself ------------------------------------------------
+    out.that(query.printed_kind("p12164") == "utility",
+             "a card printed as a Utility answers 'utility'",
+             f"{query.printed_kind('p12164')!r}")
+    out.that(query.printed_kind("p1457") == "attack",
+             "and one printed as an Attack answers 'attack' -- the pair, so"
+             " a reader returning one constant cannot pass",
+             f"{query.printed_kind('p1457')!r}")
+    out.that(query.printed_kind("m15") == "",
+             "a monster ability answers '' rather than borrowing the"
+             " monster's role, which is a different column of the same name",
+             f"{query.printed_kind('m15')!r}")
+
+    # -- and the row filters on it ---------------------------------------
+    world, me, _ = _board("p12164", 1)
+    mates = sorted(allies(world, me))
+    out.that(bool(mates), "the board deals an ally to hand a power back to",
+             f"{mates}")
+    if not mates:
+        return
+    ally = mates[0]
+    known = world.get(ally, Powers)
+    out.that(known is not None, "the ally carries Powers", f"{known}")
+    if known is None:
+        return
+
+    # One expended encounter attack and one expended encounter utility, both
+    # within the printed level cap.
+    def pick(kind: str) -> str:
+        for ref, row in sorted(REGISTRY.items()):
+            if not ref.startswith("p") or not ref[1:].isdigit():
+                continue
+            if (getattr(row, "usage", None) is Usage.ENCOUNTER
+                    and 0 < getattr(row, "level", 0) <= 10
+                    and query.printed_kind(ref) == kind):
+                return ref
+        return ""
+
+    attack_ref, utility_ref = pick("attack"), pick("utility")
+    out.that(bool(attack_ref) and bool(utility_ref),
+             "the corpus has an encounter attack and an encounter utility at"
+             " level 10 or lower to stand the pair up with",
+             f"{attack_ref} / {utility_ref}")
+    if not attack_ref or not utility_ref:
+        return
+    for ref in (attack_ref, utility_ref):
+        if ref not in known.all:
+            known.known.append(ref)
+        # `note_use`, not `use` -- the latter does not exist and the
+        # expended set is what `c.expended` reads.
+        known.note_use(ref, world.round)
+
+    offered: list[list[str]] = []
+    world.decider = (
+        lambda actor, kind, options, prompt="":
+        (offered.append([o for o in options if isinstance(o, str)])
+         or options[0])
+    )
+    c = Cast(world=world, me=me, ref="p12164")
+    c.target = ally
+    REGISTRY["p12164"].body(c)
+    out.that(bool(offered),
+             "the row offers the ally a list -- printed 'can regain', so it"
+             " is a choice",
+             f"{offered}")
+    if not offered:
+        return
+    shown = offered[-1]
+    out.that(utility_ref in shown,
+             "the expended UTILITY is on it", f"{shown}")
+    out.that(attack_ref not in shown,
+             "and the expended ATTACK is not -- the clause, and the"
+             " assertion the row failed before `printed_kind` existed:"
+             " level and usage alone cannot tell the two apart",
+             f"{shown}")
+    out.that(get(attack_ref) is not None
+             and get(attack_ref).usage is Usage.ENCOUNTER
+             and get(attack_ref).level <= 10,
+             "and it was excluded on its KIND rather than on level or usage,"
+             " which it shares with the utility -- the control that makes"
+             " the line above about the card and not the header",
+             f"{attack_ref}: usage {get(attack_ref).usage},"
+             f" level {get(attack_ref).level}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -97609,6 +97722,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "printed_kind": (a_card_knows_whether_it_is_a_utility,
+                     "the word at the top of the card was a column nothing"
+                     " read; an attack is not a utility"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

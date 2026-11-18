@@ -47,7 +47,12 @@ from combat_engine.engine import (
     my_check,
     power,
 )
-from combat_engine.engine.query import adjacent, distance_between, team
+from combat_engine.engine.query import (
+    adjacent,
+    distance_between,
+    printed_kind,
+    team,
+)
 
 #: The five skills a card means by "a knowledge check".
 _KNOWLEDGE = ("arcana", "dungeoneering", "history", "nature", "religion")
@@ -244,7 +249,6 @@ def p9321(c: Cast) -> None:
     target=EACH_ALLY,
     requires=_has_a_surge,
     requires_text="you must have at least 1 healing surge",
-    dropped=("Power.utility",),
 )
 def p12164(c: Cast) -> None:
     """The surge is one payment for the whole use, so it is behind
@@ -254,13 +258,20 @@ def p12164(c: Cast) -> None:
 
     Printed "can regain", so the ally is offered the list and may decline.
 
-    **The Utility half is dropped.** A row's header carries its level and
-    its usage, so "encounter" and "of level 10 or lower" both filter, and
-    it carries no record of whether the card was printed as an Attack power
-    or a Utility one -- `power.kind` holds that word in the database and
-    `dsl.Power` has no field for it. So this hands back an encounter
-    attack power as readily as a utility, which is more generous than
-    print."""
+    **The Utility half is written now, and the old note located it
+    exactly**: a row's header carries level and usage, so "encounter" and
+    "of level 10 or lower" filter, and nothing carried the word at the top
+    of the card. `power.kind` holds it for all 4,401 rows and nothing read
+    it -- `loader.py` reads a *monster's* `kind` as its role, which is a
+    different column of the same name.
+
+    `query.printed_kind` is that read. A **header** fact, so it takes no
+    world: two characters holding the same row hold the same card, and the
+    answer is cached because print does not change inside a process.
+
+    Without it this handed back an encounter **attack** power as readily as
+    a utility, which is more generous than the card and reported
+    finished."""
     if c.first and not c.spend_surge(on=c.me):
         return
     ally = c.target
@@ -272,6 +283,8 @@ def p12164(c: Cast) -> None:
         if (row := get(ref)) is not None
         and row.usage is ENCOUNTER
         and row.level <= 10
+        # The word at the top of the card, which the header does not carry.
+        and printed_kind(ref) == "utility"
     )
     if not spent:
         return

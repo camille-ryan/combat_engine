@@ -1066,6 +1066,10 @@ READERS: dict[str, list[str]] = {
         # `knowledge_dc` what it has to beat -- the printed
         # monster-knowledge table, which is not `dc.py`'s level bands.
         "knowledge_dc", "knowledge_skill",
+        # `printed_kind` is the word at the TOP of a card -- Attack or
+        # Utility -- which two printed lines filter on and no header field
+        # carries.
+        "printed_kind",
     ],
     # `difficulty` is here with `defence` because both answer "what number
     # does this have to beat". It is not about attacking, and no section was

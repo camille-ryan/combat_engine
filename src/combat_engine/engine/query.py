@@ -2849,6 +2849,45 @@ KNOWLEDGE_SKILLS: tuple[tuple[str, str], ...] = (
 KNOWLEDGE_DC: dict[str, int] = {"name": 15, "powers": 20, "resistances": 25}
 
 
+@cache
+def _printed_kinds() -> dict[str, str]:
+    """Every power's printed KIND, by ref, lowercased.
+
+    *Attack*, *Utility*, *Theme*, *Racial*, *Feature* or *Pact* -- the word
+    at the top of the card, which decides nothing mechanically and which two
+    printed lines filter on.
+
+    **The column was there and nothing read it.** `power.kind` holds the
+    word for all 4,401 rows (Attack 2457, Utility 1389, Theme 322, Racial
+    155, Feature 73, Pact 5); `loader.py` reads a *monster's* `kind` as its
+    role, which is a different column of the same name, and `dsl.Power` has
+    no field for this one. So a row filtering "an encounter **utility**
+    power" had nothing to ask and handed back attack powers as readily.
+
+    Read once and cached, because the question is about print and print does
+    not change inside a process.
+    """
+    from combat_engine.db import game
+
+    return {
+        ref: (kind or "").strip().lower()
+        for ref, kind in game().execute("SELECT ref, kind FROM power")
+    }
+
+
+def printed_kind(ref: str) -> str:
+    """The word at the top of that card, lowercased, or "".
+
+    A **header** fact rather than a board one, so it takes no world: two
+    characters holding the same row hold the same card.
+
+    Empty for a ref with no `power` row -- a feat, an item block, a monster
+    ability -- which is the honest answer and not a fallback: those cards
+    print no Attack/Utility line to read.
+    """
+    return _printed_kinds().get(ref, "")
+
+
 def knowledge_skill(world: World, eid: int) -> str:
     """Which knowledge skill identifies that creature, or "".
 
