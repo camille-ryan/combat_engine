@@ -1970,6 +1970,19 @@ class PowerPoints:
         self.points -= n
         return n
 
+    def gain(self, n: int) -> int:
+        """Put `n` points back, never above `maximum`. Returns how many went.
+
+        The mirror of `spend`, and clamped at the top for the same reason
+        that clamps at the bottom: *"you regain 2 power points"* on a full
+        pool regains nothing, and a row reaching into `points` by hand
+        would be the one place in the tree doing its own bookkeeping on a
+        store five readers share.
+        """
+        n = max(0, min(n, self.maximum - self.points))
+        self.points += n
+        return n
+
 
 @dataclass
 class Shrouds:

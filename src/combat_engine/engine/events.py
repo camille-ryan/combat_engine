@@ -1612,6 +1612,28 @@ class UseRestored(Event):
 
 
 @dataclass
+class PointsRegained(Event):
+    """Power points were handed back to a psionic pool.
+
+    The mirror of the spend, and declared for exactly the reason
+    `UseRestored` above was: `c.spend_points` announces itself as a `Note`,
+    which `audit.DID_SOMETHING` refuses because a `Note` carries no `by`
+    and cannot be attributed to the row that paid. So a row whose printed
+    Effect is *"you regain 2 power points"* would have been **silent by
+    construction** -- `p2638` and `p11118` are the two.
+
+    `who` is whose pool grew, `amount` how much actually went in (clamped
+    at the pool's maximum, so a full pool reads 0), and `by` the ref that
+    gave it -- which need not be the holder: `p11118` hands a point to
+    *"you or an ally you can see"*.
+    """
+
+    who: int
+    amount: int
+    by: str
+
+
+@dataclass
 class RollsTwice(Event):
     """A creature may now roll two d20s on named skill checks.
 

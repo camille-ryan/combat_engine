@@ -1682,8 +1682,21 @@ DID_SOMETHING = {
     "UsesRaised", "RollsTwice",
     "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
     "ItemConsumed", "ItemDestroyed", "ItemRestored",
-    "CompanionDestroyed", "RowStored", "DamageSpared",
+    "CompanionDestroyed", "RowStored", "DamageSpared", "PointsRegained",
 }  # fmt: skip
+# `PointsRegained` is the nineteenth, and it is `UseRestored`'s argument
+# again -- a resource's inverse. `c.spend_points` announces a `Note`, and
+# a `Note` carries no `by`, so a row whose whole printed Effect is *"you
+# regain 2 power points"* fires, does exactly what the card says, and
+# reports silent. `p2638` and `p11118` are the two, and both of their old
+# markers started from the same false premise -- "there is no spendable
+# store" -- when `PowerPoints` has been one the whole time and only the
+# giving-back direction was missing.
+#
+# It carries `who`, `amount` and `by`, so it is attributable, which is the
+# only test this set applies. `amount` is what actually went in, clamped
+# at the pool's maximum, so a full pool emits nothing at all -- which is
+# correct and is why the two rows are driven on a spent pool.
 # `DamageSpared` is the eighteenth, and the shortest argument of the lot:
 # it is `Cushioned` one event over. Seven rows print *"reduce the damage by
 # N"*, write the number onto the `DamageRolled` they are interrupting --

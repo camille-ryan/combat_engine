@@ -18345,6 +18345,43 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             )
         return gone
 
+    def gain_points(self, n: int, *, who: int | None = None) -> int:
+        """"You regain 2 power points." Returns how many actually went in.
+
+        The mirror of `c.spend_points`, and two rows were left out for want
+        of it. Both of their markers started from the same false premise --
+        *"there is no spendable store"* -- and there is: `PowerPoints`
+        carries `points` and `maximum`, `c.spend_points` takes from it and
+        `pool.refresh()` fills it. What was missing was only this
+        direction.
+
+        **Clamped at `maximum` by `PowerPoints.gain`**, so a full pool
+        regains nothing and the return value says so. `c.spend_points(-2)`
+        was not the loophole it looks like -- `spend` clamps at zero -- and
+        content adding to `points` by hand would be the one row in the tree
+        doing its own bookkeeping on a store five readers share.
+
+        **It announces `PointsRegained`, which is the half that stops the
+        row being silent.** `c.spend_points` emits a `Note`, and
+        `audit.DID_SOMETHING` refuses a `Note` because it carries no `by`
+        -- so a row whose whole printed Effect is this one line would have
+        fired, done exactly what the card says, and reported silent.
+        `c.restore_use` paid for that lesson first and `UseRestored` is the
+        event it got.
+
+        Yours, so it defaults to the caster -- `who=` for `p11118`'s *"you
+        or an ally you can see regains 1 power point"*.
+        """
+        from .events import PointsRegained
+
+        holder = self.me if who is None else who
+        got = self._pool(holder).gain(n)
+        if got:
+            self.world.bus.emit(
+                PointsRegained(who=holder, amount=got, by=self.ref)
+            )
+        return got
+
     def points_spent(self, ref: str, *, of: int | None = None) -> int:
         """How many points augmented that row this encounter."""
         return self._pool(self.me if of is None else of).augmented.get(ref, 0)

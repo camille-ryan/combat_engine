@@ -24726,6 +24726,129 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def power_points_can_be_given_back(out: Result) -> None:
+    """"You regain 2 power points."
+
+    Two rows printed a line that gives points back and both carried a
+    marker, and **both markers started from the same false premise** --
+    that there was no pool to add to. There is: `PowerPoints` carries
+    `points` and `maximum`, `c.spend_points` has always taken from it and
+    `refresh()` fills it. Only the direction was missing.
+
+    `p11118`'s note is the instructive one. It checked the whole augment
+    family and found, correctly, that none of `c.augment`,
+    `c.augmented(ref)`, `c.augment_used` or `c.lend_augment` is a store --
+    and concluded the tree had none, having looked at the four things whose
+    names sound like one.
+
+    **The event is half the fix.** `c.spend_points` announces a `Note`, and
+    `audit.DID_SOMETHING` refuses a `Note` because it carries no `by`, so a
+    row whose whole Effect is this one line fires, does exactly what the
+    card says, and reports silent. `PointsRegained` is `UseRestored`'s
+    argument one resource over.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import PowerPoints
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    out.that("PointsRegained" in _audit.DID_SOMETHING,
+             "**`PointsRegained` is admitted as doing something** -- without"
+             " it both rows below are silent by construction, which is the"
+             " shape `c.restore_use` paid for first")
+
+    # ---- p2638: the plain line, on a spent pool ------------------------
+    world, me, _ = _audit.board("p2638", 1)
+    pool = world.get(me, PowerPoints)
+    if pool is None or pool.maximum <= 0:
+        out.skip("p2638's caster has no power point pool")
+        return
+    pool.points = 0
+    foe = sorted(enemies(world, me))[0]
+    world.rng.loaded = 20
+    mark = len(world.bus.log)
+    use(world, me, "p2638", targets=[foe], spend=False)
+    given = [e for e in world.bus.log[mark:]
+             if type(e).__name__ == "PointsRegained"]
+    out.that(pool.points > 0,
+             "**p2638 puts points back into an emptied pool**",
+             f"0 -> {pool.points} of {pool.maximum}")
+    out.that(len(given) == 1 and given[0].by == "p2638",
+             "and announces it attributably -- `by` is the row, which is the"
+             " only test `DID_SOMETHING` applies and the thing a `Note`"
+             " cannot carry",
+             f"events {[(e.who, e.amount, e.by) for e in given]}")
+
+    # ---- the clamp, which is the printed rule --------------------------
+    world, me, _ = _audit.board("p2638", 1)
+    pool = world.get(me, PowerPoints)
+    pool.points = pool.maximum
+    foe = sorted(enemies(world, me))[0]
+    world.rng.loaded = 20
+    use(world, me, "p2638", targets=[foe], spend=False)
+    out.that(pool.points <= pool.maximum,
+             "**and never above the maximum, whatever the pool started at**"
+             " -- asserted as a ceiling rather than as 'no event fired',"
+             " because something on the board spends a point during the use"
+             " and the full-pool arm is therefore not full by the time the"
+             " clause runs",
+             f"{pool.points} of {pool.maximum}")
+    out.that(PowerPoints(points=3, maximum=3).gain(2) == 0,
+             "the clamp itself, asked of the component: a full pool gains"
+             " nothing and says 0, so the verb emits no event at all")
+    out.that(PowerPoints(points=1, maximum=3).gain(5) == 2,
+             "and an overfull gain is trimmed to the room there was",
+             "1 of 3, asked for 5")
+
+    # ---- p11118: somebody else's pool, on the target's miss -----------
+    world, me, _ = _audit.board("p11118", 1)
+    pool = world.get(me, PowerPoints)
+    if pool is None or pool.maximum <= 0:
+        out.skip("p11118's caster has no power point pool")
+        return
+    victim = sorted(enemies(world, me))[0]
+    world.rng.loaded = 20
+    use(world, me, "p11118", targets=[victim], spend=False)
+    pool.points = 0
+    # **A low die, not a big penalty.** `rng.loaded = 20` is still set from
+    # the use above and a natural 20 hits whatever the bonus -- a -40
+    # attack HIT, which read as a dead watcher.
+    world.rng.loaded = 2
+    mark = len(world.bus.log)
+    swung = Cast(world=world, me=victim, ref="drivers-p11118").attack(
+        -40, Defense.AC, on=me)
+    fed = [e for e in world.bus.log[mark:]
+           if type(e).__name__ == "PointsRegained"]
+    out.that(not swung,
+             "the target misses, which is p11118's trigger",
+             f"hit={bool(swung)}")
+    out.that(pool.points == 1 and len(fed) == 1 and fed[0].by == "p11118",
+             "**and the miss feeds a power point back** -- for the whole"
+             " encounter, which is what 'whenever' and 'until the end of the"
+             " encounter' say together",
+             f"pool 0 -> {pool.points}, events"
+             f" {[(e.who, e.amount, e.by) for e in fed]}")
+
+    # The negative control: the CASTER missing is not the printed trigger.
+    world, me, _ = _audit.board("p11118", 1)
+    pool = world.get(me, PowerPoints)
+    victim = sorted(enemies(world, me))[0]
+    world.rng.loaded = 20
+    use(world, me, "p11118", targets=[victim], spend=False)
+    pool.points = 0
+    world.rng.loaded = 2
+    Cast(world=world, me=me, ref="drivers-p11118-control").attack(
+        -40, Defense.AC, on=victim)
+    out.that(pool.points == 0,
+             "**and the CASTER's own miss feeds nothing** -- the card says"
+             " 'whenever IT misses', so a watcher on every miss in the"
+             " fight would pay on the wrong one",
+             f"pool after the caster's miss: {pool.points}")
+
+
 def a_parameter_the_printed_line_needed(out: Result) -> None:
     """Four narrow parameters, six power rows, one shape.
 
@@ -93367,6 +93490,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "gain_points": (
+        power_points_can_be_given_back,
+        "c.gain_points puts points back into a psionic pool and says so"
+        " attributably (p2638 p11118)",
+    ),
     "narrow_params": (
         a_parameter_the_printed_line_needed,
         "four narrow parameters six power rows asked for by name"

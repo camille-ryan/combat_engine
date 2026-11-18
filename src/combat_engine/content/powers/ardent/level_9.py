@@ -23,6 +23,8 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Melee,
+    Miss,
+    PowerPoints,
     Ranged,
     TurnStart,
     When,
@@ -199,25 +201,51 @@ def p11107(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.PSYCHIC],
     attack=Attack(CHA, vs=WILL),
-    dropped=("c.regain_power_point()",),
 )
 def p11118(c: Cast) -> None:
-    """**The claim is true and now carries the marker**, which is the rarer
-    outcome in this walk.
+    """**The claim was true of the augment family and false of the tree**,
+    which is why this row sat marked while a pool existed.
 
     Checked against the whole augment family rather than assumed, because
     the names look like a pool and are not: `c.augment` is an **int** on
     the use in flight, `c.augmented(ref)` says what bought the latest use,
     `c.augment_used` is a property and `c.lend_augment` hands a row an
-    augmentable clause. Not one of them is a spendable store, so there is
-    nothing for "regains 1 power point" to add to.
+    augmentable clause. But `PowerPoints` is the store, with `points` and
+    `maximum`, and `c.spend_points` has always taken from it -- only the
+    giving-back direction was missing. `p2638` reached the same gap from
+    the other side and its note had this right. #1341.
 
-    The -2 to all defences is the half that plays. #1341.
+    **"You or an ally you can see", so it is a choice.** The pool it goes
+    into is not always the caster's, which is the `who=` on the verb; the
+    ally has to *have* a pool, so a party with one psionic character
+    offers only the caster, and that is the common case rather than an
+    edge case.
+
+    Laid as a watch on the target's misses for the whole encounter, which
+    is what "whenever" and "until the end of the encounter" say together.
     """
+    victim = c.target
     if c.strike():
         c.damage(c.w(3), c.cha_mod, dtype=DamageType.PSYCHIC)
     for d in (AC, FORT, REF, WILL):
         c.penalty(d, 2, until=When.ENCOUNTER)
+
+    def regain(ev: Miss) -> None:
+        if ev.attacker != victim:
+            return
+        pools = [
+            who for who in (c.me, *c.allies())
+            if c.world.get(who, PowerPoints) is not None
+            and (who == c.me or c.can_see(who))
+        ]
+        if not pools:
+            return
+        lucky = c.choose(pools, f"{c.ref}: whose pool the miss feeds")
+        if lucky is not None:
+            c.gain_points(1, who=lucky)
+
+    c.watch(Miss, regain, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} feeds on the misses")
 
 
 @power(

@@ -363,7 +363,6 @@ def p2636(c: Cast) -> None:
 
 @power(
     "p2638",
-    dropped=("c.gain_points()",),
     level=9,
     cls="battlemind",
     usage=DAILY,
@@ -385,10 +384,16 @@ def p2638(c: Cast) -> None:
     be the one row in the tree doing its own bookkeeping on a pool five
     other readers share.
 
-    So this wants `c.gain_points`, the mirror of the verb already there.
+    So this wanted `c.gain_points`, the mirror of the verb already there,
+    and that is what it is. `PowerPoints.gain` clamps at `maximum` -- a
+    full pool regains nothing, which is the printed rule -- and the verb
+    announces `PointsRegained` rather than a `Note`, because a `Note`
+    carries no `by` and a row whose Effect is this one line would have
+    reported silent while doing exactly what the card says.
     """
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.dazed(until=When.EONT)
+        c.gain_points(2)
     else:
         c.half_damage(c.w(), c.con_mod)
