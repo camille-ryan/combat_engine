@@ -32,6 +32,8 @@ Things a creature spends, and the budget it spends them from.
   - How many power points this use was actually bought with.
 - `c.augmented(self, ref: 'str', *, of: 'int | None' = None) -> 'int'`
   - What bought the **latest** use of that row. 0 for an unaugmented one.
+- `c.gain_points(self, n: 'int', *, who: 'int | None' = None) -> 'int'`
+  - "You regain 2 power points." Returns how many actually went in.
 - `c.lend_augment(self, ref: 'str', cost: 'int', clause: 'Callable[[Cast], None]', *, every: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Your <power> gains the augmentable keyword": lend it a clause.
 - `c.points(self, *, of: 'int | None' = None) -> 'int'`

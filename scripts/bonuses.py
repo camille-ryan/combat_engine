@@ -576,6 +576,23 @@ def _calls(src: str) -> list[tuple[str, str, str]]:
         if not (isinstance(fn, ast.Attribute) and fn.attr == "bonus"):
             continue
         text = ast.get_source_segment(body, node) or ""
+        # **A clip is not a bonus, so it carries no printed bonus type.**
+        # `c.bonus(what, n, clip=True)` writes "any penalty to <what> is
+        # lessened by n" -- `p2384`'s printed sentence -- and that sentence
+        # names no type because bonus types govern how *bonuses* stack.
+        # `Mods.total` keeps clips in their own bucket and never adds them
+        # to the typed ones.
+        #
+        # Comparing one against the card's bonus types is a category error,
+        # and it showed as `p2384` "omitting a type the card names": the
+        # card's only type word belongs to the +2 power bonus to Will two
+        # lines up, which the same row lays correctly.
+        #
+        # Narrow on purpose -- keyed on the explicit keyword, which
+        # `Cast.bonus` refuses to combine with a negative amount -- so this
+        # cannot be reached for to quieten an ordinary bonus.
+        if any(kw.arg == "clip" for kw in node.keywords):
+            continue
         first = node.args[0] if node.args else None
         key = first.value if isinstance(first, ast.Constant) else ""
         if isinstance(first, ast.Attribute):     # `AC`, `Defense.AC`

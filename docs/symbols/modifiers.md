@@ -168,10 +168,14 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Enemies cannot perform a coup de grace against you." A standing
 - `c.no_healing(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, temp_hp: 'bool' = False) -> 'Effect | None'`
   - "The creature cannot heal."
+- `c.no_hide(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "The target cannot become hidden."
 - `c.no_immediate(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "The target cannot take immediate actions."
 - `c.no_provoke(self, *, from_: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.EOTNT: "end of target's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Walking away from that creature does not give it an opening.
+- `c.no_recharge(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "The creature's powers cannot recharge."
 - `c.no_run(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - "It cannot run." The walk is left alone.
 - `c.no_surges(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`

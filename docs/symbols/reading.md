@@ -82,6 +82,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Does this creature's next jump get the running-start divisor?
 - `query.hindering_at(world: 'World', square: 'Square') -> 'bool'`
   - Does any live zone make this square hindering terrain?
+- `query.ignores_difficult(world: 'World', eid: 'int', *, kind: 'str' = '', when: 'str' = '') -> 'bool'`
+  - Does this creature already cross rough ground for nothing?
 - `query.kept_away_from(world: 'World', eid: 'int') -> 'tuple[Square, int] | None'`
   - The square this creature may not get closer to, and how close it is.
 - `query.leash_of(world: 'World', eid: 'int') -> 'tuple[frozenset[tuple[int, int]], int] | None'`

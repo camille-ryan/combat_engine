@@ -425,7 +425,7 @@ CATEGORIES: dict[str, dict] = {
                 "no_run",
                 "gains_property", "loses_property",
                 "no_basic", "no_coup_de_grace",
-                "no_healing", "no_immediate", "no_provoke",
+                "no_healing", "no_hide", "no_recharge", "no_immediate", "no_provoke",
                 # Beside `no_healing` and not folded into it: one card
                 # bars the temporary pool and only DOCKS healing, so the
                 # two have to be sayable apart. #1360.
@@ -496,7 +496,7 @@ CATEGORIES: dict[str, dict] = {
                 # character counts as that build", and `build` is the other
                 # half of the answer.
                 "set_build",
-                "considered_bloodied", "element",
+                "considered_bloodied", "appears_unbloodied", "element",
                 "feat", "feats", "granted_by",
                 "granted_via", "healed_by", "index", "instinctive", "is_",
                 "is_hidden", "is_kind", "is_minion", "is_quarry", "is_trap",
@@ -564,7 +564,7 @@ CATEGORIES: dict[str, dict] = {
                 # having to know which. See its docstring. #1298.
                 "augment", "augment_spend", "augment_used",
                 "augmented", "lend_augment", "points",
-                "points_spent", "regain_points", "spend_points",
+                "points_spent", "regain_points", "spend_points", "gain_points",
                 "spend_shrouds", "transfer_points",
             ]),
             ("charges and per-day uses", [
@@ -981,7 +981,13 @@ READERS: dict[str, list[str]] = {
         # than distance -- but a section holding two entries is what the
         # `terrain` note above already declined. #1307.
         "drag_limit", "lift_limit",
-        "hindering_at", "kept_away_from", "leash_of", "line_of_effect",
+        "hindering_at",
+        # Beside `hindering_at` because they are the pair of questions
+        # about what the ground costs a mover: that one is "is this square
+        # forbidden", this one "does this creature pay for rough going at
+        # all". `p13701` has to ask the second **before** granting the
+        # exemption itself, which is why the reader is public. #1341.
+        "ignores_difficult", "kept_away_from", "leash_of", "line_of_effect",
         "line_of_sight", "sight_squares",
         "moved_this_action", "moving_as", "on_the_ground", "prefers_range",
         "ran_this_action", "range_profile",

@@ -149,6 +149,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
 
 ## state and identity
 
+- `c.appears_unbloodied(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "Enemy attacks never treat you as being bloodied."
 - `c.attacked_me_since(self, who: 'int | None' = None) -> 'bool'`
   - "A target that has attacked you since the end of your last turn."
 - `c.bloodied(self, on: 'int | None' = None) -> 'bool'`
