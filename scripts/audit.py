@@ -5741,6 +5741,20 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     ).lower():
         _bare_sword_hand(world, caster, ref)
 
+    # **A trap on the floor, found, beside the caster.** A pose, so it goes
+    # here with the others and not with the provocation that fires it:
+    # `m1523a3`'s trigger is an *enemy moving* and its body then looks for
+    # "a trap it is aware of within range", so the trap has to exist before
+    # the movement passes below run. Armed late it posed nothing those
+    # passes could use -- which is `#1340`'s lesson about a pose applied too
+    # late, and `#1149`'s about a pass appended at the end.
+    #
+    # `found=True` because the printed line says *aware of*: `arm` leaves a
+    # trap hidden, which is right for the board and wrong for this row.
+    # Pressing `found` is posing the awareness, not inventing it -- the
+    # search action is what sets it in play.
+    laid_trap = _pose_a_trap(world, caster, ref)
+
     from combat_engine.engine import Health
 
     # The two things every creature can do that nothing here ever did.
@@ -6651,8 +6665,152 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
             if probe():
                 return True
 
+    # **A trap going off, which nothing on this board ever did.** `p11600`'s
+    # whole printed Trigger is *"your Thievery check triggers a trap"*, and
+    # until `events.TrapSprung` existed the row could not even be declared.
+    # Now it can, and the board still has to produce the moment.
+    #
+    # Gated on the row's own printed trigger naming a trap, like the poses
+    # above: arming one costs a spawn and an attack, and 23,000 rows have no
+    # interest in it.
+    #
+    # **Last, deliberately, and measured rather than assumed.** `#1149`'s
+    # lesson is that a new pass buys nothing if an earlier one already fires
+    # the row -- so the targeted refs were counted with the pass here and
+    # nothing else fires them, because nothing else emits `TrapSprung`. It
+    # is cheap to move earlier if a row ever turns up that two passes can
+    # reach.
+    if laid_trap is not None:
+        from combat_engine.engine import traps
+        from combat_engine.engine.components import Trap
+
+        if True:
+            laid = laid_trap
+            trap = world.get(laid, Trap)
+            if trap is not None:
+                # **Both ways it can fire, because the row may name either.**
+                # `why="disable"` is the fumbled Thievery check, which is the
+                # printed trigger of the row this pass was built for;
+                # `why="stepped"` is a plate, which a row reading "a trap
+                # attacks you" wants instead.
+                #
+                # The disable half is staged directly rather than by rolling
+                # a check: `perform`'s branch needs the trap *found*, a
+                # printed `disable_dc`, adjacency and a standard action, and
+                # a pose that has to satisfy four conditions to produce one
+                # event is a pose that fails silently. The event is the thing
+                # under test.
+                traps.fire(world, laid, caster, by=caster, why="disable")
+                if probe():
+                    return True
+                traps.fire(world, laid, caster, by=caster, why="stepped")
+                if probe():
+                    return True
+
     return _fired(world, ref, cursor)
 
+
+
+@lru_cache(maxsize=1)
+def _specs() -> dict[str, str]:
+    """Every row's printed card, by ref, out of whichever table holds it.
+
+    Asked of the schema rather than from a list of table names, because the
+    list grows whenever an importer lands -- the root `CLAUDE.md` records a
+    reader that diffed eleven spec tables when there were fifteen. Every
+    table carrying both a `ref` and a `spec` column is one of them.
+    """
+    from combat_engine.db import game
+
+    con = game()
+    out: dict[str, str] = {}
+    for (table,) in con.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    ).fetchall():
+        columns = {row[1] for row in con.execute(f"PRAGMA table_info({table})")}
+        if not {"ref", "spec"} <= columns:
+            continue
+        for ref, spec in con.execute(
+            f"SELECT ref, spec FROM {table} WHERE spec IS NOT NULL"
+        ):
+            out.setdefault(ref, spec)
+    return out
+
+
+def _spec_of(ref: str) -> str:
+    """The printed card for this ref, or "" for one with none."""
+    return _specs().get(ref, "")
+
+
+#: What a body says to say it is about a trap. Read as source text, which is
+#: what `--calls` already does and the one thing the sanitiser cannot touch.
+_TRAP_CALLS = ("c.spring_trap(", "c.is_trap(", "is_trap(", ", Trap)",
+               "c.disable_trap(")
+
+
+def _wants_a_trap(ref: str) -> bool:
+    """Might this row be about a trap -- by its card or by its body?
+
+    Gated like the other poses, and for their reason: arming one costs a
+    spawn, and almost no row wants it.
+
+    **The spec alone was wrong twice, in opposite directions.** First it read
+    only the printed `trigger`, which missed `m1523a3` -- its trigger is
+    *"when an enemy moves"* and the trap is in its **effect**. Widened to the
+    whole card that caught it: 8 rows by trigger, 70 by spec, of 23,881.
+
+    **Then the names rule defeated the widened version.** `m1526a5` is the
+    same printed card as `m1523a3` and its spec reads *"the m1526 triggers a
+    m1526 it is aware of"*: the trap's printed name happened to be the
+    creature's own, so `scripts/spec.py` replaced it with a ref and the word
+    "trap" is simply not in the text. A keyword gate over sanitised prose
+    cannot see a row whose subject was a name.
+
+    So the body is asked as well, by the calls it makes -- which is what
+    `--calls` does, and the one signal sanitising cannot reach. A row
+    *responding* to a trap still needs the card half, because its body names
+    no trap verb at all.
+    """
+    text = (_spec_of(ref) or "").lower()
+    if "trap" in text or "hazard" in text:
+        return True
+    declared = get(ref)
+    body = getattr(declared, "body", None) if declared is not None else None
+    if body is None:
+        return False
+    try:
+        source = inspect.getsource(body)
+    except (OSError, TypeError):
+        return False
+    return any(call in source for call in _TRAP_CALLS)
+
+
+def _pose_a_trap(world: World, caster: int, ref: str) -> int | None:
+    """Put a found trap on the floor beside the caster, or None.
+
+    Returns the entity so the provocation further down fires *this* trap
+    rather than arming a second one -- one pose, one trap, which is also
+    what keeps `m1523a3`'s "a trap it is aware of" pointing at something the
+    movement passes have already had a chance to walk onto.
+    """
+    if not _wants_a_trap(ref):
+        return None
+    from combat_engine.content.terrain import arm
+    from combat_engine.engine.components import Position as _Pos
+    from combat_engine.engine.components import Trap as _Trap
+
+    here = world.get(caster, _Pos)
+    if here is None:
+        return None
+    laid = arm(world, (here.square[0] + 1, here.square[1]), level=5,
+               ref="audit:trap")
+    trap = world.get(laid, _Trap)
+    if trap is None:
+        return None
+    # The printed "aware of". `arm` leaves it hidden, which is right for a
+    # board and wrong for a row that asks about a trap it knows about.
+    trap.found = True
+    return laid
 
 
 def _wants_expended(ref: str) -> bool:

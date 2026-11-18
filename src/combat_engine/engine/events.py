@@ -2410,6 +2410,45 @@ class WeaponChanged(Event):
 
 
 @dataclass
+class TrapSprung(Event):
+    """A trap going off, and what set it off.
+
+    **Nothing announced this and one row's whole trigger is it.** `p11600`
+    prints *"Trigger: your Thievery check triggers a trap"* and was refused
+    in play for want of a moment to name: a trap's attack went straight from
+    `EnterSquare` to `resolve.attack`, so there was no event between the
+    skill check and the damage. Its note had it exactly -- *"nothing
+    anywhere announces one going off, least of all off the back of a skill
+    check"*.
+
+    `why` is how it came to fire, and it is the field that makes the one
+    printed trigger writable rather than a guess:
+
+    * `"stepped"` -- somebody walked onto the plate, which is the common
+      case and the only one that existed before;
+    * `"turn"` -- an ongoing trap attacking on its own initiative;
+    * `"disable"` -- a Thievery check that failed by 5 or more, which is
+      PHB p189's general rule and what `p11600` is about;
+    * `"row"` -- a power set it off deliberately (`c.spring_trap`).
+
+    `by` is the creature that caused it, or 0 for a trap firing on its own
+    count. **Not the same as `victim`**: the character who fumbles a
+    disarm sets it off, and the trap may then attack somebody else
+    entirely.
+
+    An announcement rather than a `Decision`, deliberately. A trap being
+    *prevented* is the Thievery check succeeding, which is already its own
+    roll; cancelling the firing afterwards would be a second, unprinted
+    save.
+    """
+
+    trap: int
+    victim: int
+    by: int = 0
+    why: str = "stepped"
+
+
+@dataclass
 class Doused(Decision):
     """A map feature being put out, and refusable.
 

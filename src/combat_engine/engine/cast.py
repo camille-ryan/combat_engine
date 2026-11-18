@@ -8366,6 +8366,39 @@ class Cast:
         return not asked.cancelled
 
 
+    def spring_trap(
+        self, trap: int, *, on: int | None = None,
+    ) -> bool:
+        """Set a trap off at somebody. True if its attack hit.
+
+        *"If the attack misses you, the trap repeats the attack as a free
+        action against an enemy adjacent to you."* -- `p9313`, and the
+        clause this exists for.
+
+        **The attack is the trap's, not the caster's**, which is the one
+        thing the printed line is about and the reason `c.use_power` was
+        refused for it: borrowing the trap's row would make the swing this
+        character's, so a rider on *their* attacks would pay out and a
+        creature's defences against *traps* would not apply.
+        `traps.fire` attacks with the trap as the attacker, so
+        `query.is_trap(ctx["attacker"])` is true for the rows that ask.
+
+        `on` is who it attacks, defaulting to this row's target. The trap
+        itself is named rather than found, because a card that sets one off
+        is always answering a particular trap -- usually the one that just
+        attacked, read off the trigger.
+
+        A suppressed trap fires nothing and this returns False: `traps.fire`
+        makes that test once for every caller, so a row cannot spring a
+        disabled trap by going round the front.
+        """
+        from . import traps
+
+        who = self._who(on)
+        if who is None:
+            return False
+        return traps.fire(self.world, trap, who, by=self.me, why="row")
+
     def no_douse(
         self,
         *,

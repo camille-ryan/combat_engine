@@ -47,6 +47,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - What is standing on the map that is not a creature: a crate, a fire.
 - `c.set_origin(self, *words: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, instead_of: 'str' = '') -> 'Effect | None'`
   - "You are considered a fey creature for the purpose of effects
+- `c.spring_trap(self, trap: 'int', *, on: 'int | None' = None) -> 'bool'`
+  - Set a trap off at somebody. True if its attack hit.
 - `c.terraform(self, square: 'Square | None' = None, *, raise_: 'int' = 0, sink: 'int' = 0) -> 'bool'`
   - Push one square of ground up, or pull it down.
 - `c.terrain(self, word: 'str') -> 'bool'`

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from random import Random
 
-from combat_engine.engine import AC, FORT, REF, WILL, DamageType, World
+from combat_engine.engine import AC, FORT, REF, WILL, World, traps
 from combat_engine.engine.components import (
     Defenses,
     Health,
@@ -39,7 +39,6 @@ from combat_engine.engine.durations import When
 from combat_engine.engine.events import EnterSquare, RoundStart, TurnStart
 from combat_engine.engine.grid import Square
 from combat_engine.engine.movement import place
-from combat_engine.engine.resolve import attack
 from combat_engine.engine.traps import suppressed
 from combat_engine.engine.types import Size
 
@@ -442,6 +441,19 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",
             # never printed and no way to tell. Empty says "unpriced", which
             # is a reading the hazard term can act on. #981.
             damage=(printed["damage"] or "") if printed else "",
+            # **The attack line, stored rather than closed over.** These
+            # two were locals here, reachable only by the `strike` closure
+            # below -- so a trap could fire the two ways that closure was
+            # wired for and no other, and *"you trigger the trap"* (PHB
+            # p189) had nowhere to go. `traps.fire` reads them now.
+            #
+            # Printed only, like `damage` above and for the same reason:
+            # the fallbacks are passed to `fire` per call instead, so an
+            # invented number never sits on the component as though the
+            # book had printed it. #981.
+            attack=(printed["attack"] or 0)
+            if printed and printed["attack"] is not None else 0,
+            defence=((printed or {}).get("defence") or "") if printed else "",
         ),
     )
     trap = world.need(eid, Trap)
@@ -452,16 +464,16 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",
     # takes the level back out of it exactly as it does for a monster.
     bonus = printed["attack"] if printed and printed["attack"] is not None else level + 5
     hurts = printed["damage"] if printed and printed["damage"] else f"1d10+{level}"
-    against = _DEFENCES.get((printed or {}).get("defence") or "", REF)
 
-    def strike(victim: int) -> None:
-        # Through `resolve.attack` with the trap itself as the attacker, so
-        # `is_trap(ctx["attacker"])` is true for the rows that ask and an
-        # attack bonus hung on the trap by a power is read like anyone
-        # else's.
-        if attack(world, eid, victim, bonus, against, power=trap.ref):
-            hurt = world.rng.roll(hurts).total
-            world.damage(eid, victim, hurt, DamageType.UNTYPED, detail=trap.ref)
+    def strike(victim: int, why: str = "stepped", by: int = 0) -> None:
+        # **One door, in the engine.** This used to be the attack itself,
+        # and being a closure here is what made a trap unfireable from
+        # anywhere else -- see `Trap.attack`. The fallbacks are passed
+        # rather than stored, so a block that prints no numbers still
+        # attacks and `policy/` can still tell an invented number from a
+        # printed one.
+        traps.fire(world, eid, victim, by=by, why=why,
+                   attack_bonus=bonus, damage=hurts)
 
     ticks = printed.get("initiative") if printed else None
     if ticks is None:

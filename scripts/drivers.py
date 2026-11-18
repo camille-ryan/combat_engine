@@ -14345,6 +14345,264 @@ def held_fire(out: Result) -> None:
              f"{world2.get(inside2, Scenery) is not None}")
 
 
+def a_trap_can_be_set_off(out: Result) -> None:
+    """*"Fail by 5 or More: You trigger the trap."* -- PHB p189, the Disable
+    Trap entry, and a **general** rule the engine did not have.
+
+    `actions.perform`'s disable branch said the opposite in a comment:
+    *"some printed blocks spring the trap on a bad roll and some do not --
+    that is a per-trap detail this engine does not carry a column for"*. The
+    per-trap countermeasure lines are the ones that print something
+    *different* from the general rule, which is what a countermeasure line
+    is for; reading them as the only source left a fumbled disarm costing a
+    standard action and nothing else.
+
+    **And the firing itself was unreachable.** It was a `strike` closure
+    inside `content/terrain.py`'s `arm`, so a trap could go off the two ways
+    that closure was wired for -- a plate stepped on, an ongoing trap's own
+    turn -- and no other. `Trap.attack` and `Trap.defence` were locals
+    beside it. `traps.fire` is the one door now, with the numbers on the
+    component where `damage` already was.
+
+    That is what `p11600` was refused in play for: its whole printed Trigger
+    is *"your Thievery check triggers a trap"*, and its own note said
+    *"there is no event between `SkillCheck` and the damage for a trigger to
+    name"*. `events.TrapSprung` is that event.
+
+    **The margin is asserted in both directions**, because one arm cannot
+    tell a general rule from an accident: missing by 4 must leave the trap
+    standing and missing by 5 must set it off. The DCs are staged so the
+    roll is pinned, not hoped for.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.terrain import arm
+    from combat_engine.engine import actions as acts
+    from combat_engine.engine import dsl
+    from combat_engine.engine import traps as _traps
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Position, Trap
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit, TrapSprung
+    from combat_engine.engine.query import enemies, is_trap
+    from combat_engine.engine.types import ActionType
+
+    # -- the printed numbers reach the component --------------------------
+    world, me, _ = _board("p11600", 1)
+    here = must(world.get(me, Position), "the caster stands somewhere").square
+    laid = arm(world, (here[0] + 1, here[1]), level=5, ref="drivers:trap")
+    trap = must(world.get(laid, Trap), "the trap was armed")
+    out.that(is_trap(world, laid), "what was armed is a trap", f"{laid}")
+    out.that(trap.attack > 0 and bool(trap.defence) and bool(trap.damage),
+             "its printed attack bonus and defence are on the COMPONENT, not"
+             " locals in a closure -- which is what made the firing"
+             " unreachable from anywhere but the two wirings in `arm`",
+             f"attack={trap.attack} defence={trap.defence!r} damage={trap.damage!r}")
+
+    # -- traps.fire is the one door, and it announces ---------------------
+    seen: list[TrapSprung] = []
+    world.bus.on(TrapSprung, seen.append)
+    _traps.fire(world, laid, me, by=me, why="disable")
+    out.that(len(seen) == 1,
+             "`traps.fire` announces `TrapSprung` -- the event `p11600` was"
+             " refused in play for want of",
+             f"{len(seen)}")
+    if seen:
+        got = seen[-1]
+        out.that((got.trap, got.victim, got.by, got.why)
+                 == (laid, me, me, "disable"),
+                 "and it carries who set it off and HOW, which are different"
+                 " questions from who it attacks: a fumbled disarm is the"
+                 " character's own doing and the trap may hit somebody else",
+                 f"{(got.trap, got.victim, got.by, got.why)}")
+
+    # -- a suppressed trap fires nothing, whoever asks --------------------
+    world2, me2, _ = _board("p11600", 1)
+    at2 = must(world2.get(me2, Position), "the caster stands").square
+    laid2 = arm(world2, (at2[0] + 1, at2[1]), level=5, ref="drivers:trap")
+    quiet: list[TrapSprung] = []
+    world2.bus.on(TrapSprung, quiet.append)
+    _traps.disable(world2, laid2)
+    out.that(_traps.suppressed(world2, laid2), "the trap is disabled")
+    out.that(not _traps.fire(world2, laid2, me2, by=me2, why="row"),
+             "a disabled trap fires nothing -- DMG p84's *while it's delayed"
+             " or disabled, the trap effectively isn't there*, tested once in"
+             " `fire` instead of once per caller so a row cannot spring one"
+             " by going round the front",
+             f"{len(quiet)} announced")
+    out.that(not quiet,
+             "and it announces nothing either, so a row watching for a"
+             " springing is not told about one that did not happen",
+             f"{quiet}")
+
+    # -- the margin, both ways, through the real action -------------------
+    def disarm(margin: int, loaded: int = 5) -> tuple[bool, bool]:
+        """Try the printed disable, missing by exactly `margin`.
+
+        **The DC is computed from the caster's own total, not guessed.** A
+        fixed DC cannot stage a margin: the Thievery modifier varies with
+        the dealt character, so `dc=40` was missing by 25 on this board and
+        the "by less than 5" arm was asserting nothing. The die is pinned
+        and the modifier is read off a throwaway check against a DC of 0,
+        which `Cast.check` answers with `.total`.
+        """
+        world, me, _ = _board("p11600", 1)
+        spot = must(world.get(me, Position), "the caster stands").square
+        world.rng.loaded = loaded
+        reading = Cast(world=world, me=me, ref="probe").check("thievery", 0)
+        total = int(getattr(reading, "total", 0))
+        dc = total + margin
+        eid = world.spawn()
+        world.add(eid, Trap(ref="t:drivers", perception_dc=10, found=True,
+                            disable_skill="thievery", disable_dc=dc,
+                            attack=20, defence="ref", damage="1d4"))
+        world.add(eid, Position(square=(spot[0] + 1, spot[1])))
+        fired: list[TrapSprung] = []
+        world.bus.on(TrapSprung, fired.append)
+        budget = world.get(me, Budget)
+        if budget is not None:
+            # `refresh`, not `refill` -- `_disabling` opens with
+            # `can_spend(actor, STANDARD)`, so an actor who has already
+            # acted answers from that guard and every assertion below says
+            # nothing about traps. The same trap `disarming_a_found_trap`
+            # records one rule up.
+            budget.refresh()
+        world.rng.loaded = loaded
+        acts.perform(world, world.encounter, me, acts.Action(
+            kind="disable", targets=[eid], cost=ActionType.STANDARD))
+        held = world.get(eid, Trap)
+        return bool(fired), bool(held and held.disabled)
+
+    # A pinned natural of 5 plus whatever Thievery the caster has; the DC is
+    # moved rather than the roll, so the margin is arithmetic and not luck.
+    # Missing by 4 is the page's "nothing happens"; by 5 is "you trigger the
+    # trap"; a negative margin beats the DC outright.
+    near = disarm(margin=4)
+    far = disarm(margin=5)
+    easy = disarm(margin=-5)
+    out.that(easy == (False, True),
+             "a check that BEATS the DC disables the trap and springs"
+             " nothing -- the premise, and the arm that would catch a"
+             " springing wired to every attempt",
+             f"{easy}")
+    out.that(far[0],
+             "a check missing by a wide margin SPRINGS it, which is PHB"
+             " p189's general rule and what the engine's own comment denied",
+             f"{far}")
+    out.that(not near[0],
+             "and one missing by less than 5 does not -- the margin is the"
+             " rule, so this is the arm that tells a printed threshold from"
+             " 'any failure sets it off'",
+             f"{near}")
+    out.that(not near[1] and not far[1],
+             "neither failure disables it either", f"near={near} far={far}")
+
+    # -- p11600: the row, its narrowing, and its printed effect -----------
+    declared = REGISTRY["p11600"]
+    out.that(declared.on is not None,
+             "p11600 declares a trigger at all now -- it carried printed"
+             " prose and no predicate, which is a row that never fires",
+             f"{declared.on}")
+    world3, me3, _ = _board("p11600", 1)
+    for why, by, want, label in (
+        ("disable", me3, True, "my own fumbled check"),
+        ("stepped", me3, False, "a plate I stepped on"),
+        ("disable", 9999, False, "an ally's fumble"),
+    ):
+        ev = TrapSprung(trap=1, victim=me3, by=by, why=why)
+        out.that(bool(declared.on.when(world3, me3, ev)) is want,
+                 f"p11600 {'fires on' if want else 'ignores'} {label} --"
+                 ' the printed Trigger is "your Thievery check", so both'
+                 " halves narrow",
+                 f"{declared.on.when(world3, me3, ev)}")
+
+    start = must(world3.get(me3, Position), "the thief stands").square
+    probe = Cast(world=world3, me=me3, ref="p11600")
+    half = probe.dex_mod // 2
+    dsl.use(world3, me3, "p11600",
+            trigger=TrapSprung(trap=1, victim=me3, by=me3, why="disable"))
+    moved = must(world3.get(me3, Position), "the thief stands").square
+    out.that(half > 0,
+             "the thief's Dexterity modifier is worth at least one square --"
+             " the premise, since a modifier of 1 shifts 0 and the assertion"
+             " below would pass on a row that did nothing",
+             f"dex_mod {probe.dex_mod} -> {half}")
+    if half > 0:
+        out.that(moved != start,
+                 "and p11600's printed Effect moves the thief -- the body was"
+                 " EMPTY before this, because a row refused in play has"
+                 " nothing written in it",
+                 f"{start} -> {moved}")
+
+    # -- p9313: the trap repeats the attack ------------------------------
+    world4, me4, _ = _board("p9313", 1)
+    foes = sorted(enemies(world4, me4))
+    out.that(len(foes) >= 1, "the board deals an enemy to repeat against",
+             f"{foes}")
+    if foes:
+        at4 = must(world4.get(me4, Position), "the caster stands").square
+        springer = arm(world4, (at4[0] + 1, at4[1]), level=5, ref="drivers:trap")
+        again: list[TrapSprung] = []
+        world4.bus.on(TrapSprung, again.append)
+        # A hit that the +4 will turn into a miss: the defence is lifted and
+        # re-settled by the row, so the roll has to be a near thing.
+        from combat_engine.engine.resolve import AttackResult
+
+        result = AttackResult(hit=True, critical=False, natural=12, total=12,
+                              target_defence=10, target=me4)
+        c4 = Cast(world=world4, me=me4, ref="p9313")
+        c4.trigger = Hit(attacker=springer, target=me4, power="t:drivers",
+                         critical=False, result=result)
+        out.that(result.hit, "the blow is a hit before the row runs -- the"
+                 " premise, since the clause is about a miss it CAUSED",
+                 f"{result.hit}")
+        REGISTRY["p9313"].body(c4)
+        out.that(not result.hit,
+                 "p9313's +4 turns it into a miss, which is the half that"
+                 " makes the repeat reachable at all",
+                 f"total {result.total} vs defence {result.target_defence}")
+        repeated = [e for e in again if e.why == "row"]
+        out.that(bool(repeated),
+                 "and the trap then attacks again as the TRAP -- not as this"
+                 " character, which is why `c.use_power` was refused for it:"
+                 " a rider on their attacks would pay out and a creature's"
+                 " defences against traps would not apply",
+                 f"{[(e.victim, e.why) for e in again]}")
+        if repeated:
+            out.that(repeated[-1].victim in foes
+                     and repeated[-1].victim != me4,
+                     'at "an enemy adjacent to you" and never at the caster',
+                     f"{repeated[-1].victim} of {foes}")
+
+        # -- and a blow the +4 does NOT turn aside repeats nothing --------
+        #
+        # **Two fixtures, because one cannot test the guard.** The arm above
+        # stages a near thing, so `result.hit` is already False by the time
+        # `if result.hit: return` runs -- a plant deleting that guard passed.
+        # A hit clearing by more than 4 is the case the guard is for: the
+        # card says *"if the attack misses you"*, and this one still lands.
+        world5, me5, _ = _board("p9313", 1)
+        at5 = must(world5.get(me5, Position), "the caster stands").square
+        other = arm(world5, (at5[0] + 1, at5[1]), level=5, ref="drivers:trap")
+        solid: list[TrapSprung] = []
+        world5.bus.on(TrapSprung, solid.append)
+        firm = AttackResult(hit=True, critical=False, natural=18, total=20,
+                            target_defence=10, target=me5)
+        c5 = Cast(world=world5, me=me5, ref="p9313")
+        c5.trigger = Hit(attacker=other, target=me5, power="t:drivers",
+                         critical=False, result=firm)
+        REGISTRY["p9313"].body(c5)
+        out.that(firm.hit,
+                 "a blow clearing the defence by ten is STILL a hit after the"
+                 " +4 -- the premise for the line below",
+                 f"total {firm.total} vs defence {firm.target_defence}")
+        out.that(not [e for e in solid if e.why == "row"],
+                 "so the trap does not repeat: the clause is owed only when"
+                 " this card's own +4 turned the blow aside, and without this"
+                 " arm the `if result.hit` guard is never the thing that"
+                 " stops it",
+                 f"{[(e.victim, e.why) for e in solid]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -96809,6 +97067,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "trap_sprung": (a_trap_can_be_set_off,
+                    "a Thievery check that misses by 5 sets the trap off,"
+                    " and a row can set one off deliberately"),
     "held_fire": (held_fire,
                   "one aura refuses to let its fires be put out; the"
                   " refusal is scoped to squares, not to fires found once"),

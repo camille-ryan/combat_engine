@@ -285,7 +285,7 @@ CATEGORIES: dict[str, dict] = {
         ),
         "sections": [
             ("laid on the board", [
-                "area", "aura", "barrier", "conjure", "douse", "no_douse", "hazard",
+                "area", "aura", "barrier", "conjure", "douse", "no_douse", "spring_trap", "hazard",
                 # `c.dim` beside `c.light` because they are two radii and
                 # two operations: one makes its squares bright however dark
                 # they are, the other lowers bright to dim and never

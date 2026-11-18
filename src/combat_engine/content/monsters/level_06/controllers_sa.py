@@ -100,6 +100,7 @@ from combat_engine.engine.events import (
     EffectApplied,
     Fell,
     Hit,
+    MoveStart,
     OpportunityWindow,
     PowerUsed,
     TurnEnd,
@@ -1421,6 +1422,27 @@ def m1526a4(c: Cast) -> None:
         c.slide(1, on=c.target)
 
 
+#: `m1526a5`'s printed Trigger, named once because it is used twice.
+_M1526_MOVED = "an enemy within 5 squares moves"
+
+
+def _a_foe_moved_within_5(world: World, me: int, ev: MoveStart) -> bool:
+    """An enemy of this creature, within 5, starting a move.
+
+    `MoveStart` rather than `MoveEnd`, which the sibling predicate in
+    `level_01/skirmishers_sa.py` records the reason for: on `MoveEnd` the
+    enemy has already gone and the distance that qualified it is no longer
+    the one measured.
+    """
+    actor = getattr(ev, "actor", None)
+    if actor is None or actor == me:
+        return False
+    return (
+        team(world, actor) is not team(world, me)
+        and distance_between(world, me, actor) <= 5
+    )
+
+
 @power(
     "m1526a5",
     level=6,
@@ -1428,12 +1450,41 @@ def m1526a4(c: Cast) -> None:
     action=ActionType.IMMEDIATE_REACTION,
     reach=Ranged(5),
     target=NO_TARGET,
-    trigger="an enemy moves",
-    todo=("c.trigger_trap()",),
+    trigger=_M1526_MOVED,
+    on=Trigger(MoveStart, _a_foe_moved_within_5, _M1526_MOVED),
 )
 def m1526a5(c: Cast) -> None:
-    """"Triggers a trap it is aware of within range" -- same gap as `a2`:
-    nothing here can set a trap off from a distance."""
+    """*"Ranged 5; triggers a trap it is aware of within range."*
+
+    **The same printed card as `m1523a3`**, whose marker said
+    `c.spring_trap()` where this one said `c.trigger_trap()` -- two
+    spellings for one gap, which is what `CLAUDE.md` warns a marker must
+    not do. `c.spring_trap` is the verb and both rows call it.
+
+    The old note was right that nothing could set a trap off from a
+    distance. What it did not say is that this row had **no predicate at
+    all**: `trigger=` carried printed prose and no `on=`, so it was refused
+    in play twice over -- once for the verb and once for having nothing to
+    fire on. `MoveStart` is the event, which is what the shared predicate in
+    `level_01/skirmishers_sa.py` is written for.
+
+    Hand-written rather than shared with `m1523a3` despite the identical
+    card: the two live in different files and the helper would have to cross
+    a level boundary to save eight lines.
+    """
+    from combat_engine.engine.components import Trap
+
+    mover = getattr(c.trigger, "actor", None)
+    aware = [
+        eid
+        for eid, trap in c.world.each(Trap)
+        if trap.found and not trap.sprung and is_trap(c.world, eid)
+        and distance_between(c.world, c.me, eid) <= 5
+    ]
+    if not aware or mover is None:
+        return
+    pick = min(aware, key=lambda eid: distance_between(c.world, eid, mover))
+    c.spring_trap(pick, on=mover)
 
 
 @power(

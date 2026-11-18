@@ -121,6 +121,7 @@ from combat_engine.engine.events import (
     Dropped,
     Hit,
     Miss,
+    MoveStart,
     RelationCleared,
     TurnEnd,
     TurnStart,
@@ -1086,19 +1087,58 @@ _M1523_MOVED = "an enemy within 5 squares moves"
     reach=Ranged(5),
     target=NO_TARGET,
     trigger=_M1523_MOVED,
-    on=Trigger(AttackDeclared, _foe_moved_within(5), _M1523_MOVED),
-    todo=("c.spring_trap()",),
+    on=Trigger(MoveStart, _foe_moved_within(5), _M1523_MOVED),
 )
 def m1523a3(c: Cast) -> None:
-    """The whole of this row is setting off a trap on purpose.
+    """The whole of this row is setting off a trap on purpose, and it is
+    written now.
 
-    A trap is an entity that attacks like anything else, and `c.is_trap` can
-    find one, but nothing can make one go off: there is no verb for "resolve
-    that trap's attack now" and the attack belongs to the trap rather than to
-    this creature, so `c.use_power` cannot borrow it either. Named rather than
-    approximated -- rolling the trap's attack from here would make this
-    creature the attacker, which is the one thing the printed line is not.
+    **The old note's objection was right and is why `c.spring_trap` exists
+    rather than a roll from here.** The attack belongs to the trap, so
+    rolling it from this creature would make it the attacker -- the one
+    thing the printed line is not -- and `c.use_power` cannot borrow the
+    trap's row for the same reason. `traps.fire` attacks with the trap as
+    the attacker, so `query.is_trap(ctx["attacker"])` stays true for the
+    rows that ask.
+
+    *"A trap it is aware of within range"*: `Trap.found` is the awareness
+    and the range is the row's own `Ranged(5)`, measured from this creature
+    to the trap rather than to its victim. A suppressed trap is refused
+    inside `traps.fire`, so a delayed one is correctly not available.
+
+    **The trigger was declared on the wrong event and could never be
+    true.** It read `Trigger(AttackDeclared, _foe_moved_within(5), ...)`,
+    and that predicate -- shared with `m4612a3`, which declares it on
+    `MoveStart` -- opens `getattr(ev, "actor", None)`. `AttackDeclared`
+    carries `attacker` and no `actor`, so the gate was permanently False
+    and the row could not have fired whatever was in its body. Its own
+    docstring says why the event matters: *"`MoveStart`, so the responder
+    sees the board the enemy is leaving"*. Silently false, which is this
+    engine's named failure mode, and invisible while the row was refused in
+    play for a missing verb.
+
+    **It attacks whoever moved**, which is the printed trigger's subject --
+    this is an immediate reaction to an enemy moving, and setting a trap off
+    at nobody in particular would be a different card. The nearest enemy to
+    the trap is the fallback when the mover cannot be read off the event.
     """
+    from combat_engine.engine.components import Trap
+    from combat_engine.engine.query import distance_between, is_trap
+
+    mover = getattr(c.trigger, "actor", None) or getattr(
+        c.trigger, "attacker", None)
+    aware = [
+        eid
+        for eid, trap in c.world.each(Trap)
+        if trap.found and not trap.sprung and is_trap(c.world, eid)
+        and distance_between(c.world, c.me, eid) <= 5
+    ]
+    if not aware or mover is None:
+        return
+    # The trap nearest the creature that moved, so a skirmisher with two in
+    # range sets off the one that can actually reach.
+    pick = min(aware, key=lambda eid: distance_between(c.world, eid, mover))
+    c.spring_trap(pick, on=mover)
 
 
 @power(

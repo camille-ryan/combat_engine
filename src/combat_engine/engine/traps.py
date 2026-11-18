@@ -33,8 +33,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .components import Trap
-from .events import Note
+from .components import Health, Trap
+from .events import Note, TrapSprung
+from .resolve import attack
+from .types import DamageType, Defense
 
 if TYPE_CHECKING:
     from .ecs import World
@@ -115,4 +117,73 @@ def suppressed(world: World, eid: int) -> bool:
             trap.delayed_until = None
             world.bus.emit(Note(text=f"{trap.ref} reactivates"))
             return False
+    return True
+
+
+#: Which defence a trap's printed word names. `"ref"` is the common one and
+#: the fallback: 4 in 5 printed blocks roll against Reflex, which is what
+#: `content.terrain`'s own table said before this moved.
+_DEFENCES = {
+    "ac": Defense.AC,
+    "fort": Defense.FORT,
+    "fortitude": Defense.FORT,
+    "ref": Defense.REF,
+    "reflex": Defense.REF,
+    "will": Defense.WILL,
+}
+
+
+def fire(
+    world: World, eid: int, victim: int, *, by: int = 0, why: str = "stepped",
+    attack_bonus: int | None = None, damage: str = "",
+) -> bool:
+    """Set a trap off at one creature. True if the attack hit.
+
+    **The firing was a closure in `content/terrain.py` and nothing outside
+    could reach it**, which is why a trap could only ever go off the two
+    ways that closure was wired for: a plate stepped on, and an ongoing
+    trap's own turn. *"You trigger the trap"* -- PHB p189, a Thievery check
+    failed by 5 or more -- had nowhere to go, and `p11600` was refused in
+    play for want of the moment.
+
+    Here rather than there because the numbers are printed **data** and the
+    firing is a **rule**: `Trap.attack`, `Trap.defence` and `Trap.damage`
+    carry the page, and this module already owns the suppression state that
+    decides whether a trap is there at all.
+
+    **A suppressed trap fires nothing**, whatever asks -- DMG p84's *"while
+    it's delayed or disabled, the trap effectively isn't there"* -- so a row
+    cannot spring a disabled trap and neither can a fumbled disarm. That is
+    one test here instead of one at each caller.
+
+    `TrapSprung` is announced **before** the attack, so a row answering it
+    as an immediate interrupt acts while the blow is still coming. `why`
+    says how it came to fire and `by` who caused it, which are different
+    questions from `victim`: the character who fumbles a disarm sets it off
+    and the trap may then attack somebody else.
+
+    `attack_bonus` and `damage` override the stored numbers, for the caller
+    that has a printed fallback of its own. `arm` passes them for a block
+    that prints neither, because an invented number must not be stored on
+    the component as though the book had printed it (#981).
+    """
+    from .query import alive
+
+    trap = world.get(eid, Trap)
+    if trap is None or suppressed(world, eid):
+        return False
+    if world.get(victim, Health) is None or not alive(world, victim):
+        return False
+    bonus = trap.attack if attack_bonus is None else attack_bonus
+    dice = damage or trap.damage
+    world.bus.emit(TrapSprung(trap=eid, victim=victim, by=by, why=why))
+    # Through `resolve.attack` with the trap itself as the attacker, so
+    # `query.is_trap(ctx["attacker"])` is true for the rows that ask and a
+    # bonus hung on the trap by a power is read like anybody else's.
+    if not attack(world, eid, victim, bonus, _DEFENCES.get(trap.defence, Defense.REF),
+                  power=trap.ref):
+        return False
+    if dice:
+        world.damage(eid, victim, world.rng.roll(dice).total,
+                     DamageType.UNTYPED, detail=trap.ref)
     return True

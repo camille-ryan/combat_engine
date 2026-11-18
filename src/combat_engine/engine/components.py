@@ -770,6 +770,28 @@ class Trap:
     #: offered. #955.
     disable_skill: str = ""
     disable_dc: int | None = None
+    #: The printed attack bonus and which defence it is rolled against --
+    #: `"ref"`, `"fort"`, `"will"`, `"ac"` -- stored the way `damage` above
+    #: already is.
+    #:
+    #: **They were locals in `content/terrain.py`'s `arm`**, closed over by
+    #: a `strike` function nothing outside could reach. So a trap could only
+    #: ever fire the two ways that closure was wired for -- a plate stepped
+    #: on, and an ongoing trap's own turn -- and *"you trigger the trap"*
+    #: (PHB p189, failing a Thievery check by 5 or more) had nowhere to go,
+    #: which is what left `p11600` refused in play.
+    #:
+    #: Here so `traps.fire` can do it from the engine, which is where a rule
+    #: belongs: the numbers are printed data and the firing is a rule, and
+    #: `traps.py` already owns the suppression state beside it.
+    #:
+    #: `attack` is stored **as printed**, so `world.scaling` takes the level
+    #: back out of it exactly as it does for a monster. `0` and `""` mean
+    #: the row printed neither and the caller falls back -- `arm` keeps that
+    #: fallback, because an invented number must not reach `policy/` as
+    #: though the book had printed it (#981).
+    attack: int = 0
+    defence: str = ""
 
 
 @dataclass

@@ -117,6 +117,7 @@ from combat_engine.engine.events import (
     Moved,
     PowerUsed,
     SavingThrow,
+    TrapSprung,
     TurnEnd,
     TurnStart,
     ZoneEntered,
@@ -4083,13 +4084,28 @@ def m934a1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(1),
     target=NO_TARGET,
-    dropped=("c.spring_trap()",),
+    dropped=("c.lay_trap(attack=)",),
 )
 def m934a2(c: Cast) -> None:
     """A square that bites what walks into it, which is what `c.hazard` is.
     What is dropped is the rest of the printed trap: it rolls an attack of its
-    own against Reflex, it slows what it hits, and it is destroyed the first
-    time it lands a blow. A hazard has no attack line and no one-shot."""
+    own against Reflex (+10), it slows what it hits, and it is destroyed the
+    first time it lands a blow. A hazard has no attack line and no one-shot.
+
+    **Re-pointed off `c.spring_trap()`, which arrived and is the wrong
+    half.** That verb sets an *existing* trap off, which is `m1523a3`'s and
+    `m1526a5`'s whole card; this row needs to **lay** one carrying its own
+    printed attack line. `todo.py` is what surfaced the difference -- the
+    symbol went green while this row was still unfinished, which is exactly
+    the report that marker exists to produce.
+
+    Closer than it was, and the remaining gap is narrow. `Trap.attack`,
+    `Trap.defence` and `Trap.damage` carry an attack line now and
+    `traps.fire` rolls it, so the numbers have somewhere to live; what has no
+    door is a **row** placing a trap with numbers of its own -- `terrain.arm`
+    reads them from `game.db` by level, which is right for a dressed board
+    and wrong for a monster that drops caltrops. The one-shot ("once the
+    caltrops hit") and the slow ride on that same verb."""
     where = _free_square_beside(c, c.me)
     if where is not None:
         c.hazard(
@@ -4107,16 +4123,49 @@ def m934a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d6", 3),
-    dropped=("c.spring_trap()",),
 )
 def m934a3(c: Cast) -> None:
-    """The shove works. "If a creature is attacked by a trap because of this
-    forced movement it grants combat advantage to the trap" is the dropped
-    half, and it waits on the same thing the caltrops do: a trap that makes an
-    attack of its own, which nothing on the board does."""
-    if c.strike():
-        c.hit()
+    """The shove works, and so does the rider.
+
+    *"If a creature is attacked by a trap due to this forced movement, the
+    creature grants combat advantage to the trap."* The old note said this
+    waited on *"a trap that makes an attack of its own, which nothing on the
+    board does"* -- true when written, and `events.TrapSprung` is that
+    attack announcing itself.
+
+    **Watched rather than predicted**, which is what the printed "due to"
+    asks for: the push may or may not carry the target onto a plate, and
+    only the trap going off says which. The watch is armed for the push and
+    expires with it.
+
+    **Scoped to the creature this row pushed and to the trap that bit it**,
+    both. `to=` takes an id, so the advantage is granted to the trap alone
+    rather than to a side -- which is the printed sentence, and `to="team"`
+    would hand it to this monster's allies as well.
+
+    `When.EONT` is the clock, because the card gives the rider none: the
+    advantage is for the attack the trap makes on the way through, so it has
+    to outlive the push by long enough to be read and no longer.
+    """
+    if not c.strike():
+        return
+    c.hit()
+    shoved = c.target
+    if shoved is None:
         c.push(1)
+        return
+
+    def bitten(ev: TrapSprung) -> None:
+        if ev.victim != shoved:
+            return
+        c.grants_advantage(on=shoved, to=ev.trap, until=When.EONT)
+
+    watching = c.watch(TrapSprung, bitten, until=When.EONT)
+    c.push(1)
+    # The push is over, so a later springing is not "due to this forced
+    # movement" -- the window is the shove and nothing after it.
+    if watching is not None:
+        c.world.effects.end(watching, why=f"{c.ref}: the push is over")
 
 
 @power(

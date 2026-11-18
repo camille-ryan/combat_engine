@@ -6,8 +6,10 @@ an ally, and a walk through an enemy's space. Two are the circumstance no
 board presents: a lock and a pocket, which is `f3447`'s split on `#735`
 (`actions._picking` offers the lock as a standard action and `Grid.locked`
 is empty on every board; sleight of hand went to the story engine on
-`#787`). Two are held by the engine -- nothing reaches the picking-up path
-from a body, and nothing announces a trap going off.
+`#787`). **One** is held by the engine -- nothing reaches the picking-up
+path from a body. The other was "nothing announces a trap going off", and
+`events.TrapSprung` is that announcement now: `p11600` declares its printed
+Trigger off it.
 """
 
 from __future__ import annotations
@@ -24,6 +26,8 @@ from combat_engine.engine import (
     SELF,
     Cast,
     Melee,
+    TrapSprung,
+    Trigger,
     When,
     power,
 )
@@ -109,6 +113,22 @@ def p9344(c: Cast) -> None:
         c.draw()
 
 
+#: `p11600`'s printed Trigger, named once because the string is used twice --
+#: as the prose the page shows and as the `Trigger`'s own text.
+_TRIGGERS_A_TRAP = "your thievery check triggers a trap"
+
+
+def _my_thievery_sprang_it(world: object, me: int, ev: TrapSprung) -> bool:
+    """This character's own failed disarm, and nothing else.
+
+    Both halves are the printed sentence. `by` is who caused it -- an ally's
+    fumble is not "your Thievery check" -- and `why` tells a check apart
+    from a plate stepped on or an ongoing trap's turn, which the card does
+    not pay for.
+    """
+    return ev.by == me and ev.why == "disable"
+
+
 @power(
     "p11600",
     level=6,
@@ -117,18 +137,31 @@ def p9344(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    trigger="your thievery check triggers a trap",
-    todo=("events.TrapSprung",),
+    trigger=_TRIGGERS_A_TRAP,
+    on=Trigger(TrapSprung, _my_thievery_sprang_it, _TRIGGERS_A_TRAP),
 )
 def p11600(c: Cast) -> None:
-    """The shift is one line; the trigger cannot be declared at all.
+    """The trigger is declarable now, and the row's own note said exactly
+    what was missing: *"there is no event between `SkillCheck` and the
+    damage for a trigger to name"*.
 
-    A trap is an entity the board knows -- `query.is_trap` finds one -- and
-    nothing anywhere announces one going off, least of all off the back of a
-    skill check: there is no event between `SkillCheck` and the damage for a
-    trigger to name. `trigger=` is left as the printed prose and carries no
-    `on=`, deliberately, because prose with no predicate is a row that never
-    fires and the marker is what says so."""
+    `TrapSprung` is that event, and `why="disable"` is the half that makes
+    this card's trigger the printed one rather than a guess. The page
+    settles the rest -- PHB p189's Disable Trap entry prints *"Fail by 5 or
+    More: You trigger the trap"*, which is a **general** rule, where
+    `actions.perform` had been reading per-trap countermeasure lines as the
+    only source and so sprang nothing ever.
+
+    **Narrowed to this character's own fumble**, both ways. `ev.by == c.me`
+    is "your Thievery check", so an ally setting a trap off does not move
+    this thief; and `ev.why == "disable"` keeps a trap stepped on, or one
+    taking its own turn, from paying out -- the card says a *check*
+    triggered it.
+
+    Half a Dexterity modifier, rounded down, and `max(1, ...)` is not
+    added: a character with a Dexterity modifier of 1 shifts 0 squares,
+    which is what the arithmetic says and what the card leaves alone."""
+    c.shift(c.dex_mod // 2)
 
 
 @power(

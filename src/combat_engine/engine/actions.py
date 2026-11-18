@@ -2813,13 +2813,34 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         ):
             return False
         working = Cast(world=world, me=actor, ref="disable")
-        if working.check(trap.disable_skill, trap.disable_dc):
+        rolled = working.check(trap.disable_skill, trap.disable_dc)
+        if rolled:
             traps.disable(world, eid)
-        # **A failed check spends the standard and does nothing else**, the
-        # same shape as a failed look above. Some printed blocks spring the
-        # trap on a bad roll and some do not -- that is a per-trap detail
-        # this engine does not carry a column for, and inventing one here
-        # would apply it to all 130.
+        # **A check that misses by 5 or more sets the trap off**, which is a
+        # printed general rule and not a per-trap detail. PHB p189, the
+        # Disable Trap entry:
+        #
+        #   > *"Fail by 4 or Less: Nothing happens. You can try again as a
+        #   > new action. Fail by 5 or More: You trigger the trap."*
+        #
+        # This said the opposite -- *"some printed blocks spring the trap on
+        # a bad roll and some do not, that is a per-trap detail this engine
+        # does not carry a column for"* -- and the per-trap blocks are the
+        # ones that print something *different* from the general rule, which
+        # is what a countermeasure line is for. Reading them as the only
+        # source left a fumbled disarm costing nothing but a standard, and
+        # left `p11600` refused in play: its whole trigger is *"your
+        # Thievery check triggers a trap"*.
+        #
+        # The margin comes off the roll rather than from a second test, so a
+        # trap with no printed DC cannot be sprung by arithmetic on `None` --
+        # the guard above has already refused that case.
+        #
+        # `by=actor`, and the trap attacks **the fumbler**: the page says
+        # "you trigger the trap", so the character with their hands on it is
+        # who it goes off at.
+        elif trap.disable_dc - getattr(rolled, "total", trap.disable_dc) >= 5:
+            traps.fire(world, eid, actor, by=actor, why="disable")
         #
         # **True, and the reason is `policy`'s turn loop rather than the
         # cost.** `perform` spends before it dispatches, so a `False` here

@@ -461,7 +461,6 @@ def p16503(c: Cast) -> None:
     on=Trigger(
         Hit, _trap_attacks_me, "a trap or a hazard attacks you",
     ),
-    dropped=("c.spring_trap()",),
 )
 def p9313(c: Cast) -> None:
     """The defence half plays, by `p13216`'s route: the bonus is against the
@@ -470,14 +469,44 @@ def p9313(c: Cast) -> None:
 
     **Declared on `Hit` and not on the attack roll**, which narrows the
     printed Trigger to the half where the bonus can change anything -- on an
-    attack already missing there is nothing for +4 to do. It is also what
-    makes the second clause unreachable from here, and that clause is
-    dropped anyway: nothing can set a trap off. `c.use_power` cannot borrow
-    the trap's row either, because the attack would then be this character's
-    rather than the trap's, which is the one thing the line is not.
+    attack already missing there is nothing for +4 to do.
+
+    **The repeat is written now, and declaring on `Hit` is what makes it
+    reachable rather than what blocked it.** The printed clause is *"if the
+    attack misses you"*, and after `c.settle_attack` the +4 may have made it
+    a miss -- which is exactly the case this row creates. An attack that was
+    already missing never needed this card.
+
+    `c.spring_trap` is the verb, and the old note's objection to
+    `c.use_power` still stands and is why: borrowing the trap's row would
+    make the swing **this character's**, so a rider on their attacks would
+    pay out and a creature's defences against *traps* would not apply. The
+    attack has to be the trap's, which is what `traps.fire` does.
+
+    The trap chooses nobody. The card names the geometry -- an enemy
+    adjacent to you -- and leaves which one to the table, so the first by id
+    is taken: aiming it is not an AI decision and `c.choose` would ask a
+    player to point somebody else's trap.
     """
     result = getattr(c.trigger, "result", None)
     if result is None:
         return
     result.target_defence += 4
     c.settle_attack()
+    # **"If the attack misses you"** -- so the repeat is owed only when the
+    # +4 above has actually turned the blow aside, which is why it is read
+    # after `c.settle_attack` rather than off the trigger. A row declared on
+    # `Hit` sees a hit; whether it is still one is this line's question.
+    if result.hit:
+        return
+    springer = getattr(c.trigger, "attacker", None)
+    if springer is None:
+        return
+    # "Against an enemy adjacent to you", and the trap chooses nobody: the
+    # printed line names the geometry and leaves which one to the table, so
+    # the first by id is taken rather than a scored pick -- this is not an
+    # AI decision and `c.choose` would ask a player to aim a trap.
+    beside = [foe for foe in c.enemies() if c.adjacent(foe)]
+    if not beside:
+        return
+    c.spring_trap(springer, on=beside[0])

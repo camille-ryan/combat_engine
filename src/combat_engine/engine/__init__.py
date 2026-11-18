@@ -127,6 +127,7 @@ from .events import (
     SurgeSpent,
     TempHP,
     TotalDefence,
+    TrapSprung,
     TurnEnd,
     TurnStart,
     ZoneCreated,
