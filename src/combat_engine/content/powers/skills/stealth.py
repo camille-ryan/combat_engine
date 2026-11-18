@@ -162,7 +162,7 @@ def p16491(c: Cast) -> None:
     something to narrow after all, and the row was refused in play for a
     clause the engine could nearly express.
 
-    **`c.unseen_by` and not `c.lose_sense`**, which is the whole difficulty
+    **`c.undetected_by` and not `c.lose_sense`**, which is the whole difficulty
     and the card's own second line. `c.lose_sense` takes the sense off the
     *looker*, so one use would blind every darkvision creature on the board
     in the dark; this makes **one character** invisible to those senses and
@@ -176,7 +176,7 @@ def p16491(c: Cast) -> None:
     `low_light` is deliberately **not** named: the card lists three senses
     and low-light vision is not one of them, which is the half *"you can be
     detected with other senses as normal"* is about."""
-    c.unseen_by("darkvision", "blindsight", "tremorsense",
+    c.undetected_by("darkvision", "blindsight", "tremorsense",
                 on=c.me, until=When.EONT)
 
 

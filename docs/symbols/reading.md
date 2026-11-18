@@ -147,6 +147,10 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Does this creature have that named sense at all?
 - `query.hidden_from(world: 'World', eid: 'int') -> 'set[int]'`
   - Who cannot see this creature.
+- `query.knowledge_dc(world: 'World', eid: 'int', learn: 'str' = 'name') -> 'int'`
+  - The printed DC to learn that much about that creature.
+- `query.knowledge_skill(world: 'World', eid: 'int') -> 'str'`
+  - Which knowledge skill identifies that creature, or "".
 - `query.light_concealment(world: 'World', attacker: 'int', target: 'int') -> 'Cover'`
   - The concealment the target gets from standing somewhere badly lit.
 - `query.light_level(world: 'World', square: 'Square', dark_zones: 'list[Any] | None' = None) -> 'Light'`

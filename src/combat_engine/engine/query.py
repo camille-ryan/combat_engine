@@ -2805,6 +2805,85 @@ def immune_to_power(
     return None
 
 
+#: Which knowledge skill identifies a creature, by the word its stat block
+#: carries. PHB p182-188, one sentence per skill:
+#:
+#:     Arcana         elemental, fey or shadow origin, or a construct
+#:     Dungeoneering  aberrant origin
+#:     Nature         natural origin
+#:     Religion       immortal origin, or the undead keyword
+#:
+#: Measured over `monster.origin`: natural 2109, fey 289, elemental 271,
+#: aberrant 191, shadow 183, immortal 99 -- so the four sentences cover every
+#: creature in the corpus with nothing left over, which is why this is a
+#: mapping and not a mapping plus a guess.
+#:
+#: **Ordered, because two words can both apply.** An undead construct is not
+#: in the corpus today, and if one arrives the printed sentences give no
+#: tiebreak -- so the order is declared here rather than left to set
+#: iteration, which would answer differently between runs.
+KNOWLEDGE_SKILLS: tuple[tuple[str, str], ...] = (
+    ("undead", "religion"),
+    ("immortal", "religion"),
+    ("aberrant", "dungeoneering"),
+    ("construct", "arcana"),
+    ("elemental", "arcana"),
+    ("fey", "arcana"),
+    ("shadow", "arcana"),
+    ("natural", "nature"),
+)
+
+#: What a monster knowledge check has to beat, by what it asks. PHB p181:
+#:
+#:     Name, type, and keywords        15
+#:     Powers                          20
+#:     Resistances and vulnerabilities 25
+#:     Paragon tier creature           +5
+#:     Epic tier creature             +10
+#:
+#: **Not `dc.py`'s level bands**, which is the trap worth naming: that table
+#: is the general skill-DC ladder and this is a separate printed table with
+#: its own numbers. A card may still *refer* to the banded hard DC --
+#: `p14137` does -- and that is the card comparing a result against a
+#: different yardstick, not this check's own DC.
+KNOWLEDGE_DC: dict[str, int] = {"name": 15, "powers": 20, "resistances": 25}
+
+
+def knowledge_skill(world: World, eid: int) -> str:
+    """Which knowledge skill identifies that creature, or "".
+
+    Off `kinds_of`, so a row that gave a creature an origin with
+    `c.set_origin` is honoured and one that took it away is too -- the stat
+    block is not asked directly for that reason.
+
+    Empty for a creature no printed sentence covers, which is nothing in the
+    corpus today and is an honest answer rather than a fallback: guessing a
+    skill would make the check rollable against a creature the rules give no
+    way to identify.
+    """
+    words = kinds_of(world, eid)
+    for word, skill in KNOWLEDGE_SKILLS:
+        if word in words:
+            return skill
+    return ""
+
+
+def knowledge_dc(world: World, eid: int, learn: str = "name") -> int:
+    """The printed DC to learn that much about that creature.
+
+    The tier adjustment is the creature's own level, which is what *"paragon
+    tier creature"* means -- not the asker's.
+    """
+    base = KNOWLEDGE_DC.get(learn, KNOWLEDGE_DC["name"])
+    row = stat_block(world, eid)
+    level = int((row or {}).get("level") or 0)
+    if level >= 21:
+        return base + 10
+    if level >= 11:
+        return base + 5
+    return base
+
+
 def holds_somebody(world: World, eid: int) -> bool:
     """Is this creature holding anyone in a grab? "Requirement: you must
     have a creature grabbed."
@@ -3118,7 +3197,14 @@ def _suppressed(mods: Mods, sense: str) -> bool:
 
 
 #: The prefix a sense that cannot find **one named creature** is keyed under
-#: -- `"unseen by darkvision"`, carried by the creature being looked for.
+#: -- `"undetected by darkvision"`, carried by the creature looked for.
+#:
+#: **Named `UNDETECTED_BY` and not `UNSEEN_BY`, which is a collision worth
+#: avoiding rather than documenting.** `query.unseen_by` already exists one
+#: screen up and asks a different question -- *is this creature invisible to
+#: that watcher* -- so two meanings would have shared a word in one module.
+#: `p16491`'s marker spelled it `c.unseen_by(sense=)`; the marker is retired
+#: and the name was free to choose.
 #:
 #: **The mirror of `NO_SENSE` above and a different question.** That one is
 #: on the *looker* and takes the sense away from it entirely; this is on the
@@ -3135,10 +3221,10 @@ def _suppressed(mods: Mods, sense: str) -> bool:
 #:
 #: Read by `sees_in` when it is given `against=`, which `light_concealment`
 #: passes because it is the one place that has both creatures.
-UNSEEN_BY = "unseen by "
+UNDETECTED_BY = "unseen by "
 
 
-def _unseen(world: World, quarry: int, sense: str) -> bool:
+def _undetected(world: World, quarry: int, sense: str) -> bool:
     """Does this creature refuse to be found by that sense?
 
     Asked of the quarry's own modifiers, so it costs nothing on the boards
@@ -3147,7 +3233,7 @@ def _unseen(world: World, quarry: int, sense: str) -> bool:
     mods = world.get(quarry, Mods)
     if mods is None or not mods.items:
         return False
-    return mods.total(f"{UNSEEN_BY}{sense}", {}) > 0
+    return mods.total(f"{UNDETECTED_BY}{sense}", {}) > 0
 
 
 #: The order the levels compare in. `Light` is a `StrEnum`, so `<` on it is
@@ -3174,7 +3260,7 @@ def sees_in(
       without the other, and both answer True here.
 
     **`against` is who is being looked for**, and a sense that creature is
-    `UNSEEN_BY` does not answer. One card prints it -- *"creatures can't use
+    `UNDETECTED_BY` does not answer. One card prints it -- *"creatures can't use
     darkvision, blindsight, or tremorsense to detect you"* -- and the
     narrowing is the whole of it: the same looker still sees everybody else
     in the dark, which a looker-side suppression could not say.
@@ -3198,9 +3284,9 @@ def sees_in(
         if _suppressed(mods, key):
             return False
         # The quarry's refusal, which is a different creature's modifiers --
-        # see `UNSEEN_BY`. Asked after the looker's own suppression because
+        # see `UNDETECTED_BY`. Asked after the looker's own suppression because
         # either one is enough to stop the sense answering.
-        if against is not None and _unseen(world, against, key):
+        if against is not None and _undetected(world, against, key):
             return False
         radius = mods.total(key, {})
         return radius > 0 and radius >= distance

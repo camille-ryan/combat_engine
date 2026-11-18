@@ -915,6 +915,34 @@ def p14188(c: Cast) -> None:
 # ===========================================================================
 
 
+def _about_a_creature_i_can_sense(world: Any, me: int, ev: Any) -> bool:
+    """The check was about a monster this character can see or hear.
+
+    **The printed Trigger's own narrowing, which the declaration dropped.**
+    It read any successful knowledge-skill check of mine, so a check about
+    nobody -- `SkillCheck.target` is 0 for every ordinary skill roll --
+    would have fired the row and its body would then have had no monster to
+    talk about.
+
+    `can_hear` is the "or hear" half and answers for a creature in earshot
+    whatever the light is doing; sight is `can_see`. Either is enough, which
+    is what "or" means.
+    """
+    from combat_engine.engine.query import (
+        can_hear,
+        line_of_sight,
+        unseen_by,
+    )
+
+    quarry = getattr(ev, "target", None)
+    if not quarry or quarry == me:
+        return False
+    # Sight is line of sight and not being invisible to me -- there is no
+    # single `can_see`, and `query.unseen_by` is the invisibility half.
+    seen = line_of_sight(world, me, quarry) and not unseen_by(world, me, quarry)
+    return seen or can_hear(world, me, quarry)
+
+
 @power(
     "p14137", level=0, cls=X7_854, usage=ENCOUNTER, action=FREE,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
@@ -923,22 +951,83 @@ def p14188(c: Cast) -> None:
         SkillCheck,
         both(
             my_check("arcana", "dungeoneering", "history", "nature", "religion"),
-            check_succeeded,
+            both(check_succeeded, _about_a_creature_i_can_sense),
         ),
         "you succeed on a monster knowledge check",
     ),
-    todo=("c.knowledge_check()",),
+    dropped=("c.deals_half(when=)",),
 )
 def p14137(c: Cast) -> None:
-    """Every clause is about "the monster", so all three halves wait on
-    one thing -- and it is no longer the field.
+    """Two of the three clauses are written; the third shares `p14140`'s
+    symbol.
 
-    `SkillCheck.target` landed and the rows that make an opposed check
-    pass `against=`. Nothing makes a **monster knowledge check**: there is
-    no action and no row that rolls Arcana or Nature *about a creature*,
-    so the declared trigger has no event to fire on and a target field
-    would have nothing to carry. That is the gap this names.
+    **The old note was right that nothing rolled a monster knowledge
+    check, and the page is what decided the shape of the fix.** PHB p181:
+    *"Monster Knowledge: **No action required** -- either you know the
+    answer or you don't."* So it is `c.knowledge_check`, a verb, and not an
+    action kind -- there is no action to offer, nothing for
+    `actions.options` to put in a menu and no term `policy/` owes.
+    `query.knowledge_skill` holds the skill-per-origin mapping the four
+    printed sentences give, and `query.knowledge_dc` the printed
+    monster-knowledge table.
+
+    **The trigger is narrowed to a monster this character can see or
+    hear**, which the printed Trigger says and the declaration did not: it
+    fired on any successful knowledge-skill check of mine, including one
+    about nobody. `ev.target` is the subject, which `c.check(against=)`
+    tags.
+
+    **"Meets or exceeds the hard DC for the monster's level" is a different
+    yardstick from the check's own DC**, and both are printed. The check is
+    rolled against the monster-knowledge table (15 for name and type); this
+    clause compares the *result* against `dc(level, "hard")`, the banded
+    ladder. Reading one for the other would have made a level-5 monster's
+    threshold 15 instead of 22.
+
+    **"But not when you deal damage that the target resists"** is read off
+    `Defences.resist` for the damage type in the context. A gated
+    resistance -- `c.resist(when=)` -- is not seen by that flat read, which
+    is an approximation and is said here rather than discovered: the card's
+    narrowing is honoured for every printed resistance and missed for a
+    conditional one.
+
+    Dropped: the failure branch. *"Your attacks against the target deal
+    only half damage"* needs a halving gated on the target, which is
+    `p14140`'s `c.deals_half(when=)` -- `query.deals_half` is derived from
+    being weakened and takes no context, and `c.weakened` would halve this
+    character's damage against everybody. One gap, one symbol, shared.
     """
+    ev = c.trigger
+    monster = getattr(ev, "target", None)
+    if monster is None:
+        return
+    from combat_engine.dc import dc
+
+    hard = dc(c.level_of(monster), "hard")
+    if int(getattr(ev, "total", 0)) < hard:
+        # The failure branch is the dropped clause -- see the docstring.
+        return
+    for defence in (AC, FORT, REF, WILL):
+        c.bonus(
+            defence, 4, on=c.me, until=When.EONT, kind="power",
+            when=lambda ctx, foe=monster: ctx.get("attacker") == foe,
+        )
+
+    from combat_engine.engine.components import Defences as _Defences
+
+    def unresisted(ctx: dict[str, Any], foe: int = monster) -> bool:
+        if ctx.get("target") != foe:
+            return False
+        shields = c.world.get(foe, _Defences)
+        if shields is None:
+            return True
+        kind = ctx.get("dtype")
+        return not (kind is not None and shields.resist.get(kind, 0) > 0)
+
+    c.bonus(
+        "damage", c.int_mod, on=c.me, until=When.EONT, kind="power",
+        when=unresisted,
+    )
 
 
 @power(

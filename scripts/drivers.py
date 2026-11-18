@@ -14615,7 +14615,7 @@ def unseen_by_a_sense(out: Result) -> None:
     a darkvision attacker sees this character as though it were bright, and
     without the sense the darkness conceals again.
 
-    **The second printed line is what makes this `c.unseen_by` and not
+    **The second printed line is what makes this `c.undetected_by` and not
     `c.lose_sense`.** That verb takes the sense off the *looker*, so one use
     would blind every darkvision creature on the board; this hides **one**
     character and leaves the room as visible as before. Both directions are
@@ -14680,11 +14680,11 @@ def unseen_by_a_sense(out: Result) -> None:
     out.that(after_me > before_me,
              "p16491 takes the darkvision away AGAINST THIS CHARACTER, so the"
              " darkness conceals again -- the row arm, and the plant that"
-             " matters is deleting `c.unseen_by` from its body",
+             " matters is deleting `c.undetected_by` from its body",
              f"{before_me} -> {after_me}")
     out.that(after_mate == before_mate,
              "and the same attacker still sees my ALLY for free on the same"
-             " board -- the assertion that tells `c.unseen_by` from"
+             " board -- the assertion that tells `c.undetected_by` from"
              " `c.lose_sense`, which would have blinded it outright",
              f"{before_mate} -> {after_mate}")
     out.that(query.has_sense(world, foe, "darkvision"),
@@ -14696,7 +14696,7 @@ def unseen_by_a_sense(out: Result) -> None:
     if foe2 is None:
         return
     # **Through the row, not the verb.** The first draft called
-    # `c.unseen_by(...)` here with the three senses written out, so a plant
+    # `c.undetected_by(...)` here with the three senses written out, so a plant
     # adding a FOURTH to `p16491`'s body could not be seen -- the arm was
     # about the verb and said nothing about what the row asks for.
     REGISTRY["p16491"].body(Cast(world=world2, me=me2, ref="p16491"))
@@ -14723,11 +14723,182 @@ def unseen_by_a_sense(out: Result) -> None:
     for bad, why in ((("echolocation",), "a sense no reader looks for"),
                      ((), "no sense at all")):
         try:
-            probe.unseen_by(*bad, on=me2)
+            probe.undetected_by(*bad, on=me2)
             out.that(False, f"{why} is refused", "accepted")
         except ValueError:
             out.that(True, f"{why} is refused -- a key nothing reads is a hold"
                            " that costs nothing and does nothing")
+
+
+def a_monster_knowledge_check(out: Result) -> None:
+    """*"Monster Knowledge: **No action required** -- either you know the
+    answer or you don't."* -- PHB p181, and that sentence decided the shape.
+
+    `p14137` was refused in play because nothing rolled one: its trigger is
+    *"you succeed on a monster knowledge check against a monster that you
+    can see or hear"* and there was no event to fire on. The page says there
+    is no action, so `c.knowledge_check` is a **verb** -- nothing for
+    `actions.options` to offer and no term `policy/` owes, which is the
+    difference from adding an action kind.
+
+    **Two printed tables, and reading one for the other is the trap.** The
+    check itself is rolled against the monster-knowledge DCs (15 name and
+    type, 20 powers, 25 resistances, +5 paragon, +10 epic on the
+    *creature's* level). `p14137` then compares the **result** against
+    `dc(level, "hard")`, the banded ladder -- a different yardstick, which
+    the card names in so many words. For a level-1 monster that is 15
+    against 19.
+
+    **Which skill is the creature's business.** PHB p182-188 gives one
+    sentence per skill and the mapping covers all 3,142 creatures with
+    nothing left over: arcana for elemental, fey or shadow origin and for a
+    construct, dungeoneering for aberrant, nature for natural, religion for
+    immortal or the undead keyword. The ordering is declared because two
+    words can both apply -- an undead answers religion, not nature, and set
+    iteration would have answered differently between runs.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.dc import dc
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    # -- the skill is the creature's, and the order is declared ----------
+    world, me, _ = _board("p14137", 1)
+    foes = sorted(enemies(world, me))
+    out.that(bool(foes), "the board deals a monster to identify", f"{foes}")
+    if not foes:
+        return
+    beast = next((f for f in foes if "natural" in query.kinds_of(world, f)
+                  and "undead" not in query.kinds_of(world, f)), None)
+    undead = next((f for f in foes if "undead" in query.kinds_of(world, f)), None)
+    out.that(beast is not None,
+             "a natural creature on the board -- nature identifies it",
+             f"{beast}")
+    if beast is not None:
+        out.that(query.knowledge_skill(world, beast) == "nature",
+                 "a natural creature is identified with Nature, which is the"
+                 " printed sentence for that origin",
+                 f"{query.knowledge_skill(world, beast)}")
+    out.that(undead is not None,
+             "and an undead one, which carries BOTH words -- the fixture the"
+             " ordering exists for",
+             f"{undead}")
+    if undead is not None:
+        out.that("natural" in query.kinds_of(world, undead),
+                 "that creature really is natural as well as undead, so the"
+                 " two sentences both apply and something has to break the"
+                 " tie",
+                 f"{sorted(query.kinds_of(world, undead))[:5]}")
+        out.that(query.knowledge_skill(world, undead) == "religion",
+                 "and Religion wins -- the undead keyword is checked before"
+                 " the origin, which set iteration would have decided"
+                 " differently between runs",
+                 f"{query.knowledge_skill(world, undead)}")
+
+    # -- the printed DC table, which is NOT dc.py's bands ----------------
+    if beast is not None:
+        level = Cast(world=world, me=me, ref="probe").level_of(beast)
+        out.that(query.knowledge_dc(world, beast) == 15,
+                 "name and type is DC 15 off the monster-knowledge table",
+                 f"{query.knowledge_dc(world, beast)}")
+        out.that(query.knowledge_dc(world, beast, "powers") == 20
+                 and query.knowledge_dc(world, beast, "resistances") == 25,
+                 "powers 20 and resistances 25, which `learn=` picks between",
+                 f"{query.knowledge_dc(world, beast, 'powers')}"
+                 f"/{query.knowledge_dc(world, beast, 'resistances')}")
+        out.that(query.knowledge_dc(world, beast) != dc(level, "hard"),
+                 "and it is NOT the banded hard DC -- two printed tables, and"
+                 f" for this level-{level} creature they are"
+                 f" {query.knowledge_dc(world, beast)} and"
+                 f" {dc(level, 'hard')}. Reading one for the other is the"
+                 " whole trap",
+                 f"{query.knowledge_dc(world, beast)} vs {dc(level, 'hard')}")
+
+    # -- the verb rolls it, announces it, and names the subject ----------
+    if beast is not None:
+        seen: list[SkillCheck] = []
+        world.bus.on(SkillCheck, seen.append)
+        probe = Cast(world=world, me=me, ref="probe")
+        world.rng.loaded = 20
+        got = probe.knowledge_check(on=beast)
+        out.that(bool(got),
+                 "a loaded 20 identifies it", f"{bool(got)}")
+        out.that(bool(seen) and seen[-1].target == beast,
+                 "and the `SkillCheck` names the creature it was ABOUT, which"
+                 " is what a trigger gates on -- `against=` tags the roll"
+                 " rather than opposing it",
+                 f"{seen[-1].target if seen else None}")
+        out.that(bool(seen) and seen[-1].skill == "nature",
+                 "with the skill the creature's origin called for",
+                 f"{seen[-1].skill if seen else None}")
+        world.rng.loaded = 1
+        out.that(not probe.knowledge_check(on=beast),
+                 "a loaded 1 does not", "failed")
+        # **`learn=` driven through the verb, not just read off the table.**
+        # Asserting `knowledge_dc(...,"powers") == 20` says the table is
+        # right and nothing about the verb passing the argument on -- a plant
+        # dropping `learn` from the call passed until this arm existed.
+        world.rng.loaded = 20
+        probe.knowledge_check(on=beast, learn="powers")
+        out.that(bool(seen) and seen[-1].dc == 20,
+                 "asking about its POWERS rolls against 20, so the verb hands"
+                 " `learn=` on rather than always asking for the name",
+                 f"{seen[-1].dc if seen else None}")
+        probe.knowledge_check(on=beast, learn="resistances")
+        out.that(bool(seen) and seen[-1].dc == 25,
+                 "and resistances against 25", f"{seen[-1].dc if seen else None}")
+
+    # -- p14137, both branches of the hard-DC comparison -----------------
+    declared = REGISTRY["p14137"]
+    out.that(declared.on is not None, "p14137 declares a trigger",
+             f"{declared.on}")
+    w0, m0, _ = _board("p14137", 1)
+    hard = dc(Cast(world=w0, me=m0, ref="probe").level_of(
+        sorted(enemies(w0, m0))[0]), "hard")
+
+    def after(total: int) -> tuple[bool, int, int, int]:
+        world, me, _ = _board("p14137", 1)
+        foe = sorted(enemies(world, me))[0]
+        ev = SkillCheck(actor=me, skill="nature", dc=15, natural=10,
+                        bonus=total - 10, total=total, success=True,
+                        target=foe)
+        fires = bool(declared.on.when(world, me, ev))
+        base = world.get(me, Mods)
+        was = base.total(Defense.AC, {"attacker": foe}) if base else 0
+        dsl.use(world, me, "p14137", trigger=ev)
+        mods = world.get(me, Mods)
+        return (
+            fires,
+            (mods.total(Defense.AC, {"attacker": foe}) - was) if mods else 0,
+            (mods.total(Defense.AC, {"attacker": 99999}) - was) if mods else 0,
+            mods.total("damage", {"target": foe, "dtype": None}) if mods else 0,
+        )
+
+    met = after(hard + 2)
+    missed = after(hard - 2)
+    out.that(met[0] and missed[0],
+             "the trigger fires either way -- the card's own condition is"
+             " inside the Effect, not in the Trigger, so a row that fired"
+             " only on success would be the wrong shape",
+             f"met {met[0]}, missed {missed[0]}")
+    out.that(met[1] == 4,
+             "meeting the hard DC gives +4 to defences against THAT monster",
+             f"{met[1]}")
+    out.that(met[2] == 0,
+             "and nothing against anybody else -- the printed narrowing, and"
+             " the assertion a blanket `c.bonus(AC, 4)` would fail",
+             f"{met[2]}")
+    out.that(met[3] > 0,
+             "plus a damage bonus against it", f"{met[3]}")
+    out.that(missed[1] == 0 and missed[3] == 0,
+             "and missing the hard DC gives neither -- the control, without"
+             " which 'the bonus landed' says nothing about the comparison",
+             f"AC {missed[1]}, damage {missed[3]}")
 
 
 def compelled_walk(out: Result) -> None:
@@ -97194,6 +97365,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "monster_knowledge": (a_monster_knowledge_check,
+                          "no action required, two printed DC tables, and"
+                          " the skill is the creature's own"),
     "unseen_by": (unseen_by_a_sense,
                   "one creature hides from darkvision without blinding the"
                   " looker, and low-light still finds it"),

@@ -75,6 +75,7 @@ if TYPE_CHECKING:
     from .components import Weapon
     from .dsl import Damage, Power, Range
     from .ecs import World
+    from .skills import CheckResult
 
 
 class _Decline:
@@ -16740,7 +16741,7 @@ class Cast:
             first = first or laid
         return first
 
-    def unseen_by(
+    def undetected_by(
         self, *senses: str, on: int | None = None,
         until: When = When.EONT,
     ) -> Effect | None:
@@ -16778,16 +16779,16 @@ class Cast:
         unknown = wanted - known
         if unknown:
             raise ValueError(
-                f"{self.ref}: c.unseen_by({', '.join(sorted(unknown))}) "
+                f"{self.ref}: c.undetected_by({', '.join(sorted(unknown))}) "
                 f"names no sense any reader looks for, so the hold would "
                 f"cost nothing and do nothing. Known: {sorted(known)}."
             )
         if not wanted:
             raise ValueError(
-                f"{self.ref}: c.unseen_by() with no sense named hides from "
+                f"{self.ref}: c.undetected_by() with no sense named hides from "
                 f"nothing. Name the ones the card prints."
             )
-        from .query import UNSEEN_BY
+        from .query import UNDETECTED_BY
 
         who = self._who(on)
         if who is None:
@@ -16795,7 +16796,7 @@ class Cast:
         first: Effect | None = None
         for sense in sorted(wanted):
             laid = self.bonus(
-                f"{UNSEEN_BY}{sense}", 1, on=who, until=until, kind=self.ref,
+                f"{UNDETECTED_BY}{sense}", 1, on=who, until=until, kind=self.ref,
             )
             first = first or laid
         return first
@@ -19125,6 +19126,55 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             who, self.me, until,
             label=f"{self.ref} dies at {failures} failed saves",
             on_suspend=[_off], on_resume=[_on], by=self.ref,
+        )
+
+    def knowledge_check(
+        self, *, on: int | None = None, learn: str = "name",
+        who: int | None = None,
+    ) -> CheckResult | bool:
+        """Identify a creature. Truthy when the check beat the printed DC.
+
+        *"Monster Knowledge: **No action required** -- either you know the
+        answer or you don't."* PHB p181, and that sentence is why this is a
+        verb rather than an action kind: there is no action to offer, so
+        `actions.options` has nothing to put in a menu and `policy/` has no
+        term to weigh. `p14137`'s trigger -- *"you succeed on a monster
+        knowledge check against a monster"* -- had no event to fire on
+        because nothing rolled one.
+
+        **Which skill is the creature's own business**, not the asker's.
+        PHB p182-188 gives one sentence per skill and `query.knowledge_skill`
+        holds the mapping: arcana for an elemental, fey or shadow origin or a
+        construct, dungeoneering for aberrant, nature for natural, religion
+        for immortal or undead. Those four cover all 3,142 creatures in the
+        corpus with nothing left over.
+
+        **The DC is the printed monster-knowledge table and not `dc.py`'s
+        bands** -- 15 for name, type and keywords, 20 for powers, 25 for
+        resistances and vulnerabilities, +5 paragon and +10 epic on the
+        *creature's* level. `learn=` picks which. A card may still refer to
+        the banded hard DC, which `p14137` does, and that is the card
+        measuring a result against a different yardstick.
+
+        `against=` on the roll is what carries the subject, so a trigger can
+        gate on *which* creature was identified -- and it is a tag rather
+        than an opposed test, which `c.check`'s own note is explicit about.
+
+        Answers False for a creature no printed sentence covers rather than
+        guessing a skill, which would make the check rollable against
+        something the rules give no way to identify.
+        """
+        from .query import knowledge_dc, knowledge_skill
+
+        quarry = self._who(on)
+        if quarry is None:
+            return False
+        skill = knowledge_skill(self.world, quarry)
+        if not skill:
+            return False
+        return self.check(
+            skill, knowledge_dc(self.world, quarry, learn),
+            who=who, against=quarry,
         )
 
     def death_save_failure(self, *, on: int | None = None) -> int:

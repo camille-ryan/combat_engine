@@ -552,7 +552,7 @@ CATEGORIES: dict[str, dict] = {
                 # sense is. A key of its own rather than arithmetic on
                 # theirs: two sources total 200 and subtracting 100 leaves
                 # the sense standing. #1341.
-                "lose_sense", "unseen_by", "darkvision", "has_sense", "low_light",
+                "lose_sense", "undetected_by", "darkvision", "has_sense", "low_light",
                 "see_invisible", "see_unseen", "sight_range", "telepathy",
                 "tremorsense", "truesight",
             ]),
@@ -560,7 +560,7 @@ CATEGORIES: dict[str, dict] = {
                 "declared_feats", "me", "ref", "targets", "world",
             ]),
             ("rolling and the trigger", [
-                "ability_check", "check", "opportunity", "ranged", "roll",
+                "ability_check", "check", "knowledge_check", "opportunity", "ranged", "roll",
                 "struck_by", "struck_by_property", "struck_with",
                 "substitute_check", "trigger",
             ]),
@@ -1062,6 +1062,10 @@ READERS: dict[str, list[str]] = {
         "light_level", "revealed", "sees_in", "sees_invisible",
         "sees_through",
         "sheltered_from", "sight_capped", "unseen_by",
+        # `knowledge_skill` says WHICH skill identifies a creature and
+        # `knowledge_dc` what it has to beat -- the printed
+        # monster-knowledge table, which is not `dc.py`'s level bands.
+        "knowledge_dc", "knowledge_skill",
     ],
     # `difficulty` is here with `defence` because both answer "what number
     # does this have to beat". It is not about attacking, and no section was

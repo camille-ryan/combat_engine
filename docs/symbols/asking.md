@@ -258,7 +258,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - "Tremorsense 10". Senses through the ground, so light is irrelevant.
 - `c.truesight(self, radius: 'int' = 0, *, of: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Truesight 5", and "the target cannot become invisible to you".
-- `c.unseen_by(self, *senses: 'str', on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+- `c.undetected_by(self, *senses: 'str', on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - *"Creatures can't use darkvision, blindsight, or tremorsense to
 
 ## what the call already knows -- state, not calls
@@ -280,6 +280,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Roll a raw ability check. Truthy when it beat the DC.
 - `c.check(self, skill: 'str', dc: 'int' = 0, *, who: 'int | None' = None, bonus: 'int' = 0, against: 'int | None' = None)`
   - Roll a skill check. Truthy when it beat the DC.
+- `c.knowledge_check(self, *, on: 'int | None' = None, learn: 'str' = 'name', who: 'int | None' = None) -> 'CheckResult | bool'`
+  - Identify a creature. Truthy when the check beat the printed DC.
 - `c.opportunity: bool`
   - is this use an opportunity attack?
 - `c.ranged`
