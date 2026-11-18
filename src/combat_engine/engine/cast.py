@@ -1768,12 +1768,27 @@ class Cast:
 
     def save(
         self, *, on: int | None = None, bonus: int = 0, against: str = "",
-        bare: bool = False, when_: str = "end",
+        bare: bool = False, when_: str = "end", against_trap: bool = False,
     ) -> bool:
         """Roll a saving throw now against one save-ends effect.
 
         A few powers hand somebody an extra save out of turn. Returns True
         if something was shaken off.
+
+        **`against_trap` reads the effect's SOURCE and not its text**, which
+        is the one printed narrowing a label cannot express: *"a saving
+        throw against an effect caused by a trap"*. `against` matches the
+        laying row's ref, and a trap's effect carries the trap entity in
+        `Effect.source`.
+
+        It is a **narrowing**, so a row that passes it saves against less
+        than before, never more -- `p16597` was handing its allies a free
+        save against whatever happened to be on them. With nothing
+        trap-sourced on the creature it rolls nothing and returns False,
+        which is the honest answer and is the case today: `terrain.arm`
+        resolves a trap from three columns and lays no effect at all, so
+        the 303 printed trap rows carrying a save-ends rider have nothing
+        applying it. `#1367`.
 
         `against` picks which one: `"ongoing"` for the commonest printed
         form -- "a saving throw against an ongoing damage effect" -- or a
@@ -1845,10 +1860,20 @@ class Cast:
                 )
             )
             return ev.saved
+        from .query import is_trap
+
         for effect in self.world.effects.of(who):
             if against == "ongoing" and effect.ongoing is None:
                 continue
             if against and against not in ("ongoing", "") and against not in effect.label:
+                continue
+            # **"An effect caused by a trap", which a label cannot say.**
+            # `against` matches the laying row's ref, and a trap's effect
+            # carries the trap entity in `Effect.source` -- so this is the
+            # one narrowing that reads the source rather than the text.
+            # Without it `p16597` handed its allies a free save against
+            # *whatever* was on them, which is wider than its card.
+            if against_trap and not is_trap(self.world, effect.source):
                 continue
             if effect.when is When.SAVE_ENDS:
                 effect.save_mod += bonus

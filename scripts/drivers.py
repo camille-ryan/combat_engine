@@ -15037,6 +15037,114 @@ def an_off_hand_swing_ends_it(out: Result) -> None:
              f"{off[0]} -> {off[1]}")
 
 
+def a_save_against_a_traps_effect(out: Result) -> None:
+    """*"Each ally who starts his or her turn in the zone can make a saving
+    throw against an effect **caused by a trap** that a save can end."*
+    -- `p16597`.
+
+    **The row was wider than its card, which is the finding.** `c.save`
+    picks an effect by **label** -- the laying row's ref -- and a label
+    cannot say "caused by a trap", so this handed each ally a free save
+    against whatever happened to be on them. `against_trap=` reads
+    `Effect.source` instead, which is the trap entity.
+
+    **A narrowing, so it can only take away.** Asserted both ways on one
+    board with one thing changed -- the effect's source -- because "a save
+    was rolled" is equally consistent with the old generous behaviour.
+
+    **And it rolls nothing today, correctly.** Nothing in this engine lays
+    a trap-sourced effect: `terrain.arm` resolves a trap from three columns
+    and no `t:` row is declared, so there is no body to carry a rider. 303
+    of the 631 printed trap rows carry a save-ends rider and every one is
+    dropped -- `#1367`. That is why the row is `dropped=("etl.trap_rider")`
+    now rather than waiting on this verb.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.terrain import arm
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import SavingThrow, TurnStart
+    from combat_engine.engine.query import allies
+    from combat_engine.engine.types import Condition
+
+    def rolled(trap_sourced: bool) -> tuple[bool, int]:
+        """Lay a save-ends effect from a trap or from a power, then save."""
+        world, me, _ = _board("p16597", 1)
+        mates = sorted(allies(world, me))
+        if not mates:
+            return False, -1
+        mate = mates[0]
+        at = must(world.get(me, Position), "the caster stands").square
+        trap = arm(world, (at[0] + 1, at[1]), level=5, ref="drivers:trap")
+        throws: list[SavingThrow] = []
+        world.bus.on(SavingThrow, throws.append)
+        world.effects.apply(
+            mate, trap if trap_sourced else me, When.SAVE_ENDS,
+            label="drivers:thing", conditions=[Condition.SLOWED],
+        )
+        world.rng.loaded = 20
+        got = Cast(world=world, me=me, ref="drivers").save(
+            on=mate, against_trap=True)
+        return bool(got), len(throws)
+
+    from_trap = rolled(True)
+    from_power = rolled(False)
+    out.that(from_trap[1] == 1,
+             "a save-ends effect whose SOURCE is the trap is saved against --"
+             " one throw announced",
+             f"{from_trap[1]} throw(s)")
+    out.that(from_trap[0],
+             "and a loaded 20 ends it", f"{from_trap[0]}")
+    out.that(from_power[1] == 0,
+             "while a power-sourced effect on the same board is **not even"
+             " rolled against** -- the narrowing, and the assertion the old"
+             " label-matching version fails: it handed the ally a free save"
+             " against whatever was on them",
+             f"{from_power[1]} throw(s)")
+    out.that(not from_power[0],
+             "so the call answers False rather than ending something the"
+             " card never mentioned",
+             f"{from_power[0]}")
+
+    # -- and the ROW asks for the narrowing, which the verb arms cannot say -
+    #
+    # A plant putting `c.save(on=who)` back passed until this existed: the
+    # arms above drive `c.save` directly, so they prove the parameter works
+    # and nothing about whether `p16597` passes it.
+    world, me, _ = _board("p16597", 1)
+    mates = sorted(allies(world, me))
+    out.that(bool(mates), "the board deals an ally to stand in the zone",
+             f"{mates}")
+    if mates:
+        mate = mates[0]
+        throws: list[SavingThrow] = []
+        world.bus.on(SavingThrow, throws.append)
+        # A save-ends effect from a POWER, which the card does not cover.
+        world.effects.apply(mate, me, When.SAVE_ENDS, label="drivers:thing",
+                            conditions=[Condition.SLOWED])
+        REGISTRY["p16597"].body(Cast(world=world, me=me, ref="p16597"))
+        zone = next(
+            (z for z, _held in world.zones.all() if mate in
+             world.zones.occupants(z)),
+            None,
+        )
+        out.that(zone is not None,
+                 "the ally is standing in a zone the row laid -- the premise,"
+                 " since the watcher only fires for an occupant",
+                 f"{zone}")
+        if zone is not None:
+            world.rng.loaded = 20
+            world.bus.emit(TurnStart(actor=mate, round=world.round))
+            out.that(not throws,
+                     "and starting its turn there rolls NO save against the"
+                     " power-sourced effect -- the row passes the narrowing"
+                     " on, which is what a plant restoring `c.save(on=who)`"
+                     " breaks",
+                     f"{len(throws)} throw(s)")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -97501,6 +97609,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "trap_sourced_save": (a_save_against_a_traps_effect,
+                          "a save against a TRAP's effect, read off the"
+                          " source where a label could not say it"),
     "off_hand_ender": (an_off_hand_swing_ends_it,
                        "the hand was on the event's ctx all along; a"
                        " main-hand swing must not end the bonus"),

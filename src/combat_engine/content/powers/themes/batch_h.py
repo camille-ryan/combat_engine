@@ -1854,16 +1854,30 @@ def p16596(c: Cast) -> None:
     "p16597", level=2, cls=X7_1006, usage=ENCOUNTER, action=MINOR,
     reach=CloseBurst(2), target=NO_TARGET,
     keywords=[Keyword.DIVINE, Keyword.SHADOW, Keyword.ZONE],
-    dropped=("c.save(against_trap=)",),
+    dropped=("etl.trap_rider",),
 )
 def p16597(c: Cast) -> None:
     """The defence bonus is exact: `c.is_trap` reads the attacker off the
     modifier's context, which is what the clause asks.
 
-    The free save is given but not narrowed. Nothing records that an effect
-    came from a trap -- `c.save(against=)` matches an effect's label -- so
-    the ally saves against whatever is on him rather than against the trap's
-    half alone.
+    **The free save is narrowed now, and it was wider than the card.**
+    `c.save(against=)` matches an effect's *label*, which is the laying
+    row's ref and cannot say "caused by a trap" -- so this handed each ally
+    a save against whatever happened to be on them.
+    `c.save(against_trap=True)` reads `Effect.source` instead, which is the
+    trap entity, and rolls nothing when there is nothing trap-sourced.
+
+    **Re-pointed, because the remaining gap is a directory out and much
+    bigger than this row.** Nothing in this engine lays a trap-sourced
+    effect at all: `terrain.arm` resolves a trap from three columns --
+    attack bonus, defence, damage -- and no `t:` row is declared, so there
+    is no body to carry a rider. Measured in `game.db`: **303 of the 631
+    printed trap rows** carry a save-ends rider, and every one of them is
+    dropped. `#1367`.
+
+    So the narrowing is a no-op today and is still the right code: it is
+    the difference between a row that is correct and waiting, and one that
+    is generous and reports finished.
     """
     zone = c.zone(c.area(), until=When.EONT, sustain=MINOR)
 
@@ -1885,7 +1899,7 @@ def p16597(c: Cast) -> None:
         if ev.ghost or who == c.me or who not in c.allies():
             return
         if who in c.world.zones.occupants(zone):
-            c.save(on=who)
+            c.save(on=who, against_trap=True)
 
     c.watch(TurnStart, starts, until=When.ENCOUNTER)
 
