@@ -516,7 +516,8 @@ def f3304(c: Cast) -> None:
     filled. The old note was
     right that targets are settled before a rider is reached and wrong that
     this therefore needs a rider; it needs the settling itself to read one
-    more field. `#712`.
+    more field. `#1369`, which is the live issue -- `#712` carries the
+    reasoning and is closed.
     """
     me = c.me
 

@@ -3410,8 +3410,12 @@ def target_of(
     `everyone` -- so a site that keeps reading the print offers *fewer*
     targets than the card, never more, and `_stands_right` (the filter on an
     explicitly handed target) reads neither field. Pointing the offer path
-    at this as well is a fair next step and is not needed by either row.
-    #712.
+    at this as well is a fair next step, and **it is needed by a row now**:
+    `f3304` widens an offered minor action, so `c.extra_target` moves this
+    door and the menu still shows the printed count. Tracked on `#1369`,
+    which is where the live half of this went -- `#712` is closed, and a
+    note deferring work to a closed issue reads exactly like one deferring
+    it to open work.
     """
     printed = p.target_of(augment)
     for eff in world.effects.of(actor):
