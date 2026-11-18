@@ -14971,6 +14971,72 @@ def a_feature_sized_resistance(out: Result) -> None:
              f"{whole} -> {hurt}")
 
 
+def an_off_hand_swing_ends_it(out: Result) -> None:
+    """*"Until the end of your next turn **or until you attack with your
+    off-hand weapon**."* -- `p4377`.
+
+    **The marker's premise was false and the information was already on the
+    event.** It said *"an attack event says which power swung and never
+    which fist"*. `Swung.hand` is indeed not a field -- but `Swung.ctx`
+    carries the attack context and that has held `"hand"` since `#501`, so
+    the clause wanted a read rather than a field. Measured: a swing
+    announces `AttackRolled` with `ctx["hand"]` reading `"main"`, and
+    `c.strike(hand="off")` announces `"off"`.
+
+    **Three arms, because the middle one is the clause.** A bonus that
+    simply expires proves nothing, and a bonus that any swing ends is a
+    much stronger line than print -- so a MAIN-hand swing must leave it
+    standing. That is the assertion a read of `ctx` with no hand test
+    would fail.
+
+    `AttackRolled` and not `Hit`: the card says *attack with*, which is the
+    swing and not its outcome.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    def after(hand: str | None) -> tuple[int, int]:
+        world, me, _ = _board("p4377", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return 0, 0
+        foe = foes[0]
+        dsl.use(world, me, "p4377", targets=[foe])
+        mods = must(world.get(me, Mods), "the caster carries modifiers")
+        before = mods.total(Defense.AC, {})
+        if hand:
+            swing = Cast(world=world, me=me, ref="p4377")
+            swing.target = foe
+            swing.strike(hand=hand)
+        return before, mods.total(Defense.AC, {})
+
+    stood = after(None)
+    main = after("main")
+    off = after("off")
+    out.that(stood[0] > 0,
+             "the row lays an AC bonus at all -- the premise, since a"
+             " Wisdom modifier of 0 would make every line below vacuous",
+             f"{stood[0]}")
+    if stood[0] <= 0:
+        return
+    out.that(stood[0] == stood[1],
+             "with no further swing it stands, which is the printed clock",
+             f"{stood[0]} -> {stood[1]}")
+    out.that(main[0] == main[1],
+             "a MAIN-hand swing leaves it standing -- the clause, and the"
+             " assertion a read with no hand test would fail. Ending on any"
+             " attack is a much stronger line than the card prints",
+             f"{main[0]} -> {main[1]}")
+    out.that(off[1] < off[0],
+             "and an OFF-hand swing ends it early, which is the second"
+             " printed ender and the one `When` could not hold",
+             f"{off[0]} -> {off[1]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -97435,6 +97501,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "off_hand_ender": (an_off_hand_swing_ends_it,
+                       "the hand was on the event's ctx all along; a"
+                       " main-hand swing must not end the bonus"),
     "feature_resist": (a_feature_sized_resistance,
                        "a flat resist plus a gated one comes to 4, where two"
                        " flat ones of a type would still be 2"),

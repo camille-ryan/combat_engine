@@ -378,7 +378,6 @@ def p4376(c: Cast) -> None:
 
 @power(
     "p4377",
-    dropped=("Swung.hand",),
     level=1,
     cls="ranger",
     usage=DAILY,
@@ -391,11 +390,51 @@ def p4376(c: Cast) -> None:
     requires_text="needs two melee weapons",
 )
 def p4377(c: Cast) -> None:
-    """"Or until you attack with your off-hand weapon" is not written: an
-    attack event says which power swung and never which fist."""
+    """*"Until the end of your next turn or until you attack with your
+    off-hand weapon."*
+
+    **The marker's premise was false and the information was already on the
+    event.** It said *"an attack event says which power swung and never
+    which fist"*, and `Swung.hand` is indeed not a field -- but
+    `Swung.ctx` carries the attack context, and that has held `"hand"`
+    since `#501`. Measured: a swing announces `AttackRolled` with
+    `ctx["hand"]` reading `"main"`, and `c.strike(hand="off")` announces
+    `"off"`. So the second ender wanted a read rather than a field.
+
+    **Ended by hand rather than given a duration**, because "until X" is
+    two enders and `When` holds one: the bonus carries `When.EONT` for the
+    printed clock and the watch ends it early on the off-hand swing. The
+    watch dies with the effect it ends, so a later off-hand attack after
+    the bonus has lapsed costs nothing.
+
+    `AttackRolled` and not `Hit`: the card says *attack with*, which is the
+    swing and not its outcome -- an off-hand attack that misses still ends
+    the bonus.
+
+    The `max(1, ...)` on the bonus is the pre-existing reading for a
+    character whose Wisdom modifier is 0 or less; the card prints a bonus
+    "equal to your Wisdom modifier" and a non-positive one would be no
+    bonus at all.
+    """
     if c.strike():
         c.damage(c.w(2), c.str_mod)
-    c.bonus(AC, max(1, c.wis_mod), on=c.me, until=When.EONT, kind="power")
+    held = c.bonus(AC, max(1, c.wis_mod), on=c.me, until=When.EONT,
+                   kind="power")
+    if held is None:
+        return
+
+    def swung_off_hand(ev: AttackRolled) -> None:
+        if getattr(ev, "ctx", None) is None:
+            return
+        if ev.ctx.get("hand") != "off":
+            return
+        c.world.effects.end(held, why=f"{c.ref}: the off-hand swung")
+
+    watching = c.watch(AttackRolled, swung_off_hand, until=When.EONT, on=c.me)
+    if watching is not None:
+        held.on_end.append(
+            lambda: c.world.effects.end(watching, why=f"{c.ref}: the bonus is over")
+        )
 
 
 @power(
