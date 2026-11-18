@@ -11553,6 +11553,40 @@ class Cast:
         self.world.bus.emit(Summoned(actor=self.me, summon=who, ref=self.ref))
         return True
 
+    def no_recharge(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"The creature's powers cannot recharge."
+
+        `c.no_healing` below is the same shape and the same argument:
+        `PowerRecharged` is a `Decision`, so this refuses it outright, and
+        `Window.BEFORE` is where a refusal has to live -- the restore is
+        `emit`'s callback, so an AFTER listener would run once the row was
+        already back.
+
+        **This was the whole of the work behind `p16565`'s marker and it is
+        not in this verb.** Its own note had it exactly: *"recharge is live
+        end to end ... it is that there is no moment to refuse"*. Making
+        `PowerRecharged` a proposal on both of its emitters is what cost
+        anything; given that, the verb is eight lines.
+
+        Follows `c.target`, because the printed lines are about an enemy.
+        """
+        from .events import PowerRecharged
+
+        who = self._who(on)
+        if who is None:
+            return None
+
+        def refuse(ev: PowerRecharged) -> None:
+            if ev.actor == who:
+                ev.cancel(f"{self.ref}: cannot recharge")
+
+        return self.watch(
+            PowerRecharged, refuse, until=until, window=Window.BEFORE,
+            on=who, label=f"{self.ref} cannot recharge",
+        )
+
     def no_healing(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
         temp_hp: bool = False,

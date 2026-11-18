@@ -1898,35 +1898,27 @@ def p16564(c: Cast) -> None:
     keywords=[Keyword.DIVINE, Keyword.FEAR],
     trigger="an enemy hits you with an attack",
     on=Trigger(Hit, both(targets_me, not_me), "an enemy hits you with an attack"),
-    dropped=("c.no_recharge()",),
 )
 def p16565(c: Cast) -> None:
-    """Three of the four clauses have verbs; holding a monster's recharge
-    roll shut has none.
+    """All four clauses are written, and the fourth cost nothing in this
+    row: *"cannot recharge powers"* is `c.no_recharge`.
 
-    **Confirmed, and not for the reason "it has none" suggests.** Recharge
-    is live end to end -- `Usage.RECHARGE` on the rows, `recharge_when` for
-    the printed condition, `Powers.recharging` for what came back up -- so
-    this is not a mechanism nobody built.
+    **This row's own note worked out the price and it was not here.** The
+    verb could not exist while `PowerRecharged` was a notification emitted
+    *after* `Powers.restore` had handed the row back -- "there is no moment
+    to refuse". Making it a proposal on both emitters at once is what cost
+    anything; `c.no_healing`, which this row already called, had been doing
+    the identical job against `Healed` the whole time.
 
-    It is that there is no moment to refuse. `c.no_healing` does the
-    identical job by watching `Healed`, which is a `Decision`, and
-    cancelling it; `PowerRecharged` is a plain notification and it is
-    emitted *after* `Powers.restore` has already handed the row back. So
-    the work behind this symbol is to make a recharge a proposal, and
-    `PowerRecharged`'s own docstring says why that has to land on both
-    paths at once -- `actions.recharge` rolls the die, `triggers` answers
-    the printed condition, and a refusal on one of them is a row that is
-    right in half the game.
-
-    Watching `PowerRecharged` and spending the use again would read as the
-    same thing and is deliberately not written: the restore has happened
-    by then, so every card that pays out "when an enemy recharges a power"
-    would collect."""
+    Watching the event and spending the use again would read as the same
+    thing and is still the wrong answer: the restore has happened by then,
+    so every card paying out "when an enemy recharges a power" would
+    collect."""
     foe = c.trigger.attacker
     c.penalty("attack", 2, on=foe, until=When.EOTNT)
     c.grants_advantage(on=foe, to="team", until=When.EOTNT)
     c.no_healing(on=foe, until=When.EOTNT)
+    c.no_recharge(on=foe, until=When.EOTNT)
 
 
 # ===========================================================================

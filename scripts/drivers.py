@@ -24726,6 +24726,118 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_recharge_held_shut_and_a_terrain_exemption_read(out: Result) -> None:
+    """Two rows whose markers had already worked out what they cost.
+
+    `p16565`'s note: *"recharge is live end to end ... it is that there is
+    no moment to refuse"*. With `PowerRecharged` a proposal, `c.no_recharge`
+    is eight lines -- a BEFORE listener that cancels, which is
+    `c.no_healing` against `Healed` one resource over.
+
+    `p13701`'s note: the "3 squares instead of 2" upgrade turns on whether
+    the ranger **already** ignored difficult terrain when shifting, and
+    *"asking after the fact would always answer yes"* -- because the row
+    grants the exemption itself. `query.ignores_difficult` is the public
+    reader, asked before the grant.
+
+    **And the row was stronger than its card in a second way nobody had
+    marked.** Its `c.ignores_difficult` call was unscoped, so it exempted
+    walking and charging as well; the print is "when you shift".
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine import events as _ev
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies, ignores_difficult
+
+    SPENT = "m4881a2"      # a monster ability with a printed recharge die
+
+    # ---- p16565: all four clauses, the fourth being the refusal --------
+    def fight(use_the_row: bool) -> tuple[int, list]:
+        world, me, _ = _audit.board("p16565", 1)
+        foes = sorted(enemies(world, me))
+        foe = foes[0]
+        known = world.get(foe, Powers)
+        known.known.append(SPENT)
+        known.used[SPENT] = 1
+        if use_the_row:
+            # The row is a REACTION to being hit, so it is run through its
+            # own body with the trigger its card names rather than posed.
+            REGISTRY["p16565"].body(Cast(
+                world=world, me=me, ref="p16565", targets=[],
+                trigger=_ev.Hit(attacker=foe, target=me, power="drivers",
+                                critical=False),
+            ))
+        world.rng.die = lambda faces: faces
+        mark = len(world.bus.log)
+        _actions.recharge(world, foe)
+        said = [e for e in world.bus.log[mark:]
+                if isinstance(e, _ev.PowerRecharged)]
+        return known.used.get(SPENT, 0), said
+
+    spent, said = fight(False)
+    out.that(spent == 0 and said and not said[0].cancelled,
+             "the control: the enemy's spent row recharges on its die",
+             f"uses still spent {spent}")
+    spent, said = fight(True)
+    out.that(spent == 1 and said and said[0].cancelled,
+             "**and p16565 holds it shut** -- the fourth of its four"
+             " clauses, which could not be written while the recharge was"
+             " announced after the restore",
+             f"uses still spent {spent}, cancelled"
+             f" {[e.cancelled for e in said]}")
+
+    # ---- query.ignores_difficult: the reader, both scopes --------------
+    world, me, _ = _audit.board("p13701", 1)
+    probe = Cast(world=world, me=me, ref="drivers-terrain")
+    out.that(not ignores_difficult(world, me, when="shift"),
+             "the reader says no before anything is granted",
+             f"{ignores_difficult(world, me, when='shift')}")
+    probe.ignores_difficult(on=me, when="shift")
+    out.that(ignores_difficult(world, me, when="shift"),
+             "**and yes once a shift-scoped exemption stands**",
+             f"{ignores_difficult(world, me, when='shift')}")
+    out.that(not ignores_difficult(world, me),
+             "**and still no for walking**, which is the scoping that makes"
+             " the reader worth having: a shift-only exemption must not"
+             " answer the unscoped question",
+             f"unscoped {ignores_difficult(world, me)}")
+
+    world, me, _ = _audit.board("p13701", 1)
+    probe = Cast(world=world, me=me, ref="drivers-terrain")
+    probe.ignores_difficult(on=me)
+    out.that(ignores_difficult(world, me, when="shift"),
+             "**a blanket exemption answers the shift question too** --"
+             " a creature exempt from all movement is exempt when it"
+             " shifts, which is why the unscoped set is consulted on both"
+             " paths",
+             f"shift {ignores_difficult(world, me, when='shift')}")
+
+    # ---- p13701 itself: the grant is sized by the answer ---------------
+    def ranger(already: bool) -> int:
+        world, me, _ = _audit.board("p13701", 1)
+        if already:
+            Cast(world=world, me=me, ref="drivers-already").ignores_difficult(
+                on=me, when="shift")
+        REGISTRY["p13701"].body(Cast(
+            world=world, me=me, ref="p13701", targets=[me]))
+        from combat_engine.engine.query import granted_actions
+        return granted_actions(world, me).get(("shift", "move"), 0)
+
+    out.that(ranger(False) == 2,
+             "p13701 grants a 2-square shift to a ranger who did not"
+             " already ignore difficult terrain",
+             f"granted {ranger(False)}")
+    out.that(ranger(True) == 3,
+             "**and 3 squares to one who did** -- asked before the grant,"
+             " because the row grants the exemption itself and asking"
+             " afterwards answers yes every time",
+             f"granted {ranger(True)}")
+
+
 def a_recharge_can_be_refused_and_a_hide_forbidden(out: Result) -> None:
     """Two prohibitions, which is a thing this engine was short of.
 
@@ -93764,6 +93876,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "no_recharge": (
+        a_recharge_held_shut_and_a_terrain_exemption_read,
+        "c.no_recharge holds a recharge shut, and query.ignores_difficult"
+        " is the reader a row needs before it grants one (p16565 p13701)",
+    ),
     "refusals": (
         a_recharge_can_be_refused_and_a_hide_forbidden,
         "a recharge can be refused and a hide forbidden, which are two"

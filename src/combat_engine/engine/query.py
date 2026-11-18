@@ -2149,6 +2149,39 @@ def grants_ca(world: World, eid: int) -> bool:
     return any(rules_for(world, eid, c).grants_ca for c in active(world, eid))
 
 
+def ignores_difficult(
+    world: World, eid: int, *, kind: str = "", when: str = "",
+) -> bool:
+    """Does this creature already cross rough ground for nothing?
+
+    The **public reader** for what `Cast.ignores_difficult` writes, and the
+    reason it exists is `p13701`: *"if you already ignore difficult terrain
+    when shifting, you can shift 3 squares instead of 2"*. That has to be
+    asked **before** the row grants the exemption itself, and the only
+    readers were the setter and a private helper -- so asking after the
+    fact would always answer yes, which is a worse answer than none.
+
+    `kind` names a sort of going and defaults to "every sort", which is
+    what a bare `c.ignores_difficult()` grants. `when` names a kind of
+    move -- `"shift"`, `"charge"`, `"run"` -- and a creature exempt from
+    **all** movement is exempt when it shifts too, which is why the
+    unscoped set is consulted on both paths.
+    """
+    from .components import Movement
+
+    moves = world.get(eid, Movement)
+    if moves is None:
+        return False
+    word = kind.lower() or "*"
+    blanket = moves.ignores
+    if word in blanket or "*" in blanket:
+        return True
+    if not when:
+        return False
+    scoped = moves.ignores_when.get(when.lower()) or set()
+    return word in scoped or "*" in scoped
+
+
 def can_flank(world: World, eid: int) -> bool:
     """May this companion stand in the far square and count?
 

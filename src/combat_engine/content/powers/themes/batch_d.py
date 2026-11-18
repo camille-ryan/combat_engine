@@ -1514,17 +1514,34 @@ def p16065(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.PSIONIC, Keyword.ELEMENTAL],
-    dropped=("c.no_advantage(cause=)",),
+    dropped=("query.has_combat_advantage(climbing)",),
 )
 def p16066(c: Cast) -> None:
     """The shift and the defences are exact.
 
-    "Climbing or balancing doesn't cause you to grant combat advantage" waives
-    **one cause** of a grant and leaves the others standing. Re-aimed off
-    `c.grants_advantage(when=)`, which exists now and is the wrong direction
-    twice over: this row takes advantage away rather than giving it, and the
-    verb that takes it away is `c.no_advantage`, which shuts every cause at
-    once. What is missing is a way to name which cause."""
+    **Re-pointed, and the third spelling is the first one with a subject.**
+    The clause is *"climbing or balancing doesn't cause you to grant combat
+    advantage"*, and the marker read `c.grants_advantage(when=)`, then
+    `c.no_advantage(cause=)`. Both describe a waiver, and **there is
+    nothing here to waive**: measured over `query.has_combat_advantage`,
+    its routes are a condition, the `GRANTS_CA_TO` relation, three
+    modifier keys and a flank. Climbing and balancing are not among them,
+    and nothing in `movement.py` or `skills.py` grants one -- so a waiver
+    aimed at that cause would have been a no-op dressed as a fix, and
+    `c.no_advantage(cause=)` would have been a parameter nobody could
+    demonstrate.
+
+    What is missing is the **printed rule underneath**: a climbing or
+    balancing creature grants combat advantage in the first place. That is
+    an engine-wide change touching every creature that climbs rather than
+    this row's clause, so it is filed rather than landed here, and the
+    marker names it. Until it exists this row is *stronger* than its card
+    by nothing at all -- the waiver and the absent rule cancel -- which is
+    why it plays correctly today and still owes a marker.
+
+    See `a-marker-may-name-a-verb-when-the-gap-is-a-layer-below`: read the
+    verb first, then what the verb would read.
+    """
     c.ignores_difficult(on=c.me, until=When.EOT)
     c.shift(3, who=c.me)
     _defences(c, 2, until=When.EONT)

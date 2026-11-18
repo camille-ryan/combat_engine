@@ -50,6 +50,7 @@ from combat_engine.engine.events import (
     Hit,
     SkillCheck,
 )
+from combat_engine.engine.query import ignores_difficult
 from combat_engine.engine.triggers import Trigger, both, by_melee, targets_me
 
 MARTIAL = [Keyword.MARTIAL]
@@ -289,7 +290,6 @@ def p13700(c: Cast) -> None:
     keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:6"),
     requires_text="you must have a comp:6 beast companion",
-    dropped=("query.ignores_difficult()",),
 )
 def p13701(c: Cast) -> None:
     """**"You can shift 2 squares as a move action" is written now.** The
@@ -299,13 +299,17 @@ def p13701(c: Cast) -> None:
     `squares_=` is how far it goes. Three rows were already calling it that
     way. #1341.
 
-    **The "3 instead of 2" upgrade keeps its marker**, and that is the half
-    the old note got right. It turns on whether the ranger *already*
-    ignored difficult terrain **before** this row granted it, and there is
-    no public reader for that -- `c.ignores_difficult` is the setter and
-    `_ignores_difficult_made_by` is private. Asking after the fact would
-    always answer yes, which is the wrong answer and a worse one than
-    leaving it out.
+    **The "3 instead of 2" upgrade is written**, and what it wanted was a
+    public reader: `query.ignores_difficult`. The old note had the trap
+    right -- asking after the fact answers yes every time, because this row
+    has just granted the exemption -- so the question is asked first and
+    the grant is sized by the answer.
+
+    **And the exemption is `when="shift"` now, which the card says and the
+    row did not.** An unscoped `c.ignores_difficult` exempts walking and
+    charging as well; this one is printed as "ignore difficult terrain
+    **when you shift**", so the unscoped call was strictly stronger than
+    the card.
 
     **Not verified on a board, and it cannot be here.** This row's
     Requirement is a `comp:6` companion and the board deals a beast with
@@ -316,8 +320,17 @@ def p13701(c: Cast) -> None:
     `p5104`, whose identical clause IS verified through the menu:
     MOVE-cost shift entries 2 -> 8. #1343.
     """
-    c.grant_action("shift", MOVE, squares_=2, on=c.me, until=When.ENCOUNTER)
-    c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    # **Asked before the grant, which is the whole of why the reader had
+    # to be public.** "If you already ignore difficult terrain when
+    # shifting" is about the state the row walks in on; asking afterwards
+    # answers yes every time, because this row has just granted it.
+    already = ignores_difficult(c.world, c.me, when="shift")
+    c.grant_action("shift", MOVE, squares_=3 if already else 2, on=c.me,
+                   until=When.ENCOUNTER)
+    # **`when="shift"`, which the card says and this did not.** An
+    # unscoped call exempts walking and charging too -- a row stronger
+    # than its print, which is the trade this tree refuses.
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power(
