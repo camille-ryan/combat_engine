@@ -16824,6 +16824,85 @@ def a_creature_standing_in_two_squares(out: Result) -> None:
                  f"{sorted(squares(world2, me2))}")
 
 
+def a_shift_out_of_the_blast_halves_it(out: Result) -> None:
+    """*"You shift 1 square. If the shift places you outside the area of the
+    triggering attack, you take only half damage from the attack."*
+    -- `p13034`.
+
+    **Both halves of the marker's reasoning were wrong, differently.**
+
+    "Nothing on `Cast` asks whether a square is still inside the attack's
+    area" -- nothing on `Cast` does, and the area is on the **bus**:
+    `Cast.used` puts it on `PowerUsed`, announced before the roll that
+    produced the `Hit` this row answers. That field had no reader anywhere
+    in the engine, which is why its existing was not enough on its own.
+
+    "A reaction cannot reach the damage roll anyway" -- a reaction to `Hit`
+    runs **before** `DamageRolled`, so it can watch for that roll and take
+    half off, which is the shape `p16436` already used for a trap.
+
+    **The inside arm is the control and it is the whole clause.** A body
+    that halved unconditionally would pass an escape assertion; what the
+    card says is that the shift has to carry you out. Both arms are the
+    same board, the same 20 points, and one thing changed -- how wide the
+    attacker's area was.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled, Hit, PowerUsed
+    from combat_engine.engine.query import area_struck_by, enemies, squares
+    from combat_engine.engine.types import DamageType
+
+    def played(wide: bool) -> tuple[int, int, bool]:
+        """Answer (squares moved, damage taken, was the area read)."""
+        world, me, _ = _board("p13034", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return -1, -1, False
+        foe = foes[0]
+        here = must(world.get(me, Position), "the battlemind stands").square
+        area = (frozenset({(here[0] + dx, here[1] + dy)
+                           for dx in range(-3, 4) for dy in range(-3, 4)})
+                if wide else frozenset({here}))
+        world.bus.emit(PowerUsed(actor=foe, power="drivers:burst",
+                                 targets=[me], trigger=None, area=area))
+        hit = Hit(attacker=foe, target=me, power="drivers:burst",
+                  critical=False)
+        c = Cast(world=world, me=me, ref="p13034")
+        c.trigger = hit
+        read = bool(area_struck_by(world, hit))
+        REGISTRY["p13034"].body(c)
+        moved = 0 if here in squares(world, me) else 1
+        ev = DamageRolled(source=foe, target=me, amount=20,
+                          dtype=DamageType.UNTYPED, detail="drivers:burst")
+        world.bus.emit(ev)
+        return moved, ev.amount, read
+
+    escaped = played(False)
+    stayed = played(True)
+
+    out.that(escaped[2] and stayed[2],
+             "the attack's area is readable off the bus in both arms --"
+             " `query.area_struck_by`, the first reader `PowerUsed.area`"
+             " has ever had",
+             f"{escaped[2]}, {stayed[2]}")
+    out.that(escaped[0] == 1 and stayed[0] == 1,
+             "the row shifts the creature in both arms, so the difference"
+             " below is the area and not the movement",
+             f"{escaped[0]}, {stayed[0]}")
+    out.that(escaped[1] == 10,
+             "a shift that carries it OUT of a one-square area halves 20 to"
+             " 10 -- rounding down, which is this game's rule",
+             f"{escaped[1]}")
+    out.that(stayed[1] == 20,
+             "and a shift that leaves it inside a wide one changes nothing"
+             " -- the control, and the assertion an unconditional halving"
+             " fails",
+             f"{stayed[1]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -99297,6 +99376,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "shift_out_of_blast": (a_shift_out_of_the_blast_halves_it,
+                           "half damage for stepping out of the area, and"
+                           " none for stepping about inside it"),
     "two_squares": (a_creature_standing_in_two_squares,
                     "one creature in two squares, flanking with itself, and"
                     " a Large creature that still cannot"),

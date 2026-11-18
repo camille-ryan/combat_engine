@@ -122,7 +122,7 @@ CATEGORIES: dict[str, dict] = {
             # the difference can be read at a glance. #682.
             ("dealing it", [
                 "absorb", "apply_poison", "b", "burns", "cushion", "damage",
-                "deals", "flat", "floor_damage_dice", "half_damage",
+                "deals", "flat", "floor_damage_dice", "half_damage", "halve_incoming",
                 "halve", "high_crit",
                 "maximise", "no_miss_damage", "ongoing", "quarry_damage",
                 "set_damage_faces",
@@ -1133,6 +1133,7 @@ READERS: dict[str, list[str]] = {
         "attacked_since", "bloodied", "damaged_since", "dropped_since",
         "hit_me_this_turn", "in_form", "granted_amount", "lingers",
         "my_hits_this_turn", "my_misses_this_turn", "shaped",
+        "area_struck_by",
         "attacked_during_own_turn",
         "resting",
         "since_turn_began", "turn_began_at", "since_turn_ended",

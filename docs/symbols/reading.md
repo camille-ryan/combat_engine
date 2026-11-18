@@ -248,6 +248,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 ## what has already happened
 
+- `query.area_struck_by(world: 'World', ev: 'Any') -> 'frozenset[Square]'`
+  - The squares the attack behind this event covered, or empty.
 - `query.attacked_during_own_turn(world: 'World', eid: 'int') -> 'bool'`
   - Has this creature declared an attack since its own turn began?
 - `query.attacked_since(world: 'World', victim: 'int', by: 'int', *, since: 'int | None' = None, opportunity: 'bool' = False) -> 'bool'`

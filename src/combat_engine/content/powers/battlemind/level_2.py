@@ -29,6 +29,7 @@ from combat_engine.engine import (
     hits_me,
     power,
 )
+from combat_engine.engine.query import area_struck_by, squares
 
 from . import PSIONIC, bloodied
 
@@ -125,7 +126,6 @@ def p13033(c: Cast) -> None:
 
 @power(
     "p13034",
-    dropped=("c.halve_incoming()",),
     level=2,
     cls="battlemind",
     usage=ENCOUNTER,
@@ -137,10 +137,30 @@ def p13033(c: Cast) -> None:
     on=Trigger(Hit, both(hits_me, _close_or_area), "a close or an area attack hits you"),
 )
 def p13034(c: Cast) -> None:
-    """The conditional half damage is dropped: nothing on `Cast` asks whether
-    a square is still inside the attack's area, and a reaction cannot reach
-    the damage roll anyway."""
+    """**Both halves of the old note were wrong, in different ways.**
+
+    It said "nothing on `Cast` asks whether a square is still inside the
+    attack's area". Nothing on `Cast` does, and the area is **on the bus**:
+    `Cast.used` puts it on `PowerUsed`, announced before the roll that
+    produced this `Hit`. That field had no reader anywhere in the engine --
+    computed, announced, and never asked -- which is why its being there
+    was not enough. `query.area_struck_by` is the reader.
+
+    And it said "a reaction cannot reach the damage roll anyway". A
+    reaction to `Hit` runs **before** `DamageRolled`, so it can watch for
+    that roll and take half off through `c.reduce` -- the shape `p16436`
+    already uses to soften a trap. `c.halve_incoming` is that.
+
+    Order matters and is the printed order: shift first, then ask whether
+    the shift carried this creature out. A creature that was never in the
+    area -- a close attack it was merely adjacent to -- gets nothing, which
+    is what the empty answer from the reader means.
+    """
     c.shift(1)
+    # "If the shift places you outside the area of the triggering attack."
+    area = area_struck_by(c.world, c.trigger)
+    if area and not (squares(c.world, c.me) & area):
+        c.halve_incoming(c.trigger)
 
 
 @power(

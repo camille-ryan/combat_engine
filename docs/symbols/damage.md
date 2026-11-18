@@ -29,6 +29,8 @@ Points off and points back on, and the dice behind them.
   - "Miss: half damage" -- rolled, then halved, as the rule reads.
 - `c.halve(self, ev: 'Any' = None) -> 'int'`
   - "The target takes half damage" from an interrupt answering the blow.
+- `c.halve_incoming(self, ev: 'Any' = None, *, on: 'int | None' = None) -> 'bool'`
+  - "You take only half damage from the attack."
 - `c.high_crit(self, *, ref: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "<this row> gains the high crit quality until ..."
 - `c.maximise(self, *, on: 'int | None' = None, ref: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, critical: 'bool' = False) -> 'Effect | None'`

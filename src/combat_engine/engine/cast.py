@@ -22847,6 +22847,51 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         conj = self.world.get(thing, Conjuration)
         return conj.by if conj is not None else None
 
+    def halve_incoming(self, ev: Any = None, *, on: int | None = None) -> bool:
+        """"You take only half damage from the attack."
+
+        The attack that is **already being resolved**, which is the half
+        `p13034`'s note called impossible: *"a reaction cannot reach the
+        damage roll anyway"*. It can. A reaction to `Hit` runs before
+        `DamageRolled`, so this watches for that roll and takes half of it
+        off through `c.reduce` -- the same shape `p16436` uses to soften a
+        trap.
+
+        Matched on the attacker, the power and the victim, and spent on the
+        first roll that matches: an area attack rolls damage once per
+        target, and halving somebody else's share is not what the card
+        says.
+
+        Rounds **down**, which is this game's rule for half damage, so 7
+        becomes 3.
+
+        Returns whether a watcher was laid. False for a trigger that names
+        no attack, rather than laying one that can never match.
+        """
+        from .events import DamageRolled
+
+        source = ev if ev is not None else self.trigger
+        attacker = getattr(source, "attacker", None)
+        power = getattr(source, "power", "") or ""
+        who = on if on is not None else self.me
+        if attacker is None:
+            return False
+        done = [False]
+
+        def halve(hit: DamageRolled) -> None:
+            if done[0] or hit.target != who or hit.source != attacker:
+                return
+            if (getattr(hit, "detail", "") or "") and power \
+                    and power not in (getattr(hit, "detail", "") or ""):
+                # `detail` carries the row when the damage names one; a
+                # mismatch is a different attack landing in the same window.
+                return
+            done[0] = True
+            self.reduce(hit.amount - hit.amount // 2, hit)
+
+        self.watch(DamageRolled, halve, until=When.EOT, once=True)
+        return True
+
     def flanks_alone(
         self, *, on: int | None = None, until: When = When.SONT,
     ) -> Effect | None:

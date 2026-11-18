@@ -4195,6 +4195,41 @@ def resting(world: World, eid: int | None = None) -> bool:
     return bool(world.resting)
 
 
+def area_struck_by(world: World, ev: Any) -> frozenset[Square]:
+    """The squares the attack behind this event covered, or empty.
+
+    *"If the shift places you outside the area of the triggering
+    attack"* -- `p13034`, whose note said "nothing on `Cast` asks whether a
+    square is still inside the attack's area". Nothing on `Cast` does, and
+    the area is **on the bus**: `Cast.used` puts it on `PowerUsed`, which
+    is announced before the roll that produced this `Hit`.
+
+    **`PowerUsed` had no reader at all for that field** before this -- the
+    engine computed the area, announced it, and nobody asked. Which is why
+    the field being there was not enough on its own.
+
+    Matched on the attacker **and** the power, walking back from the newest
+    entry, because one creature can use the same row twice in a round and
+    the nearest announcement is the one this event came out of.
+
+    Empty for an attack that announced no area -- a melee or a plain ranged
+    row -- which is the honest answer and is what the caller wants: a
+    creature cannot step out of an area that was never drawn.
+    """
+    from .events import PowerUsed
+
+    power = getattr(ev, "power", "") or ""
+    attacker = getattr(ev, "attacker", None)
+    if attacker is None:
+        return frozenset()
+    for past in reversed(world.bus.log):
+        if not isinstance(past, PowerUsed):
+            continue
+        if past.actor == attacker and past.power == power:
+            return frozenset(getattr(past, "area", ()) or ())
+    return frozenset()
+
+
 def attacked_during_own_turn(world: World, eid: int) -> bool:
     """Has this creature declared an attack since its own turn began?
 
