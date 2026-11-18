@@ -69,7 +69,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Your fire powers ignore the target's fire resistance."
 - `c.lose_immunity(self, dtype: 'DamageType', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "The target loses any immunity to this power's damage type."
-- `c.resist(self, amount: 'int', dtype: 'DamageType | None' = None, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+- `c.resist(self, amount: 'int', dtype: 'DamageType | None' = None, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None, onto: 'Effect | None' = None) -> 'Effect | None'`
   - Shrugs off `amount` of every hit, or of one damage type.
 - `c.resist_in(self, zone: 'int', amount: 'int', dtype: 'DamageType | None' = None, *, side: 'str' = 'team', when: 'Callable[[int], bool] | None' = None) -> 'None'`
   - "While within the zone you and your allies gain resist N."

@@ -666,6 +666,26 @@ class Target:
     #: Medium. Compared on `Size.order`, which is what makes the two
     #: comparable at all. #1319.
     min_size: Size | None = None
+    #: **The same clause with no printed category: "of your size or
+    #: smaller".** `max_size` holds an absolute band, so a relative line
+    #: could not be declared at all -- the answer depends on who is using
+    #: the row, and a header is read before any caster is known.
+    #:
+    #: **An offset in size categories and not a flag**, because only one of
+    #: the two rows that print this says plain "or smaller". `p16573` is
+    #: `0`; `p13437` prints *"your size, smaller than you, or one size
+    #: category larger"*, which is `1`. A bool would have been written
+    #: first and then found wanting by the second row -- `Size.order` is
+    #: consecutive, so the offset is the whole generalisation.
+    #:
+    #: Compared against the **actor's** size, inclusive at the top, and it
+    #: composes with the absolute bands rather than replacing them.
+    #:
+    #: It does **not** belong in the body, which is `Target.ident`'s own
+    #: ruling: a body check runs after the targeter has chosen, so the row
+    #: is offered creatures the card never allowed and spends its target
+    #: count on them. #1341.
+    max_size_relative: int | None = None
     loose: bool = False
     #: **The two weight clauses an object target line prints**, beside
     #: `max_size` and `loose` and for the same reason: they are further
@@ -3995,6 +4015,7 @@ def candidates(
         or aim.holding
         or aim.carrying
         or aim.max_size is not None
+        or aim.max_size_relative is not None
         # Named here as well as tested in the predicate, which this guard's
         # own comment demands and `#1307` paid for learning: two fields
         # tested and not named left one row honouring them and another
@@ -4568,6 +4589,12 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         return False
     if aim.max_size is not None and _size_of(world, target).order > aim.max_size.order:
         return False
+    if (
+        aim.max_size_relative is not None
+        and _size_of(world, target).order
+        > _size_of(world, actor).order + aim.max_size_relative
+    ):
+        return False
     if aim.min_size is not None and _size_of(world, target).order < aim.min_size.order:
         return False
     if aim.holding:
@@ -4883,6 +4910,9 @@ def _no_targets(world: World, actor: int, p: Power) -> str:
     if aim.max_size is not None:
         cap = aim.max_size.order
         fits = [c for c in fits if _size_of(world, c).order <= cap]
+    if aim.max_size_relative is not None:
+        mine = _size_of(world, actor).order + aim.max_size_relative
+        fits = [c for c in fits if _size_of(world, c).order <= mine]
     if not fits:
         # The printed wording, which is what `Target.__str__` returns when the
         # row carries a label -- so the card says the restriction the card

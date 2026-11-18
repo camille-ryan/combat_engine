@@ -24726,6 +24726,226 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_parameter_the_printed_line_needed(out: Result) -> None:
+    """Four narrow parameters, six power rows, one shape.
+
+    Each of these rows carried a marker naming **exactly** the parameter it
+    wanted, and in every case the verb or the field already existed and
+    pointed one way when the card pointed another. Worth one rule rather
+    than four because the failure mode is identical: written without the
+    parameter, each row would have been **strictly stronger than print**.
+
+    | row | marker | what the card says |
+    |---|---|---|
+    | `p16573` | `Target.max_size_relative` | *"of your size or smaller"* |
+    | `p13437` | the same | *"...or one size category larger"* |
+    | `p9432` | `c.grant_action(toward=)` | *"end the teleport closer to the target"* |
+    | `p3464` | the same | *"to a space adjacent to you"* |
+    | `p13781` | `c.pass_on(from_=)` | the ally's effect lands on **you** |
+    | `p11173` | `c.resist(onto=)` | *"(save ends both)"* -- one save |
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine import events as _events
+    from combat_engine.engine.actions import legal
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.grid import distance
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import allies, enemies, granted_actions, is_
+    from combat_engine.engine.types import Condition, DamageType, Size
+
+    # ---- Target.max_size_relative: an OFFSET, which is why two rows ----
+    for ref, offset, admits, refuses in (
+        ("p16573", 0, Size.MEDIUM, Size.LARGE),
+        ("p13437", 1, Size.LARGE, Size.HUGE),
+    ):
+        world, me, _ = _audit.board(ref, 1)
+        aim = REGISTRY[ref].target
+        pool = [x for x in sorted(_dsl.candidates(world, me, REGISTRY[ref],
+                                                  None, 0, 0)) if x != me]
+        if not pool:
+            out.skip(f"{ref}: nothing to aim at")
+            continue
+        victim = pool[0]
+        out.that(_dsl._size_of(world, me) is Size.MEDIUM,
+                 f"{ref}'s caster is Medium, so the bands below are readable",
+                 f"caster {_dsl._size_of(world, me).name}")
+        world.need(victim, Position).size = admits
+        allowed = _dsl._stands_right(world, me, aim, victim, ref)
+        world.need(victim, Position).size = refuses
+        barred = _dsl._stands_right(world, me, aim, victim, ref)
+        out.that(allowed and not barred,
+                 f"**{ref} admits a {admits.name} target and refuses a"
+                 f" {refuses.name} one** -- `max_size_relative={offset}`"
+                 f" against a Medium caster. An offset and not a flag,"
+                 f" because only one of the two rows prints plain 'or"
+                 f" smaller': this pair is what rules a bool out",
+                 f"{admits.name} allowed={allowed},"
+                 f" {refuses.name} allowed={barred}")
+
+    # ---- c.grant_action(beside=): p3464's ally arrives at the bard ------
+    world, me, _ = _audit.board("p3464", 1)
+    foe = sorted(enemies(world, me))[0]
+    world.rng.loaded = 20
+    use(world, me, "p3464", targets=[foe], spend=False)
+    mine = world.get(me, Position).squares
+    offered = []
+    for friend in [a for a in allies(world, me) if a != me]:
+        world.turn = friend
+        spots = [a.dest for a in legal(world, world.encounter, friend)
+                 if a.kind == "teleport"]
+        if spots:
+            offered.append((friend, spots))
+    out.that(bool(offered),
+             "**p3464's chosen ally is offered the teleport** -- on its own"
+             " turn, because a move action is budget and `can_spend` asks"
+             " whose turn it is",
+             f"{len(offered)} ally(ies) offered it")
+    if offered:
+        friend, spots = offered[0]
+        astray = [d for d in spots
+                  if min(distance(d, s) for s in mine) != 1]
+        out.that(not astray,
+                 "**and every destination is adjacent to the bard** --"
+                 " `beside=`, not the `toward=` this row's own marker asked"
+                 " for: 'nearer than you were' would let the ally land two"
+                 " squares off, which is not what 'to a space adjacent to"
+                 " you' says",
+                 f"{len(spots)} offered, {len(astray)} not beside the bard")
+
+    # ---- c.grant_action(toward=): p9432's teleport must close ----------
+    world, me, _ = _audit.board("p9432", 1)
+    victim = sorted(enemies(world, me))[0]
+    place(world, victim, (14, 14))
+    # The build gate is a chargen draw, so it is set rather than hoped for
+    # -- `c.set_build` ADDS a leg, which is all this needs.
+    Cast(world=world, me=me, ref="drivers-p9432").set_build("f1s2")
+    world.rng.loaded = 20
+    theirs = world.get(victim, Position).squares
+    here = world.get(me, Position).squares
+    was = min(distance(a, b) for a in here for b in theirs)
+    use(world, me, "p9432", targets=[victim], spend=False)
+    grants = granted_actions(world, me)
+    out.that(("teleport", "minor") in grants,
+             "p9432 grants the minor-action teleport its build rider prints",
+             f"grants {dict(grants)!r}")
+    out.that(("teleport", "minor toward") in grants,
+             "**and the anchor rides beside it under a key no existing"
+             " reader can see** -- `granted_actions` partitions on ' as ',"
+             " so `actions._granted` calls `ActionType('minor toward')`,"
+             " raises, and skips it. The grant list is unchanged",
+             f"grants {dict(grants)!r}")
+    world.turn = me
+    spots = [a.dest for a in legal(world, world.encounter, me)
+             if a.kind == "teleport"]
+    out.that(bool(spots), "and destinations are offered",
+             f"{len(spots)} offered from {was} squares away")
+    out.that(spots and all(
+        min(distance(d, t) for t in theirs) < was for d in spots),
+        "**every one of them is closer to the target than the start was**"
+        " -- the proviso the card prints and the thing an unanchored grant"
+        " could not say. Measured from 8 squares out, deliberately: from 1"
+        " square there is nothing closer and the assertion would hold"
+        " vacuously",
+        f"started {was} away, offered"
+        f" {sorted({min(distance(d, t) for t in theirs) for d in spots})}")
+
+    # ---- c.pass_on(from_=): the ardent volunteers ----------------------
+    world, me, _ = _audit.board("p13781", 1)
+    mates = [a for a in allies(world, me) if a != me]
+    if not mates:
+        out.skip("p13781: no ally to shield")
+    else:
+        mate, swinger = mates[0], sorted(enemies(world, me))[0]
+        # **A condition NEITHER of them already carries.** The board poses
+        # conditions during setup, so the obvious choice -- a daze -- was
+        # already standing on the ally: `c.condition` then laid nothing,
+        # emitted no `ConditionApplied`, and the interception had nothing
+        # to catch. That read exactly like a broken verb for two probes.
+        spare = [
+            k for k in (Condition.WEAKENED, Condition.SLOWED,
+                        Condition.BLINDED)
+            if not is_(world, mate, k) and not is_(world, me, k)
+        ]
+        out.that(bool(spare),
+                 "the board leaves at least one condition free, which is"
+                 " what makes the next lines about the row",
+                 f"free: {[k.name for k in spare]}")
+        kind = spare[0]
+        blow = _events.DamageRolled(
+            source=swinger, target=mate, amount=10,
+            dtype=DamageType.UNTYPED, detail="drivers",
+        )
+        REGISTRY["p13781"].body(Cast(
+            world=world, me=me, ref="p13781", target=mate, targets=[mate],
+            trigger=blow,
+        ))
+        out.that(blow.amount == 5,
+                 "p13781 halves the blow its ally took",
+                 f"10 -> {blow.amount}")
+        Cast(world=world, me=swinger, ref="drivers-swinger").condition(
+            kind, on=mate, until=When.SAVE_ENDS)
+        out.that(is_(world, me, kind) and not is_(world, mate, kind),
+                 f"**and the save-ends {kind.name.lower()} lands on the"
+                 " ARDENT instead of on the ally** -- `from_=`, which is"
+                 " the direction this verb could not say: every caller"
+                 " before this row was 'what would land on me lands on"
+                 " you', so a reader who found `c.pass_on` would have"
+                 " concluded it was the wrong verb",
+                 f"ally={is_(world, mate, kind)},"
+                 f" ardent={is_(world, me, kind)}")
+
+    # ---- c.resist(onto=): "(save ends both)" is ONE save ---------------
+    world, me, _ = _audit.board("p11173", 1)
+    victim = sorted(enemies(world, me))[0]
+    world.rng.loaded = 20
+    use(world, me, "p11173", targets=[victim], spend=False)
+    holds = [e for e in world.effects.of(victim) if e.by == "p11173"]
+    out.that(len(holds) == 1,
+             "**p11173 lays ONE hold, not two** -- 'the target is stunned"
+             " and gains resist all but psychic (save ends both)'. Two"
+             " holds hand the victim two saving throws against one printed"
+             " sentence and let it shed one and keep the other",
+             f"{len(holds)} hold(s): {[e.label for e in holds]}")
+    out.that(any(e.mods for e in holds),
+             "and the resist is pinned to it as a modifier, because a"
+             " GATED resist is a `Mod` -- which is why `onto=` is a"
+             " pass-through to the door `c.bonus` already opened",
+             f"mods {[len(e.mods) for e in holds]}")
+    hurt = world.need(victim, Health)
+    if hurt.hp <= 0:
+        hurt.hp = hurt.max_hp
+    probe = Cast(world=world, me=me, ref="drivers-p11173")
+    was = hurt.hp
+    # **Necrotic, not psychic, and that is not a typo.** Something the
+    # board arms retypes the caster's damage: a blow sent as psychic
+    # arrived at the resist read as necrotic, which made the row look
+    # broken for three probes. Asking with a type the row resists outright
+    # avoids the question entirely -- what is asserted here is that ONE
+    # save sheds BOTH clauses, not which types the gate admits.
+    probe.flat(10, dtype=DamageType.NECROTIC, on=victim)
+    out.that(hurt.hp == was,
+             "the immunity is standing while the hold is",
+             f"10 necrotic: {was} -> {hurt.hp}")
+    out.that(is_(world, victim, Condition.STUNNED),
+             "and so is the stun")
+    for e in list(holds):
+        world.effects.end(e, "drivers: the one save succeeds")
+    was = hurt.hp
+    probe.flat(10, dtype=DamageType.NECROTIC, on=victim)
+    out.that(hurt.hp < was and not is_(world, victim, Condition.STUNNED),
+             "**and ONE save sheds both of them** -- which is the whole"
+             " assertion: before `onto=` the stun and the immunity were two"
+             " effects on one clock, so a creature could shake off half of"
+             " a thing the book calls one",
+             f"after the save: 10 necrotic took {was - hurt.hp},"
+             f" stunned={is_(world, victim, Condition.STUNNED)}")
+
+
 def a_row_may_grant_a_second_action_row(out: Result) -> None:
     """"Until the stance ends, you can move ... as a move action."
 
@@ -93147,6 +93367,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "narrow_params": (
+        a_parameter_the_printed_line_needed,
+        "four narrow parameters six power rows asked for by name"
+        " (p16573 p13437 p9432 p3464 p13781 p11173)",
+    ),
     "granted_rows": (
         a_row_may_grant_a_second_action_row,
         "a row may grant a second action row for as long as its stance,"

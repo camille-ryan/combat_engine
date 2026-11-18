@@ -77,6 +77,7 @@ from combat_engine.engine import (
     RelationSet,
     SavingThrow,
     SkillCheck,
+    Target,
     TurnEnd,
     TurnStart,
     When,
@@ -655,16 +656,23 @@ def p13436(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        count=1,
+        max_size_relative=1,
+        label="One creature your size, smaller, or one size larger",
+    ),
     keywords=MARTIAL_WEAPON,
     attack=Attack(Pick.PRIMARY, vs=FORT),
-    dropped=("Target.max_size_relative",),
 )
 def p13437(c: Cast) -> None:
-    """The printed size line is relative to the caster and `Target.max_size`
-    is an absolute size, so the restriction is dropped. The positional
-    exchange is armed rather than offered: it is an interrupt on an attack
-    aimed at me while the hold stands.
+    """The positional exchange is armed rather than offered: it is an
+    interrupt on an attack aimed at me while the hold stands.
+
+    **The size line is declared now, and it is an offset rather than a
+    flag.** The card says *"your size, smaller than you, or one size
+    category larger"* -- so `max_size_relative=1`, where `p16573`'s plain
+    *"of your size or smaller"* is `0`. A bool would have fitted that row
+    and not this one.
 
     **The gap is confirmed and the spelling was wrong, which is the more
     useful finding.** `max_size` is a real field, enforced where it has to

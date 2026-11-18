@@ -24,6 +24,8 @@ from .resolve import _mods
 from .types import ActionType, Condition, Relation, Usage
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .ecs import World
     from .turns import Encounter
 
@@ -1455,12 +1457,75 @@ def _teleports(world: World, encounter: Encounter, actor: int) -> list[Action]:
             continue
         if not encounter.can_spend(actor, cost):
             continue
+        allowed = _anchored(world, actor, what, cost)
         for dest in sorted(spread(pos.squares, squares) - pos.squares):
             if not world.grid.passable(dest) or world.grid.occupant(dest):
+                continue
+            if not allowed(dest):
                 continue
             out.append(Action(kind="teleport", cost=cost, dest=dest,
                               path=(dest,)))
     return out
+
+
+def _anchored(
+    world: World, actor: int, what: str, cost: ActionType
+) -> Callable[[Square], bool]:
+    """Where a granted action is allowed to end, per the card that grants it.
+
+    **A granted teleport used to end anywhere in range**, and two rows
+    print otherwise: *"you must end the teleportation closer to the
+    target"* (`p9432`) and *"to a space adjacent to you"* (`p3464`). The
+    unanchored version is strictly stronger than either, so both rows were
+    left out rather than written loose.
+
+    `c.grant_action(toward=, beside=)` lays the anchor as a companion
+    modifier holding the creature's entity id `+1`; this is the reader.
+    Returns a predicate, so the destination loop above stays one `if`.
+
+    No anchor is every square, which is what every other granting row
+    prints and means this is a narrowing rather than a new rule.
+
+    Measured with `grid.distance`, which that module's own docstring calls
+    the only place the engine measures a distance -- `query.distance_between`
+    takes two entities and a destination is not one yet.
+    """
+    from .query import granted_actions
+
+    mine = world.get(actor, Position)
+    here = mine.squares if mine is not None else frozenset()
+    tests: list[Callable[[Square], bool]] = []
+    for (key, word), raw in granted_actions(world, actor).items():
+        if key != what or raw <= 0:
+            continue
+        # `granted_actions` partitions on " as ", so the cost half of an
+        # anchor key arrives as "minor toward" -- which is exactly why it
+        # is invisible to `_granted` and readable here.
+        spend, _, anchor_word = word.partition(" ")
+        if spend != cost.value or anchor_word not in ("toward", "beside"):
+            continue
+        anchor = raw - 1
+        spot = world.get(anchor, Position)
+        if spot is None:
+            continue
+        theirs = spot.squares
+        if anchor_word == "beside":
+            from .grid import spread as _spread
+
+            ring = _spread(theirs, 1) - theirs
+            tests.append(lambda dest, ring=ring: dest in ring)
+        else:
+            was = min(
+                (distance(s, t) for s in here for t in theirs), default=99,
+            )
+            tests.append(
+                lambda dest, was=was, theirs=theirs:
+                min((distance(dest, t) for t in theirs), default=99) < was
+            )
+    if not tests:
+        return lambda _dest: True
+    return lambda dest: all(test(dest) for test in tests)
+
 
 
 def granted_in_window(

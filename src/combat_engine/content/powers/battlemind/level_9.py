@@ -99,7 +99,6 @@ def p11172(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.POLYMORPH],
     attack=Attack(CON, vs=FORT),
-    dropped=("c.resist(onto=)",),
 )
 def p11173(c: Cast) -> None:
     """**"Immune to all damage but psychic" is written now, as ONE hold.**
@@ -116,24 +115,30 @@ def p11173(c: Cast) -> None:
     names, and this does not wait for it: the number says the same thing
     and the gate is what the card actually turns on. #1341.
 
-    **"(save ends both)" is two saves here, not one, and that is the half
-    still owed.** `c.bonus` takes `onto=` to add a modifier to an existing
-    hold and `c.resist` does not, so the stun and the immunity are two
-    effects on the same clock rather than one effect with two clauses. The
-    marker names it. A creature could therefore shed one and keep the
-    other, which is a real divergence from the card and is why it is
-    recorded rather than left to be noticed.
+    **"(save ends both)" is ONE save now.** The stun and the immunity were
+    two effects on the same clock, so the victim rolled twice against one
+    printed sentence and could shed one and keep the other.
+    `c.resist(onto=)` hangs the immunity on the stun's own hold -- the same
+    door `c.bonus(onto=)` and `c.condition(ongoing=)` already are, and a
+    pass-through here because a **gated** resist is a `Mod`, which is what
+    `c.bonus` pins. The ungated form writes `Defences` and joins by its
+    teardown instead.
+
+    The miss arm is `When.EONT`, which a save cannot end, so there is
+    nothing to couple there -- `onto=` is passed on both arms regardless,
+    because the coupling is about the two clauses sharing one hold and not
+    about which clock that hold runs on.
     """
     victim = c.target
     clock = When.SAVE_ENDS if c.strike() else When.EONT
-    c.stunned(until=clock)
+    stun = c.stunned(until=clock)
     # **`on=victim` and not the default.** `c.resist` defaults to the
     # CASTER, like `c.conceal` -- so written without it this row made the
     # battlemind immune and left the target untouched, which measured as
     # 10 fire damage landing on a creature the card says cannot be hurt
     # by it.
     c.resist(
-        9999, None, on=victim, until=clock,
+        9999, None, on=victim, onto=stun,
         # **The resist context carries the type as a STRING**, where the
         # damage context carries the enum: `resolve.py` builds
         # `{**dmg_ctx, "dtype": dtype.value, "dtypes": types}` for this

@@ -202,7 +202,6 @@ def p12943(c: Cast) -> None:
     on=Trigger(
         DamageRolled, ally_within(5), "an ally within 5 squares takes damage"
     ),
-    dropped=("c.pass_on(from_=)",),
 )
 def p13781(c: Cast) -> None:
     """The middle sentence is still dropped, and **the reason it used to give
@@ -217,21 +216,27 @@ def p13781(c: Cast) -> None:
     `EffectApplied` *"the one window where a creature is being stunned and
     is not yet stunned"*.
 
-    What is actually missing is the **direction**. `pass_on` sets
-    `mine = self.me`, so it takes the conditions landing on the *caster*
-    and hands them to somebody else. This card is the mirror -- the ardent
-    volunteers for what would land on the **ally** -- and there is no
-    `from_=` to aim it that way, hence the marker.
+    What was missing was the **direction**, and it is one parameter.
+    `pass_on` set `mine = self.me`, so it took the conditions landing on
+    the *caster* and handed them to somebody else; this card is the mirror
+    -- the ardent volunteers for what would land on the **ally** --
+    so `from_=` names whose blow is being intercepted.
 
-    Worth saying because the two read alike and only one is written: the
-    verb exists, it points the other way, and a reader who trusted the old
-    note would not have gone looking for it at all.
+    **"You can choose", so it is offered rather than imposed.** `c.may` is
+    the consent, and it is asked only when there is something to take: the
+    interrupt resolves before the blow lands, so what the ally "would
+    receive" is not knowable yet, and asking unconditionally would put a
+    prompt on every use of a row whose common case is just the halving.
+    The watch `pass_on` arms costs nothing when the attack applies no
+    save-ends effect.
     """
     ev = c.trigger
     who = getattr(ev, "target", None)
     if who is None or not c.first:
         return
     ev.amount = ev.amount // 2
+    if c.may("take the effect that would land on your ally", who=c.me):
+        c.pass_on(ev, to=c.me, from_=who)
 
     def close(_ctx: dict) -> bool:
         return c.distance(to=who) <= 5

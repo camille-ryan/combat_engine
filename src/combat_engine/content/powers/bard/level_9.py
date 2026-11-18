@@ -103,7 +103,6 @@ def p2979(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_WEAPON, Keyword.TELEPORTATION],
     attack=Attack(CHA, vs=REF),
-    dropped=("c.grant_action('teleport', toward=)",),
 )
 def p3464(c: Cast) -> None:
     """**Still dropped, and the marker has been corrected twice.**
@@ -120,16 +119,34 @@ def p3464(c: Cast) -> None:
     a destination. Asserting absence from a truncated read is the mistake
     this repo's own rules name -- a failed search is not an absent thing.
 
-    **What is really missing is the destination anchor.** The reader
-    offers every passable square within `squares_` of the *ally*; the card
-    says "to a space **adjacent to you**", meaning the bard. Granting the
-    unanchored version would hand the ally a free teleport anywhere in
-    range, which is strictly stronger than print -- the thing this tree
-    refuses to do. `c.slide` has `toward=` for exactly this shape and the
-    granted teleport has nothing. #1341.
+    **The destination anchor is what was missing, and it is `beside=`
+    rather than the `toward=` this marker asked for.** The reader offered
+    every passable square within `squares_` of the *ally*; the card says
+    "to a space **adjacent to you**", meaning the bard. `toward=` -- the
+    spelling the old note reached for, by analogy with `c.slide` -- only
+    says "nearer than you were", so the ally could land two squares off.
+    A marker naming the author's reach rather than the tree's gap, which
+    is why the fix is one parameter wider than the symbol. #1341.
+
+    **No printed distance, so the radius is the board.** The card puts no
+    range on the teleport itself -- the ally arrives beside the bard from
+    wherever it is standing, and the bard will have moved since the grant.
+    So the ring is the whole restriction and the radius must not be a
+    second one; `grid.width + grid.height` cannot be short on any board.
     """
     if c.strike():
         c.damage(c.w(3), c.cha_mod)
+    if not c.last:
+        return
+    near = [a for a in c.allies() if a != c.me and c.distance(a) <= 5]
+    if not near:
+        return
+    friend = c.choose(near, f"{c.ref}: who may step to your side")
+    if friend is None:
+        return
+    reach = c.world.grid.width + c.world.grid.height
+    c.grant_action("teleport", MOVE, squares_=reach, beside=c.me,
+                   on=friend, until=When.ENCOUNTER)
 
 
 @power(

@@ -603,35 +603,31 @@ def p16572(c: Cast) -> None:
 
 
 @power("p16573", level=10, cls="x7_1000", usage=ENCOUNTER, action=MOVE,
-       reach=Ranged(5), target=ANY_CREATURE,
-       keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
-       dropped=("Target.max_size_relative",))
+       reach=Ranged(5),
+       target=Target(count=1, side="any", max_size_relative=0,
+                     label="One creature of your size or smaller"),
+       keywords=[Keyword.ARCANE, Keyword.TELEPORTATION])
 def p16573(c: Cast) -> None:
-    """"Of your size or smaller" is relative to the caster and `max_size`
-    holds an absolute category, so the restriction is not in the header.
+    """"Of your size or smaller" is declared, as `max_size_relative=0`.
 
-    **Re-pointed off a catch-all.** The marker was `Target.filter()`, shared
-    with two rows whose target lines have nothing to do with size -- one
-    wanted "granting combat advantage to you", which `Target.grants_ca`
-    already said, and the other a second reach origin, which `Range.alt`
-    plus `from_` already said. Both are written, so the catch-all would
-    have reported all three ready the day a size field landed and both of
-    its other needs were never gaps at all. This is the only one of the
-    three that is a `Target` gap.
+    **Re-pointed off a catch-all before it was written**, and that is the
+    half worth keeping. The marker was `Target.filter()`, shared with two
+    rows whose target lines have nothing to do with size -- one wanted
+    "granting combat advantage to you", which `Target.grants_ca` already
+    said, and the other a second reach origin, which `Range.alt` plus
+    `from_` already said. Both were already written, so the catch-all
+    would have reported all three ready the day a size field landed.
 
-    `max_size` is a real field -- `Size | None`, enforced in `_stands_right`
-    and named in `candidates`' relational guard -- so what is missing is one
-    field beside it comparing against the caster's own size rather than a
-    printed band. `p13437` prints the identical relative-size line and waits
-    on the same thing.
+    `max_size` holds an absolute band and could not say this, because the
+    answer depends on who is using the row and a header is read before any
+    caster is known. The field beside it compares against the actor's own
+    size, and it is an **offset** rather than a flag: this row is `0` and
+    `p13437` prints *"or one size category larger"*, which is `1`.
 
-    The symbol resolves: `Target.max_size_relative` answers False through
-    `blocked._one` today and `Target.max_size` answers True, so the owner is
-    reachable and the False means the field is absent. Written as a field
-    rather than `Target.max_size(relative=)` -- which is what `p13437`
-    carries -- because `blocked._params_ok_on` refuses a keyword on a
-    non-callable and its own note says a field "can never grow" one, so that
-    spelling cannot go green on the day the gap closes."""
+    Not in the body, which is `Target.ident`'s ruling: a body check runs
+    after the targeter has chosen, so the row would be offered creatures
+    the card never allowed.
+    """
     foe = c.target
     c.swap(foe)
     if foe in c.enemies():

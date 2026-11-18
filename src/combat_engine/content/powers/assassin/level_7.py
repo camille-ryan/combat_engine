@@ -83,7 +83,6 @@ def p9431(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.IMPLEMENT, Keyword.PSYCHIC, Keyword.SHADOW, Keyword.TELEPORTATION],
     attack=Attack(DEX, vs=WILL),
-    dropped=("c.grant_action(toward=)",),
 )
 def p9432(c: Cast) -> None:
     """**The build rider's teleport is written and the marker was wrong
@@ -97,14 +96,13 @@ def p9432(c: Cast) -> None:
     `c.build("f1s2")` is the gate, which is how every other rider in this
     class reads its build.
 
-    **What is left is the proviso, and it is a narrower marker.** The card
-    says *"you must end the teleportation closer to the target"*, and
-    `c.grant_action` carries a distance and no destination test -- the
-    grant it writes is the ordinary teleport, which may end anywhere in
-    range. `c.teleport` itself takes `toward=` for precisely this shape,
-    so the gap is passing that through the grant rather than anything
-    larger; hence `c.grant_action(toward=)` and not a row-granting
-    facility.
+    **The proviso is written now**, and it was the narrow thing the old
+    marker said it was rather than a row-granting facility. The card says
+    *"you must end the teleportation closer to the target"*;
+    `c.grant_action` carried a distance and no destination test, so the
+    grant it wrote was the ordinary teleport and could end anywhere in
+    range -- strictly stronger than print. `toward=` passes the anchor
+    through to `actions._anchored`, which filters the offered squares.
 
     "During your next turn" is `When.EONT`, which is the nearest duration
     the enum has -- the grant is spent on that turn or lapses with it.
@@ -122,8 +120,12 @@ def p9432(c: Cast) -> None:
         c.watch(TurnEnd, late, until=When.ENCOUNTER, once=True)
 
         if c.build("f1s2") and c.cha_mod > 0:
-            c.grant_action("teleport", MINOR, squares_=c.cha_mod, on=c.me,
-                           until=When.EONT)
+            # **`toward=victim` is the proviso.** "You must end the
+            # teleportation closer to the target" -- without it the grant
+            # is the ordinary teleport, which may end anywhere in range
+            # and is strictly stronger than print.
+            c.grant_action("teleport", MINOR, squares_=c.cha_mod,
+                           toward=victim, on=c.me, until=When.EONT)
 
 
 @power(

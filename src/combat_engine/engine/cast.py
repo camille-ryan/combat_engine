@@ -5271,6 +5271,8 @@ class Cast:
         cost: ActionType,
         *,
         squares_: int = 1,
+        toward: int | None = None,
+        beside: int | None = None,
         on: int | None = None,
         until: When = When.STANCE,
     ) -> Effect | None:
@@ -5298,6 +5300,27 @@ class Cast:
         Follows `c.target`, because the printed lines grant it to somebody
         else -- `on=c.me` for a stance about yourself, which is what
         `c.shift_as` passes.
+
+        **`toward` and `beside` are the destination the card names**, and
+        without them a granted teleport or shift ended anywhere in range --
+        strictly stronger than print, which is the trade this tree refuses.
+        Two rows waited on it and they print different sentences, which is
+        why there are two parameters and not one:
+
+        * `p9432` -- *"you must end the teleportation closer to the
+          target"* -- is `toward=`, satisfied by any square nearer the
+          anchor than the start.
+        * `p3464` -- *"to a space adjacent to you"* -- is `beside=`, which
+          is strictly narrower. Its own marker asked for `toward=` and
+          `toward=` would have let the ally land two squares off.
+
+        Carried as a companion modifier keyed `"<what> as <cost> toward"`
+        holding the anchor's entity id. It cannot collide with the grant
+        itself: `query.granted_actions` partitions on `" as "` and
+        `actions._granted` then calls `ActionType(...)` on the remainder,
+        so `"minor toward"` raises and the key is skipped -- the anchor is
+        invisible to every existing reader and read only by the ones that
+        want it.
         """
         from .actions import GRANTABLE
 
@@ -5311,6 +5334,17 @@ class Cast:
         who = self._who(on)
         if who is None:
             return None
+        for word, anchor in (("toward", toward), ("beside", beside)):
+            if anchor is not None:
+                # **The anchor's entity id as the value**, which works
+                # because `Mods` holds ints and an id is one. `+1` so an
+                # anchor of entity 0 is not read as "no anchor" by
+                # `mods.total`'s own `n > 0` convention, which is the trap
+                # `granted_actions` already lives with one layer up.
+                self.bonus(
+                    f"{what} as {cost.value} {word}", anchor + 1, on=who,
+                    until=until, kind=self.ref,
+                )
         return self.bonus(
             f"{what} as {cost.value}", max(1, squares_), on=who,
             until=until, kind=self.ref,
@@ -7257,6 +7291,7 @@ class Cast:
         until: When = When.ENCOUNTER,
         on: int | None = None,
         when: Callable[[dict[str, Any]], bool] | None = None,
+        onto: Effect | None = None,
     ) -> Effect | None:
         """Shrugs off `amount` of every hit, or of one damage type.
 
@@ -7278,9 +7313,14 @@ class Cast:
         who = on if on is not None else self.me
         if when is not None:
             what = "resist" if dtype is None else f"resist {dtype.value}"
+            # **The gated form is already a `Mod`, so `onto` is a pass-through
+            # to the door `c.bonus` opened** -- and `until` must go with it,
+            # because `c.bonus(onto=)` refuses a duration it would then be
+            # claiming on somebody else's hold.
             return self.bonus(
-                what, amount, on=who, until=until,
+                what, amount, on=who,
                 kind=f"{self.ref} resist", when=when,
+                **({"onto": onto} if onto is not None else {"until": until}),
             )
         kinds = [dtype] if dtype is not None else list(DamageType)
         defences = self.world.get(who, Defences) or self.world.add(who, Defences())
@@ -7308,6 +7348,27 @@ class Cast:
                 else:
                     defences.resist.pop(kind, None)
 
+        if onto is not None:
+            # **"(save ends both)" is ONE save**, which is the whole of why
+            # this door exists. `p11173` prints "the target is stunned and
+            # gains resist all but psychic (save ends both)": two holds give
+            # the victim two saving throws against one printed sentence and
+            # let it shed one and keep the other. `c.bonus(onto=)` and
+            # `c.condition(ongoing=)` are the same door for a mod and for a
+            # condition; `Defences` is written directly here, so the join is
+            # the teardown rather than `Effects.pin`.
+            #
+            # `until` is the hold's, not this call's -- the same rule
+            # `c.bonus(onto=)` states -- and it is not refused here because
+            # `until` has a default a body cannot tell from an argument.
+            #
+            # **Two doors, because a resist is two different things.**
+            # Gated, it is a `Mod` and the branch above hands `onto`
+            # straight to `c.bonus`. Ungated, it writes `Defences`
+            # directly, so there is no modifier to pin and the join is the
+            # teardown instead.
+            onto.on_end.append(undo)
+            return onto
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} resist", on_end=[undo],
             by=self.ref,
@@ -17081,7 +17142,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
     # -- a hold changing hands -----------------------------------------------
 
     def pass_on(
-        self, ev: Any = None, *, to: int | None = None, attack: bool = False
+        self, ev: Any = None, *, to: int | None = None, attack: bool = False,
+        from_: int | None = None,
     ) -> Effect | None:
         """Whatever conditions the attack being answered would apply, land
         on somebody else instead.
@@ -17127,11 +17189,20 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         power's resolution, stood down by the next `PowerUsed` -- so a
         creature does not go on deflecting every attack for the rest of
         the turn.
+
+        **`from_` is whose blow is being intercepted, and without it this
+        verb could only say one of the two printed directions.** Every
+        caller before `p13781` was *"what would land on me lands on you
+        instead"*, so the source was the caster and hard-coded. The
+        ardent's card is the mirror -- it volunteers for what would land
+        on an **ally** -- and a reader who found this verb would have
+        concluded it was the wrong one. It is the same window, pointed the
+        other way.
         """
         from .events import AttackDeclared, ConditionApplied, Window
 
         victim = self._who(to)
-        mine = self.me
+        mine = from_ if from_ is not None else self.me
         if victim is None or victim == mine:
             return None
         blow = ev if ev is not None else self.trigger
