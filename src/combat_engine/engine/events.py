@@ -2207,6 +2207,34 @@ class EffectSuspended(Event):
     back: bool = False
 
 
+@dataclass
+class EffectSustained(Event):
+    """Somebody paid the action to keep an effect going.
+
+    **Sustaining announced nothing at all.** `Effects.sustain` stamped
+    `sustained` with the round and ran the `on_sustain` hooks, which reach
+    only the row that laid the effect -- so a card about *somebody else's*
+    sustain had nothing to listen for. The same courtesy `EffectSuspended`
+    one class up was added for, and the same reasoning: teaching the
+    harness to diff state is the wrong fix; the event is the right one.
+
+    Found by `m6346a1`, whose whole printed line is *"any enemy that grabs
+    the m6346 **or sustains a grab on it** takes 5 damage"*. The grab half
+    was readable off `RelationSet` and the sustain half was not readable at
+    all -- the row had been carrying a marker aimed at `c.grab(sustain=)`,
+    which gives a grab its cost and still announces nothing when the cost
+    is paid.
+
+    `actor` is who paid, `what` is the effect's label, and `on` is who the
+    effect sits on -- which is the one a row like this gates on, since the
+    creature being grabbed is not the creature sustaining.
+    """
+
+    actor: int
+    what: str
+    on: int = 0
+
+
 # -- areas ------------------------------------------------------------------
 
 

@@ -129,6 +129,7 @@ from combat_engine.engine.events import (
     DamageApplied,
     Dropped,
     EffectApplied,
+    EffectSustained,
     Hit,
     Miss,
     MoveStart,
@@ -2477,7 +2478,6 @@ def m6346a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.grab(sustain=)",),
 )
 def m6346a1(c: Cast) -> None:
     """`RelationSet` is the moment a grab is taken, and the grab relation names
@@ -2490,11 +2490,22 @@ def m6346a1(c: Cast) -> None:
     spelling, so one gap sat as two two-row groups and neither could go
     green for the other.
 
-    `c.grab(sustain=)` is the correct half: the sustain machinery is live
-    end to end -- `actions._sustaining` offers the action, `When.SUSTAIN`
-    is a rung 139 content files already use, `c.on_sustain` is the
-    per-sustain hook -- and the only thing absent is a `sustain=` keyword
-    on `c.grab`, which is a parameter rather than a facility."""
+    **Both halves are written, and the second needed an event rather than
+    the parameter the marker named.** `c.grab(sustain=)` landed and gives a
+    grab its cost -- but paying that cost still announced nothing:
+    `Effects.sustain` stamped the round and ran the `on_sustain` hooks,
+    which reach only the row that *laid* the effect. This card is about
+    somebody **else's** sustain, so there was nothing to listen for.
+
+    `EffectSustained` is the event, added beside `EffectSuspended` for the
+    same stated reason -- *"teaching the harness to diff state is the wrong
+    fix; the event is the right one"*. It carries `actor` (who paid),
+    `what` (the effect's label) and `on` (who it sits on), and this row
+    needs all three: the creature sustaining is not the creature grabbed.
+
+    The gate is the label ending in `grab` **and** the effect sitting on
+    this creature, which is what *"sustains a grab on it"* says -- an enemy
+    sustaining a grab on somebody else is not this sentence."""
     me = c.me
 
     def seized(ev: RelationSet) -> None:
@@ -2504,6 +2515,17 @@ def m6346a1(c: Cast) -> None:
             c.flat(5, on=ev.source)
 
     c.watch(RelationSet, seized, until=When.ENCOUNTER, on=me, label=f"{c.ref} thorns")
+
+    def sustained(ev: EffectSustained) -> None:
+        if getattr(ev, "on", 0) != me:
+            return
+        if not str(getattr(ev, "what", "")).endswith("grab"):
+            return
+        if ev.actor in c.enemies():
+            c.flat(5, on=ev.actor)
+
+    c.watch(EffectSustained, sustained, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} thorns kept")
 
 
 @power(

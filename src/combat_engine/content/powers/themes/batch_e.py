@@ -1935,7 +1935,6 @@ def p16565(c: Cast) -> None:
     reach=Melee(2),
     target=ONE_CREATURE,
     keywords=[Keyword.SHADOW],
-    dropped=("c.grab(sustain=)",),
     requires=_a_hand_free,
     requires_text="must have a hand free",
 )
@@ -1944,22 +1943,23 @@ def p16626(c: Cast) -> None:
     attack" means everywhere else. The grab's payout is armed, but nothing
     gives a grab a sustain cost of its own.
 
-    **Confirmed as a parameter, which is why the spelling matters.** The
-    sustain machinery is whole: `actions._sustaining` offers the action,
-    `When.SUSTAIN` is a rung the tree uses everywhere, and `c.on_sustain`
-    is the payout hook this row already calls. What stops it is one line
-    in `Effects.sustaining`, which lists only effects whose
-    `sustain_cost is not None` -- and `c.grab` takes `on`, `by` and `dc`
-    and sets no cost, so the hold below is never offered and the armed
-    payout cannot be reached. `c.effect(sustain=)` is where a cost goes
-    for every other sustained row; `c.grab` is the one that cannot say it.
+    **The parameter landed and the diagnosis above was exact.** The sustain
+    machinery was whole -- `actions._sustaining` offers the action,
+    `Effects.sustaining` lists any effect whose `sustain_cost` is set, and
+    `c.on_sustain` is the payout hook this row already called. The one
+    thing missing was that `c.grab` applied a plain `When.ENCOUNTER` hold
+    and set no cost, so the hold was never offered and the armed payout
+    could not be reached.
 
-    A **standard**, not a minor, when it lands: this card is one of the
-    few that price the sustain that high."""
+    `c.grab(sustain=STANDARD, until=When.EONT)` now. A **standard**, not a
+    minor, because this card is one of the few that price the sustain that
+    high; and `When.EONT` because the card says *"grab it until the end of
+    your next turn"* -- a grab clocked to the encounter is one there is no
+    point sustaining."""
     if c.attack(_best(c) + 2, REF):
         c.damage("2d8", _best_mod(c))
         c.pull(1)
-        held = c.grab()
+        held = c.grab(sustain=STANDARD, until=When.EONT)
         c.on_sustain(held, lambda: c.damage("2d8", _best_mod(c)))
     c.as_basic(c.ref, window="opportunity", on=c.me)
 

@@ -1003,6 +1003,16 @@ KNOWN_SILENT = {
     "i2582p1": "escapes a grab; nothing on the board grabs the caster",
     "i3045p1": "cures surprised or unconscious; the board produces neither",
     "i608p1": "its Requirement is being marked, and nobody here marks",
+    # **The relief is real and there is nothing here to relieve.** This
+    # row clears a grab's `sustain_cost` and suspends the item's property,
+    # and both were driven by hand: cost `minor` -> `None`, the hold
+    # leaves `Effects.sustaining`, the property reads `suspended=True`.
+    # What the board never produces is a **sustained grab laid by the
+    # caster** -- `c.grab(sustain=)` arrived with `#1360` and only four
+    # rows in the tree pass it, none of them dealt here. So the row finds
+    # no hold to free and does nothing, correctly.
+    "i2393p1": "needs a sustained grab of its own to relieve; the board"
+               " lays none",
     "i3527p1": "wants an adjacent non-minion killed; the board's deaths are neither",
     "i2304p1": "the same sentence as i1927p1, off a rod rather than a symbol",
     # Driven by hand too: with a `CHANNEL_DIVINITY` row spent, `Powers.used`

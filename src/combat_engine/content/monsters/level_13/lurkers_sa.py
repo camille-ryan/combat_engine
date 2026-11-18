@@ -797,7 +797,6 @@ def m2104a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=16),
     damage=Damage("2d12", 8),
-    dropped=("c.grab(sustain=)",),
 )
 def m2104a1(c: Cast) -> None:
     """Three clocks on one grab, and only one of them is a duration.
@@ -809,15 +808,21 @@ def m2104a1(c: Cast) -> None:
     "The grab ends if the m2104 attacks" is watched from *after* this row's
     own attack has resolved, which is why the watch is armed below
     `c.strike` and not above it. The other half of that sentence -- failing
-    to sustain the grab -- is the dropped clause: a grab carries no sustain
-    cost and nothing asks for one each round.
+    to sustain the grab -- is written now: `c.grab(sustain=)` gives the hold
+    a cost, so `actions._sustaining` offers the action and the grab lapses
+    on a round nobody pays it.
+
+    A **minor**, which is the printed default for sustaining a grab, and
+    `When.EONT` because an unsustained grab has to be able to lapse -- a
+    hold clocked to the encounter never does, which is why the cost alone
+    would not have said this.
     """
     victim = c.target
     if victim is None or not c.strike():
         return
     c.hit()
     me = c.me
-    hold = c.grab(on=victim)
+    hold = c.grab(on=victim, sustain=MINOR, until=When.EONT)
     if hold is None:
         return
     burn = c.ongoing(10, on=victim, until=When.ENCOUNTER)

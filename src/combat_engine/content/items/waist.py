@@ -1082,47 +1082,72 @@ def i2393x1(c: Cast) -> None:
 
 
 @power("i2393p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
-       reach=Melee(1), target=ONE_CREATURE, todo=("c.grab(sustain=)",))
+       reach=Melee(1), target=ONE_CREATURE,
+       dropped=("Scenery.holds_a_grab",))
 def i2393p1(c: Cast) -> None:
-    """Relief from a cost the engine does not charge.
+    """Relief from a cost the engine **now** charges, which is what made
+    this writable.
 
-    **The marker is right and the reason recorded under it was not.** It
-    read "handing a grab to an object that then holds it without the
-    grabber adjacent has no relation to set: `Relation.GRABBED_BY` names a
-    creature". That is a fact about implementing the *transfer*, and the
-    transfer is not what is missing. Measured: `c.grab` applies its hold at
-    `When.ENCOUNTER`, `engine/escape.py` is the only thing that ends one,
-    and `actions.py` offers no action for keeping one up. So a grab here
-    costs no minor action to sustain and does not lapse when the grabber
-    walks away.
+    **The marker was right about the shape and the old note was measuring
+    a different tree.** It read *"`c.grab` applies its hold at
+    `When.ENCOUNTER` ... and `actions.py` offers no action for keeping one
+    up. So a grab here costs no minor action to sustain"*, and concluded
+    every clause this card pays out was already the default. True then.
+    `c.grab(sustain=)` exists now, so a grabber really does pay a minor
+    each round and really does lose the hold by not -- and the printed
+    trigger, *"when you would spend a minor action to sustain a grab"*,
+    can occur.
 
-    Every clause this card pays out is therefore already the default --
-    the minor action, the adjacency, and the defences resisting an escape,
-    which stay the grabber's own either way. And the printed trigger,
-    "when you would spend a minor action to sustain a grab", can never
-    occur, so there is nothing for a free action to answer. Writing the
-    row's one real consequence -- losing `i2393x1`'s property while the
-    power is up -- would be a cost paid for a benefit nobody received.
+    So the two halves the card gives are both real relief and both are
+    written:
 
-    **Collapsed onto `c.grab(sustain=)`, which is the four-row group.**
-    This row and `m6346a1` carried `c.sustain_grab()`; `m2104a1` and
-    `p16626` carried `c.grab(sustain=)` for the same absence, and the note
-    here asked for the two to be collapsed by whoever wrote it.
+    * **no longer needing to sustain it.** The hold's `sustain_cost` is
+      cleared, which is `themes/batch_b`'s idiom for the same thing one
+      clause over, so nothing asks for the minor again and the grab does
+      not lapse unpaid.
+    * **no longer needing to remain adjacent.** Nothing in this engine
+      ends a grab on distance -- `engine/escape.py` is its only end -- so
+      this half is the default and is said in prose rather than written,
+      the one reading the old note got right.
 
-    `c.grab(sustain=)` is the right half of the pair, and the claim that
-    picked the other one was measured and is false. It said
-    *"`actions.py` offers no sustain action"*: `actions._sustaining` is
-    exactly that and is in the action list, `When.SUSTAIN` is a real rung
-    that **139 content files** already use, and `c.on_sustain(effect, fn)`
-    is the per-sustain hook. So the sustain machinery is live from end to
-    end and what is missing is one keyword on the verb that lays the grab
-    -- `c.grab(on=, by=, dc=)` has no `sustain=`.
+    And the cost the card charges for it: *"during this time, you do not
+    benefit from the sash's property"*. `i2393x1` is a `action=NONE`
+    property, so `c.suspend_trait` is the wrong door -- that one lifts
+    **conditions**. The property's own effects are what to suspend, and
+    they are laid under its ref, so the hold is found by label and
+    suspended for as long as this power is up.
 
-    That difference is worth the paragraph because it prices the work:
-    `blocked.py` calls `c.grab(sustain=)` a **parameter** on a verb that
-    exists, which is the cheapest shape in the tree, where
-    `c.sustain_grab()` reads as a facility nobody has started and asks
-    for a mechanism that is already there."""
+    **What is still dropped is the sash itself.** The card says it
+    *detaches*, holds the creature *"until you command it to cease"*, and
+    *"uses your Fortitude and Reflex defenses for resisting the creature's
+    escape"* -- a `Scenery` standing in a square and holding a
+    `Relation.GRABBED_BY`, which that component cannot do: the relation
+    names two creatures, and `escape` reads the **grabber's** defences, so
+    an object holding a grab has no defences to read. That is one gap,
+    named here for the first time, and it is a layer below this row rather
+    than a keyword on a verb.
+
+    What a player sees today is therefore the printed relief, bought at
+    the printed cost, with the sash's detachment left as flavour.
+    """
+    victim = c.target
+    if victim is None:
+        return
+    held = next(
+        (
+            e for e in c.world.effects.live.values()
+            if str(e.label).endswith("grab")
+            and e.owner == victim
+            and e.source == c.me
+        ),
+        None,
+    )
+    if held is None:
+        return
+    held.sustain_cost = None
+    for standing in list(c.world.effects.live.values()):
+        if standing.by == "i2393x1" and not standing.ended:
+            c.world.effects.suspend(standing, "the sash has detached")
 
 
 @power("i2689p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,

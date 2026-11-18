@@ -24382,6 +24382,88 @@ def a_summons_commands_are_rows(out: Result) -> None:
              "and `Cast.command` still rolls its shared line")
 
 
+def a_grab_can_be_sustained(out: Result) -> None:
+    """A grab with a sustain cost, and the event that announces paying it.
+
+    Four rows print a grab that has to be kept up, and `c.grab` applied a
+    plain `When.ENCOUNTER` hold and set no cost -- so
+    `actions._sustaining` never offered the action and an unsustained grab
+    never lapsed. `Effects.sustaining` was always general: it lists any
+    effect whose `sustain_cost` is set. The gap was one keyword.
+
+    **And paying it announced nothing**, which is the second half.
+    `Effects.sustain` stamped the round and ran the `on_sustain` hooks,
+    which reach only the row that *laid* the effect -- so `m6346a1`'s
+    *"any enemy that grabs the m6346 **or sustains a grab on it** takes 5
+    damage"* could read the first half off `RelationSet` and the second
+    off nothing. `EffectSustained` is the event, beside `EffectSuspended`
+    and for its stated reason: teaching the harness to diff state is the
+    wrong fix.
+
+    The controls that matter: a **plain** grab still carries no cost, or
+    every one of the tree's hundreds becomes a thing the grabber must pay
+    for; and the event names **who paid** and **who it sits on**
+    separately, since the creature sustaining is never the creature
+    grabbed.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import EffectSustained
+    from combat_engine.engine.types import ActionType
+
+    world, me, _ = _audit.board("p16626", 1, pose=True)
+    foes = [f for f in _audit._foes(world, me) if _audit.alive(world, f)]
+    if not foes:
+        out.skip("no creature to grab")
+        return
+    foe = foes[0]
+    c = Cast(world=world, me=me, ref="drivers")
+
+    plain = c.grab(on=foe)
+    out.that(plain is not None and plain.sustain_cost is None,
+             "**a plain grab still carries no cost** -- the tree's hundreds"
+             " of them must not become something the grabber pays for",
+             f"sustain_cost is {plain.sustain_cost if plain else None}")
+    out.that(plain not in world.effects.sustaining(me),
+             "and is not offered as something to sustain")
+    if plain is not None:
+        world.effects.end(plain, "drivers")
+
+    held = c.grab(on=foe, sustain=ActionType.MINOR, until=When.EONT)
+    out.that(held is not None and held.sustain_cost is ActionType.MINOR,
+             "a grab given a cost carries it")
+    out.that(held in world.effects.sustaining(me),
+             "and `Effects.sustaining` offers it to the grabber -- that"
+             " function was always general; the keyword is what was"
+             " missing",
+             f"sustaining: {[e.label for e in world.effects.sustaining(me)]}")
+
+    # -- the event -------------------------------------------------------
+    seen: list = []
+    world.bus.on(EffectSustained, seen.append)
+    if held is not None:
+        world.effects.sustain(held)
+    out.that(len(seen) == 1,
+             "paying the cost announces `EffectSustained` -- without it a"
+             " card about somebody ELSE's sustain has nothing to listen"
+             " for",
+             f"{len(seen)} event(s)")
+    if seen:
+        ev = seen[0]
+        out.that(ev.actor == me and getattr(ev, "on", 0) == foe,
+                 "and it names who PAID and who it sits ON separately,"
+                 " which `m6346a1` needs: the creature sustaining is never"
+                 " the creature grabbed",
+                 f"actor={ev.actor} on={getattr(ev, 'on', None)},"
+                 f" grabber={me} grabbed={foe}")
+        out.that(str(ev.what).endswith("grab"),
+                 "and carries the effect's label, so a row can tell a"
+                 " sustained grab from a sustained zone",
+                 f"what={ev.what!r}")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -91959,6 +92041,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "grab_sustain": (
+        a_grab_can_be_sustained,
+        "a grab may carry a sustain cost, and paying one announces"
+        " EffectSustained (#1360)",
+    ),
     "summon_commands": (
         a_summons_commands_are_rows,
         "a summon's printed commands are rows, each aimed and costed as"

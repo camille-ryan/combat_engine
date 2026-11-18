@@ -1054,6 +1054,18 @@ class Effects:
 
     def sustain(self, eff: Effect) -> None:
         eff.sustained = self.world.round
+        # **Announced, because this used to be an unobservable state
+        # change.** The `on_sustain` hooks below reach only the row that
+        # laid the effect, so a card about *somebody else's* sustain had
+        # nothing to listen for -- `m6346a1` prints "any enemy that grabs
+        # the m6346 or sustains a grab on it takes 5 damage" and could
+        # read the first half off `RelationSet` and the second off
+        # nothing. Same reasoning as `EffectSuspended`. `#1360`.
+        from .events import EffectSustained
+
+        self.world.bus.emit(
+            EffectSustained(actor=eff.source, what=eff.label, on=eff.owner)
+        )
         for fn in list(eff.on_sustain):
             fn()
 

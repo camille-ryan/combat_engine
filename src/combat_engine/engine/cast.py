@@ -8797,7 +8797,8 @@ class Cast:
         )
 
     def grab(
-        self, *, on: int | None = None, by: int | None = None, dc: int = 0
+        self, *, on: int | None = None, by: int | None = None, dc: int = 0,
+        sustain: ActionType | None = None, until: When = When.ENCOUNTER,
     ) -> Effect | None:
         """`by=` names the grabber when it is not the caster, as `c.mark`
         does: a summoned creature grabs on its own account, and hanging the
@@ -8811,6 +8812,19 @@ class Cast:
         the additive key and a different sentence: "a bonus to your defences
         when preventing an escape from your grab".
 
+        **`sustain` gives the grab a sustain cost of its own, which is the
+        one thing the machinery could not reach.** `p16626` prints *"grab
+        it until the end of your next turn"* with a **Sustain Standard**
+        that both keeps the hold and deals damage, and `Effects.sustaining`
+        lists any effect whose `sustain_cost` is set -- it was always
+        general. What stopped the row was that this verb applied a plain
+        `When.ENCOUNTER` hold and never set one, so the action was never
+        offered for a grab.
+
+        `until` comes with it for the same row: a sustained grab is clocked
+        to the end of a turn rather than the encounter, which is what makes
+        sustaining it mean anything. Both default to today's behaviour.
+
         `0` means no printed DC, which is the common case and leaves
         `escape.attempt` computing the defence as before. A DC that is
         *another creature's defence* is not this -- that is
@@ -8822,9 +8836,10 @@ class Cast:
             return None
         holder = self.me if by is None else by
         return self.world.effects.apply(
-            who, self.me, When.ENCOUNTER, label=f"{self.ref} grab",
+            who, self.me, until, label=f"{self.ref} grab",
             relations=[(Relation.GRABBED_BY, holder, who)],
             escape_dc=dc,
+            sustain_cost=sustain,
             by=self.ref,
         )
 
