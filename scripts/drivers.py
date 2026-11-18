@@ -16508,6 +16508,120 @@ def a_rider_keyed_on_an_opportunity_attack(out: Result) -> None:
              f"{cold[1]} -> {hot[1]} damage")
 
 
+def a_penalty_that_ends_on_a_quiet_turn(out: Result) -> None:
+    """*"The penalty also ends if the target ends its turn without having
+    made an attack during that turn."* -- `p11172`, the second of two
+    enders beside a save.
+
+    **The marker reasoned about the wrong mechanism.** It read
+    `Effect.ends_on_a_quiet_turn` and said "a duration is a `When` and
+    there is no way to add a condition to one" -- true, and beside the
+    point: the clause is a watcher that ends an effect, which rows do
+    routinely. What the body lacked was a handle on its own penalties.
+
+    **Four printed rows say this sentence and three had each written the
+    walk.** `bard._idle_ally` -- whose docstring claimed "nothing records
+    'has attacked this turn'" while being the record -- `m3084a1`'s
+    hand-kept flag, and this row's marker.
+    `query.attacked_during_own_turn` is the one reader now, and
+    `_idle_ally` calls it.
+
+    **The attacking arm is the control and it is the one that matters.** A
+    watcher that ended the penalty on *any* turn end would pass a
+    quiet-turn assertion and silently throw away the save-ends half of the
+    card.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackDeclared, TurnEnd, TurnStart
+    from combat_engine.engine.query import attacked_during_own_turn, enemies
+    from combat_engine.engine.types import Defense
+
+    # -- the reader ------------------------------------------------------
+    world, me, _ = _board("p11172", 1)
+    foe = sorted(enemies(world, me))[0]
+    world.bus.emit(TurnStart(actor=foe, round=world.round))
+    out.that(not attacked_during_own_turn(world, foe),
+             "a creature that has just started its turn has not attacked"
+             " during it",
+             f"{attacked_during_own_turn(world, foe)}")
+    world.bus.emit(AttackDeclared(attacker=foe, target=me, power="drivers",
+                                  vs=Defense.AC))
+    out.that(attacked_during_own_turn(world, foe),
+             "and once it declares one, it has -- `AttackDeclared`, so a"
+             " miss counts, which is what 'attacked' means",
+             f"{attacked_during_own_turn(world, foe)}")
+    world.bus.emit(TurnStart(actor=foe, round=world.round + 1))
+    out.that(not attacked_during_own_turn(world, foe),
+             "and a fresh turn forgets it -- the window is this turn, not"
+             " the whole fight",
+             f"{attacked_during_own_turn(world, foe)}")
+
+    # -- the row, both arms ----------------------------------------------
+    def penalty_after(the_target_swings: bool, *, save: int = 1) -> int:
+        """How much of the penalty came back after the target ends a turn.
+
+        `save` is the die the end-of-turn saving throw rolls: 1 fails it, so
+        only the printed quiet-turn clause can clear the penalty, and 20
+        passes it, which is the card's *other* ender.
+        """
+        world, me, _ = _board("p11172", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return -99
+        victim = foes[0]
+        c = Cast(world=world, me=me, ref="p11172")
+        c.target = victim
+        world.rng.loaded = 20
+        REGISTRY["p11172"].body(c)
+        mods = world.get(victim, Mods)
+        laid = mods.total("attack", {}) if mods else 0
+        # **The die goes low before the turn ends, and this is the whole
+        # reason the control works.** The penalty is `save ends`, so the
+        # target rolls against it at the end of its own turn -- with the 20
+        # still loaded from the strike that save always succeeds and BOTH
+        # arms come back clear, which is the harness ending the penalty
+        # rather than the printed clause. A 1 fails the save and leaves the
+        # quiet turn as the only thing that can end it.
+        world.rng.loaded = save
+        world.bus.emit(TurnStart(actor=victim, round=world.round))
+        if the_target_swings:
+            world.bus.emit(AttackDeclared(attacker=victim, target=me,
+                                          power="drivers", vs=Defense.AC))
+        world.bus.emit(TurnEnd(actor=victim, round=world.round))
+        after = mods.total("attack", {}) if mods else 0
+        return after - laid
+
+    quiet = penalty_after(False)
+    busy = penalty_after(True)
+    probe_world, probe_me, _ = _board("p11172", 1)
+    wis = Cast(world=probe_world, me=probe_me, ref="p11172").wis_mod
+    out.that(wis > 0,
+             "the battlemind's Wisdom modifier is positive, so the penalty"
+             " is visible rather than hidden in a zero",
+             f"+{wis}")
+    out.that(quiet == wis,
+             "a target that ends a quiet turn is rid of the whole penalty"
+             " -- the printed second ender, measured as what came back",
+             f"recovered {quiet} of {wis}")
+    out.that(busy == 0,
+             "while one that attacked during that turn keeps it -- the"
+             " control, and the assertion a watcher firing on ANY turn end"
+             " fails",
+             f"recovered {busy} of {wis}")
+    # **And the card's OTHER ender still works**, which the control above
+    # cannot show: a body that swapped `When.SAVE_ENDS` for a plain watcher
+    # would pass every line so far and quietly drop the save.
+    saved = penalty_after(True, save=20)
+    out.that(saved == wis,
+             "a target that attacked AND then made its save is rid of the"
+             " penalty too -- the save-ends half, which no assertion above"
+             " touches",
+             f"recovered {saved} of {wis}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -98981,6 +99095,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "quiet_turn": (a_penalty_that_ends_on_a_quiet_turn,
+                   "a penalty with two enders: a save, and a turn finished"
+                   " without an attack"),
     "opportunity_rider": (a_rider_keyed_on_an_opportunity_attack,
                           "a rider that pays only for an OPPORTUNITY attack"
                           " and only for one made during your own turn"),

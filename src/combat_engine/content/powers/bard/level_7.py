@@ -41,9 +41,16 @@ def _enemy_hits_ally(world: World, me: int, ev: Event) -> bool:
 def _idle_ally(world: World, me: int, ev: Event) -> bool:
     """An ally within 10 finished its turn without swinging at anything.
 
-    Read back off the bus log to the turn's own start: nothing records "has
-    attacked this turn", and a row that fired whether or not the ally had
-    already acted would be a different card.
+    Read back off the bus log to the turn's own start, through
+    `query.attacked_during_own_turn`. **This docstring used to say "nothing
+    records 'has attacked this turn'" while the walk under it was the
+    record** -- and two other rows said the same and each wrote the walk
+    again: `m3084a1` keeps a flag, and `p11172` carried a marker reading "a
+    duration is a `When` and there is no way to add a condition to one".
+    Four printed rows say this sentence; one reader answers it now.
+
+    A row that fired whether or not the ally had already acted would be a
+    different card, which is why the walk is here at all.
     """
     who = getattr(ev, "actor", None)
     if who is None or who == me or getattr(ev, "ghost", False):
@@ -52,12 +59,7 @@ def _idle_ally(world: World, me: int, ev: Event) -> bool:
         return False
     if query.distance_between(world, me, who) > 10:
         return False
-    for past in reversed(world.bus.log):
-        if isinstance(past, TurnStart) and past.actor == who:
-            return True
-        if isinstance(past, AttackDeclared) and past.attacker == who:
-            return False
-    return True
+    return not query.attacked_during_own_turn(world, who)
 
 
 @power(

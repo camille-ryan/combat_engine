@@ -18,12 +18,14 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Melee,
+    TurnEnd,
     UpTo,
     When,
     by_melee,
     power,
     spread,
 )
+from combat_engine.engine.query import attacked_during_own_turn
 
 from . import PSIONIC_WEAPON
 
@@ -34,7 +36,6 @@ _LANDED: set[int] = set()
 
 @power(
     "p11172",
-    dropped=("Effect.ends_on_a_quiet_turn",),
     level=9,
     cls="battlemind",
     usage=DAILY,
@@ -45,9 +46,21 @@ _LANDED: set[int] = set()
     attack=Attack(CON, vs=FORT),
 )
 def p11172(c: Cast) -> None:
-    """The second way the penalty ends -- the target finishing a turn without
-    attacking -- is dropped; a duration is a `When` and there is no way to
-    add a condition to one.
+    """**The second way the penalty ends is written, and the old note was
+    reasoning about the wrong mechanism.** It said "a duration is a `When`
+    and there is no way to add a condition to one" -- true, and beside the
+    point: the clause is not a duration but a watcher that ends an effect,
+    which rows do routinely. What it needed was a handle on the two
+    penalties, which the body was throwing away.
+
+    "Without having made an attack during that turn" is
+    `query.attacked_during_own_turn`, new and shared: the same walk was
+    hand-rolled in `bard`'s `_idle_ally` -- whose docstring said "nothing
+    records 'has attacked this turn'" while being the record -- and again
+    as a flag in `m3084a1`. Four printed rows say this sentence.
+
+    `When.SAVE_ENDS` on the watcher, so it dies with the thing it watches:
+    a save ending the penalty leaves nothing to end twice.
 
     **The marker was renamed rather than retired.** It read
     `c.offer_augment()`, which named the aspect half, and that half is
@@ -64,8 +77,23 @@ def p11172(c: Cast) -> None:
     """
     if c.strike():
         c.damage(c.w(2), c.con_mod)
-        c.penalty("attack", c.wis_mod, until=When.SAVE_ENDS)
-        c.penalty("save", c.wis_mod, until=When.SAVE_ENDS)
+        held = [
+            c.penalty("attack", c.wis_mod, until=When.SAVE_ENDS),
+            c.penalty("save", c.wis_mod, until=When.SAVE_ENDS),
+        ]
+        victim = c.target
+
+        def quiet(ev: TurnEnd) -> None:
+            """The printed second ender: a turn finished without a swing."""
+            if ev.actor != victim or getattr(ev, "ghost", False):
+                return
+            if attacked_during_own_turn(c.world, victim):
+                return
+            for effect in held:
+                if effect is not None:
+                    c.end_effect(effect)
+
+        c.watch(TurnEnd, quiet, until=When.SAVE_ENDS)
     else:
         c.half_damage(c.w(2), c.con_mod)
     if c.first:

@@ -4156,6 +4156,42 @@ def turn_began_at(world: World, eid: int) -> int:
     return -1
 
 
+def attacked_during_own_turn(world: World, eid: int) -> bool:
+    """Has this creature declared an attack since its own turn began?
+
+    *"Ends its turn without having made an attack"* -- four printed rows
+    say it, and **three of them had each walked the log themselves**:
+    `bard`'s `_idle_ally`, `m3084a1`'s hand-kept flag, and `p11172`, whose
+    note read "a duration is a `When` and there is no way to add a
+    condition to one". That last is true about durations and beside the
+    point -- the clause is a watcher ending an effect, which rows do all
+    the time.
+
+    `_idle_ally`'s own docstring said "nothing records 'has attacked this
+    turn'", and the function under it is the record. This is that walk,
+    once, which is what `since_turn_began`'s note asks for: 74 functions
+    reach into `world.bus.log` and five helper names are defined in more
+    than one file.
+
+    `AttackDeclared` rather than `Hit`, for `attacked_since`'s reason: the
+    printed word is **attacked**, which a miss satisfies, and a cancelled
+    declaration was still an attack made.
+
+    **False for a creature whose turn has not started in the log**, which
+    is the honest answer rather than a vacuous True: nothing it did can
+    have been during a turn it has not taken.
+    """
+    from .events import AttackDeclared, TurnStart
+
+    for past in reversed(world.bus.log):
+        if isinstance(past, TurnStart) and past.actor == eid \
+                and not getattr(past, "ghost", False):
+            return False
+        if isinstance(past, AttackDeclared) and past.attacker == eid:
+            return True
+    return False
+
+
 def attacked_since(
     world: World, victim: int, by: int, *, since: int | None = None,
     opportunity: bool = False,
