@@ -221,9 +221,32 @@ def p12419(c: Cast) -> None:
         c.push(1 + c.cha_mod, on=other)
 
 
+def _is_terrain_damage(ctx: dict[str, Any]) -> bool:
+    """Did this damage come from hindering terrain or a terrain hazard?
+
+    Two printed sources and each is identifiable without a new field, which
+    is what `c.resist(from_=)` was marked for:
+
+    * **hindering terrain** burns with `source=0` and `from_attack=False`
+      -- `Zones._burns` passes the zone's owner, and a board region has
+      none because *"the floor burning you has no attacker"*. Nothing a
+      creature does forges that pair: ongoing damage carries its effect's
+      owner and a `c.flat` carries the caster.
+    * **a terrain hazard** attacks, so `from_attack` is True, and its
+      `power` is the printed `x2_…` ref it was armed from.
+
+    The ref test is what keeps the second half from catching an ordinary
+    swing, and the owner test is what keeps the first from catching
+    ongoing damage.
+    """
+    power = str(ctx.get("power") or "")
+    if power.startswith("x2_") or power.startswith("terrain"):
+        return True
+    return not ctx.get("source") and not ctx.get("from_attack")
+
+
 @power(
     "p12420",
-    dropped=("c.resist(from_=)",),
     level=1,
     cls="battlemind",
     usage=DAILY,
@@ -234,8 +257,36 @@ def p12419(c: Cast) -> None:
     attack=Attack(CON, vs=AC),
 )
 def p12420(c: Cast) -> None:
-    """"Take no damage from hindering terrain or terrain hazards" is dropped:
-    `c.resist` cannot be aimed at a source rather than a damage type."""
+    """**"Take no damage from hindering terrain or terrain hazards" is
+    written, and the marker was a parameter nobody needed.** It said
+    `c.resist` *"cannot be aimed at a source rather than a damage type"*,
+    and `c.resist(amount, None)` already shrugs off every type -- the
+    aiming is the `when=` gate, which is handed the damage context.
+
+    Measured on a real hindering region, laid through `Zones.create` and
+    burning at turn end:
+
+        gate saw  source=0, power='x2_118', from_attack=False
+
+    So the two printed sources are both identifiable without a new field.
+    `Zones._burns` passes the zone's `label` as the detail -- which is the
+    printed terrain ref -- and `owner=0` because, as `content.terrain`
+    puts it, *"nobody laid it ... the floor burning you has no attacker"*.
+    A trap goes through `resolve.attack` with the trap's own ref.
+
+    **The gate is `source == 0 and not from_attack`, plus a trap ref**, and
+    it is deliberately narrower than "anything untyped from nobody":
+
+    * a terrain region burns with no attacker and outside an attack, which
+      is the pair nothing a creature does can forge -- ongoing damage
+      carries its effect's owner, and a creature's own `c.flat` carries
+      the creature;
+    * a terrain **hazard** attacks, so `from_attack` is True and the ref
+      is the hazard's own `x2_…`, which is what the second half reads.
+
+    `9999` is the tree's immunity idiom, as `monsters/level_10` uses it:
+    the card says *no* damage, not a reduced amount.
+    """
     if c.strike():
         c.damage(c.w(2), c.con_mod, dtype=DamageType.FORCE)
         c.push(c.cha_mod)
@@ -245,6 +296,10 @@ def p12420(c: Cast) -> None:
     if c.first:
         c.stance()
         c.ignores_difficult()
+        c.resist(
+            9999, None, on=c.me, until=When.STANCE,
+            when=lambda ctx: _is_terrain_damage(ctx),
+        )
 
 
 @power(
