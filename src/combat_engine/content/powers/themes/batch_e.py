@@ -1525,7 +1525,6 @@ def p16073(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.ELEMENTAL],
-    dropped=("c.no_douse(zone=)",),
 )
 def p16076(c: Cast) -> None:
     """An aura that makes enemies burn more easily and save worse against
@@ -1559,13 +1558,24 @@ def p16076(c: Cast) -> None:
     says. Four rows already call it one fire at a time and none of them
     wants widening.
 
-    What the clause asks for is a **refusal**, and the refusal has nowhere
-    to hook: `c.douse` emits a `Note` and despawns, so there is no
-    `Decision` to cancel -- which is exactly how `c.no_healing` does the
-    identical job against `Healed`. Hence `c.no_douse(zone=)`, and the
-    `zone=` is load-bearing rather than tidy: the aura is the thing the
-    permission is scoped to, and a hold laid per fire found at use time
-    would miss every fire lit afterwards."""
+    **The refusal has somewhere to hook now, and the old note named the
+    fix exactly.** `c.douse` emitted a `Note` and despawned, so a listener
+    heard about a fire that was already gone; `Doused` is a `Decision` and
+    the despawn is `emit`'s callback, which is how `c.no_healing` does the
+    identical job against `Healed`. `c.no_douse(zone=)` cancels it in the
+    BEFORE window.
+
+    **`zone=` is load-bearing rather than tidy**, which that note also had
+    right: the aura is what the permission belongs to, so the squares are
+    asked at the moment somebody tries. A hold laid per fire *found at use
+    time* would miss every fire lit afterwards, which in a fight about fire
+    is most of them.
+
+    The caster is refused too. *"Only if **you** allow them"* is a
+    permission nothing can ask a player for mid-resolution, so the strict
+    reading is taken and this character douses nothing in their own aura
+    either -- a judgement call, recorded rather than silent, and `side=` is
+    on the verb for the card that narrows it."""
     zone = c.aura(2, until=When.ENCOUNTER)
     c.grants_in(zone, "save", -2, side="enemy", kind="power",
                 when=lambda ctx: bool(ctx.get("ongoing"))
@@ -1576,6 +1586,7 @@ def p16076(c: Cast) -> None:
         lambda who: c.vulnerable(5, DamageType.FIRE, on=who, until=When.ENCOUNTER),
         "enemy",
     )
+    c.no_douse(zone=zone, until=When.ENCOUNTER)
 
 
 # ===========================================================================

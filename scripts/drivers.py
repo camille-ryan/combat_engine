@@ -14254,6 +14254,97 @@ def granted_to_all(out: Result) -> None:
              "and ending the outer one gets print back", f"{health.dies_at_failures}")
 
 
+def held_fire(out: Result) -> None:
+    """*"Nonmagical fires in the aura can be put out only if you allow them
+    to be extinguished."* -- `p16076`.
+
+    **The refusal had nowhere to hook and the row's note named the fix.**
+    `c.douse` emitted a plain `Note` and despawned, so a listener heard
+    about a fire that was already gone. `Doused` is a `Decision` now and the
+    despawn is `emit`'s callback -- the same shape `Healed` and `SurgeSpent`
+    are in, and the same rule: a refused dousing leaves the feature standing
+    and the caller learns it from the return rather than from the board.
+
+    **The fire is lit AFTER the row runs**, deliberately, because that is
+    the whole argument for `zone=`. A hold laid per fire *found at use time*
+    would pass an arm that lights one first and miss every fire lit during
+    the fight, which in a fight about fire is most of them. The squares are
+    asked at the moment somebody tries.
+
+    Three arms, and the second is the control that matters: a fire **outside**
+    the aura is still dousable, or "the dousing was refused" is equally
+    consistent with `c.douse` having simply stopped working.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Scenery
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies
+
+    def arena(run_row: bool):  # noqa: ANN202
+        world, me, _ = _board("p16076", 1)
+        here = must(world.get(me, Position), "the caster stands somewhere").square
+        if run_row:
+            REGISTRY["p16076"].body(Cast(world=world, me=me, ref="p16076"))
+        # Lit after the row, which is the case `zone=` exists for.
+        inside = world.spawn(Position(square=here), Scenery(kind="fire"))
+        outside = world.spawn(
+            Position(square=(here[0] + 9, here[1] + 5)), Scenery(kind="fire"))
+        return world, me, inside, outside
+
+    # -- the premise: without the row, a fire goes out --------------------
+    world, me, inside, outside = arena(False)
+    foes = sorted(enemies(world, me))
+    out.that(bool(foes), "the board deals somebody to try putting it out",
+             f"{foes}")
+    if not foes:
+        return
+    hand = Cast(world=world, me=foes[0], ref="probe")
+    out.that(hand.douse(on=inside),
+             "with no row in play a fire in those squares is put out -- the"
+             " premise, and without it every line below passes on a dousing"
+             " that was never going to happen")
+    out.that(world.get(inside, Scenery) is None,
+             "and it really leaves the board", f"{world.get(inside, Scenery)}")
+
+    # -- the clause -------------------------------------------------------
+    world, me, inside, outside = arena(True)
+    foes = sorted(enemies(world, me))
+    if not foes:
+        return
+    hand = Cast(world=world, me=foes[0], ref="probe")
+    refused = hand.douse(on=inside)
+    out.that(not refused,
+             "p16076 refuses it -- the row arm, and the plant that matters is"
+             " deleting `c.no_douse` from its body",
+             f"{refused}")
+    out.that(world.get(inside, Scenery) is not None,
+             "and the fire is still standing, which is the half a `Note`"
+             " could not deliver: the despawn is `emit`'s callback, so a"
+             " cancelled proposal leaves the board alone",
+             f"{world.get(inside, Scenery)}")
+
+    # -- the control: the aura is a place, not a switch -------------------
+    out.that(hand.douse(on=outside),
+             "a fire NINE squares away is still dousable on the same board --"
+             " the control, and the only assertion that tells a scoped"
+             " refusal from `c.douse` having stopped working",
+             "doused")
+    out.that(world.get(outside, Scenery) is None,
+             "and that one does leave the board",
+             f"{world.get(outside, Scenery)}")
+
+    # -- and the caster is refused too, which is a recorded ruling --------
+    world2, me2, inside2, _out2 = arena(True)
+    mine = Cast(world=world2, me=me2, ref="probe")
+    out.that(not mine.douse(on=inside2),
+             'the CASTER is refused as well: "only if **you** allow them" is'
+             " a permission nothing can ask a player for mid-resolution, so"
+             " the strict reading is taken. Asserted because it is a"
+             " judgement call -- a later `side=` would change this line",
+             f"{world2.get(inside2, Scenery) is not None}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -96718,6 +96809,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "held_fire": (held_fire,
+                  "one aura refuses to let its fires be put out; the"
+                  " refusal is scoped to squares, not to fires found once"),
     "granted_to_all": (granted_to_all,
                        "a bare printed grant names no side, and a death-save"
                        " threshold both readers must agree about"),

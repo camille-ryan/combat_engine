@@ -2410,6 +2410,32 @@ class WeaponChanged(Event):
 
 
 @dataclass
+class Doused(Decision):
+    """A map feature being put out, and refusable.
+
+    **A `Decision` because one card refuses it**, and the refusal had
+    nowhere to hook: `Cast.douse` emitted a plain `Note` and despawned, so
+    a listener heard about a fire that was already gone. *"Nonmagical fires
+    in the aura can be put out only if you allow them to be
+    extinguished."*
+
+    The same shape `Healed` and `SurgeSpent` are in, and the same rule
+    applies -- the despawn is passed as `emit`'s callback rather than done
+    beside it, so a refused dousing leaves the feature standing and the
+    caller learns it from the return. An emitter that announces something
+    and then goes ahead from its own local variables is the bug
+    `Decision`'s own docstring names four times over.
+
+    `by` is who is putting it out, which is what a refusal gated on a
+    *side* needs; `what` is the row doing it, for a narrowing by power.
+    """
+
+    feature: int
+    by: int = 0
+    what: str = ""
+
+
+@dataclass
 class ZoneEntered(Event):
     zone: int
     actor: int

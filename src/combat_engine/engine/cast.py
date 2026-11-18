@@ -8337,16 +8337,91 @@ class Cast:
 
         The other half of `c.grow`: a fire that is put out is gone, where
         one that was made bigger is only bigger for a while.
+
+        **A proposal now, not an announcement.** `Doused` is a `Decision`,
+        so *"nonmagical fires in the aura can be put out only if you allow
+        them to be extinguished"* is writable (`c.no_douse`). This used to
+        emit a plain `Note` and despawn, so a listener heard about a fire
+        that was already gone and had nothing to refuse.
+
+        The despawn is passed as `emit`'s second argument rather than done
+        here, which is what `Decision` requires of an emitter: a refused
+        dousing leaves the feature standing, and the caller learns it from
+        the return rather than from the board.
         """
         from .components import Scenery
+        from .events import Doused
 
         who = self._who(on)
         if who is None or self.world.get(who, Scenery) is None:
             return False
-        self.world.bus.emit(Note(text=f"{self.ref}: {who} is put out"))
-        self.world.despawn(who)
-        return True
 
+        def put_out(_ev: Doused) -> None:
+            self.world.bus.emit(Note(text=f"{self.ref}: {who} is put out"))
+            self.world.despawn(who)
+
+        asked = self.world.bus.emit(
+            Doused(feature=who, by=self.me, what=self.ref), put_out,
+        )
+        return not asked.cancelled
+
+
+    def no_douse(
+        self,
+        *,
+        zone: int | None = None,
+        until: When = When.ENCOUNTER,
+        side: str = "",
+    ) -> Effect | None:
+        """Hold a fire open: nobody may put it out while this stands.
+
+        *"Nonmagical fires in the aura can be put out only if you allow them
+        to be extinguished."* The mirror of `c.douse`, and the same shape
+        `c.no_healing` has against `Healed`: a BEFORE-window listener
+        cancelling the `Doused` proposal.
+
+        **`zone=` is the scope and is load-bearing rather than tidy.** The
+        aura is what the permission belongs to, and a hold laid per fire
+        *found at use time* would miss every fire lit afterwards -- which is
+        most of them, since the printed clause is about a fight where things
+        catch light. So the squares are asked at the moment somebody tries,
+        and `Zones.refresh` keeps an aura's squares under its owner.
+
+        With no `zone`, every fire on the board is held, which no card
+        prints -- it is here because a refusal scoped to nothing is a clearer
+        error than a silent no-op.
+
+        `side="ally"` or `"team"` narrows **who is refused**, for a card that
+        lets its own side put a fire out. The one printed row refuses
+        everybody including the caster: *"only if **you** allow them"* is a
+        permission the engine cannot ask a player for mid-resolution, so the
+        strict reading is taken and the caster douses nothing either. Said
+        here because it is a judgement call rather than an oversight.
+        """
+        from .events import Doused
+        from .zones import Zone
+
+        def refuse(ev: Doused) -> None:
+            if zone is not None:
+                area = self.world.get(zone, Zone)
+                if area is None:
+                    return
+                feature = self.world.get(ev.feature, Position)
+                if feature is None or not (feature.squares & area.squares):
+                    return
+            if side:
+                allowed = {
+                    "ally": self.allies(),
+                    "team": [self.me, *self.allies()],
+                }[side]
+                if ev.by in allowed:
+                    return
+            ev.cancel(f"{self.ref}: the fire is held open")
+
+        return self.watch(
+            Doused, refuse, until=until, window=Window.BEFORE,
+            label=f"{self.ref} holds fires open",
+        )
 
     def moving_as(self, mode: str, *, on: int | None = None) -> bool:
         """Is this creature moving that way **right now**?
