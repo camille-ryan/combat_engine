@@ -24561,6 +24561,76 @@ def a_grab_can_be_sustained(out: Result) -> None:
     out.that(guarded.temp == 0, "and refuses them once it opens")
 
 
+def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
+    """"Increase that movement by 1 square **instead of** sliding 1." `p11221`.
+
+    The hard shape in one clause: the row must know, while the attack is
+    still resolving, whether **that** attack is going to shove at all, and
+    pick one of the two. `Hit` fires before the shove, so a `c.forces`
+    armed alongside the slide pays out **both** -- strictly stronger than
+    print, and invisible, which is why the row carried a marker rather
+    than a guess.
+
+    What resolves it is that the shove announces itself *before* it
+    happens: `ForcedMove` is a `Decision` carrying `squares` while the
+    distance is still being settled. So a one-shot watch lengthens it and
+    records that it did, and the slide runs on `PowerResolved` only if
+    nothing was lengthened -- `f1827` takes the same route for the same
+    reason, *"declared on `PowerResolved`, not on `Hit`"*.
+
+    **Both arms are asserted, and that is the whole point of the rule.**
+    Either one alone passes for an implementation that pays out both: a
+    row that always slides looks right on the no-shove arm, and a row that
+    always lengthens looks right on the shove arm. Only the pair fails
+    them.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import ForcedMove, Hit, PowerResolved
+
+    world, me, _ = _audit.board("p11221", 1, pose=True)
+    foes = [f for f in _audit._foes(world, me) if _audit.alive(world, f)]
+    if not foes:
+        out.skip("no creature to mark")
+        return
+    foe = foes[0]
+    use(world, me, "p11221", targets=[foe])
+
+    def swing(shove: int) -> list[int]:
+        """One later hit on the marked target; returns the shove distances."""
+        seen: list[int] = []
+        world.bus.on(ForcedMove, lambda ev: seen.append(ev.squares))
+        world.bus.emit(
+            Hit(attacker=me, target=foe, power="drivers", critical=False)
+        )
+        if shove:
+            Cast(world=world, me=me, ref="drivers").push(shove, on=foe)
+        world.bus.emit(
+            PowerResolved(actor=me, power="drivers", targets=[foe], rolls=[])
+        )
+        return seen
+
+    plain = swing(0)
+    out.that(plain == [1],
+             "a hit with no shove of its own slides the target 1 -- the"
+             " fallback arm",
+             f"ForcedMove squares were {plain}")
+
+    pushed = swing(2)
+    out.that(pushed == [3],
+             "**and a hit that pushes 2 pushes 3 instead, with no extra"
+             " slide** -- the printed 'instead of'. One distance, not two,"
+             " which is what an unconditional `c.forces` beside the slide"
+             " would have produced",
+             f"ForcedMove squares were {pushed}")
+    out.that(len(pushed) == 1,
+             "exactly one forced movement for that attack, so the choice"
+             " really was a choice",
+             f"{len(pushed)} ForcedMove(s)")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -92138,6 +92208,10 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "shove_or_slide": (
+        a_printed_choice_between_a_slide_and_a_longer_shove,
+        "p11221 lengthens its own shove INSTEAD of sliding, never both",
+    ),
     "grab_sustain": (
         a_grab_can_be_sustained,
         "a grab may carry a sustain cost, and paying one announces"

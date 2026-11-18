@@ -24,18 +24,25 @@ from combat_engine.engine import (
     CloseBlast,
     Condition,
     DamageType,
+    ForcedMove,
     Keyword,
     Melee,
     Ranged,
     Trigger,
     When,
+    Window,
     both,
     by_melee,
     get,
     hits_me,
     power,
 )
-from combat_engine.engine.events import Hit, Moved, TurnEnd
+from combat_engine.engine.events import (
+    Hit,
+    Moved,
+    PowerResolved,
+    TurnEnd,
+)
 
 # Psionic is printed on every one of these cards and the constant
 # omitted it, so 28 rows declared half their keyword line -- the
@@ -91,27 +98,41 @@ def p11220(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=FORT),
-    dropped=("c.forces(or_else=)",),
 )
 def p11221(c: Cast) -> None:
-    """The "lengthen the forced movement instead" option is still dropped,
-    and the reason it used to give was half false. It said "there is no way
-    to reach into an attack's own shove after the fact" -- true of *after
-    the fact*, and `c.forces` reaches it **before**: *"lengthen every push,
-    pull and slide this creature makes"*, with a gate handed `how` and
-    `power` so "when you push with this row" is sayable.
+    """**The "lengthen the forced movement instead" option is written, and
+    the shape the note asked for is what it needed: a hold that lengthens
+    the shove when there is one and falls back to the slide when there is
+    not.**
 
-    What the card wants is harder than either. It prints a choice --
-    *"increase the distance of that movement by 1 square **instead of**
-    sliding the target 1 square"* -- so the row has to know, while the
-    attack is still resolving, whether that attack is going to shove at
-    all, and pick one of the two. `c.forces` has to be armed in advance,
-    and `Hit` is before the shove, so arming it unconditionally alongside
-    the slide pays out **both**: strictly stronger than print, which is the
-    failure this tree warns about and would show up nowhere.
+    The note had the difficulty exactly right. The card prints a *choice*
+    -- *"increase the distance of that movement by 1 square **instead of**
+    sliding the target 1 square"* -- and `Hit` fires before the shove, so
+    a `c.forces` armed unconditionally alongside the slide pays out
+    **both**, which is strictly stronger than print and would show up
+    nowhere.
 
-    Hence the symbol: a `forces` hold that lengthens the shove when there
-    is one and falls back to the slide when there is not."""
+    What resolves it is that **the shove announces itself before it
+    happens**: `ForcedMove` is a `Decision` emitted with `source`,
+    `target`, `how` and `squares` while the distance is still being
+    settled. So the order is:
+
+    1. on `Hit`, arm a one-shot `ForcedMove` watch and remember nothing
+       has shoved yet;
+    2. if that attack shoves this target, lengthen it by one and mark the
+       choice taken;
+    3. at the **end** of the hit's resolution, slide 1 only if it was not.
+
+    The third step needs a moment of its own, and `PowerResolved` is it:
+    the slide has to wait until the attack's own forced movement would
+    have happened, which is after every other clause of the Hit line.
+    `f1827` takes the same route for the same reason -- *"declared on
+    `PowerResolved`, not on `Hit`"* -- and it is the one event that is
+    reliably after them all.
+
+    `once=True` on the lengthening watch, so one attack lengthens one
+    shove: the card says "that movement", not every shove in the
+    encounter."""
     if c.strike():
         c.damage("3d10", c.dex_mod)
     else:
@@ -124,8 +145,32 @@ def p11221(c: Cast) -> None:
         when=lambda ctx, v=victim: ctx.get("target") == v, kind="power")
 
     def herd(ev: Hit) -> None:
-        if ev.attacker == c.me and ev.target == victim:
-            c.slide(1, on=victim)
+        if ev.attacker != c.me or ev.target != victim:
+            return
+        # **The choice, settled by whether this attack shoves.** A
+        # `ForcedMove` is a `Decision` announced before the distance is
+        # applied, so a one-shot watch can lengthen it -- and the slide
+        # below only happens if nothing did.
+        lengthened = [False]
+
+        def shoved(move: ForcedMove) -> None:
+            if lengthened[0] or move.source != c.me or move.target != victim:
+                return
+            lengthened[0] = True
+            move.squares += 1
+
+        watching = c.watch(ForcedMove, shoved, until=When.EOT,
+                           window=Window.BEFORE)
+
+        def settle(done: PowerResolved) -> None:
+            if done.actor != c.me or done.power != ev.power:
+                return
+            if watching is not None and not watching.ended:
+                c.world.effects.end(watching, "the hit is over")
+            if not lengthened[0]:
+                c.slide(1, on=victim)
+
+        c.watch(PowerResolved, settle, until=When.EOT, once=True)
 
     c.watch(Hit, herd, until=When.ENCOUNTER)
 
