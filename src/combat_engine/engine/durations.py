@@ -148,6 +148,21 @@ class Effect:
     #: one ender. Read by the same loop in `actions._dropping`, so a
     #: second ender needs no second reader.
     drop_also: tuple[ActionType, int] | None = None
+    #: **A test the deliberate ending has to pass**, for the printed line
+    #: that spends the action either way. `p13878`: *"the target can take
+    #: a move action to make an opposed Acrobatics check or Athletics
+    #: check against you. If it succeeds, the ongoing damage ends."*
+    #:
+    #: `drop_when` is the wrong shape for it twice over -- it gates whether
+    #: the drop is *offered*, so a certain failure would not be offered at
+    #: all (leaking the roll) and would cost nothing when it was. And
+    #: `drop_then` pays out *after* a successful ending rather than
+    #: deciding it.
+    #:
+    #: Handed the world and the ender, like `drop_when`, and returning
+    #: whether the effect actually goes. The action is spent regardless,
+    #: which is what the card says.
+    drop_check: Callable[[Any, int], bool] | None = None
     #: What ending it deliberately *buys*, when the printed line offers a
     #: trade rather than a dismissal -- "the ally can end the effect as a
     #: free action to teleport", "the target can end the effect by taking

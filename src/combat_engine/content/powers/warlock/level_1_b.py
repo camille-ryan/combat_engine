@@ -39,6 +39,8 @@ already does for `p1333`.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.content.features.warlock import FELL
 from combat_engine.content.powers.warlock.shared import backlash
 from combat_engine.engine import (
@@ -52,6 +54,7 @@ from combat_engine.engine import (
     EACH_OTHER,
     ENCOUNTER,
     FORT,
+    MOVE,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -493,7 +496,6 @@ def p13877(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.SHADOW],
     attack=Attack(CHA, vs=WILL),
-    dropped=("c.endable(on_check=)",),
 )
 def p13878(c: Cast) -> None:
     """The second way out is still dropped and **both halves of the old
@@ -507,17 +509,52 @@ def p13878(c: Cast) -> None:
     somebody other than the holder. The burn sits on the target, so the
     target is already the one who would be offered it.
 
-    What is missing is the **shape**: the card spends the move action
-    whether or not the check succeeds, and `c.endable` ends the effect
-    when the action is taken. `when=` gates whether the drop is *offered*,
-    which would leak the roll and cost nothing on a failure, and `then=`
-    pays out *after* a successful ending rather than deciding it. So the
-    gap is one argument wide.
+    **The shape it was missing is one argument wide, and that is what
+    landed.** The card spends the move action whether or not the check
+    succeeds; `c.endable` ended the effect when the action was taken.
+    `when=` gates whether the drop is *offered*, which would leak the roll
+    and cost nothing on a failure, and `then=` pays out *after* a
+    successful ending rather than deciding it. `on_check=` is the test the
+    ending has to pass, run after `perform` has charged the action --
+    which is the printed order.
 
-    The saving throw remains."""
+    **The comparison is made by hand, because `against=` does not make a
+    check opposed.** That parameter is *"who the check is about"* -- it
+    tags the roll for a listener and compares nothing, so
+    `c.check("acrobatics", who=ender, against=c.me)` reported success with
+    a total of **-21** against a dc of 0 when I first wrote it that way.
+    `p9323` is the idiom for a real opposed pair: roll both, keep the
+    printed order, compare the totals.
+
+    So the target rolls its better skill and the warlock rolls the
+    opposing Acrobatics -- the card says "an opposed Acrobatics check or
+    Athletics check against you", which makes the warlock's the same skill
+    the target chose. A tie goes to the **effect** staying, since the card
+    gives the ending to a success and names no tiebreak.
+
+    The saving throw remains, as the card's own `(save ends)` and a second
+    way out."""
+    victim = c.target
     if c.strike():
         c.damage("3d8", c.cha_mod, dtype=DamageType.FORCE)
-        c.ongoing(5, DamageType.FORCE)
+        burn = c.ongoing(5, DamageType.FORCE)
+
+        def shakes_off(world: Any, ender: int) -> bool:
+            """The opposed pair, compared by hand -- see the docstring."""
+            del world
+            best = ""
+            theirs = -99
+            for skill in ("acrobatics", "athletics"):
+                rolled = c.check(skill, who=ender, against=c.me)
+                if rolled.total > theirs:
+                    best, theirs = skill, rolled.total
+            # The same skill back, which is what "an opposed <skill> check
+            # against you" names.
+            mine = c.check(best, who=c.me, against=ender)
+            return theirs > mine.total
+
+        if burn is not None and victim is not None:
+            c.endable(burn, MOVE, by=victim, on_check=shakes_off)
 
 
 @power(

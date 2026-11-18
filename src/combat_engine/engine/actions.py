@@ -3313,6 +3313,17 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         if eff is None:
             return False
         payout = eff.drop_then
+        # **A test the ending has to pass, where the action is spent
+        # either way.** `p13878` prints *"the target can take a move
+        # action to make an opposed check ... if it succeeds, the ongoing
+        # damage ends"* -- so a failure costs the move and leaves the
+        # burn. `perform` has already charged the action by the time this
+        # runs, which is exactly the printed order.
+        if eff.drop_check is not None and not eff.drop_check(world, actor):
+            world.bus.emit(
+                Note(text=f"{actor} fails to shake off {eff.label}")
+            )
+            return True
         world.effects.end(eff, "ended deliberately")
         # After the end, not before: the printed trades read "end the
         # effect to gain X", and a payout that lays an effect of its own

@@ -24793,6 +24793,70 @@ def one_effect_two_enders(out: Result) -> None:
              "**and a minor on its own turn**, off the same effect",
              f"offered {drops(aloft)}")
 
+    # -- `c.endable(on_check=)`: the action is spent either way ----------
+    #
+    # `p13878` prints *"the target can take a move action to make an
+    # opposed Acrobatics check or Athletics check against you. If it
+    # succeeds, the ongoing damage ends."* Neither existing argument says
+    # it, which is that row's own reading: `when=` gates whether the drop
+    # is OFFERED, so a certain failure would not be offered at all --
+    # leaking the roll -- and would cost nothing when it was; `then=` pays
+    # out after a successful ending rather than deciding it.
+    #
+    # **Both arms, and the move being spent on the failure is the half a
+    # `when=` implementation gets wrong.**
+    from combat_engine.engine.actions import _dropping, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Conditions
+
+    def shake_off(hopeless: bool) -> tuple:
+        board, caster, _ = _audit.board("p13878", 1, pose=True)
+        mark = next((f for f in _audit._foes(board, caster)
+                     if _audit.alive(board, f)), 0)
+        if not mark:
+            return None, None
+        use(board, caster, "p13878", targets=[mark])
+        burn = next((e for e in board.effects.live.values()
+                     if e.drop_check is not None), None)
+        if burn is None:
+            return None, None
+        # Steered by MODIFIERS, not by a loaded die: an opposed pair loads
+        # both rolls to the same face, so the die cannot separate them.
+        helper = Cast(world=board, me=mark, ref="drivers")
+        for skill in ("skill:acrobatics", "skill:athletics"):
+            if hopeless:
+                helper.penalty(skill, 40, on=mark)
+            else:
+                helper.bonus(skill, 40, on=mark, kind="drivers")
+        conds = board.get(mark, Conditions)
+        if conds is not None:
+            conds.counts.clear()
+        board.turn = mark
+        budget = board.get(mark, Budget)
+        if budget is not None:
+            budget.refresh()
+        offers = _dropping(board, board.encounter, mark)
+        if offers:
+            perform(board, board.encounter, mark, offers[0])
+        return (burn.id not in board.effects.live,
+                budget.move == 0 if budget is not None else None)
+
+    went_hopeless, spent_hopeless = shake_off(hopeless=True)
+    went_certain, spent_certain = shake_off(hopeless=False)
+    if went_hopeless is None or went_certain is None:
+        out.skip("p13878 laid no burn on this board")
+    else:
+        out.that(went_certain,
+                 "a winning opposed check ends the burn")
+        out.that(not went_hopeless,
+                 "and a losing one leaves it standing")
+        out.that(spent_hopeless and spent_certain,
+                 "**and the move action is spent either way** -- which is"
+                 " the half a `when=` implementation gets wrong: it would"
+                 " not offer the drop at all and so would cost nothing",
+                 f"spent on a failure={spent_hopeless},"
+                 f" on a success={spent_certain}")
+
 
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.

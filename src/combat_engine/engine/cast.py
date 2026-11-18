@@ -2110,6 +2110,7 @@ class Cast:
         by: int | None = None,
         when: Callable[[Any, int], bool] | None = None,
         also: tuple[ActionType, int] | None = None,
+        on_check: Callable[[Any, int], bool] | None = None,
     ) -> Effect | None:
         """Let whoever holds this effect end it deliberately, for an action.
 
@@ -2129,6 +2130,19 @@ class Cast:
         It runs for the deliberate drop and for nothing else -- not for
         the clock and not for a saving throw -- because a payout owed for
         choosing is not owed for waiting.
+
+        **`on_check=` is a test the ending has to pass**, for the printed
+        line that spends the action either way. `p13878`: *"the target can
+        take a move action to make an opposed Acrobatics check or
+        Athletics check against you. If it succeeds, the ongoing damage
+        ends."*
+
+        Neither existing argument says it, which is that row's own
+        reading: `when=` gates whether the drop is **offered**, so a
+        certain failure would not be offered at all -- leaking the roll --
+        and would cost nothing when it was; `then=` pays out *after* a
+        successful ending rather than deciding it. The action is charged
+        by `perform` before this runs, which is the printed order.
 
         **`also=` is a SECOND ender at its own cost**, for the printed line
         that gives two. `p11273` is the row: *"you can end this effect as
@@ -2160,6 +2174,8 @@ class Cast:
             effect.drop_cost = cost
             if also is not None:
                 effect.drop_also = also
+            if on_check is not None:
+                effect.drop_check = on_check
             effect.drop_then = then
             if by is not None:
                 effect.drop_by = by
