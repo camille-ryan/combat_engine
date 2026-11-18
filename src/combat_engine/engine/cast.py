@@ -6855,6 +6855,39 @@ class Cast:
     def immobilized(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         return self.condition(Condition.IMMOBILIZED, until=until, on=on)
 
+    def deals_half(
+        self, *, on: int | None = None, until: When = When.EONT,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"Your attacks deal only half damage" -- **conditionally**.
+
+        `c.weakened` is the unconditional version and is a *condition*:
+        `query.deals_half` derives it from whatever is active on the
+        creature, so it cannot be narrowed and cannot be laid beside
+        another reason to be weakened. Three printed rows want it narrowed,
+        each on a different thing the damage context already carries:
+
+            p12947   "with any attack that is not a basic attack"  -> power
+            p14137   "your attacks against the target"             -> target
+            p14140   "creatures of that origin deal half damage"   -> nobody,
+                                                                     laid on
+                                                                     the right
+                                                                     creatures
+
+        So this is a modifier with a gate rather than a condition, read in
+        `resolve` beside `query.deals_half` at the one site that halves.
+        `when` takes the damage context -- `source`, `target`,
+        `from_attack`, `power` and the rest -- the same dictionary
+        `crit_damage` mods are split with two lines above it.
+
+        **Not a condition on purpose.** A creature halved by this is not
+        *weakened*: nothing else keyed on the condition should fire, and a
+        save should not end it.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("deals_half", 1, on=who, until=until, when=when,
+                          stacks=False)
+
     def weakened(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         return self.condition(Condition.WEAKENED, until=until, on=on)
 

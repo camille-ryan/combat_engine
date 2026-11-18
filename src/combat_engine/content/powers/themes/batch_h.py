@@ -955,7 +955,6 @@ def _about_a_creature_i_can_sense(world: Any, me: int, ev: Any) -> bool:
         ),
         "you succeed on a monster knowledge check",
     ),
-    dropped=("c.deals_half(when=)",),
 )
 def p14137(c: Cast) -> None:
     """Two of the three clauses are written; the third shares `p14140`'s
@@ -991,11 +990,15 @@ def p14137(c: Cast) -> None:
     narrowing is honoured for every printed resistance and missed for a
     conditional one.
 
-    Dropped: the failure branch. *"Your attacks against the target deal
-    only half damage"* needs a halving gated on the target, which is
-    `p14140`'s `c.deals_half(when=)` -- `query.deals_half` is derived from
-    being weakened and takes no context, and `c.weakened` would halve this
-    character's damage against everybody. One gap, one symbol, shared.
+    The failure branch is written. *"Your attacks against the target deal
+    only half damage"* is `c.deals_half(when=)` gated on the target, which
+    the damage context carries -- `query.deals_half` is the read, derived
+    from being weakened and taking no context, and `c.weakened` would have
+    halved this character's damage against everybody.
+
+    One facility, three rows: `p14140` lays it ungated on the creatures its
+    zone picks, `p12947` gates it on the power not being a basic attack,
+    and this one gates it on the target.
     """
     ev = c.trigger
     monster = getattr(ev, "target", None)
@@ -1005,7 +1008,14 @@ def p14137(c: Cast) -> None:
 
     hard = dc(c.level_of(monster), "hard")
     if int(getattr(ev, "total", 0)) < hard:
-        # The failure branch is the dropped clause -- see the docstring.
+        # "If your check result does not meet or exceed the hard DC, your
+        # attacks against the target deal only half damage until the end of
+        # your next turn." Gated on the target, which the damage context
+        # carries.
+        c.deals_half(
+            on=c.me, until=When.EONT,
+            when=lambda ctx, foe=monster: ctx.get("target") == foe,
+        )
         return
     for defence in (AC, FORT, REF, WILL):
         c.bonus(
@@ -1062,20 +1072,25 @@ def p14139(c: Cast) -> None:
     "p14140", level=10, cls=X7_854, usage=DAILY, action=MINOR,
     reach=CloseBurst(2), target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.ZONE],
-    dropped=("query.deals_half(ctx=)",),
 )
 def p14140(c: Cast) -> None:
     """The penalties are held on the geometry and on what the creature is --
     `c.grants_in` carries neither the origin test nor five effects at once,
     so `_while_in` does it.
 
-    The half-damage clause is dropped. **Re-aimed off `c.deals_half(when=)`,**
-    which read as arrived only because `query.deals_half` exists and a
-    marker naming a lowercase owner is looked for anywhere on the surface.
-    That one is the *read*: it is derived from being weakened and takes
-    `(world, eid)` and no context, so it cannot say "only against what is
-    standing in the zone". `c.weakened` would halve the creature's damage
-    everywhere instead.
+    The half-damage clause is written now, and the symbol it waited on was
+    the right ask: `query.deals_half` is the **read**, derived from being
+    weakened, taking `(world, eid)` and no context -- so it could not say
+    "only while standing in the zone" -- and `c.weakened` would have halved
+    the creature's damage everywhere instead.
+
+    `c.deals_half(when=)` is a *modifier* rather than a condition, read in
+    `resolve` beside the condition at the one site that halves, with the
+    damage context in hand. Here it needs no gate at all: `hold` is only
+    called for a creature of the chosen origin standing in the zone, which
+    is the whole of the printed condition, and `_while_in` lifts it on the
+    way out. `p14137` and `p12947` are the two rows that do need gates, on
+    the target and on the power.
     """
     word = c.choose(list(ORIGINS), "which origin")
     zone = c.zone(c.area(), until=When.EONT, sustain=MINOR)
@@ -1090,7 +1105,11 @@ def p14140(c: Cast) -> None:
             c.penalty(defence, 2, on=who, until=When.EONT)
             for defence in DEFENCES
         ]
-        return held
+        # "and deal half damage" -- ungated, because `hold` is only called
+        # for a creature of the chosen origin standing in the zone, which
+        # is the whole of the printed condition.
+        held.append(c.deals_half(on=who, until=When.EONT))
+        return [eff for eff in held if eff is not None]
 
     _while_in(c, zone, hold)
 

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .ammunition import hurl, nock, spend_load
-from .components import Defences, Health
+from .components import Defences, Health, Mods
 from .conditions import DROPPED
 from .durations import When
 from .events import (
@@ -1496,7 +1496,17 @@ def deal_damage(
     # halving, which is the quantity a changed die has to be priced against.
     whole = amount
     halved = False
-    if from_attack and deals_half(world, source):
+    # **Two ways to be halved and one site that halves.** `deals_half` is
+    # the *condition* -- weakened, derived off whatever is active -- and the
+    # `"deals_half"` modifier is the conditional kind three printed rows
+    # want: "with any attack that is not a basic attack", "against the
+    # target", "creatures of that origin". Read with `dmg_ctx`, so a gate
+    # can ask about the power, the target or who is dealing it. See
+    # `Cast.deals_half`.
+    mine = world.get(source, Mods)
+    narrowed = (mine.total("deals_half", dmg_ctx)
+                if mine is not None and mine.items else 0)
+    if from_attack and (deals_half(world, source) or narrowed > 0):
         halved = True
         amount = amount // 2
         parts = _rescale(parts, amount)

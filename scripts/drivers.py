@@ -16903,6 +16903,124 @@ def a_shift_out_of_the_blast_halves_it(out: Result) -> None:
              f"{stayed[1]}")
 
 
+def half_damage_can_be_narrowed(out: Result) -> None:
+    """Three printed rows want *conditional* half damage and all three
+    carried a marker for it:
+
+        p12947   "deals half damage with any attack that is not a basic
+                 attack"                                       -> the power
+        p14137   "your attacks against the target deal only half damage"
+                                                               -> the target
+        p14140   "creatures of that origin ... deal half damage"
+                                                               -> ungated
+
+    **The markers were the right ask and named it three ways.**
+    `query.deals_half` is the *read*: it derives from being weakened, takes
+    `(world, eid)` and no context, so it cannot say "only against that
+    creature" -- and `c.weakened` halves everything the creature throws.
+    `c.deals_half(when=)` is a **modifier** rather than a condition, read
+    in `resolve` beside the condition at the one site that halves, with
+    the damage context in hand.
+
+    **Not a condition on purpose**, which is the part worth a gate of its
+    own: a creature halved this way is not *weakened*, so nothing keyed on
+    that condition fires and no save ends it. Asserted below.
+
+    Each row's gate is measured **both ways on one board** -- the damage
+    context it is asked about is the only thing that changes -- because
+    "the modifier is there" is equally true of a gate that always answers
+    yes, which is the shape `c.weakened` would have given these rows.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import deals_half, enemies
+
+    # -- the facility halves, and only when its gate says so -------------
+    def dealt(gate) -> int:  # noqa: ANN001
+        world, me, _ = _board("p12947", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return -1
+        foe = foes[0]
+        c = Cast(world=world, me=me, ref="p12947")
+        if gate is not None:
+            c.deals_half(on=me, until=When.ENCOUNTER, when=gate)
+        hp = must(world.get(foe, Health), "the victim")
+        before = hp.hp
+        world.rng.loaded = 20
+        c.target = foe
+        REGISTRY["p12947"].body(c)
+        return before - hp.hp
+
+    plain = dealt(None)
+    halved = dealt(lambda ctx: True)
+    shut = dealt(lambda ctx: False)
+    out.that(plain > 1, "the row deals something to halve", f"{plain}")
+    out.that(halved == plain // 2,
+             "an open gate halves it, rounding down", f"{plain} -> {halved}")
+    out.that(shut == plain,
+             "and a closed gate changes nothing -- the assertion an"
+             " unconditional halving fails",
+             f"{plain} -> {shut}")
+
+    # -- and it is NOT the weakened condition ----------------------------
+    world, me, _ = _board("p12947", 1)
+    c = Cast(world=world, me=me, ref="drivers")
+    c.deals_half(on=me, until=When.ENCOUNTER)
+    out.that(not deals_half(world, me),
+             "a creature halved by the modifier is NOT weakened -- so"
+             " nothing keyed on that condition fires and no save ends it,"
+             " which `c.weakened` could not have given these rows",
+             f"{deals_half(world, me)}")
+
+    # -- p12947's gate is the power --------------------------------------
+    world2, me2, _ = _board("p12947", 1)
+    foes2 = sorted(enemies(world2, me2))
+    out.that(bool(foes2), "a victim to penalise", f"{foes2}")
+    if foes2:
+        c2 = Cast(world=world2, me=me2, ref="p12947")
+        c2.target = foes2[0]
+        c2.augment = 2
+        world2.rng.loaded = 20
+        REGISTRY["p12947"].body(c2)
+        mods = world2.get(foes2[0], Mods)
+        basic = mods.total("deals_half", {"power": "mba"}) if mods else -1
+        other = mods.total("deals_half", {"power": "p9999"}) if mods else -1
+        out.that(other > 0 and basic == 0,
+                 "Augment 2 halves the victim's NON-basic attacks and leaves"
+                 " its basic alone -- the printed line, gated on the power",
+                 f"basic {basic}, other {other}")
+
+    # -- p14137's gate is the target -------------------------------------
+    world3, me3, _ = _board("p14137", 1)
+    foes3 = sorted(enemies(world3, me3))
+    out.that(len(foes3) >= 2, "two enemies, to tell the gate apart",
+             f"{foes3}")
+    if len(foes3) >= 2:
+        monster, bystander = foes3[0], foes3[1]
+        c3 = Cast(world=world3, me=me3, ref="p14137")
+
+        class _Failed:
+            """A monster knowledge check that missed the hard DC."""
+
+            target = monster
+            total = 0
+
+        c3.trigger = _Failed()
+        REGISTRY["p14137"].body(c3)
+        m3 = world3.get(me3, Mods)
+        his = m3.total("deals_half", {"target": monster}) if m3 else -1
+        hers = m3.total("deals_half", {"target": bystander}) if m3 else -1
+        out.that(his > 0 and hers == 0,
+                 "a failed knowledge check halves this character's attacks"
+                 " against THAT monster and nobody else -- the failure"
+                 " branch, which used to `return` and do nothing",
+                 f"monster {his}, bystander {hers}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -99376,6 +99494,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "narrowed_half": (half_damage_can_be_narrowed,
+                      "half damage gated on the power, on the target, or on"
+                      " nothing -- and not the weakened condition"),
     "shift_out_of_blast": (a_shift_out_of_the_blast_halves_it,
                            "half damage for stepping out of the area, and"
                            " none for stepping about inside it"),

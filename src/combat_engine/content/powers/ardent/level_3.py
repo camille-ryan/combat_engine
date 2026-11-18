@@ -327,7 +327,6 @@ def p12946(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
-    dropped=("query.deals_half(attack=)",),
 )
 def p12947(c: Cast) -> None:
     """"Any attack that is not a basic attack" is read off what the creature's
@@ -339,7 +338,7 @@ def p12947(c: Cast) -> None:
     basic attack" is `Condition.WEAKENED`, which `query.deals_half` reads off
     the creature and not off the attack, so there is nothing to gate and the
     augmented form would halve its basic attacks too."""
-    spent = augment(c, 1)
+    spent = augment(c, 1, 2)
     victim = c.target
     if victim is None or not c.strike():
         return
@@ -354,6 +353,12 @@ def p12947(c: Cast) -> None:
 
     if not spent:
         c.penalty("attack", 2, until=When.EONT, when=not_basic)
+        return
+    if spent >= 2:
+        # Augment 2: "the target deals half damage with any attack that is
+        # not a basic attack". The same `not_basic` gate the unaugmented
+        # form uses for its penalty, pointed at the damage context instead.
+        c.deals_half(on=victim, until=When.EONT, when=not_basic)
         return
 
     def shove(ev: AttackDeclared) -> None:

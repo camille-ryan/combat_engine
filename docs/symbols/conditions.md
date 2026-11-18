@@ -13,6 +13,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Cannot shift. Still walks, which is why this is not `immobilized`.
 - `c.dazed(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - (no docstring)
+- `c.deals_half(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - "Your attacks deal only half damage" -- **conditionally**.
 - `c.immobilized(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - (no docstring)
 - `c.insubstantial(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, except_: 'tuple[DamageType, ...]' = (), when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`

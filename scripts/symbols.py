@@ -216,6 +216,11 @@ CATEGORIES: dict[str, dict] = {
             ("writers -- a condition named after itself", [
                 "blinded", "cannot_shift", "dazed", "immobilized",
                 "insubstantial", "prone", "slowed", "stunned", "unconscious",
+                # The conditional kind, read in `resolve` beside the
+                # condition: a modifier with a gate, so it can say
+                # "not a basic attack" or "against that creature".
+                # Deliberately NOT a condition -- see the verb.
+                "deals_half",
                 "weakened", "zone_condition",
             ]),
             # `c.cannot_approach` sits beside `c.leash` and not beside
