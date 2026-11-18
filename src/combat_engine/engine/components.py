@@ -1228,12 +1228,27 @@ class Mod:
         return self.value + (self.roll() if self.roll is not None else 0)
 
 
+#: The suffix a clipping modifier is keyed under -- `"attack penalty clip"`.
+#:
+#: Shared by `Mods.total`, which reads it, and `Cast.bonus(clip=True)`,
+#: which writes it, so the two cannot drift apart. A modifier key nothing
+#: reads is this component's commonest bug and `lint.UNREAD_MODIFIER_KEYS`
+#: exists because of it.
+_CLIP = "penalty clip"
+
+
 @dataclass
 class Mods:
     items: list[Mod] = field(default_factory=list)
 
     def total(self, what: str, ctx: dict[str, Any] | None = None) -> int:
         """Sum the modifiers to `what`, applying 4e's stacking rules.
+
+        **A clip lessens whatever penalty is standing and cannot turn it
+        into a bonus**, which is the third stacking rule here and the one
+        `p2384` prints: *"any penalty to attack rolls that such an ally
+        takes is lessened by 2"*. `c.bonus(clip=True)` lays it under
+        `"<what> penalty clip"`, and this is the only reader.
 
         Bonuses bucket by **type**: two of a kind do not add, the larger
         applies, and untyped ones add freely.
@@ -1250,7 +1265,20 @@ class Mods:
         best: dict[str, int] = {}
         worst: dict[str, int] = {}
         out = 0
+        clip = 0
+        # **One pass, not two.** This is asked for every attack roll, save
+        # and check in the game, so the clip key is matched inside the loop
+        # that was already walking the list rather than by a second scan.
+        clipped = f"{what} {_CLIP}"
         for m in self.items:
+            if m.what == clipped:
+                if m.applies(ctx):
+                    # The **largest** clip and not their sum: two cards
+                    # each lessening a penalty by 2 is two of a kind, and
+                    # the better applies -- the same rule a typed bonus
+                    # gets two lines down.
+                    clip = max(clip, m.amount())
+                continue
             if m.what != what or not m.applies(ctx):
                 continue
             value = m.amount()
@@ -1260,7 +1288,14 @@ class Mods:
                 out += value
             else:
                 best[m.kind] = max(best.get(m.kind, 0), value)
-        return out + sum(best.values()) + sum(worst.values())
+        penalties = sum(worst.values())
+        if clip and penalties:
+            # **Never past zero**, which is what "lessens any penalty by 2"
+            # says and what makes this different from a flat +2: with no
+            # penalty standing it is worth nothing, and `p2384`'s own note
+            # records that a flat bonus "would be a different card".
+            penalties = min(0, penalties + clip)
+        return out + sum(best.values()) + penalties
 
     def split(
         self, what: str, ctx: dict[str, Any] | None = None

@@ -134,17 +134,29 @@ def p14472(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.ZONE],
-    dropped=("c.bonus(clip=)",),
 )
 def p2384(c: Cast) -> None:
-    """"Lessens any penalty to attack rolls by 2" is dropped -- a modifier can
-    be added but not clipped, and a flat +2 to attack would be a different
-    card."""
+    """"Lessens any penalty to attack rolls by 2" is `c.bonus(clip=True)`.
+
+    **A clip and not a flat +2, which the old note had right about why it
+    could not be approximated**: with no penalty standing a clip is worth
+    nothing, and it never turns a penalty into a bonus. `Mods.total`
+    applies it after the penalties are bucketed, where the arithmetic is.
+
+    The gate is the same `occupants` read the Will bonus uses, so both
+    halves of the zone's effect come and go with standing inside it -- the
+    zone follows the bard, which is what the aura is.
+    """
     ring = c.aura(5, until=When.ENCOUNTER)
     for mate in c.allies():
-        c.bonus(
-            WILL, 2, on=mate, until=When.ENCOUNTER,
-            when=lambda ctx, w=mate: w in c.world.zones.occupants(ring), kind="power")
+
+        def inside(_ctx: dict[str, Any], who: int = mate) -> bool:
+            return who in c.world.zones.occupants(ring)
+
+        c.bonus(WILL, 2, on=mate, until=When.ENCOUNTER, when=inside,
+                kind="power")
+        c.bonus("attack", 2, on=mate, until=When.ENCOUNTER, when=inside,
+                clip=True)
 
 
 @power(

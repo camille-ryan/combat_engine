@@ -2164,20 +2164,53 @@ def can_flank(world: World, eid: int) -> bool:
 def flankers(world: World, eid: int) -> list[int]:
     """Who may hold the other side of a creature for `eid`.
 
-    Its allies, plus any companion told it can flank. `allies` excludes
-    companions on purpose -- "each ally adjacent to your spirit companion"
-    must not mean the spirit -- so the exception is made here instead of
+    Its allies, plus any companion told it can flank, plus any **conjuration
+    on its side** told the same. `allies` excludes both companions and
+    conjurations on purpose -- "each ally adjacent to your spirit companion"
+    must not mean the spirit, and "each ally within 5 squares" must not heal
+    your illusory double -- so both exceptions are made here instead of
     widening that default.
+
+    The conjuration half is `p13442`'s *"your allies can flank with the
+    <conjuration>"*. It is a standing property of the thing conjured rather
+    than a question asked at a call site, which is why `c.conjure(flanks=)`
+    lays it and this reads it: `flanked_by` is reached from
+    `has_combat_advantage` and from the menu, so a parameter there would
+    have had to be threaded through every caller to be worth anything.
     """
+    conjured = [
+        o for o in _side_conjurations(world, eid) if can_flank(world, o)
+    ]
     return [
         o
-        for o in allies(world, eid, companions=True)
+        for o in (*allies(world, eid, companions=True), *conjured)
         if (world.get(o, Companion) is None or can_flank(world, o))
         # **"Cannot flank with its allies", from the far side.** A creature
         # under that clause is no use holding the other half of a flank
         # either, so it drops out of everybody's list of partners -- not
         # only out of its own attacks. `c.cannot_flank` lays it. #1299.
         and not _barred_from_flanking(world, o)
+    ]
+
+
+def _side_conjurations(world: World, eid: int) -> list[int]:
+    """Conjurations standing on this creature's side.
+
+    `allies` subtracts them deliberately -- see its own note -- so this is
+    the one place that adds them back, and only for flanking.
+
+    Keyed on who conjured the thing rather than on a team, because that is
+    what `Conjuration` carries and it is the same question: the conjurer is
+    `eid` itself or one of its allies.
+    """
+    from .components import Conjuration
+
+    mine = {eid, *allies(world, eid, companions=True)}
+    return [
+        thing
+        for thing in world.having(Conjuration)
+        if (world.get(thing, Conjuration) or Conjuration(ref="", by=-1)).by
+        in mine
     ]
 
 
@@ -2254,6 +2287,13 @@ def flanked_by(
     if _barred_from_flanking(world, attacker):
         return False
     for mate in flankers(world, attacker):
+        # **`can_act` needs no exception for a conjuration**, and a plant
+        # is what established that: a waiver was written here on the
+        # reasoning that "a conjuration never acts, so the furniture rule
+        # is asking the wrong question", and removing it changed nothing.
+        # `can_act`'s own first line is *"a trap and a conjuration have no
+        # hit points to be unconscious about"* -- it already answers True.
+        # Dead code on a hot path, deleted rather than kept for comfort.
         if mate == target or not can_act(world, mate) or not _near(
             world, mate, space
         ):

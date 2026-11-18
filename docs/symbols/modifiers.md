@@ -11,7 +11,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - How big a number this mechanic hands out, after anything raising it.
 - `c.attack_mod`
   - The modifier of whatever ability *this branch* attacks with.
-- `c.bonus(self, what: 'str | Defense', value: 'int', *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, kind: 'str' = 'untyped', when: 'Callable[[dict[str, Any]], bool] | None' = None, once: 'bool' = False, stacks: 'bool' = True, dice: 'str' = '', dtype: 'DamageType | Sequence[DamageType] | None' = None, label: 'str' = '', onto: 'Effect | None' = None) -> 'Effect | None'`
+- `c.bonus(self, what: 'str | Defense', value: 'int', *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, kind: 'str' = 'untyped', when: 'Callable[[dict[str, Any]], bool] | None' = None, once: 'bool' = False, stacks: 'bool' = True, dice: 'str' = '', dtype: 'DamageType | Sequence[DamageType] | None' = None, label: 'str' = '', onto: 'Effect | None' = None, clip: 'bool' = False) -> 'Effect | None'`
   - A numeric modifier with a duration.
 - `c.boost_check(self, bonus: 'int', *, ev: 'Any' = None) -> 'bool'`
   - Add to the triggering skill check, after the die is already down.

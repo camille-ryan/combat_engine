@@ -24726,6 +24726,152 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_conjuration_flanks_and_a_penalty_is_clipped(out: Result) -> None:
+    """Two rows, two clauses nothing could say, and both markers named the
+    right gap one level too high.
+
+    `p13442` prints *"your allies can flank with the <conjuration>"*.
+    `query.flanked_by` required both flankers to be able to act -- "a
+    stunned ally standing in the right square is furniture" -- and a
+    conjuration never acts. The geometry was always answerable, since
+    `Grid.flanks` takes two squares and reads no creature; what was missing
+    was the thing being in the **partner list**, which `query.allies`
+    subtracts on purpose so that "each ally within 5 squares" cannot heal
+    your illusory double. So the fix is in `flankers`, where the same
+    exception is already made for a familiar, and not the
+    `flanked_by(conjuration=)` parameter the marker asked for -- that would
+    have had to be threaded through `has_combat_advantage` and the menu.
+
+    `p2384` prints *"any penalty to attack rolls that such an ally takes is
+    lessened by 2"*. A clip is not a bonus: with no penalty standing it is
+    worth nothing, and it never turns a penalty into a bonus. `Mods.total`
+    applies it where the arithmetic is, after the penalties are bucketed.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import events as _events
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conjuration as _Conjuration
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import enemies, flanked_by, flankers
+
+    # ---- p13442: a conjuration holds the far side ----------------------
+    def pose(flanks: bool) -> tuple[Any, int, int, int, int] | None:
+        world, me, _ = _audit.board("p13442", 1)
+        mates = [a for a in _audit._allies_of(world, me) if a != me]
+        if not mates:
+            return None
+        mate, foe = mates[0], sorted(enemies(world, me))[0]
+        # The ally on one side of the foe and the conjuration on the other,
+        # which is the only arrangement the printed clause is about.
+        place(world, foe, (5, 5))
+        place(world, mate, (4, 5))
+        thing = Cast(world=world, me=me, ref="p13442").conjure(
+            at=(6, 5), until=When.EONT, sustain=None, speed=6, flanks=flanks,
+        )
+        return world, me, mate, foe, thing
+
+    with_flag = pose(True)
+    without = pose(False)
+    if with_flag is None or without is None:
+        out.skip("p13442: the board fielded no ally to flank with")
+    else:
+        world, me, mate, foe, thing = with_flag
+        out.that(thing in flankers(world, mate),
+                 "**the conjuration joins the ally's partner list** --"
+                 " `query.allies` subtracts conjurations deliberately, so"
+                 " `flankers` is the one place that adds them back, which is"
+                 " where a familiar's exception already lives",
+                 f"flankers {sorted(flankers(world, mate))}, conj {thing}")
+        out.that(flanked_by(world, foe, mate),
+                 "and the foe is flanked by the ally and the conjuration",
+                 f"flanked={flanked_by(world, foe, mate)}")
+        cold, _caster, mate2, foe2, thing2 = without
+        out.that(thing2 not in flankers(cold, mate2),
+                 "**and without the flag it is not a partner at all** --"
+                 " which is the control: every other conjuration in the"
+                 " tree must go on being furniture",
+                 f"flankers {sorted(flankers(cold, mate2))}, conj {thing2}")
+        out.that(not flanked_by(cold, foe2, mate2),
+                 "so the same two squares do not flank",
+                 f"flanked={flanked_by(cold, foe2, mate2)}")
+
+        # **And the ROW passes the flag, which the two arms above do not
+        # say.** They call `c.conjure` directly, so deleting `flanks=True`
+        # from `p13442` left this rule green -- the facility was asserted
+        # and the row was not. The body is run with a `Miss` trigger,
+        # which is what the card's interrupt reads to place the thing.
+        world, me, _ = _audit.board("p13442", 1)
+        mates = [a for a in _audit._allies_of(world, me) if a != me]
+        foe = sorted(enemies(world, me))[0]
+        place(world, foe, (5, 5))
+        place(world, mates[0], (4, 5))
+        miss = _events.Miss(attacker=mates[0], target=foe, power="drivers")
+        REGISTRY["p13442"].body(Cast(
+            world=world, me=me, ref="p13442", trigger=miss, targets=[],
+        ))
+        laid = [
+            thing for thing in world.having(_Conjuration)
+            if (world.get(thing, _Conjuration) or None) is not None
+            and world.get(thing, _Conjuration).by == me
+        ]
+        out.that(len(laid) == 1,
+                 "p13442 conjures one thing when its trigger fires",
+                 f"{len(laid)} conjuration(s)")
+        out.that(bool(laid) and laid[0] in flankers(world, mates[0]),
+                 "**and the row itself asks for the flanking** -- asserted"
+                 " through `p13442`'s own body, because the two arms above"
+                 " call `c.conjure` directly and a plant deleting"
+                 " `flanks=True` from the row passed them both",
+                 f"flankers {sorted(flankers(world, mates[0]))}, laid {laid}")
+
+    # ---- c.bonus(clip=True): the arithmetic ----------------------------
+    world, me, _ = _audit.board("p2384", 1)
+    probe = Cast(world=world, me=me, ref="drivers-clip")
+    mods = world.get(me, Mods)
+    base = mods.total("attack", {})
+    probe.penalty("attack", 3, on=me, until=When.ENCOUNTER)
+    with_penalty = mods.total("attack", {})
+    out.that(with_penalty == base - 3,
+             "a -3 penalty to attack stands",
+             f"{base} -> {with_penalty}")
+    probe.bonus("attack", 2, on=me, until=When.ENCOUNTER, clip=True)
+    clipped = mods.total("attack", {})
+    out.that(clipped == base - 1,
+             "**a clip of 2 lessens it to -1** -- applied after the"
+             " penalties are bucketed, which is where the arithmetic is",
+             f"{with_penalty} -> {clipped}")
+    probe.bonus("attack", 5, on=me, until=When.ENCOUNTER, clip=True)
+    out.that(mods.total("attack", {}) == base,
+             "**and a clip larger than the penalty stops at zero rather"
+             " than becoming a bonus** -- which is what makes this a"
+             " different thing from a flat +2, as `p2384`'s own note said"
+             " before it could be written",
+             f"{clipped} -> {mods.total('attack', {})}")
+
+    world, me, _ = _audit.board("p2384", 2)
+    probe = Cast(world=world, me=me, ref="drivers-clip")
+    mods = world.get(me, Mods)
+    was = mods.total("attack", {})
+    probe.bonus("attack", 2, on=me, until=When.ENCOUNTER, clip=True)
+    out.that(mods.total("attack", {}) == was,
+             "**and a clip with no penalty standing is worth nothing** --"
+             " the control, and the half a flat bonus would have got wrong"
+             " on every roll of the encounter",
+             f"{was} -> {mods.total('attack', {})}")
+    raised = False
+    try:
+        probe.bonus("attack", -2, on=me, until=When.ENCOUNTER, clip=True)
+    except ValueError:
+        raised = True
+    out.that(raised,
+             "and a negative clip is refused rather than deepening the"
+             " penalty it was asked to lessen")
+
+
 def power_points_can_be_given_back(out: Result) -> None:
     """"You regain 2 power points."
 
@@ -93490,6 +93636,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "conjured_flank": (
+        a_conjuration_flanks_and_a_penalty_is_clipped,
+        "a conjuration can hold the far side of a flank, and a penalty can"
+        " be clipped without becoming a bonus (p13442 p2384)",
+    ),
     "gain_points": (
         power_points_can_be_given_back,
         "c.gain_points puts points back into a psionic pool and says so"

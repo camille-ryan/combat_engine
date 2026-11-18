@@ -7724,8 +7724,17 @@ class Cast:
         defences_plus: int = 0,
         defences_each: Mapping[Defense, int] | None = None,
         hp: int = 0,
+        flanks: bool = False,
     ) -> int:
         """Put a conjuration on the board and return its entity id.
+
+        **`flanks=True` is "your allies can flank with it"**, which one row
+        prints and which no conjuration could say: `query.flanked_by`
+        requires both flankers to be able to act, and a conjuration never
+        acts. The geometry was already answerable -- `Grid.flanks` takes two
+        squares and reads no creature -- so what was missing was the thing
+        being in the partner list at all. It lays the same `can_flank`
+        marker a familiar carries.
 
         **Creatures move through it unless the printed line says otherwise**,
         which is the rule and was not what this did. It used to claim its
@@ -7900,6 +7909,20 @@ class Cast:
             ring = self.aura(aura, label=name, until=until, on=eid)
             if burn is not None:
                 self.burns(ring, burn[0], burn[1])
+        if flanks:
+            # **The same marker a familiar carries**, read by
+            # `query.flankers`, which adds the side's conjurations back into
+            # the partner list -- `allies` subtracts them, deliberately, so
+            # that "each ally within 5 squares" cannot heal your illusory
+            # double. Laid here rather than asked at a call site because
+            # *"your allies can flank with it"* is a standing property of
+            # the thing conjured, and `flanked_by` is reached from
+            # `has_combat_advantage` and from the menu.
+            #
+            # `until=None` is deliberate: the modifier is owned by the
+            # conjuration, which `_banish` removes outright, so a duration
+            # here would be a second clock on a thing that already has one.
+            self.can_flank(on=eid, until=until)
         return eid
 
     def _banish(self, eid: int) -> None:
@@ -13721,8 +13744,18 @@ class Cast:
         dtype: DamageType | Sequence[DamageType] | None = None,
         label: str = "",
         onto: Effect | None = None,
+        clip: bool = False,
     ) -> Effect | None:
         """A numeric modifier with a duration.
+
+        **`clip=True` lessens whatever penalty is standing instead of
+        adding a bonus**, and the difference is a whole card: `p2384`
+        prints *"any penalty to attack rolls that such an ally takes is
+        lessened by 2"*, and its own note says a flat +2 "would be a
+        different card" -- with no penalty up, a clip is worth nothing.
+        `Mods.total` is the reader and applies it after the penalties are
+        bucketed, never past zero. Two clips are two of a kind and the
+        larger applies.
 
         **`onto` hangs this on a hold that already stands instead of laying
         a new one, and `until` is then that hold's.** "The target takes
@@ -13816,6 +13849,19 @@ class Cast:
         if who is None:
             return None
         key = what.value if isinstance(what, Defense) else what
+        if clip:
+            if value < 0:
+                raise ValueError(
+                    f"{self.ref}: c.bonus(clip=True) takes how much the "
+                    f"penalty is LESSENED by, so {value} would deepen it. "
+                    f"Pass a positive number."
+                )
+            # Keyed off the thing being clipped, so `Mods.total` finds it
+            # on the same pass it is already making. `_CLIP` is shared with
+            # that reader rather than spelled twice.
+            from .components import _CLIP
+
+            key = f"{key} {_CLIP}"
         if dtype is not None and key not in ("damage", "crit_damage"):
             raise ValueError(
                 f"{self.ref}: c.bonus(dtype=) is the type of the extra "

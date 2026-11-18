@@ -207,7 +207,6 @@ def p7648(c: Cast) -> None:
     ],
     trigger="an ally within 10 squares of you misses an enemy with an attack",
     on=Trigger(Miss, ally_within(10), "an ally within 10 squares of you misses"),
-    dropped=("query.flanked_by(conjuration=)",),
 )
 def p13442(c: Cast) -> None:
     """A conjuration, so creatures move through it -- nothing printed says it
@@ -222,13 +221,23 @@ def p13442(c: Cast) -> None:
     with a move action -- all of which `c.conjure` is". One half of a
     two-clause admission was simply wrong about the code beside it.
 
-    The flanking it grants is genuinely dropped. `query.flanked_by`
-    requires **both flankers to be able to attack** -- "a stunned ally
-    standing in the right square is furniture, and the printed rule says
-    so" -- and a conjuration cannot act, so it cannot be one of them.
-    `Grid.flanks(a, b, space)` takes two squares and reads no creature, so
-    the geometry is already answerable; what is missing is `flanked_by`
-    counting a conjuration as the second flanker."""
+    **The flanking is written, and one word wider than the marker asked
+    for.** `query.flanked_by` required both flankers to be able to act --
+    "a stunned ally standing in the right square is furniture, and the
+    printed rule says so" -- and a conjuration never acts, so it could not
+    be one of them. The geometry was already answerable, since
+    `Grid.flanks(a, b, space)` takes two squares and reads no creature.
+
+    What was missing was the conjuration being in the **partner list** at
+    all: `query.allies` subtracts conjurations deliberately, so that "each
+    ally within 5 squares" cannot heal your illusory double, and
+    `query.flankers` is where that exception is made for a companion. So
+    the fix is there and not at a call site -- the marker named
+    `flanked_by(conjuration=)`, and a parameter would have had to be
+    threaded through `has_combat_advantage` and the menu to be worth
+    anything. `c.conjure(flanks=True)` lays the marker a familiar carries,
+    `flankers` reads it, and `flanked_by` waives `can_act` for a
+    conjuration and for nothing else."""
     victim = getattr(c.trigger, "target", None)
     spot = c.world.get(victim, Position) if victim is not None else None
     where = None
@@ -237,4 +246,4 @@ def p13442(c: Cast) -> None:
             if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None:
                 where = sq
                 break
-    c.conjure(at=where, until=When.EONT, sustain=None, speed=6)
+    c.conjure(at=where, until=When.EONT, sustain=None, speed=6, flanks=True)
