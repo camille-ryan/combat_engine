@@ -37,7 +37,14 @@ body runs once per target and the points are spent once for the whole use.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from combat_engine.engine import Cast
+from combat_engine.engine.durations import When
+from combat_engine.engine.types import Keyword, Usage
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 #: What the most recent use of a row was bought with, by (caster, ref).
 #: Read **while that use is still resolving**: "your unaugmented attacks
@@ -80,19 +87,114 @@ def lent(c: Cast) -> int:
     `_LAST` included, which is what `spent_on` reads while the use is still
     resolving.
     """
+    lenders = _lenders(c)
+    if not lenders:
+        return 0
+    return augment(c, *sorted({cost for cost, _ in lenders}))
+
+
+def one_hit_rider(c: Cast, amount: int, label: str) -> None:
+    """"Choose a single creature hit by the at-will attack. That creature
+    takes extra damage equal to your Wisdom modifier."
+
+    Three battlemind aspects print this sentence verbatim as the second half
+    of their lent augment, so it is written once -- the exception the global
+    rule allows for a run of rows that genuinely share a clause.
+
+    **It cannot be paid when the clause runs.** A lent clause is run at the
+    moment the points leave the pool, which is before the at-will swings, so
+    there is nobody hit yet to choose among. The pair of watchers below is
+    `f1827`'s lesson generalised: `Hit` is emitted from *inside* the body,
+    `PowerResolved` when the body is done, and "a creature hit by the
+    attack" is only answerable at the second.
+
+    `amount` is read by the caller, because it is the lending aspect's
+    Wisdom modifier and not the at-will's.
+    """
+    from combat_engine.engine.events import Hit, PowerResolved
+
+    struck: list[int] = []
+    done: list[bool] = []
+
+    def saw(ev: Hit) -> None:
+        if (
+            not done
+            and ev.attacker == c.me
+            and ev.power == c.ref
+            and ev.target not in struck
+        ):
+            struck.append(ev.target)
+
+    def pay(ev: PowerResolved) -> None:
+        # **Guarded on the ref as well as the actor**, because an action
+        # point can buy a second use of the same at-will inside one turn
+        # and the collector's duration outlives a single use.
+        if done or ev.actor != c.me or ev.power != c.ref or not struck:
+            return
+        done.append(True)
+        who = (
+            c.choose(struck, f"{label}: who takes the extra damage")
+            if len(struck) > 1
+            else struck[0]
+        )
+        c.flat(amount, on=who)
+
+    c.watch(Hit, saw, until=When.EONT, on=c.me, label=f"{label} watches")
+    c.watch(PowerResolved, pay, until=When.EONT, on=c.me, label=label)
+
+
+def _lenders(c: Cast) -> tuple[tuple[int, Callable[[Cast], None]], ...]:
+    """Every clause lent to the row being used -- by ref, and by class.
+
+    The ref half is `c.lend_augment("p1450", ...)`: a feat printing an
+    Augment line on a card that prints none. The class half is
+    `c.lend_augment("battlemind", ..., every=True)`, which five aspects
+    print and which names the character's whole augmentable at-will
+    repertoire rather than a row somebody could list.
+
+    **The class test is the printed sentence clause for clause** -- "your
+    battlemind at-will attack powers that are augmentable" -- so a daily
+    aspect carrying the augmentable keyword itself does not lend to itself,
+    and a battlemind at-will that is not an attack is not reached.
+    """
+    from combat_engine.engine import get
     from combat_engine.engine.components import Powers
 
     known = c.world.get(c.me, Powers)
-    lenders = known.lent_augments.get(c.ref, ()) if known is not None else ()
-    if not lenders:
-        return 0
-    spent = augment(c, *sorted({cost for cost, _ in lenders}))
-    if not spent:
-        return 0
-    for cost, clause in lenders:
+    if known is None:
+        return ()
+    lent = tuple(known.lent_augments.get(c.ref, ()))
+    wide = known.lent_class_augments
+    if wide:
+        p = get(c.ref)
+        if (
+            p is not None
+            and p.cls in wide
+            and p.usage is Usage.AT_WILL
+            and p.attack is not None
+            and Keyword.AUGMENTABLE in (p.keywords or ())
+        ):
+            lent += wide[p.cls]
+    return lent
+
+
+def _run_lent(
+    c: Cast, lent: tuple[tuple[int, Callable[[Cast], None]], ...], spent: int,
+) -> None:
+    """Run whatever was lent at the cost actually paid, once per use.
+
+    **Once per use and not once per target**, which is the same reason
+    `augment` memoises the spend on the cast: a close burst runs its body
+    per creature in the burst and the points leave the pool once. Guarded
+    on the cast rather than on `_LAST`, because a second use of the same
+    row later in the encounter must run the clause again.
+    """
+    if not lent or not spent or getattr(c, "lent_ran", False):
+        return
+    c.lent_ran = True
+    for cost, clause in lent:
         if cost == spent:
             clause(c)
-    return spent
 
 
 def augment(c: Cast, *offers: int) -> int:
@@ -116,13 +218,20 @@ def augment(c: Cast, *offers: int) -> int:
         # runs. Asking again here would offer the same choice twice and
         # charge for it twice.
         _LAST[(c.me, c.ref)] = c.augment
+        _run_lent(c, _lenders(c), c.augment)
         return c.augment
     held = getattr(c, "augment_spend", None)
     if held is not None:
         return held
-    afford = sorted((n for n in (offers or (2, 1)) if n <= c.points()), reverse=True)
+    # **A lend adds its cost to the offer**, which is the other half of
+    # what an aspect prints: its Augment 1 is usable with a row that prints
+    # only an Augment 2, and a cost nothing offers can never be paid.
+    lent = _lenders(c)
+    costs = set(offers or (2, 1)) | {cost for cost, _ in lent}
+    afford = sorted((n for n in costs if n <= c.points()), reverse=True)
     picked = c.choose([*afford, 0], "power points to augment")
     spent = c.spend_points(picked) if picked else 0
     c.augment_spend = spent
     _LAST[(c.me, c.ref)] = spent
+    _run_lent(c, lent, spent)
     return spent

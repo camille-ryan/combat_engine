@@ -89,18 +89,6 @@
     "wants": "c.must_attack(on=, against=) plus a way to say that enemies provoke from a creature",
     "why": "'enemies provoke opportunity attacks from the target, and it must make those attacks' needs both halves; c.provoke opens one window for one named attacker and nothing obliges anybody to answer it"
   },
-  "p11158:augment1": {
-    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
-    "why": "the aspect's whole content is an augmentation lent to the battlemind's at-will attacks while it stands; nothing hangs a clause on another row's augment, and the same shape is p11165, p11172, p13030 and p13043"
-  },
-  "p11165:augment1": {
-    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
-    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
-  },
-  "p11172:augment1": {
-    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
-    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
-  },
   "p12422:augment2": {
     "wants": "dsl.Range.by_ability, a reach sized off an ability modifier",
     "why": "Augment 1 -- reach + 1 -- is now written as dsl.Augment(reach=); Augment 2 is reach + Charisma modifier, and a Range holds a number read off the card before any creature is in hand"
@@ -116,14 +104,6 @@
   "p12958:augment1": {
     "wants": "c.deals_half(when=) -- half damage narrowed to some of a creature's attacks",
     "why": "the same gate, on basic attacks this time; its Charisma modifier is not written alone"
-  },
-  "p13030:augment1": {
-    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
-    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
-  },
-  "p13043:augment1": {
-    "wants": "c.lend_augment(ref_or_class, clause) -- a row that adds an offer to another row's augment",
-    "why": "an aspect daily whose Augment 1 is bought when some other at-will is augmented, not when this row is used"
   },
   "p13051:augment1": {
     "wants": "Position.squares holding a second, separate square for one creature",

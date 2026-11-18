@@ -2918,7 +2918,24 @@ def _lends_nobody_asks_for() -> list[tuple[str, str, str]]:
             lender = inspect.getsource(row.body)
         except (OSError, TypeError):
             continue
-        for host in _LENDS.findall(lender):
+        for host, wide in _lend_calls(lender):
+            if wide:
+                # **A class lend has a different obligation and a
+                # different reader.** `every=True` names a class, so there
+                # is no row to look up and no row to check for a `lent(c)`
+                # call: the read is in `augment()`, which every augmentable
+                # body already goes through. What can still be silently
+                # dead is the class name and the printed description -- a
+                # lend to a class no row declares, or to one whose rows
+                # none of them answer, is the same modifier-nobody-consults
+                # fault aimed one level up.
+                if not _class_can_be_lent_to(host):
+                    out.append((
+                        ref, host,
+                        "no declared row is an augmentable at-will attack"
+                        " power of that class, so the lend reaches nothing",
+                    ))
+                continue
             target = REGISTRY.get(host)
             if target is None:
                 out.append((ref, host, "names a row that is not declared"))
@@ -2940,6 +2957,54 @@ def _lends_nobody_asks_for() -> list[tuple[str, str, str]]:
 #: every call in the tree -- a computed one would belong to a different
 #: check, since there would be nothing to resolve at lint time.
 _LENDS = re.compile(r'c\.lend_augment\(\s*"([^"]+)"')
+
+
+def _lend_calls(src: str) -> list[tuple[str, bool]]:
+    """Every `c.lend_augment` call in a body, and whether it lends to a class.
+
+    **`every=True` cannot be read off the first argument**, which is all
+    `_LENDS` captures, and the two kinds of lend have opposite obligations
+    -- so the flag is found by scanning to the call's own closing paren
+    rather than by widening the pattern. A call spans five lines in every
+    one of these rows, and a pattern reaching across them would also reach
+    into the *next* call.
+    """
+    out = []
+    for m in _LENDS.finditer(src):
+        depth, i = 0, src.index("(", m.start())
+        while i < len(src):
+            if src[i] == "(":
+                depth += 1
+            elif src[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        out.append((m.group(1), "every=True" in src[m.start():i]))
+    return out
+
+
+def _class_can_be_lent_to(name: str) -> bool:
+    """Does any declared row answer "your <class> at-will attack powers
+    that are augmentable"?
+
+    The same clause `augment._lenders` tests at play time, asked at lint
+    time of the whole registry. Written as a separate function rather than
+    imported from it because the two ask it of different things -- one row
+    there, every row here -- and a shared helper would have to take a
+    `Power` the content side does not hold.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Keyword, Usage
+
+    return any(
+        row.cls == name
+        and row.usage is Usage.AT_WILL
+        and row.attack is not None
+        and Keyword.AUGMENTABLE in (row.keywords or ())
+        for row in REGISTRY.values()
+    )
 
 
 def _gates_on_nothing() -> list[tuple[str, str, str]]:

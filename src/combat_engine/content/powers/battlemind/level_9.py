@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import one_hit_rider
 from combat_engine.engine import (
     AC,
     CON,
@@ -33,7 +34,7 @@ _LANDED: set[int] = set()
 
 @power(
     "p11172",
-    dropped=("c.offer_augment()",),
+    dropped=("Effect.ends_on_a_quiet_turn",),
     level=9,
     cls="battlemind",
     usage=DAILY,
@@ -45,10 +46,22 @@ _LANDED: set[int] = set()
 )
 def p11172(c: Cast) -> None:
     """The second way the penalty ends -- the target finishing a turn without
-    attacking -- is dropped; a duration is a `When` and there is no way to add
-    a condition to one. The aspect's whole content is its Augment 1, and that
-    clause is bought when some *other* at-will is augmented while the aspect
-    stands -- nothing hangs a clause on another row's augment."""
+    attacking -- is dropped; a duration is a `When` and there is no way to
+    add a condition to one.
+
+    **The marker was renamed rather than retired.** It read
+    `c.offer_augment()`, which named the aspect half, and that half is
+    written now: `every=True` lends the Augment 1 to every augmentable
+    battlemind at-will, which is what the card describes. What is still
+    missing is the quiet-turn ender, so the marker says that instead -- one
+    symbol, one gap.
+
+    The shift is "before or after the attack", and the clause runs at the
+    moment the points are spent, which is before. That is one of the two
+    printed orders and the row takes it rather than asking, because the
+    choice is only visible when the shift would change what is in reach --
+    and a row that asks on every augmented swing is noise on the other 90%.
+    """
     if c.strike():
         c.damage(c.w(2), c.con_mod)
         c.penalty("attack", c.wis_mod, until=When.SAVE_ENDS)
@@ -57,6 +70,23 @@ def p11172(c: Cast) -> None:
         c.half_damage(c.w(2), c.con_mod)
     if c.first:
         c.effect("aspect", until=When.ENCOUNTER, on=c.me)
+
+        wis = c.wis_mod
+
+        def aspect(use: Cast) -> None:
+            # **The permission is exactly as long as the shift**, which
+            # is what the card says and what `f3224b` could not do: that
+            # row phases until the end of the turn and argues no wall is
+            # in reach of a close burst 1. Half a speed is three or four
+            # squares, so the same argument does not hold here, and
+            # `c.may_enter` waives bodies without waiving walls.
+            through = use.may_enter(side="enemy", on=use.me)
+            use.shift(max(1, use.speed_of() // 2), who=use.me)
+            use.end_effect(through)
+            one_hit_rider(use, wis, "p11172")
+
+        c.lend_augment("battlemind", 1, aspect, every=True, on=c.me,
+                       until=When.ENCOUNTER)
 
 
 @power(

@@ -10224,6 +10224,7 @@ class Cast:
         cost: int,
         clause: Callable[[Cast], None],
         *,
+        every: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -10250,6 +10251,23 @@ class Cast:
         `clause` takes the `Cast` of the row being used, not of the feat --
         it is that row's use the effect joins.
 
+        **`every=True` reads `ref` as a class name rather than a row**, for
+        the five battlemind aspects that print "while in this aspect you can
+        use the following augmentation with your <class> at-will attack
+        powers that are augmentable". That names the character's whole
+        augmentable at-will repertoire, which a ref cannot say and which is
+        not knowable at authoring time either -- it is whatever the draw
+        dealt. The set is tested rather than enumerated: the row's own
+        `cls`, an at-will usage, an attack line, and the augmentable
+        keyword, which is the printed sentence clause for clause.
+
+        **A class lend is read in `augment()` and a ref lend in `lent()`,
+        and the difference is not a preference.** The ref half works only
+        because all five of its lent-to rows call `augment.lent` by hand; a
+        class lend has no such list, and **none of the 28 battlemind rows it
+        reaches asks**. So the read moved to the door every augmentable body
+        already goes through, and `lent()` is now a wrapper over it.
+
         Yours, so it defaults to the caster.
         """
         from .components import Powers
@@ -10259,18 +10277,23 @@ class Cast:
         if known is None:
             return None
         entry = (cost, clause)
-        was = known.lent_augments.get(ref)
-        known.lent_augments[ref] = (*known.lent_augments.get(ref, ()), entry)
+        book = known.lent_class_augments if every else known.lent_augments
+        was = book.get(ref)
+        book[ref] = (*book.get(ref, ()), entry)
 
         def restore() -> None:
             if was is None:
-                known.lent_augments.pop(ref, None)
+                book.pop(ref, None)
             else:
-                known.lent_augments[ref] = was
+                book[ref] = was
 
         return self.world.effects.apply(
             who, self.me, until,
-            label=f"{self.ref} lends {ref} an augment at {cost}",
+            label=(
+                f"{self.ref} lends every {ref} an augment at {cost}"
+                if every else
+                f"{self.ref} lends {ref} an augment at {cost}"
+            ),
             on_end=[restore],
             by=self.ref,
         )

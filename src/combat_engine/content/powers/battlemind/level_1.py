@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.content.powers.augment import augment
+from combat_engine.content.powers.augment import augment, one_hit_rider
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -29,6 +29,7 @@ from combat_engine.engine import (
     MoveEnd,
     Position,
     TurnEnd,
+    TurnStart,
     UpTo,
     When,
     power,
@@ -127,7 +128,6 @@ def p11157(c: Cast) -> None:
 
 @power(
     "p11158",
-    dropped=("c.offer_augment()",),
     level=1,
     cls="battlemind",
     usage=DAILY,
@@ -141,8 +141,15 @@ def p11158(c: Cast) -> None:
     """The aspect is a hold with no content of its own: everything it grants
     is its Augment 1, and that clause is bought when some *other* row is
     augmented -- "while in this aspect you can use the following augmentation
-    with your at-will attack powers". Nothing lets one row add an offer to
-    another row's augment, so it is left out."""
+    with your battlemind at-will attack powers that are augmentable".
+
+    `every=True` is what says that set. It cannot be a list of refs: the
+    repertoire is whatever the draw dealt, and 28 rows in the tree answer
+    the printed description.
+
+    The temporary hit points are the aspect's, so they read the **aspect
+    caster's** Wisdom at the moment the clause runs and not the at-will's.
+    """
     if c.strike():
         c.damage(c.w(2), c.con_mod)
     else:
@@ -151,6 +158,15 @@ def p11158(c: Cast) -> None:
         if c.may("spend a healing surge", who=c.me):
             c.surge(on=c.me)
         c.effect("aspect", until=When.ENCOUNTER, on=c.me)
+
+        wis = c.wis_mod
+
+        def aspect(use: Cast) -> None:
+            use.temp_hp(5 + wis, on=use.me)
+            one_hit_rider(use, wis, "p11158")
+
+        c.lend_augment("battlemind", 1, aspect, every=True, on=c.me,
+                       until=When.ENCOUNTER)
 
 
 @power(
@@ -473,10 +489,15 @@ def p13029(c: Cast) -> None:
     attack=Attack(CON, vs=FORT),
 )
 def p13030(c: Cast) -> None:
-    """The aspect's resist 5 cold is its whole unaugmented content. Its
-    Augment 1 is not an augment of *this* row at all: it is an extra clause
-    the aspect lends to any augmented battlemind at-will, and nothing hangs
-    a clause on another row's augment."""
+    """The aspect's resist 5 cold is its unaugmented content. Its Augment 1
+    is not an augment of *this* row at all: it is an extra clause the aspect
+    lends to any augmented battlemind at-will, which `every=True` says.
+
+    **The lent clause is a slow that fires on a turn boundary**, so it is a
+    watcher and not a condition -- "any enemy that **starts its turn**
+    adjacent to you", which is a different sentence from "enemies adjacent
+    to you are slowed" and would be wrong as an aura.
+    """
     if c.strike():
         c.damage(c.w(), c.con_mod, dtype=DamageType.COLD)
         c.push(1)
@@ -486,6 +507,19 @@ def p13030(c: Cast) -> None:
         c.slowed(until=When.SAVE_ENDS)
     if c.first:
         c.resist(5, DamageType.COLD, until=When.ENCOUNTER)
+
+        def aspect(use: Cast) -> None:
+            def slow(ev: TurnStart) -> None:
+                if ev.actor in use.enemies and use.adjacent_to(
+                    use.me, ev.actor,
+                ):
+                    use.slowed(on=ev.actor, until=When.EOT)
+
+            use.watch(TurnStart, slow, until=When.SONT, on=use.me,
+                      label="p13030 slows what steps up")
+
+        c.lend_augment("battlemind", 1, aspect, every=True, on=c.me,
+                       until=When.ENCOUNTER)
 
 
 @power(

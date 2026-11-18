@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import one_hit_rider
 from combat_engine.engine import (
     AC,
     CON,
@@ -33,7 +34,6 @@ from . import shift_beside
 
 @power(
     "p11165",
-    dropped=("c.offer_augment()",),
     level=5,
     cls="battlemind",
     usage=DAILY,
@@ -47,8 +47,12 @@ def p11165(c: Cast) -> None:
     """The aspect holds nothing of its own: resist 5 and the Wisdom rider are
     its Augment 1, and that clause is bought when some *other* row is
     augmented -- "while in this aspect you can use the following augmentation
-    with your at-will attack powers". Nothing lets one row add an offer to
-    another row's augment, so it is left out."""
+    with your battlemind at-will attack powers that are augmentable", which
+    `every=True` says.
+
+    The resist is **all damage** and lasts to the end of the augmented row's
+    turn, not the aspect's -- the clause runs during that use.
+    """
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.prone()
@@ -56,6 +60,15 @@ def p11165(c: Cast) -> None:
         c.half_damage(c.w(), c.con_mod)
     if c.first:
         c.effect("aspect", until=When.ENCOUNTER, on=c.me)
+
+        wis = c.wis_mod
+
+        def aspect(use: Cast) -> None:
+            use.resist(5, until=When.EONT, on=use.me)
+            one_hit_rider(use, wis, "p11165")
+
+        c.lend_augment("battlemind", 1, aspect, every=True, on=c.me,
+                       until=When.ENCOUNTER)
 
 
 @power(
@@ -143,10 +156,15 @@ def p12423(c: Cast) -> None:
     attack=Attack(CON, vs=WILL),
 )
 def p13043(c: Cast) -> None:
-    """The aspect's Intimidate bonus is not a combat effect, and its
-    Augment 1 is a clause lent to *another* row's augment -- an at-will
-    augmented while the aspect stands. Nothing hangs a clause on another
-    row's augment, so the hold carries nothing."""
+    """The aspect's Intimidate bonus is not a combat effect. Its Augment 1
+    is a clause lent to *another* row's augment -- an at-will augmented
+    while the aspect stands -- which `every=True` says.
+
+    **"Each target of the at-will attack", not each target hit**, so this
+    one needs no watcher: the target list is settled before any body runs
+    and `Cast.targets` holds it, where the sibling aspects' "a creature hit
+    by the attack" is only answerable once the use is over.
+    """
     if c.strike():
         c.damage(c.w(), c.con_mod)
         c.damage("1d12", dtype=DamageType.PSYCHIC)
@@ -155,6 +173,13 @@ def p13043(c: Cast) -> None:
         c.half_damage("1d12", dtype=DamageType.PSYCHIC)
     if c.first:
         c.effect("aspect", until=When.ENCOUNTER, on=c.me)
+
+        def aspect(use: Cast) -> None:
+            for who in use.targets:
+                use.penalty("attack", 2, until=When.EONT, on=who)
+
+        c.lend_augment("battlemind", 1, aspect, every=True, on=c.me,
+                       until=When.ENCOUNTER)
 
 
 @power(

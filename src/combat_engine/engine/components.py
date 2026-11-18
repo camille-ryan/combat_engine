@@ -1402,6 +1402,21 @@ class Powers:
     lent_augments: dict[
         str, tuple[tuple[int, Callable[[Any], None]], ...]
     ] = field(default_factory=dict)
+    #: The same lend aimed at a **class of rows** instead of one ref,
+    #: keyed by class name. Five battlemind aspects print "while in this
+    #: aspect you can use the following augmentation with your <class>
+    #: at-will attack powers that are augmentable", which names a set the
+    #: ref-keyed dict above cannot say -- the character's whole augmentable
+    #: at-will repertoire, whatever it happens to hold.
+    #:
+    #: `content.powers.augment.augment` is the read, and it is read there
+    #: rather than in each row because **none of the 28 rows this reaches
+    #: asks**: the ref-keyed half works only because all five of its
+    #: lent-to rows call `augment.lent` by hand, and a class lend has no
+    #: such list to edit.
+    lent_class_augments: dict[
+        str, tuple[tuple[int, Callable[[Any], None]], ...]
+    ] = field(default_factory=dict)
     #: What this creature's basic attack is. A monster points at one of its
     #: own abilities; everyone else uses the engine's melee basic.
     basic: str = "mba"

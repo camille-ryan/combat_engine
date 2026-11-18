@@ -24726,6 +24726,242 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def an_aspect_lends_its_augment_to_a_whole_class(out: Result) -> None:
+    """"While in this aspect you can use the following augmentation with your
+    battlemind at-will attack powers that are augmentable."
+
+    Five aspects print that sentence and none of them could say it.
+    `c.lend_augment` keyed on **one ref**, which is right for the four feats
+    that print "your <named power> gains the augmentable keyword" and cannot
+    name a set the draw decides. `every=True` reads the first argument as a
+    class and tests the rest of the sentence against the row: at-will, an
+    attack, and the augmentable keyword.
+
+    **The reader had to move, and that is the half worth knowing.** The
+    ref-keyed lend works only because all five of its lent-to rows call
+    `augment.lent(c)` by hand -- and **none of the 28 rows a class lend
+    reaches asks**. So the read is in `augment()`, the door every augmentable
+    body already goes through, and `lent()` is now a wrapper over it.
+
+    The clause also had to be reachable: an aspect's Augment 1 is usable with
+    a row printing only an Augment 2, so a lent cost joins the offer. That is
+    the second marker these rows carried.
+
+    **One point in the pool, deliberately.** `augment` offers richest-first
+    on the argument that an unspent point is lost, so with four points a
+    headless run takes 2 and the aspect's 1 is never paid. Which spend the AI
+    *prefers* is a policy question and not this rule's; what is asserted here
+    is that paying 1 pays out.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content.powers import augment as _augment
+    from combat_engine.engine import events as _ev
+    from combat_engine.engine.components import (
+        Health,
+        PowerPoints,
+        Powers,
+        Stats,
+    )
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Ability
+
+    #: An augmentable battlemind at-will attack row that settles its own
+    #: augment in the body. Named rather than searched for, so the rule
+    #: fails loudly if it stops answering the printed description.
+    AT_WILL = "p13025"
+    #: Two battlemind at-wills the printed sentence does **not** reach, one
+    #: per clause. **Both, because one is not enough**: the first plant of
+    #: this rule deleted the augmentable test and every assertion still
+    #: held, since `p10439` fails the *attack* clause as well and the
+    #: keyword was never what was being asked.
+    NO_ATTACK = "p10438"
+    NO_KEYWORD = "p2623b"
+
+    def play(aspect: str, row: str, *, up: bool = True, aim: int = 1,
+             points: int = 1, hit: bool = True) -> dict[str, Any] | None:
+        world, me, _ = _audit.board(aspect, 1)
+        known, pp = world.get(me, Powers), world.get(me, PowerPoints)
+        if known is None or pp is None:
+            return None
+        known.known.append(row)
+        foes = enemies(world, me)
+        if len(foes) < aim + 1:
+            return None
+        if up:
+            use(world, me, aspect, targets=[foes[0]], spend=False)
+        pp.points = points
+        if hit:
+            world.rng.loaded = 20
+        targets = foes[1:1 + aim]
+        before = {f: world.get(f, Health).hp for f in targets}
+        temp = world.get(me, Health).temp
+        mark = len(world.bus.log)
+        use(world, me, row, targets=targets, spend=False)
+        blows = [
+            e.amount for e in world.bus.log[mark:]
+            if isinstance(e, _ev.DamageApplied)
+        ]
+        return {
+            "world": world, "me": me, "targets": targets,
+            "spent": _augment.spent_on(me, row),
+            "temp_gained": world.get(me, Health).temp - temp,
+            "dealt": {f: before[f] - world.get(f, Health).hp for f in targets},
+            "blows": blows,
+            "known": known,
+        }
+
+    # -- the lend lands on the class, not on a row ------------------------
+    world, me, _ = _audit.board("p11158", 1)
+    known = world.get(me, Powers)
+    foes = enemies(world, me)
+    out.that(not known.lent_class_augments,
+             "no class lend stands before the aspect is used")
+    use(world, me, "p11158", targets=[foes[0]], spend=False)
+    out.that(list(known.lent_class_augments) == ["battlemind"],
+             "**p11158's aspect lends to the class and not to a row** --"
+             " the printed set is the character's whole augmentable at-will"
+             " repertoire, which no list of refs can name because the draw"
+             " decides it",
+             f"lent to {dict(known.lent_class_augments)!r},"
+             f" ref-keyed {dict(known.lent_augments)!r}")
+    out.that(not known.lent_augments,
+             "and nothing went into the ref-keyed book, which is the half"
+             " that would have made the lend unreachable")
+
+    # -- p11158: both halves of its Augment 1 ----------------------------
+    wis = (world.get(me, Stats).scores.get(Ability.WIS, 10) - 10) // 2
+    run = play("p11158", AT_WILL)
+    if run is None:
+        out.skip("the board could not field an aspect and two foes")
+        return
+    out.that(run["spent"] == 1,
+             "the at-will is paid for at the lent cost",
+             f"spent {run['spent']}")
+    out.that(run["temp_gained"] == 5 + wis,
+             "**the temporary hit points are the aspect's half of a cost"
+             " paid on another row** -- 5 + the Wisdom modifier, landing on"
+             " a use of an at-will whose own card says nothing about it",
+             f"gained {run['temp_gained']}, wanted {5 + wis}")
+    out.that(wis in run["blows"],
+             "and the extra damage lands as a blow of its own, exactly the"
+             " Wisdom modifier -- counted off the log rather than differenced"
+             " out of a total, because the aspect's own attack moves the dice"
+             " and the two arms never deal the same damage",
+             f"blows {run['blows']}, wanted one of {wis}")
+
+    # -- the control: no aspect, so no clause ----------------------------
+    bare = play("p11158", AT_WILL, up=False)
+    out.that(bare is not None and bare["spent"] == 1,
+             "the control pays the same point",
+             f"spent {bare and bare['spent']}")
+    out.that(bare["temp_gained"] == 0,
+             "**and with no aspect standing the same spend buys none of"
+             " it** -- which is the control that tells a lent clause apart"
+             " from a row that always did this",
+             f"gained {bare['temp_gained']}")
+    out.that(wis not in bare["blows"] or len(bare["blows"]) == 1,
+             "and the rider's blow is absent from the control",
+             f"blows {bare['blows']}")
+
+    # -- the printed description narrows --------------------------------
+    from combat_engine.engine.types import Keyword as _Kw
+
+    out.that(REGISTRY[NO_ATTACK].attack is None
+             and _Kw.AUGMENTABLE in (REGISTRY[NO_ATTACK].keywords or ()),
+             f"{NO_ATTACK} is a battlemind at-will that **is** augmentable"
+             " and is not an attack, so it isolates the attack clause."
+             " `p10439` was here first and fails BOTH clauses, which made it"
+             " useless as a negative case for either -- deleting the attack"
+             " test left this rule green")
+    out.that(REGISTRY[NO_KEYWORD].attack is not None
+             and _Kw.AUGMENTABLE not in (REGISTRY[NO_KEYWORD].keywords or ()),
+             f"{NO_KEYWORD} is a battlemind at-will attack that is **not"
+             " augmentable**, which is the other clause and the one a"
+             " single negative case cannot test")
+    reached = _augment._lenders
+    world2, me2, _ = _audit.board("p11158", 1)
+    foes2 = enemies(world2, me2)
+    use(world2, me2, "p11158", targets=[foes2[0]], spend=False)
+
+    class _Ask:
+        """The two fields `_lenders` reads, so the test can be asked of a
+        row without playing it -- `augment()` is reached per use and the
+        question here is about the description, not about a use."""
+
+        def __init__(self, ref: str) -> None:
+            self.ref, self.me, self.world = ref, me2, world2
+
+    out.that(bool(reached(_Ask(AT_WILL))),
+             f"the class lend reaches {AT_WILL}, which answers every clause"
+             " of the printed description")
+    out.that(not reached(_Ask(NO_ATTACK)),
+             f"**and does not reach {NO_ATTACK}** -- the sentence says at-will"
+             " ATTACK powers, and a lend ignoring that word would hand the"
+             " clause to rows that swing at nobody",
+             f"lenders {reached(_Ask(NO_ATTACK))!r}")
+    out.that(not reached(_Ask(NO_KEYWORD)),
+             f"**nor {NO_KEYWORD}** -- it attacks and it is at-will, and the"
+             " only thing keeping it out is the augmentable keyword. Asserted"
+             " separately for that reason: with only the first negative case"
+             " the keyword test could be deleted and this rule stayed green",
+             f"lenders {reached(_Ask(NO_KEYWORD))!r}")
+    out.that(reached(_Ask("p13025")) and not reached(_Ask("p13030")),
+             "**nor `p13030`, which is an aspect that attacks and carries"
+             " the augmentable keyword itself** -- the only thing keeping a"
+             " daily out is the usage clause, so this is the third negative"
+             " case and the third thing a single one cannot test. The"
+             " assertion used to name `p11158`, whose card has no"
+             " augmentable keyword at all, so deleting the usage test left"
+             " this rule green",
+             f"lenders {reached(_Ask('p13030'))!r}")
+
+    # -- the OFFER half, on a row that prints no Augment 1 ---------------
+    #
+    # `p13466` offers only 2 in its body, so with a single point in the
+    # pool the lent cost is the **only** thing that can be paid -- and
+    # before the lend joined the offer list there was nothing to pay at
+    # all. That was the second marker these five rows carried, and it is
+    # not visible on `p13025`, which offers both costs anyway.
+    only_two = play("p11158", "p13466")
+    if only_two is None:
+        out.skip("the board could not field p13466")
+    else:
+        out.that(only_two["spent"] == 1,
+                 "**a lent cost is offered on a row whose own card prints"
+                 " no Augment 1** -- p13466 offers only 2, so with one"
+                 " point the aspect's clause is the only purchase on the"
+                 " table, and without the lend joining the offer there was"
+                 " none",
+                 f"spent {only_two['spent']}")
+        out.that(only_two["temp_gained"] == 5 + wis,
+                 "and it pays out there too",
+                 f"gained {only_two['temp_gained']}")
+
+    # -- p13043: each TARGET, not each target hit ------------------------
+    pair = play("p13043", AT_WILL, aim=2, hit=False)
+    if pair is None:
+        out.skip("the board could not field two foes for the burst")
+    else:
+        world3 = pair["world"]
+        penalised = [
+            t for t in pair["targets"]
+            if any("attack" in (e.label or "")
+                   for e in world3.effects.of(t))
+        ]
+        out.that(pair["spent"] == 1,
+                 "p13043's aspect is paid for on the at-will",
+                 f"spent {pair['spent']}")
+        out.that(len(penalised) == len(pair["targets"]),
+                 "**p13043 penalises each TARGET of the at-will, hit or"
+                 " missed** -- the die is left alone here on purpose, so the"
+                 " assertion is about the target line and not about the"
+                 " rolls; its two sibling aspects print 'a creature hit by"
+                 " the attack' and need a watcher for exactly that reason",
+                 f"{len(penalised)} of {len(pair['targets'])} penalised")
+
+
 def one_effect_two_enders(out: Result) -> None:
     """"You can end this as a free action ... it can end it as a minor."
 
@@ -92675,6 +92911,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "class_augment": (
+        an_aspect_lends_its_augment_to_a_whole_class,
+        "c.lend_augment(every=True) lends an aspect's Augment 1 to a whole"
+        " class of at-wills (p11158 p11165 p11172 p13030 p13043)",
+    ),
     "two_enders": (
         one_effect_two_enders,
         "c.endable(also=) gives one effect two enders at their own printed"
