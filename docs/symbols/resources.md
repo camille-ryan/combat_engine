@@ -19,6 +19,8 @@ Things a creature spends, and the budget it spends them from.
   - Spend a surge and gain nothing for it.
 - `c.surge(self, *, on: 'int | None' = None, bonus: 'int' = 0) -> 'int'`
   - Spend a healing surge: a quarter of maximum hit points.
+- `c.surge_from(self, who: 'int | None' = None, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Let a creature spend somebody else's healing surges as its own.
 - `c.surge_value(self, of: 'int | None' = None) -> 'int'`
   - A quarter of that creature's maximum, which is what a surge heals.
 

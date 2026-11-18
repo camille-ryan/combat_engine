@@ -1398,38 +1398,37 @@ def p15887(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_ALLY,
     keywords=ARCANE,
-    dropped=("c.surge_from(who)",),
 )
 def p15888(c: Cast) -> None:
     """The trade is `c.give` with a body: a minor action the ally takes once,
     which spends one of the caster's levelled rows and hands the ally back an
-    expended row of the same usage and level. Spending the ally's surges as
-    though they were the caster's is a standing permission and there is no
-    verb that lends a surge pool.
+    expended row of the same usage and level.
 
-    **Measured rather than asserted, because "nothing can do it" is the
-    marker shape that is usually wrong here.** The spend *is* visible and
-    refusable -- `SurgeSpent` is a `Decision` and `resolve.spend_surge`
-    returns `not spent.cancelled` -- so a watch could see every surge this
-    caster pays. What no verb takes is a different *pool*:
-    `resolve.spend_surge` decrements the actor's own `Health.surges` and
-    names no alternative, and `c.surge`, `c.spend_surge`,
-    `c.regain_surge`, `c.second_wind` and `diseases.lost_surges` are all
-    about the creature in `on=`.
+    **The lent surge pool is written, and the old note had already found the
+    right place for it: "where the pool is read".** `resolve.spend_surge`
+    decremented the actor's own `Health.surges` and named no alternative,
+    which is why `c.surge`, `c.spend_surge`, `c.regain_surge` and
+    `c.second_wind` could none of them say this -- they are all about the
+    creature in `on=`. `c.surge_from` writes `Health.surges_from` and the
+    spend consults it.
 
-    So the emulation available today is two bookkeeping moves standing in
-    for one -- `c.spend_surge(on=mate)` plus `c.regain_surge(on=c.me)` on
-    every `SurgeSpent` -- and it is deliberately not written. It
-    hand-writes state the engine derives; it reports the ally's pool as
-    spent for nothing and the caster's as refunded, which is two `Note`s
-    saying something that did not happen; and `c.regain_surge` is a bare
-    `health.surges += count` against no ceiling, so a caster refunded
-    above `Health.max_surges` would be handed a pool the extended rest
-    never gave him. `c.surge_from(who)` is one gap and the right place for
-    it is where the pool is read."""
+    **The emulation that note rejected is still the wrong answer** and the
+    reasons are worth keeping, because they are what made this a field
+    rather than two calls: spending the ally's surge and refunding the
+    caster's announces two surges where one was spent, reports both pools
+    wrongly in between, and `c.regain_surge` is a bare `surges += count`
+    against no ceiling, so the refund could hand a caster a larger pool than
+    the extended rest ever gave him.
+
+    Own pool first, which is what *"as if they were your own"* means -- a
+    pool extension, not a substitution -- so this costs the ally nothing
+    until the caster is dry. `until=When.ENCOUNTER` rather than the pact's
+    own "until you end it": the pact is a daily and the permission is the
+    half with no printed clock, so it runs to the end of the fight."""
     mate = c.target
     if mate is None:
         return
+    c.surge_from(mate, on=c.me, until=When.ENCOUNTER)
 
     def trade(who: int) -> None:
         ours = c.world.get(c.me, Powers)

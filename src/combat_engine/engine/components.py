@@ -203,6 +203,31 @@ class Health:
     #: creature is built, because `surges` is spent down during the day
     #: and nothing else remembers what it started with.
     max_surges: int = 0
+    #: **Whose pool this creature may draw on once its own is empty**, or 0.
+    #:
+    #: One card prints it -- *"you can spend the target's healing surges as
+    #: if they were your own, if the target allows it"* -- and `p15888`'s own
+    #: note measured why no verb could: `resolve.spend_surge` decrements the
+    #: actor's own `surges` and names no alternative, and `c.surge`,
+    #: `c.spend_surge`, `c.regain_surge` and `c.second_wind` are all about
+    #: the creature in `on=`.
+    #:
+    #: **Here rather than on the borrower's row**, because this is the field
+    #: the spend already reads. The emulation that field avoids is two
+    #: bookkeeping moves standing in for one -- spend the ally's, refund the
+    #: caster's -- which `p15888` rejected for three reasons that still hold:
+    #: it announces two surges where one was spent, it reports both pools
+    #: wrongly in between, and `c.regain_surge` has no ceiling so the refund
+    #: could hand a caster more than an extended rest ever gave.
+    #:
+    #: **Own pool first, and only then the lender's.** *"As if they were your
+    #: own"* is a pool extension rather than a substitution, so a caster with
+    #: surges of his own spends those -- which also keeps every existing
+    #: spend untouched, since the field is 0 on everybody who was not lent to.
+    #:
+    #: Written by `c.surge_from`, read in `resolve.spend_surge`, which
+    #: announces whose pool paid on `SurgeSpent.pool`.
+    surges_from: int = 0
     #: **A monster dies at 0.** Only a character keeps fighting into the
     #: negatives and only a character rolls death saves. Without this
     #: every monster inherited the player's floor and was still alive at

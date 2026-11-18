@@ -932,6 +932,19 @@ class SurgeSpent(Decision):
     #: Hit points the surge actually restored. 0 for a surge spent for
     #: nothing, which is most of them.
     healed: int = 0
+    #: **Whose pool actually paid**, when it was not the spender's own. 0 is
+    #: the ordinary case and means `actor` paid from his own surges.
+    #:
+    #: One card lets a creature spend an ally's surges as if they were its
+    #: own (`Health.surges_from`, `p15888`). Without this field the spend is
+    #: unobservable from the lender's side: `actor` is the borrower and
+    #: `left` is the pool that moved, so a row counting *the ally's* surges
+    #: would see a number fall with nothing to attribute it to, and "when an
+    #: ally spends a healing surge" would answer about the wrong creature.
+    #:
+    #: Named rather than derived, because a listener cannot work it out:
+    #: `left` alone does not say which `Health` it came off.
+    pool: int = 0
 
 
 @dataclass

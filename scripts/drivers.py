@@ -13703,6 +13703,158 @@ def chosen_die_face(out: Result) -> None:
              f"{dict(known.picked_roll) if known else None}")
 
 
+def lent_surge_pool(out: Result) -> None:
+    """*"You can spend the target's healing surges as if they were your own,
+    if the target allows it."* -- `p15888`'s pact.
+
+    **"As if they were your own" is a pool extension, not a substitution**,
+    and that is the whole design. A borrower with surges of his own spends
+    those and only reaches the lender's when dry, which is both the printed
+    reading and what leaves every other spend in the game on the path it was
+    already on: `Health.surges_from` is 0 on anybody never lent to.
+
+    **The two-call emulation is what this replaces**, and `p15888`'s own note
+    had already refused it for three reasons that are each asserted here or
+    impossible by construction: spending the ally's and refunding the
+    caster's announces **two** surges where one was spent, reports both pools
+    wrongly in between, and `c.regain_surge` has no ceiling so the refund
+    could exceed what an extended rest gave. One decrement, one event.
+
+    **`SurgeSpent.pool` is the half a counter cannot derive.** `actor` is the
+    borrower and `left` is whichever pool moved, so without a named field a
+    row counting *the ally's* surges would watch a number fall with nothing
+    to attribute it to. Asserted as 0 while the caster pays his own and as
+    the lender's id afterwards -- the same event, two different answers.
+
+    The negative control is the one that matters: an **unlent** caster with
+    an empty pool cannot spend at all. Without it, "the spend succeeded"
+    says nothing about where the surge came from.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import resolve
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SurgeSpent
+    from combat_engine.engine.query import allies
+
+    def pact():  # noqa: ANN202
+        """Pose, run the row on an ally, and hand back both pools."""
+        world, me, _ = _posed("p15888", 1)
+        mates = sorted(allies(world, me))
+        if not mates:
+            return world, me, None, [], None, None
+        mate = mates[0]
+        log: list[SurgeSpent] = []
+        world.bus.on(SurgeSpent, log.append)
+        c = Cast(world=world, me=me, ref="p15888")
+        c.target = mate
+        REGISTRY["p15888"].body(c)
+        return (world, me, mate, log,
+                world.get(me, Health), world.get(mate, Health))
+
+    world, me, mate, log, mine, theirs = pact()
+    out.that(mate is not None, "the board deals an ally to make the pact with",
+             f"{mate}")
+    if mate is None or mine is None or theirs is None:
+        return
+    out.that(mine.surges_from == mate,
+             "p15888's body lends the ally's pool to the caster -- the row"
+             " arm, and the plant that matters is deleting `c.surge_from`"
+             " from its body",
+             f"{mine.surges_from}")
+    out.that(theirs.surges_from == 0,
+             "and the lend is one-way: the ALLY is not given the caster's"
+             " pool, which a symmetric write would have done silently",
+             f"{theirs.surges_from}")
+
+    # -- own pool first, which is what "as if they were your own" means ----
+    mine.surges, theirs.surges = 2, 5
+    out.that(mine.surges > 0,
+             "the caster has surges of his own -- the premise for the two"
+             " lines below, which are about WHICH pool pays",
+             f"{mine.surges}")
+    before = len(log)
+    out.that(resolve.spend_surge(world, me), "the caster spends one")
+    out.that(mine.surges == 1 and theirs.surges == 5,
+             "it comes off the CASTER's pool and the ally's is untouched --"
+             " a substitution rather than an extension would have charged"
+             " the ally while the caster still had two",
+             f"caster {mine.surges}, ally {theirs.surges}")
+    fresh = log[before:]
+    out.that(len(fresh) == 1,
+             "**one** surge announced, not two -- the two-call emulation this"
+             " replaces would have emitted a spend and a refund",
+             f"{len(fresh)}")
+    out.that(bool(fresh) and fresh[-1].pool == 0,
+             "and `SurgeSpent.pool` is 0, meaning the spender paid his own",
+             f"{fresh[-1].pool if fresh else None}")
+
+    # -- and the lender's once the borrower is dry -------------------------
+    out.that(resolve.spend_surge(world, me), "the caster spends his last")
+    out.that(mine.surges == 0,
+             "the caster is dry -- the premise for the lend being reached at"
+             " all",
+             f"{mine.surges}")
+    before = len(log)
+    out.that(resolve.spend_surge(world, me),
+             "and can still spend, which is the clause")
+    out.that(theirs.surges == 4 and mine.surges == 0,
+             "the surge comes off the ALLY's pool and the caster's stays at"
+             " 0 -- no refund, no second decrement",
+             f"caster {mine.surges}, ally {theirs.surges}")
+    fresh = log[before:]
+    out.that(len(fresh) == 1 and fresh[-1].actor == me
+             and fresh[-1].pool == mate,
+             "and the one event says the CASTER spent it out of the ALLY's"
+             " pool -- `actor` is the borrower, `pool` is the lender, and a"
+             " row counting the ally's surges needs the second to attribute"
+             " the first",
+             f"{[(e.actor, e.pool) for e in fresh]}")
+
+    # -- the control: without the lend, dry is dry ------------------------
+    world2, me2, _ = _posed("p15888", 1)
+    bare = world2.get(me2, Health)
+    out.that(bare is not None and bare.surges_from == 0,
+             "the control caster has been lent nothing", f"{bare}")
+    if bare is not None:
+        bare.surges = 1
+        out.that(resolve.spend_surge(world2, me2),
+                 "spends his own one")
+        out.that(not resolve.spend_surge(world2, me2),
+                 "and cannot spend a second -- so every assertion above is"
+                 " about the lend and not about `spend_surge` having gone"
+                 " permissive",
+                 f"{bare.surges}")
+
+    # -- a lender with nothing to lend ------------------------------------
+    world3, me3, _mate3, _log3, mine3, theirs3 = pact()
+    if mine3 is not None and theirs3 is not None:
+        mine3.surges, theirs3.surges = 0, 0
+        out.that(not resolve.spend_surge(world3, me3),
+                 "a lender with an empty pool lends nothing, rather than"
+                 " paying out of a pool that is not there",
+                 f"caster {mine3.surges}, ally {theirs3.surges}")
+        theirs3.surges = 1
+        out.that(resolve.spend_surge(world3, me3)
+                 and theirs3.surges == 0 and mine3.surges == 0,
+                 "and one surge in the lender's pool is one the borrower can"
+                 " spend -- the same board, one number changed, so the two"
+                 " answers are about the pool and not about the board",
+                 f"caster {mine3.surges}, ally {theirs3.surges}")
+
+    # -- the refusal ------------------------------------------------------
+    try:
+        Cast(world=world, me=me, ref="p15888").surge_from(me, on=me)
+        out.that(False, "lending a creature its own pool is refused", "accepted")
+    except ValueError:
+        out.that(True,
+                 "lending a creature its own pool is refused -- it is what"
+                 " every spend already does, so the call is a mistake rather"
+                 " than a no-op, and a no-op would read as a working pact")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -96167,6 +96319,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "lent_surges": (lent_surge_pool,
+                    "one creature spends another's healing surges as its"
+                    " own; own pool first, and one event"),
     "picked_die": (chosen_die_face,
                    "one row chooses the face of another row's d6; six"
                    " printed branches, one arm each"),

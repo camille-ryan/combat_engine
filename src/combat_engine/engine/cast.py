@@ -18228,6 +18228,69 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         """
         return self.bonus("no_run", 1, on=on, until=until, kind="untyped")
 
+    def surge_from(
+        self,
+        who: int | None = None,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Let a creature spend somebody else's healing surges as its own.
+
+        *"You can spend the target's healing surges as if they were your own,
+        if the target allows it."* `who` is the lender and `on` is the
+        borrower, defaulting to the **caster** -- which is the opposite way
+        round from most of this class and is what the one printed card says:
+        the pact's target lends, and the character who made it borrows.
+
+        **Own pool first.** "As if they were your own" extends a pool rather
+        than replacing it, so a borrower with surges of his own spends those
+        and only reaches the lender's when empty. That is also what keeps
+        every other spend in the game untouched: `Health.surges_from` is 0 on
+        anybody never lent to, so `resolve.spend_surge` takes exactly the
+        path it did before.
+
+        **The permission is the consent.** The printed *"if the target allows
+        it"* is settled when the pact is made -- the lender is the target of
+        a row it agreed to -- rather than re-asked on every surge. Asking per
+        spend would put a prompt inside `resolve.spend_surge`, which has no
+        `Cast` and no row to attribute the question to.
+
+        **Not two bookkeeping moves**, which is what this replaces and why it
+        is a field rather than a pair of calls. Spending the ally's and
+        refunding the caster's announces two surges where one was spent,
+        reports both pools wrongly in between, and `c.regain_surge` has no
+        ceiling -- so the refund could hand a caster more than an extended
+        rest ever gave him. `p15888`'s note worked that out before the verb
+        existed.
+
+        `SurgeSpent.pool` names the lender when one pays, so the spend is
+        observable from the lending side too.
+        """
+        lender = self.me if who is None else who
+        borrower = self.me if on is None else on
+        if lender == borrower:
+            raise ValueError(
+                f"{self.ref}: surge_from lends {lender} its own pool, which "
+                f"is what every spend already does"
+            )
+        health = self.world.get(borrower, Health)
+        if health is None:
+            return None
+        before = health.surges_from
+        health.surges_from = lender
+
+        def _off() -> None:
+            health.surges_from = before
+
+        def _on() -> None:
+            health.surges_from = lender
+
+        return self.world.effects.apply(
+            borrower, self.me, until, label=f"{self.ref} lends surges",
+            on_suspend=[_off], on_resume=[_on], by=self.ref,
+        )
+
     def regain_surge(self, count: int = 1, *, on: int | None = None) -> int:
         """"Each target regains a healing surge." Returns how many it now has.
 

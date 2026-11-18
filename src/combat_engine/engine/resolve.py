@@ -1897,17 +1897,36 @@ def spend_surge(
     would have the two windows disagree about the same field.
     """
     health = world.get(eid, Health)
-    if health is None or health.surges <= 0:
+    if health is None:
+        return False
+    # **A lent pool, once this creature's own is empty.** One card prints
+    # *"you can spend the target's healing surges as if they were your
+    # own"*, which is a pool extension rather than a substitution -- so a
+    # spender with surges of his own spends those, and `surges_from` is 0
+    # on everybody who was never lent to, leaving every other spend on the
+    # path it was already on. `Health.surges_from` has the argument.
+    pool, paid_by = health, 0
+    if health.surges <= 0 and health.surges_from:
+        lent = world.get(health.surges_from, Health)
+        if lent is not None:
+            pool, paid_by = lent, health.surges_from
+    # **One emptiness test for both pools**, which is why there is no
+    # `lent.surges > 0` above: an empty lender falls through to here exactly
+    # as an empty own pool does. That guard was written and a plant removing
+    # it passed -- it was redundant, and a redundant guard beside a real one
+    # reads as if the two cases differed.
+    if pool.surges <= 0:
         return False
 
     def take(ev: SurgeSpent) -> None:
-        health.surges -= 1
-        ev.left = health.surges
+        pool.surges -= 1
+        ev.left = pool.surges
 
     spent = world.bus.emit(
         SurgeSpent(
-            actor=eid, left=health.surges - 1, source=source,
+            actor=eid, left=pool.surges - 1, source=source,
             granted_by=granted_by, power=power, healed=healed,
+            pool=paid_by,
         ),
         take,
     )

@@ -579,7 +579,10 @@ CATEGORIES: dict[str, dict] = {
                 "death_save_failure",
                 "dailies_per_day",
                 "regain_surge", "second_wind", "spend_surge",
-                "surge", "surge_value",
+                # `surge_from` lends a whole POOL, where the five around it
+                # are each about one surge belonging to the creature in
+                # `on=`. That difference is the gap it was built for.
+                "surge", "surge_from", "surge_value",
             ]),
             ("power points and augments", [
                 # `augment` is the header's spend and `augment_spend` the
