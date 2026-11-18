@@ -15258,6 +15258,99 @@ def a_card_knows_whether_it_is_a_utility(out: Result) -> None:
              f" level {get(attack_ref).level}")
 
 
+def a_printed_hazard_is_softened_like_a_trap(out: Result) -> None:
+    """*"Trigger: You take damage from a trap, a hazard, or a fall."* --
+    `p16436`.
+
+    **A marker came off here, so this rule is what replaces it.** The row
+    carried `dropped=("c.is_hazard()")` on the reasoning that a hazard's
+    damage "arrives from whoever made the zone and is indistinguishable
+    from an attack's". That is true of `c.zone(hindering=)` and false of a
+    printed hazard, which is a row of the same `trap` table -- 397 traps
+    against 221 hazards, split only by the unread `kind` column -- armed by
+    the same `terrain.arm` and carrying the same `Trap` component. So
+    `c.is_trap`, already the row's gate, answers for both.
+
+    **The creature arm is the control and is why the other two mean
+    anything.** A row that reduced every incoming blow would pass a
+    hazard-only assertion and a trap-only one; what the card asks is that
+    the source decides. Driven at level 10, where the printed reduction is
+    5 + 10/2 = 10, with 25 points incoming so the arithmetic is visible --
+    a trap rolling 3 floors to 0 either way and cannot tell a reduction
+    from a cancellation.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.terrain import arm
+    from combat_engine.db import game
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Trap
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    kinds = {r["ref"]: (r["kind"] or "") for r in
+             game().execute("SELECT ref, kind FROM trap")}
+    out.that(sum("hazard" in k for k in kinds.values()) > 100,
+             "print tells a hazard from a trap in the `kind` column -- the"
+             " premise the retired marker got wrong",
+             f"{sum('hazard' in k for k in kinds.values())} hazard rows")
+
+    def drive(which: str) -> tuple[str, int]:
+        """Hand the row 25 points from that source; answer what survives."""
+        world, me, _ = _board("p16436", 1)
+        at = must(world.get(me, Position), "the character stands").square
+        if which == "creature":
+            foes = sorted(enemies(world, me))
+            if not foes:
+                return "", -1
+            src, label = foes[0], "creature"
+        else:
+            src = arm(world, (at[0] + 1, at[1]), level=10, ref="drivers:haz",
+                      pick=Random(0 if which == "hazard" else 1))
+            label = kinds.get(must(world.get(src, Trap), "armed").ref, "?")
+        ev = DamageRolled(source=src, target=me, amount=25,
+                          dtype=DamageType.UNTYPED, detail="drivers")
+        c = Cast(world=world, me=me, ref="p16436")
+        c.trigger = ev
+        out.that(c.level == 10,
+                 f"the {which} arm is driven at the printed level, so the"
+                 " reduction is 5 + 10/2 = 10 rather than a number the board"
+                 " happened to deal",
+                 f"level {c.level}")
+        REGISTRY["p16436"].body(c)
+        return label, ev.amount
+
+    hazard = drive("hazard")
+    trap = drive("trap")
+    creature = drive("creature")
+
+    out.that("hazard" in hazard[0],
+             "seed 0 at level 10 arms a printed HAZARD -- the premise, since"
+             " `printed_trap` filters on level alone and the draw decides"
+             " which kind turns up",
+             f"{hazard[0]!r}")
+    out.that(hazard[1] == 15,
+             "and 25 points from it reach the character as 15: the hazard"
+             " third of the trigger, which the marker said was unwritten",
+             f"25 -> {hazard[1]}")
+    out.that(trap[0] == "trap",
+             "seed 1 arms a printed TRAP -- the pair, so a rule that armed"
+             " one kind twice cannot pass",
+             f"{trap[0]!r}")
+    out.that(trap[1] == 15,
+             "and it is softened by the same 10 -- one reduction for both"
+             " sources, which is how the card reads them",
+             f"25 -> {trap[1]}")
+    out.that(creature[1] == 25,
+             "while 25 points from a CREATURE arrive whole -- the control:"
+             " the row reduces on the SOURCE, and a body that softened every"
+             " blow would pass both arms above",
+             f"25 -> {creature[1]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -97722,6 +97815,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "hazard_softened": (a_printed_hazard_is_softened_like_a_trap,
+                        "a printed hazard is a trap-table row, so the row's"
+                        " existing gate already answers for it"),
     "printed_kind": (a_card_knows_whether_it_is_a_utility,
                      "the word at the top of the card was a column nothing"
                      " read; an attack is not a utility"),

@@ -1867,7 +1867,6 @@ def p16435(c: Cast) -> None:
         Trigger(DamageRolled, targets_me, "you take damage"),
         Trigger(Fell, about_me, "you fall"),
     ),
-    dropped=("c.is_hazard()",),
 )
 def p16436(c: Cast) -> None:
     """The trap third was written; the fall third is written now.
@@ -1879,8 +1878,32 @@ def p16436(c: Cast) -> None:
     it. `c.cushion(n)` is that one line, and `on=` takes a sequence, so the
     second printed source is a second `Trigger` rather than a second row.
 
-    Still dropped: a hazard. Its damage arrives from whoever made the zone
-    and is indistinguishable from an attack's, so there is nothing to ask.
+    **The hazard third needs no third branch, and the marker claiming it did
+    was wrong about what print means by a hazard.** It said the damage
+    "arrives from whoever made the zone and is indistinguishable from an
+    attack's" -- reasoning about `c.zone(hindering=)`, which is a caster's
+    region. A printed hazard is not that. It is a row of the same 631-row
+    `trap` table, told apart only by the `kind` column: 397 traps against
+    **221 hazards** (hazard 213, minion hazard 5, elite hazard 3).
+
+    `printed_trap` filters that table on **level alone**, so `terrain.arm`
+    already arms hazards -- seed 0 at level 10 draws `t:516`, which is one
+    -- and an armed hazard carries the same `Trap` component as any trap.
+    So `c.is_trap(ev.source)`, already the gate below, answers for both.
+
+    That is the card rather than a convenience: it names a trap and a
+    hazard as two sources of **one** reduction, not as two questions. Driven
+    three ways with 25 points incoming at level 10, softening 10:
+
+        a printed hazard (t:516)    25 -> 15
+        a printed trap   (t:269)    25 -> 15
+        a creature's attack         25 -> 25
+
+    the third being the control that keeps the first two about the source.
+
+    **`trap.kind` is still unread, and that is a separate gap from this
+    row.** Nothing in the tree can tell a trap from a hazard; no printed
+    line here asks it to. The column is there when one does.
     """
     ev = c.trigger
     softened = 5 + c.level // 2
