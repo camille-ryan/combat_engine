@@ -3117,12 +3117,48 @@ def _suppressed(mods: Mods, sense: str) -> bool:
     return mods.total(f"{NO_SENSE}{sense}", {}) > 0
 
 
+#: The prefix a sense that cannot find **one named creature** is keyed under
+#: -- `"unseen by darkvision"`, carried by the creature being looked for.
+#:
+#: **The mirror of `NO_SENSE` above and a different question.** That one is
+#: on the *looker* and takes the sense away from it entirely; this is on the
+#: *quarry* and leaves every other creature as visible as before.
+#: `p16491` is the printed line -- *"creatures can't use darkvision,
+#: blindsight, or tremorsense to detect you. You can be detected with other
+#: senses as normal"* -- and a looker-side suppression would have blinded
+#: the whole board in the dark rather than hiding one character.
+#:
+#: **Carried by the quarry rather than written onto every looker**, which
+#: is the choice `Zone.obscured_for` records the argument for: a hold laid
+#: on each enemy at cast time is wrong the moment one more walks in, and
+#: this card lasts a round in a fight where they do.
+#:
+#: Read by `sees_in` when it is given `against=`, which `light_concealment`
+#: passes because it is the one place that has both creatures.
+UNSEEN_BY = "unseen by "
+
+
+def _unseen(world: World, quarry: int, sense: str) -> bool:
+    """Does this creature refuse to be found by that sense?
+
+    Asked of the quarry's own modifiers, so it costs nothing on the boards
+    where nobody has laid one -- which is almost all of them.
+    """
+    mods = world.get(quarry, Mods)
+    if mods is None or not mods.items:
+        return False
+    return mods.total(f"{UNSEEN_BY}{sense}", {}) > 0
+
+
 #: The order the levels compare in. `Light` is a `StrEnum`, so `<` on it is
 #: alphabetical -- "bright" < "dark" < "dim" -- which is wrong twice over.
 _DARKER = {Light.BRIGHT: 0, Light.DIM: 1, Light.DARK: 2}
 
 
-def sees_in(world: World, eid: int, level: Light, distance: int = 0) -> bool:
+def sees_in(
+    world: World, eid: int, level: Light, distance: int = 0, *,
+    against: int | None = None,
+) -> bool:
     """Can this creature see normally at that light level?
 
     The senses are `Mods` keys rather than components, for the reason every
@@ -3136,6 +3172,15 @@ def sees_in(world: World, eid: int, level: Light, distance: int = 0) -> bool:
     * `blindsight` and `tremorsense` -- light is irrelevant entirely. They are
       separate keys because the printed ranges differ and a row may grant one
       without the other, and both answer True here.
+
+    **`against` is who is being looked for**, and a sense that creature is
+    `UNSEEN_BY` does not answer. One card prints it -- *"creatures can't use
+    darkvision, blindsight, or tremorsense to detect you"* -- and the
+    narrowing is the whole of it: the same looker still sees everybody else
+    in the dark, which a looker-side suppression could not say.
+
+    Optional, so the two content callers and every other reader are
+    unchanged. With no `against` the function answers exactly as before.
     """
     if level is Light.BRIGHT:
         return True
@@ -3151,6 +3196,11 @@ def sees_in(world: World, eid: int, level: Light, distance: int = 0) -> bool:
         prints no range, so the comparison needs no second branch.
         """
         if _suppressed(mods, key):
+            return False
+        # The quarry's refusal, which is a different creature's modifiers --
+        # see `UNSEEN_BY`. Asked after the looker's own suppression because
+        # either one is enough to stop the sense answering.
+        if against is not None and _unseen(world, against, key):
             return False
         radius = mods.total(key, {})
         return radius > 0 and radius >= distance
@@ -3230,14 +3280,16 @@ def light_concealment(world: World, attacker: int, target: int) -> Cover:
     # The distance matters: a sense with a printed range stops answering past
     # it, which is the whole of what the range is for.
     far = distance_between(world, attacker, target)
-    if sees_in(world, attacker, Light.DARK, far):
+    # `against=target`, because this is the one place with both creatures --
+    # the same reason the side-filtered zone scan above lives here.
+    if sees_in(world, attacker, Light.DARK, far, against=target):
         return Cover.NONE
     worst = Light.BRIGHT
     for square in squares(world, target):
         level = light_level(world, square, dark_zones)
         if _DARKER[level] > _DARKER[worst]:
             worst = level
-    if sees_in(world, attacker, worst, far):
+    if sees_in(world, attacker, worst, far, against=target):
         return Cover.NONE
     if worst is Light.DARK:
         return Cover.SUPERIOR

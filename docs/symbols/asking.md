@@ -258,6 +258,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - "Tremorsense 10". Senses through the ground, so light is irrelevant.
 - `c.truesight(self, radius: 'int' = 0, *, of: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Truesight 5", and "the target cannot become invisible to you".
+- `c.unseen_by(self, *senses: 'str', on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+  - *"Creatures can't use darkvision, blindsight, or tremorsense to
 
 ## what the call already knows -- state, not calls
 

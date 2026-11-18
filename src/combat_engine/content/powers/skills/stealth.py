@@ -147,19 +147,37 @@ def _shields_me(c: Cast, shooter: int, body: int) -> bool:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.unseen_by(sense=)",),
 )
 def p16491(c: Cast) -> None:
-    """All three of the named faculties are on the board and none of them is
-    a *bypass* for this row to take away.
+    """*"Creatures can't use darkvision, blindsight, or tremorsense to
+    detect you. You can be detected with other senses as normal."*
 
-    `c.darkvision`, `c.blindsight` and `c.tremorsense` grant them and
-    `query.has_sense` asks after them, but they only answer the **light**
-    question through `query.sees_in`: `query.sees_through` consults
-    see-invisible and truesight and nothing else, so a creature with any of
-    the three already needs line of sight exactly as this card demands.
-    There is no model of detection-without-sight to narrow, which is
-    `i2413x1`'s gap verbatim and why this waits on the same symbol."""
+    **The old note had the right facts and drew the wrong conclusion from
+    them.** It is true that these three only answer the **light** question
+    through `query.sees_in`, and true that none of them is a *bypass* of
+    line of sight. But answering the light question is exactly what this
+    card takes away: in darkness a darkvision attacker sees this character
+    as if it were bright, and without that sense the darkness conceals again
+    -- measured, `Cover.NONE` becomes `Cover.SUPERIOR`. So there was
+    something to narrow after all, and the row was refused in play for a
+    clause the engine could nearly express.
+
+    **`c.unseen_by` and not `c.lose_sense`**, which is the whole difficulty
+    and the card's own second line. `c.lose_sense` takes the sense off the
+    *looker*, so one use would blind every darkvision creature on the board
+    in the dark; this makes **one character** invisible to those senses and
+    leaves the rest of the room as visible as before. Asserted both ways in
+    `drivers.unseen_by_a_sense`.
+
+    Carried by this character rather than written onto each enemy, so an
+    enemy that walks in during the round is covered too -- the argument
+    `Zone.obscured_for` records for the same choice.
+
+    `low_light` is deliberately **not** named: the card lists three senses
+    and low-light vision is not one of them, which is the half *"you can be
+    detected with other senses as normal"* is about."""
+    c.unseen_by("darkvision", "blindsight", "tremorsense",
+                on=c.me, until=When.EONT)
 
 
 @power(

@@ -155,7 +155,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Which enemies count as nearest to that creature.
 - `query.revealed(world: 'World', who: 'int') -> 'bool'`
   - Has this creature been stripped of the benefit of invisibility? #774.
-- `query.sees_in(world: 'World', eid: 'int', level: 'Light', distance: 'int' = 0) -> 'bool'`
+- `query.sees_in(world: 'World', eid: 'int', level: 'Light', distance: 'int' = 0, *, against: 'int | None' = None) -> 'bool'`
   - Can this creature see normally at that light level?
 - `query.sees_invisible(world: 'World', eid: 'int') -> 'bool'`
   - Does this creature see what is hidden from everybody else?

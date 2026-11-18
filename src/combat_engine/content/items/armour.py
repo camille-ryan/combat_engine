@@ -2529,18 +2529,29 @@ def i2401p1(c: Cast) -> None:
 
 
 @power("i2413x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.unseen_by(sense=)",))
+       reach=PERSONAL, target=SELF, todo=("query.hidden_from(sense=)",))
 def i2413x1(c: Cast) -> None:
-    """Re-diagnosed, and still blocked -- but not on the sense. "Tremorsense
-    is not a sense the board has" is stale: `c.tremorsense` grants it,
-    `query.has_sense` asks after it and `query.sees_in` answers for it.
+    """Re-pointed off `c.unseen_by(sense=)`, which arrived and is not this
+    row's gap.
 
-    The gap is one level in. This card takes a *bypass* away, and the engine
-    has no bypass to take: `sees_in` makes tremorsense answer the **light**
+    **That verb hides one creature from a sense that answers the *light*
+    question**, which is `p16491`'s card -- *"creatures can't use
+    darkvision, blindsight, or tremorsense to detect you"*, and it has an
+    observable effect because darkness conceals again once the sense stops
+    answering. This card is the other sentence: *"creatures that have
+    tremorsense must have **line of sight** to detect you"*, which takes a
+    **bypass** away. There is no bypass.
+
+    So the two rows shared a symbol for one word and want opposite things,
+    and the gate caught it: `todo.py` reported `c.unseen_by(sense=)` arrived
+    while this row was still unfinished. `query.hidden_from(sense=)` names
+    what is actually missing -- a sense that finds a hidden creature
+    *without* line of sight, for this card to then forbid.
+
+    The gap is one level in: `sees_in` makes tremorsense answer the light
     question and nothing else, so a creature with it already needs line of
-    sight exactly as this card demands. There is no model of detection
-    without sight for the row to narrow, so writing anything here would
-    either do nothing or invent a rule the engine does not have.
+    sight exactly as this card demands. Writing anything here would either
+    do nothing or invent a rule the engine does not have.
 
     **Re-measured, because the obvious write is a per-enemy one.**
     `c.has_sense("tremorsense", on=foe)` asks the question and works, so a

@@ -552,7 +552,7 @@ CATEGORIES: dict[str, dict] = {
                 # sense is. A key of its own rather than arithmetic on
                 # theirs: two sources total 200 and subtracting 100 leaves
                 # the sense standing. #1341.
-                "lose_sense", "darkvision", "has_sense", "low_light",
+                "lose_sense", "unseen_by", "darkvision", "has_sense", "low_light",
                 "see_invisible", "see_unseen", "sight_range", "telepathy",
                 "tremorsense", "truesight",
             ]),

@@ -16740,6 +16740,66 @@ class Cast:
             first = first or laid
         return first
 
+    def unseen_by(
+        self, *senses: str, on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """*"Creatures can't use darkvision, blindsight, or tremorsense to
+        detect you."*
+
+        **The mirror of `c.lose_sense` above and a different sentence.**
+        That one takes a sense away from the creature in `on=`, so a
+        darkvision monster stops seeing in the dark at all; this leaves
+        every sense intact and makes **one creature** invisible to them.
+        `p16491` prints the narrowing in its own second line -- *"you can
+        be detected with other senses as normal"* -- and a looker-side
+        suppression would have blinded the whole board instead of hiding
+        one character.
+
+        **Carried by the creature being looked for**, which is why `on=`
+        here is the quarry and defaults to the target like everything else.
+        A hold written onto each enemy at cast time is wrong the moment one
+        more walks in, and this lasts a round in a fight where they do --
+        the argument `Zone.obscured_for` records for the same choice.
+
+        **What it is observable as.** These senses answer the *light*
+        question (`query.sees_in`), so taking them away for one quarry
+        restores the concealment darkness would otherwise have given it:
+        a darkvision attacker in the dark goes from `Cover.NONE` to
+        `Cover.SUPERIOR` against this creature and to `Cover.NONE` against
+        everybody else. In bright light nothing changes, which is what the
+        card's second line says.
+
+        An unrecognised sense **raises**, for `c.lose_sense`'s reason: a key
+        nothing reads is a hold that costs nothing and does nothing.
+        """
+        known = {"blindsight", "tremorsense", "darkvision", "low_light"}
+        wanted = {w.lower() for w in senses}
+        unknown = wanted - known
+        if unknown:
+            raise ValueError(
+                f"{self.ref}: c.unseen_by({', '.join(sorted(unknown))}) "
+                f"names no sense any reader looks for, so the hold would "
+                f"cost nothing and do nothing. Known: {sorted(known)}."
+            )
+        if not wanted:
+            raise ValueError(
+                f"{self.ref}: c.unseen_by() with no sense named hides from "
+                f"nothing. Name the ones the card prints."
+            )
+        from .query import UNSEEN_BY
+
+        who = self._who(on)
+        if who is None:
+            return None
+        first: Effect | None = None
+        for sense in sorted(wanted):
+            laid = self.bonus(
+                f"{UNSEEN_BY}{sense}", 1, on=who, until=until, kind=self.ref,
+            )
+            first = first or laid
+        return first
+
     def blindsight(
         self, radius: int = 0, *, on: int | None = None,
         until: When = When.ENCOUNTER,

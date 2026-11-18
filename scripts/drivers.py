@@ -14603,6 +14603,133 @@ def a_trap_can_be_set_off(out: Result) -> None:
                  f"{[(e.victim, e.why) for e in solid]}")
 
 
+def unseen_by_a_sense(out: Result) -> None:
+    """*"Creatures can't use darkvision, blindsight, or tremorsense to detect
+    you. You can be detected with other senses as normal."* -- `p16491`,
+    refused in play until this landed.
+
+    **The row's old note had the right facts and the wrong conclusion.** It
+    said none of the three senses is a *bypass* of line of sight, which is
+    true, and concluded there was nothing to narrow. But these senses answer
+    the **light** question, and that is what the card takes away: in darkness
+    a darkvision attacker sees this character as though it were bright, and
+    without the sense the darkness conceals again.
+
+    **The second printed line is what makes this `c.unseen_by` and not
+    `c.lose_sense`.** That verb takes the sense off the *looker*, so one use
+    would blind every darkvision creature on the board; this hides **one**
+    character and leaves the room as visible as before. Both directions are
+    asserted on one board with one creature changed, because "the attacker
+    lost its cover advantage" is equally consistent with the far stronger
+    rule.
+
+    `low_light` is asserted as **not** suppressed: the card names three
+    senses and that is not one of them, which is the half *"with other
+    senses as normal"* is about. Without that arm a verb that suppressed
+    every sense would pass.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Light
+
+    def darkened():  # noqa: ANN202
+        """A pitch-dark board, an enemy with darkvision, and an ally of mine."""
+        world, me, _ = _board("p16491", 1)
+        foes = sorted(enemies(world, me))
+        mates = sorted(allies(world, me))
+        if not foes or not mates:
+            return world, me, None, None
+        foe, mate = foes[0], mates[0]
+        Cast(world=world, me=foe, ref="probe").darkvision(
+            on=foe, until=When.ENCOUNTER)
+        world.grid.light = {
+            (x, y): Light.DARK
+            for x in range(world.grid.width)
+            for y in range(world.grid.height)
+        }
+        return world, me, foe, mate
+
+    world, me, foe, mate = darkened()
+    out.that(foe is not None and mate is not None,
+             "the board deals an enemy to look and an ally to compare against",
+             f"{foe} {mate}")
+    if foe is None or mate is None:
+        return
+
+    out.that(query.has_sense(world, foe, "darkvision"),
+             "the looker really has darkvision -- the premise, and without it"
+             " every line below is about a creature that was blind anyway")
+    before_me = query.light_concealment(world, foe, me)
+    before_mate = query.light_concealment(world, foe, mate)
+    out.that(before_me == 0 and before_mate == 0,
+             "in pitch darkness its darkvision sees BOTH of us for free --"
+             " the premise, since a board where it already had cover could"
+             " not show the clause landing",
+             f"me {before_me}, ally {before_mate}")
+    if before_me != 0:
+        return
+
+    # -- the row ---------------------------------------------------------
+    REGISTRY["p16491"].body(Cast(world=world, me=me, ref="p16491"))
+    after_me = query.light_concealment(world, foe, me)
+    after_mate = query.light_concealment(world, foe, mate)
+    out.that(after_me > before_me,
+             "p16491 takes the darkvision away AGAINST THIS CHARACTER, so the"
+             " darkness conceals again -- the row arm, and the plant that"
+             " matters is deleting `c.unseen_by` from its body",
+             f"{before_me} -> {after_me}")
+    out.that(after_mate == before_mate,
+             "and the same attacker still sees my ALLY for free on the same"
+             " board -- the assertion that tells `c.unseen_by` from"
+             " `c.lose_sense`, which would have blinded it outright",
+             f"{before_mate} -> {after_mate}")
+    out.that(query.has_sense(world, foe, "darkvision"),
+             "the looker still HAS darkvision; nothing was taken off it",
+             f"{query.has_sense(world, foe, 'darkvision')}")
+
+    # -- the senses it does not name -------------------------------------
+    world2, me2, foe2, _mate2 = darkened()
+    if foe2 is None:
+        return
+    # **Through the row, not the verb.** The first draft called
+    # `c.unseen_by(...)` here with the three senses written out, so a plant
+    # adding a FOURTH to `p16491`'s body could not be seen -- the arm was
+    # about the verb and said nothing about what the row asks for.
+    REGISTRY["p16491"].body(Cast(world=world2, me=me2, ref="p16491"))
+    out.that(not query.sees_in(world2, foe2, Light.DARK, 1, against=me2),
+             "darkvision does not find this character in the dark",
+             "suppressed")
+    out.that(query.sees_in(world2, foe2, Light.DARK, 1),
+             "and the same call WITHOUT `against=` still answers, so every"
+             " other reader of `sees_in` is untouched -- the parameter is"
+             " optional and the two content callers pass none",
+             "unchanged")
+    # low-light is the sense the card leaves alone.
+    Cast(world=world2, me=foe2, ref="probe").low_light(
+        on=foe2, until=When.ENCOUNTER)
+    out.that(query.sees_in(world2, foe2, Light.DIM, 1, against=me2),
+             "low-light vision still finds this character in DIM light -- the"
+             ' card names three senses and this is not one of them, which is'
+             ' the "with other senses as normal" half. Without this arm a'
+             " verb suppressing every sense would pass",
+             "not suppressed")
+
+    # -- the refusals ----------------------------------------------------
+    probe = Cast(world=world2, me=me2, ref="probe")
+    for bad, why in ((("echolocation",), "a sense no reader looks for"),
+                     ((), "no sense at all")):
+        try:
+            probe.unseen_by(*bad, on=me2)
+            out.that(False, f"{why} is refused", "accepted")
+        except ValueError:
+            out.that(True, f"{why} is refused -- a key nothing reads is a hold"
+                           " that costs nothing and does nothing")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -97067,6 +97194,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "unseen_by": (unseen_by_a_sense,
+                  "one creature hides from darkvision without blinding the"
+                  " looker, and low-light still finds it"),
     "trap_sprung": (a_trap_can_be_set_off,
                     "a Thievery check that misses by 5 sets the trap off,"
                     " and a row can set one off deliberately"),
