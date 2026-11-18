@@ -24811,10 +24811,24 @@ def a_weapon_is_conjured_and_its_siblings_know_it(out: Result) -> None:
     if gear is None:
         out.skip("p15895's caster has no Gear to put a weapon in")
         return
+    # **The hand is freed here rather than hoped for.** This arm asserted
+    # that the caster *starts* with one free, which held alone and failed
+    # in the suite: the dealt gear depends on `chargen.SCORED_CHOICES`,
+    # and whether a rule gets the production draw depends on whether it is
+    # the first in the run to import `audit` (`#1362`). With a weapon in
+    # hand `p15895`'s own Requirement refuses it, so three arms below read
+    # as a broken verb.
+    #
+    # Stowed rather than discarded, which is what `audit.board`'s own pose
+    # does for the same reason: `Gear.held` is `weapons` minus `stowed`.
+    gear.stowed.update(w.ref for w in gear.held)
     out.that(gear.main is None,
-             "the caster starts with a hand free, which is the row's own"
-             " Requirement and what makes the next line about the row",
+             "**a hand is free**, which is the row's own Requirement and"
+             " what the arms below depend on -- staged rather than assumed,"
+             " because the draw decides what the caster was dealt",
              f"in hand {getattr(gear.main, 'ref', None)!r}")
+    if gear.main is not None:
+        return
 
     out.that(use(world, me, "p15895", targets=[me], spend=False),
              "the row is usable, which it was not at all while refused")
