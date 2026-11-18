@@ -22830,6 +22830,33 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         conj = self.world.get(thing, Conjuration)
         return conj.by if conj is not None else None
 
+    def made_with(self, thing: int) -> str:
+        """Which row put that zone or conjuration on the board, or "".
+
+        The companion to `c.made_by`, which answers *who*. Both halves of a
+        printed target line need both: `p3056` reads *"one conjuration or
+        zone that has the fire keyword"* and then attacks *"the Will of the
+        target's creator"* -- the keyword comes off the row, the defence off
+        the creature.
+
+        One door for two components, because the ref is kept in a different
+        field on each -- `Zone.power` and `Conjuration.ref` -- and a row
+        checking only the one it happened to think of would silently skip
+        half the pool `c.conjurations` offers it.
+
+        Empty rather than None for a thing that is neither, so a caller can
+        feed the answer straight to `dsl.get` and ask about keywords without
+        a second guard.
+        """
+        from .components import Conjuration
+        from .zones import Zone
+
+        zone = self.world.get(thing, Zone)
+        if zone is not None:
+            return zone.power or ""
+        conj = self.world.get(thing, Conjuration)
+        return (conj.ref or "") if conj is not None else ""
+
     def conjurations(self, *, within: int = 0, side: str = "any") -> list[int]:
         """The zones, auras and conjurations standing on the board.
 

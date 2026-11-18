@@ -16191,6 +16191,98 @@ def a_stated_wall_height_stops_only_the_grounded(out: Result) -> None:
              f"1 high: {low}, 2 high: {tall_one}")
 
 
+def a_fire_zone_is_put_out_by_beating_its_maker(out: Result) -> None:
+    """*"Target: One conjuration or zone that has the fire keyword. Attack:
+    Charisma + 2 vs. the Will of the target's creator. Hit: The target is
+    destroyed."* -- `p3056`.
+
+    **A marker came off and no facility was built for it.** The old note
+    gave three reasons the clause could not be written -- "a zone is not a
+    creature, nothing targets one, and there is no dispel" -- and all three
+    were false. `c.conjurations` is the pool and says so in its own
+    docstring; `c.made_by` answers whose it is; `c.dispel` is "destroy a
+    zone or a conjuration, and unwind what it was holding".
+    `sorcerer/level_10_sd.py` had the whole shape working already.
+
+    `Zone.defences` was the wrong symbol too, and that matters because two
+    other rows wait on it: this card attacks the **creator's** Will, which
+    is an ordinary creature defence. `x2_129` is the row that wants a zone
+    to have defences of its own, and its gap is untouched.
+
+    **The keyword control is the assertion that matters.** A body that
+    dispelled whatever was nearest would pass "the fire went out"; what the
+    card says is that the fire goes out *and the other thing does not*. Two
+    zones are staged a square apart, identical but for the row each is
+    marked as coming from.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.types import Keyword
+    from combat_engine.engine.zones import Zone
+
+    HOT, COLD = "p1787", "p16275"
+    hot_row, cold_row = get(HOT), get(COLD)
+    out.that(hot_row is not None and Keyword.FIRE in hot_row.keywords,
+             f"{HOT} carries the fire keyword -- the premise for the zone"
+             " that should be put out",
+             f"{HOT}")
+    out.that(cold_row is not None and Keyword.FIRE not in cold_row.keywords,
+             f"and {COLD} does not -- the premise for the control",
+             f"{COLD}")
+
+    world, me, _ = _board("p3056", 1)
+    at = must(world.get(me, Position), "the sorcerer stands").square
+    lay = Cast(world=world, me=me, ref="drivers:lay")
+    hot = lay.zone({(at[0] + 1, at[1])}, label="drivers:hot",
+                   until=When.ENCOUNTER)
+    cold = lay.zone({(at[0] + 2, at[1])}, label="drivers:cold",
+                    until=When.ENCOUNTER)
+    out.that(hot and cold, "two zones are laid a square apart",
+             f"{hot}, {cold}")
+    # Identical but for the row each came from, which is the one thing the
+    # printed target line reads.
+    must(world.get(hot, Zone), "the hot zone").power = HOT
+    must(world.get(cold, Zone), "the cold zone").power = COLD
+
+    offered: list[list[int]] = []
+
+    def decide(actor: int, kind: str, options: list, prompt: str = "") -> object:
+        if options and all(isinstance(o, int) for o in options):
+            offered.append(list(options))
+        return options[0] if options else None
+
+    world.decider = decide
+    world.rng.loaded = 20
+    c = Cast(world=world, me=me, ref="p3056")
+    c.target = me
+    REGISTRY["p3056"].body(c)
+
+    zones_offered = [lst for lst in offered if hot in lst or cold in lst]
+    out.that(bool(zones_offered),
+             "the row offers a choice of thing to put out -- printed 'one"
+             " conjuration or zone', so it is a target line and not an"
+             " automatic pick",
+             f"{zones_offered}")
+    out.that(any(hot in lst and cold not in lst for lst in zones_offered),
+             "and the list holds the FIRE zone and not the other -- the"
+             " keyword half of the target line, read off the row that laid"
+             " each via `c.made_with`",
+             f"{zones_offered}")
+    out.that(world.get(hot, Zone) is None,
+             "a loaded 20 beats the creator's Will and the fire is gone --"
+             " `c.dispel`, which is the card's 'destroyed, all its effects"
+             " end'",
+             f"{world.get(hot, Zone)}")
+    out.that(world.get(cold, Zone) is not None,
+             "while the zone that is not on fire is still standing -- the"
+             " control, and the assertion a body that dispelled whatever"
+             " was nearest would fail",
+             f"{world.get(cold, Zone) is not None}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -98664,6 +98756,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "dispel_fire": (a_fire_zone_is_put_out_by_beating_its_maker,
+                    "a fire zone destroyed by beating its creator's Will,"
+                    " and the zone beside it left alone"),
     "wall_height": (a_stated_wall_height_stops_only_the_grounded,
                     "a wall that prints a height: a flier crosses it for"
                     " free, a climber pays the height, a walker goes round"),

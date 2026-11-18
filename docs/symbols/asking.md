@@ -207,6 +207,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Who on the board has that row, if anybody.
 - `c.made_by(self, thing: 'int') -> 'int | None'`
   - Whoever put that zone or conjuration on the board.
+- `c.made_with(self, thing: 'int') -> 'str'`
+  - Which row put that zone or conjuration on the board, or "".
 - `c.missing(self, on: 'int | None' = None) -> 'int'`
   - How many hit points this creature is down. 0 when untouched.
 - `c.part_of(self, dtype: 'DamageType', *, ev: 'Any' = None) -> 'int'`

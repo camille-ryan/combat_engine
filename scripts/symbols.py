@@ -538,7 +538,7 @@ CATEGORIES: dict[str, dict] = {
                 "feat", "feats", "granted_by",
                 "granted_via", "healed_by", "index", "instinctive", "is_",
                 "is_hidden", "is_kind", "is_minion", "is_quarry", "is_trap",
-                "keywords_of", "kinds_of", "knows", "made_by", "missing",
+                "keywords_of", "kinds_of", "knows", "made_by", "made_with", "missing",
                 # **"Since the end of your last turn" is three questions,
                 # not one state.** They belong here rather than with the
                 # senses or the conditions because what they ask about is

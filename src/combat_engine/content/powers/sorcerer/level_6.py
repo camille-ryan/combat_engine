@@ -197,25 +197,65 @@ def p16243(c: Cast) -> None:
     reach=CloseBurst(10),
     target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
-    dropped=("Zone.defences",),
 )
 def p3056(c: Cast) -> None:
-    """The attack half -- destroying a fire conjuration or zone by beating
-    its creator's Will -- is not written: a zone is not a creature, nothing
-    targets one, and there is no dispel. The resistance is the half that
-    every use of this row gets.
+    """**The attack half is written, and every verb it needed already
+    existed.** The old note said "a zone is not a creature, nothing targets
+    one, and there is no dispel", and all three clauses were false:
+    `c.conjurations` is the pool -- its own docstring says it is "the pool a
+    target line reading 'one conjuration or zone' picks from" -- `c.made_by`
+    answers whose it is, and `c.dispel` is *"destroy a zone or a
+    conjuration, and unwind what it was holding"*, which is this card's "the
+    target is destroyed, all its effects end" in one call.
 
-    `Zone.defences` is the symbol two other rows already wait on
-    (`x2_129`, whose card prints "a ranged attack against the thing
-    itself, whose defences are level + 5"), so this joins them rather
-    than naming a synonym. `p3041` wants the conjuration half of the same
-    gap and has its own symbol, because a zone and a conjuration are
-    different components and one change does not land both."""
+    `sorcerer/level_10_sd.py` had the whole shape already: pool, choose,
+    `c.made_by`, strike the maker, dispel the thing. So this was a marker
+    standing where a sibling row was working.
+
+    **`Zone.defences` was also the wrong symbol**, which is worth saying
+    because two other rows wait on it and should not now be read as waiting
+    on this. The card attacks *"the Will of the target's **creator**"* -- a
+    creature's defence, which has always existed. `x2_129` is the row that
+    genuinely wants a zone to have defences of its own ("a ranged attack
+    against the thing itself, whose defences are level + 5"); that gap is
+    untouched and keeps its symbol.
+
+    The keyword filter needs the row that laid the thing rather than the
+    thing itself, which is `c.made_with` -- `Zone.power` and
+    `Conjuration.ref` keep the ref in different fields, so a filter reading
+    one would silently skip half the pool.
+
+    Close burst 10, so `within=10`. Nothing excludes the caster's own
+    fire: the card says "one conjuration or zone that has the fire
+    keyword" and names no side, where the sibling row above prints
+    "created by an enemy" and filters on it."""
     if c.first:
         c.resist(c.cha_mod, DamageType.FIRE, on=c.me, until=When.ENCOUNTER)
     friend = c.target
     if friend is not None and friend != c.me:
         c.resist(c.cha_mod, DamageType.FIRE, on=friend, until=When.ENCOUNTER)
+    if not c.first:
+        return
+    burning = [
+        thing
+        for thing in c.conjurations(within=10)
+        if (row := get(c.made_with(thing))) is not None
+        and Keyword.FIRE in c.keywords_of(row)
+    ]
+    if not burning:
+        return
+    pick = c.choose(burning, f"{c.ref}: which fire to put out")
+    if pick is None:
+        return
+    maker = c.made_by(pick)
+    if maker is None:
+        return
+    # "Charisma + 2 vs. the Will of the target's creator". Longhand
+    # through `c.attack` rather than `c.strike`, because the header
+    # declares no attack -- the first target line is the resistance,
+    # which rolls nothing, and this is the card's second one.
+    if c.attack(c.cha_ + 2, WILL, on=maker):
+        c.dispel(pick)
 
 
 @power(
