@@ -24763,6 +24763,120 @@ def a_printed_choice_between_a_slide_and_a_longer_shove(out: Result) -> None:
                  f"invoked {blows_in} blow(s), declined {blows_out}")
 
 
+def a_passive_check_is_lent_across_creatures(out: Result) -> None:
+    """"Allies who can see or hear you can use your passive Perception in
+    place of their own while within 5 squares of you."
+
+    `p11587` was **refused in play** -- a `todo=`, the worst category,
+    since nothing of it reached a board -- and its note said the
+    substitution could not be said: *"a zone modifier carries one value
+    for everybody standing in it, so the geometry half and the arithmetic
+    half cannot both be right"*.
+
+    **Both are right, because `Cast._while_inside` calls its giver per
+    arrival.** `c.resist_in` has used that for six rows; the value may
+    therefore be computed from the ally, and the substitution is then
+    arithmetic -- a bonus of *my passive minus yours* makes your passive
+    mine. The two allies on this board are lent **different numbers**,
+    which is the whole of what one shared zone value could not do.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import allies, conscious
+    from combat_engine.engine.query import can_hear as _can_hear
+    from combat_engine.engine.query import unseen_by as _unseen_by
+    from combat_engine.engine.skills import passive
+    from combat_engine.engine.types import Condition
+
+    world, me, _ = _audit.board("p11587", 1)
+    mates = [a for a in allies(world, me) if a != me]
+    if len(mates) < 2:
+        out.skip("p11587 wants two allies to show a per-ally difference")
+        return
+    here = world.need(me, Position).square
+    for mate in mates:
+        place(world, mate, (here[0] + 1, here[1]))
+
+    mine = passive(world, me, "perception")
+    own = {a: passive(world, a, "perception") for a in mates}
+    out.that(len({*own.values()}) > 1 and all(v != mine for v in own.values()),
+             "**the two allies start with different passives, neither the"
+             " caster's** -- which is what makes the next line about a"
+             " per-ally value and not about a shared one",
+             f"caster {mine}, allies {own}")
+
+    out.that(use(world, me, "p11587", targets=[me], spend=False),
+             "the stance is usable, which it was not at all while the row"
+             " carried `todo=`")
+    lent = {a: passive(world, a, "perception") for a in mates}
+    out.that(all(v == mine for v in lent.values()),
+             "**and every ally inside now reads the CASTER's passive** --"
+             " each lent a different number to get there, which is the"
+             " arithmetic a single zone value could not carry",
+             f"{own} -> {lent}, caster {mine}")
+
+    # -- "you do not grant this benefit while you are unconscious" ------
+    Cast(world=world, me=me, ref="drivers-p11587").condition(
+        Condition.UNCONSCIOUS, on=me, until=When.ENCOUNTER)
+    out.that(not conscious(world, me),
+             "the caster is unconscious, which is the printed exception")
+    out.that({a: passive(world, a, "perception") for a in mates} == own,
+             "**and every ally has its own number back** -- a gate on the"
+             " laid bonus and not a second hold, because the clause"
+             " suspends the benefit without ending the stance, so the"
+             " modifier stays standing and reads False",
+             f"{ {a: passive(world, a, 'perception') for a in mates} }"
+             f" against {own}")
+
+    # -- "allies who can see OR hear you", which is two questions -------
+    #
+    # **Not tested by the arms above and a plant said so**: dropping the
+    # `when=` narrowing from the row changed nothing, because both allies
+    # on that board can see the caster and the clause is satisfied either
+    # way. So this is a fresh board with one ally blinded AND deafened --
+    # both, since the printed `or` means either sense is enough.
+    world, me, _ = _audit.board("p11587", 1)
+    mates = [a for a in allies(world, me) if a != me]
+    here = world.need(me, Position).square
+    for mate in mates:
+        place(world, mate, (here[0] + 1, here[1]))
+    deaf, seeing = mates[0], mates[1]
+    probe = Cast(world=world, me=me, ref="drivers-p11587-senses")
+    probe.condition(Condition.BLINDED, on=deaf, until=When.ENCOUNTER)
+    probe.condition(Condition.DEAFENED, on=deaf, until=When.ENCOUNTER)
+    out.that(_unseen_by(world, deaf, me) and not _can_hear(world, deaf, me),
+             "**one ally can neither see nor hear the caster** -- asked of"
+             " the ALLY as watcher, which is the direction the card reads"
+             " and the one `c.can_see` cannot express: that verb measures"
+             " from the caster, who sees a blinded ally perfectly well",
+             f"sees={not _unseen_by(world, deaf, me)},"
+             f" hears={_can_hear(world, deaf, me)}")
+    before = {a: passive(world, a, "perception") for a in mates}
+    mine2 = passive(world, me, "perception")
+    use(world, me, "p11587", targets=[me], spend=False)
+    after = {a: passive(world, a, "perception") for a in mates}
+    out.that(after[deaf] == before[deaf],
+             "**and is lent nothing** -- the narrowing is asked per"
+             " arrival, so a sense is a membership test and not a"
+             " modifier",
+             f"{before[deaf]} -> {after[deaf]}")
+    out.that(after[seeing] == mine2,
+             "while the ally that can still see is lent the caster's,"
+             " which is what makes the line above about the senses rather"
+             " than about the whole zone failing",
+             f"{before[seeing]} -> {after[seeing]}, caster {mine2}")
+
+    out.that(not REGISTRY["p11587"].todo and not REGISTRY["p11587"].dropped,
+             "and p11587 carries no marker in either column",
+             f"todo {REGISTRY['p11587'].todo!r},"
+             f" dropped {REGISTRY['p11587'].dropped!r}")
+
+
 def an_allys_body_is_cover_for_hiding(out: Result) -> None:
     """"You can use cover granted by your allies both to become hidden and
     to remain hidden."
@@ -94275,6 +94389,11 @@ DRIVERS = {
     # **`lent_body`, because `lent_eye` is taken** -- by the rule for
     # `c.line_of_sight_from`, which is this one's square-valued sibling
     # and the verb `p12345` was right to refuse. Two names for two cards.
+    "lend_passive": (
+        a_passive_check_is_lent_across_creatures,
+        "a passive check is lent across creatures, a different number to"
+        " each ally, and withdrawn while the lender is out (p11587)",
+    ),
     "ally_cover": (
         an_allys_body_is_cover_for_hiding,
         "an ally's body can be cover for becoming hidden, which is a"

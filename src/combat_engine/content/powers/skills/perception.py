@@ -47,7 +47,13 @@ from combat_engine.engine import (
     get,
     power,
 )
-from combat_engine.engine.query import conscious, defence, is_
+from combat_engine.engine.query import (
+    can_hear,
+    conscious,
+    defence,
+    is_,
+    unseen_by,
+)
 
 #: "Ranged sight" has no unbounded range kind, and 20 is the convention the
 #: rest of the tree already uses for it: the board is smaller than that and
@@ -124,26 +130,49 @@ def p11586(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.STANCE],
-    todo=("c.lend_passive(skill)",),
 )
 def p11587(c: Cast) -> None:
-    """Lending a check across creatures, which nothing does.
+    """"Allies who can see or hear you can use your passive Perception in
+    place of their own while within 5 squares of you."
 
-    The printed benefit is that an ally uses the caster's *passive*
-    Perception in place of its own, and that number is read -- it is the DC
-    a hider is measured against -- so this is a real gap and not a
-    narrative one.
+    **The old note was right about the arithmetic and wrong about where it
+    lives.** It said a zone modifier *"carries one value for everybody
+    standing in it, so the geometry half and the arithmetic half cannot
+    both be right"* -- and `Cast._while_inside`, which `c.resist_in` has
+    used all along, calls its giver **per arrival**. So the value can be
+    computed from the ally, and the substitution is then arithmetic: a
+    bonus of *my passive minus yours* makes your passive mine.
 
-    What cannot be said is the substitution. `c.bonus("skill:perception")`
-    moves one creature's own number; the difference wanted here is per
-    ally, and a zone modifier carries one value for everybody standing in
-    it, so the geometry half and the arithmetic half cannot both be right.
-    `c.substitute_check()` is a different gap -- one creature rolling a
-    different skill of its own -- so this wants its own symbol.
+    `c.substitute_check` really is a different gap -- a creature rolling a
+    different skill of its own -- so the symbol was not that one either.
 
-    Nothing survives without it, so the whole row waits rather than
-    playing: a stance that grants nothing would be offered every fight.
+    **"See or hear", which is two questions and not one.** `query.can_see`
+    and `query.can_hear` both answer, and the printed `or` is why neither
+    a side word nor a single call could carry the pool. Asked per arrival,
+    so an ally that walks in blinded and deafened is refused and the same
+    ally cured is not.
+
+    **"You do not grant this benefit while you are unconscious"** is a
+    gate on the laid bonus rather than a second hold: the clause suspends
+    the benefit and does not end the stance, so the modifier has to stay
+    standing and read False while the caster is down.
     """
+    ring = c.aura(5, until=When.STANCE, on=c.me)
+
+    def sees_or_hears(who: int) -> bool:
+        # **The ALLY is the watcher, which `c.can_see` cannot say.** That
+        # verb measures from the caster -- "can I see him" -- and the card
+        # is "allies who can see YOU". The two differ exactly where it
+        # matters: a blinded ally is seen perfectly well by the caster and
+        # sees nothing, so the caster-side reading would lend the benefit
+        # to the one creature the clause excludes. `query.unseen_by` takes
+        # the watcher first and asks blindness before anything else.
+        return (
+            not unseen_by(c.world, who, c.me)
+            or can_hear(c.world, who, c.me)
+        )
+
+    c.lend_passive(ring, "perception", side="ally", when=sees_or_hears)
 
 
 _CAUGHT_OUT = "you are surprised while conscious"

@@ -15451,6 +15451,71 @@ class Cast:
             side,
         )
 
+    def lend_passive(
+        self,
+        zone: int,
+        skill: str,
+        *,
+        side: str = "ally",
+        when: Callable[[int], bool] | None = None,
+    ) -> None:
+        """"Allies within the zone can use YOUR passive check in place of
+        their own."
+
+        `p11587` prints it of passive Perception, and its marker said the
+        substitution could not be said: *"a zone modifier carries one value
+        for everybody standing in it, so the geometry half and the
+        arithmetic half cannot both be right"*.
+
+        **Both are right, because `_while_inside` lays a hold per
+        creature.** It calls `give_one(who)` on each arrival, so the value
+        may be computed from that ally -- and the substitution is then
+        arithmetic rather than a mechanism: a bonus of *my passive minus
+        yours* makes your passive mine. Negative when the ally is the
+        better spotter, which is what *"in place of"* means in both
+        directions; a card meaning "the higher of the two" would print
+        that instead, and none does.
+
+        **Not `c.substitute_check`**, which is a different gap: that one is
+        a creature rolling a different skill, and this is a creature
+        reading somebody else's standing number without rolling at all.
+
+        `when` narrows the pool beyond a side, as on `c.resist_in` -- this
+        row's *"allies who can see or hear you"* is two `query` calls and
+        no side word.
+        """
+        from .query import conscious as _conscious
+        from .skills import passive as _passive
+
+        lender = self.me
+        mine = _passive(self.world, lender, skill)
+
+        def awake(_ctx: dict[str, Any]) -> bool:
+            # **"You do not grant this benefit while you are
+            # unconscious."** A gate rather than a second hold, because
+            # the clause suspends the benefit and does not end the
+            # stance: the modifier has to stay standing and read False
+            # while the lender is down, then read True again.
+            #
+            # Unconditional rather than a parameter: a creature that
+            # cannot notice anything has no passive to lend, so this is
+            # the verb's meaning and not one card's rider. A row printing
+            # otherwise would want the flag, and none does.
+            return _conscious(self.world, lender)
+
+        def lend(who: int) -> Effect | None:
+            gap = mine - _passive(self.world, who, skill)
+            if not gap:
+                # Nothing to lend, and a zero modifier would read as a
+                # hold this row laid -- which the audit would then credit.
+                return None
+            return self.bonus(
+                f"skill:{skill}", gap, on=who, until=When.ENCOUNTER,
+                kind=self.ref, when=awake,
+            )
+
+        self._while_inside(zone, lend, side, when)
+
     def resist_in(
         self,
         zone: int,

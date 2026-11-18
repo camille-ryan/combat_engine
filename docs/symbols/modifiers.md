@@ -67,6 +67,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
 
 - `c.ignore_resistance(self, amount: 'int | None' = None, dtype: 'DamageType | None' = None, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None, immunity: 'bool | int' = False, insubstantial: 'bool' = False) -> 'Effect | None'`
   - "Your fire powers ignore the target's fire resistance."
+- `c.lend_passive(self, zone: 'int', skill: 'str', *, side: 'str' = 'ally', when: 'Callable[[int], bool] | None' = None) -> 'None'`
+  - "Allies within the zone can use YOUR passive check in place of
 - `c.lose_immunity(self, dtype: 'DamageType', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "The target loses any immunity to this power's damage type."
 - `c.resist(self, amount: 'int', dtype: 'DamageType | None' = None, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None, onto: 'Effect | None' = None) -> 'Effect | None'`

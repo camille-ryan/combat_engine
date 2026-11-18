@@ -363,6 +363,12 @@ CATEGORIES: dict[str, dict] = {
             ]),
             ("resistance and vulnerability", [
                 "ignore_resistance", "lose_immunity", "resist", "resist_in",
+                # Beside `resist_in` because it is the same door --
+                # `_while_inside`, a hold laid per arrival and taken back
+                # on the way out -- and because an author looking for
+                # "something each ally in my aura gets" will find them
+                # together or not at all. #1341.
+                "lend_passive",
                 "resistances",
                 "vulnerabilities", "vulnerable", "vulnerable_in",
             ]),
