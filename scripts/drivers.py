@@ -13492,6 +13492,217 @@ def zone_crossing_tax(out: Result) -> None:
                            " otherwise bar nobody and read as a working zone")
 
 
+def chosen_die_face(out: Result) -> None:
+    """*"You lose a healing surge, and you can select the result of your d6
+    roll."* -- `p16399`, answering `p16397`'s own use.
+
+    **Four operations on a die and this is the fourth.** `c.boost_roll` adds
+    to a roll, the `c.reroll_*` family throws a fresh one, `c.replace_roll`
+    substitutes a face on a d20 that `resolve.settle` recomputes -- and none
+    of them reaches a plain `c.roll` in the middle of a body, which is where
+    `p16397` throws the d6 that decides which of six printed benefits lands.
+    `c.pick_roll` writes the face, `c.picked` reads it, and the row that
+    rolls must read it or the write is a modifier nothing consults.
+
+    **The timing needed nothing built, which is the finding.** `dsl.use`
+    announces `PowerUsed` *before* it runs the body, so a free action
+    triggered by that event resolves while the die is still in the cup. The
+    old marker said "nothing reaches into a finished roll" and was right
+    about a finished roll; this one is not finished yet.
+
+    **Six arms, one per printed face, because a pin that steered the die to
+    the wrong branch would pass any single one.** Each asserts the benefit
+    that face prints and the premise that makes it visible:
+
+    | face | printed | asserted |
+    |---|---|---|
+    | 1 | +2 to attack rolls | `Mods.total("attack")` on the attacker |
+    | 2 | 2 extra damage when hit | `Defences.vulnerable` on the target |
+    | 3 | +2 to speed | `Mods.total("speed")` on the attacker |
+    | 4 | the target grants combat advantage | an **ally's** view of it |
+    | 5 | a basic attack as a free action | a swing by the attacker |
+    | 6 | the target cannot shift | `query.can_shift` |
+
+    **Face 4 is the one that needed the premise.** The audit board leaves the
+    target `rattled`, so `has_combat_advantage(caster -> target)` is already
+    True before the row runs and could never show the clause landing. An
+    ally's view goes False -> True, which is what `to="team"` means and the
+    only reading that can fail.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Mods, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled, Hit
+    from combat_engine.engine.query import allies, enemies
+
+    PICKED = "p16397"
+
+    def board(face: int | None):  # noqa: ANN202
+        """Pose, let `p16399` choose `face`, and hand back the pieces.
+
+        `face=None` declines the choice, which `c.choose(optional=True)`
+        offers as the last entry in the pool. Driven through the row's own
+        body rather than by calling `c.pick_roll` here -- a rule that pins
+        the die itself proves the verb and says nothing about whether the
+        row asks.
+        """
+        world, me, _ = _posed("p16399", 1)
+        world.decider = (
+            lambda actor, kind, options, prompt="":
+            options[-1] if face is None
+            else next((o for o in options if o == face), options[0])
+        )
+        swings: list[int] = []
+        world.bus.on(AttackRolled,
+                     lambda ev: swings.append(getattr(ev, "attacker", -1)))
+        return world, me, sorted(enemies(world, me)), swings
+
+    def look(world, me: int, foe: int) -> dict[str, object]:  # noqa: ANN001
+        mods = world.get(me, Mods)
+        shield = world.get(foe, Defences)
+        mates = sorted(allies(world, me))
+        return {
+            "attack": mods.total("attack", {}) if mods else 0,
+            "speed": mods.total("speed", {}) if mods else 0,
+            "vulnerable": sum((shield.vulnerable or {}).values()) if shield else 0,
+            # An ALLY's view, never the caster's -- see the docstring.
+            "ally_ca": bool(mates) and query.has_combat_advantage(
+                world, mates[0], foe),
+            "can_shift": query.can_shift(world, foe),
+        }
+
+    def fire(world, me: int, foe: int) -> None:  # noqa: ANN001
+        c = Cast(world=world, me=me, ref=PICKED)
+        c.trigger = Hit(attacker=me, target=foe, power="x", critical=False)
+        REGISTRY[PICKED].body(c)
+
+    # -- the pin itself, through p16399's body ----------------------------
+    world, me, foes, _sw = board(4)
+    out.that(bool(foes), "the board deals an enemy for p16397 to answer", f"{foes}")
+    if not foes:
+        return
+    known = world.get(me, Powers)
+    out.that(known is not None, "the caster has a Powers component", f"{known}")
+    if known is None:
+        return
+    REGISTRY["p16399"].body(Cast(world=world, me=me, ref="p16399"))
+    out.that(known.picked_roll.get(PICKED) == 4,
+             "p16399's body writes the chosen face against p16397's ref --"
+             " the row arm, and the plant that matters is deleting"
+             " `c.pick_roll` from it",
+             f"{dict(known.picked_roll)}")
+
+    # -- declining leaves the die alone -----------------------------------
+    world, me, foes, _sw = board(None)
+    known = world.get(me, Powers)
+    REGISTRY["p16399"].body(Cast(world=world, me=me, ref="p16399"))
+    out.that(known is not None and not known.picked_roll,
+             'printed "you **can** select", so declining pins nothing and the'
+             " die is thrown -- `c.choose(optional=True)` is what offers the"
+             " refusal",
+             f"{dict(known.picked_roll) if known else None}")
+
+    # -- one arm per printed face -----------------------------------------
+    WANTED = {
+        1: ("attack", "+2 to attack rolls"),
+        2: ("vulnerable", "2 extra damage each time it is hit"),
+        3: ("speed", "+2 to speed"),
+        4: ("ally_ca", "the target grants combat advantage"),
+        6: ("can_shift", "the target cannot shift"),
+    }
+    for face, (key, printed) in sorted(WANTED.items()):
+        world, me, foes, _sw = board(face)
+        if not foes:
+            continue
+        foe = foes[0]
+        REGISTRY["p16399"].body(Cast(world=world, me=me, ref="p16399"))
+        before = look(world, me, foe)
+        # The premise: the thing this face grants must not be true already,
+        # or the assertion below is about the board. Face 4 is why.
+        fresh = (before[key] is False) if key in ("ally_ca",) else True
+        if key == "can_shift":
+            fresh = before[key] is True
+        out.that(fresh,
+                 f"face {face}: the target does not already have"
+                 f" \"{printed}\" -- the premise, without which the line"
+                 " below reports on the board",
+                 f"{key}={before[key]}")
+        if not fresh:
+            continue
+        fire(world, me, foe)
+        after = look(world, me, foe)
+        if key == "can_shift":
+            moved = before[key] is True and after[key] is False
+        elif key == "ally_ca":
+            moved = after[key] is True
+        else:
+            moved = isinstance(after[key], int) and isinstance(before[key], int) \
+                and after[key] > before[key]
+        out.that(moved,
+                 f"face {face} lands \"{printed}\" and nothing else does --"
+                 " the six branches are one `if` chain, so a pin that steered"
+                 " the die to a neighbour would pay the wrong benefit"
+                 " silently",
+                 f"{key} {before[key]} -> {after[key]}")
+        # And the five it did NOT choose are untouched, which is what makes
+        # each arm about its own face rather than about the row doing
+        # something.
+        others = {k: (before[k], after[k]) for k in before
+                  if k != key and before[k] != after[k]}
+        # Face 5's granted swing legitimately moves the board, and face 6's
+        # target stops shifting -- named rather than waived, so a new
+        # side effect shows up here instead of being absorbed.
+        out.that(not others,
+                 f"face {face}: and the other five observables are unmoved",
+                 f"{others}")
+
+    # -- face 5 is a swing, which no state read can see -------------------
+    world, me, foes, swings = board(5)
+    if foes:
+        foe = foes[0]
+        REGISTRY["p16399"].body(Cast(world=world, me=me, ref="p16399"))
+        out.that(not [a for a in swings if a == me],
+                 "face 5: the caster has not swung yet -- the premise",
+                 f"{swings}")
+        fire(world, me, foe)
+        out.that([a for a in swings if a == me],
+                 'face 5 lands "the character can make a basic attack as a'
+                 ' free action", which is an ATTACK and not a state -- read'
+                 " off `AttackRolled` rather than by looking at the board,"
+                 " because a swing that misses leaves nothing behind",
+                 f"{swings}")
+
+    # -- one-shot: the face does not pin the next roll too ----------------
+    world, me, foes, _sw = board(1)
+    if foes:
+        foe = foes[0]
+        known = world.get(me, Powers)
+        REGISTRY["p16399"].body(Cast(world=world, me=me, ref="p16399"))
+        fire(world, me, foe)
+        out.that(known is not None and not known.picked_roll,
+                 "the read CONSUMES the face -- the card says *the* d6 roll,"
+                 " singular, so a face left behind would pin every later"
+                 " `c.roll` in the same body",
+                 f"{dict(known.picked_roll) if known else None}")
+
+    # -- and the pin expires if the die is never thrown --------------------
+    world, me, foes, _sw = board(2)
+    known = world.get(me, Powers)
+    REGISTRY["p16399"].body(Cast(world=world, me=me, ref="p16399"))
+    out.that(known is not None and known.picked_roll.get(PICKED) == 2,
+             "a face chosen and not yet rolled is held", f"{dict(known.picked_roll)}")
+    for eff in list(world.effects.of(me)):
+        if "picks" in eff.label:
+            world.effects.end(eff, why="probe")
+    out.that(known is not None and not known.picked_roll,
+             "and the effect that laid it clears what is left on expiry, so a"
+             " choice made and never used does not outlive its duration",
+             f"{dict(known.picked_roll) if known else None}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -95956,6 +96167,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "picked_die": (chosen_die_face,
+                   "one row chooses the face of another row's d6; six"
+                   " printed branches, one arm each"),
     "zone_tax": (zone_crossing_tax,
                  "five rows print a movement cost a zone could not name;"
                  " four of them reported finished"),

@@ -12816,6 +12816,85 @@ class Cast:
         known.dice.setdefault(ref, []).insert(0, entry)
         return effect
 
+    def pick_roll(
+        self,
+        ref: str,
+        face: int,
+        *,
+        on: int | None = None,
+        until: When = When.EOTNT,
+    ) -> Effect | None:
+        """Say what a named row's next die **comes up**.
+
+        The sibling of `change_dice` above, and the distinction is the whole
+        of it: that one says *which* die a row rolls, this says what it
+        shows. *"You can select the result of your d6 roll."*
+
+        **Not `c.replace_roll`**, which is the near miss and was written for
+        a different shape. That substitutes a face on a d20 that
+        `resolve.settle` then recomputes -- an attack, a save, a check -- and
+        reaches a roll that has already been made and announced. The die
+        here is thrown inside a body by a plain `c.roll`, where nothing is
+        announced and there is nothing to settle. Adding to a roll
+        (`c.boost_roll`), throwing a fresh one (`c.reroll_*`), substituting a
+        d20's face (`c.replace_roll`) and dictating a body's own die are four
+        operations, and this is the fourth.
+
+        **A row must read it with `c.picked`** -- the arrangement
+        `change_dice` has with `c.dice_for`, and the same commonest bug if
+        it does not. The pick is one-shot and the read consumes it, because
+        the printed clause is about *the* roll and a face left behind would
+        pin the next one.
+
+        Lands on the **caster** by default, since the card says *your* d6.
+        Only useful ahead of the roll, which is what makes the timing work:
+        `dsl.use` announces `PowerUsed` before it runs the body, so a free
+        action answering that event is resolved while the die is still in
+        the cup.
+        """
+        from .components import Powers
+
+        who = self._who(on)
+        if who is None or not ref:
+            return None
+        if face < 1:
+            raise ValueError(f"{self.ref}: pick_roll face {face} is not a die face")
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} picks {ref}'s die",
+            on_end=[lambda: known.picked_roll.pop(ref, None)],
+            by=self.ref,
+        )
+        if effect is None:
+            return None
+        known.picked_roll[ref] = face
+        return effect
+
+    def picked(self, ref: str = "") -> int:
+        """The face chosen for this row's next die, or 0. **Consumes it.**
+
+        The read half of `pick_roll`, so a row rolling a die somebody may
+        choose writes:
+
+            roll = c.picked() or c.roll("1d6")
+
+        and keeps working unchanged for everybody with nothing picking it.
+
+        **The read consumes**, which is unlike `c.dice_for` next door and is
+        the printed difference: a changed die is a standing property of the
+        creature for a duration, where a chosen face is one roll. Left in
+        place it would pin every later `c.roll` in the same body.
+        """
+        from .components import Powers
+
+        known = self.world.get(self.me, Powers)
+        if known is None:
+            return 0
+        return known.picked_roll.pop(ref or self.ref, 0)
+
     def change_amount(
         self,
         ref: str,

@@ -350,7 +350,12 @@ CATEGORIES: dict[str, dict] = {
             ("the numbers", [
                 "amount_for", "attack_mod", "bonus", "boost_check",
                 "boost_roll", "change_amount", "change_dice", "dice_for",
-                "enhancement", "grants_in", "penalty", "rolls_with",
+                "enhancement", "grants_in", "penalty",
+                # `pick_roll`/`picked` beside `change_dice`/`dice_for` and
+                # NOT with the rerolls below: those throw a fresh die, and
+                # these two are the write/read pair saying what a body's own
+                # die shows. Same relationship, one row apart.
+                "pick_roll", "picked", "rolls_with",
                 "settle_attack", "shield_bonus", "treat_roll_as",
                 "widen_areas",
             ]),

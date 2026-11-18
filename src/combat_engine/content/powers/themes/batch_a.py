@@ -1334,13 +1334,19 @@ AP_BOON = (
 def p16397(c: Cast) -> None:
     """Six printed results, each an ordinary verb. Result 2 is untyped
     vulnerability -- "2 extra damage each time it is hit" is what that is --
-    and result 6 is `c.cannot_shift`, which forbids a shift and leaves the walk."""
+    and result 6 is `c.cannot_shift`, which forbids a shift and leaves the walk.
+
+    `c.picked()` is here because `p16399` answers this row's own use and
+    chooses the face -- the read half of `c.pick_roll`, and without it that
+    row would lay a number nothing consults. It falls through to the die for
+    every character who does not hold that power, which is almost all of
+    them."""
     ev = c.trigger
     who = getattr(ev, "attacker", None)
     victim = getattr(ev, "target", None)
     if who is None:
         return
-    roll = c.roll("1d6")
+    roll = c.picked() or c.roll("1d6")
     if roll == 1:
         c.bonus("attack", 2, on=who, until=When.EONT, kind="power")
     elif roll == 2 and victim is not None:
@@ -1393,20 +1399,34 @@ def _used_p16397(world: World, me: int, ev: Any) -> bool:
     target=SELF,
     trigger="you use p16397",
     on=Trigger(PowerUsed, _used_p16397, "you use p16397"),
-    dropped=("c.pick_roll()",),
     keywords=[Keyword.ELEMENTAL],
 )
 def p16399(c: Cast) -> None:
-    """The surge is paid. The dropped clause is choosing the face.
+    """The surge is paid and the face is chosen.
 
-    Re-aimed off `c.change_dice()`, which exists now and is the wrong verb:
-    that one says *which* die a row rolls, and this says what the die **came
-    up**, on a roll the triggering row has already made. Nothing reaches into
-    a finished roll to set its result. `c.boost_roll` (#495) and the
-    `Rerolled` announcement (#496) were the neighbouring gaps and both have
-    landed; neither is this. Adding to a roll and dictating what it shows
-    are different operations, and only the first is written."""
+    **The old note's distinction was right and its last sentence stopped
+    being true.** `c.change_dice` says *which* die a row rolls and this
+    says what it shows, so that verb was correctly refused; `c.boost_roll`
+    adds to a roll and `c.replace_roll` substitutes a d20's face on a roll
+    `resolve.settle` recomputes. None of them reaches a plain `c.roll` in
+    the middle of a body, which is where `p16397` throws its d6.
+    `c.pick_roll` is the fourth operation and `p16397` reads it with
+    `c.picked`.
+
+    **The timing is what makes it writable, not a new event.** `dsl.use`
+    announces `PowerUsed` *before* it runs the body, so this free action --
+    whose trigger is that event for `p16397` -- resolves while the die is
+    still in the cup. Nothing had to be re-ordered.
+
+    Printed "you **can** select", so the six faces go through `c.choose`
+    and declining leaves the die alone. The surge is lost either way: the
+    card spends it in the same sentence, before the choice."""
     c.spend_surge(on=c.me)
+    face = c.choose(
+        [1, 2, 3, 4, 5, 6], f"{c.ref}: which result p16397 gives", optional=True,
+    )
+    if face is not None:
+        c.pick_roll("p16397", face, on=c.me, until=When.EOTNT)
 
 
 def _roll_near_me(world: World, me: int, ev: Event) -> bool:

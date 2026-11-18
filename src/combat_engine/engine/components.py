@@ -1600,6 +1600,27 @@ class Powers:
     dice: dict[str, list[tuple[str, Callable[[dict[str, Any]], bool] | None]]] = field(
         default_factory=dict
     )
+    #: **What a named row's next die comes up**, by ref. The sibling of
+    #: `dice` one field up and a different question: that one says *which*
+    #: die a row rolls, and this says what it **shows**.
+    #:
+    #: One card prints it -- *"you lose a healing surge, and you can select
+    #: the result of your d6 roll"*, answering the moment its sibling is
+    #: used. `c.boost_roll` adds to a roll and `c.replace_roll` substitutes
+    #: a face on a d20 that `resolve.settle` recomputes; neither reaches a
+    #: plain `c.roll` in the middle of a body, which is where that d6 is
+    #: thrown.
+    #:
+    #: **One-shot, consumed by the read.** The printed clause is about *the*
+    #: d6 roll, singular, so a face left lying about would pin the next one
+    #: too. `Cast.picked` pops it; the effect that laid it clears whatever
+    #: is left on expiry, so a choice made and never rolled does not
+    #: outlive its duration.
+    #:
+    #: **The row that rolls must read it**, with `Cast.picked` -- the same
+    #: arrangement `dice` has with `Cast.dice_for`, and for the same reason:
+    #: a pick on a row whose body ignores it is a modifier nothing consults.
+    picked_roll: dict[str, int] = field(default_factory=dict)
     #: How big a number a named mechanic hands out, when something has
     #: changed it. The third sibling of `dice` and `extra_squares`, and the
     #: same argument once more: "you grant a +3 bonus, rather than the
