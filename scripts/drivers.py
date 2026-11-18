@@ -13855,6 +13855,214 @@ def lent_surge_pool(out: Result) -> None:
                  " than a no-op, and a no-op would read as a working pact")
 
 
+def immunity_to_a_keyword(out: Result) -> None:
+    """*"The target is immune to poison"* -- `p11549` -- and *"immune to
+    charm effects and fear effects"* -- `i3538p1`.
+
+    **The recording and the asking were both built; the enforcement was
+    not.** `loader._stat_block` has filled `Defences.immune_keywords` off
+    `monster.immune` since `#560` and `query.immune_to` answers a `Keyword`
+    beside a `Condition` -- but `durations.Effects.apply` refused an arriving
+    effect by `Condition` only, so **744 creatures** carrying such a token
+    took every condition a poison or a charm power imposed. Both rows'
+    docstrings had located it: *"nothing asks it whether the owner is immune
+    to the keyword"*.
+
+    `query.immune_to_power` turns the laying row's ref into its keywords --
+    through `dsl.keywords_of`, so the 12 feats that grant a row a keyword for
+    one character are honoured -- and `Effects.apply` drops every condition
+    when one matches.
+
+    **Every condition, not a subset**, which is the opposite call from the
+    `Condition` filter it sits beside, and the printed word decides it: the
+    immunity is to a class of *power*, so "immune to charm effects" refuses
+    the whole effect rather than the dazed half of it.
+
+    **The narrowing control is the assertion that matters.** A creature
+    immune to poison must still take a condition from a power that is not
+    poison -- otherwise "the effect was refused" is consistent with an
+    immunity that refuses everything, which is a far stronger rule than any
+    card prints.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conditions, Defences
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition, DamageType, Keyword
+
+    def declaring(word: Keyword) -> str:
+        """A declared row carrying this keyword, by ref."""
+        for ref, p in sorted(REGISTRY.items()):
+            if word in (getattr(p, "keywords", None) or ()):
+                return ref
+        return ""
+
+    POISONED = declaring(Keyword.POISON)
+    CLEAN = next(
+        ref for ref, p in sorted(REGISTRY.items())
+        if (getattr(p, "keywords", None)
+            and Keyword.POISON not in p.keywords)
+    )
+    out.that(bool(POISONED),
+             "the corpus has a row declaring the poison keyword to lay the"
+             " condition with",
+             f"{POISONED}")
+    if not POISONED:
+        return
+
+    def arena(immune_to_what: tuple[Keyword, ...] = ()):  # noqa: ANN202
+        world, me, _ = _posed("p11549", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return world, me, None
+        foe = foes[0]
+        if immune_to_what:
+            shields = (world.get(foe, Defences)
+                       or world.add(foe, Defences()))
+            shields.immune_keywords = frozenset(
+                {*shields.immune_keywords, *immune_to_what}
+            )
+        return world, me, foe
+
+    def slowed(world, who: int) -> bool:  # noqa: ANN001
+        held = world.get(who, Conditions)
+        return bool(held) and Condition.SLOWED in list(held.active or ())
+
+    def lay(world, me: int, ref: str, who: int) -> None:  # noqa: ANN001
+        Cast(world=world, me=me, ref=ref).condition(
+            Condition.SLOWED, on=who, until=When.EONT)
+
+    # -- the premise, and then the clause ---------------------------------
+    world, me, foe = arena()
+    out.that(foe is not None, "the board deals an enemy", f"{foe}")
+    if foe is None:
+        return
+    out.that(not slowed(world, foe), "the enemy is not slowed to begin with")
+    lay(world, me, POISONED, foe)
+    out.that(slowed(world, foe),
+             f"a poison row ({POISONED}) slows a creature with no immunity --"
+             " the premise, without which every line below passes on a"
+             " condition that was never going to land",
+             f"{slowed(world, foe)}")
+
+    world, me, foe = arena((Keyword.POISON,))
+    if foe is None:
+        return
+    out.that(query.immune_to_power(world, foe, POISONED, caster=me)
+             is Keyword.POISON,
+             "`immune_to_power` names WHICH keyword refused it, rather than"
+             " answering a bare True -- a Note reading 'immune to poison' is"
+             " worth more than one reading 'immune'",
+             f"{query.immune_to_power(world, foe, POISONED, caster=me)}")
+    lay(world, me, POISONED, foe)
+    out.that(not slowed(world, foe),
+             "and a creature immune to the poison KEYWORD takes no condition"
+             " from that row -- the enforcement both rows were marked for",
+             f"{slowed(world, foe)}")
+
+    # -- the narrowing: immunity is to the keyword, not to everything -----
+    world, me, foe = arena((Keyword.POISON,))
+    if foe is None:
+        return
+    out.that(query.immune_to_power(world, foe, CLEAN, caster=me) is None,
+             f"the same creature is NOT immune to {CLEAN}, which declares no"
+             " poison keyword",
+             f"{query.immune_to_power(world, foe, CLEAN, caster=me)}")
+    lay(world, me, CLEAN, foe)
+    out.that(slowed(world, foe),
+             "so it is still slowed by a row that is not poison -- the"
+             " control, and the only assertion that tells a keyword immunity"
+             " from an immunity to everything",
+             f"{slowed(world, foe)}")
+
+    # -- a row with no keywords at all, and a condition from no row -------
+    world, me, foe = arena((Keyword.POISON,))
+    if foe is not None:
+        out.that(query.immune_to_power(world, foe, "", caster=me) is None,
+                 "a condition arriving from no row claims no narrowing --"
+                 " empty ref, None, rather than a lookup that raises",
+                 f"{query.immune_to_power(world, foe, '', caster=me)}")
+        out.that(query.immune_to_power(world, foe, "no-such-ref", caster=me)
+                 is None,
+                 "and an unknown ref answers None rather than raising, since"
+                 " engine sites label with plain words like \"dead\" and"
+                 " \"fall\"",
+                 f"{query.immune_to_power(world, foe, 'no-such-ref', caster=me)}")
+
+    # -- p11549 grants both halves of its one printed word ----------------
+    world, me, foe = arena()
+    if foe is None:
+        return
+    c = Cast(world=world, me=me, ref="p11549")
+    c.target = foe
+    REGISTRY["p11549"].body(c)
+    shields = world.get(foe, Defences)
+    out.that(shields is not None and DamageType.POISON in shields.immune,
+             "p11549 grants the DAMAGE half",
+             f"{sorted(t.value for t in shields.immune) if shields else None}")
+    out.that(shields is not None and Keyword.POISON in shields.immune_keywords,
+             "p11549 grants the KEYWORD half too -- one printed word, both"
+             " fields, because `dtype=` alone left the target taking the slow"
+             " off a poison cloud it is immune to",
+             f"{sorted(k.value for k in shields.immune_keywords) if shields else None}")
+    lay(world, me, POISONED, foe)
+    out.that(not slowed(world, foe),
+             "and the granted immunity refuses a poison row's condition, which"
+             " is the clause end to end: a row grants it and the door honours"
+             " it",
+             f"{slowed(world, foe)}")
+
+    # -- and it is handed back, only what it added ------------------------
+    for eff in list(world.effects.of(foe)):
+        if "immune to" in eff.label:
+            world.effects.end(eff, why="probe")
+    shields = world.get(foe, Defences)
+    out.that(shields is not None
+             and Keyword.POISON not in shields.immune_keywords,
+             "the hold ending takes the keyword back off", f"{shields}")
+
+    world, me, foe = arena((Keyword.POISON,))
+    if foe is not None:
+        c = Cast(world=world, me=me, ref="p11549")
+        c.target = foe
+        REGISTRY["p11549"].body(c)
+        for eff in list(world.effects.of(foe)):
+            if "immune to" in eff.label:
+                world.effects.end(eff, why="probe")
+        shields = world.get(foe, Defences)
+        out.that(shields is not None
+                 and Keyword.POISON in shields.immune_keywords,
+                 "**and only what it added** -- a creature with PRINTED"
+                 " immunity to the same keyword still has it after the"
+                 " granted hold ends, which a blanket discard would have"
+                 " taken away",
+                 f"{sorted(k.value for k in shields.immune_keywords) if shields else None}")
+
+    # -- i3538p1, the sibling on the same symbol --------------------------
+    # Its clause is on a **summoned companion**, which this board does not
+    # field, so the arm reports a skip rather than a pass. `out.that(True,
+    # ...)` would increment `passed` while the message admitted it was
+    # asserting nothing, which is the failure `Result.skip` exists for.
+    world, me, _ = _posed("i3538p1", 1)
+    pets = sorted(Cast(world=world, me=me, ref="probe").companions())
+    if not pets:
+        out.skip("i3538p1: the board fields no summoned companion, so its"
+                 " charm and fear immunity has nobody to land on -- the door"
+                 " it shares with p11549 is asserted in the arms above")
+    else:
+        REGISTRY["i3538p1"].body(Cast(world=world, me=me, ref="i3538p1"))
+        shields = world.get(pets[-1], Defences)
+        out.that(shields is not None
+                 and {Keyword.CHARM, Keyword.FEAR} <= shields.immune_keywords,
+                 "i3538p1 makes its summon immune to the charm and fear"
+                 " keywords, which is the printed pair",
+                 f"{sorted(k.value for k in shields.immune_keywords) if shields else None}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -96319,6 +96527,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "keyword_immunity": (immunity_to_a_keyword,
+                         "immunity to a power's KEYWORD refuses the"
+                         " conditions it imposes; 744 creatures carry one"),
     "lent_surges": (lent_surge_pool,
                     "one creature spends another's healing surges as its"
                     " own; own pool first, and one event"),

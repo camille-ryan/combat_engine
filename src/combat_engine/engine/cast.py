@@ -6850,6 +6850,7 @@ class Cast:
         self, *conditions: Condition, until: When = When.EONT, on: int | None = None,
         when: Callable[[dict[str, Any]], bool] | None = None,
         dtype: DamageType | Sequence[DamageType] = (),
+        keyword: Keyword | Sequence[Keyword] = (),
     ) -> Effect | None:
         """"You cannot be marked or slowed until the end of your next turn."
 
@@ -6871,12 +6872,20 @@ class Cast:
             Defences.immune            read twice in `resolve.deal_damage`,
                                        so the blow and the ongoing tick
                                        alike simply do not land
-            Defences.immune_keywords   read only by `query.immune_to`, and
-                                       nothing asks it when a
-                                       keyword-tagged effect arrives
+            Defences.immune_keywords   read when a keyword-tagged effect
+                                       arrives, since `#1224`
 
-        So the damage set is the one to write, which is what that row's own
-        docstring worked out before this existed.
+        **`keyword=` is the other half, and that table used to say it had no
+        reader.** It does now: `query.immune_to_power` turns the laying row's
+        ref into its keywords and `Effects.apply` refuses every condition
+        when one of them matches. So *"immune to poison"* -- which is both a
+        `DamageType` and a `Keyword` -- is written as **both**, which is what
+        the printed word means: the damage does not land and the conditions a
+        poison power imposes do not arrive.
+
+        Pass both where the printed word is both. `dtype=` alone leaves a
+        creature taking the slow off a poison cloud it is immune to, and
+        `keyword=` alone leaves it taking the damage.
 
         **It is a plain `set` on the component, not a `Mod`**, which has two
         consequences worth stating rather than discovering. It is put back
@@ -6914,18 +6923,42 @@ class Cast:
                         or self.world.add(who, _Defences()))
             added = [t for t in kinds if t not in defences.immune]
             defences.immune.update(added)
+        words: tuple[Keyword, ...] = (
+            (keyword,) if isinstance(keyword, Keyword) else tuple(keyword)
+        )
+        lent: list[Keyword] = []
+        if words:
+            defences = (self.world.get(who, _Defences)
+                        or self.world.add(who, _Defences()))
+            lent = [k for k in words if k not in defences.immune_keywords]
+            # **A frozenset, unlike `immune` beside it**, so this rebinds
+            # rather than mutating -- and puts back only what it added, for
+            # the same reason: a creature with printed immunity to the same
+            # keyword must still have it when the hold ends.
+            defences.immune_keywords = frozenset(
+                {*defences.immune_keywords, *lent}
+            )
 
         def restore() -> None:
             defences = self.world.get(who, _Defences)
-            if defences is not None:
-                defences.immune.difference_update(added)
+            if defences is None:
+                return
+            defences.immune.difference_update(added)
+            if lent:
+                defences.immune_keywords = frozenset(
+                    k for k in defences.immune_keywords if k not in lent
+                )
 
-        if kinds and not conditions:
+        # Named in the label, both halves, so a log reading "immune to
+        # poison" is the same text whichever field carried it.
+        spelled = ", ".join(
+            [*(t.value for t in kinds), *(k.value for k in words)]
+        )
+        if (kinds or words) and not conditions:
             return self.world.effects.apply(
                 who, self.me, until,
-                label=f"{self.ref} immune to "
-                      f"{', '.join(t.value for t in kinds)}",
-                on_end=[restore] if added else [],
+                label=f"{self.ref} immune to {spelled}",
+                on_end=[restore] if (added or lent) else [],
                 by=self.ref,
             )
         # `when` rides on the `Mod`, where `Mods.total` already evaluates it through
@@ -6944,9 +6977,9 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} immune to {', '.join(c.value for c in conditions)}",
             mods=mods,
-            # Both halves on one hold when a card names a condition and a
-            # damage type together, so they end at the same moment.
-            on_end=[restore] if added else [],
+            # Every half on one hold when a card names a condition, a damage
+            # type and a keyword together, so they end at the same moment.
+            on_end=[restore] if (added or lent) else [],
             by=self.ref,
         )
 

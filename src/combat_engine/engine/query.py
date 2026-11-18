@@ -2755,6 +2755,56 @@ def immune_to(
     return mods.total(f"immune to {cond.value}", ctx) > 0
 
 
+def immune_to_power(
+    world: World, eid: int, power: str, *, caster: int | None = None
+) -> Keyword | None:
+    """A keyword of `power` this creature's printed immunity covers, or None.
+
+    **The half `immune_to` above could not be asked.** That one answers about
+    a `Condition` or about one named `Keyword`; the printed line is *"Immune
+    poison"*, which is immunity to a whole class of **power**, and nothing
+    was turning a row's ref into the keywords to test. So a creature immune
+    to poison took every condition a poison power imposed:
+    `Effects.apply`'s immunity filter is handed the conditions and never the
+    row's keywords.
+
+    Measured off `monster.immune`: **744 creatures** carry a token that is
+    also a `Keyword` -- poison on 336, disease on 467, fear, charm, gaze,
+    sleep and seven damage-typed words besides. `loader._stat_block` has
+    kept them in `Defences.immune_keywords` since `#560`, and until now the
+    only reader was a `Keyword` asked by name from four feats.
+
+    **Returns the keyword rather than a bool**, so the caller can say which
+    one refused the effect. A `Note` reading "immune to poison" is worth
+    more than one reading "immune", and the four content gates that ask
+    `immune_to(..., Keyword.FEAR)` show the keyword is what a reader wants.
+
+    `dsl.keywords_of` rather than `Power.keywords`, for that function's own
+    reason: 12 feats grant a row a keyword for one character, and a grant
+    honoured at 21 of 22 readers is this component's commonest bug. The
+    caster is who the grant would belong to.
+
+    Damage immunity is **not** asked here, exactly as in `immune_to`:
+    `Defences.immune` is a set of `DamageType` read in
+    `resolve.deal_damage`, which answers how much of a blow lands rather
+    than whether an effect may arrive.
+    """
+    if not power:
+        return None
+    shields = world.get(eid, Defences)
+    if shields is None or not shields.immune_keywords:
+        return None
+    from .dsl import get, keywords_of
+
+    declared = get(power)
+    if declared is None:
+        return None
+    for word in sorted(keywords_of(world, caster, declared), key=str):
+        if word in shields.immune_keywords:
+            return word
+    return None
+
+
 def holds_somebody(world: World, eid: int) -> bool:
     """Is this creature holding anyone in a grab? "Requirement: you must
     have a creature grabbed."

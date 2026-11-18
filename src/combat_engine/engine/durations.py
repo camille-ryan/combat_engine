@@ -37,7 +37,7 @@ from .events import (
     TurnEnd,
     TurnStart,
 )
-from .query import immune_to
+from .query import immune_to, immune_to_power
 from .types import ActionType, Condition, DamageType, Relation
 
 if TYPE_CHECKING:
@@ -555,6 +555,26 @@ class Effects:
                 Note(text=f"{owner} is immune to "
                           f"{', '.join(c.value for c in refused)}")
             )
+        # **And immunity to the laying power's own keyword**, which is the
+        # printed *"Immune poison"* and a different question from the line
+        # above: that one asks about each condition by name, this asks
+        # whether the whole class of power may touch this creature at all.
+        # 744 creatures carry such a token and none of them was refusing
+        # anything a poison or a fear power imposed -- the conditions were
+        # handed here and the row's keywords never were. `#1224`, and
+        # `query.immune_to_power` has the measurement.
+        #
+        # Every condition goes, not a subset, because the immunity is to the
+        # power rather than to any one of its clauses -- which is the
+        # opposite call from the filter above, and the printed word is why.
+        if conditions:
+            blanket = immune_to_power(self.world, owner, label, caster=source)
+            if blanket is not None:
+                self.world.bus.emit(
+                    Note(text=f"{owner} is immune to {blanket.value}, so "
+                              f"{label} imposes nothing")
+                )
+                conditions = []
 
         self._next += 1
         clock = owner if when in _TARGET_CLOCKED else source

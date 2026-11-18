@@ -3415,7 +3415,7 @@ def i3441p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("durations.Effects.apply(keyword=)", "c.instinctive(fn=)"),
+    dropped=("c.instinctive(fn=)",),
     requires_text="you must have used a summoning power near the tapestry",
 )
 def i3538p1(c: Cast) -> None:
@@ -3434,20 +3434,24 @@ def i3538p1(c: Cast) -> None:
     `f"immune to {cond.value}"` and `Keyword` is a `StrEnum`, which that
     reader's own docstring says is deliberate.
 
-    What is missing is the **enforcement**, one layer down.
-    `durations.Effects.apply` refuses an arriving effect by `Condition`
-    only -- it is the one door every condition comes through, and it is
-    already handed `label`, the laying row's ref, from which the power's
-    keywords read. Nothing asks it whether the owner is immune to the
-    *keyword*, so an enemy charm power lands on this summon whatever is
-    recorded. Laying the mod here anyway would refuse nothing and report
-    the row finished, which is worse than the marker. `relations.set` is
-    the same shape for a mark.
+    **The enforcement landed, which is what that note was waiting for.**
+    `durations.Effects.apply` refused an arriving effect by `Condition`
+    only -- and it is already handed `label`, the laying row's ref, from
+    which the power's keywords read, which is exactly the door
+    `query.immune_to_power` now opens. So the two immunities are written as
+    `c.immune(keyword=)` and an enemy charm or fear power imposes nothing
+    on this summon.
 
-    Not shared with `f2884`, which wanted the asking side and is written
-    now, nor with `p11549`, whose printed word is a `DamageType` as well as
-    a `Keyword` and which wants a door onto `Defences.immune`. One symbol
-    was serving three different gaps. #1224.
+    **Refusing every condition and not a subset**, which is the opposite
+    call from the `Condition` filter beside it and the printed word decides
+    it: the immunity is to the class of *power*, not to any one of its
+    clauses, so "immune to charm effects" is the whole effect and not the
+    dazed half of it.
+
+    Not shared with `f2884`, which wanted the asking side and was written
+    earlier, and no longer apart from `p11549`: that row's printed word is
+    a `DamageType` **and** a `Keyword` and it passes both halves of the one
+    call now, so the two rows are one gap after all. #1224.
 
     The self-command half was `c.instinctive(made)` and that is the wrong
     verb twice over. It **fires the block's own** Instinctive Effect, found
@@ -3466,6 +3470,10 @@ def i3538p1(c: Cast) -> None:
     mine = c.companions()
     if mine:
         c.resist(5, on=mine[-1], until=When.ENCOUNTER)
+        c.immune(
+            keyword=[Keyword.CHARM, Keyword.FEAR], on=mine[-1],
+            until=When.ENCOUNTER,
+        )
 
 
 @power(

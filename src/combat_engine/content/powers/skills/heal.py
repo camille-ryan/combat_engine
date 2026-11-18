@@ -137,7 +137,6 @@ def p9318(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=ANY_CREATURE,
-    dropped=("durations.Effects.apply(keyword=)",),
 )
 def p11549(c: Cast) -> None:
     """The whole printed Effect is an immunity nothing can be granted.
@@ -165,17 +164,25 @@ def p11549(c: Cast) -> None:
     immunity to the same type keeps it. The damage half of the sentence is
     the bulk of it and is written.
 
-    What is left is the half this row already named: the non-damage side
-    of "immune to poison", which is the conditions a poison *power*
-    imposes. That is `durations.Effects.apply(keyword=)`, which is
-    `i3538p1`'s own marker and the right symbol to share -- one gap, one
-    symbol, and a door onto the same place.
+    **The other half landed too, and the table above used to say it had no
+    reader.** `Defences.immune_keywords` is asked when a keyword-tagged
+    effect arrives now -- `query.immune_to_power` turns the laying row's ref
+    into its keywords and `Effects.apply` refuses every condition when one
+    matches -- so the non-damage side of "immune to poison" is the
+    conditions a poison *power* imposes, and they no longer arrive.
+
+    Both halves on one call, because the printed word is one word: `dtype=`
+    alone left this target taking the slow off a poison cloud it is immune
+    to, and `keyword=` alone would leave it taking the damage. One hold, so
+    they end together.
 
     `when=` cannot gate the damage half and does not need to here:
     `Defences.immune` is a bare set with no context to evaluate against,
     and this card prints no condition on the immunity. #1224.
     """
-    c.immune(dtype=DamageType.POISON, until=When.EONT)
+    c.immune(
+        dtype=DamageType.POISON, keyword=Keyword.POISON, until=When.EONT,
+    )
 
 
 @power(

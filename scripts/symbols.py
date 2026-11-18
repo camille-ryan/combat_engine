@@ -1084,7 +1084,11 @@ READERS: dict[str, list[str]] = {
         "can_walk",
         "can_wield",
         "granted_actions", "held_by", "holding", "holds_somebody",
-        "immune_to", "may_ride", "needs_loading", "ready_to_fire",
+        # `immune_to` asks about a Condition or one named Keyword;
+        # `immune_to_power` asks whether a whole class of power may touch
+        # this creature, which is the printed "Immune poison".
+        "immune_to", "immune_to_power",
+        "may_ride", "needs_loading", "ready_to_fire",
         "ready_to_throw", "rideable_by",
     ],
     "what has already happened": [

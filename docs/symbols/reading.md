@@ -225,6 +225,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Is this creature holding anyone in a grab? "Requirement: you must
 - `query.immune_to(world: 'World', eid: 'int', cond: 'Condition | Keyword', source: 'int | None' = None, power: 'str' = '') -> 'bool'`
   - Can this condition not be laid on this creature at all?
+- `query.immune_to_power(world: 'World', eid: 'int', power: 'str', *, caster: 'int | None' = None) -> 'Keyword | None'`
+  - A keyword of `power` this creature's printed immunity covers, or None.
 - `query.may_ride(world: 'World', rider: 'int', mount: 'int') -> 'bool'`
   - Is this pairing a legal mount, by size and by exception?
 - `query.needs_loading(weapon: 'Any') -> 'bool'`
