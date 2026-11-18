@@ -16283,6 +16283,93 @@ def a_fire_zone_is_put_out_by_beating_its_maker(out: Result) -> None:
              f"{world.get(cold, Zone) is not None}")
 
 
+def a_species_rider_pays_only_for_its_own_categories(out: Result) -> None:
+    """*"Beast: If your companion is [one of five categories], the attack
+    deals extra damage equal to your Wisdom modifier."* -- `p4384`.
+
+    **Staged, not borrowed.** The audit board fields a **category-less**
+    beast -- built from a copy of its owner, belonging to no category -- so
+    `c.beast_kind()` answers `""` there and every species rider in the tree
+    takes its no-rider arm on every audit run. That is `#1343`, open, and
+    it is why this rule sets `Companion.ref` itself instead of asking the
+    board for a typed one.
+
+    **Three arms, because two would not separate the clause from the
+    card.** A category the line names pays the rider; one it does not name
+    pays nothing; and a category-less companion pays nothing either -- the
+    last being the state every board is actually in, so a row that read
+    "has a companion at all" would pass a two-arm test and be wrong for
+    eight of the nine rows `level_2_b` describes.
+
+    Damage is read as a **delta against the same board with the same roll**,
+    not as an absolute: the row rolls `2[W] + Strength`, which no assertion
+    here should be pinning.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies
+
+    #: One the card names, and one it does not. Refs only -- see
+    #: `ranger/level_3._BEAST_RIDER`.
+    NAMED, UNNAMED = "comp:1", "comp:8"
+
+    def dealt(category: str | None) -> int:
+        """Damage the row deals with the companion in that category."""
+        world, me, _ = _board("p4384", 1)
+        c = Cast(world=world, me=me, ref="p4384")
+        pet = c.companion()
+        if pet is not None and category is not None:
+            must(world.get(pet, Companion), "the companion").ref = category
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return -1
+        victim = foes[0]
+        hp = must(world.get(victim, Health), "the victim")
+        before = hp.hp
+        world.rng.loaded = 20
+        c.target = victim
+        REGISTRY["p4384"].body(c)
+        return before - hp.hp
+
+    world, me, _ = _board("p4384", 1)
+    probe = Cast(world=world, me=me, ref="p4384")
+    out.that(probe.companion() is not None,
+             "the board gives the ranger a companion at all -- the premise",
+             f"{probe.companion()}")
+    out.that(probe.beast_kind() == "",
+             "and it belongs to NO category, which is `#1343` and the reason"
+             " this rule stages one of its own",
+             f"{probe.beast_kind()!r}")
+    out.that(probe.wis_mod > 0,
+             "the ranger's Wisdom modifier is positive, so the rider is"
+             " visible as a difference rather than hidden in a zero",
+             f"+{probe.wis_mod}")
+
+    none_set, named, unnamed = dealt(None), dealt(NAMED), dealt(UNNAMED)
+    out.that(none_set > 0 and named > 0 and unnamed > 0,
+             "all three arms land a hit on a loaded 20",
+             f"category-less {none_set}, {NAMED} {named}, {UNNAMED} {unnamed}")
+    out.that(named - unnamed == probe.wis_mod,
+             f"a companion in {NAMED} -- a category the line names -- deals"
+             f" exactly Wisdom more than one in {UNNAMED}, which it does"
+             " not: the rider, measured as a delta on one board",
+             f"{named} - {unnamed} = {named - unnamed}, Wisdom"
+             f" {probe.wis_mod}")
+    out.that(unnamed == none_set,
+             "and an unnamed category deals exactly what a category-LESS"
+             " companion deals -- the two no-rider states agree, so the"
+             " board's own untyped beast is not a special case",
+             f"{UNNAMED} {unnamed}, none {none_set}")
+    # **The delta above is what catches the "owns any beast" reading**, and
+    # this line is not: a plant paying the rider for `c.companion() is not
+    # None` leaves it green, because the category-less arm has a companion
+    # too and both sides move together. Recorded rather than left implied --
+    # that reading is the one which made eight of the nine rows
+    # `level_2_b` describes wrong, so which assertion covers it matters.
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -98756,6 +98843,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "beast_rider": (a_species_rider_pays_only_for_its_own_categories,
+                    "a Beast: rider that pays for its own categories and"
+                    " not for owning any beast at all"),
     "dispel_fire": (a_fire_zone_is_put_out_by_beating_its_maker,
                     "a fire zone destroyed by beating its creator's Will,"
                     " and the zone beside it left alone"),

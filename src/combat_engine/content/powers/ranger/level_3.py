@@ -448,9 +448,16 @@ def p2603(c: Cast) -> None:
         c.slide(1)
 
 
+#: The five companion categories `p4384`'s `Beast:` line pays out for, by
+#: ref. **Refs and never species words** -- `level_2_b._beast_is` records
+#: why: a word here is a printed name sitting in content code, and
+#: `api/render.py` falls back to `requires_text` when the localisation is
+#: absent. Each category's own printed block says which creatures it covers.
+_BEAST_RIDER = frozenset({"comp:1", "comp:3", "comp:5", "comp:6", "comp:7"})
+
+
 @power(
     "p4384",
-    dropped=("c.beast_kind()",),
     level=3,
     cls="ranger",
     usage=ENCOUNTER,
@@ -484,14 +491,28 @@ def p4384(c: Cast) -> None:
     adjacent to the target is at most that far if the beast can reach it
     at all, and `c.shift` stops when it arrives.
 
-    The extra damage is **not** written, and for a different reason the
-    old note did not separate out: it is gated on the companion being a
-    bear, a cat, a raptor, a spider or a snake, and nothing reads a
-    beast's species. That is #1343, not a gap in the companion model.
+    **The `Beast:` rider is written now.** The marker named the right
+    thing -- a reader -- and the reason it was needed is sharper than "the
+    species is unmodelled": the species *is* modelled, and `_beast_is` can
+    already ask about it, but that is a `requires=` predicate. This rider
+    pays out mid-body on a hit and gates nothing about whether the row may
+    be used, so there was nothing for a Requirement-shaped gate to be
+    called from. `c.beast_kind()` is the body-side half.
+
+    The five categories are the refs in `_BEAST_RIDER` above, and the
+    species words have come out of this note along with it.
+
+    **It takes the no-rider arm on every audit run, and that is `#1343`
+    rather than this row.** The audit board fields a category-less beast --
+    the sort built from a copy of its owner, which belongs to no category
+    -- so `c.beast_kind()` answers `""` there, correctly.
+    `drivers.beast_rider` stages a typed companion of its own rather than
+    waiting for the board, which is what makes the clause measurable today.
     """
     victim = c.target
     if c.strike():
-        c.damage(c.w(2), c.str_mod)
+        rider = c.wis_mod if c.beast_kind() in _BEAST_RIDER else 0
+        c.damage(c.w(2), c.str_mod + rider)
     if c.is_quarry():
         c.slowed()
     pet = c.companion()

@@ -22830,6 +22830,41 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         conj = self.world.get(thing, Conjuration)
         return conj.by if conj is not None else None
 
+    def beast_kind(self, *, of: int | None = None) -> str:
+        """Which category this creature's beast companion belongs to, or "".
+
+        The ref -- `comp:1` and so on -- and **never a species word**, for
+        the reason `ranger/level_2_b._beast_is` records: a word here would
+        be a printed name sitting in content code, and `api/render.py`
+        falls back to `requires_text` when the localisation is absent.
+
+        **The body-side half of a question only a Requirement could ask.**
+        `_beast_is(ref)` is a `requires=` predicate, so a printed *Beast:*
+        rider -- "if your companion is one of these, the attack deals extra
+        damage" -- had nothing to call: it pays out mid-body on a hit and
+        gates nothing about whether the row may be used.
+
+        The species is modelled and has been since `#1341`: `chargen`
+        records the category beside the leg as `beast:comp:N`,
+        `c.call_beast` reads it back, and `Companion.ref` carries it on the
+        board. `beast_sb.py`'s own docstring records that the sentence
+        "this engine does not model a species" was true when written and is
+        not now.
+
+        Empty for a creature with no companion, and for a **ref-less** one
+        -- the kind built from a copy of its owner, which genuinely has no
+        category. Both are "not one of the five the card names", which is
+        the answer a rider wants.
+        """
+        from .components import Companion
+
+        owner = of if of is not None else self.me
+        for who in self.world.having(Companion):
+            mine = self.world.get(who, Companion)
+            if mine is not None and mine.owner == owner:
+                return mine.ref or ""
+        return ""
+
     def made_with(self, thing: int) -> str:
         """Which row put that zone or conjuration on the board, or "".
 

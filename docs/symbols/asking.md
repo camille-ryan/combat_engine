@@ -15,6 +15,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - (no docstring)
 - `c.beast(self, *, of: 'int | None' = None, category: 'str' = '') -> 'int | None'`
   - The beast companion a ranger keeps, if it is on the board.
+- `c.beast_kind(self, *, of: 'int | None' = None) -> 'str'`
+  - Which category this creature's beast companion belongs to, or "".
 - `c.can_flank(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "Your familiar can flank with you or your allies."
 - `c.can_hear(self, who: 'int') -> 'bool'`

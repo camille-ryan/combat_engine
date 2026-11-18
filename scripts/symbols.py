@@ -494,6 +494,7 @@ CATEGORIES: dict[str, dict] = {
             # the caster's and is in that section.
             ("who and where", [
                 "adjacent", "adjacent_to", "allies", "beast", "can_flank",
+                "beast_kind",
                 "can_hear", "can_see", "carrying", "companion", "companions",
                 "conjurations", "distance", "enemies", "fallen", "familiar",
                 "familiar_active", "familiar_mode", "first", "height",
