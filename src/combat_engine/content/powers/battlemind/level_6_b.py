@@ -16,7 +16,6 @@ from combat_engine.engine import (
 
 @power(
     "p2633",
-    dropped=("c.as_ranged(weapon=)",),
     level=6,
     cls="battlemind",
     usage=ENCOUNTER,
@@ -34,13 +33,24 @@ def p2633(c: Cast) -> None:
     carries a `weapon` field and every `AttackRolled` is one, so the
     record exists. What is missing is a way to tell `c.as_ranged` to
     spend itself only on a swing with *that* weapon -- a narrowing on the
-    verb, not a gap in the bus. #1341.
+    verb, not a gap in the bus. `c.as_ranged(weapon=)` is that narrowing:
+    `dsl._reach_of` reads `Gear` for the reach anyway, so it carries the
+    held weapon's ref in the modifier context and the gate takes one more
+    clause. #1341.
 
-    It matters only to a character holding two weapons, which is why this
-    plays rather than refuses: with one in hand the next melee attack is
-    the chosen weapon's by construction.
+    **The weapon is the one in hand when the power is used**, which is
+    what *"choose a weapon you are holding"* means for a row that has no
+    way to ask a player: `gear.main` is "the first weapon that can be
+    swung", and a character with one weapon is the common case where the
+    choice is forced anyway.
+
+    It matters only to a character holding two, which is why this played
+    rather than refused before the narrowing existed: with one in hand the
+    next melee attack is the chosen weapon's by construction.
 
     The weapon returning to your hand stays flavour on a thing that never
     left it.
     """
-    c.as_ranged(10, until=When.EONT)
+    held = c.held()
+    chosen = getattr(held[0], "ref", "") if held else ""
+    c.as_ranged(10, until=When.EONT, weapon=chosen)

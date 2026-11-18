@@ -4007,7 +4007,8 @@ class Cast:
         )
 
     def as_ranged(
-        self, squares_: int = 10, *, on: int | None = None, until: When = When.EONT
+        self, squares_: int = 10, *, on: int | None = None,
+        until: When = When.EONT, weapon: str = "",
     ) -> Effect | None:
         """"The next melee attack you make becomes a ranged attack with a
         range of N."
@@ -4018,6 +4019,15 @@ class Cast:
         is for and the rest of it is not sayable per creature. Spent on the
         next attack roll rather than on the next melee one, because the gate
         is also asked where no range line is in the question.
+
+        **`weapon` narrows it to one weapon's swing**, which `p2633`
+        prints -- *"the next melee attack you make **with that weapon**"*
+        -- and which could not be said: the gate saw the range kind and
+        not what was in hand. `dsl._reach_of` reads `Gear` for the reach
+        anyway, so it now carries the held weapon's ref in the context and
+        this is one more clause on the same gate. It matters only to a
+        character holding two weapons; `""` is any, which is every other
+        caller.
 
         **"Melee" is enforced by the key, and the `when=` is a second lock
         on the same door.** #547 read this note and concluded the gate was
@@ -4059,7 +4069,15 @@ class Cast:
         return self.bonus(
             "reach", max(0, squares_ - 1), until=until,
             on=on if on is not None else self.me,
-            when=lambda ctx: ctx.get("range_kind", "melee") == "melee",
+            # **The weapon narrowing, which `p2633` prints and nothing
+            # could say.** `dsl._reach_of` carries the held weapon's ref
+            # in the context now, so "the next melee attack you make
+            # **with that weapon**" is a second clause on the same gate.
+            # Empty means any weapon, which is every other caller.
+            when=lambda ctx: (
+                ctx.get("range_kind", "melee") == "melee"
+                and (not weapon or ctx.get("weapon") == weapon)
+            ),
             once=True, stacks=False,
         )
 
@@ -15140,17 +15158,26 @@ class Cast:
         dtype: DamageType | None = None,
         *,
         side: str = "team",
+        when: Callable[[int], bool] | None = None,
     ) -> None:
         """"While within the zone you and your allies gain resist N."
 
         `c.grants_in` cannot carry this: resistance lives on `Defences`
         rather than in `Mods`, so a modifier named "resist" is read by
         nothing. Six rows across warden and shaman print the sentence.
+
+        **`when` narrows the pool beyond a side**, for the printed clause
+        that does: `p16369` gives it to *"each ally **who can hear you**"*,
+        which `query.can_hear` answers and which no side word can. Handed
+        the creature arriving and asked per arrival, so somebody who walks
+        in deafened is refused and the same creature cured and walking in
+        again is not.
         """
         self._while_inside(
             zone,
             lambda who: self.resist(amount, dtype, on=who, until=When.ENCOUNTER),
             side,
+            when,
         )
 
     def vulnerable_in(
@@ -15247,9 +15274,16 @@ class Cast:
         )
 
     def _while_inside(
-        self, zone: int, give_one: Any, side: str
+        self, zone: int, give_one: Any, side: str,
+        when: Callable[[int], bool] | None = None,
     ) -> None:
-        """Hold something on whoever stands in a zone, and take it back."""
+        """Hold something on whoever stands in a zone, and take it back.
+
+        `when` is a second test on the creature arriving, for the printed
+        clause that narrows the pool beyond a side -- *"each ally **who
+        can hear you**"*. Asked per arrival, like the side test beside it,
+        so a creature that walks in later is asked in its turn.
+        """
         from .events import ZoneEntered, ZoneExited
 
         held: dict[int, Effect] = {}
@@ -15264,6 +15298,10 @@ class Cast:
             # summoned after the zone was laid still has to be in the pool
             # the moment it walks in.
             if who in held or who not in self._side(side, self.me):
+                return
+            # The printed narrowing, asked of the creature arriving --
+            # see the docstring. `None` is every other caller.
+            if when is not None and not when(who):
                 return
             got = give_one(who)
             if got is not None:

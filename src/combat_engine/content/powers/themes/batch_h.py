@@ -1500,15 +1500,26 @@ def p16368(c: Cast) -> None:
 @power(
     "p16369", level=10, cls=X7_973, usage=DAILY, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.MARTIAL],
-    dropped=("c.resist_in(when=)",),
 )
 def p16369(c: Cast) -> None:
     """`side="ally"` and not `"team"`: the card says "each ally", and the
     caster is not in that pool. "Who can hear you" is dropped -- the
-    resistance is handed out by geometry and nothing filters it by what a
-    creature can perceive."""
+    resistance was handed out by geometry and nothing filtered it by what a
+    creature can perceive.
+
+    **It is filtered now, and the reader existed.** `query.can_hear`
+    answers *"who can hear you"* -- composed from `Condition.DEAFENED` and
+    `query.sealed`, and its own docstring notes it was that condition's
+    first reader. What was missing was a way to narrow the pool beyond a
+    side, which `c.resist_in(when=)` is: `_while_inside` already gates per
+    **arrival**, so the test rides beside the side word and a creature
+    walking in deafened is refused while the same creature cured and
+    walking in again is not."""
     aura = c.aura(1, until=When.ENCOUNTER)
-    c.resist_in(aura, _best(c), side="ally")
+    c.resist_in(
+        aura, _best(c), side="ally",
+        when=lambda who: query.can_hear(c.world, who, c.me),
+    )
 
 
 # ===========================================================================

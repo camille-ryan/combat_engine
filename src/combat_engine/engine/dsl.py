@@ -2891,11 +2891,24 @@ def _reach_of(
     """
     from .components import Gear
 
-    if stretch is None:
-        stretch = _stretched(
-            world, actor, r.kind, {"power": ref, "range_kind": r.kind}
-        )
     gear = world.get(actor, Gear)
+    if stretch is None:
+        # **The weapon in hand goes into the context.** `c.as_ranged`'s
+        # gate reads `range_kind` to enforce "melee", and one card narrows
+        # further: `p2633` turns *"the next melee attack you make **with
+        # that weapon**"* into a ranged one, which cannot be said without
+        # knowing which weapon the swing is being measured for. `Gear` is
+        # read on the line above for the reach itself, so this costs a key
+        # rather than a lookup.
+        held = getattr(gear, "main", None) if gear is not None else None
+        stretch = _stretched(
+            world, actor, r.kind,
+            {
+                "power": ref,
+                "range_kind": r.kind,
+                "weapon": getattr(held, "ref", ""),
+            },
+        )
     # **What the range itself adds**, fixed and by ability, folded into
     # `stretch` so it reaches **both** returns below. A reach increase means
     # the same thing to a fixed-number row and a by-weapon one, and six

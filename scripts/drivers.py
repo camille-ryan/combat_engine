@@ -24908,6 +24908,100 @@ def one_effect_two_enders(out: Result) -> None:
     out.that(granted(Condition.STUNNED),
              "while `ignoring=` lets the printed 'even if stunned' through")
 
+    # -- two more narrowings, both on verbs that already existed ---------
+    #
+    # `c.as_ranged(weapon=)`: `p2633` turns *"the next melee attack you
+    # make **with that weapon**"* into a ranged one. The gate saw the
+    # range kind and not what was in hand, so `dsl._reach_of` -- which
+    # reads `Gear` for the reach anyway -- now carries the held weapon's
+    # ref in the context.
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import _stretched
+
+    board, caster, _ = _audit.board("p2633", 1, pose=True)
+    gear = board.get(caster, Gear)
+    arms = [a.ref for a in (gear.weapons if gear is not None else [])]
+    if len(arms) < 2:
+        out.skip("p2633's board deals fewer than two weapons")
+    else:
+        asker = Cast(world=board, me=caster, ref="drivers")
+        asker.as_ranged(10, until=_When.ENCOUNTER, weapon=arms[0])
+
+        def reach(weapon: str, kind: str) -> int:
+            return _stretched(board, caster, kind,
+                              {"power": "drivers", "range_kind": kind,
+                               "weapon": weapon})
+
+        out.that(reach(arms[0], "melee") > 0,
+                 "the chosen weapon's melee swing gets the range")
+        out.that(reach(arms[1], "melee") == 0,
+                 "**and a different weapon in the same hand gets nothing**"
+                 " -- the narrowing, which matters only to a character"
+                 " holding two and is why the row played before it existed",
+                 f"{arms[1]} got {reach(arms[1], 'melee')}")
+        out.that(reach(arms[0], "ranged") == 0,
+                 "while a ranged line still gets nothing, which the key"
+                 " enforced before the weapon clause was added")
+
+        # **Through `_reach_of`, not a hand-built context.** The three
+        # assertions above pass a dict of their own, so they cannot see
+        # whether the ENGINE supplies the weapon -- planting
+        # `_reach_of`'s key away left them all green. This asks the
+        # function that content actually goes through.
+        from combat_engine.engine.dsl import Range, _reach_of
+
+        melee = Range(kind="melee", size=1)
+        with_wep = _reach_of(board, caster, melee, "drivers")
+        bare, bare_caster, _ = _audit.board("p2633", 1, pose=True)
+        without = _reach_of(bare, bare_caster, melee, "drivers")
+        out.that(with_wep > without,
+                 "**and `dsl._reach_of` supplies the weapon itself** -- the"
+                 " three assertions above build their own context, so only"
+                 " this one fails when the engine stops carrying the key",
+                 f"with the hold {with_wep}, on a fresh board {without}")
+
+    # `c.resist_in(when=)`: `p16369` gives it to *"each ally who can hear
+    # you"*, which `query.can_hear` answers and no side word can.
+    from combat_engine.engine.components import Defences as _Guards
+    from combat_engine.engine.events import ZoneEntered
+    from combat_engine.engine.query import can_hear
+
+    board, caster, _ = _audit.board("p16369", 1, pose=True)
+    friends = [a for a in _audit._allies_of(board, caster) if a != caster]
+    if len(friends) < 2:
+        out.skip("p16369's board deals fewer than two allies")
+        return
+    ears, deafened = friends[0], friends[1]
+    asker = Cast(world=board, me=caster, ref="drivers")
+    asker.condition(Condition.DEAFENED, on=deafened, until=_When.ENCOUNTER)
+    out.that(can_hear(board, ears, caster)
+             and not can_hear(board, deafened, caster),
+             "a deafened ally cannot hear and an undeafened one can -- the"
+             " reader this narrows by, and `Condition.DEAFENED`'s first"
+             " reader when it was written")
+    ring = asker.aura(1, until=_When.ENCOUNTER)
+    asker.resist_in(ring, 7, side="ally",
+                    when=lambda who: can_hear(board, who, caster))
+
+    def resisting(who: int) -> int:
+        guards = board.get(who, _Guards)
+        return max(guards.resist.values()) if guards and guards.resist else 0
+
+    # **The arrival is driven directly.** Walking a creature in is what
+    # the engine does in play and what a probe cannot stage here: a
+    # one-step walk will not cross the aura's edge from outside it, and
+    # two probes read 0 for both allies on that account before the
+    # staging was the suspect rather than the row.
+    board.bus.emit(ZoneEntered(actor=ears, zone=ring))
+    board.bus.emit(ZoneEntered(actor=deafened, zone=ring))
+    out.that(resisting(ears) == 7,
+             "the ally who can hear gains the resistance",
+             f"got {resisting(ears)}")
+    out.that(resisting(deafened) == 0,
+             "**and the deafened ally does not** -- the clause no side"
+             " word could express",
+             f"got {resisting(deafened)}")
+
 
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
