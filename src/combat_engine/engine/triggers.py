@@ -93,6 +93,22 @@ class Trigger:
     #: and those cannot be said any other way: the roll, the hit and the
     #: damage all happen inside the `AttackDeclared` emit.
     window: Window | None = None
+    #: **Which branch of the row this trigger fires.** Defaults to 0, so
+    #: every trigger written before this behaves exactly as it did.
+    #:
+    #: A card can print a second *way of being used* with its own action
+    #: cost, requirement and body -- `p16497`'s *"you can expend this power
+    #: at the start of your turn to make a saving throw"*, beside a
+    #: minor-action Effect. `Power.action_alt`, `requires_alt` and
+    #: `body_alt` hold the three halves, and this says which branch the
+    #: trigger belongs to, so the window, the action budget and the
+    #: requirement are all read off **that** branch rather than off the
+    #: base line.
+    #:
+    #: Without it a trigger on such a row was checked against `p.action` --
+    #: the minor -- so the window was wrong and the branch's own body was
+    #: unreachable.
+    branch: int = 0
 
 
 #: Refs currently resolving, keyed by responder. A reaction that emits the
@@ -359,41 +375,54 @@ class Triggers:
                 and can_act(self.world, eid, ignoring=_shrugging(ev, eid))
             ):
                 continue
-            for ref in self._answers(eid, ev, window):
-                self._ask(eid, ref, ev)
+            for ref, branch in self._answers(eid, ev, window):
+                self._ask(eid, ref, ev, branch)
                 if ev.cancelled:
                     return
 
-    def _answers(self, eid: int, ev: Event, window: Window) -> list[str]:
-        """Which of this creature's rows this event triggers, in order."""
+    def _answers(self, eid: int, ev: Event,
+                 window: Window) -> list[tuple[str, int]]:
+        """Which of this creature's rows this event triggers, in order.
+
+        **`(ref, branch)` rather than a bare ref**, because a row may print
+        a second way of being used whose action cost, requirement and body
+        are its own -- see `Trigger.branch`. Every trigger declares branch
+        0 unless it says otherwise, so this reads as before for all but
+        the handful that do.
+        """
         from .dsl import _IN_FLIGHT, get, usable
 
         known = self.world.get(eid, Powers)
         if known is None:
             return []
         dying = getattr(ev, "actor", None) == eid and not alive(self.world, eid)
-        out = []
+        out: list[tuple[str, int]] = []
         for ref in known.all:
             p = get(ref)
             if p is None or not p.triggers:
                 continue
-            if not any(
-                (t.window or WINDOW_OF.get(p.action)) is window for t in p.triggers
-            ):
+            # **The window and the cost come off the trigger's own
+            # branch.** `action_of` is `action_alt or action` for branch 1,
+            # so a row printing a second way of being used is checked
+            # against that way rather than against its base action line.
+            answered = [
+                t for t in p.triggers
+                if isinstance(ev, t.event)
+                and (t.window or WINDOW_OF.get(p.action_of(t.branch))) is window
+                and t.when(self.world, eid, ev)
+            ]
+            if not answered:
                 continue
             # Any of them. A row naming several printed triggers answers
-            # whichever one actually happened.
-            if not any(
-                isinstance(ev, t.event)
-                and (t.window or WINDOW_OF.get(p.action)) is window
-                and t.when(self.world, eid, ev)
-                for t in p.triggers
-            ):
-                continue
+            # whichever one actually happened -- and the first that matches
+            # decides the branch, which is the order they are declared in.
+            t = answered[0]
             if (eid, ref) in _IN_FLIGHT:
                 continue
+            if t.branch and not p.can_branch(self.world, eid, t.branch):
+                continue
             if not dying and not self.encounter.can_spend(
-                eid, p.action, ignoring=_shrugging(ev, eid)
+                eid, p.action_of(t.branch), ignoring=_shrugging(ev, eid)
             ):
                 continue
             # **`ignoring=` here too, and leaving it off was the bug.**
@@ -408,10 +437,10 @@ class Triggers:
                 ignoring=_shrugging(ev, eid),
             )
             if ok:
-                out.append(ref)
+                out.append((ref, t.branch))
         return out
 
-    def _ask(self, eid: int, ref: str, ev: Event) -> None:
+    def _ask(self, eid: int, ref: str, ev: Event, branch: int = 0) -> None:
         """Offer one power, and use it if it is taken.
 
         The offer is a real choice -- a printed trigger is permission, not an
@@ -447,8 +476,16 @@ class Triggers:
             return
         variant = int(taken.split("#")[1]) if "#" in taken else 0
         dying = getattr(ev, "actor", None) == eid and not alive(self.world, eid)
+        # **`action_of(branch)`, not `p.action`.** `_answers` CHECKS
+        # affordability against the trigger's own branch and this SPENT the
+        # base line's cost, so a row printing a second way of being used --
+        # `p16497`'s no-action Special beside a minor-action Effect -- was
+        # offered correctly and then charged a minor it did not have, and
+        # `spend` refused it here. The same check-here-spend-there
+        # asymmetry as the `_shrugging` threading two commits ago, in the
+        # same function.
         if not dying and not self.encounter.spend(
-            eid, p.action, ignoring=_shrugging(ev, eid)
+            eid, p.action_of(branch), ignoring=_shrugging(ev, eid)
         ):
             return
 
@@ -463,7 +500,7 @@ class Triggers:
         # then refused a third time inside `use`, which re-checks. Each
         # refusal was the same condition read again without the waiver.
         use(self.world, eid, ref, targets=self._at(p, eid, ev), trigger=ev,
-            variant=variant, ignoring=_shrugging(ev, eid))
+            variant=variant, ignoring=_shrugging(ev, eid), branch=branch)
 
     def _at(self, p, eid: int, ev: Event) -> list[int] | None:  # noqa: ANN001
         """Who a triggered row is aimed at: whoever the event was about.

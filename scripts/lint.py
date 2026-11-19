@@ -1813,6 +1813,19 @@ def _minor_with_a_declared_trigger() -> list[tuple[str, str]]:
     So a prose `trigger="..."` beside a `requires=` is **correct** and is not
     flagged -- only a declared `on=Trigger(...)`, which is the half that
     silently does nothing.
+
+    **And a trigger that names a BRANCH is exempt, because the premise
+    above stops being true for it.** `triggers._answers` reads the window
+    off `p.action_of(t.branch)`, not off `p.action`, so a row printing a
+    second way of being used -- `p16497`'s `action_alt=NONE` Special beside
+    a minor-action Effect -- has a real window for the branch its trigger
+    fires, and `WINDOW_OF` maps `NONE`.
+
+    The exemption is `branch=` appearing in the declared `Trigger(...)`,
+    which is the narrowest test that distinguishes the two: without it this
+    check flagged `p16497` for a fault it does not have, and the honest fix
+    is the check's definition rather than the row -- the engine changed
+    under it. `#1376`.
     """
     out: list[tuple[str, str]] = []
     for path in _asked_for():
@@ -1832,6 +1845,11 @@ def _minor_with_a_declared_trigger() -> list[tuple[str, str]]:
                 if "MINOR" not in ast.unparse(kw["action"]):
                     continue
                 if "Trigger(" not in ast.unparse(kw["on"]):
+                    continue
+                # A branch-declaring trigger reads its window off
+                # `action_of(branch)`, so the minor is not the cost that
+                # decides -- see the note above.
+                if "branch=" in ast.unparse(kw["on"]):
                     continue
                 rel = path.relative_to(ROOT)
                 out.append((f"{rel}:{dec.lineno}", node.name))

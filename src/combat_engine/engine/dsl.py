@@ -1807,6 +1807,28 @@ class Power:
     #: builds a throwaway `Cast` before the real one, so a pre-targeting
     #: `Cast` is established rather than new.
     effect_before: Callable[[Any], None] | None = None
+    #: **A second printed body, for branch 1.** `p16497` prints a
+    #: minor-action Effect and then a *"Special"* that is a different way
+    #: of using the same card: no action, at the start of your turn, only
+    #: while dominated, expending the row to roll one saving throw instead
+    #: of laying the Effect's bonuses.
+    #:
+    #: The three other halves already existed -- `action_alt` for the cost,
+    #: `requires_alt` for the condition, and `Trigger.branch` for which
+    #: branch the printed Trigger line fires. This is the body.
+    #:
+    #: **Not a `pNb` second card**, which was built and reverted: `cls=""`
+    #: means no draw deals it, `Powers.all` is `known` plus the basic
+    #: attacks with no derivation, and `triggers._answers` offers only what
+    #: is in that list -- so it could not fire, and a `drivers` rule
+    #: calling the body directly cannot see that. Deriving `pNb` inside
+    #: `Powers.all` catches **216** rows, 212 of which their parents
+    #: already hand over under conditions of their own.
+    #:
+    #: Read where `body` is read, so a branch-1 use runs this and nothing
+    #: else. `None` falls through to `body`, which is every row but the
+    #: handful that print a second mode.
+    body_alt: Callable[[Any], None] | None = None
     #: A printed Trigger line. Set for immediate and opportunity actions.
     trigger: str = ""
     #: The same line in a form the dispatcher can act on. With it the row is
@@ -2350,6 +2372,15 @@ class Power:
         """
         return (self.action_alt or self.action) if branch else self.action
 
+    def body_of(self, branch: int = 0) -> Callable[[Any], None]:
+        """Which body this branch runs.
+
+        `body_alt or body` for branch 1, falling through for every row that
+        prints no second mode -- the same shape `action_of` has, and for the
+        same reason: a branch with no body of its own runs the card's.
+        """
+        return (self.body_alt or self.body) if branch else self.body
+
     def can_branch(self, world: World, actor: int, branch: int = 0) -> bool:
         """Is this branch open to this creature, given what it is holding?
 
@@ -2565,6 +2596,7 @@ def power(
     action_alt: ActionType | None = None,
     by_ally_check: tuple[str, int] | None = None,
     effect_before: Callable[[Any], None] | None = None,
+    body_alt: Callable[[Any], None] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
     recharge: int = 0,
@@ -2826,6 +2858,7 @@ def power(
             action_alt=action_alt,
             by_ally_check=by_ally_check,
             effect_before=effect_before,
+            body_alt=body_alt,
             trigger=trigger,
             on=on,
             recharge=recharge,
@@ -5555,7 +5588,7 @@ def use(
     rolls: list[Any] = []
     try:
         if not chosen:
-            p.body(cast)
+            p.body_of(branch)(cast)
         landed = False
         # By index rather than by iterator: `chosen` is `cast.targets`, and a
         # row answering this one may lengthen it while it is being walked.
@@ -5591,7 +5624,7 @@ def use(
             cast.target = t
             cast.result = None
             del cast.swings[:]
-            p.body(cast)
+            p.body_of(branch)(cast)
             # **Every swing the body made, not the last one it happened to
             # leave behind.** `cast.result` is written by `Cast.attack`, the
             # single funnel every attack roll goes through, so a body with

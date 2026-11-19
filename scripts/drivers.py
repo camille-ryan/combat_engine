@@ -11830,12 +11830,26 @@ def every_triggered_action_can_be_offered(out: Result) -> None:
     declared row carries alongside a trigger must have an entry. A third
     action type turning up later cannot then be silently unreachable, which
     is the only way this bug has ever appeared.
+
+    **Counted per TRIGGER and off `action_of(t.branch)`, not per row off
+    `p.action`.** A row may print a second way of being used whose cost is
+    its own -- `p16497` is `action=MINOR` with a Special that is
+    `action_alt=NONE`, and its declared Trigger fires that second branch.
+    Read off the row, this census saw `MINOR` on a triggered row and
+    reported it unreachable; read off the branch the trigger actually
+    fires, it sees `NONE`, which is mapped.
+
+    The old reading was right for every row until branches existed and is
+    wrong now, so the definition moved rather than the row: `_answers`
+    resolves the window the same way, and a census that disagrees with the
+    dispatcher is measuring nothing. `#1376`.
     """
     from combat_engine.content import loader  # noqa: F401
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.triggers import WINDOW_OF, _watched
 
-    carried = {p.action for p in REGISTRY.values() if p.triggers}
+    carried = {p.action_of(t.branch)
+               for p in REGISTRY.values() for t in p.triggers}
     out.that(carried, "some declared row carries a trigger, or this rule is"
                       " asserting over an empty set")
     missing = sorted(getattr(a, "name", str(a))
@@ -11852,7 +11866,7 @@ def every_triggered_action_can_be_offered(out: Result) -> None:
     unsubscribed = []
     for row in REGISTRY.values():
         for t in row.triggers:
-            w = t.window or WINDOW_OF.get(row.action)
+            w = t.window or WINDOW_OF.get(row.action_of(t.branch))
             if w is not None and w not in watched.get(t.event, set()):
                 unsubscribed.append(f"{row.ref}:{t.event.__name__}/{w.name}")
     out.that(not unsubscribed,
@@ -20248,6 +20262,174 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
         out.that(row is not None and not row.unfinished,
                  f"`{which}` is declared and carries no marker",
                  f"{row.unfinished if row else 'absent'}")
+
+
+def a_card_may_print_a_second_way_of_being_used(out: Result) -> None:
+    """*"Effect: You gain a +4 power bonus to Will and a +4 power bonus to
+    saving throws against charm and psychic effects until the end of your
+    next turn. Special: If you are dominated and a save can end the
+    domination effect, you can expend this power at the start of your turn
+    to make a saving throw to end that effect."* -- `p16497`.
+
+    **A second printed MODE of one card**, which is different from a second
+    cost or a second reach: it has its own action (none), its own
+    requirement (dominated, savably), its own moment (a turn start) and its
+    own body (one saving throw) -- and it replaces the Effect rather than
+    adding to it.
+
+    Four halves, three of which already existed: `action_alt` for the cost
+    (built earlier this run), `requires_alt` for the condition,
+    `Trigger(branch=1)` for which branch the printed Trigger fires, and
+    `body_alt` for the body. `Power.body_of` resolves it the way
+    `action_of` resolves the cost, falling through to `body` for every row
+    that prints no second mode.
+
+    **The `pNb` route was built and reverted and must not be retried.**
+    `cls=""` means no draw deals it, `Powers.all` is `known` plus the basic
+    attacks with no derivation, and `triggers._answers` offers a creature
+    only what is in that list -- so it could not fire, and a `drivers` rule
+    calling the body directly cannot see that. Deriving `pNb` inside
+    `Powers.all` catches **216** rows, 212 of which their parents already
+    hand over under conditions of their own.
+
+    **The dispatcher had to learn about branches, and one site disagreed
+    with another.** `_answers` now reads the window, the action budget and
+    the requirement off the trigger's branch. `_ask` *checked*
+    affordability against that branch and then **spent `p.action`** -- the
+    minor -- so this row was offered correctly and charged a cost it did
+    not have, and `spend` refused it. The same check-here-spend-there
+    asymmetry as the `_shrugging` threading, in the same function.
+
+    **Every assertion reads `SavingThrow.granted_via`.** The audit board
+    deals class features that hand out early saves of their own --
+    `cf:fighter-slayer-f17` shook off this very domination in the first
+    probe -- so "the domination ended" is not evidence and nearly credited
+    this row for another feature's work.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import PowerUsed, SavingThrow, TurnStart
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+
+    row = REGISTRY["p16497"]
+    out.that(row.branches == (0, 1)
+             and row.action_of(0) is ActionType.MINOR
+             and row.action_of(1) is ActionType.NONE
+             and row.body_of(1) is not row.body_of(0)
+             and row.requires_of(1) is not None,
+             "the card declares a second mode whole -- two branches, two"
+             " action costs, two bodies, and a requirement on the second"
+             " only",
+             f"{row.branches} / {row.action_of(0).value},"
+             f" {row.action_of(1).value} /"
+             f" bodies differ={row.body_of(1) is not row.body_of(0)}")
+    out.that(bool(row.triggers) and row.triggers[0].branch == 1,
+             "and its printed Trigger fires the SECOND branch -- without"
+             " that the trigger is checked against the minor-action line,"
+             " whose window is wrong and whose body is the Effect",
+             f"branch={row.triggers[0].branch if row.triggers else None}")
+
+    def turn_starts(seed: int, *, dominate: str = "save") -> dict | None:
+        """Start a turn. `dominate` is `save`, `locked` or `none`."""
+        world, me, _ = _board("p16497", seed)
+        known = world.get(me, Powers)
+        if known is None:
+            return None
+        if "p16497" not in known.all:
+            known.known.append("p16497")
+        world.encounter = enc = Encounter(world)
+        enc.start()
+        if dominate != "none":
+            foe = next(iter(sorted(enemies(world, me))), -1)
+            if foe < 0:
+                return None
+            Cast(world=world, me=foe, ref="drivers:dom").dominate(
+                on=me,
+                # `locked` is a domination no save can end, which is the
+                # second half of the printed Requirement and the only
+                # thing that distinguishes it from the condition test.
+                until=When.SAVE_ENDS if dominate == "save" else When.ENCOUNTER,
+            )
+        used: list[str] = []
+        saves: list[tuple[str, str, bool]] = []
+        world.bus.on(PowerUsed, lambda ev: used.append(str(ev.power)))
+        world.bus.on(SavingThrow, lambda ev: saves.append(
+            (str(getattr(ev, "granted_via", "")), str(ev.when_), bool(ev.saved))))
+        world.bus.emit(TurnStart(actor=me, round=world.round + 1))
+        mine = [sv for sv in saves if sv[0] == "p16497"]
+        return {
+            "fired": "p16497" in used,
+            "spent": dict(known.used or {}).get("p16497"),
+            "mine": mine,
+            "early": all(sv[1] == "early" for sv in mine) and bool(mine),
+        }
+
+    savable = [g for g in (turn_starts(seed) for seed in (1, 2, 3, 4)) if g]
+    out.that(bool(savable) and all(g["fired"] for g in savable),
+             "**dominated at the start of its turn, the second mode"
+             " fires** -- which it could not while `_ask` spent the"
+             " minor-action cost instead of this branch's",
+             f"{sum(g['fired'] for g in savable)} of {len(savable)}")
+    if not savable:
+        return
+    out.that(all(g["mine"] for g in savable),
+             "**and the saving throw is ITS OWN** -- read off"
+             " `SavingThrow.granted_via`, because the board deals class"
+             " features that hand out early saves and one of them shook"
+             " off this very domination in the first probe. 'The"
+             " domination ended' is not evidence",
+             f"{[len(g['mine']) for g in savable]} save(s) credited to it")
+    out.that(all(g["early"] for g in savable),
+             "taken at the START of the turn -- `when_='early'`, the"
+             " printed moment, which three other rows narrow on",
+             f"{[g['mine'][0][1] for g in savable if g['mine']]}")
+    out.that(all(g["spent"] for g in savable),
+             "and the row is expended by it -- *'you can expend this"
+             " power'*. Nothing in the body does that: `dsl.use` spends the"
+             " usage for whichever branch ran, so a `c.expend_row` call"
+             " would have spent it twice",
+             f"{[g['spent'] for g in savable]}")
+
+    # -- the Requirement, both halves -------------------------------------
+    clear = [g for g in (turn_starts(seed, dominate="none")
+                         for seed in (1, 2, 3, 4)) if g]
+    out.that(bool(clear) and not any(g["mine"] for g in clear),
+             "undominated, it does not fire -- the first half of"
+             " *'if you are dominated and a save can end it'*",
+             f"{sum(bool(g['mine']) for g in clear)} fired of {len(clear)}")
+    locked = [g for g in (turn_starts(seed, dominate="locked")
+                          for seed in (1, 2, 3, 4)) if g]
+    # **Asserted on `spent`, not on the save.** With the Requirement
+    # widened the row fires and `c.save` finds no save-ends effect, so it
+    # rolls nothing and emits no `SavingThrow` -- the "it did not fire"
+    # reading passes while the card has been thrown away. The plant that
+    # drops this half of the Requirement passed on exactly that.
+    out.that(bool(locked) and not any(g["spent"] for g in locked),
+             "**and dominated by something NO save can end, the card is"
+             " not expended** -- the second half of *'if you are dominated"
+             " AND a save can end the domination effect'*, which a"
+             " condition test alone misses. Offering it there spends an"
+             " encounter power to roll a throw against a clock that"
+             " answers none",
+             f"{[g['spent'] for g in locked]}")
+    out.that(bool(locked) and not any(g["mine"] for g in locked),
+             "and no throw is credited to it either",
+             f"{sum(bool(g['mine']) for g in locked)} of {len(locked)}")
+
+    # -- branch 0 is untouched --------------------------------------------
+    world, me, _ = _board("p16497", 1)
+    c = Cast(world=world, me=me, ref="p16497")
+    row.body_of(0)(c)
+    mods = world.get(me, Mods)
+    out.that(mods is not None and mods.total("will", {}) > 0,
+             "and the minor-action Effect still lays its +4 to Will --"
+             " branch 0 runs `body`, which `body_of` falls through to",
+             f"will {mods.total('will', {}) if mods else 0}")
 
 
 def a_printed_effect_can_run_before_the_row_aims(out: Result) -> None:
@@ -104141,6 +104323,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "second_mode": (a_card_may_print_a_second_way_of_being_used,
+                    "a card prints a second way of being used, with its own"
+                    " cost, requirement, moment and body"),
     "aim_after_moving": (a_printed_effect_can_run_before_the_row_aims,
                          "a printed Effect runs before the row aims, and"
                          " the burst is re-aimed from where the caster"

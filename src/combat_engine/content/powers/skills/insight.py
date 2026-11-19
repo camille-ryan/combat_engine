@@ -42,6 +42,7 @@ from combat_engine.engine import (
     CloseBurst,
     Keyword,
     Melee,
+    PersonalPair,
     Ranged,
     Trigger,
     When,
@@ -50,8 +51,16 @@ from combat_engine.engine import (
     my_check,
     power,
 )
-from combat_engine.engine.events import AttackRolled, Hit, MoveStart, SkillCheck
-from combat_engine.engine.query import allies, distance_between, team, unseen_by
+from combat_engine.engine.durations import When as _When
+from combat_engine.engine.events import (
+    AttackRolled,
+    Hit,
+    MoveStart,
+    SkillCheck,
+    TurnStart,
+)
+from combat_engine.engine.query import allies, distance_between, is_, team, unseen_by
+from combat_engine.engine.types import ActionType, Condition
 
 #: The three checks the level-6 reroll names, and the three the level-10
 #: burst hands a bonus to. Separate from the blanket `skill` key on purpose:
@@ -277,15 +286,69 @@ def p11555(c: Cast) -> None:
     c.no_advantage(on=c.me, until=When.EONT)
 
 
+def _p16497_dominated_and_savable(world: Any, actor: int) -> bool:
+    """*"If you are dominated AND a save can end the domination effect."*
+
+    Both halves, because the card prints both and the second is the one a
+    condition test alone misses: a domination with no save-ends clock
+    cannot be shaken off, so offering the Special there would spend the
+    card for nothing.
+
+    `c.dominate` files `Relation.DOMINATED_BY` and lets `relations.IMPLIES`
+    supply `Condition.DOMINATED`, so the condition is the cheap test and
+    the effect behind it is what carries the clock. Matched on the label
+    fragment `dominate`, which is what `c.save(against=)` matches too --
+    so the thing this looks for and the thing the body saves against are
+    the same string.
+    """
+    if not is_(world, actor, Condition.DOMINATED):
+        return False
+    return any(
+        eff.when is _When.SAVE_ENDS and "dominate" in eff.label
+        for eff in world.effects.of(actor)
+    )
+
+
+def _p16497_shrug_it_off(c: Cast) -> None:
+    """*"You can expend this power at the start of your turn to make a
+    saving throw to end that effect."*
+
+    The second printed mode of one card, reached as branch 1 --
+    `action_alt=NONE` for the cost, `requires_alt` for the condition,
+    `Trigger(..., branch=1)` for the moment, and this for the body.
+
+    **Nothing expends the row here.** The Special says *"expend this
+    power"*, and that is what using it already does: `dsl.use` spends the
+    encounter usage for whichever branch ran, so a `c.expend_row` call
+    would spend it twice and the second would find nothing.
+
+    **`when_="early"` is the printed moment** and is read by three rows
+    that narrow on it -- a throw taken at the start of a turn is not the
+    ordinary end-of-turn one, and `SavingThrow.when_` is the field that
+    says which.
+    """
+    c.save(on=c.me, against="dominate", when_="early")
+
+
 @power(
     "p16497",
     level=6,
     cls="insight",
     usage=ENCOUNTER,
     action=MINOR,
-    reach=PERSONAL,
+    action_alt=ActionType.NONE,
+    reach=PersonalPair(),
     target=SELF,
-    dropped=("Power.body_alt",),
+    requires_alt=_p16497_dominated_and_savable,
+    body_alt=_p16497_shrug_it_off,
+    trigger="you are dominated at the start of your turn",
+    on=Trigger(
+        TurnStart,
+        lambda w, me, ev: getattr(ev, "actor", None) == me
+        and not getattr(ev, "ghost", False),
+        "the start of your turn, while dominated",
+        branch=1,
+    ),
 )
 def p16497(c: Cast) -> None:
     """Two +4s, and the qualifier belongs to the second only: the card
