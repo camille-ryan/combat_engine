@@ -393,7 +393,31 @@ class World:
         """
         from .components import Movement
 
-        heights = self.zones.wall_heights()
+        # **A zone that prices its own crossing is not tolled on top of
+        # it**, which is this file's half of "the printed row wins over a
+        # printed table". `p16292` is the worked case: *"The wall can be up
+        # to 4 squares high"* AND *"Moving through a square of the wall
+        # costs 2 extra squares of movement"* -- both printed, on the same
+        # card. The height toll is 3 and beat the printed 2 under
+        # `crossing`'s "larger of" rule, so a climber paid 4 to cross a wall
+        # its own card prices at 3.
+        #
+        # The height is still **recorded**, and deliberately read from
+        # `wall_heights()` elsewhere: `movement.over_a_wall` needs it to
+        # know a flier crosses and a walker does not, which is the question
+        # `#1365` was actually about. What is dropped here is only the
+        # *movement surcharge*, and only where a row states one itself.
+        #
+        # A wall of wind is the reason the two can disagree at all: it is
+        # pushed through rather than climbed, so its printed cost is not a
+        # climb and the general rule has nothing to say about it.
+        heights: dict[Any, int] = {}
+        for _, zone in self.zones.all():
+            if zone.height <= 0 or zone.extra_cost:
+                continue
+            for sq in zone.squares:
+                if zone.height > heights.get(sq, 0):
+                    heights[sq] = zone.height
         if not heights:
             return {}
         mv = self.get(for_, Movement)
