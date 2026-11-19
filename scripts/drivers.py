@@ -5881,6 +5881,37 @@ def a_feat_may_widen_what_another_rows_trigger_answers(out: Result) -> None:
              "the trait half declares no trigger and the b half does, which"
              " is why they are two rows")
 
+    # -- and the holder has to KNOW it, which is what this rule could not
+    #    see for the whole of its life ------------------------------------
+    #
+    # **Every assertion below reaches the row's body directly**, so all of
+    # them passed while `f2793b` was unreachable in play: `cls=""` means no
+    # draw deals it, `Powers.all` is `known` plus the basics with no
+    # derivation, and `triggers._answers` offers a creature only what is in
+    # that list. A trigger nothing can answer is a row that never fires.
+    #
+    # The fix is `c.grant_row` from the parent trait, which is how 212 of
+    # the 218 hand-declared second cards arrive -- measured -- and which
+    # `chargen.power_swap`'s own docstring states from the other side: *"The
+    # card arrives with the feat -- its body hands it over -- and this is
+    # the other half: something goes back."* This feat has no swap, so
+    # handing it over was the only half it ever had.
+    from combat_engine.engine.components import Powers as _Powers
+
+    armed, holder, _ = _board("f2793", 1)
+    hand = set((armed.get(holder, _Powers) or _Powers()).all)
+    out.that("f2793" in hand,
+             "the board deals the parent trait -- the premise, since a"
+             " grant it never runs hands over nothing",
+             f"{'f2793' in hand}")
+    out.that(ref in hand,
+             "and the trait hands the second card over, so a creature can"
+             " actually answer its trigger. Asserted on `Powers.all`"
+             " because that is the list `triggers._answers` walks -- the"
+             " body-level assertions below cannot see this and passed"
+             " through the whole time it was false",
+             f"{sorted(r for r in hand if r.endswith('b'))}")
+
     # Narrowed rather than reached through: `Power.on` is
     # `Trigger | Sequence[Trigger] | None`, and this row declares one.
     declared = REGISTRY[ref].on

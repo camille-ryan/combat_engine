@@ -304,6 +304,41 @@ def p16497(c: Cast) -> None:
     would replace the minor-action use rather than sit beside it, so the
     alternative has nowhere to go. `c.expend_row` and `c.save` are both
     already here; what is missing is the second mode.
+
+    **The obvious way round was built, measured and reverted, so nobody has
+    to spend that twice.** The `b` suffix is this tree's convention for a
+    second way of using one printed entry -- 218 hand-declared ones, and
+    `dsl.entry_of` ties `pNb` back to `pN` -- so the Special was written as
+    `p16497b`: `cls=""`, `AT_WILL`, `action=NONE`, triggered on `TurnStart`,
+    with `c.expend_row("p16497")` paying for the throw out of the parent's
+    own use, which is what keeps two rows from being two encounter uses.
+    Nine assertions held and four plants red their own lines.
+
+    **It cannot fire.** `cls=""` means no draw deals it; `Powers.all` is
+    `known` plus the basic attacks with no derivation; and
+    `triggers._answers` offers a creature only what is in that list. So the
+    trigger is unreachable in play, and a `drivers` rule calling the body
+    directly cannot see that -- which is exactly how `f2793b` shipped dead.
+
+    The convention's missing half is `c.grant_row` **from a standing
+    trait**: 212 of the 218 arrive that way, and `chargen.power_swap`'s
+    docstring states it from the other side -- *"The card arrives with the
+    feat -- its body hands it over -- and this is the other half: something
+    goes back."* That is why the feats work and this cannot: a trait's body
+    runs at `arm_traits`, and this parent is a **minor action** whose body
+    runs only when it is used. The Special has to be available *without*
+    using the parent, so the grant would have to happen before the only
+    moment the parent ever executes.
+
+    Deriving `pNb` inside `Powers.all` was the other candidate and is
+    wrong: it catches **216** rows, 212 of which their parents already hand
+    over under conditions of their own, so it would offer those outside
+    their own gating.
+
+    So the gap is real and is one layer up, where the marker says: a second
+    printed mode needs somewhere in the **header** to live. The same gap
+    `p14124` carries as `Power.action_alt` and `m1171a1` waits on, so it is
+    one facility and not three.
     """
     c.bonus(WILL, 4, on=c.me, kind="power", until=When.EONT)
     c.bonus(

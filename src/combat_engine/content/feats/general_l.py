@@ -2375,6 +2375,20 @@ def f2793(c: Cast) -> None:
         when=lambda ctx: c.mount() is not None
         and _group_in(c, "spear", "bow"),
     )
+    # **And hand the second card over, which nothing did.** `f2793b` was
+    # declared, audited green and **unreachable**: `cls=""` means no draw
+    # deals it, `Powers.all` is `known` plus the basics with no derivation,
+    # and `triggers._answers` offers a creature only what is in that list.
+    # So its trigger could never be reached in play.
+    #
+    # `c.grant_row` from a standing trait is how every other second card
+    # arrives -- 212 of the 218 hand-declared ones, measured -- and this
+    # parent is already such a trait. `power_swap`'s docstring states the
+    # convention from the other side: *"The card arrives with the feat --
+    # its body hands it over -- and this is the other half: something goes
+    # back."* This feat has no swap; it only ever had the handing over to
+    # do, and did not.
+    c.grant_row("f2793b", on=me, until=When.ENCOUNTER)
 
 
 @power("f2793b", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
