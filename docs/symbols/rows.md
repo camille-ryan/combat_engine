@@ -63,7 +63,7 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
 
 ## asking
 
-- `c.choose(self, options: 'list[T]', prompt: 'str' = '', *, optional: 'bool' = False, decline: 'str' = 'none of them') -> 'T | None'`
+- `c.choose(self, options: 'list[T]', prompt: 'str' = '', *, optional: 'bool' = False, decline: 'str' = 'none of them', who: 'int | None' = None) -> 'T | None'`
   - Pick one. With `optional`, "none of them" is one of the answers.
 - `c.declare(self, category: 'str', *feats: 'str') -> 'str'`
   - Which feat of one printed category applies to **this use**.

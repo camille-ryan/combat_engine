@@ -28,7 +28,9 @@ from combat_engine.engine import (
     World,
     both,
     by_melee,
+    candidates,
     enemy_within,
+    get,
     power,
     targets_me,
 )
@@ -195,18 +197,52 @@ def p11529(c: Cast) -> None:
     target=SELF,
     trigger=_TARGETED,
     on=Trigger(AttackDeclared, targets_me, _TARGETED),
-    dropped=("c.retarget()",),
 )
 def p16502(c: Cast) -> None:
-    """The shift is exact and is the whole of what plays.
+    """The shift is exact, and the retargeting is written now.
 
-    The dropped clause hands the *attacker* a fresh choice of target when
-    the shift has carried this creature out of range. `c.redirect` is the
-    wrong half of it -- that one moves the blow where the interrupting row
-    says, which is a different permission -- and nothing lets the creature
-    that declared an attack pick again.
-    """
+    *"The triggering enemy can choose a new target for the attack if you
+    are now out of range."*
+
+    **The old note had both halves right and the conclusion was one kwarg
+    short.** `c.redirect` is indeed "the wrong half -- that one moves the
+    blow where the interrupting row says, which is a different
+    permission". And nothing let the creature that declared the attack pick
+    again, because `c.choose` hard-coded `self.me` into `World.decide` --
+    which has always taken an actor. So the missing piece was `who=`, and
+    `c.redirect` is then exactly right for moving the blow once the shooter
+    has said where.
+
+    **"Out of range" is asked as "no longer a legal target"**, which is the
+    same question and the one the engine can answer: `dsl.candidates` for
+    that shooter and that power. A distance test would have to re-derive
+    the attack's reach, its branch and its augment, all of which
+    `candidates` already reads -- and it also catches a shift that broke
+    line of effect rather than distance, which is the printed *"out of
+    range"* read generously in the card's favour.
+
+    Asked of the shooter, not imposed: the card says the enemy *can*
+    choose, so declining leaves the attack where it was -- which, with this
+    creature no longer a candidate, is a swing at nobody. That is the
+    printed outcome rather than a gap."""
     c.shift(max(1, c.speed_of() // 2))
+    swing = c.trigger
+    shooter = getattr(swing, "attacker", None)
+    aimed = get(getattr(swing, "power", "") or "")
+    if shooter is None or aimed is None:
+        return
+    reachable = candidates(c.world, shooter, aimed)
+    if c.me in reachable:
+        return
+    others = sorted(t for t in reachable if t != c.me)
+    if not others:
+        return
+    fresh = c.choose(
+        others, f"{c.ref}: a new target for the attack", who=shooter,
+        optional=True, decline="swing at nobody",
+    )
+    if fresh is not None:
+        c.redirect(to=fresh)
 
 
 @power(

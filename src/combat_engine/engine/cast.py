@@ -17113,7 +17113,7 @@ class Cast:
 
     def choose[T](
         self, options: list[T], prompt: str = "", *, optional: bool = False,
-        decline: str = "none of them",
+        decline: str = "none of them", who: int | None = None,
     ) -> T | None:
         """Pick one. With `optional`, "none of them" is one of the answers.
 
@@ -17126,7 +17126,19 @@ class Cast:
         if not options:
             return None
         pool = [*options, _Decline(decline)] if optional else list(options)
-        picked = self.world.decide(self.me, "choose", pool, prompt or self.ref)
+        # **`who` is whose choice it is, and defaults to the caster** --
+        # which is every existing call. `World.decide` has always taken an
+        # actor; this was the one door that hard-coded `self.me`, so a card
+        # handing the decision to somebody else had nowhere to say so.
+        #
+        # `p16502` is the case: *"The triggering enemy can choose a new
+        # target for the attack if you are now out of range."* The row is an
+        # interrupt on the creature being shot at, and the choice belongs to
+        # the shooter.
+        picked = self.world.decide(
+            self.me if who is None else who, "choose", pool,
+            prompt or self.ref,
+        )
         return None if isinstance(picked, _Decline) else picked
 
     def may(self, what: str, *, who: int | None = None, default: bool = True) -> bool:

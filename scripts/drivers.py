@@ -19606,6 +19606,118 @@ def a_summon_may_carry_an_ally_and_set_it_down(out: Result) -> None:
              f"{was} -> {hp.hp}")
 
 
+def the_attacker_may_pick_a_new_target(out: Result) -> None:
+    """*"The triggering enemy can choose a new target for the attack if you
+    are now out of range."* -- `p16502`.
+
+    **The marker's survey was right and the conclusion was one kwarg
+    short.** It said `c.redirect` is "the wrong half of it -- that one moves
+    the blow where the interrupting row says, which is a different
+    permission -- and nothing lets the creature that declared an attack pick
+    again". Both true. What was missing is only the *picking*: `c.choose`
+    hard-coded `self.me` into `World.decide`, which has always taken an
+    actor. With `who=`, `c.redirect` is then exactly the right verb for
+    moving the blow once the shooter has said where.
+
+    **"Out of range" is asked as "no longer a legal target"** --
+    `dsl.candidates` for that shooter and that power. A distance test would
+    have to re-derive the attack's reach, branch and augment, all of which
+    `candidates` already reads, and this also catches a shift that broke
+    line of effect rather than distance.
+
+    The assertion that matters is **who is asked**: the decision has to go
+    to the shooter. A rule that only checked the target moved would pass on
+    an implementation where the interrupting creature picked its own
+    replacement, which is the permission the old note was careful to
+    distinguish.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.events import AttackDeclared
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    shot = "f1762b"
+    aim = dsl.REGISTRY.get(shot)
+    out.that(aim is not None and aim.attack is not None
+             and getattr(aim.reach, "kind", "") == "ranged",
+             f"the fixture borrows `{shot}` as the incoming attack -- a"
+             " ranged one, so a shift can carry the target out of it",
+             f"{aim.reach if aim else None}")
+    if aim is None:
+        return
+
+    def staged(*, far: bool) -> tuple[Any, int, int, list[int]]:
+        world, me, _ = _board("p16502", 1)
+        shooter = sorted(enemies(world, me))[0]
+        at = next(iter(world.get(shooter, Position).squares))
+        seat = world.get(me, Position)
+        spot = (at[0] + (9 if far else 1), at[1])
+        world.grid.place(me, frozenset({spot}))
+        seat.square = spot
+        seat.spans = frozenset({spot})
+        asked: list[int] = []
+        world.decider = (
+            lambda actor, kind, options, prompt="":
+            (asked.append(actor) or (options[0] if options else None))
+        )
+        return world, me, shooter, asked
+
+    # -- still in reach: nothing is retargeted ----------------------------
+    world, me, shooter, asked = staged(far=False)
+    out.that(me in dsl.candidates(world, shooter, aim),
+             "parked beside the shooter, the caster is a legal target --"
+             " the premise for the negative case", "in reach")
+    swing = AttackDeclared(attacker=shooter, target=me, power=shot,
+                           vs=Defense.AC)
+    c = Cast(world=world, me=me, ref="p16502")
+    c.trigger = swing
+    dsl.REGISTRY["p16502"].body(c)
+    out.that(swing.target == me,
+             "and a shift that leaves it in reach retargets nothing",
+             f"{swing.target}")
+    out.that(shooter not in asked,
+             "and the shooter is not asked at all -- the clause is gated on"
+             " *'if you are now out of range'*", f"asked {sorted(set(asked))}")
+
+    # -- carried out of reach ---------------------------------------------
+    world, me, shooter, asked = staged(far=True)
+    out.that(me not in dsl.candidates(world, shooter, aim),
+             "parked at the far edge, a half-speed shift carries it out of"
+             " the attack's reach", "out of reach")
+    swing = AttackDeclared(attacker=shooter, target=me, power=shot,
+                           vs=Defense.AC)
+    c = Cast(world=world, me=me, ref="p16502")
+    c.trigger = swing
+    dsl.REGISTRY["p16502"].body(c)
+    out.that(shooter in asked,
+             "the SHOOTER is asked for the new target -- which is the whole"
+             " of `c.choose(who=)`, and the permission the old note was"
+             " careful to distinguish from `c.redirect`",
+             f"asked {sorted(set(asked))}")
+    out.that(swing.target != me,
+             "and the attack moves off the creature that shifted",
+             f"{me} -> {swing.target}")
+
+    # -- it is a may, so declining leaves the swing where it was ----------
+    world, me, shooter, asked = staged(far=True)
+    world.decider = (
+        lambda actor, kind, options, prompt="":
+        next((o for o in options if not isinstance(o, int)), options[0])
+    )
+    swing = AttackDeclared(attacker=shooter, target=me, power=shot,
+                           vs=Defense.AC)
+    c = Cast(world=world, me=me, ref="p16502")
+    c.trigger = swing
+    dsl.REGISTRY["p16502"].body(c)
+    out.that(swing.target == me,
+             "and declining leaves the attack aimed where it was -- a swing"
+             " at a creature no longer in reach, which is the printed"
+             " outcome of a *may* rather than a gap", f"{swing.target}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -102234,6 +102346,9 @@ DRIVERS = {
     "carried_flight": (a_summon_may_carry_an_ally_and_set_it_down,
                        "a summon's move command carries an ally and sets it"
                        " down, which costs it the fall"),
+    "attacker_retargets": (the_attacker_may_pick_a_new_target,
+                           "the shooter picks the new target when a shift"
+                           " carries its mark out of reach"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),
