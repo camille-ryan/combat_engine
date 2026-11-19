@@ -321,7 +321,6 @@ def p16484(c: Cast) -> None:
         both(targets_me, by_ranged),
         "an enemy makes a ranged attack against you",
     ),
-    dropped=("c.reroll_attack(against=)",),
 )
 def p9340(c: Cast) -> None:
     """Declared on `AttackDeclared`, which is where an interrupt lives: the
@@ -360,3 +359,26 @@ def p9340(c: Cast) -> None:
         c.end_effect(carried, why="the triggering attack is resolved")
 
     c.watch(AttackDeclared, past, until=When.EOT, once=True, on=c.me)
+
+    # *"If the attack misses, the attacker rerolls it against one enemy
+    # that granted cover to you against it."* Watched on the `Miss` rather
+    # than done here, because the clause is conditional on the outcome and
+    # the row runs as an interrupt before the roll.
+    def spoiled(ev: Miss) -> None:
+        if getattr(ev, "attacker", None) != foe or ev.target != c.me:
+            return
+        # Whose choice it is: the card says *the attacker* rerolls, and the
+        # shields are its own allies. `who=` is what lets the row ask it.
+        shield = c.choose(
+            sorted(shields), f"{c.ref}: which cover to strike instead",
+            who=foe,
+        )
+        if shield is None:
+            return
+        # `against=` and not `c.redirect`: that one moves the blow with its
+        # live result and leaves `target_defence` alone, so a miss stays a
+        # miss wherever it is pointed. This re-measures against the new
+        # creature for the same defence the attack was aimed at.
+        c.reroll_attack(ev=ev, against=shield)
+
+    c.watch(Miss, spoiled, until=When.EOT, once=True, on=c.me)

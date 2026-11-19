@@ -6406,7 +6406,8 @@ class Cast:
         return walk(self.world, who, paths[away])
 
     def reroll_attack(
-        self, *, keep: str = "new", bonus: int = 0, ev: Any = None
+        self, *, keep: str = "new", bonus: int = 0, ev: Any = None,
+        against: int | None = None,
     ) -> bool:
         """Make an attack roll again. `keep` is new, best or worst.
 
@@ -6439,6 +6440,46 @@ class Cast:
         result = getattr(ev, "result", None) if ev is not None else None
         if result is None:
             return False
+        # **`against` rolls the second attack at somebody else**, which is
+        # what `c.redirect` cannot do: that one moves `ev.target` and
+        # `result.target` and leaves `target_defence` alone, so the blow
+        # keeps the number it was measured against and a miss stays a miss
+        # wherever it is pointed. `p9340`'s note says exactly that, and this
+        # is the half it was missing -- *"the attacker rerolls it against
+        # one enemy that granted cover to you against it"*.
+        #
+        # The new creature's defence is read for the **same** defence the
+        # attack was aimed at: a reroll against a different Reflex is still
+        # a Reflex attack. Taken off the event rather than guessed, and a
+        # row whose event cannot say which defence gets no redirection
+        # rather than a wrong one.
+        if against is not None:
+            # **`Miss` and `Hit` carry no `vs`**, and that is the whole
+            # subtlety here: only `AttackRolled` has it, and the clause that
+            # wants this fires in the `Miss` window. So the defence is read
+            # off the event when it is there and off the **power's header**
+            # otherwise, for the branch the event itself names.
+            #
+            # Measured: `Miss` carries `result`, `ctx`, `power` and `branch`
+            # and no `vs`, so a guard that only looked at the event refused
+            # every real use of this parameter while passing a hand-built
+            # fixture that had one.
+            vs = getattr(ev, "vs", None)
+            if vs is None:
+                from .dsl import get as _get
+
+                aimed = _get(str(getattr(ev, "power", "")) or "")
+                line = (aimed.attack_of(int(getattr(ev, "branch", 0)))
+                        if aimed is not None else None)
+                vs = getattr(line, "vs", None)
+            if vs is None:
+                return False
+            from .query import defence as _defence
+
+            result.target = against
+            result.target_defence = _defence(self.world, against, vs)
+            if hasattr(ev, "target"):
+                ev.target = against
         fresh = self.world.rng.d20().total
         old = result.natural
         result.rolls.append(fresh)

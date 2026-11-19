@@ -19718,6 +19718,165 @@ def the_attacker_may_pick_a_new_target(out: Result) -> None:
              " outcome of a *may* rather than a gap", f"{swing.target}")
 
 
+def a_reroll_may_be_aimed_at_a_different_creature(out: Result) -> None:
+    """*"If the attack misses, the attacker rerolls it against one enemy
+    that granted cover to you against it."* -- `p9340`.
+
+    **The marker's survey of three near misses was right on all three**, and
+    the third is the one that mattered: *"`c.redirect` moves the blow with
+    its live result, so a miss stays a miss wherever it is pointed."*
+    Measured -- `redirect` sets `ev.target` and `result.target` and leaves
+    `result.target_defence` alone, so the blow keeps the number it was
+    measured against.
+
+    `against=` is that missing half: it re-points the result **and
+    re-measures the defence** for the creature now being struck, reading
+    the same defence the attack was aimed at off the event. A reroll
+    against a different Reflex is still a Reflex attack.
+
+    **The premise is that the two creatures have different defences**,
+    without which the re-measure is invisible and a plant removing it would
+    pass. The board's caster and its shields differ by several points.
+
+    `c.redirect` is also unusable from the `Miss` watch for a second
+    reason worth recording: it reads `self.trigger`, which in a watch
+    handler is whatever the row was answering when it armed -- the
+    `AttackDeclared` -- not the event handed to the handler. That is the
+    closure trap `reroll_attack`'s own `ev=` parameter exists for.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+    from combat_engine.engine.types import Defense
+
+    world, me, _ = _board("p9340", 1)
+    foes = sorted(enemies(world, me))
+    out.that(len(foes) >= 2, "the board fields a shooter and a shield",
+             f"{foes[:3]}")
+    if len(foes) < 2:
+        return
+    shooter, shield = foes[0], foes[1]
+    mine = query.defence(world, me, Defense.AC)
+    theirs = query.defence(world, shield, Defense.AC)
+    out.that(mine != theirs,
+             "and the two have different ACs -- the premise, without which"
+             " re-measuring and not re-measuring look identical",
+             f"caster {mine} / shield {theirs}")
+
+    # A `SimpleNamespace`, not a class with mutable class attributes --
+    # `ruff` flags the dict, and per-instance state is what a fixture wants.
+    from types import SimpleNamespace
+
+    ev = SimpleNamespace(
+        attacker=shooter, target=me, vs=Defense.AC, power="drivers:probe",
+        branch=0,
+        result=AttackResult(hit=False, critical=False, natural=5, total=10,
+                            target_defence=99, target=me),
+        ctx={"attacker": shooter, "target": me},
+    )
+    c = Cast(world=world, me=me, ref="drivers:probe")
+    out.that(c.reroll_attack(ev=ev, against=shield),
+             "`against=` rerolls", "True")
+    out.that(ev.result.target == shield,
+             "and points the result at the new creature", f"{ev.result.target}")
+    out.that(ev.result.target_defence == theirs,
+             "and RE-MEASURES against its defence -- 99 was the sentinel the"
+             " fixture put there, so this is the half `c.redirect` leaves"
+             " alone and the whole reason the clause needed a verb",
+             f"99 -> {ev.result.target_defence}")
+
+    # -- and the row drives it, asking the shooter -------------------------
+    #
+    # **The geometry is the hard part and it is not arbitrary.** A single
+    # creature standing in a *straight* line grants no cover -- the
+    # corner-to-corner traces pass around it -- so `_shields_me` is False
+    # and the row returns before arming anything. Searched: the shot has to
+    # be diagonal. With the shooter five squares out on the diagonal and the
+    # shield adjacent on the same diagonal, one body is enough.
+    #
+    # The first version of this rule staged a straight shot, armed nothing,
+    # and passed anyway, because its last two assertions each had an escape
+    # hatch (`not asked or ...`, and `in (99, ...)`). Both are gone.
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.events import Miss
+
+    world, me, _ = _board("p9340", 1)
+    foes = sorted(enemies(world, me))
+    shooter, shield = foes[0], foes[1]
+    here = next(iter(world.get(me, Position).squares))
+
+    def put(eid: int, square: tuple[int, int]) -> None:
+        seat = world.get(eid, Position)
+        world.grid.place(eid, frozenset({square}))
+        seat.square = square
+        seat.spans = frozenset({square})
+
+    put(shooter, (here[0] + 5, here[1] + 5))
+    put(shield, (here[0] + 1, here[1] + 1))
+
+    asked: list[int] = []
+    world.decider = (
+        lambda actor, kind, options, prompt="":
+        (asked.append(actor) or (options[0] if options else None))
+    )
+    c = Cast(world=world, me=me, ref="p9340")
+    c.trigger = SimpleNamespace(attacker=shooter, target=me)
+    dsl.REGISTRY["p9340"].body(c)
+    out.that(any(e.label.startswith("p9340") for e in world.effects.of(me)),
+             "the row finds a shield and lays the cover -- the premise, and"
+             " what a straight-line fixture silently fails",
+             f"{[e.label for e in world.effects.of(me) if e.label.startswith('p9340')]}")
+
+    # **The power on the Miss is the SHOOTER's attack, not this row.**
+    # `p9340` is a utility with no attack line, so `attack_of(0)` is `None`
+    # and `against=` cannot learn which defence to re-measure -- it refuses
+    # rather than guess, which is correct and is what the first version of
+    # this fixture ran into: the shooter was asked, and the reroll then did
+    # nothing.
+    incoming = next(
+        ref for ref, row in sorted(dsl.REGISTRY.items())
+        if row.attack is not None and not row.unfinished
+        and getattr(row.reach, "kind", "") == "ranged"
+    )
+    out.that(dsl.REGISTRY[incoming].attack is not None,
+             "the fixture names a real ranged attack as the incoming swing,"
+             " because `against=` reads the defence off its header when the"
+             " event carries none", f"{incoming}")
+    missed = Miss(attacker=shooter, target=me, power=incoming)
+    missed.result = AttackResult(hit=False, critical=False, natural=4,
+                                 total=9, target_defence=99, target=me)
+    missed.ctx = {"attacker": shooter, "target": me}
+    world.bus.emit(missed)
+    out.that(shooter in asked,
+             "on the miss the SHOOTER is asked which cover to strike -- the"
+             " card says *the attacker* rerolls, and `c.choose(who=)` is"
+             " what lets the row ask it", f"asked {sorted(set(asked))}")
+    out.that(missed.result.target == shield,
+             "the reroll lands on the creature that granted the cover",
+             f"{missed.result.target}")
+    # **Against the attack's OWN defence, not AC.** The borrowed swing may
+    # be a Reflex or a Will attack, and asserting AC here failed on exactly
+    # that -- the re-measure was right and the assertion was reading the
+    # wrong number off the right creature.
+    # `getattr`, because `attack_of` is `Attack | None` -- the same
+    # `missing-union-attribute` shape `types.py` has caught twice already in
+    # this file, on `summon.attack` and `summon.commands`.
+    aimed_at = getattr(dsl.REGISTRY[incoming].attack_of(0), "vs", None)
+    out.that(aimed_at is not None,
+             "the borrowed attack names a defence to re-measure against",
+             f"{aimed_at}")
+    if aimed_at is None:
+        return
+    want = query.defence(world, shield, aimed_at)
+    out.that(missed.result.target_defence == want,
+             f"and is measured against ITS {aimed_at.name} rather than the"
+             " 99 the fixture planted -- which is the half `c.redirect`"
+             " leaves alone",
+             f"99 -> {missed.result.target_defence}, wanted {want}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -102349,6 +102508,9 @@ DRIVERS = {
     "attacker_retargets": (the_attacker_may_pick_a_new_target,
                            "the shooter picks the new target when a shift"
                            " carries its mark out of reach"),
+    "reroll_elsewhere": (a_reroll_may_be_aimed_at_a_different_creature,
+                         "a reroll may be aimed at another creature, and is"
+                         " re-measured against its defence"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),
