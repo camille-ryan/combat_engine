@@ -61,6 +61,7 @@ from combat_engine.engine import (
     Condition,
     DamageType,
     Dropped,
+    Gear,
     Health,
     Hit,
     InitiativeRolled,
@@ -98,6 +99,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.durations import keywords_of
+from combat_engine.engine.events import ItemDestroyed
 from combat_engine.engine.types import Light
 
 DEFENCES = (AC, FORT, REF, WILL)
@@ -1604,7 +1606,6 @@ def p16116(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("c.strip_armor()",),
 )
 def p16411(c: Cast) -> None:
     """"You instantly don +1 magic armor of a type you have proficiency
@@ -1617,19 +1618,42 @@ def p16411(c: Cast) -> None:
     numbers has to be laid by hand -- `c.destroy`'s armour branch records
     the same fact from the other direction.
 
-    **Three printed enders, and they are three different mechanisms.**
-    The dismissal is `c.endable`; *"until you use this power again"* is
-    the row ending its own previous hold, which is what the label lookup
-    below does; *"until it is removed from you"* is not written, and the
-    marker says so, and it names the layer the gap is really on:
-    **nothing strips worn armour from a creature**. `c.destroy`'s armour
-    branch is the holder spending its own suit, not somebody taking it --
-    so the clause has no subject rather than no verb, which is why the
-    symbol is `c.strip_armor()` and not a parameter on the verb above.
+    **Three printed enders, and they are three different mechanisms.** The
+    dismissal is `c.endable`; *"until you use this power again"* is the row
+    ending its own previous hold, which is the label lookup below; *"until
+    it is removed from you"* is the `ItemDestroyed` watch.
 
-    The row **plays** without it, which is why the marker is `dropped=`
-    and the row is no longer refused: the donning, the AC, the dismissal
-    and the re-use ender are all live.
+    **The marker said "nothing strips worn armour from a creature" and that
+    was wrong.** `c.destroy(on=, armour=True)` does exactly that and goes
+    through `equipment.unequip`, and `on=` is general -- the two cards the
+    old note reasoned from happen to be self-destruction, but the parameter
+    is not. Measured: it returns True, emits `ItemDestroyed`, and the suit
+    comes off. So the clause had a subject all along.
+
+    **What was actually broken was the clause above it**, and the marker
+    pointed away from it. *"Choose a type of armor with which you have
+    proficiency"* never donned anything, because the body passed no `kind=`
+    -- which is right, `kind=""` is `grant_armor`'s "offer every rung and
+    ask" -- and that verb read proficiency off the suit the creature was
+    **wearing**. This row prints *"Requirement: You must not be wearing
+    armor"*, so the read always answered `cloth`, the menu was one rung
+    long, and the choice could not be made. It is a theme power, so that
+    was every class's loss rather than one class's.
+
+    Fixed a layer down, where it belongs: `Gear.armour_trained` carries
+    `ClassLine.armour`, written by `chargen.spawn` beside the `bands=` that
+    is the weapon half of the same question. No new chargen import --
+    `engine/CLAUDE.md` allows four function-local leaks and says not to add
+    a fifth, and this needs none. Measured on a fighter standing in
+    nothing: the menu was `['cloth']` and is now
+    `['scale', 'chain', 'hide', 'leather', 'cloth']`, and donning scale
+    moves AC by the printed 8 rather than by 1.
+
+    The printed enhancement ladder is written too. **Levels 11 and up are
+    outside this tree** -- `etl.MAX_POWER_LEVEL` is 10 -- so only the +1
+    and the Level 6 +2 can ever be reached; the rest are written because
+    the page prints them and a reader should not have to wonder whether
+    they were dropped or are merely unreachable.
 
     `c.grant_weapon()` remains a marker group of its own: a weapon is an
     entry in `Gear.weapons` with a wield, not a single field.
@@ -1641,9 +1665,35 @@ def p16411(c: Cast) -> None:
     for standing in c.world.effects.of(c.me):
         if standing.by == c.ref:
             c.end_effect(standing, on=c.me, why="donned again")
-    hold = c.grant_armor(enhancement=1, on=c.me, until=When.ENCOUNTER)
-    if hold is not None:
-        c.endable(hold, MINOR)
+    # The printed ladder: +1, then +2 at 6th, +3 at 11th, and so on. Only
+    # the first two are reachable here -- see the note.
+    plus = 1
+    for step, floor in ((6, 26), (5, 21), (4, 16), (3, 11), (2, 6)):
+        if c.level >= floor:
+            plus = step
+            break
+    hold = c.grant_armor(enhancement=plus, on=c.me, until=When.ENCOUNTER)
+    if hold is None:
+        return
+    c.endable(hold, MINOR)
+
+    # **"Until it is removed from you."** `ItemDestroyed` is the engine's
+    # one signal for worn gear leaving a creature -- `equipment.unequip`
+    # emits it, and `c.destroy(armour=True)` is the only thing in the
+    # corpus that takes a suit off somebody. Guarded on the armour having
+    # actually changed, so an unrelated item being destroyed does not
+    # strip the conjured suit.
+    donned = c.world.get(c.me, Gear)
+    wearing = donned.armour if donned is not None else ""
+
+    def taken(ev: ItemDestroyed) -> None:
+        if ev.who != c.me or hold.ended:
+            return
+        gear = c.world.get(c.me, Gear)
+        if gear is not None and gear.armour != wearing:
+            c.end_effect(hold, on=c.me, why="removed")
+
+    c.watch(ItemDestroyed, taken, until=When.ENCOUNTER, on=c.me)
 
 
 def _surprised_at_the_off(world: World, me: int, ev: RoundStart) -> bool:

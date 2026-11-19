@@ -2384,6 +2384,24 @@ class Gear:
     #:
     #: Empty means "nobody recorded any", exactly as `trained` does.
     bands: frozenset[str] = frozenset()
+    #: The heaviest armour rung this creature's **class page** allows, as
+    #: `armour.LADDER` spells it -- `"plate"`, `"scale"`, `"cloth"`.
+    #:
+    #: `bands` above is the weapon half of the same question and this is the
+    #: armour half, written from `ClassLine.armour` by `chargen.spawn`. It
+    #: exists because reading proficiency off `armour` -- what the creature
+    #: is *wearing* -- is a documented under-grant in `Cast.grant_armor`,
+    #: and for one row it is total: `p16411` prints *"Requirement: You must
+    #: not be wearing armor"*, so the worn read always answered `cloth` and
+    #: *"choose a type of armor with which you have proficiency"* could
+    #: never conjure anything else. It is a theme power, so every class can
+    #: take it.
+    #:
+    #: **Empty means "nobody recorded any", not "proficient with nothing"**
+    #: -- `trained`'s convention above, and for the same reason. A monster
+    #: has no `Build`, and a board assembled by hand in a probe records
+    #: none, so readers fall back to the worn read rather than refusing.
+    armour_trained: str = ""
     #: Magic items being worn, by slot. A weapon's own magic is on the
     #: `Weapon` -- it is a longsword with properties -- so this holds the
     #: armour, the neck, and the eight small slots that had nowhere to go.

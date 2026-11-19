@@ -18115,6 +18115,143 @@ def a_ring_round_a_conjuration_grants_advantage(out: Result) -> None:
              " nobody could lift", f"ally still at {beside}")
 
 
+def a_conjured_suit_comes_off_the_class_page(out: Result) -> None:
+    """*"Choose a type of armor with which you have proficiency. You
+    instantly don +1 magic armor of that type ... until you dismiss it as a
+    minor action, until it is removed from you, or until you use this power
+    again. Level 6: +2 magic armor."* -- `p16411`.
+
+    **The marker said "nothing strips worn armour from a creature" and that
+    was false twice over.** `c.destroy(on=, armour=True)` does exactly
+    that, through `equipment.unequip`, and `on=` is general -- the two
+    cards the old note reasoned from happen to be self-destruction, but the
+    parameter is not.
+
+    **And the clause it pointed away from was the broken one.** *"Choose a
+    type of armor with which you have proficiency"* donned nothing,
+    because `Cast.grant_armor` read proficiency off the suit the creature
+    was **wearing** -- a documented under-grant -- and this row prints
+    *"Requirement: You must not be wearing armor"*. So the read always
+    answered `cloth`, the menu was one rung long, and the choice could not
+    be made. It is a theme power, so that was every class's loss.
+
+    `Gear.armour_trained` is the fix and it sits a layer down, beside the
+    `bands=` that is the weapon half of the same question: `ClassLine.armour`,
+    written by `chargen.spawn`. No new chargen import -- `engine/CLAUDE.md`
+    allows four function-local leaks and says not to add a fifth.
+
+    The last assertion is the control that keeps the fallback honest: a
+    creature with **no** recorded page -- a monster, or a board built by
+    hand in a probe -- must still get the worn read rather than being
+    refused, which is `Gear.trained`'s documented convention.
+
+    `audit.board` has no level knob, so the printed Level 6 rung is staged
+    by setting `Stats.level`, which is what `c.level` reads.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Stats
+    from combat_engine.engine.query import defence
+    from combat_engine.engine.types import Defense
+
+    def bare(level: int = 1) -> tuple[Any, int, Any, list[list[str]]]:
+        world, me, _ = _board("p16411", 1)
+        world.get(me, Stats).level = level
+        gear = world.get(me, Gear)
+        gear.armour = "cloth"          # the printed Requirement
+        asked: list[list[str]] = []
+        world.decider = (
+            lambda actor, kind, options, prompt="":
+            (asked.append([o for o in options if isinstance(o, str)])
+             or options[0])
+        )
+        return world, me, gear, asked
+
+    world, me, gear, asked = bare()
+    out.that(gear.armour_trained not in ("", "cloth"),
+             "the board's character has a class page allowing more than"
+             " cloth -- the premise, and without it every line below is"
+             " about a character that could only ever conjure cloth anyway",
+             f"page={gear.armour_trained!r} worn={gear.armour!r}")
+    before = defence(world, me, Defense.AC)
+    dsl.REGISTRY["p16411"].body(Cast(world=world, me=me, ref="p16411"))
+    out.that(bool(asked) and len(asked[-1]) > 1,
+             "*standing in nothing* it is still offered more than one rung"
+             " -- the whole of the fix: the worn read answered `cloth` and"
+             " this row forbids wearing armour, so the printed choice could"
+             " not be made",
+             f"{asked[-1] if asked else None}")
+    if not asked:
+        return
+    menu = asked[-1]
+    out.that(menu[0] == gear.armour_trained,
+             "and the heaviest the page allows is offered FIRST, because a"
+             " headless decider takes `options[0]` -- offering light-first"
+             " would don cloth on a character entitled to plate",
+             f"{menu}")
+    out.that(gear.armour == gear.armour_trained,
+             "so the suit is actually donned, not merely chosen -- which is"
+             " what `Gear.armour` says and what the old body never changed",
+             f"{gear.armour!r}")
+    donned = defence(world, me, Defense.AC)
+    out.that(donned - before == 8,
+             "and AC moves by the printed 8 -- 7 for the swap out of cloth"
+             " and 1 for the enhancement. Not 1: reading the page into"
+             " `worn` in place priced the swap at ZERO, because `worn` is"
+             " also the baseline this gap is measured from",
+             f"{before} -> {donned}")
+
+    hold = [e for e in world.effects.of(me) if e.label.startswith("p16411 armour")]
+    out.that(len(hold) == 1, "the row leaves exactly one armour hold", f"{hold}")
+    if len(hold) != 1:
+        return
+    world.effects.end(hold[0], "dismissed")
+    out.that(gear.armour == "cloth"
+             and defence(world, me, Defense.AC) == before,
+             "dismissing it puts the old suit and the old AC back, both --"
+             " `c.endable` is the minor action the card prints",
+             f"{gear.armour!r} AC {defence(world, me, Defense.AC)}")
+
+    # -- "until it is removed from you" -----------------------------------
+    world, me, gear, asked = bare()
+    dsl.REGISTRY["p16411"].body(Cast(world=world, me=me, ref="p16411"))
+    out.that(Cast(world=world, me=me, ref="drivers:probe").destroy(
+                 on=me, armour=True),
+             "somebody CAN take a worn suit off -- the marker said nothing"
+             " could, and `c.destroy(on=, armour=True)` is general in `on=`",
+             "destroy() -> True")
+    out.that(not [e for e in world.effects.of(me)
+                  if e.label.startswith("p16411 armour")],
+             "and the hold goes with it -- *'until it is removed from you'*,"
+             " the clause the marker was for. Left standing it is a +1 on"
+             " armour the character is no longer wearing",
+             f"{[e.label for e in world.effects.of(me)][-1:]}")
+
+    # -- the printed ladder ----------------------------------------------
+    for level, want in ((5, 8), (6, 9)):
+        world, me, gear, asked = bare(level)
+        start = defence(world, me, Defense.AC)
+        dsl.REGISTRY["p16411"].body(Cast(world=world, me=me, ref="p16411"))
+        got = defence(world, me, Defense.AC) - start
+        out.that(got == want,
+                 f"at level {level} the suit is worth {want} -- 7 for the"
+                 f" swap and {want - 7} of enhancement, which is the printed"
+                 " *Level 6: +2* and the pair that a flat +1 cannot pass",
+                 f"delta {got}")
+
+    # -- the control: no page recorded --------------------------------------
+    world, me, gear, asked = bare()
+    gear.armour_trained = ""
+    dsl.REGISTRY["p16411"].body(Cast(world=world, me=me, ref="p16411"))
+    out.that(asked and asked[-1] == ["cloth"],
+             "with NO page recorded the worn read still stands and offers"
+             " cloth alone -- a monster carries no `Build` and a board built"
+             " by hand records none, so an empty field must fall back rather"
+             " than refuse. `Gear.trained`'s own convention",
+             f"{asked[-1] if asked else None}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -100705,6 +100842,9 @@ DRIVERS = {
     "ca_ring": (a_ring_round_a_conjuration_grants_advantage,
                 "anyone beside the servant grants combat advantage, and the"
                 " conjurer does not"),
+    "conjured_armour": (a_conjured_suit_comes_off_the_class_page,
+                        "the page decides which rungs are offered, and being"
+                        " stripped ends the hold"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

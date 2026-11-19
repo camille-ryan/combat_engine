@@ -16585,6 +16585,34 @@ class Cast:
         if gear is None:
             return None
         worn = gear.armour or "cloth"
+        # **Proficiency comes off the class page when the page was
+        # recorded, and off the worn suit when it was not.**
+        # `Gear.armour_trained` is `ClassLine.armour`, written by
+        # `chargen.spawn`; empty means nobody recorded one -- a monster, or
+        # a board built by hand -- and then the worn read stands, which is
+        # the behaviour every caller had before.
+        #
+        # The worn read alone is an under-grant this docstring admits, and
+        # `p16411` is the case where it is total rather than conservative:
+        # that row prints *"Requirement: You must not be wearing armor"*,
+        # so `worn` is always `cloth` and *"choose a type of armor with
+        # which you have proficiency"* could never offer a second rung. It
+        # is a theme power, so this was every class's loss, not one's.
+        #
+        # The **heavier** of the two, never the page alone: a character
+        # standing in plate it was dealt is trained in plate whatever its
+        # page says, which is the same direction `trained`/`bands` take for
+        # weapons.
+        # **A separate name, because `worn` is doing two jobs here and only
+        # one of them is proficiency.** `worn` is also the AC baseline the
+        # `gap` below is measured from and the suit `restore()` puts back,
+        # so widening it in place priced a swap from cloth to scale at
+        # **zero** and would have restored the wrong suit when the hold
+        # ended. Caught by the AC moving +1 instead of +7.
+        ceiling = worn
+        page = gear.armour_trained or ""
+        if page and ARMOUR.get(page, 0) > ARMOUR.get(ceiling, 0):
+            ceiling = page
         # **Heaviest first, because the decider takes the first option.**
         # `LADDER` runs light to heavy, and `World.decide` with nobody
         # installed takes `options[0]` -- so the printed "choose a type"
@@ -16593,7 +16621,7 @@ class Cast:
         # points: the options run richest first, because that is the only
         # ordering under which the headless default is the one a player
         # would pick.
-        allowed = [r for r in reversed(LADDER) if trains_in(worn, r)]
+        allowed = [r for r in reversed(LADDER) if trains_in(ceiling, r)]
         want = kind.lower() if kind else self.choose(
             allowed, f"{self.ref}: which armour to conjure",
         )

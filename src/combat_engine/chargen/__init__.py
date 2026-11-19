@@ -7717,6 +7717,12 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
             # class's printed proficiency line, so a human picking a
             # different military weapon gets the bonus the book grants.
             bands=line.bands,
+            # And the armour half of the same line, which nothing carried
+            # before: `Cast.grant_armor` had only the *worn* read, which is
+            # an under-grant its own docstring admits and which `p16411`
+            # made total -- that row requires you to be unarmoured, so the
+            # worn read could only ever answer `cloth`.
+            armour_trained=line.armour,
         ),
     )
     # Owned, not held. `Gear.__post_init__` works the grip out from an
