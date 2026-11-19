@@ -450,7 +450,6 @@ def p13704(c: Cast) -> None:
     keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:8"),
     requires_text="you must have a comp:8 beast companion",
-    dropped=("c.prone(held_away_from=)",),
     trigger=_MELEE_DAMAGE,
     on=Trigger(DamageApplied, when=both(targets_me, by_melee), text=_MELEE_DAMAGE),
 )
@@ -459,16 +458,26 @@ def p13705(c: Cast) -> None:
     header: the beast has to be standing next to whoever swung.
 
     **"Cannot stand up until it begins a move action not adjacent to your
-    beast companion" is a real gap and now carries the marker.** Checked
-    against the near misses rather than assumed: `c.prone(held=)` takes a
-    `When` and nothing else, there is no `c.no_stand` beside the fifteen
-    other `c.no_*` prohibitions, and `"stand"` is in `actions.GRANTABLE`
-    as a thing a row can *grant* for a cheaper action rather than forbid.
+    beast companion" is written now**, and the marker's own survey of the
+    near misses is what showed the shape. All three of those readings hold:
+    `c.prone(held=)` takes a `When` and nothing else, there is no
+    `c.no_stand` among the other `c.no_*` prohibitions, and `"stand"` is in
+    `actions.GRANTABLE` as a thing a row can make **cheaper** rather than
+    forbid.
 
-    What the card asks for is a prohibition that lifts on a *position* --
-    the move action has to begin somewhere not adjacent to the beast --
-    which is neither a duration nor a condition the engine has. The prone
-    itself is applied. #1341.
+    Where it went wrong was the last step: *"a prohibition that lifts on a
+    position ... is neither a duration nor a condition the engine has"* --
+    true, and a **gated modifier** is neither of those either. `when=` is
+    asked at the moment the creature tries to stand, so the answer reads
+    where it is **then** rather than where it was when knocked down. Crawl
+    out of the wolf's reach and standing is allowed again, which is the
+    printed loop.
+
+    `c.cannot_stand` is the verb and `actions._recovery` is the one place
+    standing is offered, so the read landed with it -- a key nobody read
+    would be the silently-false shape this component's rules warn about.
+    `until=When.ENCOUNTER` because the clause states no clock: the position
+    is the clock. #1341.
     """
     ev = c.trigger
     beast = c.companion()
@@ -478,6 +487,17 @@ def p13705(c: Cast) -> None:
     if not c.adjacent_to(beast, foe):
         return
     c.prone(on=foe)
+    # *"...and cannot stand up until it begins a move action not adjacent
+    # to your beast companion."* The gate is asked when the creature tries
+    # to stand, so it reads where the creature is **then** -- crawl out of
+    # the wolf's reach and standing is allowed again, which is the printed
+    # loop. `until=` is the encounter because the clause states no clock of
+    # its own; the position is the clock.
+    c.cannot_stand(
+        on=foe,
+        until=When.ENCOUNTER,
+        when=lambda ctx: c.adjacent_to(beast, foe),
+    )
 
 
 @power(

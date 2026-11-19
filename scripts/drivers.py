@@ -18742,6 +18742,128 @@ def a_disease_can_be_improved_by_stages(out: Result) -> None:
              f"moved {moved}, now {now}")
 
 
+def a_prohibition_may_lift_on_a_position(out: Result) -> None:
+    """*"The triggering enemy is knocked prone and cannot stand up until it
+    begins a move action not adjacent to your beast companion."* -- `p13705`.
+
+    **The marker's survey of the near misses was right and its last step
+    was not.** All three readings hold: `c.prone(held=)` takes a `When` and
+    nothing else, there is no `c.no_stand` among the other `c.no_*`
+    prohibitions, and `"stand"` is in `actions.GRANTABLE` as a thing a row
+    can make **cheaper** rather than forbid. Then it concluded the clause
+    "asks for a prohibition that lifts on a *position* ... which is neither
+    a duration nor a condition the engine has" -- true, and a **gated
+    modifier** is neither of those either.
+
+    `when=` is asked at the moment the creature tries to stand, so the
+    answer reads where it is **then**. That is the whole clause, and the
+    last assertion is the one a duration cannot pass: crawl out of the
+    wolf's reach and standing is allowed **again**.
+
+    **Two staging facts, both load-bearing.** `can_spend` refuses a move
+    action to anybody whose turn it is not, so the fixture sets
+    `world.turn` -- without it `_recovery` offers nothing and every line
+    below would pass for the wrong reason. And the first assertion is the
+    positive control: prone and *able* to stand before anything is laid.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions, dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Condition, Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies, is_
+
+    world, me, _ = _board("p13705", 1, pose=True)
+    foe = sorted(enemies(world, me))[0]
+    # `can_spend` reads whose turn it is, so a prone creature off-turn is
+    # offered no move action at all and the control below would be vacuous.
+    world.turn = foe
+    enc = world.encounter
+
+    def can_stand(who: int) -> bool:
+        return any(a.kind == "stand"
+                   for a in actions._recovery(world, enc, who))
+
+    c = Cast(world=world, me=me, ref="drivers:probe")
+    c.prone(on=foe)
+    out.that(is_(world, foe, Condition.PRONE), "the fixture knocks it prone",
+             "prone")
+    out.that(can_stand(foe),
+             "and it CAN stand before anything is laid -- the positive"
+             " control, without which a board that never offered standing"
+             " would pass every line below", "stand offered")
+
+    c.cannot_stand(on=foe, until=When.ENCOUNTER,
+                   when=lambda ctx: c.adjacent_to(me, foe))
+
+    here = next(iter(world.get(me, Position).squares))
+    seat = world.get(foe, Position)
+
+    def put(square: tuple[int, int]) -> None:
+        world.grid.place(foe, frozenset({square}))
+        seat.square = square
+        seat.spans = frozenset({square})
+
+    put((here[0] + 1, here[1]))
+    out.that(c.adjacent_to(me, foe) and not can_stand(foe),
+             "standing beside the beast, it cannot get up", "refused")
+    put((here[0] + 5, here[1]))
+    out.that(not c.adjacent_to(me, foe) and can_stand(foe),
+             "and having crawled out of reach it can -- the clause, and the"
+             " assertion a duration cannot pass: nothing about the clock"
+             " changed between these two lines, only the square",
+             "offered again")
+    out.that(is_(world, foe, Condition.PRONE),
+             "and it is still prone throughout, so this is a prohibition on"
+             " standing rather than the prone wearing off", "prone")
+
+    # -- the row lays it ---------------------------------------------------
+    world, me, _ = _board("p13705", 1, pose=True)
+    foe = sorted(enemies(world, me))[0]
+    world.turn = foe
+    enc = world.encounter
+    c = Cast(world=world, me=me, ref="p13705")
+    beast = c.companion()
+    out.that(beast is not None,
+             "the posed board fields the wolf the Prerequisite names",
+             f"{beast}")
+    if beast is None:
+        return
+    seat = world.get(foe, Position)
+    at = next(iter(world.get(beast, Position).squares))
+    world.grid.place(foe, frozenset({(at[0] + 1, at[1])}))
+    seat.square = (at[0] + 1, at[1])
+    seat.spans = frozenset({seat.square})
+
+    class Swing:  # the printed Trigger: damage from a melee attack
+        source = foe
+
+    c.trigger = Swing()
+    dsl.REGISTRY["p13705"].body(c)
+    out.that(is_(world, foe, Condition.PRONE),
+             "the row knocks the triggering enemy prone", "prone")
+    out.that(not any(a.kind == "stand"
+                     for a in actions._recovery(world, enc, foe)),
+             "and forbids it standing while the wolf is beside it -- the"
+             " row's own call, not the probe's", "refused")
+
+    # **And the ROW's gate is the positional one.** The pair above tests the
+    # probe's `when=`, so a plant making the row's gate `lambda ctx: True`
+    # -- an unconditional ban, which is not what the card prints -- passed
+    # every line until this one existed.
+    away = (at[0] + 5, at[1])
+    world.grid.place(foe, frozenset({away}))
+    seat.square = away
+    seat.spans = frozenset({away})
+    out.that(not c.adjacent_to(beast, foe)
+             and any(a.kind == "stand"
+                     for a in actions._recovery(world, enc, foe)),
+             "and once it has crawled out of the wolf's reach the row lets"
+             " it up -- *'until it begins a move action not adjacent to"
+             " your beast companion'*, which an unconditional ban cannot"
+             " pass", "offered again")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -101346,6 +101468,9 @@ DRIVERS = {
     "disease_stage": (a_disease_can_be_improved_by_stages,
                       "a disease's stage can be improved, and the target"
                       " pays the surge"),
+    "held_down": (a_prohibition_may_lift_on_a_position,
+                  "a row may forbid standing, and the ban lifts when the"
+                  " creature crawls out of reach"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

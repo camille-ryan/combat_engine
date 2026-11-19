@@ -1014,6 +1014,39 @@ class Cast:
 
         return _can_hear(self.world, who, self.me)
 
+    def cannot_stand(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """*"The triggering enemy is knocked prone and cannot stand up until
+        it begins a move action not adjacent to your beast companion."*
+
+        **A prohibition that lifts on a position, which is why `when=` is
+        the whole of it.** `p13705` carried this as a marker on the
+        reasoning that the clause "asks for a prohibition that lifts on a
+        *position* ... which is neither a duration nor a condition the
+        engine has". Both halves true, and a gated modifier is neither: the
+        gate is asked at the moment the creature tries to stand, so the
+        answer tracks where it is standing rather than when it was knocked
+        down.
+
+        The near misses the marker had already ruled out, kept here because
+        they are the reasons this is a new key: `c.prone(held=)` takes a
+        `When` and nothing else, and `"stand"` is in `actions.GRANTABLE` as
+        a thing a row can make **cheaper**, not forbid.
+
+        `until=When.ENCOUNTER` by default, because the printed clause has no
+        clock of its own -- the gate is what ends it.
+
+        Read by `actions._recovery`, which is the one place standing up is
+        offered. A key nobody read would be this component's documented way
+        of being silently false, so the read landed with the verb.
+        """
+        return self.bonus(
+            "cannot_stand", 1, on=on if on is not None else self.me,
+            until=until, kind="untyped", when=when,
+        )
+
     def cannot_speak(
         self, *, on: int | None = None, until: When = When.SAVE_ENDS,
         when: Callable[[dict[str, Any]], bool] | None = None,

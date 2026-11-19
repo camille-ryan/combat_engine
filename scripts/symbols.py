@@ -474,6 +474,11 @@ CATEGORIES: dict[str, dict] = {
                 # exactly one reader, and `Condition.DEAFENED` sat inert
                 # for seven rows until that reader existed.
                 "cannot_speak",
+                # A prohibition that lifts on a **position** rather than a
+                # clock: `when=` is asked when the creature tries to stand,
+                # so the answer reads where it is then. Read by
+                # `actions._recovery`, the one place standing is offered.
+                "cannot_stand",
                 # Beside `cannot_be_flanked` and not folded into it:
                 # that one is about being flanked and this is about
                 # flanking, which are different creatures' clauses

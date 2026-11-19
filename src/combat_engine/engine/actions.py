@@ -15,7 +15,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from .components import Budget, Build, Health, Mod, Movement, Position, Powers
+from .components import (
+    Budget,
+    Build,
+    Health,
+    Mod,
+    Mods,
+    Movement,
+    Position,
+    Powers,
+)
 from .dsl import affordable, aim_points, candidates, get, pick_targets, usable
 from .durations import When
 from .grid import Square, distance, spread
@@ -2424,7 +2433,26 @@ def _mounting(world: World, encounter: Encounter, actor: int) -> list[Action]:
 
 def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     out: list[Action] = []
-    if is_(world, actor, Condition.PRONE) and not is_(world, actor, Condition.PINNED):
+    # **And a row may forbid standing outright**, which `PINNED` beside it
+    # could not say: that is a printed condition with its own card, and
+    # `p13705`'s clause is *"cannot stand up until it begins a move action
+    # not adjacent to your beast companion"* -- a prohibition that lifts on
+    # a **position**. `c.cannot_stand` lays a gated modifier and the gate is
+    # asked here, at the moment the creature tries, so the answer tracks
+    # where it is rather than when it was knocked down.
+    #
+    # Asked with the actor in the context like every other gate, so a row
+    # can narrow on who is standing as well as on the board.
+    held = world.get(actor, Mods)
+    pinned_by_a_row = (
+        held is not None and bool(held.items)
+        and held.total("cannot_stand", {"actor": actor}) > 0
+    )
+    if (
+        is_(world, actor, Condition.PRONE)
+        and not is_(world, actor, Condition.PINNED)
+        and not pinned_by_a_row
+    ):
         # A move action to stand is the rule; `c.grant_action` is the
         # printed line that changes it ("allies within 3 squares of you can
         # stand up as a minor action"), which had nowhere to go while the

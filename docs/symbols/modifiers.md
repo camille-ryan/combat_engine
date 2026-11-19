@@ -158,6 +158,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "The target cannot mark your allies."
 - `c.cannot_speak(self, *, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - *"The target cannot speak intelligibly or deliver any effect that
+- `c.cannot_stand(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - *"The triggering enemy is knocked prone and cannot stand up until
 - `c.counts_as(self, satisfies: 'str', *, holding: 'str | None' = None, kind: 'str | None' = None, keyword: 'Keyword | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You can use a warhammer with any power that requires a light blade."
 - `c.counts_as_keyword(self, ref: 'str', keyword: 'Keyword', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
