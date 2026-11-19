@@ -522,7 +522,31 @@ def f3318(c: Cast) -> None:
     """Pays out on one particular saving throw succeeding. `SavingThrow`
     carries `against` as a free-text label and nothing sets it to the
     condition the throw is avoiding, so which save this is cannot be
-    asked -- the gap the warden's f1024 names."""
+    asked -- the gap the warden's f1024 names.
+
+    **Re-measured 2026-11-19 and this diagnosis is right**, which is worth
+    recording because `triage.json` had judged the symbol `mis-marked` on
+    the ground that the hook exists. It does -- `Trigger(SavingThrow,
+    pred)` is declared by `items.arms.i3556p1` -- and that is not the
+    blocker: the predicate has nothing to look at. The twelve fields are
+    `seq`, `depth`, `cancelled`, `reason`, `actor`, `against`, `natural`,
+    `bonus`, `saved`, `when_`, `granted_via` and `keywords`, and the old
+    verdict deferred this row's gate to a `SavingThrow.effect` that is not
+    among them.
+
+    **The moment itself is real**, which the old verdict also doubted. Six
+    printed rows say *"a saving throw to avoid falling prone"* (`m168a2`,
+    `m169a1`, `m729a0`, `m839a3`, `m972a3`, `m1123a6`) and two content rows
+    already raise one -- `monsters/level_06/skirmishers_sa` tests
+    `ev.condition is Condition.PRONE` and calls `c.save()`, and
+    `level_10/soldiers_sa` writes the condition into the label by hand as
+    `against=f"{c.ref} prone"`. That hand-written label is the workaround a
+    field would replace.
+
+    So the fix is `SavingThrow.conditions`, the exact mirror of `keywords`
+    -- and `cast.py`'s save modifier context already carries a
+    `"conditions"` key, passed empty. It owes a `replay` re-record because
+    `SavingThrow` is in `wire()`. `#1391`."""
 
 
 @power("f3319", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

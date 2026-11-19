@@ -5474,13 +5474,12 @@
     "why": "The event names the relation and the two creatures and not the row that set it, and every class's mark is the same relation value, so there is no way to tell which mark just landed. Nothing else announces a mark."
   },
   "c.on_save()": {
-    "at": "2026-10-12",
-    "by": "slice6",
-    "found": "Trigger(SavingThrow, pred) -- items.arms.i3556p1 ships on it",
-    "refused_rows": 3,
-    "rows": 3,
-    "verdict": "mis-marked",
-    "why": "i1516x1 itself says 'SavingThrow is announced before it is acted on, so the roll itself is reachable from a c.watch' and asks only for the hook plus a gate; the hook exists as a declared Trigger and i3556p1 uses it with a predicate. The gates split: f3318's condition is answerable off the standing effect (see SavingThrow.effect), i1516x1's 'which row granted the bonus' is SavingThrow.power and real, and f3470's save-against-prone is a moment that never happens."
+    "at": "2026-11-19",
+    "by": "plan-step-5",
+    "found": "nothing -- Trigger(SavingThrow, pred) exists and is NOT the gap",
+    "rows": 1,
+    "verdict": "real",
+    "why": "Re-judged from `mis-marked`, which was right about the shape and wrong about the blocker. `Trigger(SavingThrow, pred)` does exist and `items.arms.i3556p1` ships on it, which is what the old verdict found -- but the predicate has nothing to test. f3318 prints 'when you make a save to avoid being knocked prone', and SavingThrow carries `against` (the LAYING ROW's ref or a display string), `keywords` (the effect's keywords, added for f1941's 'save against a poison effect') and `when_`. None of them names the CONDITION being avoided, which is f3318's own docstring's diagnosis and it is correct. The save itself is real and written: monsters/level_06/skirmishers_sa watches ConditionApplied for Condition.PRONE and calls c.save(), and level_10/soldiers_sa uses c.save(against=f'{c.ref} prone'); 6 printed monster rows print 'a saving throw to avoid falling prone'. So the event happens and cannot be recognised. The fix is SavingThrow.conditions, the exact mirror of `keywords` -- and cast.py's save modifier context ALREADY carries a 'conditions' key (empty today), so the shape is agreed and only the event field is missing. Costs a replay re-record, because SavingThrow is in wire() and every fixture reads the envelope; must be a sorted tuple, not a frozenset, per #1120. Two of the old verdict's three clauses are refutable by measurement, which is why this was re-judged rather than left: it deferred f3318's gate to `SavingThrow.effect`, and SavingThrow has no such field (its 12 are seq, depth, cancelled, reason, actor, against, natural, bonus, saved, when_, granted_via, keywords); and it called f3470's save-against-prone 'a moment that never happens', where 6 printed monster rows print 'a saving throw to avoid falling prone' and two content rows already raise it."
   },
   "c.on_skill_check()": {
     "at": "2026-10-13",
