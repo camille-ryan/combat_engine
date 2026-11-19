@@ -59,6 +59,8 @@ Making an attack, and what the attack turns out to be.
   - Did the last attack hit? `c.hit()` is the damage; this is the question.
 - `c.line_of_sight_from(self, square: 'Square', *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "Until the end of your next turn, you can determine your line of
+- `c.miss_lands_on(self, *, on: 'int', who: 'int | None' = None, until: 'When' = <When.SONT: "start of source's next turn">, kinds: 'tuple[str, ...]' = ('melee', 'ranged'), unless_attacker: 'bool' = True) -> 'Effect | None'`
+  - "Any melee or ranged attack that misses you hits the target
 - `c.oversized(self, categories: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Wield a weapon made for a creature this many sizes larger.
 - `c.provoke(self, attacker: 'int', *, on: 'int | None' = None, why: 'str' = '') -> 'None'`

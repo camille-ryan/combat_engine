@@ -20250,6 +20250,165 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_miss_can_land_on_the_creature_you_ride(out: Result) -> None:
+    """*"Any melee or ranged attack that misses you hits the target
+    instead, unless the target is the attacker."* -- `p9433`, while the
+    assassin is riding its victim.
+
+    **`c.miss_lands_on` is the verb and it is a composition, not a new
+    mechanism.** The marker's own note had measured why none of the three
+    near misses is this, and all three readings hold: `c.redirect` moves a
+    blow **with its live result**, so a miss stays a miss wherever it is
+    pointed; `c.also_hits` copies a blow that has already landed by
+    watching its `DamageRolled`, and a miss rolls none;
+    `c.hit_becomes(True)` forces the answered blow to land, on the creature
+    it was **already aimed at**.
+
+    So the verb is the last two composed: re-aim the result the way
+    `c.reroll_attack(against=)` does, then force the hit. `Miss` carries
+    `result` -- measured -- which is what makes its window usable, and
+    carries no `vs`, so the new target's defence is read off the power's
+    header for the branch the event names.
+
+    **The four words I nearly dropped are asserted separately.** *"Unless
+    the target is the attacker"* is the end of a long Hit line, and without
+    it a creature swinging at the rider hits **itself** every time it
+    misses. The arm below puts the ridden creature in the attacker's seat
+    and asserts it takes nothing.
+
+    **And the verb's own default was the trap this tree warns about most.**
+    `who=` routed through `Cast._who` defaults to `c.target`, which in this
+    row **is** the creature named by `on=` -- so the guard refused the hold
+    and the row laid nothing, silently, while the rest of the Hit line
+    worked. It defaults to `self.me` now.
+
+    Sampled over seeds, because every assertion here rides on an attack
+    roll: the row's own strike has to land before the hold exists, and the
+    swings afterwards have to miss before there is anything to redirect.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import Encounter
+
+    def ride(seed: int, *, swinger_is_victim: bool,
+             kinds: tuple[str, ...] | None = None) -> dict | None:
+        """Land `p9433`, then swing at the rider eight times.
+
+        `kinds` re-lays the hold narrowed to those reach kinds, which is
+        how the *"melee or ranged"* half is tested: the swings below are
+        melee basics, so a hold narrowed to `("ranged",)` must redirect
+        nothing. A hand-built `Miss` cannot ask this -- it carries no
+        `result`, so the verb returns at an earlier guard and the control
+        would pass for the wrong reason.
+        """
+        world, me, _ = _board("p9433", seed)
+        world.encounter = Encounter(world)
+        world.encounter.start()
+        foes = sorted(enemies(world, me))
+        if len(foes) < 2:
+            return None
+        victim, other = foes[0], foes[1]
+        spot = world.get(me, Position)
+        if spot is None:
+            return None
+        here = spot.square
+        # **Adjacent first.** `p9433` is melee 1 and the board does not
+        # place its target in reach, so `c.strike()` refuses for distance
+        # rather than missing -- which reads exactly like a row that never
+        # fires. 24 seeds in a row "missed" before this line existed.
+        place(world, victim, (here[0] + 1, here[1]))
+        c = Cast(world=world, me=me, ref="p9433")
+        c.target = victim
+        dsl.REGISTRY["p9433"].body(c)
+        held = [e for e in world.effects.of(me) if "misses land on" in e.label]
+        if not held:
+            return {"landed": False}
+        if kinds is not None:
+            for e in held:
+                world.effects.end(e, "drivers re-lays it narrowed")
+            if c.miss_lands_on(on=victim, until=When.SONT, kinds=kinds) is None:
+                return None
+        swinger = victim if swinger_is_victim else other
+        place(world, swinger, (here[0] + 1, here[1]) if swinger_is_victim
+              else (here[0], here[1] + 1))
+        hurt_v = world.get(victim, Health)
+        hurt_m = world.get(me, Health)
+        if hurt_v is None or hurt_m is None:
+            return None
+        hurt_v.hp, hurt_m.hp = hurt_v.max_hp, hurt_m.max_hp
+        sw = Cast(world=world, me=swinger, ref="drivers:swing")
+        for _ in range(8):
+            sw.basic(on=me)
+        return {
+            "landed": True,
+            "victim": hurt_v.max_hp - hurt_v.hp,
+            "rider": hurt_m.max_hp - hurt_m.hp,
+        }
+
+    def sweep(*, swinger_is_victim: bool,
+              kinds: tuple[str, ...] | None = None) -> tuple[int, int, int]:
+        """(boards where the hold landed, boards hurting the victim, total)"""
+        laid = hurt = 0
+        for seed in range(1, max(6, SAMPLE // 10) + 1):
+            got = ride(seed, swinger_is_victim=swinger_is_victim, kinds=kinds)
+            if got is None or not got["landed"]:
+                continue
+            laid += 1
+            hurt += bool(got["victim"])
+        return laid, hurt, max(6, SAMPLE // 10)
+
+    laid, hurt, asked = sweep(swinger_is_victim=False)
+    out.that(laid > 0,
+             "the row lands and leaves a redirect hold on at least one"
+             " board -- the premise, and it needs the target placed in"
+             " reach first: `p9433` is melee 1 and the board does not do"
+             " that, so `c.strike()` refuses for distance and 24 seeds"
+             " read as misses", f"{laid} of {asked} board(s) landed it")
+    if not laid:
+        return
+    out.that(hurt == laid,
+             "**and on every one of them a missed swing at the rider hurts"
+             " the creature it rides** -- the clause. Sampled because the"
+             " swings have to miss before there is anything to redirect",
+             f"the victim took damage on {hurt} of {laid}")
+
+    # -- *"unless the target is the attacker"* ----------------------------
+    laid2, hurt2, _ = sweep(swinger_is_victim=True)
+    out.that(laid2 > 0,
+             "the same fixture with the RIDDEN creature doing the swinging"
+             " lands too -- the premise for the exemption",
+             f"{laid2} board(s)")
+    if not laid2:
+        return
+    out.that(hurt2 == 0,
+             "**and it never hurts itself** -- *'unless the target is the"
+             " attacker'*, four words at the end of a long Hit line."
+             " Without them a creature swinging at the rider wounds itself"
+             " on every miss",
+             f"the victim took damage on {hurt2} of {laid2}")
+
+    # -- *"melee or ranged"*, which is the verb's `kinds` ------------------
+    laid3, hurt3, _ = sweep(swinger_is_victim=False, kinds=("ranged",))
+    out.that(laid3 > 0,
+             "the hold re-lays narrowed to ranged attacks only",
+             f"{laid3} board(s)")
+    if not laid3:
+        return
+    out.that(hurt3 == 0,
+             "**and a MELEE miss then redirects nothing** -- the *'melee or"
+             " ranged'* narrowing, read off the swinging power's own reach."
+             " Asked through the parameter because the swings here are melee"
+             " basics: with the default `kinds` every one of them redirects,"
+             " so dropping the check inside the verb was invisible until"
+             " this arm existed",
+             f"the victim took damage on {hurt3} of {laid3}")
+
+
 def a_second_action_cost_carries_the_row_alone(out: Result) -> None:
     """*"(standard or opportunity; requires longsword, recharge)"* --
     `m1171a1` and `m1178a1`, the same card on two monsters.
@@ -103515,6 +103674,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "miss_rides": (a_miss_can_land_on_the_creature_you_ride,
+                   "a miss on the rider lands on the creature it rides,"
+                   " unless that creature is the one swinging"),
     "opportunity_half": (a_second_action_cost_carries_the_row_alone,
                          "a monster card printing 'standard or opportunity'"
                          " declares both, and the second carries the row"

@@ -101,6 +101,13 @@ CATEGORIES: dict[str, dict] = {
                 # punish an opening somebody ELSE left -- the only one of
                 # the three that is about a side rather than a set.
                 "provoked_by_allies",
+                # Beside `redirect` because an author's question is the
+                # same -- "this blow should land somewhere else" -- and the
+                # answer differs: `redirect` moves a blow with its live
+                # result, so a miss stays a miss, where this turns a miss
+                # on one creature into a hit on another and is a standing
+                # hold rather than an answer to one blow.
+                "miss_lands_on",
                 "redirect", "retarget_defence",
                 "returns_to_hand", "strike",
                 "target",

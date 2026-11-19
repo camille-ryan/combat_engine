@@ -138,44 +138,32 @@ def p9432(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.SHADOW, Keyword.WEAPON],
     attack=Attack(DEX, vs=AC),
-    dropped=("c.miss_lands_on(on=)",),
 )
 def p9433(c: Cast) -> None:
     """Sharing the target's square is `share=True`; moving with it is riding
     it, which is the relation that makes a creature carry another.
 
-    "Any melee or ranged attack that misses you hits the target instead" is
-    still dropped, and the reason has been narrowed: the old note said it
-    "needs a redirect from inside the attack's own interrupt window", and
-    that window is reachable -- `c.pass_on`'s docstring demonstrates it,
-    and `c.redirect` is a verb that lives in it.
+    **"Any melee or ranged attack that misses you hits the target instead"
+    is written**, as `c.miss_lands_on`. The reasoning that was recorded here
+    is now that verb's docstring, because it is about the verb rather than
+    about this card -- the short version is that the clause is a **standing
+    hold**, and the three near misses each answer one blow instead:
+    `c.redirect` moves a blow with its live result so a miss stays a miss,
+    `c.also_hits` copies a blow that has already landed, and
+    `c.hit_becomes(True)` forces the answered blow to land on the creature
+    it was already aimed at. The verb is the last two composed -- re-aim the
+    result, then force the hit.
 
-    Three near misses, and what each cannot do:
+    **"Unless the target is the attacker" is the clause I nearly dropped.**
+    It is the last four words of a long Hit line, and without it a creature
+    swinging at the rider would hit *itself* whenever it missed. That is the
+    verb's `unless_attacker`, defaulted True because this is the only card
+    printing the sentence.
 
-    * `c.redirect` moves the blow **with its live result**, so a miss
-      stays a miss wherever it is pointed.
-    * `c.also_hits` copies a blow that has already landed, by watching the
-      `DamageRolled` that attack makes -- a miss rolls none, so there is
-      nothing to copy.
-    * `c.hit_becomes(True)` forces the blow that was answered to land, on
-      the creature it was already aimed at, not on a second one.
-
-    What the card asks for is a **standing** hold that turns a miss on one
-    creature into a hit on another, and none of the three is that.
-
-    **And the obvious composition was tried and measured, 2026-11-18, so
-    the next reader need not.** From an `AttackRolled` watcher in
-    `Window.BEFORE`, on a blow that would miss (total 7 against defence
-    21):
-
-        c.redirect(to=other)        False -- refused outside an interrupt
-        c.hit_becomes(True, ev=ev)  True
-        the attack then announced   Hit, on the ORIGINAL target
-
-    So forcing the hit works and lands it on the creature already aimed at,
-    which is what the third bullet above says, and redirect does not reach
-    from that window at all. The two do not compose into the printed
-    clause."""
+    The *"melee or ranged"* narrowing is the verb's `kinds`, read off the
+    swinging power's own reach -- so a close burst or an area attack that
+    misses the rider is not redirected.
+    """
     victim = c.target
     if victim is None:
         return
@@ -184,6 +172,10 @@ def p9433(c: Cast) -> None:
         c.shift(1, to=c.there, share=True)
         c.insubstantial(on=c.me, until=When.SONT)
         c.ride(on=victim)
+        # The redirect lives exactly as long as the ride: both run to the
+        # start of the assassin's next turn, which is when the printed
+        # slide puts it back beside the target.
+        c.miss_lands_on(on=victim, until=When.SONT)
 
         def step_off(ev: TurnStart) -> None:
             if ev.actor != c.me:

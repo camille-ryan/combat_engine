@@ -4932,6 +4932,105 @@ class Cast:
         )
         return True
 
+    def miss_lands_on(
+        self,
+        *,
+        on: int,
+        who: int | None = None,
+        until: When = When.SONT,
+        kinds: tuple[str, ...] = ("melee", "ranged"),
+        unless_attacker: bool = True,
+    ) -> Effect | None:
+        """"Any melee or ranged attack that misses you hits the target
+        instead, unless the target is the attacker." -- `p9433`, while the
+        assassin is riding its victim.
+
+        **A standing hold rather than an answer to one blow**, which is why
+        none of the three obvious verbs is this. `c.redirect` moves a blow
+        **with its live result**, so a miss stays a miss wherever it is
+        pointed. `c.also_hits` copies a blow that has already landed, by
+        watching the `DamageRolled` a hit makes -- a miss rolls none.
+        `c.hit_becomes(True)` forces the answered blow to land, on the
+        creature it was **already aimed at**.
+
+        So this is the third and the fourth composed, and the composition is
+        the whole verb: re-aim the result the way `c.reroll_attack(against=)`
+        does, then force the hit. Neither half alone says the clause.
+
+        `Miss` carries `result` -- measured, along with `ctx`, `power` and
+        `branch` -- which is what makes the `Miss` window usable. It does
+        **not** carry `vs`, so the defence of the new target is read off the
+        power's own header for the branch the event names, exactly as
+        `c.reroll_attack(against=)` reads it and for the same reason.
+
+        **`unless_attacker` is a printed clause, not a safety rail.** The
+        card says *"unless the target is the attacker"*: a creature swinging
+        at the rider does not hit itself on a miss. Defaulted True because
+        that is what the one card printing this says, and named so a card
+        without the exemption can say so.
+
+        `kinds` is the *"melee or ranged"* narrowing, read off the swinging
+        power's own reach -- so a close burst or an area attack that misses
+        is not redirected, which no other gate here would catch.
+
+        `who` is whose misses are redirected and defaults to the caster;
+        `on` is who they land on instead and is required, because a hold
+        with nobody to take the blow is the one shape this must not be
+        allowed to lay silently.
+        """
+        from .events import Miss as _Miss
+
+        # **`self.me`, not `self._who(who)`, and that distinction cost a
+        # probe.** Almost every verb here defaults `on=` to `c.target`,
+        # which is right when the clause is about whoever was hit. This
+        # clause is about *"attacks that miss **you**"* -- the rider -- and
+        # the creature the blow lands on instead is the separate, required
+        # `on=`. Routed through `_who` the default resolved to `c.target`,
+        # which in `p9433` **is** the creature named by `on=`, so the guard
+        # below refused the hold and the row laid nothing. Silently: the
+        # rest of the Hit line was unaffected.
+        mine = self.me if who is None else who
+        if mine is None or on == mine:
+            return None
+        hold = self.effect(f"{self.ref} misses land on {on}", until=until,
+                           on=mine)
+        if hold is None:
+            return None
+
+        def landed(ev: _Miss) -> None:
+            if getattr(ev, "target", None) != mine or hold.ended:
+                return
+            attacker = getattr(ev, "attacker", None)
+            if unless_attacker and attacker == on:
+                return
+            from .dsl import get as _get
+
+            aimed = _get(str(getattr(ev, "power", "")) or "")
+            if aimed is None:
+                return
+            branch = int(getattr(ev, "branch", 0))
+            if getattr(aimed.reach_of(branch), "kind", "") not in kinds:
+                return
+            result = getattr(ev, "result", None)
+            if result is None:
+                return
+            vs = getattr(ev, "vs", None)
+            if vs is None:
+                line = aimed.attack_of(branch)
+                vs = getattr(line, "vs", None)
+            if vs is None:
+                return
+            from .query import defence as _defence
+
+            result.target = on
+            result.target_defence = _defence(self.world, on, vs)
+            if hasattr(ev, "target"):
+                ev.target = on
+            self.hit_becomes(True, ev=ev)
+
+        hold.subs.append(self.world.bus.on(_Miss, landed, owner=mine))
+        return hold
+
     def hit_becomes(self, hit: bool, *, ev: Any = None) -> bool:
         """"The attack misses", or it lands after all.
 
