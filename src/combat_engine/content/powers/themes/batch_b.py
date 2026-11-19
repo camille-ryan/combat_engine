@@ -2888,7 +2888,9 @@ def p16653(c: Cast) -> None:
     reach=CloseBurst(5),
     target=YOU_AND_EACH_ALLY,
     keywords=MARTIAL,
-    dropped=("c.vehicle_speed()",),
+    declined="the theme is built around a ship and nothing models"
+             " a vehicle; deferred until ship combat exists, if"
+             " ever -- Camille, 2026-11-19, #1387",
 )
 def p16557(c: Cast) -> None:
     """One skill for the whole party, so the choice is made once on the
@@ -2934,8 +2936,27 @@ def _enemy_closed(world: World, me: int, ev: AdjacencyGained) -> bool:
     keywords=MARTIAL,
     trigger="an enemy enters a square adjacent to you",
     on=Trigger(AdjacencyGained, _enemy_closed, "an enemy moves adjacent to you"),
+    declined="the theme is built around a ship and nothing models"
+             " a vehicle; deferred until ship combat exists, if"
+             " ever -- Camille, 2026-11-19, #1387",
 )
 def p16558(c: Cast) -> None:
+    """**Written, working, and declined with its theme.** Nothing in this
+    body waits on anything: it is declined because the *theme* is, which is
+    the unit Camille named --
+
+    > *"defer until we implement ship combat (if ever). Drop the whole
+    > theme until that."*
+
+    -- and a theme built around a ship is not worth dealing while nothing
+    models a vehicle, however well two of its three rows play. Only
+    `p16557` needed the missing facility; these two are collateral, and
+    `declined=` says so without claiming they are unfinished.
+
+    The same shape as the Fortune Card rows this tree already declined:
+    decline the thing, not the lines that happen to mention it. Revisit
+    with `#1387`.
+    """
     foe = getattr(c.trigger, "mover", None)
     c.ignores_difficult(on=c.me, until=When.EOT)
     c.shift(_half_speed(c, c.me), who=c.me)
@@ -2961,9 +2982,17 @@ def p16558(c: Cast) -> None:
     reach=CloseBurst(5),
     target=Target("ally", 99, everyone=True),
     keywords=MARTIAL,
+    declined="the theme is built around a ship and nothing models"
+             " a vehicle; deferred until ship combat exists, if"
+             " ever -- Camille, 2026-11-19, #1387",
 )
 def p16559(c: Cast) -> None:
-    """The slow is the price, so it is offered rather than imposed:
+    """**Declined with its theme, not for want of anything.** This body
+    is finished; the theme is deferred until ship combat exists, which is
+    Camille's call and the unit she named -- *"drop the whole theme until
+    that"*. `#1387`. The rest of this note is about how the row works.
+
+    The slow is the price, so it is offered rather than imposed:
     `c.may` asks the creature whose turn it will spoil."""
     who = c.target
     if who is None or not c.may("be slowed", who=who):
