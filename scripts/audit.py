@@ -2937,6 +2937,52 @@ def _marks(world: Any) -> _Marks:
 def board(ref: str, seed: int, pose: bool = False,
           arm: str = "", element: bool = False,
           terrain: str = "") -> tuple[World, int, set[str]]:
+    """The board, with `chargen.SCORED_CHOICES` pinned for the whole build.
+
+    **A one-line wrapper, and the pin is the point.** `_board` below is the
+    board; this exists so that every draw inside it -- the party, and the
+    caster's own gear and powers -- happens in the mode this module
+    documents at the top of the file, rather than in whatever mode the
+    calling process left the flag in.
+
+    Inside an `audit.py` run this is a **no-op**: the flag is already False
+    throughout, set at import, so no verdict and no baseline can move.
+
+    Inside `drivers` it is the fix for `#1362`. Every rule imports `audit`
+    function-locally, so the *first* rule in a run to reach that import
+    flipped the flag off for the rest of the process while
+    `drivers.main` set it back to True before each rule -- which gave the
+    first rule the unscored board and all the others the production one.
+    Measured on `board("p3464", 1)`:
+
+        SCORED_CHOICES=False   w3610, w3631, w:rod
+        SCORED_CHOICES=True    w:ki-focus, w3678, w3631, w:rod, w3660, w3610
+
+    With a ki focus in the main hand there is no weapon in it, so `usable`
+    refuses any `Keyword.WEAPON` row for *"requirement not met"* -- which
+    is how `drivers.narrow_params` came to pass standalone and fail in the
+    suite, reporting a broken facility when the row had simply been refused
+    for want of a weapon. Four rounds of diagnostics to find.
+
+    **The existing pin around `_deal_party_unscored` is left alone**, and
+    not because it is now redundant. It still guards that function when it
+    is called directly, and this tree's rule is that a guard reported "no
+    longer needed" is usually a check that stopped firing rather than a
+    fault that went away. Two pins of the same flag cost nothing.
+
+    A measurement that depends on what ran before it is not a measurement.
+    """
+    was_scored = chargen.SCORED_CHOICES
+    chargen.SCORED_CHOICES = False
+    try:
+        return _board(ref, seed, pose, arm, element, terrain)
+    finally:
+        chargen.SCORED_CHOICES = was_scored
+
+
+def _board(ref: str, seed: int, pose: bool = False,
+           arm: str = "", element: bool = False,
+           terrain: str = "") -> tuple[World, int, set[str]]:
     """A caster with the row, four creatures in reach, and the fight started.
 
     The third value is what got emitted while the encounter was starting,

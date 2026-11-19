@@ -20264,6 +20264,72 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def the_audit_board_does_not_depend_on_what_ran_before_it(out: Result) -> None:
+    """`audit.board` builds the same board whatever mode the process is in.
+
+    **`#1362`, and the bug was invisible by construction.** Every
+    `drivers` rule imports `audit` function-locally, and `audit.py` sets
+    `chargen.SCORED_CHOICES = False` at import as a documented
+    module-level side effect. `drivers.main` sets it back to True before
+    each rule. So the *first* rule in a run to reach that import got the
+    unscored board and every rule after it got the production one -- and
+    nothing said so, because each rule passed or failed on its own terms.
+
+    What it cost: `drivers.narrow_params` passed standalone and failed in
+    the suite, reporting *"0 ally(ies) offered the teleport"* when the real
+    answer was that the row had been refused for want of a weapon. With a
+    ki focus in the main hand there is no weapon in it, so `usable` refuses
+    any `Keyword.WEAPON` row. Four rounds of diagnostics.
+
+    **This rule is the guard, and it has to set the flag itself** -- which
+    is the one thing a rule here normally must not do. `main` has already
+    set the production value by the time this runs, so asserting on the
+    ambient flag would assert on `main` rather than on `board`. It saves
+    and restores, like `_board` does.
+
+    A measurement that depends on what ran before it is not a measurement.
+    """
+    from audit import board as audit_board
+    from combat_engine import chargen
+    from combat_engine.engine.components import Gear
+
+    def kit(flag: bool) -> list[str]:
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = flag
+        try:
+            world, caster, _ = audit_board("p3464", 1)
+        finally:
+            chargen.SCORED_CHOICES = was
+        gear = world.get(caster, Gear)
+        return sorted(w.ref for w in (gear.weapons if gear else []))
+
+    unscored = kit(False)
+    scored = kit(True)
+    out.that(
+        bool(unscored),
+        f"the board arms its caster at all ({unscored})",
+    )
+    out.that(
+        unscored == scored,
+        "`audit.board` deals the same kit whether the calling process left"
+        " SCORED_CHOICES on or off -- the pin is inside the board, so no"
+        f" rule's board depends on which rule ran first ({unscored} vs"
+        f" {scored})",
+    )
+
+    # **And the flag is given back**, which the `finally` is for: a guard
+    # that pinned the mode and kept it would hand every later rule the
+    # audit's board instead of the production one, which is this bug with
+    # the sign flipped.
+    chargen.SCORED_CHOICES = True
+    audit_board("p3464", 1)
+    out.that(
+        chargen.SCORED_CHOICES is True,
+        "and `board` restores the flag rather than leaving it pinned"
+        f" (left it {chargen.SCORED_CHOICES})",
+    )
+
+
 def a_compelled_creature_cannot_decline_an_opening(out: Result) -> None:
     """*"You must make every opportunity attack you can."*
 
@@ -105297,6 +105363,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "board_is_pinned": (the_audit_board_does_not_depend_on_what_ran_before_it,
+                        "audit.board deals the same board whatever mode the"
+                        " calling process left chargen in"),
     "must_swing": (a_compelled_creature_cannot_decline_an_opening,
                    "a creature told it must make every opportunity attack it"
                    " can cannot decline an opening, and does not displace a"
