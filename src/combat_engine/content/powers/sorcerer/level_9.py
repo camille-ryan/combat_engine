@@ -39,10 +39,11 @@ from combat_engine.engine import (
     TurnStart,
     UpTo,
     When,
+    Window,
     power,
 )
 from combat_engine.engine.components import Conjuration
-from combat_engine.engine.events import MoveEnd
+from combat_engine.engine.events import MoveEnd, OpportunityWindow
 from combat_engine.engine.query import distance_between
 
 from . import has_familiar, wild_even
@@ -401,13 +402,53 @@ def p5856(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p5857(c: Cast) -> None:
-    """"It cannot take immediate actions or opportunity actions" is not
-    written: `Rules.no_reactions` is reachable only through DAZED and
-    STUNNED, each of which carries a great deal else. The burn is an Effect
-    line and lands on a miss too."""
+    """*"Until the target saves against this damage, it cannot take
+    immediate actions or opportunity actions."*
+
+    **This note used to say the clause "is not written", with no marker to
+    say so** -- which is the thing `content/CLAUDE.md` forbids outright: a
+    row is finished or it carries a marker. The reason it gave was true when
+    written and is not now: *"`Rules.no_reactions` is reachable only through
+    DAZED and STUNNED, each of which carries a great deal else"*, and
+    `c.no_immediate` is the writer `#1285` landed for exactly that.
+
+    The two halves take two mechanisms, as they do everywhere in the tree:
+    `c.no_immediate` for the immediate actions, and a cancelled
+    `OpportunityWindow` for the opportunity ones -- which is what 33 other
+    cards printing the opportunity half do.
+
+    **One save ends both, which is why neither takes `When.SAVE_ENDS` of
+    its own.** The printed clock is *"until the target saves against this
+    damage"* -- the burn's save, not a second one. Two `SAVE_ENDS` holds
+    would be two separate throws and the creature would shake the denial
+    off while still burning. So both ride the burn's `on_end`.
+
+    The burn is an Effect line and lands on a miss too, which is why it sits
+    outside the `c.strike()` guard -- and so does the denial, for the same
+    reason: the card hangs it on the damage, not on the hit."""
     if c.strike():
         c.damage("2d6", c.cha_mod, dtype=DamageType.PSYCHIC)
-    c.ongoing(5, DamageType.PSYCHIC)
+    burn = c.ongoing(5, DamageType.PSYCHIC)
+    victim = c.target
+    if burn is None or victim is None:
+        return
+    held = c.no_immediate(on=victim, until=When.ENCOUNTER)
+
+    def refuse(ev: OpportunityWindow) -> None:
+        if ev.actor == victim:
+            ev.cancel(f"{c.ref}: cannot take opportunity actions")
+
+    watching = c.watch(
+        OpportunityWindow, refuse, until=When.ENCOUNTER,
+        window=Window.BEFORE, on=victim, label=f"{c.ref} refuses openings",
+    )
+
+    def saved() -> None:
+        for eff in (held, watching):
+            if eff is not None and not eff.ended:
+                c.world.effects.end(eff, "saved")
+
+    burn.on_end.append(saved)
 
 
 @power(

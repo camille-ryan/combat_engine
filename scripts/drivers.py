@@ -19393,6 +19393,111 @@ def denying_immediate_attacks_spares_other_immediates(out: Result) -> None:
              f"{[m.what for m in (held.items if held else [])][-3:]}")
 
 
+def two_rows_printed_a_denial_and_called_nothing(out: Result) -> None:
+    """*"It cannot take immediate actions or opportunity actions."*
+    `p5857` (save ends) and `m2975a2` (until the end of its next turn).
+
+    **Neither carried a marker and neither did anything.** `p5857`'s
+    docstring said the clause "is not written"; `m2975a2`'s body held a
+    `c.note` reading "the target can take no immediate or opportunity
+    actions". Both read as finished to every instrument that counts
+    markers, which is what `content/CLAUDE.md`'s "finished or carries a
+    marker" exists to stop.
+
+    Both notes gave a reason that was true when written and is not now:
+    `Rules.no_reactions` is reachable only through daze, domination and
+    stun, each carrying a great deal the cards do not print.
+    `c.no_immediate` is the writer `#1285` landed for exactly that, and the
+    opportunity half is a cancelled `OpportunityWindow` -- which is what 33
+    other cards printing that half already do.
+
+    **`p5857`'s clock is the burn's save, not a second one**, and that is
+    the assertion worth having: *"until the target saves against this
+    damage"*. Two `SAVE_ENDS` holds would be two throws, and the creature
+    would shake the denial off while still burning. Both halves ride the
+    burn's `on_end`.
+
+    **The target has to be kept alive to measure any of it.** The burn
+    killed it in the first probe, so `can_react` read False after the save
+    -- for the right answer and the wrong reason. `Conditions` said `DEAD`.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Mods
+    from combat_engine.engine.events import OpportunityWindow
+    from combat_engine.engine.query import enemies
+
+    def denied(ref: str) -> tuple[Any, int, int]:
+        world, me, _ = _board(ref, 1)
+        victim = sorted(enemies(world, me))[0]
+        c = Cast(world=world, me=me, ref=ref)
+        c.target = victim
+        dsl.REGISTRY[ref].body(c)
+        # Topped up because the burn and the hit can drop it, and a dead
+        # creature cannot react for reasons that are not this clause.
+        hp = world.get(victim, Health)
+        if hp is not None:
+            hp.hp = hp.max_hp
+        return world, me, victim
+
+    for ref in ("p5857", "m2975a2"):
+        out.that(not dsl.REGISTRY[ref].unfinished,
+                 f"`{ref}` carries no marker -- which is only honest now"
+                 " that it does the thing", f"{dsl.REGISTRY[ref].unfinished}")
+
+    for ref in ("p5857", "m2975a2"):
+        world, me, _ = _board(ref, 1)
+        victim = sorted(enemies(world, me))[0]
+        out.that(query.can_react(world, victim),
+                 f"`{ref}`: the target can react before the row runs -- the"
+                 " premise, and the board poses no condition that would"
+                 " make this vacuous", "True")
+
+        world, me, victim = denied(ref)
+        held = world.get(victim, Mods)
+        out.that(held is not None and held.total("no_reactions", {}) > 0
+                 and not query.can_react(world, victim),
+                 f"`{ref}`: afterwards it cannot take immediate actions",
+                 "denied")
+
+        seen: list[Any] = []
+        world.bus.on(OpportunityWindow, lambda ev, s=seen: s.append(ev))
+        window = OpportunityWindow(actor=victim, provoker=me,
+                                   why="drivers:probe", kind_="walk",
+                                   mode="walk")
+        world.bus.emit(window)
+        out.that(window.cancelled,
+                 f"`{ref}`: and an opportunity window of its own is"
+                 " cancelled -- the other half, which `c.no_immediate`"
+                 " cannot say because `can_react` gates both categories"
+                 " together", f"{window.cancelled!r}")
+
+    # -- p5857's two halves end on ONE save -------------------------------
+    world, me, victim = denied("p5857")
+    burns = [e for e in world.effects.of(victim) if e.ongoing]
+    out.that(len(burns) == 1,
+             "`p5857` leaves exactly one burn, which is the clock the"
+             " clause names", f"{[(e.label, e.when.name) for e in burns]}")
+    if len(burns) != 1:
+        return
+    for burn in burns:
+        world.effects.end(burn, "saved")
+    held = world.get(victim, Mods)
+    out.that(held is None or held.total("no_reactions", {}) == 0,
+             "and saving against the burn lifts the immediate denial with"
+             " it -- one throw, not two, which is what the printed *'until"
+             " the target saves against this damage'* says",
+             f"{held.total('no_reactions', {}) if held else 0}")
+    after = OpportunityWindow(actor=victim, provoker=me, why="drivers:probe",
+                              kind_="walk", mode="walk")
+    world.bus.emit(after)
+    out.that(not after.cancelled,
+             "and the opportunity half goes with it, so the same save ends"
+             " both halves of one printed sentence",
+             f"{after.cancelled!r}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -102015,6 +102120,9 @@ DRIVERS = {
     "no_immediate_attacks": (
         denying_immediate_attacks_spares_other_immediates,
         "denying immediate ATTACKS leaves other immediate actions alone"),
+    "silent_denial": (two_rows_printed_a_denial_and_called_nothing,
+                      "two rows printed a denial of immediate and"
+                      " opportunity actions and did nothing"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

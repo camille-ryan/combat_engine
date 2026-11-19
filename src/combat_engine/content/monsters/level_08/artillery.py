@@ -106,6 +106,7 @@ from combat_engine.engine import (
     TurnStart,
     Usage,
     When,
+    Window,
     World,
     get,
     power,
@@ -119,6 +120,7 @@ from combat_engine.engine.events import (
     EffectApplied,
     Event,
     LeaveSquare,
+    OpportunityWindow,
     PowerUsed,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
@@ -723,14 +725,40 @@ def m2975a1(c: Cast) -> None:
     damage=Damage("2d8", 7),
 )
 def m2975a2(c: Cast) -> None:
-    """The rider is noted rather than invented: nothing on `Cast` shuts off
-    a creature's immediate and opportunity actions. `c.cannot_attack` bars
-    every attack it makes, which is a far larger thing than the printed
-    line, and `c.threatens(0)` would take away only the opportunity half
-    and leave an immediate interrupt untouched. See the report."""
-    if c.strike():
-        c.hit()
-        c.note("m2975a2: the target can take no immediate or opportunity actions")
+    """*"The target cannot take immediate actions or opportunity actions
+    until the end of the m2975's next turn."*
+
+    **This was a `c.note` standing in for the clause**, with no marker to
+    say so -- which reads as finished to every instrument that counts
+    markers, and is the thing `content/CLAUDE.md` forbids outright.
+
+    The old note's survey was right and is kept, because both near misses
+    still are near misses: `c.cannot_attack` bars every attack the creature
+    makes, far more than the printed line, and `c.threatens(0)` takes away
+    only the opportunity half and leaves an immediate interrupt untouched.
+    What it concluded -- "nothing on `Cast` shuts off a creature's
+    immediate and opportunity actions" -- stopped being true with `#1285`.
+
+    Two mechanisms, as everywhere in the tree for this clause:
+    `c.no_immediate` for the immediate actions, read by `query.can_react`,
+    and a cancelled `OpportunityWindow` for the opportunity ones, which is
+    what 33 other cards printing that half do."""
+    if not c.strike():
+        return
+    c.hit()
+    victim = c.target
+    if victim is None:
+        return
+    c.no_immediate(on=victim, until=When.EONT)
+
+    def refuse(ev: OpportunityWindow) -> None:
+        if ev.actor == victim:
+            ev.cancel(f"{c.ref}: cannot take opportunity actions")
+
+    c.watch(
+        OpportunityWindow, refuse, until=When.EONT, window=Window.BEFORE,
+        on=victim, label=f"{c.ref} refuses openings",
+    )
 
 
 @power(
