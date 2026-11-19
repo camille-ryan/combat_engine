@@ -17620,6 +17620,56 @@ class Cast:
             by=self.ref,
         )
 
+    def cast_from_square(
+        self, square: Square, *, on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """"You can treat that square as the point of origin of your
+        attacks."
+
+        `c.cast_from` is the sibling and borrows a **creature's** square:
+        it files `Relation.CASTS_FROM` between two entities, and
+        `dsl.measured_from` hands back the lender's id for `Position` to be
+        read off. `p10203` picks *"a square adjacent to the target"*, and a
+        bare square is nobody -- there is nothing to relate to.
+
+        **So a marker stands in the square and the ordinary relation is
+        filed against it.** That is this engine's existing answer to "a
+        thing that is somewhere and is not a creature": `terrain.arm`'s
+        trap has a `Position` and no `Health` or `Side`, which is what
+        keeps it out of `query.creatures`, and it is **deliberately not in
+        the occupancy index** either. The marker here is the same -- spawned
+        with a `Position` and never placed on the grid, so it blocks
+        nothing, is nobody's occupant, grants no cover and takes no turn.
+
+        The alternative was teaching `dsl.origins` to answer squares as
+        well as entities, which is three call sites on the targeting hot
+        path for one printed row. This touches none of them: every reader
+        already turns an origin into `squares(world, eye)`, and a marker
+        answers that.
+
+        Despawned when the hold ends, so the board does not silt up with
+        old vantage points.
+        """
+        from .components import Ident, Position
+        from .types import Relation
+
+        borrower = on if on is not None else self.me
+        marker = self.world.spawn(
+            Position(square=square),
+            Ident(ref=f"{self.ref}:origin"),
+        )
+        self.world.relations.set(Relation.CASTS_FROM, borrower, marker)
+
+        def undo() -> None:
+            self.world.relations.clear(Relation.CASTS_FROM, borrower, marker)
+            self.world.despawn(marker)
+
+        return self.world.effects.apply(
+            borrower, self.me, until, label=f"{self.ref} origin square",
+            on_end=[undo], by=self.ref,
+        )
+
     def cast_from(
         self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER,
         optional: bool = False, melee: bool = False, within: int = 0,

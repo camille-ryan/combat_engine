@@ -78,7 +78,7 @@ CATEGORIES: dict[str, dict] = {
                 "as_ranged", "as_though_hit_by", "as_weapon", "attack",
                 "attack_with", "attacks_defence", "autohit", "basic",
                 "becomes_burst",
-                "cast_from", "coup_de_grace", "crit", "crit_becomes",
+                "cast_from", "cast_from_square", "coup_de_grace", "crit", "crit_becomes",
                 "line_of_sight_from",
                 # Beside `line_of_sight_from` because they are the pair:
                 # that one lends a SQUARE for sight, this lends a BODY, so

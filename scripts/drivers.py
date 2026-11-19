@@ -17294,6 +17294,97 @@ def a_zone_that_bites_the_ring_only_on_a_turn_start(out: Result) -> None:
              f"bitten: {bites2}")
 
 
+def an_origin_can_be_a_bare_square(out: Result) -> None:
+    """*"Choose a square adjacent to the target. Until the end of your next
+    turn, you can treat that square as the point of origin of your
+    attacks."* -- `p10203`.
+
+    **The marker had the gap located exactly and it is the *kind* of
+    origin.** `c.cast_from(who: int)` borrows from a creature -- a
+    `Relation.CASTS_FROM` between two entities, with `dsl.measured_from`
+    handing back the lender's id for `Position` to be read off it -- and a
+    bare square is nobody.
+
+    `c.cast_from_square` puts a **marker** in the square and files the
+    ordinary relation against that: this engine's existing answer to "a
+    thing that is somewhere and is not a creature", which `terrain.arm`'s
+    trap already is -- a `Position`, no `Health`, no `Side`, and
+    deliberately not in the occupancy index.
+
+    **Four things asserted about the marker, because an invisible entity on
+    the board is exactly the sort of thing that turns out to be visible
+    after all**: it is not a creature, it holds nobody's square on the
+    grid, it really does move where attacks are measured from, and it is
+    gone when the hold ends. The alternative -- teaching `dsl.origins` to
+    answer squares -- is three call sites on the targeting hot path for one
+    printed row, and this touches none of them.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import creatures, enemies, squares
+
+    row = must(dsl.get("p10203"), "p10203")
+    world, me, _ = _board("p10203", 1)
+    here = must(world.get(me, Position), "the artificer stands").square
+    spot = (here[0] + 6, here[1])
+    c = Cast(world=world, me=me, ref="p10203")
+
+    out.that(dsl.origins(world, me, row.reach, row) == [me],
+             "attacks start out measured from the caster",
+             f"{dsl.origins(world, me, row.reach, row)}")
+    held = c.cast_from_square(spot, until=When.EONT)
+    lent = dsl.origins(world, me, row.reach, row)
+    out.that(lent != [me] and len(lent) == 1,
+             "and after the lend they are measured from something else",
+             f"{lent}")
+    out.that(sorted(squares(world, lent[0])) == [spot],
+             "which stands in the chosen square -- so the square really is"
+             " the point of origin, not merely recorded as one",
+             f"{sorted(squares(world, lent[0]))} against {spot}")
+    out.that(lent[0] not in creatures(world),
+             "the marker is NOT a creature, so nothing targets it, it takes"
+             " no turn and it grants nobody cover",
+             f"{lent[0]} in creatures: {lent[0] in creatures(world)}")
+    out.that(world.grid.occupant(spot) is None,
+             "and it is not on the occupancy index, so it blocks no"
+             " movement and holds nobody's square -- the same choice"
+             " `terrain.arm` makes for a trap",
+             f"{world.grid.occupant(spot)}")
+    marker = lent[0] if lent else -1
+    if held is not None:
+        c.end_effect(held)
+    out.that(dsl.origins(world, me, row.reach, row) == [me],
+             "when the hold ends the origin is the caster again",
+             f"{dsl.origins(world, me, row.reach, row)}")
+    # **And the marker is really gone, not merely unrelated.** Clearing the
+    # relation alone restores the origin, so an assertion about origins
+    # passes either way -- a plant dropping the despawn left the entity on
+    # the board and nothing said so. Every use of the row would add one.
+    out.that(world.get(marker, Position) is None,
+             "and the marker itself is despawned, so the board does not"
+             " silt up with one old vantage point per use",
+             f"marker {marker}: {world.get(marker, Position)}")
+
+    # -- and the row does it ---------------------------------------------
+    world2, me2, _ = _board("p10203", 1)
+    foes = sorted(enemies(world2, me2))
+    out.that(bool(foes), "a target to hit", f"{foes}")
+    if foes:
+        c2 = Cast(world=world2, me=me2, ref="p10203")
+        c2.target = foes[0]
+        world2.decider = (lambda a, k, o, prompt="": o[0] if o else None)
+        world2.rng.loaded = 20
+        dsl.REGISTRY["p10203"].body(c2)
+        moved = dsl.origins(world2, me2, row.reach, row)
+        out.that(moved != [me2],
+                 "the ROW moves its own point of origin on a hit -- the"
+                 " clause end to end, not the verb in isolation",
+                 f"{moved}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -99767,6 +99858,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "origin_square": (an_origin_can_be_a_bare_square,
+                      "a bare square as the point of origin, held by a"
+                      " marker nothing else can see"),
     "bites_the_ring": (a_zone_that_bites_the_ring_only_on_a_turn_start,
                        "a zone that bites a creature starting its turn"
                        " beside it, and not one walking past"),

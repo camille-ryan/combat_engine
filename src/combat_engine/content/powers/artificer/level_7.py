@@ -30,6 +30,7 @@ from combat_engine.engine import (
     by_keyword,
     enemy_within,
     power,
+    spread,
     targets_me,
 )
 
@@ -78,23 +79,44 @@ def p10202(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.THUNDER],
     attack=Attack(INT, vs=WILL),
-    dropped=("c.cast_from(square=)",),
 )
 def p10203(c: Cast) -> None:
-    """Still dropped, and "no hold to live in" was false: `c.cast_from` is
-    the standing version of `from_=` and its docstring says so outright.
+    """**Written, and the old note had the gap located exactly: it is in the
+    kind of origin.** `c.cast_from(who: int)` borrows from a **creature** --
+    `Relation.CASTS_FROM` between two entities, with `dsl.measured_from`
+    handing back the lender's id for `Position` to be read off it -- and
+    this card picks "a square adjacent to the target". A bare square is
+    nobody.
 
-    The gap here is narrower and is in the **kind of origin**. This card
-    picks "a square adjacent to the target", and `c.cast_from(who: int)`
-    borrows from a **creature**: it files `Relation.CASTS_FROM` between two
-    entities and `dsl.measured_from` hands back the lender's id for
-    `Position` to be read off it. A bare square is nobody, so there is
-    nothing to relate to and nothing to look up.
+    `c.cast_from_square` answers it by putting a **marker** in the square
+    and filing the ordinary relation against that, which is this engine's
+    existing answer to "a thing that is somewhere and is not a creature":
+    `terrain.arm`'s trap has a `Position` and no `Health` or `Side`, and is
+    deliberately not in the occupancy index. The marker blocks nothing,
+    occupies nobody's square and takes no turn, and it is despawned when
+    the hold ends.
 
-    `p10193` is the sibling and wants the other missing piece -- a distance
-    proviso -- which is why these are two symbols and not one."""
-    if c.strike():
-        c.damage("2d10", c.int_mod, dtype=DamageType.THUNDER)
+    The alternative was teaching `dsl.origins` to answer squares as well as
+    entities -- three call sites on the targeting hot path, for one printed
+    row. This touches none of them: all three already turn an origin into
+    `squares(world, eye)`, and a marker answers that.
+
+    `p10193` is still the sibling wanting the other piece, a distance
+    proviso, which is why those were two symbols and not one."""
+    if not c.strike():
+        return
+    c.damage("2d10", c.int_mod, dtype=DamageType.THUNDER)
+    # "Choose a square adjacent to the target."
+    there = c.there
+    if there is None:
+        return
+    spots = sorted(
+        sq for sq in spread({there}, 1)
+        if c.world.grid.inside(sq) and sq != there
+    )
+    spot = c.choose(spots, f"{c.ref}: the new point of origin")
+    if spot is not None:
+        c.cast_from_square(spot, until=When.EONT)
 
 
 @power(
