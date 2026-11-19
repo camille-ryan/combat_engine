@@ -57816,20 +57816,54 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # a step behind the vampire bump above it. Both say 599 now, because a
     # message quoting a number the assertion does not use is how the next
     # reader gets the wrong figure.
+    # **Sixth and seventh, and this pair is different from the five above:
+    # one of them moves the number under test.** Both were found the way
+    # the paragraph above prescribes -- by diffing the bucket MEMBERSHIP
+    # against the commit that set the pin, not by trusting the counts:
+    #
+    #     reaches_an_ally  122 -> 123   `p11296c1` ADDED
+    #     holdable         601 -> 602   the same row
+    #     undeclared       122 -> 121   `p9434` LEFT
+    #
+    # `p11296c1` is a summon command that `d2899ec7` turned into a row of
+    # its own. It declares `One ally` and its body is `c.heal(c.roll("1d6"))`,
+    # so it belongs in `reaches_an_ally` on both tests and the numerator
+    # moved for the only reason this counter should ever move: somebody
+    # wrote a healing row that can answer a dying ally.
+    #
+    # `p9434` moved the other way and is a **fix landing**, which is why
+    # the count going *down* is the good direction here. It used to inherit
+    # `dsl.ONE_CREATURE` -- no target line at all -- and the shroud work
+    # gave it `_SHROUDED`, which is the printed *"Your p9400 target"*. So it
+    # is one fewer missing header, which is exactly what the note below
+    # calls "a content finding and not this counter's business". It stays in
+    # `cannot_reach_an_ally`: its heal is `c.temp_hp(c.con_mod, on=c.me)`,
+    # a drain that helps only its caster.
+    #
+    # **The diff was nearly got wrong, and the way it failed is worth the
+    # line.** The first comparison ran the pin commit's tree in a detached
+    # worktree and reported every bucket identical -- which read as "the
+    # assertion was simply written wrong". It was not: the worktree was
+    # invoked through the main checkout's venv, which installs
+    # `combat_engine` editable from the MAIN tree, so both runs measured the
+    # same source twice. `combat_engine.__file__` says which, in one line,
+    # and `PYTHONPATH=<worktree>/src` is the fix.
     reach = SC._heal_reach()
-    out.that(reach["reaches_an_ally"] == 122
-             and reach["holdable"] == 601,
-             "122 of the 601 character-holdable healing rows can reach an"
+    out.that(reach["reaches_an_ally"] == 123
+             and reach["holdable"] == 602,
+             "123 of the 602 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
-             " refusal counter is about, and it has moved five times:"
+             " refusal counter is about, and it has moved seven times:"
              " `i545p2` (#1139) and `p3847` (#1153) by one each against"
              " their printed cards, six at once with `#1163`'s wave,"
              " `f1848` with `i2273p1` when two waves wrote them a heal,"
              " `f2864` when `#1233` unblocked it, and `p4170` when #1346"
              " wrote its vestige rider -- 'you gain 3 temporary hit points"
              " for each target you hit' is a heal the row did not have"
-             " before, so the POPULATION grew while `reaches_an_ally`"
-             " stood still",
+             " before -- in all six of those the POPULATION grew while"
+             " `reaches_an_ally` stood still. The seventh is the exception"
+             " and the comment above names it: `p11296c1` moved BOTH,"
+             " because a summon command became a row and it heals an ally",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
     out.that(reach["self_only"] == 338
              and reach["cannot_reach_an_ally"] == 141
@@ -57845,16 +57879,20 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
              " outright for the other 122 in it",
              f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
              f" + {reach['reaches_an_ally']}")
-    out.that(reach["undeclared"] == 122,
-             "**122 of those 140 declare no target line at all** and"
+    out.that(reach["undeclared"] == 121,
+             "**121 of those 141 declare no target line at all** and"
              " inherit `dsl.ONE_CREATURE`, so they read `enemy` by"
              " default rather than by design. Told apart by identity"
              " against the singleton, which is the only way to see it --"
-             " the other 18 print an enemy target for real, and a heal"
+             " the other 20 print an enemy target for real, and a heal"
              " aimed at an enemy is a drain that heals its caster."
              " `#1139` closed with 0 of its 12 live: 8 are fired by a"
              " trigger that requires having hit an enemy, so an enemy"
-             " exists by construction",
+             " exists by construction. **121 and not 122 because `p9434`"
+             " gained the header it was missing**, which is this number"
+             " falling for the right reason. 20 and not 18 for the same"
+             " move: this clause is `cannot_reach_an_ally` minus"
+             " `undeclared`, so it had been a step behind twice over",
              f"{reach['undeclared']} undeclared")
     # -- and the filter exercised, which is the load-bearing pair -------
     #
