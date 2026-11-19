@@ -311,6 +311,45 @@ class Encounter:
         # because an encounter-usage trait is refused the second time.
         for eid in list(self.order):
             self.arm_traits_of(eid)
+        self._resume_carried()
+
+    def _resume_carried(self) -> None:
+        """Re-hang the watches over state a row carried into this fight.
+
+        A `c.watch` dies with its duration and its closure dies with the
+        `World`, so a printed effect that outlives the encounter -- not the
+        encounter's *longest* duration, but genuinely past it -- cannot be
+        held by a watch alone. `p14141` is the case: three recorded d20
+        results that end on an **extended rest**.
+
+        So the state lives in `Powers.kept_rolls` (mirrored to
+        `story.Sheet`) and `Power.resume` re-arms over it.
+
+        **Keyed on who carries the state, not on who knows the row.**
+        `p14141` records its results on an **ally**, who does not own the
+        card -- so walking `powers.known` would find nobody. This walks the
+        store.
+
+        Called from `_arm_traits` rather than beside it so the ordering is
+        stated once: traits are in force first, then anything carried over,
+        and both before the first turn.
+        """
+        from .components import Powers
+        from .dsl import get
+
+        for eid in list(self.order):
+            known = self.world.get(eid, Powers)
+            if known is None or not known.kept_rolls:
+                continue
+            for ref, left in sorted(known.kept_rolls.items()):
+                if not left:
+                    continue
+                row = get(ref)
+                if row is None or row.resume is None:
+                    continue
+                from .cast import Cast
+
+                row.resume(Cast(world=self.world, me=eid, ref=ref))
 
     def arm_traits_of(self, eid: int) -> None:
         """Turn on one creature's traits.

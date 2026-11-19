@@ -20264,6 +20264,174 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def recorded_rolls_outlive_the_fight(out: Result) -> None:
+    """*"When you next take an extended rest, the effect ends."* --
+    `p14141`, which records three d20 results for an ally to use in place
+    of its next three rolls of three different kinds.
+
+    **The marker read `durations.When.DAY` and the duration was never the
+    whole of it.** `When.ENCOUNTER` is the longest the engine has, so the
+    faces were bounded strictly tighter than printed -- the row's own note
+    said so. But a longer `When` alone would not have worked: a `c.watch`
+    dies with its duration and its **closure dies with the `World`**, and
+    the faces lived in a closure.
+
+    So it is three pieces rather than a duration:
+
+    * `Powers.kept_rolls` holds them in a fight, keyed on the recording
+      row and sitting on the creature whose rolls they replace -- which is
+      **not the caster**; `p14141` records them on an ally.
+    * `story.Sheet.kept_rolls` is the persisted half, mirrored by
+      `story._wear` and `harvest` exactly as `per_day` is, and cleared by
+      `rest(extended=True)` and nothing else. One fixed field for one
+      mechanism, which is what `withheld`, `per_day`, `afflictions` and
+      `vestiges_used` each are -- a *general* effect store is a larger
+      thing and this is deliberately not it.
+    * `Power.resume` re-hangs the watches over whatever is left, called by
+      `Encounter._resume_carried`. **Not `body`**, which would record three
+      fresh faces -- the thing that must not happen.
+
+    **`resume` made a guard necessary and the guard was found by
+    measurement.** The watches run `until=When.ENCOUNTER`, and a second
+    `Encounter` over the same `World` does not expire them -- so arming
+    again hung a second set and one roll spent **two** faces: `[7, 4]`
+    emptied on a single swing. In production each fight builds a fresh
+    `World`, so the duplicate cannot arise; the label guard makes that an
+    assumption rather than a dependency.
+
+    The fixture places the foe in reach before swinging. Without it
+    `c.basic` refuses for distance and nothing is spent, which reads
+    exactly like a row that does not work -- the same staging fault three
+    other rules in this file record.
+    """
+    import combat_engine.content  # noqa: F401
+    import combat_engine.story as story
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.turns import Encounter
+
+    world, me, _ = _board("p14141", 1)
+    mates = [a for a in sorted(allies(world, me)) if a != me]
+    foes = sorted(enemies(world, me))
+    out.that(bool(mates) and bool(foes),
+             "the board deals an ally to record for and an enemy for it to"
+             " swing at", f"allies {mates[:2]} / enemies {foes[:2]}")
+    if not mates or not foes:
+        return
+    mate, foe = mates[0], foes[0]
+    spot = world.get(mate, Position)
+    if spot is None:
+        return
+    # In reach, or `c.basic` refuses for distance and spends nothing.
+    place(world, foe, (spot.square[0] + 1, spot.square[1]))
+
+    c = Cast(world=world, me=me, ref="p14141")
+    c.target = mate
+    dsl.REGISTRY["p14141"].body(c)
+    held = world.get(mate, Powers)
+    mine = world.get(me, Powers)
+    out.that(held is not None and len(held.kept_rolls.get("p14141", [])) == 3,
+             "**three faces are recorded on the ALLY** -- the creature"
+             " whose rolls they replace, not the caster",
+             f"{dict(held.kept_rolls) if held else None}")
+    out.that(mine is not None and not mine.kept_rolls,
+             "and nothing on the caster -- a count there would follow the"
+             " wrong sheet out of the fight",
+             f"{dict(mine.kept_rolls) if mine else None}")
+    if held is None or len(held.kept_rolls.get("p14141", [])) != 3:
+        return
+
+    before = list(held.kept_rolls["p14141"])
+    Cast(world=world, me=mate, ref="drivers:swing").basic(on=foe)
+    after = list(held.kept_rolls["p14141"])
+    out.that(len(after) == len(before) - 1 and after == before[1:],
+             "**a roll spends exactly one, from the FRONT** -- *'in the"
+             " order they come'*, and one rather than two, which is what"
+             " the double-arm bug did",
+             f"{before} -> {after}")
+
+    # -- out of this fight and into the next, the production way ----------
+    # **A genuinely fresh `World`, not a second `Encounter` over this
+    # one.** Re-starting an encounter here leaves the ORIGINAL watches
+    # live, so a roll spends a face whether `resume` exists or not -- the
+    # plants that deleted `resume=` and `_resume_carried` both passed
+    # against that fixture. The real path is harvest -> sheet -> `_wear`
+    # onto a new board -> `Encounter.start`, and on that board nothing but
+    # `resume` can have armed anything.
+    # **One sheet per party member, and read back whichever one took it.**
+    # `harvest` matches sheets to the party BY POSITION -- its own
+    # docstring says so -- and the faces sit on an ally rather than on
+    # position 0, so a single-sheet party reads the wrong creature and the
+    # assertion fails on a correct engine. That is how the first version
+    # of this arm failed.
+    held.kept_rolls["drivers:spent"] = []
+    seats = [a for a in sorted(allies(world, me))]
+    party = story.Party(sheets=[
+        story.Sheet(cls="wizard", level=5, build="", chassis="", race="r1")
+        for _ in seats
+    ])
+    story.harvest(world, party)
+    carried = [sh for sh in party.sheets if sh.kept_rolls]
+    out.that(len(carried) == 1
+             and carried[0].kept_rolls.get("p14141") == after
+             and "drivers:spent" not in carried[0].kept_rolls,
+             "`harvest` carries what is LEFT onto exactly one sheet and"
+             " drops an emptied key -- three results used is the effect"
+             " over, so nothing should be carried for it",
+             f"{[sh.kept_rolls for sh in party.sheets]}")
+    if len(carried) != 1:
+        return
+    sheet = carried[0]
+
+    worn, wearer, _ = _board("p14141", 3)
+    story._wear(worn, wearer, sheet)
+    back = worn.get(wearer, Powers)
+    out.that(back is not None and back.kept_rolls.get("p14141") == after,
+             "and `_wear` puts them on the next board -- the same round"
+             " trip `per_day` makes",
+             f"{dict(back.kept_rolls) if back else None}")
+    if back is None or not back.kept_rolls.get("p14141"):
+        return
+
+    worn.encounter = fresh_enc = Encounter(worn)
+    fresh_enc.start()
+    kept = list(back.kept_rolls["p14141"])
+    out.that(kept == after,
+             "starting that fight does not clear them -- the printed clock"
+             " is an extended rest, and `When.ENCOUNTER` was strictly"
+             " tighter than that", f"{after} -> {kept}")
+    seat = worn.get(wearer, Position)
+    others = [e for e in sorted(enemies(worn, wearer))]
+    if seat is None or not others:
+        return
+    place(worn, others[0], (seat.square[0] + 1, seat.square[1]))
+    Cast(world=worn, me=wearer, ref="drivers:swing2").basic(on=others[0])
+    now = list(back.kept_rolls.get("p14141", []))
+    out.that(len(now) == len(kept) - 1,
+             "**and a roll in that fight spends one** -- on a board where"
+             " nothing but `Power.resume` could have armed a watch, since"
+             " the originals died with the `World` that held them. One,"
+             " not two, which is the label guard",
+             f"{kept} -> {now}")
+
+    # Compared against what the sheet actually carried, not a literal: the
+    # faces are rolled, so hard-coding them fails on every seed but one.
+    party.rest(extended=False)
+    out.that(sheet.kept_rolls.get("p14141") == after,
+             "**a SHORT rest leaves them** -- the card names an extended"
+             " one, so clearing here would be tighter than printed",
+             f"{sheet.kept_rolls} vs {after}")
+    party.rest(extended=True)
+    out.that(not sheet.kept_rolls,
+             "**and an extended rest ends them** -- *'when you next take"
+             " an extended rest, the effect ends'*, which is the whole"
+             " clock and the only thing that clears it",
+             f"{sheet.kept_rolls}")
+
+
 def a_grant_of_combat_advantage_can_be_copied(out: Result) -> None:
     """*"When one enemy in the aura grants combat advantage to you or an
     ally, that enemy grants it to you and each ally."* -- `p16112`.
@@ -104460,6 +104628,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "carried_rolls": (recorded_rolls_outlive_the_fight,
+                      "recorded d20 results survive the encounter and end"
+                      " on an extended rest"),
     "copied_advantage": (a_grant_of_combat_advantage_can_be_copied,
                          "a grant of combat advantage to one member of an"
                          " aura is copied to every member"),

@@ -234,6 +234,20 @@ class Sheet:
     #: against and those rows are written as once per fight. This is the
     #: counter they wanted; the rows still have to read it.
     per_day: dict[str, int] = field(default_factory=dict)
+    #: **Recorded rolls carried between fights**, mirrored from
+    #: `Powers.kept_rolls`. `p14141` records three d20 results for an ally
+    #: and the card ends them on an extended rest, not on the encounter --
+    #: so `When.ENCOUNTER`, the longest duration the engine has, was
+    #: strictly tighter than printed.
+    #:
+    #: One fixed field for one mechanism, which is what `withheld`,
+    #: `per_day`, `afflictions` and `vestiges_used` each are. A *general*
+    #: effect store is a different and larger thing and this is
+    #: deliberately not it.
+    #:
+    #: Cleared by `rest(extended=True)` and by nothing else, which is the
+    #: printed clock.
+    kept_rolls: dict[str, list[int]] = field(default_factory=dict)
 
     #: Items this character is carrying, by item ref -> how many.
     #:
@@ -743,6 +757,11 @@ class Party:
             if extended:
                 sheet.spent.clear()
                 sheet.per_day.clear()
+                # *"When you next take an extended rest, the effect
+                # ends."* The extended fork is the whole of that clause --
+                # a short rest leaves them, which is why this is here and
+                # not above the fork.
+                sheet.kept_rolls.clear()
                 sheet.hp = None
                 # **A full pool, minus what the rest does not give back.**
                 # The printed rule is explicit and the shipped half of
@@ -937,6 +956,11 @@ def _wear(world: World, eid: int, sheet: Sheet) -> str:
         # `powers.known` at all. Filtering it the way `spent` is filtered
         # would drop every one of them.
         powers.per_day = dict(sheet.per_day)
+        # The recorded rolls, unfiltered for `per_day`'s reason: they are
+        # keyed on the row that RECORDED them, which for `p14141` is a
+        # caster's power and not something this creature knows. Filtering
+        # through `powers.known` would empty it every fight.
+        powers.kept_rolls = {k: list(v) for k, v in sheet.kept_rolls.items()}
     return said
 
 
@@ -1035,6 +1059,13 @@ def harvest(world: World, party: Party) -> None:
         if powers is not None:
             sheet.spent = dict(powers.used)
             sheet.per_day = dict(powers.per_day)
+            # **Only what is left.** The row pops a face as it is spent, so
+            # an emptied list is three results used and the effect over --
+            # which is the printed end condition, carried across the fight
+            # rather than re-derived.
+            sheet.kept_rolls = {
+                k: list(v) for k, v in powers.kept_rolls.items() if v
+            }
             sheet.vestiges_used = list(powers.vestiges_used)   # `#1046`
         # **What the fight left in them.** `Afflictions` lives on a creature
         # in a `World` that does not outlive the encounter, and

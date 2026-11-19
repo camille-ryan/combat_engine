@@ -77,7 +77,12 @@ from combat_engine.engine import (
     targets_me,
     would_hit_me,
 )
-from combat_engine.engine.components import Companion, Conjuration, Position
+from combat_engine.engine.components import (
+    Companion,
+    Conjuration,
+    Position,
+    Powers,
+)
 from combat_engine.engine.events import (
     AdjacencyGained,
     AttackRolled,
@@ -1003,6 +1008,76 @@ def p14103(c: Cast) -> None:
 # -- x7_855: the fortune teller ----------------------------------------------
 
 
+def _p14141_arm(c: Cast, mate: int) -> None:
+    """Hang the three watches over whatever faces are left on `mate`.
+
+    **Shared by the body and by `resume`**, which is the whole point: the
+    body records the faces and arms, and `resume` arms again at the start
+    of the next fight without recording anything. One function, so the two
+    cannot drift in what they spend or in what order.
+
+    The store is `Powers.kept_rolls[ref]` on the **ally**, not a closure
+    and not the caster's: a closure dies with the `World`, and the card
+    ends on an extended rest rather than on the encounter.
+
+    The empty list is still the end of the effect -- an exhausted list
+    makes every handler a no-op -- and `story.harvest` drops an emptied key
+    so nothing is carried forward for a spent row.
+    """
+    ref = c.ref
+    # **Armed once per creature, which `resume` makes necessary.** The
+    # watches run `until=When.ENCOUNTER` and a second `Encounter` over the
+    # same `World` does not expire them, so arming again would hang a
+    # second set and one roll would spend TWO faces -- measured, [7, 4]
+    # emptied on a single swing.
+    #
+    # In production each fight builds a fresh `World` and the sheets are
+    # mirrored in and out, so the duplicate cannot arise; this is the guard
+    # that makes that an assumption rather than a dependency.
+    watching = f"{ref} recorded"
+    if any(e.label == watching for e in c.world.effects.of(mate)):
+        return
+
+    def left() -> list[int]:
+        known = c.world.get(mate, Powers)
+        return known.kept_rolls.get(ref, []) if known is not None else []
+
+    def spend(ev: Any, kind: str, *, whose: int) -> None:
+        if whose != mate:
+            return
+        faces = left()
+        if not faces:
+            return
+        if not c.may("use a recorded result", who=mate):
+            return
+        if c.replace_roll(faces[0], kind=kind, ev=ev):
+            faces.pop(0)
+
+    def on_attack(ev: AttackRolled) -> None:
+        spend(ev, "attack", whose=ev.attacker)
+
+    def on_save(ev: SavingThrow) -> None:
+        spend(ev, "save", whose=ev.actor)
+
+    def on_check(ev: SkillCheck) -> None:
+        spend(ev, "check", whose=getattr(ev, "actor", mate))
+
+    c.watch(AttackRolled, on_attack, until=When.ENCOUNTER, on=mate,
+            label=watching)
+    c.watch(SavingThrow, on_save, until=When.ENCOUNTER, on=mate)
+    c.watch(SkillCheck, on_check, until=When.ENCOUNTER, on=mate)
+
+
+def _p14141_resume(c: Cast) -> None:
+    """Re-arm at the start of a later fight. Records nothing.
+
+    `Encounter._resume_carried` builds the `Cast` with `me` set to the
+    creature **carrying** the faces, which for this row is the ally rather
+    than the caster -- so `mate` is `c.me` here and `c.target` is None.
+    """
+    _p14141_arm(c, c.me)
+
+
 @power(
     "p14141",
     level=0,
@@ -1012,7 +1087,7 @@ def p14103(c: Cast) -> None:
     reach=Ranged(5),
     target=Target("ally", 1, day_locked_by="p14141"),
     keywords=[Keyword.ARCANE],
-    dropped=("durations.When.DAY",),
+    resume=_p14141_resume,
 )
 def p14141(c: Cast) -> None:
     """Three recorded results standing in for the next three d20 rolls of
@@ -1086,34 +1161,13 @@ def p14141(c: Cast) -> None:
     # explicit-target one -- so a False here would mean the row landed on a
     # target neither arm could have given it, and there is no such path.
     c.spend_per_day(c.ref, 1, on=mate)
-    kept = [c.roll("1d20") for _ in range(3)]
-
-    def spend(ev: Any, kind: str, *, whose: int) -> None:
-        # The empty list **is** the end of the effect. "When all three
-        # results have been used ... the effect ends" needs nothing taken
-        # off the bus: an exhausted list makes every handler a no-op, and
-        # the watches expire with the encounter anyway. There is no
-        # `c.unwatch`, and adding one for this would be a verb for a
-        # bookkeeping step that a guard already does.
-        if whose != mate or not kept:
-            return
-        if not c.may("use a recorded result", who=mate):
-            return
-        if c.replace_roll(kept[0], kind=kind, ev=ev):
-            kept.pop(0)
-
-    def on_attack(ev: AttackRolled) -> None:
-        spend(ev, "attack", whose=ev.attacker)
-
-    def on_save(ev: SavingThrow) -> None:
-        spend(ev, "save", whose=ev.actor)
-
-    def on_check(ev: SkillCheck) -> None:
-        spend(ev, "check", whose=getattr(ev, "actor", mate))
-
-    c.watch(AttackRolled, on_attack, until=When.ENCOUNTER, on=mate)
-    c.watch(SavingThrow, on_save, until=When.ENCOUNTER, on=mate)
-    c.watch(SkillCheck, on_check, until=When.ENCOUNTER, on=mate)
+    # **Recorded on the ALLY's sheet, not in a closure.** A closure dies
+    # with the `World`; the card ends these on an extended rest.
+    holder = c.world.get(mate, Powers)
+    if holder is None:
+        return
+    holder.kept_rolls[c.ref] = [c.roll("1d20") for _ in range(3)]
+    _p14141_arm(c, mate)
 
 
 @power(

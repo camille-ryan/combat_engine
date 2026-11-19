@@ -1505,6 +1505,26 @@ class Powers:
     #: Wiped by **both** rests -- `turns.short_rest` and
     #: `turns.extended_rest` -- because the card names both.
     vestiges_used: list[str] = field(default_factory=list)
+    #: **Rolls recorded now and spent later, by the row that recorded
+    #: them.** `p14141` records three d20 results for an ally to use in
+    #: place of its next three, and *"when you next take an extended rest,
+    #: the effect ends"* -- so they outlive the encounter, which
+    #: `When.ENCOUNTER` cannot say.
+    #:
+    #: Kept here rather than in the row's own closure because a closure
+    #: dies with the fight. `story.Sheet.kept_rolls` is the persisted half
+    #: and `story._wear`/`harvest` mirror the two, exactly as `per_day`
+    #: above is mirrored; the extended rest clears it, which is the printed
+    #: clock and the only thing that does.
+    #:
+    #: Keyed on the **recording row's** ref and held on the creature whose
+    #: rolls they replace -- which is not the caster. `p14141` records them
+    #: on an ally, so a count on the caster would follow the wrong sheet.
+    #:
+    #: A list because they are spent in order, front first: *"in the order
+    #: they come"*. Empty or absent both mean none left, and the row's
+    #: watches are a no-op then.
+    kept_rolls: dict[str, list[int]] = field(default_factory=dict)
     #: Rows this creature uses as **daily** powers whatever their card
     #: declares, by ref.
     #:

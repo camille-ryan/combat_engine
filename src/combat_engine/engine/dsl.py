@@ -1829,6 +1829,27 @@ class Power:
     #: else. `None` falls through to `body`, which is every row but the
     #: handful that print a second mode.
     body_alt: Callable[[Any], None] | None = None
+    #: **Re-arm a row's carried-over state at the start of a fight.**
+    #: `p14141` records three d20 results for an ally and the card ends
+    #: them on an **extended rest**, not on the encounter -- so they
+    #: outlive the fight that bought them, and the watches that spend them
+    #: do not: a `c.watch` dies with its duration and its closure dies with
+    #: the `World`.
+    #:
+    #: So the state persists (`Powers.kept_rolls`, mirrored to
+    #: `story.Sheet`) and this re-hangs the watches over it.
+    #: `Encounter.start` calls it for every creature carrying state for
+    #: this ref, which is **not** the same as every creature that knows the
+    #: row: `p14141`'s results sit on an ally who does not own the card.
+    #:
+    #: **Not `body`.** Re-running the body would record three fresh
+    #: results, which is the thing that must not happen -- the printed
+    #: effect is the same three faces until they are spent. `resume` reads
+    #: the store and arms; it never fills it.
+    #:
+    #: Takes the `Cast` and returns nothing, like `effect_before` and
+    #: `body_alt`.
+    resume: Callable[[Any], None] | None = None
     #: A printed Trigger line. Set for immediate and opportunity actions.
     trigger: str = ""
     #: The same line in a form the dispatcher can act on. With it the row is
@@ -2597,6 +2618,7 @@ def power(
     by_ally_check: tuple[str, int] | None = None,
     effect_before: Callable[[Any], None] | None = None,
     body_alt: Callable[[Any], None] | None = None,
+    resume: Callable[[Any], None] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
     recharge: int = 0,
@@ -2859,6 +2881,7 @@ def power(
             by_ally_check=by_ally_check,
             effect_before=effect_before,
             body_alt=body_alt,
+            resume=resume,
             trigger=trigger,
             on=on,
             recharge=recharge,
