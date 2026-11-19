@@ -544,7 +544,6 @@ def p13798(c: Cast) -> None:
     attack=Attack(DEX, vs=AC),
     requires=_light_blade,
     requires_text="needs a hand free and a light blade",
-    dropped=("c.spend_row(on_miss=)",),
 )
 def p13806(c: Cast) -> None:
     """**The escape penalty is written now.** The old note said "escaping a
@@ -581,6 +580,66 @@ def p13806(c: Cast) -> None:
         first.subs.append(c.world.bus.on(Escaped, spent))
     hold = c.effect(f"{c.ref} hold", until=When.SUSTAIN, on=victim, sustain=MINOR)
     c.on_sustain(hold, lambda: c.grab(on=victim))
+
+    # *"If you make a melee weapon attack against the target before the
+    # grab ends and your `p13799` is not expended, you can use that power
+    # against the target even if the attack misses."*
+    #
+    # **`f2793b`'s pattern**: declare the wider moment here and spend the
+    # borrowed row, rather than editing `p13799`'s own trigger -- which is
+    # `Hit` and right for that card. `c.use_power` passes `c.trigger`
+    # through, and `p13799`'s body reads its victim off it, so the `Miss`
+    # is what it is handed.
+    #
+    # *"not expended"* needs no test: `c.use_power` spends by default and
+    # answers False when the row is already gone, which is the printed
+    # limit and not this row's.
+    if hold is not None:
+
+        def missed(ev: Miss) -> None:
+            if getattr(ev, "attacker", None) != c.me or ev.target != victim:
+                return
+            # No `hold.ended` test: *"before the grab ends"* is carried by
+            # the subscription, not by a guard. `Effects.end` calls
+            # `bus.off` on every entry in `subs`, and the dispatch loop
+            # re-checks membership for a sub an earlier listener removed --
+            # so this handler cannot run after the grab goes. A guard here
+            # read as the enforcement and was unreachable: the plant that
+            # deletes it passes.
+            swung = get(getattr(ev, "power", "") or "")
+            # "a melee weapon attack", both words. A ranged miss or an
+            # unarmed one is not what the clause names.
+            if swung is None or Keyword.WEAPON not in swung.keywords:
+                return
+            if getattr(swung.reach, "kind", "") != "melee":
+                return
+            if not c.may("spend p13799 on the miss"):
+                return
+            # **The miss has to be handed over as the trigger**, which is
+            # the half `f2793b` gets for free and this row does not.
+            # `c.use_power` passes `c.trigger` through, `p13799`'s body
+            # reads its victim off it -- and `p13806` is a standard action
+            # with no trigger of its own, so the borrowed row was handed
+            # `None` and returned at its first line. `on=` does not help:
+            # that card reads the trigger, not `c.target`.
+            #
+            # Put back afterwards, because this `Cast` outlives the handler
+            # -- the watch fires again on the next miss while the grab
+            # holds, and a leaked trigger would be read as that one's.
+            #
+            # **Defensive, and no fixture reds it**: the next miss assigns
+            # `c.trigger` before reading it, and the row's other two
+            # closures (`c.on_sustain`, the `Escaped` watch) do not read
+            # it at all. Kept as discipline around a borrowed mutable
+            # rather than claimed as load-bearing -- deleting the restore
+            # passes `drivers.grab_widens`.
+            was, c.trigger = c.trigger, ev
+            try:
+                c.use_power("p13799", on=victim)
+            finally:
+                c.trigger = was
+
+        hold.subs.append(c.world.bus.on(Miss, missed))
 
 
 @power(

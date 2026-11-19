@@ -20001,6 +20001,214 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_grab_may_widen_another_rows_trigger(out: Result) -> None:
+    """*"If you make a melee weapon attack against the target before the
+    grab ends and your `p13799` is not expended, you can use that power
+    against the target even if the attack misses."* -- `p13806`.
+
+    **`f2793b`'s pattern**: declare the wider moment here and spend the
+    borrowed row, rather than editing `p13799`'s own trigger -- which is
+    `Hit`, and right for that card. The marker read
+    `c.spend_row(on_miss=)` and the note had the shape exactly: "a rule
+    about another row's usage limit rather than an effect".
+
+    **Two things this row does not get for free that `f2793b` does**, and
+    both cost a probe:
+
+    * `c.use_power` passes `c.trigger` through and `p13799`'s body reads
+      its victim off it. `f2793b` is itself a triggered row, so its
+      `c.trigger` *is* the event; `p13806` is a standard action with none,
+      so the borrowed row was handed `None` and returned at its first
+      line. `on=` does not help -- that card reads the trigger, not
+      `c.target`. The miss is handed over and put back in a `finally`,
+      because this `Cast` outlives the handler.
+    * **The row's own hit expends `p13799`.** That power triggers on *any*
+      hit, so grabbing the target fires it and `usable` then answers
+      `(False, 'expended')`. The clause is for a player who **declined**
+      it, which is what the fixture models -- and the first probe read the
+      clause as dead because it did not.
+
+    *"Not expended"* needs no test of its own: `c.use_power` spends by
+    default and answers False when the row is gone, so the printed limit is
+    the borrowed row's and not this one's.
+
+    **Four of the first six plants passed, and each pass named a missing
+    control rather than a weak assertion.** Worth reading before adding to
+    this rule, because three of them are general:
+
+    * *'melee weapon attack'* is **two** narrowings and wants **two**
+      controls. The first fixture held a melee weapon attack and a ranged
+      one, so deleting the `WEAPON` test changed nothing -- the melee test
+      still rejected the ranged row. A melee attack that is **not** a
+      weapon attack is the control that reads it.
+    * **a `hold.ended` guard in the row was unreachable**, so the plant
+      deleting it could not red. `Effects.end` calls `bus.off` on every
+      entry in `subs` and `Bus._run` re-checks membership for a sub an
+      earlier listener removed, so the subscription *is* the window. The
+      guard was removed rather than the assertion strengthened. The
+      released-grab assertion stays, because it is what proves the
+      teardown does the job.
+    * **damage is the wrong observable for the aim half.** `p13799` reads
+      its victim off the trigger, so the grabber missing a *different*
+      enemy hurts that creature and leaves the grabbed target's hp
+      untouched whether the gate is read or not -- narrowing the gate to
+      the attacker alone passed. Asked on `known.used` instead: what the
+      clause forbids is the row being **spent**.
+
+    The `finally` restoring `c.trigger` is the one guard left that no
+    fixture reds, and the row says so beside it.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.events import Miss
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Keyword
+
+    melee = next(
+        (r for r, row in sorted(dsl.REGISTRY.items())
+         if row.attack is not None and not row.unfinished
+         and getattr(row.reach, "kind", "") == "melee"
+         and Keyword.WEAPON in row.keywords), "")
+    # **A ranged WEAPON attack**, not just any ranged one: the handler also
+    # checks `Keyword.WEAPON`, so a ranged implement attack is rejected by
+    # that guard and the control would pass without the melee test being
+    # read at all. Planting the melee narrowing away is what showed it.
+    ranged = next(
+        (r for r, row in sorted(dsl.REGISTRY.items())
+         if row.attack is not None and not row.unfinished
+         and getattr(row.reach, "kind", "") == "ranged"
+         and Keyword.WEAPON in row.keywords), "")
+    # And a melee attack that is NOT a weapon attack. Both halves of
+    # *'melee weapon attack'* need their own control: with only a melee
+    # weapon and a ranged weapon in the fixture, planting the `WEAPON`
+    # test away changed nothing, because the melee test still rejected
+    # the ranged row.
+    unarmed = next(
+        (r for r, row in sorted(dsl.REGISTRY.items())
+         if row.attack is not None and not row.unfinished
+         and getattr(row.reach, "kind", "") == "melee"
+         and Keyword.WEAPON not in row.keywords), "")
+    out.that(bool(melee) and bool(ranged) and bool(unarmed),
+             "the corpus has a melee weapon attack, a ranged weapon one and"
+             " a melee attack that is not a weapon attack -- one control per"
+             " word of *'melee weapon attack'*",
+             f"{melee} / {ranged} / {unarmed}")
+    if not melee or not ranged or not unarmed:
+        return
+
+    def grabbed() -> tuple[Any, int, int, Any]:
+        world, me, _ = _board("p13806", 1)
+        victim = sorted(enemies(world, me))[0]
+        known = world.get(me, Powers)
+        for ref in ("p13806", "p13799"):
+            if ref not in known.all:
+                known.known.append(ref)
+        c = Cast(world=world, me=me, ref="p13806")
+        c.target = victim
+        dsl.REGISTRY["p13806"].body(c)
+        return world, me, victim, known
+
+    world, _, victim, known = grabbed()
+    out.that(any(e.label == "p13806 hold" for e in world.effects.of(victim)),
+             "the row lands and leaves its sustain hold -- the premise, and"
+             " the clause is gated on the grab persisting", "held")
+    out.that("p13799" in known.used,
+             "and the row's own HIT has already expended `p13799`, because"
+             " that power triggers on any hit -- which is why the fixture"
+             " below models a player who declined it, and why the first"
+             " probe read this clause as dead",
+             f"{dict(known.used).get('p13799')}")
+
+    def swing(power: str, *, declined: bool, by: str = "me") -> int:
+        """Damage the grabbed target takes from one miss.
+
+        `by` moves the attacker off the grabber, which is the half of the
+        `ev.attacker`/`ev.target` gate damage can see. The aim half is
+        asked below instead, on `known.used` -- a miss aimed elsewhere
+        does not touch the grabbed target's hp whether the gate is there
+        or not, so this helper cannot see it.
+        """
+        world, me, victim, known = grabbed()
+        if declined:
+            known.used.pop("p13799", None)
+        hurt = world.get(victim, Health)
+        hurt.hp = hurt.max_hp
+        swinger = me
+        if by == "other":
+            mates = [a for a in sorted(allies(world, me)) if a != me]
+            if not mates:
+                return -1
+            swinger = mates[0]
+        world.bus.emit(Miss(attacker=swinger, target=victim, power=power))
+        return hurt.max_hp - hurt.hp
+
+    out.that(swing(melee, declined=True) > 0,
+             "a melee weapon MISS against the grabbed target spends"
+             " `p13799` and hurts it anyway -- the clause", "damage dealt")
+    out.that(swing(melee, declined=False) == 0,
+             "and does nothing when `p13799` is already expended -- the"
+             " printed limit, which `c.use_power` enforces for free",
+             "no damage")
+    out.that(swing(ranged, declined=True) == 0,
+             "and nothing on a RANGED weapon miss -- *'a melee weapon"
+             " attack'* is both words, and this is the control that says"
+             " the melee half is read", "no damage")
+    out.that(swing(unarmed, declined=True) == 0,
+             "and nothing on a MELEE miss that is not a weapon attack --"
+             " the other half of the same narrowing, and the control"
+             " without which the `WEAPON` test could be deleted unnoticed",
+             "no damage")
+
+    # -- it is the grabber's own swing, at the creature grabbed ------------
+    # `-1` is the fixture failing to find a second creature, which is a
+    # different answer from 0 and must not read as the clause declining.
+    by_other = swing(melee, declined=True, by="other")
+    out.that(by_other == 0,
+             "an ALLY missing the grabbed target spends nothing -- *'if YOU"
+             " make a melee weapon attack'*, and the board had to field a"
+             " second ally for this to be asked at all",
+             "no damage" if by_other == 0 else f"{by_other}")
+
+    # **Damage is the wrong observable for the aim half**, and the plant is
+    # what said so. `p13799` reads its victim off the trigger, so a miss
+    # aimed elsewhere hurts *that* creature -- the grabbed target's hp is
+    # untouched either way, and narrowing the gate to the attacker alone
+    # passed. What the clause forbids is the row being **spent**.
+    world, me, victim, known = grabbed()
+    known.used.pop("p13799", None)
+    spare = [e for e in sorted(enemies(world, me)) if e != victim]
+    out.that(bool(spare), "the board fields a second enemy to aim at --"
+             " without one the aim half cannot be asked", f"{spare}")
+    if not spare:
+        return
+    world.bus.emit(Miss(attacker=me, target=spare[0], power=melee))
+    out.that("p13799" not in known.used,
+             "and the grabber missing a DIFFERENT enemy leaves `p13799`"
+             " unspent -- *'against the target'*", f"{dict(known.used)}")
+
+    # -- and the grab is what holds the window open ------------------------
+    # The fixture above never lets go, so *'before the grab ends'* was
+    # untested: a plant deleting the `hold.ended` gate passed. Releasing
+    # the grab is the only state that distinguishes them.
+    world, me, victim, known = grabbed()
+    known.used.pop("p13799", None)
+    held = [e for e in world.effects.of(victim) if e.label == "p13806 hold"]
+    out.that(len(held) == 1, "the released fixture has exactly one hold to"
+             " let go of", f"{len(held)}")
+    if len(held) != 1:
+        return
+    world.effects.end(held[0], "let go")
+    hurt = world.get(victim, Health)
+    hurt.hp = hurt.max_hp
+    world.bus.emit(Miss(attacker=me, target=victim, power=melee))
+    out.that(hurt.hp == hurt.max_hp,
+             "once the grab has ENDED the same melee miss does nothing --"
+             " *'before the grab ends'*, and the plant dropping this gate"
+             " passed until the fixture let go", f"{hurt.max_hp} -> {hurt.hp}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -102638,6 +102846,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "grab_widens": (a_grab_may_widen_another_rows_trigger,
+                    "a grab lets a missed melee swing spend a power whose"
+                    " own trigger is a hit"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),
