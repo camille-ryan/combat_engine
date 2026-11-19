@@ -686,7 +686,6 @@ def p16098(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.CONJURATION, Keyword.ELEMENTAL],
-    dropped=("c.opportunity_from(square)",),
 )
 def p16099(c: Cast) -> None:
     """Three solid conjurations that move on a move action, which `speed=`
@@ -717,27 +716,34 @@ def p16099(c: Cast) -> None:
     have been banished grants nothing, since nothing occupies their
     squares.
 
-    **The remaining clause is the marker's, and this paragraph used to name
-    a different symbol from the header.** It said the gap was
-    `c.strike(from_=)` while `dropped=` says `c.opportunity_from(square)`;
-    the header is the one that is right, because the window has to *open*
-    before there is any swing to aim. Measured in `movement.step`:
-    `watchers` is `before | _reachers`, `reach` is `_threat(world, other,
-    eid)`, and every one of those reads `squares(world, other)` -- the
-    watcher's own squares and nothing else. So a caster five squares back
-    is not in `watchers` at all, and `c.bonus("reach", n)` is the wrong
-    lever twice over (it widens from the caster's square, and
-    `movement.threat_range` asks it with an empty context, which is
-    `f2276`'s note).
+    **The last clause is written now, and the marker's own measurement is
+    what it was written from.** *"You can make opportunity attacks through
+    each guardian as if you occupied its square."* The note had already
+    found the exact line: in `movement.step`, `watchers` is
+    `before | _reachers` and `reach` is `_threat(world, other, eid)`, and
+    "every one of those reads `squares(world, other)` -- the watcher's own
+    squares and nothing else".
 
-    **And there is nothing on the event to read instead.**
-    `OpportunityWindow` carries `actor`, `provoker`, `why`, `kind_` and
-    `mode` -- no origin square, and `why` is `"moved away"` for a walk, a
-    charge and a flight alike. `c.provoke` would open a window the caster
-    cannot answer, since the swing still leaves from where he stands: a
-    verb that nearly fits, paying the clause on the log while the attack
-    is out of reach. So the symbol names one thing -- making a creature
-    threaten, and swing, as though it occupied a square it does not.
+    So that is the one thing changed. `movement.threatening_squares` is a
+    creature's own squares **plus** any conjuration of its carrying
+    `threatens=True`, and it is the single reader for all three places that
+    ask where a watcher threatens from. One function rather than three
+    expressions on purpose: the preview loop's own comment records the last
+    time they drifted, when "a creature with a reach weapon provoked in
+    play and not in the preview the policy scores against".
+
+    Laid as a marker on the conjuration, beside `flanks=` and `grants_ca=`
+    and for the same reason: it is read at ask time, so it travels when the
+    guardians take their move action.
+
+    **What the old note ruled out stays ruled out**, and both readings were
+    right. `c.bonus("reach", n)` widens from the caster's square rather
+    than from a guardian's. And `c.provoke` would open a window the caster
+    cannot answer, since the swing still leaves from where he stands -- a
+    verb that nearly fits, paying the clause on the log while the attack is
+    out of reach. `OpportunityWindow` still carries no origin square and
+    does not need to: the window opens because the guardian's square is in
+    the set the step is measured against.
 
     **A fault reported here has since been fixed, and the report is left
     with its correction rather than deleted.** This note said: each
@@ -759,7 +765,7 @@ def p16099(c: Cast) -> None:
         if (
             eid := c.conjure(
                 at=sq, label=c.ref, until=When.SUSTAIN, sustain=MINOR,
-                speed=3, solid=True,
+                speed=3, solid=True, threatens=True,
             )
         )
     )

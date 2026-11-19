@@ -18864,6 +18864,101 @@ def a_prohibition_may_lift_on_a_position(out: Result) -> None:
              " pass", "offered again")
 
 
+def a_conjuration_may_lend_its_square_to_a_threat(out: Result) -> None:
+    """*"You can make opportunity attacks through each guardian as if you
+    occupied its square."* -- `p16099`, three guardians.
+
+    **The marker had already measured the exact line.** Its note said that
+    in `movement.step`, `watchers` is `before | _reachers` and `reach` is
+    `_threat(world, other, eid)`, and "every one of those reads
+    `squares(world, other)` -- the watcher's own squares and nothing else.
+    So a caster five squares back is not in `watchers` at all."
+
+    `movement.threatening_squares` is that read, now one function for all
+    three places that ask it, and `c.conjure(threatens=True)` is the marker
+    it consults. The lend is on the conjuration rather than on the caster,
+    so it travels when the guardians take their printed move action.
+
+    **`_reachers` needed widening too, and the first attempt missed it.**
+    That function short-circuits on `reach > 1`, which is sound while a
+    creature can only threaten from its own squares -- and is exactly wrong
+    here: this caster has an ordinary one-square reach and threatens five
+    squares away through a guardian. Changing the reach *test* alone left
+    the caster out of `watchers`, so no window opened and the probe read
+    False.
+
+    The control is the same board with the row not run, because every
+    assertion here would also pass on a board where the enemy simply
+    walked away from the caster itself.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conjuration, Position
+    from combat_engine.engine.events import OpportunityWindow
+    from combat_engine.engine.query import enemies
+
+    def staged(lay: bool) -> tuple[Any, int, list[int], int]:
+        world, me, _ = _board("p16099", 1)
+        if lay:
+            dsl.REGISTRY["p16099"].body(Cast(world=world, me=me, ref="p16099"))
+        guards = sorted(e for e, g in world.each(Conjuration) if g.by == me)
+        return world, me, guards, sorted(enemies(world, me))[0]
+
+    world, me, guards, foe = staged(True)
+    out.that(len(guards) == 3,
+             "the row conjures the three guardians the card prints",
+             f"{guards}")
+    if len(guards) != 3:
+        return
+    lent = movement.threatening_squares(world, me)
+    own = movement.squares(world, me)
+    out.that(all(movement.squares(world, g) <= lent for g in guards),
+             "and the caster threatens from every one of their squares as"
+             " well as its own", f"own {sorted(own)} -> {sorted(lent)}")
+    out.that(own < lent,
+             "which is strictly more than it threatened before -- asserted"
+             " because a reader that returned the creature's own squares"
+             " would satisfy the line above as well", f"{len(lent)} squares")
+
+    def walk_away(world: Any, me: int, where: Any, foe: int) -> list[int]:
+        at = next(iter(world.get(where, Position).squares))
+        beside, away = (at[0] + 1, at[1]), (at[0] + 3, at[1])
+        seat = world.get(foe, Position)
+        world.grid.place(foe, frozenset({beside}))
+        seat.square = beside
+        seat.spans = frozenset({beside})
+        seen: list[Any] = []
+        world.bus.on(OpportunityWindow, lambda ev, s=seen: s.append(ev))
+        movement.step(world, foe, away)
+        return [ev.actor for ev in seen]
+
+    opened = walk_away(world, me, guards[0], foe)
+    out.that(me in opened,
+             "an enemy stepping out from beside a guardian provokes the"
+             " CASTER, five squares off and with an ordinary one-square"
+             " reach -- the clause", f"windows for {opened}")
+
+    world, me, guards, foe = staged(False)
+    out.that(not guards, "the control board has no guardians", f"{guards}")
+    world, me, guards, foe = staged(False)
+    here = next(iter(world.get(me, Position).squares))
+    far = (here[0] + 6, here[1])
+    seat = world.get(foe, Position)
+    world.grid.place(foe, frozenset({far}))
+    seat.square = far
+    seat.spans = frozenset({far})
+    seen: list[Any] = []
+    world.bus.on(OpportunityWindow, lambda ev: seen.append(ev))
+    movement.step(world, foe, (far[0] + 2, far[1]))
+    out.that(me not in [ev.actor for ev in seen],
+             "and with no guardians laid, an enemy walking about six squares"
+             " from the caster provokes nothing from it -- the control, and"
+             " the only line that makes the assertion above about the"
+             " guardians rather than about adjacency",
+             f"windows for {[ev.actor for ev in seen]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -101471,6 +101566,9 @@ DRIVERS = {
     "held_down": (a_prohibition_may_lift_on_a_position,
                   "a row may forbid standing, and the ban lifts when the"
                   " creature crawls out of reach"),
+    "lent_threat": (a_conjuration_may_lend_its_square_to_a_threat,
+                    "a conjuration may lend its square so its conjurer"
+                    " threatens from there"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

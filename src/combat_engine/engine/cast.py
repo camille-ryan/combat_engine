@@ -8286,6 +8286,7 @@ class Cast:
         hp: int = 0,
         flanks: bool = False,
         grants_ca: bool = False,
+        threatens: bool = False,
     ) -> int:
         """Put a conjuration on the board and return its entity id.
 
@@ -8495,6 +8496,21 @@ class Cast:
             # takes its own modifiers with it, which is what makes the
             # printed "destroyed if it is hit by an attack" end this too.
             self.bonus("ca_ring", 1, on=eid, until=until, kind="untyped")
+        if threatens:
+            # **"You can make opportunity attacks through each guardian as
+            # if you occupied its square."** The third of these geometric
+            # lends, beside `flanks=` and `grants_ca=`, and laid the same
+            # way: a marker on the conjuration that one reader consults at
+            # ask time, so it travels when the guardian is moved.
+            #
+            # `movement.threatening_squares` is that reader, and it is one
+            # function rather than three expressions because the three
+            # places asking where a watcher threatens from have drifted
+            # apart before -- the preview loop's own comment records a
+            # reach weapon that provoked in play and not in the preview a
+            # policy scored against.
+            self.bonus("threatens_from", 1, on=eid, until=until,
+                       kind="untyped")
         return eid
 
     def _banish(self, eid: int) -> None:

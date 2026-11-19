@@ -181,10 +181,15 @@ def step(
             if other not in foes and not provoked_by_allies(world, other, eid):
                 continue
             reach = _threat(world, other, eid)
-            if reach == 1:
-                left = not (after_reach & squares(world, other))
-            else:
-                left = not (spread(squares(world, other), reach) & target)
+            # **Not `from_`**, which this function already binds to
+            # `pos.square` for the `Moved` event it emits further down.
+            # Shadowing it put a `frozenset` on every `Moved` in the tree
+            # and diverged all 8 replay fixtures at once.
+            threat_from = threatening_squares(world, other)
+            left = (
+                not (after_reach & threat_from) if reach == 1
+                else not (spread(threat_from, reach) & target)
+            )
             if left:
                 # No `by`: a move is not a row, and **the absence is the
                 # signal**. `f1302` prints "opportunity attacks provoked by
@@ -460,6 +465,7 @@ def _reachers(world: World, eid: int) -> set[int]:
     """
 
     mine = squares(world, eid)
+    lent = lent_squares(world)
     out: set[int] = set()
     for other in creatures(world):
         if other == eid:
@@ -469,7 +475,17 @@ def _reachers(world: World, eid: int) -> set[int]:
         # could stretch a reach and is wrong now that a weapon and a row can:
         # a creature with a glaive and no modifiers reaches two and was skipped.
         reach = _threat(world, other, eid)
-        if reach > 1 and spread(squares(world, other), reach) & mine:
+        # **A lent square counts at reach 1 too**, which the `reach > 1`
+        # fast path alone would skip -- and that is exactly the case
+        # `p16099` prints: a caster five squares back threatens through its
+        # guardians with an ordinary one-square reach. `before` covers a
+        # creature standing next to the mover itself, so only the lent
+        # squares need this extra arm.
+        extra = lent.get(other, frozenset())
+        if (
+            (extra and spread(extra, reach) & mine)
+            or (reach > 1 and spread(squares(world, other), reach) & mine)
+        ):
             out.add(other)
     return out
 
@@ -989,7 +1005,7 @@ def risk_along(world: World, eid: int, path: list[Square]) -> str:
         return ""
 
     foes = [o for o in enemies(world, eid) if alive(world, o)]
-    where = {o: squares(world, o) for o in foes}
+    where = {o: threatening_squares(world, o) for o in foes}
     at = pos.square
     hostile: set[Square] = set()
     for _zid, zone in world.zones.all():
@@ -1481,10 +1497,56 @@ def _can_stop(world: World, eid: int, target: frozenset[Square], *,
     return True
 
 
+def lent_squares(world: World) -> dict[int, frozenset[Square]]:
+    """Which extra squares each creature threatens from, by owner.
+
+    One walk over the conjurations rather than one per watcher, because
+    `step`'s own comment measures what the alternative costs: "asking each
+    watcher separately turned a full audit from 84 seconds into 331 -- the
+    cost is per watcher per step, and a fight takes thousands of steps".
+
+    Empty in every fight with no conjuration lending a square, which is
+    almost all of them, and then `threatening_squares` is a plain read.
+    """
+    from .components import Conjuration, Mods
+
+    out: dict[int, frozenset[Square]] = {}
+    for other, conj in world.each(Conjuration):
+        lent = world.get(other, Mods)
+        if lent is None or not lent.items:
+            continue
+        if lent.total("threatens_from") <= 0:
+            continue
+        out[conj.by] = out.get(conj.by, frozenset()) | squares(world, other)
+    return out
+
+
+def threatening_squares(world: World, eid: int) -> frozenset[Square]:
+    """The squares this creature threatens **from** -- its own, plus any
+    conjuration of its that lends its square for the purpose.
+
+    *"You can make opportunity attacks through each guardian as if you
+    occupied its square"* -- `p16099`, three guardians. `c.conjure` lays the
+    marker with `threatens=True` and this is the one reader, so the three
+    places that ask where a watcher threatens from cannot drift apart.
+
+    **That drift is why this is a function and not three expressions.** The
+    preview loop's own comment records the last time they disagreed: "the
+    hardcoded 1 here made this preview disagree with `step`, which has
+    always spread by the watcher's reach. A creature with a reach weapon
+    provoked in play and not in the preview the policy scores against."
+
+    Cheap in the ordinary case: one `World.each` over conjurations, which is
+    empty in most fights, and the creature's own squares otherwise
+    unchanged.
+    """
+    return squares(world, eid) | lent_squares(world).get(eid, frozenset())
+
+
 def _threatened_from(world: World, eid: int) -> dict[int, frozenset[Square]]:
-    """Which squares each living enemy is standing in, for the threat test."""
+    """Which squares each living enemy threatens from, for the threat test."""
     return {
-        foe: squares(world, foe)
+        foe: threatening_squares(world, foe)
         for foe in enemies(world, eid)
         if alive(world, foe)
     }
