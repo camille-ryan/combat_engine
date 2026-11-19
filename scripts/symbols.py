@@ -947,6 +947,18 @@ CTX_KEYS: dict[str, str] = {
         "non-empty, which means only that *some* row opened the window -- "
         "`c.provoke` opens one for arbitrary rows. #880."
     ),
+    "origin": (
+        "the squares this swing comes **from**, as a frozenset. Not the "
+        "attacker's square: a ranged attack's origin moves with "
+        "`c.cast_from` or `c.cast_from_square`, and an area power's is the "
+        "square it was **placed** at, which may hold no creature at all.\n\n"
+        "A set because an origin can be several squares -- a Large "
+        "creature's footprint, or a shaman with two spirits lending at "
+        "once. Empty when the caller said nothing, so a gate narrowing on "
+        "it should fail closed rather than grant on a guess. "
+        "`Cast._origin_squares` is what fills it; `p16653` reads it for "
+        "\"against attacks that originate outside the zone\"."
+    ),
     "source": "who laid the effect.",
     "target": "who it lands on. The commonest key in the tree.",
     "weapon": (

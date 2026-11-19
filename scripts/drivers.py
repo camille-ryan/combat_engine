@@ -17563,6 +17563,150 @@ def a_grant_tied_to_one_weapon_in_hand(out: Result) -> None:
              f"{granted('w9002')}")
 
 
+def the_attack_context_says_where_the_swing_came_from(out: Result) -> None:
+    """*"While in the zone, you and your allies gain a +4 power bonus to all
+    defenses against attacks that originate outside the zone."* -- `p16653`.
+
+    **The marker named the context key and not the verb.**
+    `c.grants_in(when=)` was already there; what the attack context lacked
+    was where the swing came **from**. It carries `attacker`, and the
+    note was right that the two are not the same thing.
+
+    **Three cases, which is the whole argument for the key**: a melee
+    attack comes from the attacker's own squares, a ranged one from
+    wherever `c.cast_from` or `c.cast_from_square` has moved it, and an
+    area one from the square it was **placed** at -- which may hold no
+    creature at all. Asking `Position` of the attacker is right in the
+    first and wrong in the other two.
+
+    Then the row: the bonus applies to a swing from outside the zone and
+    not to one from inside it, with the zone's own squares as the only
+    thing that changes between the two reads.
+
+    **And it fails closed.** An empty origin -- a caller that said nothing
+    -- gets no bonus, because the card is a narrowing and granting on a
+    guess would make the row wider than print.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Position, Powers
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    # -- the three origins -----------------------------------------------
+    ranged = next(
+        (r for r, row in sorted(dsl.REGISTRY.items())
+         if row.attack is not None and row.reach is not None
+         and row.reach.kind == "ranged" and row.reach.size > 0), "")
+    out.that(bool(ranged),
+             "a declared ranged attack row, so `_lenders` allows a borrow"
+             " at all -- a melee row may not, which is correct and would"
+             " make the lent arm pass for the wrong reason",
+             f"{ranged}")
+    world, me, _ = _board("p16653", 1)
+    here = must(world.get(me, Position), "the caster stands").square
+    out.that(sorted(Cast(world=world, me=me, ref=ranged)
+                    ._origin_squares(me)) == [here],
+             "a swing with nothing lent comes from the attacker's own"
+             " square",
+             f"{here}")
+    spot = (here[0] + 5, here[1] + 5)
+    Cast(world=world, me=me, ref="drivers:lend").cast_from_square(
+        spot, until=When.ENCOUNTER)
+    out.that(sorted(Cast(world=world, me=me, ref=ranged)
+                    ._origin_squares(me)) == [spot],
+             "one with a square lent comes from THERE -- the case the"
+             " attacker's own position answers wrongly",
+             f"{spot}")
+    placed = Cast(world=world, me=me, ref=ranged)
+    placed.origin = (1, 1)
+    out.that(sorted(placed._origin_squares(me)) == [(1, 1)],
+             "and an area power's placed origin wins over both, which is"
+             " the third case: a burst's origin may hold no creature",
+             f"{sorted(placed._origin_squares(me))}")
+
+    # -- the key really arrives through `resolve.attack` -----------------
+    #
+    # **Driven as a real swing, because every assertion below builds the
+    # context by hand.** A plant emptying the key in `resolve` left those
+    # green: they never went through the code that fills it.
+    world3, me3, _ = _board("p16653", 1)
+    spot3 = must(world3.get(me3, Position), "the caster stands").square
+    foes3 = sorted(enemies(world3, me3))
+    out.that(bool(foes3), "an enemy to swing at", f"{foes3}")
+    if foes3:
+        foe = foes3[0]
+        beside = must(world3.get(foe, Position), "the enemy stands")
+        world3.grid.lift(foe)
+        beside.square = (spot3[0] + 1, spot3[1])
+        world3.grid.place(foe, beside.squares)
+        caught: dict = {}
+        Cast(world=world3, me=me3, ref="drivers:peek").bonus(
+            "attack", 0, on=me3,
+            when=lambda ctx: (caught.update(ctx) or False),
+        )
+        world3.rng.loaded = 12
+        basic = must(world3.get(me3, Powers), "the caster's powers").basic
+        dsl.use(world3, me3, basic, targets=[foe])
+        out.that("origin" in caught,
+                 "a real attack hands its gate an `origin` key -- which is"
+                 " what a plant emptying it in `resolve` breaks and no"
+                 " hand-built context can show",
+                 f"{sorted(caught)[:4]}...")
+        out.that(caught.get("origin") == frozenset({spot3}),
+                 "and it holds the attacker's own squares for an ordinary"
+                 " melee swing",
+                 f"{caught.get('origin')} against {spot3}")
+
+    # -- the row's gate --------------------------------------------------
+    world2, me2, _ = _board("p16653", 1)
+    c2 = Cast(world=world2, me=me2, ref="p16653")
+    dsl.REGISTRY["p16653"].body(c2)
+    area = frozenset(c2.area())
+    out.that(bool(area), "the row lays a zone with squares in it",
+             f"{len(area)} square(s)")
+    mods = world2.get(me2, Mods)
+    out.that(mods is not None, "and the caster carries the bonus",
+             f"{mods is not None}")
+    if mods is None or not area:
+        return
+    outside = next(
+        (sq for sq in ((here[0] + n, here[1] + n) for n in range(4, 12))
+         if sq not in area), None)
+    inside = sorted(area)[0]
+    out.that(outside is not None,
+             "there is a square outside the zone to swing from",
+             f"{outside}")
+
+    def shielded(origin) -> int:  # noqa: ANN001
+        return mods.total(Defense.AC, {
+            "attacker": me2, "target": me2, "power": "drivers",
+            "origin": frozenset({origin}) if origin else frozenset(),
+        })
+
+    # **Read as deltas between contexts, never as a total.** The audit
+    # board's own hand carries several AC modifiers -- `f127 ac+2` and more
+    # -- and none of them gates on `origin`, so they contribute the same to
+    # every read. An earlier draft asserted `== 0` on the inside case and
+    # failed against correct code, because the board's +2s were in the
+    # number.
+    from_outside = shielded(outside) if outside is not None else -1
+    from_inside = shielded(inside)
+    from_nowhere = shielded(None)
+    out.that(outside is not None and from_outside - from_inside == 4,
+             "a swing from OUTSIDE the zone meets exactly 4 more defence"
+             " than one from inside it -- the printed clause, as a delta"
+             " between two contexts that differ only in the origin",
+             f"outside {from_outside}, inside {from_inside}")
+    out.that(from_nowhere == from_inside,
+             "and an attack whose origin nothing recorded gets what an"
+             " inside one gets -- nothing extra. The card is a narrowing,"
+             " so this fails closed rather than granting on a guess",
+             f"nowhere {from_nowhere}, inside {from_inside}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -100036,6 +100180,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "attack_origin": (the_attack_context_says_where_the_swing_came_from,
+                      "where a swing comes from: own square, lent square,"
+                      " or an area's placed origin"),
     "one_weapon_grant": (a_grant_tied_to_one_weapon_in_hand,
                          "a grant spent by one named weapon, not by any"
                          " weapon attack"),

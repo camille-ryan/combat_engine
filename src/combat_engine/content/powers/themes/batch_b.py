@@ -2772,19 +2772,21 @@ def p16652(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.ZONE],
-    dropped=("resolve.ctx(origin=)",),
 )
 def p16653(c: Cast) -> None:
-    """The defence bonus is laid whole, which is wider than printed: the card gives
-    it only against attacks **originating outside the zone**.
+    """**The narrowing is written: the context carries `origin` now.** The
+    marker named the key and not the verb, and that was the right
+    diagnosis -- `c.grants_in(when=)` was already there, and what the
+    attack context lacked was where the swing came **from**. It has
+    `attacker`, and the note was right that the attacker's square is not
+    the same thing: a ranged attack's origin moves with `c.cast_from`, and
+    an area burst's origin is a placed square with no creature in it.
+    Measured on all three -- own square, lent square, placed origin -- in
+    `drivers.attack_origin`.
 
-    **Re-aimed off `c.grants_in(when=)`, which arrived and is not the hold.** The
-    gate exists and is handed the attack context; what the context does not carry is
-    where the attack came *from*. It has `attacker`, so the attacker's current square
-    is reachable -- but that is not the same thing: a ranged attack's origin can be
-    moved by `c.cast_from`, and a burst's origin is a square rather than a creature.
-    Asking the attacker's position would be right most of the time and wrong exactly
-    where the card is interesting.
+    **Fails closed on an empty origin.** A caller that said nothing gets
+    no bonus rather than one granted on a guess: the card is a narrowing,
+    so withholding keeps the row no wider than print.
 
     The entry tax is written. Four extra squares is not difficult terrain -- that
     word is worth one -- so it is `extra_cost=4`, narrowed to `"enemies"` as the
@@ -2794,8 +2796,23 @@ def p16653(c: Cast) -> None:
         c.area(), until=When.SUSTAIN, sustain=MINOR,
         extra_cost=4, extra_cost_for="enemies",
     )
+    inside = frozenset(c.area())
+
+    def from_outside(ctx: dict[str, Any]) -> bool:
+        """"Against attacks that originate outside the zone."
+
+        The attack context carries `origin` now -- the squares the swing
+        comes **from**, which is not the attacker's square whenever
+        `c.cast_from` has moved it or an area power placed one. An empty
+        set means the caller said nothing, and the bonus is withheld
+        rather than granted on a guess: the card is a narrowing, so
+        failing closed keeps the row no wider than print.
+        """
+        came = ctx.get("origin") or frozenset()
+        return bool(came) and not (frozenset(came) & inside)
+
     for d in (AC, FORT, REF, WILL):
-        c.grants_in(zone, d, 4, side="team", kind="power")
+        c.grants_in(zone, d, 4, side="team", kind="power", when=from_outside)
 
 
 # ==========================================================================

@@ -36,6 +36,7 @@ from .events import (
     SurgeSpent,
     TempHP,
 )
+from .grid import Square
 from .query import (
     alive,
     attack_penalty,
@@ -449,6 +450,7 @@ def attack(
     as_: str = "",
     weapon: str = "",
     augment: int = 0,
+    origin: frozenset[Square] = frozenset(),
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
@@ -520,6 +522,20 @@ def attack(
             "attacker": attacker,
             "target": target,
             "power": power,
+            # **Where the swing comes FROM, which `attacker` does not
+            # answer.** `p16653` prints "+4 to all defenses against attacks
+            # that originate outside the zone", and the attacker's own
+            # square is the wrong square exactly where the card is
+            # interesting: a ranged attack's origin moves with
+            # `c.cast_from`, and an area burst's origin is a placed square
+            # with no creature in it at all.
+            #
+            # A frozenset, because an origin can be several squares -- a
+            # Large creature's footprint, or a shaman with two spirits
+            # lending at once. Empty when the caller did not say, which is
+            # the honest answer rather than the attacker's square dressed
+            # up as one.
+            "origin": origin,
             "advantage": ca,
             "opportunity": opportunity,
             # What opened the window this swing is coming through. Three

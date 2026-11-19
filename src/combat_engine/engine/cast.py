@@ -4538,6 +4538,34 @@ class Cast:
             granted_by=self.me, granted_via=self.ref,
         )
 
+    def _origin_squares(self, swinger: int) -> frozenset[Square]:
+        """Which squares this swing originates from.
+
+        `self.origin` when the row placed one -- an area burst's origin is
+        a square and may hold no creature at all. Otherwise the squares of
+        whatever `dsl.origins` names, so a borrowed origin
+        (`c.cast_from`, `c.cast_from_square`) is honoured without this
+        having to know about either.
+
+        Falls back to the swinger's own squares, which is the ordinary
+        case and the one every melee row is in.
+        """
+        from .dsl import get, origins, reach_of
+        from .query import squares as _squares
+
+        if self.origin is not None:
+            return frozenset({self.origin})
+        row = get(self.ref)
+        if row is not None and row.reach is not None:
+            reach = reach_of(self.world, swinger, row, self.branch,
+                             self.augment)
+            lent: frozenset[Square] = frozenset()
+            for eye in origins(self.world, swinger, reach, row):
+                lent |= _squares(self.world, eye)
+            if lent:
+                return lent
+        return _squares(self.world, swinger)
+
     def attack(
         self,
         bonus: int,
@@ -4615,6 +4643,13 @@ class Cast:
             # every payout, so a rider inside the attack inherits it and an
             # implement power stamps nothing for one to inherit. #698.
             weapon=self._swung_weapon(hand=hand),
+            # **The squares this swing comes from**, computed here because
+            # `dsl` is reachable from `Cast` and would be a cycle from
+            # `resolve`. An area power's placed origin is one square; a
+            # ranged or melee one takes the origin entities `dsl.origins`
+            # answers -- which is where `c.cast_from` and
+            # `c.cast_from_square` have already had their say.
+            origin=self._origin_squares(from_ or self.me),
         )
         # An interrupt may have moved the blow onto somebody else. The roll
         # and the `Hit` already name the new target; without this the body's

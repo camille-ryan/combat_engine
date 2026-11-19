@@ -61,6 +61,9 @@ Two keys rather than one because all four printed lines forbidding a mark differ
 - `ctx['occupant']` -- who is standing in it. The other half of `mover`.
 - `ctx['ongoing']` -- is this ongoing damage rather than a blow.
 - `ctx['opportunity']` -- is this an opportunity attack.
+- `ctx['origin']` -- the squares this swing comes **from**, as a frozenset. Not the attacker's square: a ranged attack's origin moves with `c.cast_from` or `c.cast_from_square`, and an area power's is the square it was **placed** at, which may hold no creature at all.
+
+A set because an origin can be several squares -- a Large creature's footprint, or a shaman with two spirits lending at once. Empty when the caller said nothing, so a gate narrowing on it should fail closed rather than grant on a guess. `Cast._origin_squares` is what fills it; `p16653` reads it for "against attacks that originate outside the zone".
 - `ctx['power']` -- the ref of the row doing this. The commonest gate.
 - `ctx['provoked_by']` -- the **ref that opened the opportunity window** this swing is coming through, and `""` when a *move* opened it, because a move is not a row. Written by `resolve.attack` off `World.provocation`, which `c.provoke`, `dsl._survive_provoking` and `movement.step` each park their window on for the duration of its emit. Read only when `opportunity` is true, so an ordinary attack cannot inherit one. #880.
 - `ctx['provoked_kind']` -- how the provoker was moving when it opened the window -- `movement.step`'s own `walk` / `shift` / `charge` -- and `""` when a row rather than a move opened it. **The absence is the signal**: it is what lets "provoked by this movement" be told from "provoked by using a ranged power", which `opportunity` alone could not. #301 put it on the event, #880 carried it here.
