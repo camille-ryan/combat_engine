@@ -666,6 +666,10 @@ def p4106(c: Cast) -> None:
     made = c.summon_inline(get(c.ref).summon, at=c.origin)
     if not made:
         return
+    # *"You don't need line of effect to the serpent to command it."* The
+    # sibling of `p16089`'s clause, and the requirement it waives is
+    # enforced by `Cast.command` -- nine cards print it.
+    c.commanded_unseen(on=made, until=When.ENCOUNTER)
 
     def surge_lost(ev: Dropped) -> None:
         if ev.actor == made:

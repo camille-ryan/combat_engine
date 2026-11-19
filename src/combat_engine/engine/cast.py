@@ -1014,6 +1014,26 @@ class Cast:
 
         return _can_hear(self.world, who, self.me)
 
+    def commanded_unseen(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """*"You don't need line of effect to the zephyr to command it."*
+
+        The waiver for the requirement `Cast.command` now enforces, and it
+        is laid on the **creature** rather than on its summoner, because
+        that is what the card is about: this summon is reachable by thought
+        where others are not.
+
+        Two cards print it (`p16089`, `p4106`) against **nine** printing the
+        requirement, which is the ratio that decided which way round to
+        build it -- the rule is the default and this is the exception,
+        rather than nine rows each opting in.
+        """
+        return self.bonus(
+            "commanded_unseen", 1, on=on if on is not None else self.me,
+            until=until, kind="untyped",
+        )
+
     def climbs_steadily(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
         when: Callable[[dict[str, Any]], bool] | None = None,
@@ -12102,8 +12122,29 @@ class Cast:
         rider that reads one. `c.charge_at` cannot say it here, because it
         goes through `dsl.use` and a summon's attack line is not a row.
         """
-        from .components import Companion
+        from .components import Companion, Mods
         from .dsl import get
+        from .query import line_of_effect
+
+        # **"You must have line of effect to the creature to command it."**
+        # Printed on **nine** cards, waived on two, and enforced by nothing
+        # until now -- so eight rows dropped the requirement in silence,
+        # with no marker and no note between them. Measured over `power`,
+        # `feat`, `item_block` and `associate`.
+        #
+        # Asked here because this is the door: `actions._commands` is for
+        # companions and says in as many words that a summon is "deliberately
+        # not offered anything here".
+        #
+        # The waiver is `c.commanded_unseen`, laid on the creature, which is
+        # where `p16089` and `p4106` print it: *"You don't need line of
+        # effect to the zephyr to command it."*
+        waived = self.world.get(who, Mods)
+        if not (
+            waived is not None and bool(waived.items)
+            and waived.total("commanded_unseen") > 0
+        ) and not line_of_effect(self.world, self.me, who):
+            return None
 
         # Spending an action on it is what "you gave it a command" means,
         # and `turns._uncommanded` reads this at the end of the turn.

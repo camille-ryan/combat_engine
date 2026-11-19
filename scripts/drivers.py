@@ -19065,6 +19065,109 @@ def a_climbing_creature_grants_advantage(out: Result) -> None:
              f"{[(e.label, e.when.name) for e in laid]}")
 
 
+def commanding_a_summon_needs_line_of_effect(out: Result) -> None:
+    """*"You must have line of effect to the creature to command it."*
+    Printed on **nine** cards; waived on two.
+
+    **This is not a general rule the engine was missing, which is what
+    `p16089`'s marker called it.** Its note said the requirement would be
+    "an engine-wide change touching every summon rather than this row's
+    clause". It is printed per card, and counting them is what decided the
+    direction: nine require, two waive, so the requirement is the default
+    and `c.commanded_unseen` is the exception. Had it been one of each, two
+    opt-ins would have been the better shape.
+
+    Counted over `power`, `feat`, `item_block` and `associate`. The other
+    eight requiring rows carried **no marker and no note** between them --
+    they dropped a printed requirement in silence -- so they are correct
+    now without being touched, and this rule's 2x2 is what says so.
+
+    Enforced in `Cast.command`, which is the door: `actions._commands` is
+    for companions and says in as many words that a summon is "deliberately
+    not offered anything here".
+
+    **The fixture needs a summon whose block carries an attack line**, and
+    that is a real constraint rather than a convenience: `Cast.command`
+    returns `None` early when `summon.attack` is absent, so 9 of the 41
+    summoning rows would have read "refused" whatever this gate did -- which
+    is exactly what the first probe showed, four refusals in a row proving
+    nothing.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Position
+    from combat_engine.engine.query import enemies
+
+    ref = "p11282"
+    row = dsl.REGISTRY[ref]
+    out.that(getattr(row.summon, "attack", None) is not None,
+             f"the fixture row `{ref}` carries a summon block WITH an attack"
+             " line -- `Cast.command` returns early without one, so a row"
+             " lacking it refuses for a reason that is not this gate",
+             f"{getattr(row.summon, 'attack', None)}")
+
+    def staged(*, wall: bool, waive: bool) -> tuple[Any, int, int, Any]:
+        world, me, _ = _board(ref, 1)
+        c = Cast(world=world, me=me, ref=ref)
+        before = {e for e, _ in world.each(Position)}
+        row.body(c)
+        made = sorted({e for e, _ in world.each(Position)} - before)
+        pet = made[0]
+        here = next(iter(world.get(me, Position).squares))
+        at = (here[0] + 4, here[1])
+        seat = world.get(pet, Position)
+        world.grid.place(pet, frozenset({at}))
+        seat.square = at
+        seat.spans = frozenset({at})
+        if wall:
+            for dy in (-2, -1, 0, 1, 2):
+                world.grid.blocking.add((here[0] + 2, here[1] + dy))
+        if waive:
+            c.commanded_unseen(on=pet)
+        return world, me, pet, c
+
+    def commands(*, wall: bool, waive: bool) -> tuple[bool, bool]:
+        world, me, pet, c = staged(wall=wall, waive=waive)
+        seen = query.line_of_effect(world, me, pet)
+        foes = sorted(enemies(world, me))
+        return seen, c.command(pet, on=foes[0]) is not None
+
+    seen, swung = commands(wall=False, waive=False)
+    out.that(seen and swung,
+             "in the open, the summoner commands it", "swung")
+    seen, swung = commands(wall=True, waive=False)
+    out.that(not seen and not swung,
+             "with a wall between them it is refused -- the printed"
+             " requirement, which eight rows dropped in silence", "refused")
+    seen, swung = commands(wall=True, waive=True)
+    out.that(not seen and swung,
+             "and with the waiver it is commanded through the wall anyway --"
+             " *'you don't need line of effect to the zephyr'*", "swung")
+    seen, swung = commands(wall=False, waive=True)
+    out.that(seen and swung,
+             "and the waiver takes nothing away in the open, which is the"
+             " fourth corner and says the gate is the only thing it"
+             " touches", "swung")
+
+    # -- the two cards that waive lay it, and a requiring one does not ----
+    for which, want in (("p16089", True), ("p4106", True), ("p13649", False)):
+        world, me, _ = _board(which, 1)
+        c = Cast(world=world, me=me, ref=which)
+        before = {e for e, _ in world.each(Position)}
+        dsl.REGISTRY[which].body(c)
+        made = sorted({e for e, _ in world.each(Position)} - before)
+        held = [
+            e for e in made
+            if (m := world.get(e, Mods)) is not None and bool(m.items)
+            and m.total("commanded_unseen") > 0
+        ]
+        out.that(bool(held) is want,
+                 f"`{which}` {'waives' if want else 'does NOT waive'} the"
+                 " requirement, which is what its card prints",
+                 f"summoned {made}, waived {held}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -101678,6 +101781,9 @@ DRIVERS = {
     "climbing_grants": (a_climbing_creature_grants_advantage,
                         "a climbing creature grants combat advantage, and"
                         " two cards waive it"),
+    "command_sight": (commanding_a_summon_needs_line_of_effect,
+                      "commanding a summon needs line of effect, and two"
+                      " cards waive it"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

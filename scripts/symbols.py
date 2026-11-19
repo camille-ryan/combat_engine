@@ -479,6 +479,10 @@ CATEGORIES: dict[str, dict] = {
                 # shuts every route, which neither card printing this
                 # takes away.
                 "climbs_steadily",
+                # The waiver for the printed requirement that commanding a
+                # summon needs line of effect to it -- nine cards print the
+                # requirement, two waive it, and `Cast.command` enforces it.
+                "commanded_unseen",
                 "cannot_speak",
                 # A prohibition that lifts on a **position** rather than a
                 # clock: `when=` is asked when the creature tries to stand,

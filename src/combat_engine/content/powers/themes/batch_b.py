@@ -2006,7 +2006,6 @@ def p16050(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL, Keyword.SUMMONING],
-    dropped=("actions.command_needs_line_of_effect()",),
 )
 def p16089(c: Cast) -> None:
     """**Off `defect=`: the block is `x10_62` and it is in the table.** The
@@ -2051,21 +2050,26 @@ def p16089(c: Cast) -> None:
     not what this row wants.
 
     *"You don't need line of effect to the zephyr to command it"* is a
-    waiver, and measured 2026-11-18 **there is nothing here to waive**:
-    `Cast.command` checks no line of effect, and the only
-    `query.line_of_effect` call in `actions.py` is the one that finds
-    hidden traps. Commanding a summon is not gated on sight at all, so
-    laying the waiver would be a no-op dressed as a fix -- which is
-    exactly what `p16066`'s note records about its own clause, and the
-    same reading applies.
+    waiver, and the note here used to say there was nothing to waive --
+    measured, and true of the engine at the time: `Cast.command` checked no
+    line of effect, and the only `query.line_of_effect` call in
+    `actions.py` was the one that finds hidden traps.
 
-    What is missing is the **printed rule underneath**: commanding a
-    summoned creature should require line of effect to it in the first
-    place. That is an engine-wide change touching every summon rather than
-    this row's clause, so the marker names it. Until it lands this row is
-    stronger than its card by nothing at all -- the waiver and the absent
-    requirement cancel -- which is why it plays correctly today and still
-    owes a marker.
+    **What it got wrong was calling the missing rule "an engine-wide change
+    touching every summon".** It is not a general rule at all -- it is
+    printed, per card, on **nine** of them: *"You must have line of effect
+    to the creature to command it."* Two waive it, this one and `p4106`.
+    Counted over `power`, `feat`, `item_block` and `associate`.
+
+    So the requirement is the printed default and this is the exception,
+    which is the way round it is built. `Cast.command` enforces it and
+    `c.commanded_unseen` is the waiver, laid on the **creature** because
+    that is what the card is about: this summon is reachable by thought
+    where others are not.
+
+    That also means the change was never only for this row. The other eight
+    printed the requirement and **dropped it in silence** -- no marker and
+    no note between them -- so they are correct now without being touched.
 
     The rest of that sentence -- "you share knowledge but not senses" --
     wants nothing laid, and `c.cast_from` in particular would be wrong: it
@@ -2086,6 +2090,11 @@ def p16089(c: Cast) -> None:
         return
     made = spawn_associate(c.world, "x10_62", free[0], of=me)
     c.world.bus.emit(Summoned(actor=me, summon=made, ref=c.ref))
+    # *"You don't need line of effect to the zephyr to command it."* The
+    # requirement that waives is real now -- `Cast.command` enforces it,
+    # printed on nine cards against the two that waive -- so this is a
+    # suppression rather than a no-op.
+    c.commanded_unseen(on=made, until=When.ENCOUNTER)
 
     def fell(ev: Dropped) -> None:
         if ev.actor == made and not c.spend_surge(on=me):
