@@ -129,16 +129,40 @@ def p12601(c: Cast) -> None:
     reach=CloseBurst(5),
     target=YOU_OR_ONE_ALLY,
     keywords=DIVINE,
-    dropped=("affliction.stage",),
 )
 def p12608(c: Cast) -> None:
-    """A saving throw per save-ends effect, then the petrification clause.
+    """A saving throw per save-ends effect, then the disease half, then the
+    petrification clause -- in the order the card prints them, which the
+    body did not have: the petrification arm returned early when nobody was
+    stone, so anything after it could never run.
 
-    The disease half is dropped: disease has no stage track in the engine,
-    so "improve the disease by 2 stages" has nothing to move. Petrification
-    does exist as a condition, and "loses any remaining healing surges" is
-    `c.spend_surge` until there are none -- capped, because the method
-    reports failure rather than counting.
+    **The disease half is written now, and the marker's premise was wrong.**
+    It said *"disease has no stage track in the engine, so 'improve the
+    disease by 2 stages' has nothing to move"*. `Afflictions.contracted`
+    maps a disease's ref to the stage it is at, `c.stage` has been the
+    reader since `#948`, and `story.affliction` counts upward into the
+    disease -- so improving is subtracting and zero is cured.
+    `c.improve_disease` is the writer.
+
+    What *is* true is the component's own note rather than a gap: the stage
+    never advances during a fight, because all 69 pages check at the end of
+    an extended rest. So a contracted disease sits at the stage it was
+    caught at -- **1 for every row in the tree** -- and improving by 2 from
+    there cures it outright. That is the card's own outcome, not a no-op,
+    and it is why the assertion for it is "the disease is gone" rather than
+    "the stage fell by two".
+
+    *"The target regains no hit points for spending the healing surge"* is
+    `c.spend_surge`, which is that verb's whole purpose. Asked rather than
+    imposed -- the card says the target *can* spend one -- and asked of the
+    **target**, whose surge it is.
+
+    **And a bug beside it: both surge clauses were spending the CASTER's.**
+    `c.spend_surge` defaults to `self.me`, not to the row's target, and the
+    petrification line is *"the target loses any remaining healing
+    surges"*. A cleric using this on an ally was paying with its own pool
+    and leaving the ally's untouched -- `content/CLAUDE.md`'s "commonest
+    single mistake", in a clause that reported finished.
     """
     who = c.target
     if who is None:
@@ -147,13 +171,27 @@ def p12608(c: Cast) -> None:
     for _ in holds:
         c.save(bonus=5)
 
+    # The disease half, before the petrification arm because that is the
+    # order the card prints them and because that arm returns early.
+    # `c.exposed(on=who)` with no ref is "has caught ANY disease", which is
+    # the question the card asks -- not `c.stage`, which is a property about
+    # the *row's own* disease and so is always 0 here.
+    if (
+        c.exposed(on=who)
+        and c.may("spend a surge to shake off a disease", who=who)
+        and c.spend_surge(on=who)
+    ):
+        c.improve_disease(2, on=who)
+
     stone = [e for e in c.world.effects.of(who) if Condition.PETRIFIED in e.conditions]
     if not stone:
         return
     for effect in stone:
         c.world.effects.end(effect, c.ref)
+    # `on=who`: the card says *the target* loses its surges, and
+    # `c.spend_surge` defaults to the caster.
     for _ in range(20):
-        if not c.spend_surge():
+        if not c.spend_surge(on=who):
             break
 
 

@@ -297,7 +297,12 @@ CATEGORIES: dict[str, dict] = {
             # category-is-not-where-you-would-look problem the content
             # rules warn about, inside the page that warning points at.
             ("disease", [
-                "contract", "expose", "exposed", "stage",
+                "contract", "expose", "exposed",
+                # The writer beside `stage`'s reader: a disease's stage can
+                # be improved, which is subtracting, because the stage
+                # counts upward into the disease.
+                "improve_disease",
+                "stage",
             ]),
         ],
     },

@@ -12973,6 +12973,53 @@ class Cast:
             return 0
         return int(caught.contracted.get(self.ref, 0))
 
+    def improve_disease(self, by: int = 1, *, on: int | None = None) -> int:
+        """*"Spend a healing surge to improve the disease by 2 stages."*
+        Returns how many diseases moved.
+
+        **The stage track it needs already exists.** `Afflictions.contracted`
+        maps a disease's ref to the stage it is at, `c.stage` is the reader
+        above, and `story.affliction` counts **upward into** the disease --
+        so improving is subtracting, and reaching zero is cured.
+
+        `p12608` carried a marker saying *"disease has no stage track in the
+        engine, so 'improve the disease by 2 stages' has nothing to move"*,
+        and that was wrong about the store. What is true, and is the
+        component's own note rather than a gap, is that **the stage never
+        advances during a fight** -- every one of the 69 pages checks at the
+        end of an extended rest. So every contracted disease sits at the
+        stage it was caught at, which is 1 for every row in the tree, and
+        improving by 2 from there *cures* it. That is a real outcome and the
+        card's own, not a no-op.
+
+        **Zero is `story.affliction.CURED` and is written as a literal here
+        on purpose.** `engine` must not import `story` -- `.importlinter`
+        holds that contract, and `#949` moved `dc.py` out of `story/` rather
+        than breach it -- so the sentinel is named in this docstring instead
+        of imported. A cured entry is **removed** rather than left at zero,
+        because `c.stage` reads a missing ref and a zero one identically and
+        `Afflictions.contracted`'s own docstring treats presence as having
+        caught the thing: `m5100a0`'s aura acts on *"an enemy that has been
+        exposed to a disease"*.
+        """
+        from .components import Afflictions
+
+        who = self.me if on is None else on
+        caught = self.world.get(who, Afflictions)
+        if caught is None or not caught.contracted:
+            return 0
+        moved = 0
+        for ref, stage in list(caught.contracted.items()):
+            better = max(0, int(stage) - by)
+            if better == stage:
+                continue
+            moved += 1
+            if better:
+                caught.contracted[ref] = better
+            else:
+                del caught.contracted[ref]
+        return moved
+
     def expose(
         self,
         ref: str,

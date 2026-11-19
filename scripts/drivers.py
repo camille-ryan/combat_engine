@@ -18624,6 +18624,124 @@ def a_build_may_print_its_own_range(out: Result) -> None:
              f"{reach}")
 
 
+def a_disease_can_be_improved_by_stages(out: Result) -> None:
+    """*"If the target suffers from a disease, he or she can spend a healing
+    surge to improve the disease by 2 stages. The target regains no hit
+    points for spending the healing surge."* -- `p12608`.
+
+    **The marker's premise was wrong.** It read *"disease has no stage track
+    in the engine, so 'improve the disease by 2 stages' has nothing to
+    move"*. `Afflictions.contracted` maps a disease's ref to the stage it is
+    at, `c.stage` has been the reader since `#948`, and `story.affliction`
+    counts **upward into** the disease -- so improving is subtracting and
+    zero is cured. `c.improve_disease` is the writer.
+
+    What *is* true is the component's own note rather than a gap: the stage
+    never advances during a fight, because all 69 pages check at the end of
+    an extended rest. A contracted disease therefore sits at the stage it
+    was caught at, **1 for every row in the tree**, and improving by 2 from
+    there cures it outright. That is why the assertion is "the disease is
+    gone" and not "the stage fell by two" -- it cannot fall by two from 1.
+
+    **Two surge clauses were spending the CASTER's surges**, which is the
+    other half of this rule. `c.spend_surge` defaults to `self.me`, the card
+    says *"the **target** loses any remaining healing surges"*, and a cleric
+    using this on an ally was paying out of its own pool while the ally's
+    stood full. `content/CLAUDE.md` calls that the commonest single mistake
+    here, and it was in a clause reporting finished.
+
+    And the body's order was wrong in a way that made the new clause
+    unreachable wherever it was put after: the petrification arm **returns
+    early** when nobody is stone.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Afflictions, Health
+    from combat_engine.engine.query import allies
+
+    def stage(seed: int = 1, *, sick: bool = True) -> tuple[Any, int, int]:
+        world, me, _ = _board("p12608", seed)
+        mate = sorted(allies(world, me))[0]
+        caught = world.get(mate, Afflictions) or world.add(mate, Afflictions())
+        caught.contracted.clear()
+        if sick:
+            caught.contracted["x5_23"] = 1
+        return world, me, mate
+
+    world, me, mate = stage()
+    caught = world.get(mate, Afflictions)
+    out.that(dict(caught.contracted) == {"x5_23": 1},
+             "the fixture gives the ally a disease at stage 1, which is the"
+             " stage every row in the tree contracts at",
+             f"{dict(caught.contracted)}")
+    out.that(Cast(world=world, me=me, ref="probe").exposed(on=mate),
+             "and `c.exposed` sees it -- the reader the row asks, rather"
+             " than `c.stage`, which is a property about the ROW's own"
+             " disease and is 0 for a cleric utility", "True")
+    mine = world.get(me, Health)
+    theirs = world.get(mate, Health)
+    before_me, before_them = mine.surges, theirs.surges
+    # Hurt first, or "no hit points come back" cannot be seen: a target at
+    # full health looks identical whether a surge healed it or not.
+    theirs.hp = max(1, theirs.max_hp // 2)
+    hurt = theirs.hp
+
+    c = Cast(world=world, me=me, ref="p12608")
+    c.target = mate
+    dsl.REGISTRY["p12608"].body(c)
+
+    out.that(not caught.contracted,
+             "using it cures the disease -- improving by 2 from stage 1"
+             " reaches zero, and a cured entry is removed rather than left"
+             " at zero, because `c.stage` reads a missing ref and a zero"
+             " one identically", f"{dict(caught.contracted)}")
+    out.that(theirs.surges == before_them - 1,
+             "the TARGET pays the surge, which is whose surge the card"
+             " spends", f"{before_them} -> {theirs.surges}")
+    out.that(mine.surges == before_me,
+             "and the caster pays nothing -- the bug this fixes, since"
+             " `c.spend_surge` defaults to the caster and a cleric was"
+             " paying for an ally's cure out of its own pool",
+             f"{before_me} -> {mine.surges}")
+    out.that(theirs.hp == hurt,
+             "and NO hit points come back for it, which is the whole"
+             " difference between `c.spend_surge` and `c.surge`. The target"
+             " is hurt to half first, because at full health a surge that"
+             " healed and one that did not look the same -- and the first"
+             " version of this line read `hp <= max_hp`, which is true of"
+             " every creature that has ever existed",
+             f"hp {hurt} -> {theirs.hp} of {theirs.max_hp}")
+
+    # -- the control: no disease, no surge spent -------------------------
+    world, me, mate = stage(sick=False)
+    theirs = world.get(mate, Health)
+    was = theirs.surges
+    c = Cast(world=world, me=me, ref="p12608")
+    c.target = mate
+    dsl.REGISTRY["p12608"].body(c)
+    out.that(theirs.surges == was,
+             "with no disease the surge is NOT spent -- the control, and the"
+             " assertion a clause that always charged would fail",
+             f"{was} -> {theirs.surges}")
+
+    # -- the verb itself, where a stage CAN fall without curing ----------
+    world, me, mate = stage()
+    world.get(mate, Afflictions).contracted["x5_23"] = 5
+    moved = Cast(world=world, me=me, ref="probe").improve_disease(2, on=mate)
+    # **`.get`, not `[...]`.** The first version subscripted, and a plant
+    # that makes `improve_disease` delete instead of subtract then raises a
+    # `KeyError` rather than failing this line -- so the rule died where it
+    # should have reported, and a grep for `FAIL` found nothing and read as
+    # a passing plant.
+    now = dict(world.get(mate, Afflictions).contracted)
+    out.that(moved == 1 and now.get("x5_23") == 3,
+             "and from a stage the pages never reach in play, 5, it falls by"
+             " exactly 2 rather than curing -- the arithmetic, which the"
+             " cure above cannot tell apart from 'delete the entry'",
+             f"moved {moved}, now {now}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -101225,6 +101343,9 @@ DRIVERS = {
     "build_range": (a_build_may_print_its_own_range,
                     "one leg of a class fork prints a longer range, which is"
                     " a branch and not a new header field"),
+    "disease_stage": (a_disease_can_be_improved_by_stages,
+                      "a disease's stage can be improved, and the target"
+                      " pays the surge"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

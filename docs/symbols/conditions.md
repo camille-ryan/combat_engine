@@ -148,6 +148,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - "At the end of the encounter, the target makes a saving throw. On
 - `c.exposed(self, ref: 'str' = '', *, on: 'int | None' = None, pending: 'bool' = False) -> 'bool'`
   - Has this creature caught a disease -- that one, or any?
+- `c.improve_disease(self, by: 'int' = 1, *, on: 'int | None' = None) -> 'int'`
+  - *"Spend a healing surge to improve the disease by 2 stages."*
 - `c.stage`
   - Which stage of **this row's own disease** the caster is at. #948.
 
