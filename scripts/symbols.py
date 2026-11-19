@@ -84,7 +84,7 @@ CATEGORIES: dict[str, dict] = {
                 # that one lends a SQUARE for sight, this lends a BODY, so
                 # the eye follows it. Neither lends a firing position --
                 # which is what keeps both out of `cast_from`'s meaning.
-                "see_from",
+                "see_from", "see_from_as_well",
                 "disarm",
                 "flurry_of_blows", "grant_attack", "hit", "hit_becomes",
                 "landed", "oversized",

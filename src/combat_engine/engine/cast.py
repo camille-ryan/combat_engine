@@ -17498,6 +17498,48 @@ class Cast:
             by=self.ref,
         )
 
+    def see_from_as_well(
+        self, square: Square, *, on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """"You can see from **both** your location and that spot."
+
+        The adding form. `c.line_of_sight_from` **replaces** the creature's
+        vantage -- *"you can determine your line of sight from that
+        square"* moves the eye -- and `p14142` prints a second one instead.
+        One field could not carry both readings without making one of the
+        two rows wrong, so `Senses.sight_also` is its own and
+        `query.sight_squares` unions it with the creature's own squares.
+
+        **No line of sight to the spot is needed**, which the card says in
+        as many words and which falls out of the shape: nothing is traced
+        *to* the spot, it is added to the set sight is traced *from*.
+
+        Sight only, like its sibling -- lending an eye does not lend a
+        firing position, and `squares` is still what a power's reach is
+        measured from. `#1283`.
+        """
+        from .components import Senses
+
+        who = on if on is not None else self.me
+        lent = self.world.get(who, Senses)
+        if lent is None:
+            lent = self.world.add(who, Senses())
+        was = lent.sight_also
+        lent.sight_also = frozenset(was) | {square}
+        held = self.effect(f"{self.ref} second sight", until=until, on=who)
+        if held is None:
+            lent.sight_also = was
+            return None
+
+        def forget() -> None:
+            live = self.world.get(who, Senses)
+            if live is not None:
+                live.sight_also = frozenset(live.sight_also) - {square}
+
+        held.on_end.append(forget)
+        return held
+
     def line_of_sight_from(
         self, square: Square, *, on: int | None = None,
         until: When = When.EONT,

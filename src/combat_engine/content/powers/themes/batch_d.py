@@ -1085,18 +1085,39 @@ def p14141(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE],
-    dropped=("c.see_from(square)",),
 )
 def p14142(c: Cast) -> None:
     """The darkvision is written now and lasts as long as the card says.
 
-    Still dropped: seeing *from* a chosen spot 20 squares away, with no line
-    of sight to it. That is a second vantage point, and every sight question
-    in the engine measures from the creature's own squares -- so it is a real
-    missing clause rather than flavour, and `narrative=` would be a lie about
-    it. One row wants it, which is below the threshold #468 sets, so it is
-    named and left."""
+    **The second vantage is written, and the note had the shape of it
+    exactly right: a second one, not a different one.** That is why
+    `c.line_of_sight_from` was not the answer -- it *replaces* the
+    creature's vantage, which is what `p12407` prints ("determine your line
+    of sight from that square") and would be a different card here. So
+    `Senses.sight_also` is its own field and `query.sight_squares` unions it
+    with the creature's own squares.
+
+    The note was wrong on one clause: "every sight question in the engine
+    measures from the creature's own squares". They all measure from
+    `sight_squares`, which has been the one door since `#1283` and already
+    knew how to answer something other than the body.
+
+    *"You need not have line of sight or line of effect to the spot you
+    choose"* needs no code, and is why the pool below is unfiltered:
+    nothing is traced **to** the spot, it is added to the set sight is
+    traced **from**."""
     c.darkvision(until=When.EONT)
+    # "Choose any spot within 20 squares of you."
+    mine = c.world.get(c.me, Position)
+    if mine is None:
+        return
+    spots = sorted(
+        sq for sq in spread(mine.squares, 20)
+        if c.world.grid.inside(sq) and sq not in mine.squares
+    )
+    spot = c.choose(spots, f"{c.ref}: where the second eye looks from")
+    if spot is not None:
+        c.see_from_as_well(spot, until=When.EONT)
 
 
 @power(

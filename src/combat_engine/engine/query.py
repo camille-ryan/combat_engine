@@ -290,6 +290,12 @@ def sight_squares(world: World, eid: int) -> frozenset[Square]:
                 return theirs
         if lent.sight_from is not None:
             return frozenset({lent.sight_from})
+        # **Added, where `sight_from` replaced.** "You can see from both
+        # your location and that spot" is a second vantage; asked after the
+        # two replacing forms, because a row that moved the eye has said
+        # where it is and a union would put it back.
+        if lent.sight_also:
+            return squares(world, eid) | frozenset(lent.sight_also)
     return squares(world, eid)
 
 

@@ -125,6 +125,17 @@ class Senses:
     #: order the two cards imply: nothing prints both, and a body is the
     #: more specific of the two.
     sight_from_who: int = 0
+    #: Extra vantage points, **as well as** the creature's own squares.
+    #:
+    #: `sight_from` replaces: *"you can determine your line of sight from
+    #: that square"* (`p12407`) moves the eye. `p14142` prints *"you can
+    #: see from **both** your location and that spot"*, which is a second
+    #: vantage rather than a different one -- so one field could not carry
+    #: both readings without one of the two rows being wrong.
+    #:
+    #: A set because the printed line allows one spot and nothing says a
+    #: creature may not be lent two; `query.sight_squares` unions it in.
+    sight_also: frozenset[tuple[int, int]] = frozenset()
 
 
 @dataclass

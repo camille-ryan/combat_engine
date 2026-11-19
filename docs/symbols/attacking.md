@@ -73,6 +73,8 @@ Making an attack, and what the attack turns out to be.
   - A thrown weapon comes back, so throwing it spends nothing.
 - `c.see_from(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>, saver: 'int | None' = None) -> 'Effect | None'`
   - "You can see and hear as if you were in the target's space."
+- `c.see_from_as_well(self, square: 'Square', *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+  - "You can see from **both** your location and that spot."
 - `c.strike(self, *, on: 'int | None' = None, advantage: 'bool | None' = None, plus: 'int' = 0, from_: 'int | None' = None, ignore_cover: 'bool' = False, keep: 'str' = '', hand: 'str' = 'main') -> 'AttackResult'`
   - Roll the attack the header declared.
 - `c.target: int | None`

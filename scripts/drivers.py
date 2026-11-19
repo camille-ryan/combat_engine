@@ -17103,6 +17103,83 @@ def a_blow_absorbed_whole_carries_no_rider(out: Result) -> None:
              f"dazed: {partial[1]}")
 
 
+def a_second_vantage_adds_rather_than_moves(out: Result) -> None:
+    """*"Choose any spot within 20 squares of you. You need not have line of
+    sight or line of effect to the spot. You can see from **both** your
+    location and that spot."* -- `p14142`.
+
+    **The marker's shape was right and one clause of its reasoning was
+    wrong.** It said "every sight question in the engine measures from the
+    creature's own squares" -- they all measure from
+    `query.sight_squares`, which has been the one door since `#1283` and
+    already knew how to answer something other than the body.
+
+    What was genuinely missing is the **adding** form.
+    `c.line_of_sight_from` replaces -- *"you can determine your line of
+    sight from that square"*, `p12407` -- and a single field could not
+    carry both readings without one of the two rows being wrong. So
+    `Senses.sight_also` is its own, unioned in.
+
+    **The replacing sibling is the control**, and it is the assertion that
+    matters: a verb that wrote the new square into `sight_from` would pass
+    "the spot is a vantage" and silently take `p12407`'s eye off the
+    creature.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import sight_squares
+
+    world, me, _ = _board("p14142", 1)
+    here = must(world.get(me, Position), "the caster stands").square
+    spot = (here[0] + 12, here[1] + 8)
+    c = Cast(world=world, me=me, ref="p14142")
+
+    out.that(sorted(sight_squares(world, me)) == [here],
+             "sight starts at the creature's own square", f"{here}")
+    held = c.see_from_as_well(spot, until=When.EONT)
+    out.that(held is not None, "the second vantage is laid", f"{held}")
+    seen = sight_squares(world, me)
+    out.that(here in seen and spot in seen,
+             "and sight is traced from BOTH -- which is the printed word and"
+             " the whole difference from the replacing sibling",
+             f"{sorted(seen)}")
+    if held is not None:
+        c.end_effect(held)
+    out.that(sorted(sight_squares(world, me)) == [here],
+             "when it ends the extra vantage is gone and the creature's own"
+             " square is still there",
+             f"{sorted(sight_squares(world, me))}")
+
+    # -- the replacing sibling still replaces ----------------------------
+    world2, me2, _ = _board("p14142", 1)
+    here2 = must(world2.get(me2, Position), "the caster stands").square
+    far = (here2[0] + 5, here2[1])
+    c2 = Cast(world=world2, me=me2, ref="drivers:moved")
+    c2.line_of_sight_from(far, until=When.EONT)
+    moved = sight_squares(world2, me2)
+    out.that(far in moved and here2 not in moved,
+             "`c.line_of_sight_from` still MOVES the eye -- the control, and"
+             " the assertion a verb that wrote into `sight_from` instead"
+             " would break: `p12407` would have kept its own square too",
+             f"{sorted(moved)}")
+
+    # -- and the row does it ---------------------------------------------
+    world3, me3, _ = _board("p14142", 1)
+    here3 = must(world3.get(me3, Position), "the caster stands").square
+    c3 = Cast(world=world3, me=me3, ref="p14142")
+    world3.decider = (lambda a, k, o, prompt="":
+                      o[len(o) // 2] if o else None)
+    REGISTRY["p14142"].body(c3)
+    after = sight_squares(world3, me3)
+    out.that(len(after) == 2 and here3 in after,
+             "the ROW gives the caster a second vantage and keeps its first"
+             " -- end to end, not the verb in isolation",
+             f"{sorted(after)}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -99576,6 +99653,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "second_vantage": (a_second_vantage_adds_rather_than_moves,
+                       "a second place to see from, where the sibling verb"
+                       " moves the only one"),
     "absorbed_whole": (a_blow_absorbed_whole_carries_no_rider,
                        "a blow taken whole carries no rider; one that got"
                        " partly through still does"),
