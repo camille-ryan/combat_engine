@@ -12,6 +12,7 @@ from combat_engine.engine import (
     FREE,
     INTERRUPT,
     MINOR,
+    MOVE,
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
@@ -227,9 +228,8 @@ def p7194(c: Cast) -> None:
     keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.SUMMONING],
     summon=Summon(
         speed=6, modes=("fly",),
-        commands=((STANDARD, "p11296c1"),),
+        commands=((STANDARD, "p11296c1"), (MOVE, "p11296c0")),
     ),
-    dropped=("falling.drop(forced_flight=)",),
 )
 def p11296(c: Cast) -> None:
     """**Its standard command heals rather than attacks, which is the case
@@ -291,3 +291,57 @@ def p11296c1(c: Cast) -> None:
     # `c.heal` takes a number, not an expression -- the idiom the
     # runepriest and ardent at-wills use.
     c.heal(c.roll("1d6"))
+
+
+@power(
+    "p11296c0",
+    level=10,
+    # `cls=""` for the reason `p11296c1` above gives at length: a command
+    # row declared with its class joins that class's draw.
+    cls="",
+    usage=AT_WILL,
+    action=MOVE,
+    reach=PERSONAL,
+    target=SELF,
+    keywords=[Keyword.DIVINE],
+)
+def p11296c0(c: Cast) -> None:
+    """*"Move Action: The angel and one ally adjacent to it fly 8 squares.
+    The ally must land at the end of this movement, or he or she falls."*
+
+    **The command was not declared at all**, which is what `p11296`'s
+    marker was really covering: it named `falling.drop(forced_flight=)`,
+    the fall at the end, inside a row that did not exist. `Summon.commands`
+    now carries both, and `d2899ec7`'s convention is what makes a command a
+    row -- so granting and aiming this is the same as any other.
+
+    The ally is chosen **before** the angel moves, because the card says
+    *"one ally adjacent to it"* -- adjacent now, not wherever the angel
+    ends up.
+
+    *"Must land ... or he or she falls"* is written as what it says: the
+    lent flight is ended and the ally comes down. **On flat ground that
+    fall is harmless and that is correct** -- `c.fall` defaults to the
+    creature's own height, which `c.move` does not raise, so an ally
+    carried across a flat board lands safely. It bites where something has
+    lifted the ally: `falling.lift` assigns `floor + squares` and a
+    level-13 controller row uses it.
+
+    So `falling.drop(forced_flight=)` was not needed. The gap the marker
+    named is real but belongs to `movement.settle`, which spares a flier at
+    turn end -- *"a flyer is not settled; it is where it means to be"* --
+    and that is a different sentence from this card's. Here the row ends
+    the carry itself, which is what *"at the end of this movement"* means.
+
+    A creature with a fly speed of its own is not carved out, because the
+    printed sentence does not carve it out."""
+    mates = sorted(a for a in c.allies() if c.adjacent_to(c.me, a))
+    pick = c.choose(mates, f"{c.ref}: which ally flies with it") if mates else None
+    c.move(8, who=c.me)
+    if pick is None:
+        return
+    lent = c.mode("fly", 8, on=pick, until=When.EOT)
+    c.move(8, who=pick)
+    if lent is not None:
+        c.end_effect(lent, on=pick, why="the flight ends")
+    c.fall(on=pick)

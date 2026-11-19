@@ -19498,6 +19498,114 @@ def two_rows_printed_a_denial_and_called_nothing(out: Result) -> None:
              f"{after.cancelled!r}")
 
 
+def a_summon_may_carry_an_ally_and_set_it_down(out: Result) -> None:
+    """*"Move Action: The angel and one ally adjacent to it fly 8 squares.
+    The ally must land at the end of this movement, or he or she falls."*
+    -- `p11296`.
+
+    **The command was not declared at all**, which is what the marker was
+    really covering: it named `falling.drop(forced_flight=)` -- the fall at
+    the end -- inside a row that did not exist. `Summon.commands` listed
+    only the standard heal, so the move action could not be granted, aimed
+    or taken.
+
+    `d2899ec7`'s convention is what makes a command a row, so granting and
+    aiming it is the same as any other once the row is there. `cls=""` for
+    the reason `p11296c1` gives at length: a command declared with its class
+    joins that class's draw.
+
+    **`falling.drop(forced_flight=)` turned out not to be needed**, and the
+    marker's reasoning says why without quite reaching it: it is about
+    `movement.settle`, which spares a flier at turn end -- *"a flyer is not
+    settled; it is where it means to be"*. That is a different sentence
+    from this card's. This one says *"at the end of this movement"*, so the
+    row ends the carry itself and calls `c.fall`.
+
+    **The two controls are the point.** On flat ground the landing is
+    harmless, because `c.fall` defaults to the creature's own height and
+    `c.move` does not raise it -- so the clause looks inert on most boards
+    and is not: `falling.lift` assigns `floor + squares`, a level-13
+    controller row uses it, and from height 4 the ally takes real damage.
+    Both are asserted, because only the pair says the fall reads the
+    height rather than a constant.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, falling
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Health, Position
+    from combat_engine.engine.query import allies
+    from combat_engine.engine.types import ActionType
+
+    row = dsl.REGISTRY["p11296"]
+    # `getattr`, because `Power.summon` is `Summon | None` and a bare
+    # `row.summon.commands` is a `missing-union-attribute` that `types.py`
+    # names -- the same shape as the `summon.attack` detail string two
+    # rules over.
+    commands = dict(getattr(row.summon, "commands", ()) or ())
+    out.that(commands.keys() == {ActionType.STANDARD, ActionType.MOVE},
+             "the summon block declares both printed commands -- the"
+             " standard heal and the move action, which was missing",
+             f"{sorted((k.value, v) for k, v in commands.items())}")
+
+    def staged(lift: int) -> tuple[Any, int, int, int]:
+        world, me, _ = _board("p11296", 1)
+        before = {e for e, _ in world.each(Companion)}
+        dsl.REGISTRY["p11296"].body(Cast(world=world, me=me, ref="p11296"))
+        angel = sorted({e for e, _ in world.each(Companion)} - before)[0]
+        mate = sorted(a for a in allies(world, me) if a != angel)[-1]
+        at = next(iter(world.get(angel, Position).squares))
+        beside = (at[0] + 1, at[1])
+        seat = world.get(mate, Position)
+        world.grid.place(mate, frozenset({beside}))
+        seat.square = beside
+        seat.spans = frozenset({beside})
+        if lift:
+            falling.lift(world, mate, lift)
+        # **The decider must be told which ally**, or it takes `options[0]`
+        # -- which is the summoner, not the one standing beside the angel.
+        # The first probe did that and read the clause as doing nothing.
+        world.decider = (
+            lambda actor, kind, options, prompt="":
+            mate if mate in options else options[0]
+        )
+        return world, me, angel, mate
+
+    world, _, angel, mate = staged(4)
+    out.that(Cast(world=world, me=angel, ref="probe").adjacent_to(angel, mate),
+             "the fixture stands an ally beside the angel, which is the"
+             " printed requirement -- *'one ally adjacent to it'*",
+             f"{angel} / {mate}")
+    out.that(falling.height(world, mate) == 4,
+             "and lifts it four squares, so the fall has something to"
+             " measure", f"{falling.height(world, mate)}")
+    hp = world.get(mate, Health)
+    was, where = hp.hp, next(iter(world.get(mate, Position).squares))
+    dsl.REGISTRY["p11296c0"].body(Cast(world=world, me=angel, ref="p11296c0"))
+    out.that(next(iter(world.get(mate, Position).squares)) != where,
+             "the command carries the ally -- it does not end where it"
+             " started", f"{where} -> "
+             f"{next(iter(world.get(mate, Position).squares))}")
+    out.that(falling.height(world, mate) == 0,
+             "and sets it down, which is *'the ally must land at the end of"
+             " this movement'*", f"{falling.height(world, mate)}")
+    out.that(hp.hp < was,
+             "and it took the fall, which is *'or he or she falls'*",
+             f"{was} -> {hp.hp}")
+
+    # -- the control: flat ground, and the landing is harmless -----------
+    world, _, angel, mate = staged(0)
+    hp = world.get(mate, Health)
+    was = hp.hp
+    out.that(falling.height(world, mate) == 0,
+             "on a flat board the ally starts on the floor", "0")
+    dsl.REGISTRY["p11296c0"].body(Cast(world=world, me=angel, ref="p11296c0"))
+    out.that(hp.hp == was,
+             "and lands unhurt -- the control, and what says the fall reads"
+             " the creature's height rather than dealing a constant. The"
+             " clause looks inert on most boards and is not",
+             f"{was} -> {hp.hp}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -102123,6 +102231,9 @@ DRIVERS = {
     "silent_denial": (two_rows_printed_a_denial_and_called_nothing,
                       "two rows printed a denial of immediate and"
                       " opportunity actions and did nothing"),
+    "carried_flight": (a_summon_may_carry_an_ally_and_set_it_down,
+                       "a summon's move command carries an ally and sets it"
+                       " down, which costs it the fall"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),
