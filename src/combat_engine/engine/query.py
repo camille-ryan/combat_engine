@@ -2601,6 +2601,33 @@ def _has_combat_advantage(
     # conjurer and is read off the conjuration itself.
     if _beside_a_granting_conjuration(world, target):
         return True
+    # **A creature climbing grants combat advantage**, which is a printed
+    # rule the engine did not have -- and two rows waited on it from
+    # opposite sides, each having written down that it was missing:
+    #
+    # * `m6371a0` prints *"can climb at full speed and does not grant
+    #   combat advantage while doing so"* -- a card that **waives** the
+    #   rule, which is the strongest evidence the rule is the baseline. It
+    #   was marked `out_of_combat=True` on the reasoning that "nothing
+    #   grants combat advantage automatically for doing it -- there is no
+    #   rule here to lift".
+    # * `p16066` prints *"climbing or balancing doesn't cause you to grant
+    #   combat advantage"* and carried a marker whose note said the same:
+    #   "there is nothing here to waive".
+    #
+    # `Movement.using` is the state and `movement.step` sets it, so this
+    # asks what the creature is doing rather than what it could do --
+    # `c.moving_as`'s own distinction.
+    #
+    # **Balancing is not modelled at all**, so that half of `p16066`'s
+    # clause is vacuous rather than dropped: nothing can put a creature in
+    # a balancing state, so nothing can make one grant for it.
+    if moving_as(world, target, "climb") and not (
+        (steady := world.get(target, Mods)) is not None
+        and bool(steady.items)
+        and steady.total("climbs_steadily", ca_ctx) > 0
+    ):
+        return True
     # The gated form of the same sentence. `c.grants_advantage(when=)` cannot use the
     # relation above, because a relation carries no predicate and this function returns
     # as soon as it holds -- so the conditional version lays a modifier instead and is

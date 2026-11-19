@@ -473,6 +473,12 @@ CATEGORIES: dict[str, dict] = {
                 # condition, and the verb says why: hearing already has
                 # exactly one reader, and `Condition.DEAFENED` sat inert
                 # for seven rows until that reader existed.
+                # The narrow waiver for the printed rule that a climbing
+                # creature grants combat advantage. Narrow on purpose:
+                # `no_advantage` in `modifiers` is the blanket form and
+                # shuts every route, which neither card printing this
+                # takes away.
+                "climbs_steadily",
                 "cannot_speak",
                 # A prohibition that lifts on a **position** rather than a
                 # clock: `when=` is asked when the creature tries to stand,

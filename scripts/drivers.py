@@ -18959,6 +18959,112 @@ def a_conjuration_may_lend_its_square_to_a_threat(out: Result) -> None:
              f"windows for {[ev.actor for ev in seen]}")
 
 
+def a_climbing_creature_grants_advantage(out: Result) -> None:
+    """A printed rule the engine did not have, and **two rows waited on it
+    from opposite sides** -- each having written down that it was absent:
+
+    * `m6371a0` prints *"can climb at full speed and does not grant combat
+      advantage while doing so"*, and was marked `out_of_combat=True`
+      because "nothing grants combat advantage automatically for doing it
+      -- there is no rule here to lift".
+    * `p16066` prints *"climbing or balancing doesn't cause you to grant
+      combat advantage"*, and its marker's note said the same: "there is
+      nothing here to waive".
+
+    A card printing a **waiver** is the strongest evidence the thing waived
+    is the baseline, which is what turned this from a filing into a change.
+
+    `Movement.using` is the state and `movement.step` sets it, so the rule
+    asks what the creature is *doing* rather than what it could do --
+    `c.moving_as`'s distinction, and the reason a creature with a climb
+    speed standing still does not grant.
+
+    **The control that matters is the waiver's narrowness.**
+    `c.no_advantage` is the blanket form and would also shut off flanking,
+    being unseen and an outright grant; neither card takes those away. So
+    the rule asserts a creature carrying the waiver still grants when it is
+    *dazed*, which is a different route entirely.
+
+    **The balancing half is vacuous rather than dropped** -- nothing in the
+    engine models balancing, so nothing can put a creature in it. Recorded
+    in `p16066`'s note; there is no state here to assert against.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, enemies, grants_ca
+
+    world, me, _ = _board("p16066", 1)
+    shooter = sorted(enemies(world, me))[0]
+    clean = [a for a in sorted(allies(world, me)) if not grants_ca(world, a)]
+    out.that(bool(clean),
+             "the board deals an ally it has not already made grant combat"
+             " advantage -- it poses one `DAZED`, which would make every"
+             " line below vacuous", f"{clean}")
+    if not clean:
+        return
+    mate = clean[0]
+    mover = world.get(mate, Movement)
+    out.that(mover is not None, "and that ally has a Movement to read",
+             f"{mover}")
+    if mover is None:
+        return
+
+    out.that(not query.has_combat_advantage(world, shooter, mate),
+             "standing still it grants nothing -- the baseline", "False")
+    mover.using = "climb"
+    out.that(query.has_combat_advantage(world, shooter, mate),
+             "and while CLIMBING it does -- the printed rule, which nothing"
+             " in the engine said before", "True")
+    mover.using = ""
+    out.that(not query.has_combat_advantage(world, shooter, mate),
+             "and not once it has stopped, so this reads `Movement.using`"
+             " rather than whether it has a climb speed at all", "False")
+
+    # -- the waiver, and its narrowness ----------------------------------
+    mover.using = "climb"
+    Cast(world=world, me=mate, ref="drivers:probe").climbs_steadily(
+        on=mate, until=When.ENCOUNTER)
+    out.that(not query.has_combat_advantage(world, shooter, mate),
+             "`c.climbs_steadily` takes the climbing route away", "False")
+    Cast(world=world, me=me, ref="drivers:probe").dazed(on=mate)
+    out.that(query.has_combat_advantage(world, shooter, mate),
+             "and a creature carrying the waiver still grants when DAZED --"
+             " the control, and the whole difference from `c.no_advantage`,"
+             " which would have shut every route at once", "True")
+
+    # -- both rows lay it, and they are reached differently ---------------
+    #
+    # **`m6371a0` is not called here and `p16066` is**, which is the whole
+    # difference between a trait and a power: `turns.arm_traits` runs an
+    # `action=NONE` row with no declared trigger at the start of the fight,
+    # so the board has already armed the monster's and calling the body
+    # again laid the waiver **twice** -- which is what the first version of
+    # this rule asserted against and failed on. Asserting the board's own
+    # arming is the stronger test anyway: it says the trait is reached in
+    # play, not merely that its body works when called.
+    world, me, _ = _board("m6371a0", 1)
+    armed = [e for e in world.effects.of(me)
+             if "climbs_steadily" in str(e.mods)]
+    out.that(len(armed) == 1 and armed[0].when is When.ENCOUNTER,
+             "`m6371a0` is armed by the board as a standing trait and the"
+             " waiver is already on it, for the encounter -- nothing calls"
+             " its body here",
+             f"{[(e.label, e.when.name) for e in armed]}")
+
+    world, me, _ = _board("p16066", 1)
+    dsl.REGISTRY["p16066"].body(Cast(world=world, me=me, ref="p16066"))
+    laid = [e for e in world.effects.of(me)
+            if "climbs_steadily" in str(e.mods)]
+    out.that(len(laid) == 1 and laid[0].when is When.EONT,
+             "and `p16066` lays it when used, until the end of its next"
+             " turn -- a power rather than a trait, and the clock its own"
+             " card prints",
+             f"{[(e.label, e.when.name) for e in laid]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -101569,6 +101675,9 @@ DRIVERS = {
     "lent_threat": (a_conjuration_may_lend_its_square_to_a_threat,
                     "a conjuration may lend its square so its conjurer"
                     " threatens from there"),
+    "climbing_grants": (a_climbing_creature_grants_advantage,
+                        "a climbing creature grants combat advantage, and"
+                        " two cards waive it"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

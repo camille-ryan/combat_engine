@@ -763,13 +763,27 @@ def m6347a6(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    out_of_combat=True,
 )
 def m6371a0(c: Cast) -> None:
-    """Nothing in the engine charges extra movement for climbing without a
-    climb speed, and nothing grants combat advantage automatically for
-    doing it -- there is no rule here to lift, so this is complete and
-    inert in a fight."""
+    """*"Can climb at full speed and does not grant combat advantage while
+    doing so."*
+
+    **This was `out_of_combat=True` on a premise that has stopped being
+    true**, and the premise is worth keeping because it was right when
+    written: "nothing grants combat advantage automatically for doing it --
+    there is no rule here to lift". The rule exists now, in
+    `query._has_combat_advantage`, and this card is one of the two that
+    argued for it -- a card printing a **waiver** is the strongest evidence
+    the thing waived is the baseline. `p16066` is the other, and its note
+    had reached the same conclusion independently.
+
+    So the second half of the sentence is `c.climbs_steadily`, and the row
+    is live rather than inert.
+
+    The first half still lifts nothing: climbing costs no extra movement in
+    this engine, with or without a climb speed, so *"at full speed"* has
+    nothing to charge. That part of the old note stands."""
+    c.climbs_steadily(on=c.me, until=When.ENCOUNTER)
 
 
 @power(

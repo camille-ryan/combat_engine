@@ -1014,6 +1014,32 @@ class Cast:
 
         return _can_hear(self.world, who, self.me)
 
+    def climbs_steadily(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """*"Can climb at full speed and does not grant combat advantage
+        while doing so."*
+
+        The waiver for the printed rule that a climbing creature grants
+        combat advantage -- which `query._has_combat_advantage` now carries,
+        and which two rows had each separately recorded as missing.
+
+        **Narrow on purpose.** `c.no_advantage` is the blanket form and
+        would also shut off flanking, being unseen and an outright grant,
+        which neither card takes away. This suppresses the climbing route
+        and nothing else, so a climbing creature that is *also* flanked
+        still grants -- which is what both pages leave standing.
+
+        The "full speed" half of `m6371a0`'s sentence is a different clause
+        and not this verb's: climbing costs no extra movement in this
+        engine, so there is nothing there to lift.
+        """
+        return self.bonus(
+            "climbs_steadily", 1, on=on if on is not None else self.me,
+            until=until, kind="untyped", when=when,
+        )
+
     def cannot_stand(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
         when: Callable[[dict[str, Any]], bool] | None = None,

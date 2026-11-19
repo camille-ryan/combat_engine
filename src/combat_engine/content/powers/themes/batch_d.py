@@ -1575,7 +1575,6 @@ def p16065(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.PSIONIC, Keyword.ELEMENTAL],
-    dropped=("query.has_combat_advantage(climbing)",),
 )
 def p16066(c: Cast) -> None:
     """The shift and the defences are exact.
@@ -1592,13 +1591,26 @@ def p16066(c: Cast) -> None:
     `c.no_advantage(cause=)` would have been a parameter nobody could
     demonstrate.
 
-    What is missing is the **printed rule underneath**: a climbing or
-    balancing creature grants combat advantage in the first place. That is
-    an engine-wide change touching every creature that climbs rather than
-    this row's clause, so it is filed rather than landed here, and the
-    marker names it. Until it exists this row is *stronger* than its card
-    by nothing at all -- the waiver and the absent rule cancel -- which is
-    why it plays correctly today and still owes a marker.
+    What was missing is the **printed rule underneath**: a climbing
+    creature grants combat advantage in the first place. That is landed now
+    rather than filed, because the change earns itself twice over --
+    `m6371a0` prints *"can climb at full speed and does not grant combat
+    advantage while doing so"*, a card that **waives** the rule, and it had
+    been marked `out_of_combat=True` on the very same reasoning as this
+    note: "there is no rule here to lift". Two rows, from opposite sides,
+    each having written down that the baseline was absent.
+
+    `query._has_combat_advantage` carries it, reading `Movement.using` so
+    it asks what the creature is *doing* rather than what it could do --
+    `c.moving_as`'s distinction. `c.climbs_steadily` is the waiver, and it
+    is narrow on purpose: `c.no_advantage` would also shut off flanking,
+    being unseen and an outright grant, which this card does not take away.
+
+    **The balancing half is vacuous rather than dropped.** Nothing in the
+    engine models balancing -- grep finds the word twice and neither is a
+    state -- so nothing can put a creature in it and nothing can make one
+    grant for it. That is measured, not assumed, and it is why the clause
+    reads as fully written with only the climbing half implemented.
 
     See `a-marker-may-name-a-verb-when-the-gap-is-a-layer-below`: read the
     verb first, then what the verb would read.
@@ -1606,6 +1618,12 @@ def p16066(c: Cast) -> None:
     c.ignores_difficult(on=c.me, until=When.EOT)
     c.shift(3, who=c.me)
     _defences(c, 2, until=When.EONT)
+    # *"...and climbing or balancing doesn't cause you to grant combat
+    # advantage."* The rule it waives exists now, so this is a real
+    # suppression rather than a no-op. Narrow deliberately: a climbing
+    # creature that is also flanked still grants, which is what the page
+    # leaves standing.
+    c.climbs_steadily(on=c.me, until=When.EONT)
 
 
 @power(
