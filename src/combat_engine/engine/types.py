@@ -246,6 +246,25 @@ class Condition(StrEnum):
     REMOVED = "removed"
     RESTRAINED = "restrained"
     SHAPED = "shaped"
+    #: **Given up.** Not a printed condition -- a house one, Camille's call
+    #: 2026-11-19, so that the Intimidate rule the compendium describes has
+    #: something to impose:
+    #:
+    #: > *"Let's create a "surrendered" condition for now. Surrendered
+    #: > enemies should remain on the board, but not take any actions. If
+    #: > the party damages a surrendered enemy, it should lose the
+    #: > surrendered condition and become immune to the condition for the
+    #: > rest of combat."*
+    #:
+    #: So it carries `cannot_act` and nothing else. It is deliberately NOT
+    #: a daze or a stun: those also grant combat advantage and cost an
+    #: action, and a creature that has given up is not easier to hit.
+    #:
+    #: The compendium's own note on the skill is that this is not mind
+    #: control -- *"it will not take an action that harms it
+    #: immediately"* -- and `cannot_act` settles that by construction: a
+    #: creature taking no actions cannot be made to take a bad one.
+    SURRENDERED = "surrendered"
     #: Stabilised: dying, but no longer rolling death saving throws. #1074.
     #:
     #: **Carries no `Rules` entry, deliberately**, and for the same reason

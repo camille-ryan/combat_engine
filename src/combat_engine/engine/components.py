@@ -575,6 +575,37 @@ class Movement:
     #: back by one effect ending without lying about the other.
     run_up: set[str] = field(default_factory=set)
 
+    #: **Mid-air over a square this creature will not stop on.** True only
+    #: while a flier is stepping *through* a square during one move, and
+    #: False on the square it lands on.
+    #:
+    #: Camille's rule, 2026-11-19, on being shown that a flier in this
+    #: engine was a walker with a different label:
+    #:
+    #: > *"fliers should ignore terrain and hazards except on the squares
+    #: > they start and end from"*
+    #:
+    #: The start square needs no entry here: a cost and a hazard are both
+    #: paid on *entering* a square, and a creature is already in the one it
+    #: starts from. So this says "passing over", and it has two readers --
+    #: `movement.walk`, which charges a flat 1 instead of the rough-ground
+    #: price, and `Zones.create`'s hindering watch, which deals no damage.
+    #:
+    #: **Not three readers, and not the opportunity window.** The hop's
+    #: provocation half cannot be carried by a flag of this shape: this
+    #: engine provokes on *escaping a watcher's reach* rather than per
+    #: square left, so the step a flag like this would allow is never the
+    #: step the window opens on, and using it there waived every flier's
+    #: window instead of all but one. `movement._hop_provokes` holds that
+    #: reasoning and the measurement; it tests `went_from` and needs no
+    #: state of its own.
+    #:
+    #: Set and cleared by `walk` around each step, so it is false whenever
+    #: nobody is moving -- a flag that outlived its move would make a
+    #: flier standing in a hazard immune to it, which is the half of the
+    #: rule that keeps the other half honest.
+    passing: bool = False
+
 
 @dataclass
 class Shapes:

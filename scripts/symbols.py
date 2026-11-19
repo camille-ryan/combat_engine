@@ -222,7 +222,14 @@ CATEGORIES: dict[str, dict] = {
         "sections": [
             ("writers -- a condition named after itself", [
                 "blinded", "cannot_shift", "dazed", "immobilized",
-                "insubstantial", "prone", "slowed", "stunned", "unconscious",
+                "insubstantial", "prone", "slowed",
+                # **Beside the conditions it is deliberately not.** A stun
+                # grants combat advantage and a daze costs an action; a
+                # creature that has given up is no easier to hit and acts
+                # not at all. An author reaching for one of those wants to
+                # find this and see the difference.
+                "surrender",
+                "stunned", "unconscious",
                 # The conditional kind, read in `resolve` beside the
                 # condition: a modifier with a gate, so it can say
                 # "not a basic attack" or "against that creature".

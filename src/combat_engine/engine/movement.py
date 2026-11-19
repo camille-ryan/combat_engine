@@ -190,7 +190,19 @@ def step(
                 not (after_reach & threat_from) if reach == 1
                 else not (spread(threat_from, reach) & target)
             )
-            if left:
+            # **A flier provokes only from the square it started in.**
+            # Camille's rule, and the mental model is that fliers "hop":
+            # passing over a threatened square is not leaving one.
+            # Only a watcher that had this flier in reach when it took
+            # off, which is what the rule comes to once you notice this
+            # engine provokes on *escaping reach* rather than per square
+            # left -- see `_hop_provokes`, which is where that reasoning
+            # and the measurement behind it live.
+            #
+            # **Not `Movement.passing`**: that is the *cost* half, keyed on
+            # the square being entered, and a step-shaped flag cannot
+            # express this one at all.
+            if left and (mode != "fly" or _hop_provokes(world, eid, threat_from, reach)):
                 # No `by`: a move is not a row, and **the absence is the
                 # signal**. `f1302` prints "opportunity attacks provoked by
                 # this movement" and `f2565` prints "that you provoke when
@@ -865,6 +877,55 @@ def _braced_between(world: World, square: Square) -> bool:
     )
 
 
+def _hop_provokes(world: World, eid: int, stands: frozenset | set, reach: int) -> bool:
+    """Does a flier owe this watcher its window.
+
+    **Only if the watcher threatened the square the flight began in.**
+    Camille's rule is that a flier *"ignores opportunity attacks except on
+    the first square they leave"* -- the mental model being that fliers
+    hop -- and that sentence does not translate into a per-step test,
+    because this engine does not provoke per square left.
+
+    What it provokes on is **escaping a watcher's reach**: `step`'s `left`
+    is "nothing the watcher threatens touches where I am going", so a
+    creature walking away from an adjacent enemy provokes on whichever
+    step carries it out of range, which is usually not the first. Measured
+    on a nine-square lane with watchers beside the 1st, 5th and 9th
+    squares: both windows opened mid-route, neither on step one.
+
+    So a per-step flag got this wrong in the most expensive direction --
+    it suppressed **every** flier window, since a flier's escape is never
+    on the step the flag allows. That is a far stronger rule than the one
+    printed, and it reads as working.
+
+    The faithful test is about the *start of the move* rather than the
+    step: a watcher that had the flier in reach when it took off gets its
+    attack, and anything the flier merely passed over gets nothing. That
+    is the same shape as the cost half -- the start and the landing square
+    are what count -- and it needs no new state, because `walk` already
+    records where the move began for the Stealth clause.
+
+    **One square, not a footprint.** `went_from` is a single square, so a
+    large flier is judged by its origin square alone. Honest and narrow:
+    the alternative is storing the whole take-off footprint for a case no
+    row in the tree asks about.
+
+    **`stands` is where the watcher *is*, not what it threatens**, which
+    is the shape `threatening_squares` returns and cost a wrong reading
+    here: testing the start square against it directly asks whether the
+    flier took off from inside the watcher's own body, which is false for
+    every ordinary board, so the rule waived everything. `left` above has
+    the same asymmetry -- it spreads whichever side is cheaper -- so the
+    reach is spread here too.
+    """
+    mv = world.get(eid, Movement)
+    if mv is None or mv.went_from is None:
+        # Nothing recorded where this began -- a bare `step` rather than a
+        # `walk`. Fail toward the ordinary rule rather than a waiver.
+        return True
+    return mv.went_from in spread(stands, reach)
+
+
 def mode_of(world: World, eid: int, mode: str | None) -> str:
     """Resolve the mode a creature is moving with, defaulting to its best.
 
@@ -975,15 +1036,62 @@ def walk(
     if frm is None:
         at = world.get(eid, Position)
         frm = at.square if at is not None else None
-    for sq in path:
+    # **A flier hops**, which is Camille's rule and three things at once:
+    # it ignores rough going, hazards and opportunity attacks on the
+    # squares it passes *over*, and pays all three on the square it stops
+    # on. `Movement.passing` carries it -- see that field -- and is set
+    # around each step rather than for the whole move, so the last square
+    # is priced and suffered normally.
+    #
+    # The square it starts from needs nothing: cost and hazards are paid on
+    # **entering** a square and the creature is already in that one.
+    #
+    # Set before `step`, because `step` is what opens the opportunity
+    # window and what moves the creature into the zone that burns it.
+    hops = mode == "fly" and len(path) > 1
+    last = len(path) - 1
+    # **The printed exception**, hoisted for the same reason `price` is:
+    # five rows lay a zone that is rough going *even for creatures that
+    # fly*, and without this the general rule would silently invert them.
+    # Empty on any board laying no such zone. See `Zone.difficult_in_flight`.
+    sticky = world.zones.catches_fliers() if hops else frozenset()
+    for n, sq in enumerate(path):
+        # The square this creature will not stop on, which is what the
+        # cost and hazard waivers key on -- both are paid on *entering* a
+        # square, so the one it lands on is `n == last` and pays in full.
+        #
+        # The provocation half is **not** here: it is provoked by leaving,
+        # and by escaping a watcher's reach rather than per square, so no
+        # per-step flag can carry it. `step` tests `went_from` instead.
+        over = hops and n != last
+        if mv is not None:
+            mv.passing = over
         if not step(world, eid, sq, kind=kind, mode=mode):
+            if mv is not None:
+                mv.passing = False
             break
-        spent += price(frm, sq)
+        # **The cost waiver is the one the exception narrows, and the
+        # hazard waiver above is not.** The printed sentence is about
+        # difficult *terrain*, so a zone that both slows and burns still
+        # waives its damage for a flier passing over and charges for the
+        # ground.
+        spent += 1 if (over and sq not in sticky) else price(frm, sq)
         frm = sq
         # Squares entered, not budget spent -- `spent` charges 2 for rough
         # ground and the printed penalty counts squares.
         if mv is not None:
             mv.went += 1
+    # **Cleared before `MoveEnd`**, not after: `Zones.refresh` is
+    # subscribed to that event, so a `ZoneEntered` can still be announced
+    # from inside the emit below -- and the creature has landed by then.
+    # Both the normal exit and the blocked one above already leave this
+    # false; this is the belt, and it is cheap.
+    #
+    # A flag that outlived its move would make a flier standing in a
+    # hazard immune to it, which is the half of Camille's rule that keeps
+    # the other half honest.
+    if mv is not None:
+        mv.passing = False
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_=kind))
     return spent

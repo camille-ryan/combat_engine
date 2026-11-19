@@ -162,6 +162,7 @@ def legal(
     out.extend(_manoeuvres(world, encounter, actor))
     out.extend(_stabilising(world, encounter, actor))
     out.extend(_ally_unlocks(world, encounter, actor))
+    out.extend(_cowing(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
     out.extend(_searching(world, encounter, actor))
     out.extend(_spotting(world, encounter, actor))
@@ -318,6 +319,57 @@ def _stabilising(world: World, encounter: Encounter, actor: int) -> list[Action]
             continue
         out.append(Action(kind="stabilise", cost=ActionType.STANDARD,
                           targets=(friend,)))
+    return out
+
+
+def _cowing(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """The Intimidate attempt that makes a bloodied enemy give up.
+
+    **A skill use every character has, not a power.** Camille's call,
+    2026-11-19:
+
+    > *"make sure you build the intimidate to surrender thing as its own
+    > functionality rather than just part of the power. It's something all
+    > characters can do, the yakuza power just grants special timing"*
+
+    So the offer is here, beside `_stabilising` and `_hiding` -- the two
+    other things anybody may do with an action and a skill -- and `p16005`
+    grants only the *moment*, which is its own clause and not this one.
+
+    **A standard action**, which is what the compendium prints for the
+    skill. The DC is the target's Will and the refusals are the printed
+    ones; both live in `Cast.surrender`, so the menu and the power ask the
+    same question and cannot disagree about the answer.
+
+    Offered only where it could do something: a bloodied enemy, not one
+    already surrendered, and not one that has refused or been broken out
+    of it this fight. Advertising an attempt that is certain to do nothing
+    is the thing `_stabilising`'s own note refuses for the same reason.
+
+    **No reach test**, deliberately: the printed skill names no range, and
+    Intimidate is a thing you do to somebody who can hear you rather than
+    somebody you can touch. `query.can_hear` is the narrowing if one is
+    ever wanted; the card does not ask for it.
+    """
+    from .components import Mods
+    from .query import bloodied as _bloodied
+    from .query import enemies as _foes
+    from .query import is_ as _is
+
+    out: list[Action] = []
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return out
+    for foe in _foes(world, actor):
+        if not _bloodied(world, foe):
+            continue
+        if _is(world, foe, Condition.SURRENDERED):
+            continue
+        refused = world.get(foe, Mods)
+        if refused is not None and refused.items and refused.total(
+                "no_surrender", {}) > 0:
+            continue
+        out.append(Action(kind="cow", cost=ActionType.STANDARD,
+                          targets=(foe,)))
     return out
 
 
@@ -3489,6 +3541,17 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # this neither duplicates the destination search nor trusts the
         # menu's view of a board that may have moved since it was drawn.
         return Cast(world=world, me=actor, ref="move_zone").move_zone(zone, reach)
+
+    if action.kind == "cow":
+        from .cast import Cast as _CowCast
+
+        # Re-checked by the verb rather than here: every refusal the card
+        # prints lives in `Cast.surrender`, so the menu and a power that
+        # grants the timing ask one question and get one answer.
+        foe = action.targets[0] if action.targets else -1
+        if foe < 0:
+            return False
+        return _CowCast(world=world, me=actor, ref="skill:intimidate").surrender(on=foe)
 
     if action.kind == "ally_check":
         from .cast import Cast as _Cast

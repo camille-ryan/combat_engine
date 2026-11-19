@@ -20264,6 +20264,449 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_flier_hops_over_the_ground_it_crosses(out: Result) -> None:
+    """Camille's flier rule, which is three waivers and one exception.
+
+    Asked for directly, 2026-11-19, after I measured that a flier in this
+    engine was a walker with a different label:
+
+    > *"fliers should ignore terrain and hazards except on the squares they
+    > start and end from"*
+
+    > *"can you check that fliers ignore opportunity attacks except on the
+    > first square they leave as well? The mental model is that fliers
+    > 'hop'"*
+
+    **The three halves key off different things, which is the whole
+    difficulty.** A cost and a hazard are paid on *entering* a square, so
+    the waiver runs to `path[-1]` and stops. An opportunity attack is
+    provoked by **escaping a watcher's reach** -- not by leaving a square
+    -- so it does not line up with a per-step marker at all, and the first
+    draft of this used one flag for both and waived **every** flier's
+    window instead of all but one. `movement._hop_provokes` carries that
+    reasoning; the test is whether the watcher threatened the square the
+    flight began in.
+
+    **And the exception is asserted here beside the rule**, because the
+    two are one change: `p11470` lays *"difficult terrain, even for
+    creatures that fly"*, which was correct by accident while fliers were
+    hampered by everything, and the moment they were not it became false.
+
+    **Six rows print the exception, four of them written**, and all four
+    are asserted below -- the three stat-block auras as well as `p11470`,
+    because landing the general rule without them makes three cards say
+    something they do not. #1364.
+
+    Each assertion carries its walking control, because every number here
+    is only meaningful beside what a walker pays on the same board.
+    """
+    from combat_engine.engine import When, movement
+    from combat_engine.engine.components import Health, Movement, Position
+    from combat_engine.engine.events import OpportunityWindow
+    from combat_engine.engine.query import enemies
+
+    LANE = [(x, 2) for x in range(3, 12)]
+    SHORT = [(3, 2), (4, 2), (5, 2)]
+
+    def world(
+        fly: bool, *, park: list[tuple[int, int]] | None = None
+    ) -> tuple[World, int, dict[int, tuple[int, int]]]:
+        """A board with a clear lane and every enemy moved out of it.
+
+        The enemies are parked rather than left where the board put them:
+        a body in the lane blocks the step and the walk stops short, which
+        reads as a waiver that worked. `park` puts one foe beside each
+        named square instead.
+        """
+        w, me, _ = _board()
+        mv = w.get(me, Movement)
+        mv.speed = 20
+        if fly:
+            mv.modes["fly"] = 20
+        tags = {}
+        for i, foe in enumerate(enemies(w, me)):
+            if park is not None and i < len(park):
+                sq = (park[i][0], park[i][1] + 1)
+                tags[foe] = park[i]
+            else:
+                sq = (30 + i, 30)
+            w.grid.lift(foe)
+            w.get(foe, Position).square = sq
+            w.grid.place(foe, sq)
+        w.grid.lift(me)
+        w.get(me, Position).square = (2, 2)
+        w.grid.place(me, (2, 2))
+        return w, me, tags
+
+    def rough_cost(fly: bool, *, in_flight: bool = False, zone: bool = True) -> int:
+        w, me, _ = world(fly)
+        if zone:
+            w.zones.create(owner=me, label="rough", squares_=frozenset(SHORT),
+                           when=When.ENCOUNTER, difficult=True,
+                           difficult_in_flight=in_flight)
+        else:
+            for sq in SHORT:
+                w.grid.difficult[sq] = "rubble"
+        return movement.walk(w, me, list(SHORT), mode="fly" if fly else None)
+
+    # --- the cost half. Three squares of rough ground, the last one landed on.
+    walked = rough_cost(False, zone=False)
+    flown = rough_cost(True, zone=False)
+    out.that(
+        walked == 6,
+        f"a walker pays full for three rough squares (paid {walked}, wanted 6)",
+    )
+    out.that(
+        flown == 4,
+        "a flier pays a flat 1 for the two squares it passes over and full"
+        f" for the one it lands on (paid {flown}, wanted 4)",
+    )
+    out.that(
+        flown < walked,
+        f"flying over rough ground is cheaper than walking it ({flown} < {walked})",
+    )
+
+    # **The landing square is the control on the waiver**, and without it
+    # "a flier pays 4" is equally consistent with a blanket exemption.
+    w, me, _ = world(True)
+    for sq in SHORT:
+        w.grid.difficult[sq] = "rubble"
+    one = movement.walk(w, me, [SHORT[0]], mode="fly")
+    out.that(
+        one == 2,
+        "a flight of one square is all landing and pays the rough price in"
+        f" full (paid {one}, wanted 2)",
+    )
+
+    # --- the hazard half.
+    def burnt(fly: bool, land_in_it: bool) -> int:
+        w, me, _ = world(fly)
+        w.zones.create(owner=me, label="fire", squares_=frozenset({(4, 2), (5, 2)}),
+                       when=When.ENCOUNTER, hindering="5")
+        hp = w.get(me, Health)
+        assert hp is not None, "the board fields a creature with hit points"
+        was = hp.hp
+        path = [(3, 2), (4, 2)] if land_in_it else [(3, 2), (4, 2), (5, 2), (6, 2)]
+        movement.walk(w, me, path, mode="fly" if fly else None)
+        return was - hp.hp
+
+    through = burnt(False, False)
+    over = burnt(True, False)
+    landed = burnt(True, True)
+    out.that(
+        through > 0,
+        f"a walker crossing a hazard is hurt by it (took {through})",
+    )
+    out.that(
+        over == 0,
+        f"a flier passing over a hazard takes nothing (took {over})",
+    )
+    out.that(
+        landed == through,
+        "a flier that LANDS in the hazard takes what a walker does"
+        f" (took {landed}, walker {through})",
+    )
+
+    # --- the provocation half. A watcher beside the take-off square, one
+    # beside the middle of the lane, one beside the landing.
+    PARK = [(2, 2), (6, 2), (10, 2)]
+
+    def windows(fly: bool) -> list:
+        w, me, tags = world(fly, park=PARK)
+        seen: list = []
+        w.bus.on(OpportunityWindow, lambda ev: seen.append(tags.get(ev.actor)))
+        movement.walk(w, me, list(LANE), mode="fly" if fly else None)
+        return [x for x in seen if x is not None]
+
+    on_foot = windows(False)
+    aloft = windows(True)
+    out.that(
+        len(on_foot) >= 2 and PARK[0] in on_foot,
+        "a walker crossing the lane provokes from more than the square it"
+        f" started in (provoked {on_foot})",
+    )
+    out.that(
+        aloft == [PARK[0]],
+        "a flier provokes from the watcher that threatened its take-off"
+        f" square and from nobody else (provoked {aloft})",
+    )
+    out.that(
+        PARK[1] in on_foot and PARK[1] not in aloft,
+        "the watcher mid-lane gets its window against a walker and not"
+        f" against a flier (walker {on_foot}, flier {aloft})",
+    )
+
+    # --- the printed exception, on p11470's own shape.
+    plain = rough_cost(True, in_flight=False)
+    sticky = rough_cost(True, in_flight=True)
+    ground = rough_cost(False, in_flight=True)
+    out.that(
+        plain == 4,
+        f"a flier is waived an ordinary difficult zone (paid {plain}, wanted 4)",
+    )
+    out.that(
+        sticky == 6,
+        "a zone declaring difficult_in_flight catches a flier for every"
+        f" square (paid {sticky}, wanted 6)",
+    )
+    out.that(
+        sticky == ground,
+        "and catches it for exactly what a walker pays, which is what"
+        f" \"even for creatures that fly\" says (flier {sticky}, walker {ground})",
+    )
+
+    # **p11470 must lay one**, and this is asserted off the live zone the
+    # row produces rather than off its marker. The first draft of this
+    # checked only that the marker was gone, and a plant removing the
+    # kwarg from the row's body **passed** -- which is the one regression
+    # this rule exists to catch, since the general rule inverts the card
+    # the moment the flag goes. A marker is bookkeeping; the zone is the
+    # behaviour.
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+
+    w, me, _ = _board("p11470", 1)
+    foes = sorted(enemies(w, me))
+    out.that(bool(foes), f"the board fields something for p11470 to hit ({foes})")
+    if not foes:
+        return
+    c = Cast(world=w, me=me, ref="p11470")
+    c.target = foes[0]
+    dsl.REGISTRY["p11470"].body(c)
+    its_zone = [z for _, z in w.zones.all() if z.difficult and z.difficult_in_flight]
+    out.that(
+        bool(its_zone),
+        "p11470 lays a zone that is difficult terrain even for creatures"
+        f" that fly ({len(its_zone)} such zone(s) on the board)",
+    )
+    out.that(
+        bool(w.zones.catches_fliers()),
+        "and `catches_fliers` reports its squares, which is what `walk`"
+        " consults -- a flag the row sets and the mover never reads would"
+        " be worth nothing",
+    )
+    row = dsl.REGISTRY.get("p11470")
+    out.that(
+        row is not None and not row.unfinished,
+        "p11470 carries no marker now that the flag its marker named exists",
+    )
+
+    # **The three stat-block auras print the same exception**, and they are
+    # the rows this change could have broken silently: none carried a
+    # marker, none mentions flight in its header, and each set
+    # `Zone.difficult` by hand because `c.aura` takes no such argument. One
+    # of them said in as many words that *"including flying ones is free:
+    # the engine charges everybody for rough ground"* -- true when written,
+    # false the day the general rule landed.
+    for aura_ref in ("m406a2", "m2244a2", "m2507a3"):
+        w, me, _ = _board(aura_ref, 1)
+        c = Cast(world=w, me=me, ref=aura_ref)
+        dsl.REGISTRY[aura_ref].body(c)
+        caught = w.zones.catches_fliers()
+        out.that(
+            bool(caught),
+            f"{aura_ref}'s aura is difficult terrain for a flier too, which"
+            " is what \"including flying ones\" says"
+            f" ({len(caught)} square(s) catch one)",
+        )
+
+
+def a_bloodied_enemy_can_be_cowed_into_surrender(out: Result) -> None:
+    """The Intimidate rule the compendium describes, and `p16005`'s timing.
+
+    **A skill use every character has, not a power**, which is Camille's
+    call on the shape, 2026-11-19:
+
+    > *"make sure you build the intimidate to surrender thing as its own
+    > functionality rather than just part of the power. It's something all
+    > characters can do, the yakuza power just grants special timing"*
+
+    So `actions._cowing` offers it as a **standard action** beside
+    stabilising and hiding, `Cast.surrender` holds the rule, and `p16005`
+    adds only *"immediately"* -- the same attempt for no action, off a
+    trigger.
+
+    **What print settles and what Camille settled.** The compendium's
+    `skill_use` row prints no DC at all (`dc` is NULL) and three
+    consequences: a bloodied creature is cowed; it is not mind control, so
+    it will not act against itself; and a failure cannot be retried that
+    encounter. Camille supplied the rest -- the DC is the target's **Will**,
+    and `Condition.SURRENDERED` carries `cannot_act` and nothing else, so
+    a surrendered creature stays on the board and does nothing. Damage
+    lifts it and makes the creature immune for the rest of the fight.
+
+    **Not a daze and not a stun**, which is why it is its own condition: a
+    stun grants combat advantage and a daze costs an action, and a creature
+    that has given up is no easier to hit.
+
+    Sampled, because every arm rides on an Intimidate check against a live
+    Will defence -- about half land, so a single trial proves neither side.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions, dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Mods, Position
+    from combat_engine.engine.events import Bloodied, Dropped
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import bloodied, can_act, enemies, is_
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType, Condition
+
+    # -- the offer, which belongs to everybody ----------------------------
+    world, _, _ = _board("p16005", 1)
+    world.encounter = enc = Encounter(world)
+    enc.start()
+    actor = world.turn
+    foes = sorted(enemies(world, actor))
+    out.that(bool(foes), "the board deals the turn-holder an enemy",
+             f"{foes[:3]}")
+    if not foes:
+        return
+    foe = foes[0]
+    hurt = world.get(foe, Health)
+    if hurt is None:
+        return
+
+    def cows(who: int) -> list:
+        return [a for a in actions.legal(world, enc, who)
+                if a.kind == "cow" and a.targets == (foe,)]
+
+    out.that(not bloodied(world, foe) and not cows(actor),
+             "**an unbloodied enemy is not offered** -- the printed"
+             " condition, and the control that keeps the next line from"
+             " passing for the wrong reason",
+             f"bloodied={bloodied(world, foe)} offers={len(cows(actor))}")
+    hurt.hp = hurt.max_hp // 2 - 1
+    offers = cows(actor)
+    out.that(len(offers) == 1 and offers[0].cost is ActionType.STANDARD,
+             "**and once it is bloodied, ANY character is offered it for a"
+             " standard action** -- `actions._cowing`, not a power. The"
+             " turn-holder here holds no card that mentions surrender",
+             f"{len(offers)} offer(s), cost"
+             f" {offers[0].cost.value if offers else None}")
+
+    # -- the rule itself, sampled -----------------------------------------
+    def attempt(seed: int) -> dict | None:
+        w, _, _ = _board("p16005", seed)
+        w.encounter = e = Encounter(w)
+        e.start()
+        act = w.turn
+        them = sorted(enemies(w, act))
+        if not them:
+            return None
+        them0 = them[0]
+        h = w.get(them0, Health)
+        if h is None:
+            return None
+        h.hp = h.max_hp // 2 - 1
+        picks = [a for a in actions.legal(w, e, act)
+                 if a.kind == "cow" and a.targets == (them0,)]
+        if not picks:
+            return None
+        ran = actions.perform(w, e, act, picks[0])
+        got = {
+            "ran": bool(ran),
+            "down": is_(w, them0, Condition.SURRENDERED),
+            "acts": can_act(w, them0),
+            "barred": (w.get(them0, Mods).total("no_surrender", {})
+                       if w.get(them0, Mods) is not None else 0),
+        }
+        if got["down"]:
+            Cast(world=w, me=act, ref="drivers:hit").flat(
+                5, on=them0, from_attack=False)
+            got["after_damage"] = is_(w, them0, Condition.SURRENDERED)
+            got["acts_after"] = can_act(w, them0)
+            # **The modifier, not the menu.** `perform` has spent the
+            # actor's standard action by now, so `_cowing` offers nothing
+            # whatever the immunity says -- the plant that deleted the
+            # immunity passed against an `offered_again == 0` reading.
+            # `no_surrender` is the mechanism and is readable directly.
+            got["barred_after"] = (
+                w.get(them0, Mods).total("no_surrender", {})
+                if w.get(them0, Mods) is not None else 0)
+            # And the menu too, with the action given back, so both halves
+            # are asserted rather than one standing in for the other.
+            e.refresh(act) if hasattr(e, "refresh") else None
+            got["offered_again"] = len([
+                a for a in actions.legal(w, e, act)
+                if a.kind == "cow" and a.targets == (them0,)])
+        return got
+
+    tries = [g for g in (attempt(n) for n in range(1, 13)) if g]
+    won = [g for g in tries if g["ran"]]
+    lost = [g for g in tries if not g["ran"]]
+    out.that(bool(won) and bool(lost),
+             "the sample holds BOTH outcomes of the check -- without both,"
+             " one half of the rule is untested",
+             f"{len(won)} cowed, {len(lost)} refused, of {len(tries)}")
+    if not won:
+        return
+    out.that(all(g["down"] and not g["acts"] for g in won),
+             "**a cowed enemy stays on the board and takes no actions** --"
+             " `cannot_act`, and nothing else: it is no easier to hit,"
+             " which is why this is not a daze or a stun",
+             f"{[(g['down'], g['acts']) for g in won]}")
+    out.that(all(not g["after_damage"] and g["acts_after"] for g in won),
+             "**damaging it breaks the surrender** -- it fights again,"
+             " which is the half that keeps this from being a free kill",
+             f"{[(g['after_damage'], g['acts_after']) for g in won]}")
+    out.that(all(g["barred_after"] > 0 for g in won),
+             "**and it is immune for the rest of the fight** -- read off"
+             " the `no_surrender` modifier rather than off an empty menu,"
+             " because `perform` has already spent the actor's standard"
+             " action and the menu is empty either way. Camille's call, and"
+             " the thing that stops a party cowing the same creature every"
+             " round", f"{[g['barred_after'] for g in won]}")
+    if lost:
+        out.that(all(g["barred"] > 0 for g in lost),
+                 "a FAILED check bars it too -- *'cannot be tried again for"
+                 " the rest of the encounter'*, which print settles",
+                 f"{[g['barred'] for g in lost]}")
+
+    # -- `p16005` grants the timing and nothing else -----------------------
+    def by_the_card(seed: int, *, dropped: bool) -> dict | None:
+        w, mine, _ = _board("p16005", seed)
+        w.encounter = e = Encounter(w)
+        e.start()
+        them = sorted(enemies(w, mine))
+        spot = w.get(mine, Position)
+        if not them or spot is None:
+            return None
+        them0 = them[0]
+        place(w, them0, (spot.square[0] + 1, spot.square[1]))
+        h = w.get(them0, Health)
+        if h is None:
+            return None
+        h.hp = h.max_hp // 2 - 1
+        had = e.can_spend(mine, ActionType.STANDARD)
+        c = Cast(world=w, me=mine, ref="p16005")
+        c.trigger = (Dropped(actor=them0, source=mine) if dropped
+                     else Bloodied(actor=them0, source=mine))
+        dsl.REGISTRY["p16005"].body(c)
+        return {"down": is_(w, them0, Condition.SURRENDERED),
+                "kept_standard": e.can_spend(mine, ActionType.STANDARD) == had}
+
+    carded = [g for g in (by_the_card(n, dropped=False)
+                          for n in range(1, 8)) if g]
+    out.that(any(g["down"] for g in carded),
+             "`p16005` cows the enemy it bloodied, off its trigger",
+             f"{sum(g['down'] for g in carded)} of {len(carded)}")
+    out.that(all(g["kept_standard"] for g in carded),
+             "**and spends no action doing it** -- *'immediately'*, which is"
+             " the whole of what the card adds to a rule everybody already"
+             " has. A version that went through the standard-action offer"
+             " would read as working and charge for it",
+             f"{[g['kept_standard'] for g in carded]}")
+    felled = [g for g in (by_the_card(n, dropped=True)
+                          for n in range(1, 8)) if g]
+    out.that(bool(felled) and not any(g["down"] for g in felled),
+             "**and it does NOT attempt it on the enemy it dropped** --"
+             " *'if you bloodied the triggering enemy'*, where the trigger"
+             " fires on either. There is nobody left to cow",
+             f"{sum(g['down'] for g in felled)} of {len(felled)}")
+
+
 def recorded_rolls_outlive_the_fight(out: Result) -> None:
     """*"When you next take an extended rest, the effect ends."* --
     `p14141`, which records three d20 results for an ally to use in place
@@ -96715,6 +97158,18 @@ UNNAMED_KINDS_OWED = frozenset(
         # owing it, because it claims the kind was priced at nothing.
         "ally_check",
         "bull_rush",
+        # **`cow` is the Intimidate attempt that makes a bloodied enemy
+        # give up** -- `actions._cowing`, a skill use every character has
+        # rather than a power. Owed and not priced for the standing reason:
+        # Camille's ruling this round is that we are not doing AI policy,
+        # and `#1098`'s rule is that a declared 0.0 claims the kind was
+        # priced at nothing.
+        #
+        # It is worth saying that this one will want a real number sooner
+        # than most. Taking an enemy out of the fight for a standard action
+        # is a large swing, and it is the first kind on this list that the
+        # AI would be clearly wrong to never consider.
+        "cow",
         # **Owed and not priced, which is the same call as the three above
         # and not a new judgement.** `move_in_zone` is `p16590`'s free hop
         # inside its own zone (`#1098`'s rule: a declared 0.0 claims the
@@ -104628,6 +105083,13 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "flier_hops": (a_flier_hops_over_the_ground_it_crosses,
+                   "a flier ignores rough ground, hazards and opportunity"
+                   " attacks except where it starts and lands -- and a zone"
+                   " may print the exception"),
+    "cow_to_surrender": (a_bloodied_enemy_can_be_cowed_into_surrender,
+                         "any character can cow a bloodied enemy into"
+                         " surrender; p16005 only grants the timing"),
     "carried_rolls": (recorded_rolls_outlive_the_fight,
                       "recorded d20 results survive the encounter and end"
                       " on an extended rest"),

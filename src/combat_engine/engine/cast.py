@@ -14976,6 +14976,96 @@ class Cast:
             Relation.GUARDED_BY, self.me, who
         )
 
+    def surrender(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> bool:
+        """Cow a bloodied creature into giving up. True if it did.
+
+        The compendium's Intimidate entry settles the rule and prints **no
+        DC** (`skill_use.dc` is NULL): a bloodied creature is forced to
+        surrender or cowed into some other action; it is explicitly not
+        mind control, so it will not take an action that harms it
+        immediately; and on a failure the same creature cannot be tried
+        again for the rest of the encounter.
+
+        Camille supplied the two things print leaves open, 2026-11-19:
+
+        > *"intimidate check vs will defence as a DC. Let's create a
+        > "surrendered" condition for now. Surrendered enemies should remain
+        > on the board, but not take any actions. If the party damages a
+        > surrendered enemy, it should lose the surrendered condition and
+        > become immune to the condition for the rest of combat."*
+
+        So the DC is the target's **Will**, and `Condition.SURRENDERED`
+        carries `cannot_act` and nothing else -- see its own note for why
+        it is not a daze or a stun.
+
+        **Three refusals, and each is a printed line rather than a rail.**
+        A creature that is not bloodied cannot be cowed; one already
+        surrendered needs no second attempt; and one that has been tried
+        and refused, or that has been hit while surrendered, is immune for
+        the rest of the fight. The last two are one key, because they are
+        one question -- *can this creature be surrendered* -- and the card
+        gives two ways to answer no.
+
+        **Damage lifts it, and that is armed here rather than watched for
+        globally.** The watch dies with the condition's own duration, so a
+        creature that saves out or whose fight ends carries nothing
+        forward.
+
+        *"Or cowed into some other action"* is **not** written: choosing an
+        action for somebody is a `policy` question, and `cannot_act` is the
+        half that is a rules change. Said plainly because the other half
+        reads as missing rather than declined.
+        """
+        from .components import Mods
+        from .events import DamageApplied
+        from .query import bloodied as _bloodied
+        from .query import defence as _defence
+        from .query import is_ as _is
+
+        foe = self._who(on)
+        if foe is None or foe == self.me:
+            return False
+        if not _bloodied(self.world, foe):
+            return False
+        if _is(self.world, foe, Condition.SURRENDERED):
+            return False
+        refused = self.world.get(foe, Mods)
+        if refused is not None and refused.items and refused.total(
+                "no_surrender", {}) > 0:
+            return False
+
+        if not self.check("skill:intimidate",
+                          _defence(self.world, foe, Defense.WILL)):
+            # *"On a failure the same creature cannot be tried again for the
+            # rest of the encounter."*
+            self.bonus("no_surrender", 1, on=foe, until=When.ENCOUNTER,
+                       kind=f"{self.ref} refused")
+            return False
+
+        given = self.condition(Condition.SURRENDERED, on=foe, until=until)
+        if given is None:
+            return False
+
+        def hurt(ev: DamageApplied) -> None:
+            if getattr(ev, "target", None) != foe or given.ended:
+                return
+            if getattr(ev, "amount", 0) <= 0:
+                return
+            self.world.effects.end(given, "hit while surrendered")
+            # **Immune for the rest of the fight**, which is the same key a
+            # failed attempt lays: one question, two printed ways to answer
+            # it no.
+            self.bonus("no_surrender", 1, on=foe, until=When.ENCOUNTER,
+                       kind=f"{self.ref} broken")
+
+        given.subs.append(self.world.bus.on(DamageApplied, hurt, owner=foe))
+        return True
+
     def spread_advantage(
         self,
         zone: int,
@@ -16493,6 +16583,7 @@ class Cast:
         extra_cost_on: str = "enter",
         extra_cost_for: str = "",
         extra_cost_if_difficult: bool = False,
+        difficult_in_flight: bool = False,
         closed_to: frozenset[str] | set[str] | None = None,
         closed_to_for: str = "",
     ) -> int:
@@ -16550,6 +16641,16 @@ class Cast:
         the larger of the two. Laying both charges the printed number anyway
         and makes the row look like it meant to stack them.
 
+        `difficult_in_flight=True` with `difficult=` is *"difficult
+        terrain, even for creatures that fly"* -- six rows print it, four
+        of them written. An aura built by `c.aura` sets the field on its
+        `Zone` directly, which is what the three stat-block rows do.
+        A flier ignores rough going it passes over (Camille's rule, see
+        `Movement.passing`), so a card naming the exception has to say so
+        or the general rule inverts it. Nothing else about the zone
+        changes: a hazard it also lays still waives its damage overhead,
+        because the printed sentence is about the ground.
+
         `extra_cost_if_difficult=True` is the one card that does not rough
         the ground up but makes rough ground rougher; it taxes only the
         squares that were already difficult, and a creature that ignores
@@ -16594,6 +16695,7 @@ class Cast:
             extra_cost_on=extra_cost_on,
             extra_cost_for=extra_cost_for,
             extra_cost_if_difficult=extra_cost_if_difficult,
+            difficult_in_flight=difficult_in_flight,
             closed_to=closed_to, closed_to_for=closed_to_for,
         )
 

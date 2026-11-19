@@ -911,8 +911,19 @@ def m406a2(c: Cast) -> None:
 
     **Difficult terrain** is a field on the zone; `Zones.difficult_squares`
     reads every zone including an aura, and only `c.zone` takes the
-    argument. "Including flying ones" is free: the engine charges everybody
-    for rough ground.
+    argument.
+
+    **"Including flying ones" used to be free and is not any more.** This
+    note said *"the engine charges everybody for rough ground"*, which was
+    true when it was written and stopped being true on 2026-11-19, when the
+    printed general rule -- a flier is not hampered by difficult terrain --
+    landed on Camille's call. From then on the clause needed saying, and
+    `Zone.difficult_in_flight` is the field that says it: without it a
+    flier crosses these shadows untouched and the card is false.
+
+    A worked instance of this repo's own warning about a docstring whose
+    premise expires: nothing about the engine change would have named this
+    row, and the clause would have gone quietly wrong.
 
     **Concealment** is the -2 that concealment is, gated on the *target*
     being in the aura -- so it moves as the aura moves and as people walk in
@@ -936,6 +947,14 @@ def m406a2(c: Cast) -> None:
     if shadows is None or shadows.effect is None:
         return
     shadows.difficult = True
+    # *"Enemies (including flying ones) also treat the area within the
+    # aura as difficult terrain."* **The parenthesis stopped being free on
+    # 2026-11-19**, when the printed general rule that a flier is not
+    # hampered by difficult terrain landed (Camille's call; see
+    # `Movement.passing`). Before that the engine charged everybody and
+    # the clause was right by accident; after it, a flier would cross this
+    # aura untouched and the card would be false.
+    shadows.difficult_in_flight = True
     hold = shadows.effect
     struck: dict[int, int] = {}
 

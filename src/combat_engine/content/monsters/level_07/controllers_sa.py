@@ -859,6 +859,14 @@ def m2244a2(c: Cast) -> None:
     if shadows is None or shadows.effect is None:
         return
     shadows.difficult = True
+    # *"Enemies (including flying ones) also treat the area within the
+    # aura as difficult terrain."* **The parenthesis stopped being free on
+    # 2026-11-19**, when the printed general rule that a flier is not
+    # hampered by difficult terrain landed (Camille's call; see
+    # `Movement.passing`). Before that the engine charged everybody and
+    # the clause was right by accident; after it, a flier would cross this
+    # aura untouched and the card would be false.
+    shadows.difficult_in_flight = True
     hold = shadows.effect
     struck: dict[int, int] = {}
 

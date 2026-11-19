@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .components import Health, Ident, Position
+from .components import Health, Ident, Movement, Position
 from .durations import When
 from .events import (
     EnterSquare,
@@ -188,6 +188,31 @@ class Zone:
     #: outlives all of them.
     #:
     #: Written by `c.difficult_for`, read in `World.difficult`. #831.
+    #: **Rough going that catches a flier too.** Off by default, because
+    #: the printed general rule is that flight is not hampered by difficult
+    #: terrain -- `movement.walk` honours that now -- and a zone naming the
+    #: exception has to be able to say so.
+    #:
+    #: `p11470` is the worked case: *"the zone is difficult terrain, even
+    #: for creatures that fly"*, which was correct by accident while fliers
+    #: were hampered by everything and became false the moment they were
+    #: not.
+    #:
+    #: **Six rows print the exception and four of them are written** --
+    #: `p11470` plus three stat-block auras whose line reads *"enemies
+    #: (including flying ones) also treat the area ... as difficult
+    #: terrain"*. `m1108a3` and `x2_11` have no row yet, so there was
+    #: nothing to invert there. Counted off the specs; `#1364` said six
+    #: without saying which were written, and a tree-wide search for
+    #: difficult terrain beside a flight word returns **ten** -- three
+    #: rows print *"ignores* difficult terrain", the opposite direction,
+    #: and one names no flight at all. #1364.
+    #:
+    #: Scoped to the **cost** and not to a hazard, which is what the
+    #: printed sentence is about: a zone with both still waives its damage
+    #: for a flier passing over.
+    difficult_in_flight: bool = False
+
     difficult_for: set[int] = field(default_factory=set)
     #: **Extra squares of movement crossing these squares costs**, instead
     #: of the one that ordinary difficult ground charges. 0 is no tax.
@@ -403,6 +428,7 @@ class Zones:
         extra_cost_on: str = "enter",
         extra_cost_for: str = "",
         extra_cost_if_difficult: bool = False,
+        difficult_in_flight: bool = False,
         closed_to: frozenset[str] | set[str] | None = None,
         closed_to_for: str = "",
     ) -> int:
@@ -514,6 +540,7 @@ class Zones:
             extra_cost_on=extra_cost_on,
             extra_cost_for=extra_cost_for,
             extra_cost_if_difficult=extra_cost_if_difficult,
+            difficult_in_flight=difficult_in_flight,
             closed_to=bars,
             closed_to_for=closed_to_for,
         )
@@ -598,8 +625,25 @@ class Zones:
             )
 
         def on_enter(ev: ZoneEntered) -> None:
-            if getattr(ev, "zone", None) == zone and alive(self.world, ev.actor):
-                hurt(ev.actor)
+            if getattr(ev, "zone", None) != zone:
+                return
+            if not alive(self.world, ev.actor):
+                return
+            # **A flier passing over takes nothing.** Camille's rule:
+            # *"fliers should ignore terrain and hazards except on the
+            # squares they start and end from"*. `Movement.passing` is set
+            # by `movement.walk` around each step of a flight and is false
+            # on the square the creature stops on -- so a flier that ENDS
+            # in the hazard is burnt, which is the half that keeps this
+            # from being immunity.
+            #
+            # The `TurnEnd` reader below needs no such test: a creature
+            # standing in the zone at the end of its turn has stopped
+            # there by definition.
+            moving = self.world.get(ev.actor, Movement)
+            if moving is not None and moving.passing:
+                return
+            hurt(ev.actor)
 
         def at_turn_end(ev: TurnEnd) -> None:
             standing = self.inside.get(zone) or set()
@@ -847,6 +891,21 @@ class Zones:
     def height_at(self, square: Square) -> int:
         """How tall the wall in that square is, or 0 for no stated height."""
         return self.wall_heights().get(square, 0)
+
+    def catches_fliers(self) -> set[Square]:
+        """Rough squares a flier still pays for, from live zones.
+
+        The exception to Camille's flier rule, and the one set
+        `movement.walk` consults before waiving a pass-over square's cost
+        -- see `Zone.difficult_in_flight`. Empty on every board that lays
+        no such zone, which is nearly all of them, so the hoisted call in
+        `walk` costs one set construction a move.
+        """
+        out: set[Square] = set()
+        for _, zone in self.all():
+            if zone.difficult and zone.difficult_in_flight:
+                out |= set(zone.squares)
+        return out
 
     def difficult_squares(self) -> dict[Square, str]:
         """Rough squares from live zones, each with its label."""

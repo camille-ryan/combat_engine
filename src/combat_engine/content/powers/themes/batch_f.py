@@ -1510,31 +1510,36 @@ def _low_roll(world: Any, me: int, ev: Any) -> bool:
         Trigger(Bloodied, _felled_adjacent, "you bloody an adjacent enemy"),
         Trigger(Dropped, _felled_adjacent, "you drop an adjacent enemy"),
     ),
-    dropped=("c.surrender()",),
 )
 def p16005(c: Cast) -> None:
     """Both halves of the trigger are declared -- `Bloodied` and `Dropped`
-    each carry `source`. Forcing a beaten enemy to surrender is a second
-    thing entirely: nothing takes a creature out of a fight that way.
+    each carry `source`.
 
-    **The check half is already sayable and is deliberately not written.**
-    `c.check("skill:intimidate", dc, against=foe)` is the roll, and the DC
-    is the moderate band `combat_engine.dc` reads for the target's level --
-    so a body could roll it today and then have nothing to do with the
-    answer. A row that rolls for no consequence is worse than a dropped
-    clause, because the roll shows up in the log as the clause working.
+    **The surrender is this row's TIMING, not this row's mechanism**, which
+    is Camille's call and the shape the card describes. She asked for it
+    that way, 2026-11-19:
 
-    **What `c.surrender()` has to decide is in the compendium, which is why
-    the symbol is actionable rather than a placeholder.** `game.db`'s
-    `skill_use` row for this skill prints the three halves a verb would
-    need and prints **no DC at all** (`dc` is `NULL`): a bloodied creature
-    is forced to surrender or cowed into some other action; it is explicitly
-    not mind control, so it will not take an action that harms it
-    immediately; and on a failure the same creature cannot be tried again
-    for the rest of the encounter. Nothing in that is a condition the engine
-    holds -- it is a standing refusal to attack, which is a `policy`
-    question as much as an engine one. Read it before building the verb; the
-    row above is the whole of what print settles."""
+    > *"make sure you build the intimidate to surrender thing as its own
+    > functionality rather than just part of the power. It's something all
+    > characters can do, the yakuza power just grants special timing"*
+
+    So the attempt lives in `Cast.surrender` and is offered to every
+    character as a **standard action** by `actions._cowing`, beside
+    stabilising and hiding. What this card gives is *"immediately"*: the
+    same attempt for no action at all, off a trigger.
+
+    **And only on the bloodying half.** The card says *"if you bloodied the
+    triggering enemy"*, while the trigger fires on bloodying **or** on
+    dropping to 0 -- so the body reads which happened. A row that attempted
+    it on the `Dropped` branch would be trying to cow a corpse.
+
+    Asked rather than taken, because the card says *"you can"*.
+
+    What print settles and what Camille settled are both recorded on
+    `Cast.surrender`: the DC is the target's Will, and the condition carries
+    `cannot_act` and nothing else. *"Or cowed into some other action"* is
+    deliberately unwritten there -- choosing somebody's action is a
+    `policy` question."""
     held = [
         c.penalty("attack", 2, on=foe, until=When.ENCOUNTER, when=_aimed_at_me(c))
         for foe in c.enemies()
@@ -1548,6 +1553,17 @@ def p16005(c: Cast) -> None:
             c.end_effect(effect)
 
     c.watch(Hit, over, until=When.ENCOUNTER, once=True)
+
+    # *"Also, if you bloodied the triggering enemy, you can immediately
+    # make an Intimidate check against it to force it to surrender."*
+    #
+    # `Bloodied` only: the trigger above also fires on dropping an enemy to
+    # 0, and the card's own "if you bloodied" excludes that -- there is
+    # nobody left to cow.
+    if isinstance(c.trigger, Bloodied):
+        beaten = getattr(c.trigger, "actor", None)
+        if beaten is not None and c.may("force it to surrender"):
+            c.surrender(on=beaten)
 
 
 @power(

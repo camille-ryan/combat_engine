@@ -25,6 +25,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - (no docstring)
 - `c.stunned(self, *, until: 'When' = <When.SAVE_ENDS: 'save ends'>, on: 'int | None' = None) -> 'Effect | None'`
   - (no docstring)
+- `c.surrender(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'bool'`
+  - Cow a bloodied creature into giving up. True if it did.
 - `c.unconscious(self, *, until: 'When' = <When.SAVE_ENDS: 'save ends'>, on: 'int | None' = None) -> 'Effect | None'`
   - (no docstring)
 - `c.undo_riders(self, ev: 'Any' = None, *, on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'Effect | None'`
@@ -153,9 +155,9 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
 - `c.stage`
   - Which stage of **this row's own disease** the caster is at. #948.
 
-## `Condition` (25 members)
+## `Condition` (26 members)
 
-  `blinded`, `dazed`, `dead`, `deafened`, `dominated`, `dying`, `grabbed`, `helpless`, `immobilized`, `insubstantial`, `marked`, `petrified`, `pinned`, `prone`, `removed`, `restrained`, `shaped`, `stable`, `cannot shift`, `slowed`, `squeezing`, `stunned`, `surprised`, `unconscious`, `weakened`
+  `blinded`, `dazed`, `dead`, `deafened`, `dominated`, `dying`, `grabbed`, `helpless`, `immobilized`, `insubstantial`, `marked`, `petrified`, `pinned`, `prone`, `removed`, `restrained`, `shaped`, `surrendered`, `stable`, `cannot shift`, `slowed`, `squeezing`, `stunned`, `surprised`, `unconscious`, `weakened`
 
 ## `When` (11 members)
 
@@ -175,9 +177,9 @@ Generated from `Condition` and `Cast` together, so it cannot drift from either. 
 
   `c.dying` -- a **property**, so no parens: `c.dying` is the state and `c.dying()` is `TypeError: 'bool' object is not callable`.
 
-**12 have no same-named member at all**, and are reached three ways -- a differently-named verb that carries a relation too (`c.grab` for `grabbed`, `c.dominate` for `dominated`), the generic `c.condition(*conditions, until=)`, or nothing yet:
+**13 have no same-named member at all**, and are reached three ways -- a differently-named verb that carries a relation too (`c.grab` for `grabbed`, `c.dominate` for `dominated`), the generic `c.condition(*conditions, until=)`, or nothing yet:
 
-  `dead`, `deafened`, `dominated`, `grabbed`, `helpless`, `petrified`, `pinned`, `removed`, `restrained`, `squeezing`, `stable`, `surprised`
+  `dead`, `deafened`, `dominated`, `grabbed`, `helpless`, `petrified`, `pinned`, `removed`, `restrained`, `squeezing`, `stable`, `surprised`, `surrendered`
 
 So a card naming one of the last group is **not** evidence of a gap: check `c.condition()` and the relation verbs before marking a row.
 

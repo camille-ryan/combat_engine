@@ -131,6 +131,12 @@ RULES: dict[Condition, Rules] = {
     # attack, and it grants combat advantage to everybody.
     Condition.SQUEEZING: Rules(grants_ca=True, attack=-5, halve_speed=True),
     Condition.STUNNED: Rules(grants_ca=True, cannot_act=True, no_reactions=True),
+    # **A creature that has given up acts not at all, and is no easier to
+    # hit.** `cannot_act` alone, deliberately: a stun grants combat
+    # advantage and a daze costs an action, and neither is what surrender
+    # is. Camille's call on the shape, 2026-11-19 -- see
+    # `Condition.SURRENDERED`.
+    Condition.SURRENDERED: Rules(cannot_act=True),
     Condition.SURPRISED: Rules(grants_ca=True, cannot_act=True, no_reactions=True),
     Condition.UNCONSCIOUS: Rules(
         grants_ca=True,

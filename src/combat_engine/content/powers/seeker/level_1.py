@@ -267,48 +267,43 @@ def p11469(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.ZONE],
     attack=Attack(WIS, vs=REF),
-    dropped=("c.zone(difficult_in_flight=)",),
 )
 def p11470(c: Cast) -> None:
-    """**The move action is written; the flier clause is the one real gap
-    here.** The old note dropped both "for want of anywhere to put them",
-    and that was only ever true of one: `"move_zone"` has been in
-    `actions.GRANTABLE` and read by the action menu all along, and several
-    monster rows grant it this way. #1342.
+    """**Both clauses are written now, and the flier one took a general
+    rule with it.** The move action was never the gap: `"move_zone"` has
+    been in `actions.GRANTABLE` and read by the action menu all along, and
+    several monster rows grant it this way. #1342.
 
-    What remains is "the zone is rough going for creatures that fly too".
-
-    **The measurement this note used to carry was backwards, and the
-    marker survives for the opposite reason.** It said *"flight bypasses
-    difficult ground before the adder is consulted"*, with 15 / 17 / 17
-    reachable squares. That is a true statement about `c.difficult_for`,
-    the per-creature adder, and false about `c.zone(difficult=)` -- which
-    is what this row lays. Re-driven on this row's own board, squares
-    reachable with 4:
+    The other clause -- *"the zone is difficult terrain, even for
+    creatures that fly"* -- played correctly **by accident** and this note
+    predicted what would happen when that stopped. The accident was that
+    PHB prints the general rule that a flying creature is not hampered by
+    difficult terrain and this engine did not have it, so there was
+    nothing for the printed exception to except. Measured then, squares
+    reachable with 4 on this row's own board:
 
         clear ground          walking 65    flying 69
         this row's zone       walking 45    flying 57
 
-    -- so a flier **is** slowed, by 12 squares of ground it is not
-    touching.
+    -- a flier slowed by 12 squares of ground it is not touching, which is
+    the right answer reached for the wrong reason.
 
-    The clause therefore plays correctly today and does so **by
-    accident**: PHB prints the general rule that a flying creature is not
-    hampered by difficult terrain, and this engine does not have it, so
-    there is nothing for the printed exception to except. 447 of 3,142
-    monsters carry a `fly` mode and all of them are slowed by every rough
-    square in the game.
+    **The general rule landed on 2026-11-19** (Camille's call: *"fliers
+    should ignore terrain and hazards except on the squares they start and
+    end from"*), so the accident is spent and the exception is load
+    bearing. `difficult_in_flight=True` is it, and the two had to be one
+    change: with the rule and without the flag this zone stops catching
+    fliers and the printed sentence becomes false.
 
-    The marker stays because landing that general rule inverts this row:
-    the moment fliers are exempt, this zone stops catching them and the
-    printed sentence becomes false. The flag and the rule are one change
-    and `#1364` holds it, with the five sibling rows that print the same
-    exception."""
+    The marker named `c.zone(difficult_in_flight=)` and that is exactly
+    what was built, which is the uncommon case -- see `#1364` for the five
+    sibling rows printing the same exception."""
     if c.strike():
         c.damage(c.w(), c.wis_mod)
     c.slide(1)
     if c.first:
-        zone = c.zone(c.area(), until=When.EONT, difficult=True)
+        zone = c.zone(c.area(), until=When.EONT, difficult=True,
+                      difficult_in_flight=True)
         c.grant_action("move_zone", MOVE, squares_=4, on=c.me,
                        until=When.ENCOUNTER)
         on_enemies_within(

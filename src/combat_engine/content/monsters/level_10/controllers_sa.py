@@ -1502,6 +1502,14 @@ def m2507a3(c: Cast) -> None:
     zc = c.world.get(zone, Zone)
     if zc is not None:
         zc.difficult = c.ref
+        # *"Enemies (including flying ones) also treat the area within the
+        # aura as difficult terrain."* **The parenthesis stopped being free
+        # on 2026-11-19**, when the printed general rule that a flier is
+        # not hampered by difficult terrain landed (Camille's call; see
+        # `Movement.passing`). Before that the engine charged everybody and
+        # the clause was right by accident; after it, a flier would cross
+        # this aura untouched and the card would be false.
+        zc.difficult_in_flight = True
     for friend in {me, *c.allies()}:
         c.ignores_difficult(c.ref, on=friend, until=When.ENCOUNTER)
     hold = zc.effect if zc is not None else None
