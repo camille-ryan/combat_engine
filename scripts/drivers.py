@@ -20250,6 +20250,115 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_minor_buys_a_refusal_instead_of_a_penalty(out: Result) -> None:
+    """*"Special: You can spend a minor action when you use this power to
+    enhance it. If you do so, the target cannot make opportunity attacks or
+    immediate action attacks until the end of your next turn **instead of**
+    taking a penalty to attack rolls."* -- `p12340`.
+
+    **The marker had gone stale under the row.** It read `c.no_reactions()`
+    and the note under it said the immediate half could not be said,
+    because `query.can_react` reads *conditions and nothing else*. `#1285`
+    landed `c.no_immediate`, which files an ordinary modifier `can_react`
+    reads beside the conditions -- and that verb's own docstring names
+    **this row** as the case its `attacks=True` was built for. So the verb
+    arrived for this clause and nothing came back to spend it. `f2029` is
+    the written sibling with the same two calls for the same sentence.
+
+    **Three things are asserted and the middle one is the clause:**
+
+    * the two halves of the refusal -- the `OpportunityWindow` cancelled
+      before it opens, and `no_immediate_attacks` filed;
+    * *"instead of"* is a **fork**, so the enhanced arm must NOT also carry
+      the -4. Laying both would be a strictly better card than the page
+      prints and every assertion about the refusal would still pass;
+    * `attacks=True` rather than the bare verb, which is asserted by
+      `query.can_react` staying **True** on the enhanced arm. A bare
+      `c.no_immediate` denies every immediate action, where this card stops
+      only the attacks -- three other rows record rejecting the verb over
+      exactly that, and nothing else here would notice.
+
+    **Measured as a difference, never as an absolute.** The audit board
+    already gives this victim -2 to attacks, so the arms read -6 and -2
+    rather than -4 and 0. A rule asserting `== -4` would have failed on a
+    correct engine and one asserting `< 0` would pass on both arms.
+    """
+    import combat_engine.content  # noqa: F401
+    import combat_engine.content.powers.themes.batch_b as _theme
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.events import OpportunityWindow
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import Condition
+
+    def arm(enhanced: bool) -> dict:
+        world, me, _ = _board("p12340", 1)
+        world.encounter = Encounter(world)
+        victim = sorted(enemies(world, me))[0]
+        c = Cast(world=world, me=me, ref="p12340")
+        c.target, c.index = victim, 0
+        # The consent is pinned rather than rolled: `_enhanced` asks
+        # `c.may`, and a rule about the fork must drive both arms rather
+        # than take whichever the decider felt like.
+        setattr(c, _theme._ENHANCED, enhanced)
+        dsl.REGISTRY["p12340"].body(c)
+        mods = world.get(victim, Mods)
+        window = world.bus.emit(
+            OpportunityWindow(actor=victim, provoker=me, why="drivers"))
+        return {
+            "penalty": mods.total(
+                "attack", {"power": "p12340", "opportunity": True}
+            ) if mods is not None else 0,
+            "no_imm": mods.total("no_immediate_attacks", {})
+            if mods is not None else 0,
+            "cancelled": bool(window.cancelled),
+            "slowed": Condition.SLOWED in query.active(world, victim),
+            "can_react": query.can_react(world, victim),
+        }
+
+    plain, better = arm(False), arm(True)
+
+    out.that(plain["slowed"] and better["slowed"],
+             "the Hit slows the target on both arms -- the Special trades"
+             " the penalty, not the rest of the card",
+             f"plain {plain['slowed']} / enhanced {better['slowed']}")
+
+    # -- the refusal ------------------------------------------------------
+    out.that(better["cancelled"] and not plain["cancelled"],
+             "the minor cancels the target's opportunity window before it"
+             " opens, and the unenhanced arm does NOT -- the control that"
+             " makes this about the Special rather than about the row",
+             f"enhanced {better['cancelled']} / plain {plain['cancelled']}")
+    out.that(better["no_imm"] > 0 and plain["no_imm"] == 0,
+             "and files `no_immediate_attacks`, which `dsl.usable` reads --"
+             " the half that stopped being unwritable when `#1285` landed"
+             " `c.no_immediate`",
+             f"enhanced {better['no_imm']} / plain {plain['no_imm']}")
+
+    # -- "instead of", which is the clause -------------------------------
+    gap = plain["penalty"] - better["penalty"]
+    out.that(gap == -4,
+             "**the -4 is laid on the plain arm and NOT on the enhanced"
+             " one** -- *'instead of taking a penalty to attack rolls'*."
+             " Measured as the DIFFERENCE between the arms, because the"
+             " board already gives this victim -2 and an absolute `== -4`"
+             " would fail on a correct engine",
+             f"plain {plain['penalty']} vs enhanced {better['penalty']},"
+             f" gap {gap}")
+
+    # -- `attacks=True` rather than the bare verb -------------------------
+    out.that(better["can_react"],
+             "and the target can still take a non-attack immediate action"
+             " -- *'immediate action **attacks**'*. This is what says"
+             " `attacks=True` was passed: a bare `c.no_immediate` writes"
+             " `no_reactions`, which `query.can_react` reads, and would"
+             " stop every interrupt and reaction the card never mentions."
+             " Nothing else in this rule would notice",
+             f"can_react={better['can_react']}")
+
+
 def a_grab_may_widen_another_rows_trigger(out: Result) -> None:
     """*"If you make a melee weapon attack against the target before the
     grab ends and your `p13799` is not expended, you can use that power
@@ -103137,6 +103246,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "minor_trade": (a_minor_buys_a_refusal_instead_of_a_penalty,
+                    "a minor action buys a refusal of opportunity and"
+                    " immediate attacks INSTEAD OF an attack penalty"),
     "grab_widens": (a_grab_may_widen_another_rows_trigger,
                     "a grab lets a missed melee swing spend a power whose"
                     " own trigger is a hit"),

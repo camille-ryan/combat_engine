@@ -74,6 +74,7 @@ from combat_engine.engine import (
     Moved,
     MoveEnd,
     MoveStart,
+    OpportunityWindow,
     Pick,
     PowerUsed,
     Ranged,
@@ -827,7 +828,6 @@ def p12339(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT],
     attack=Attack(Pick.PRIMARY, vs=FORT),
-    dropped=("c.no_reactions()",),
 )
 def p12340(c: Cast) -> None:
     """A shift either side of the blast, then slowed and clumsy out of turn.
@@ -842,27 +842,59 @@ def p12340(c: Cast) -> None:
     second one needed nothing built, and for what the old marker on this
     row got wrong.
 
-    **The Special is still not offered here, and the marker is a different
-    gap from the one it replaces.** It reads "the target cannot make
-    opportunity attacks or immediate action attacks *instead of* taking a
-    penalty to attack rolls", so taking it trades the penalty above for a
-    refusal. Half of that refusal is sayable -- an `OpportunityWindow`
-    watch cancelling the windows whose `actor` is the target, which is
-    what `m5741a1` writes out for the same printed clause -- and the
-    immediate half is not: `Encounter.can_spend` asks
-    `query.can_react`, which reads *conditions* and nothing else, so no
-    effect a row lays can deny an immediate action. Dazed is the only
-    thing in the engine that does, and it also costs an action and grants
-    combat advantage, which this card does not. So the minor stays
-    unoffered rather than being spent to make the row do less.
+    **The Special is written, and its marker had gone stale under it.** The
+    marker read `c.no_reactions()` and the note under it said the immediate
+    half could not be said, because `query.can_react` reads *conditions and
+    nothing else*. That stopped being true when `#1285` landed
+    `c.no_immediate`, which files an ordinary modifier that `can_react`
+    reads beside the conditions -- and `c.no_immediate`'s own docstring
+    names **this row** as the case its `attacks=True` was built for. So the
+    verb arrived for this clause and nothing came back to spend it.
+
+    *"The target cannot make opportunity attacks or immediate action
+    attacks until the end of your next turn **instead of** taking a penalty
+    to attack rolls"* is two calls and a fork:
+
+    * the **opportunity** half cancels the `OpportunityWindow` whose
+      `actor` is the target, in `Window.BEFORE`, before it opens;
+    * the **immediate** half is `c.no_immediate(attacks=True)`, and the
+      `attacks=` is load-bearing. A bare `c.no_immediate` denies every
+      immediate action, where this card stops only the *attacks* -- a row
+      stronger than its printed line, which three other rows record
+      rejecting the verb over.
+
+    **"Instead of" is a fork and not an addition**, which is the half worth
+    asserting: the enhanced version must *not* also carry the -4, or the
+    minor buys a strictly better card than the page prints.
+    `f2029` is the written sibling and carries the same two calls for the
+    same printed sentence.
     """
+    # Bought before the roll and paid for either way -- "when you use this
+    # power" buys the enhanced card, not a hit. Asked once per use, which
+    # a close blast 5 needs: see `_enhanced`.
+    better = _enhanced(c)
     if c.first:
         c.shift(3)
     if not c.strike():
         return
     c.damage("1d8", c.attack_mod, dtype=DamageType.RADIANT)
     c.slowed(until=When.EONT)
-    c.penalty("attack", 4, until=When.EONT, when=_vs_opportunity_or_immediate)
+    victim = c.target
+    if not better or victim is None:
+        c.penalty("attack", 4, until=When.EONT,
+                  when=_vs_opportunity_or_immediate)
+        return
+
+    # **The Special, which is a trade: the refusal replaces the penalty.**
+    # Returning above rather than laying both is the whole of "instead of".
+    def refuse(ev: OpportunityWindow) -> None:
+        if ev.actor == victim:
+            ev.cancel(f"{c.ref}: cannot make opportunity attacks")
+
+    c.watch(OpportunityWindow, refuse, until=When.EONT,
+            window=Window.BEFORE, on=victim,
+            label=f"{c.ref} refuses openings")
+    c.no_immediate(on=victim, until=When.EONT, attacks=True)
 
 
 @power(
