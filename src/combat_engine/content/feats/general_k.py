@@ -1022,8 +1022,7 @@ def f1988(c: Cast) -> None:
 
 @power("f2029", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.no_immediate(attacks=)",),
-       trigger="you hit a target with f2023b",
+          trigger="you hit a target with f2023b",
        on=Trigger(Hit, lambda w, me, ev: (
            ev.attacker == me and ev.power == "f2023b"
        ), "you hit with f2023b"))
@@ -1076,6 +1075,11 @@ def f2029(c: Cast) -> None:
 
     c.watch(OpportunityWindow, refuse, until=When.EONT, window=Window.BEFORE,
             on=victim, label=f"{c.ref} refuses openings")
+    # And the immediate half, which `attacks=True` is for: a bare
+    # `c.no_immediate` would also deny the non-attack immediates this card
+    # never mentions, which is what three other rows record as the reason
+    # they did not use it.
+    c.no_immediate(on=victim, until=When.EONT, attacks=True)
 
 
 # -- the standing bonuses ---------------------------------------------------

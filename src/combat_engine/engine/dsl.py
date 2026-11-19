@@ -4316,7 +4316,7 @@ def usable(
     -- so an encounter attack that has just been spent would otherwise refuse
     the very repeat the card is printed to cause.
     """
-    from .components import Powers
+    from .components import Mods, Powers
     from .query import can_act
 
     # **An unfinished row is refused outright**, and this is the whole
@@ -4401,6 +4401,24 @@ def usable(
         # `forbidden` list below because it is the same kind of answer and
         # the narrower one: a creature under this may reach exactly the rows
         # named, and only where the row is an attack at all.
+        # **"Cannot make opportunity attacks or immediate action
+        # attacks."** The immediate half, asked here because it needs the
+        # row: `query.can_react` is handed a creature and an `ActionType`,
+        # so it cannot tell an immediate interrupt that attacks from one
+        # that heals, and `c.no_immediate` without the narrowing takes both
+        # away. `p12340` and `f2029` print it.
+        #
+        # The opportunity half is not here -- it is a cancelled
+        # `OpportunityWindow`, which a dozen content sites already do.
+        if (
+            p.attack is not None
+            and p.action in (ActionType.IMMEDIATE_INTERRUPT,
+                             ActionType.IMMEDIATE_REACTION)
+            and (held := world.get(actor, Mods)) is not None
+            and bool(held.items)
+            and held.total("no_immediate_attacks", {}) > 0
+        ):
+            return False, "cannot make immediate action attacks"
         if (powers.only_attacks and p.attack is not None
                 and p.ref not in powers.only_attacks):
             return False, "it can only attack with another power"

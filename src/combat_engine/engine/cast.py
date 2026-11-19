@@ -9876,8 +9876,27 @@ class Cast:
 
     def no_immediate(
         self, *, on: int | None = None, until: When = When.EONT,
+        attacks: bool = False,
     ) -> Effect | None:
         """"The target cannot take immediate actions."
+
+        **`attacks=True` denies only immediate *attacks***, a third printed
+        category and the one this verb alone is too broad for. Three rows
+        record the problem from the other side -- `monk/level_0`,
+        `warlock/level_7_b` and `psion/level_9` each say "not
+        `c.no_immediate`, which is the near miss: `query.can_react` gates
+        immediate *and* opportunity actions". Those three are
+        opportunity-only and cancel the window instead.
+
+        This is the middle case: *"cannot make opportunity attacks or
+        immediate action attacks"* -- `p12340` and `f2029` -- where the
+        opportunity half is a cancelled `OpportunityWindow` and the
+        immediate half must leave a non-attack immediate alone.
+
+        Read in `dsl.usable` rather than beside the conditions in
+        `can_react`, and it has to be: `can_react` is handed a creature and
+        an `ActionType`, so it cannot tell an immediate interrupt that
+        attacks from one that heals. `usable` has the row.
 
         **The writer `Rules.no_reactions` never had.** That flag is set by
         `Condition.DAZED`, `DOMINATED` and `STUNNED` and by nothing else, so
@@ -9908,7 +9927,8 @@ class Cast:
         Theirs, so it follows `c.target`. #1285.
         """
         return self.bonus(
-            "no_reactions", 1, on=self._who(on), until=until,
+            "no_immediate_attacks" if attacks else "no_reactions", 1,
+            on=self._who(on), until=until,
             kind=f"{self.ref} no immediate",
         )
 

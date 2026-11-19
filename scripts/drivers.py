@@ -19272,6 +19272,127 @@ def a_card_may_print_two_action_costs(out: Result) -> None:
              " body ignoring `c.branch` could not do", "untouched")
 
 
+def denying_immediate_attacks_spares_other_immediates(out: Result) -> None:
+    """*"The target cannot make opportunity attacks or immediate action
+    attacks."* -- `f2029`, and `p12340` prints the same pair.
+
+    **Three printed categories, and only the middle one was missing.**
+    Counted over `power`, `feat`, `item_block`, `monster_power`,
+    `class_feature` and `racial_trait`: 40 cards deny opportunity or
+    immediate actions, and they split into
+
+    * **opportunity only** -- 33 of them, and a cancelled
+      `OpportunityWindow` is the answer. `monk/level_0`,
+      `warlock/level_7_b` and `psion/level_9` each record *why* they did
+      not reach for the obvious verb: "not `c.no_immediate`, which is the
+      near miss: `query.can_react` gates immediate *and* opportunity
+      actions".
+    * **all immediates** -- `c.no_immediate`, which `#1285` landed and
+      `query.can_react` already reads beside the conditions. `p12340`'s
+      marker note said that read did not exist; it does, and has since
+      `#1285`.
+    * **immediate *attacks* only** -- this, and nothing could say it.
+
+    `attacks=True` is read in `dsl.usable` rather than in `can_react`, and
+    it has to be: `can_react` is handed a creature and an `ActionType`, so
+    it cannot tell an immediate interrupt that attacks from one that heals.
+
+    **The control is the non-attack immediate**, which is the whole reason
+    for a third category. A verb that denied every immediate would pass
+    every other assertion here.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Powers
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import can_react, enemies
+    from combat_engine.engine.types import ActionType
+
+    immediate = (ActionType.IMMEDIATE_INTERRUPT, ActionType.IMMEDIATE_REACTION)
+    attacker = healer = ""
+    for ref, row in sorted(dsl.REGISTRY.items()):
+        if row.action not in immediate or row.unfinished:
+            continue
+        if row.attack is not None and not attacker:
+            attacker = ref
+        if row.attack is None and not healer:
+            healer = ref
+        if attacker and healer:
+            break
+    out.that(bool(attacker) and bool(healer),
+             "the corpus has an immediate-action row that attacks and one"
+             " that does not -- the pair this narrowing exists to tell"
+             " apart", f"{attacker} / {healer}")
+    if not attacker or not healer:
+        return
+
+    world, me, _ = _board(attacker, 1)
+    known = world.get(me, Powers)
+    for ref in (attacker, healer):
+        if ref not in known.all:
+            known.known.append(ref)
+
+    def offered(ref: str) -> bool:
+        return dsl.usable(world, me, dsl.REGISTRY[ref], spent_ok=True)[0]
+
+    out.that(offered(attacker) and offered(healer),
+             "both are usable to begin with -- the baseline", "both")
+    c = Cast(world=world, me=me, ref="drivers:probe")
+    c.no_immediate(on=me, until=When.ENCOUNTER, attacks=True)
+    out.that(not offered(attacker),
+             "denying immediate ATTACKS refuses the one that attacks",
+             "refused")
+    out.that(offered(healer),
+             "and spares the one that does not -- the control, and the"
+             " whole reason this is a third category rather than"
+             " `c.no_immediate`", "still usable")
+    out.that(can_react(world, me),
+             "and the creature can still take immediate actions at all, so"
+             " `query.can_react` is untouched -- a narrowing that leaked"
+             " into that gate would deny the non-attack row too",
+             "can_react True")
+
+    # -- the broad form still works, and is a different key ---------------
+    world, me, _ = _board(attacker, 1)
+    known = world.get(me, Powers)
+    for ref in (attacker, healer):
+        if ref not in known.all:
+            known.known.append(ref)
+    Cast(world=world, me=me, ref="drivers:probe").no_immediate(
+        on=me, until=When.ENCOUNTER)
+    out.that(not can_react(world, me),
+             "the bare form still denies every immediate through"
+             " `can_react`, which is `#1285`'s behaviour and is not"
+             " changed here", "can_react False")
+
+    # -- and the row that marked it ---------------------------------------
+    out.that(not dsl.REGISTRY["f2029"].unfinished,
+             "`f2029` carries no marker now -- its opportunity half was"
+             " already a window cancel and this is the other half",
+             f"{dsl.REGISTRY['f2029'].unfinished}")
+
+    # **And the row lays it, which the marker assertion above cannot see.**
+    # Deleting `f2029`'s call reds nothing without this line: the marker
+    # stays off either way, so that assertion is about the header and this
+    # one is about the body.
+    world, me, _ = _board("f2029", 1, pose=True)
+    victim = sorted(enemies(world, me))[0]
+    c = Cast(world=world, me=me, ref="f2029")
+
+    class Landed:  # the printed Trigger: a hit with the feat's own power
+        target = victim
+
+    c.trigger = Landed()
+    dsl.REGISTRY["f2029"].body(c)
+    held = world.get(victim, Mods)
+    out.that(held is not None and bool(held.items)
+             and held.total("no_immediate_attacks", {}) > 0,
+             "and it lays the narrow key on the creature it hit, not the"
+             " broad one -- the body, asserted separately from the header",
+             f"{[m.what for m in (held.items if held else [])][-3:]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -101891,6 +102012,9 @@ DRIVERS = {
     "two_costs": (a_card_may_print_two_action_costs,
                   "one card, two printed action costs, offered as two"
                   " branches at their own prices"),
+    "no_immediate_attacks": (
+        denying_immediate_attacks_spares_other_immediates,
+        "denying immediate ATTACKS leaves other immediate actions alone"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),
