@@ -2524,6 +2524,32 @@ def has_combat_advantage(
     world: World, attacker: int, target: int, power: str = "",
     hand: str = "",
 ) -> bool:
+    """Does `attacker` have combat advantage against `target`.
+
+    **`_IN_FLIGHT` is what makes a card that COPIES a grant askable**, and
+    it was already here. `p16112` prints *"when one enemy in the aura
+    grants combat advantage to you or an ally, that enemy grants it to you
+    and each ally"*, and its marker's note said the question could not be
+    asked without reading the answer: `c.grants_advantage(when=)` lays a
+    `grants_ca_to` modifier and the gate would consult the same bucket.
+
+    Measured, and the note's conclusion does not follow:
+
+    * a member asking about its **own** grant never reaches the gate -- the
+      relation branch answers True first;
+    * a member asking about **another's** finds that other's real reason,
+      because the pair being asked is different and not in flight;
+    * and in the all-copy case, where no member has any other reason, the
+      recursion bottoms out **False** rather than looping, because every
+      pair it would need is already in flight.
+
+    So there is no order-dependence to remove and no exclusion to add. I
+    built a `without=<ref>` parameter for this, could not make a plant red
+    it either as a relation filter or as a modifier filter, and took it out
+    again: a parameter nothing consults is this component's commonest bug
+    wearing a different hat. `drivers.copied_advantage` asserts the
+    order-independence directly instead, by asking in both directions.
+    """
     if (attacker, target) in _IN_FLIGHT:
         return False
     _IN_FLIGHT.add((attacker, target))

@@ -201,7 +201,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 - `query.grants_ca_beside(world: 'World', eid: 'int') -> 'bool'`
   - Does standing next to this conjuration make a creature grant combat
 - `query.has_combat_advantage(world: 'World', attacker: 'int', target: 'int', power: 'str' = '', hand: 'str' = '') -> 'bool'`
-  - (no docstring)
+  - Does `attacker` have combat advantage against `target`.
 - `query.shield_bonus(world: 'World', eid: 'int') -> 'int'`
   - What this creature's shield adds to AC and Reflex. 0 for none.
 - `query.takes_half(world: 'World', eid: 'int', dtypes: 'frozenset[DamageType]' = frozenset(), ctx: 'dict[str, Any] | None' = None) -> 'bool'`

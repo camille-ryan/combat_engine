@@ -20264,6 +20264,143 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_grant_of_combat_advantage_can_be_copied(out: Result) -> None:
+    """*"When one enemy in the aura grants combat advantage to you or an
+    ally, that enemy grants it to you and each ally."* -- `p16112`.
+
+    **The card COPIES a grant rather than making one**, which is why
+    `c.grants_advantage` was never it: that verb decides who grants, and
+    this answers a grant somebody else already has. The row's own note had
+    the diagnosis right and said the question could not be asked
+    *excluding one effect* -- which is the one capability that was added.
+
+    Two things made it unanswerable. `c.grants_advantage` writes the
+    `GRANTS_CA_TO` bucket `_has_combat_advantage` reads, so a gate asking
+    "does this enemy already grant to a member" reads the copy it is
+    deciding whether to lay; and `query._IN_FLIGHT` answers False for a
+    pair already being asked, so the answer depended on **which member
+    asked first**.
+
+    `query.has_combat_advantage(without=<ref>)` cuts both: it skips the
+    relations whose `via` is that row, so the question becomes *"does it
+    grant for some OTHER reason"*, which nothing recursive reaches.
+    `Relations.via` has carried the laying row's ref since `#875`, so the
+    exclusion is exact rather than a re-enumeration of the routes and
+    cannot drift from `_has_combat_advantage`'s own list.
+
+    **The board is staged rather than borrowed, and that is load-bearing.**
+    The first probe read True for every member *before* any grant existed:
+    the audit board clusters creatures, so the foe was flanked and the
+    baseline was already what the clause is supposed to produce. Every
+    member below stands on one side of the foe, and the rule asserts the
+    baseline is False before asserting anything else.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import allies, enemies, flanked_by
+
+    world, me, _ = _board("p16112", 1)
+    foes = sorted(enemies(world, me))
+    mates = [a for a in sorted(allies(world, me)) if a != me]
+    out.that(len(mates) >= 2 and len(foes) >= 3,
+             "the board deals two allies and three enemies -- two members"
+             " to spread between, one enemy to grant and one to stay out of"
+             " it", f"allies {mates[:3]} / enemies {foes[:3]}")
+    if len(mates) < 2 or len(foes) < 3:
+        return
+    first, second = mates[0], mates[1]
+    foe, outsider = foes[2], foes[0]
+
+    # **All on one side**, so nothing is flanked. Clustered as the board
+    # deals them, the foe is flanked and every member already has combat
+    # advantage -- which is the answer this clause exists to produce, so
+    # the premise below would have been vacuously true.
+    place(world, me, (5, 5))
+    place(world, first, (5, 6))
+    place(world, second, (6, 6))
+    place(world, foe, (6, 5))
+    place(world, outsider, (14, 14))
+    members = (me, first, second)
+    out.that(not any(flanked_by(world, foe, w) for w in members),
+             "and none of them flanks it, so nothing grants yet",
+             "unflanked")
+    out.that(not any(query.has_combat_advantage(world, w, foe)
+                     for w in members),
+             "**the baseline: no member has combat advantage on it** -- the"
+             " assertion the first probe failed, because a clustered board"
+             " had already flanked the foe",
+             f"{[query.has_combat_advantage(world, w, foe) for w in members]}")
+
+    c = Cast(world=world, me=me, ref="p16112")
+    dsl.REGISTRY["p16112"].body(c)
+    rings = [z for z, _ in world.zones.all()
+             if me in world.zones.occupants(z)
+             and foe in world.zones.occupants(z)]
+    out.that(bool(rings),
+             "the row lays an aura holding the caster and that enemy -- the"
+             " printed scope", f"{rings}")
+    if not rings:
+        return
+    out.that(not any(query.has_combat_advantage(world, w, foe)
+                     for w in members),
+             "and the aura ALONE grants nothing -- the control that makes"
+             " the next line about the copy rather than about the row"
+             " laying a blanket grant",
+             f"{[query.has_combat_advantage(world, w, foe) for w in members]}")
+
+    # One member gains it, by a route that is not this row.
+    Cast(world=world, me=first, ref="drivers:one").grants_advantage(
+        on=foe, to=first, until=When.ENCOUNTER)
+    spread = [query.has_combat_advantage(world, w, foe) for w in members]
+    out.that(all(spread),
+             "**one member gaining it gives it to every member** -- the"
+             " clause. Granted to `first` alone and read back for all"
+             " three", f"{spread}")
+    out.that(not query.has_combat_advantage(world, outsider, foe),
+             "and a creature on the other side gets nothing -- *'to you and"
+             " each ally'*, which the gate narrows by asking whether the"
+             " asker is a member",
+             f"{query.has_combat_advantage(world, outsider, foe)}")
+
+    # -- the aura is the scope ---------------------------------------------
+    # Walked out of the ring, the copy stops. Without this the gate's
+    # membership test could be deleted and nothing would notice: the
+    # fixture only ever poses an enemy standing inside.
+    place(world, foe, (16, 16))
+    world.zones.refresh()
+    # **The COPY stops; `first`'s own grant does not.** The grant to
+    # `first` was laid directly on the foe by another row and has nothing
+    # to do with the aura -- asserting that every member loses it fails on
+    # a correct engine, which is how the first version of this line read.
+    copies = [query.has_combat_advantage(world, w, foe)
+              for w in (me, second)]
+    own = query.has_combat_advantage(world, first, foe)
+    out.that(not any(copies) and own,
+             "**walked out of the aura, the COPY stops and the real grant"
+             " does not** -- *'one enemy IN the aura'*, read at ask time"
+             " because membership moves. `first` keeps what another row"
+             " gave it, which is not the aura's business",
+             f"copies {copies}, first's own {own}")
+    place(world, foe, (6, 5))
+    world.zones.refresh()
+
+    # **Order-independence**, asked in both directions on one board:
+    # `_IN_FLIGHT` answers False for a pair already being asked, so a
+    # design that depended on who asked first would disagree with itself.
+    forward = [query.has_combat_advantage(world, w, foe) for w in members]
+    backward = [query.has_combat_advantage(world, w, foe)
+                for w in reversed(members)]
+    out.that(forward == list(reversed(backward)),
+             "**and the answer does not depend on who asks first** --"
+             " `_IN_FLIGHT` answers False for a pair already being asked,"
+             " so a gate that read the bucket it writes would give one"
+             " answer forwards and another backwards",
+             f"{forward} vs {list(reversed(backward))}")
+
+
 def a_card_may_print_a_second_way_of_being_used(out: Result) -> None:
     """*"Effect: You gain a +4 power bonus to Will and a +4 power bonus to
     saving throws against charm and psychic effects until the end of your
@@ -104323,6 +104460,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "copied_advantage": (a_grant_of_combat_advantage_can_be_copied,
+                         "a grant of combat advantage to one member of an"
+                         " aura is copied to every member"),
     "second_mode": (a_card_may_print_a_second_way_of_being_used,
                     "a card prints a second way of being used, with its own"
                     " cost, requirement, moment and body"),

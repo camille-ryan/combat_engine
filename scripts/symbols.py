@@ -438,6 +438,12 @@ CATEGORIES: dict[str, dict] = {
                 "conceal", "conceal_in", "cover", "cover_in",
                 "damage_disadvantage",
                 "gains_advantage", "grants_advantage", "had_advantage",
+                # Beside `grants_advantage` because an author's question is
+                # nearly the same and the answer is its opposite end: that
+                # verb DECIDES who grants, this one COPIES a grant somebody
+                # else already has -- which is why it is askable at all only
+                # through `query.has_combat_advantage(without=)`.
+                "spread_advantage",
                 "hide", "ignore_cover",
                 # Beside `ignore_cover` because the pair is one
                 # printed sentence on `i3146p1` -- and they are

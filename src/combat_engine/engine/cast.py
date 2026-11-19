@@ -14976,6 +14976,89 @@ class Cast:
             Relation.GUARDED_BY, self.me, who
         )
 
+    def spread_advantage(
+        self,
+        zone: int,
+        *,
+        side: str = "team",
+        until: When = When.ENCOUNTER,
+    ) -> list[Effect]:
+        """"When one enemy in the aura grants combat advantage to you or an
+        ally, that enemy grants it to you and each ally." -- `p16112`.
+
+        **This COPIES a grant rather than making one**, which is why
+        `c.grants_advantage` is not it: that verb decides who grants, and
+        this one answers a grant somebody else already has. The hard part
+        was never the publishing, it was asking the question without
+        reading the answer.
+
+        **`query._IN_FLIGHT` is what makes it askable, and it was already
+        there.** The marker's note said the question cannot be asked
+        without reading the answer -- the gate consults the same
+        `grants_ca_to` bucket `c.grants_advantage(when=)` writes. Measured,
+        that does not bite: a member asking about its own grant answers on
+        the relation branch before any gate runs; a member asking about
+        another's finds that other's real reason, because the pair is
+        different and not in flight; and where no member has any other
+        reason, the recursion bottoms out **False** rather than looping.
+
+        So no exclusion is needed. I built a
+        `has_combat_advantage(without=<ref>)` for this and removed it
+        again, because no plant could red it -- see that function's own
+        note. `drivers.copied_advantage` asserts the order-independence
+        directly, by asking in both directions.
+
+        Laid **per enemy in the zone**, gated, so it is read at ask time
+        rather than fixed when the aura goes down: membership changes as
+        people walk, and so does who is flanked. The gate also narrows the
+        beneficiary to a member, because the card gives the copy to the
+        caster's side and not to everybody.
+
+        `side` is `c.grants_advantage`'s vocabulary -- `"team"` includes
+        the caster, `"ally"` does not -- and defaults to `"team"` because
+        the printed line is *"you and each ally"*.
+
+        Returns one effect per enemy it laid on, so a caller can end them.
+        """
+        from .query import has_combat_advantage as _ca
+        from .zones import Zone as _Zone
+
+        region = self.world.get(zone, _Zone)
+        if region is None:
+            return []
+        mine = [self.me, *self.allies()] if side == "team" else self.allies()
+        if not mine:
+            return []
+
+        def copied(ctx: dict[str, Any], foe: int) -> bool:
+            # **No attacker test here.** *"To you and each ally"* is
+            # `grants_advantage`'s own job: its gated branch wraps this
+            # predicate in `ctx.get("attacker") in allowed`, built from the
+            # `to=` side word. Repeating it was redundant and invited
+            # drift -- the plant that deleted the copy duplicate passed,
+            # which is how it was found.
+            #
+            # **The enemy has to be in the aura when asked**, not when
+            # the hold was laid: `p16112`'s other clause is read the same
+            # way and for the same reason.
+            if foe not in self.world.zones.occupants(zone):
+                return False
+            # *"Grants combat advantage to you or an ally"* -- any member,
+            # for any reason that is not this row's own copy.
+            return any(_ca(self.world, who, foe) for who in mine)
+
+        out: list[Effect] = []
+        for foe in self.world.zones.occupants(zone):
+            if foe in mine:
+                continue
+            laid = self.grants_advantage(
+                on=foe, to=side, until=until,
+                when=lambda ctx, f=foe: copied(ctx, f),
+            )
+            if laid is not None:
+                out.append(laid)
+        return out
+
     def grants_advantage(
         self,
         *,

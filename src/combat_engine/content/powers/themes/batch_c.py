@@ -1064,7 +1064,7 @@ def p16111(c: Cast) -> None:
 
 @power("p16112", level=10, cls="x7_951", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.ELEMENTAL],
-       dropped=("c.spread_advantage()",))
+       )
 def p16112(c: Cast) -> None:
     """"You and each ally in the aura grant combat advantage for being
     flanked **only if** you and every ally in the aura are flanked" is
@@ -1083,26 +1083,35 @@ def p16112(c: Cast) -> None:
     casting, and `ctx["target"]` -- the creature being asked to grant -- is
     tested for membership there.
 
-    **Dropped clause:** "when one enemy in the aura grants combat advantage
-    to you or an ally, that enemy grants it to you and each ally". The card
-    does not narrow a grant, it **copies** one.
+    **The second clause is written**, and the note that stood here had the
+    diagnosis exactly right: *"when one enemy in the aura grants combat
+    advantage to you or an ally, that enemy grants it to you and each
+    ally"* does not narrow a grant, it **copies** one -- and
+    `c.grants_advantage` writes the same `grants_ca_to` bucket
+    `_has_combat_advantage` reads, so a gate asking "does this enemy
+    already grant it to a member" reads the copy it is deciding whether to
+    lay. `query._IN_FLIGHT` made it worse: it answers False for a pair
+    already being asked, so the result depended on **which member asked
+    first**.
 
-    **The stated reason was half wrong and the right half is sharper.** It
-    said nothing can "ask on another creature's behalf", and
-    `query.has_combat_advantage(world, attacker, target, power)` takes the
-    attacker explicitly -- asking for somebody else is its signature. What
-    cannot be done is the **re-publishing**. `c.grants_advantage` writes a
-    `grants_ca_to` modifier and `_has_combat_advantage` reads that same
-    bucket, so a gate asking "does this enemy already grant it to a member"
-    would be reading the copy it is deciding whether to lay; and
-    `query._IN_FLIGHT` answers False for a pair already being asked, so the
-    result would depend on which member asked first. There is no way to ask
-    the question *excluding one effect*, which is what a copy needs, so the
-    verb has to publish the grant rather than a row gating one.
+    The note's conclusion was that the question cannot be asked *excluding
+    one effect*, and **that turned out not to be needed**. `_IN_FLIGHT`
+    already prevents the loop: a member asking about its own grant answers
+    on the relation branch before any gate runs, a member asking about
+    another's finds that other's real reason because the pair is different
+    and not in flight, and where no member has any other reason the
+    recursion bottoms out False. Measured in all three directions.
 
-    `c.spread_advantage()` resolves False through `blocked._one` with
-    `c.grants_advantage()` True beside it, so the symbol is absent rather
-    than its owner unreachable."""
+    So no engine capability was added for this in the end. I built a
+    `has_combat_advantage(without=<ref>)`, could not make a plant red it
+    either as a relation filter or as a modifier filter, and took it out --
+    a parameter nothing consults is the bug this component produces most.
+    `query.has_combat_advantage` carries the measurement.
+
+    So the copy is `c.spread_advantage(ring)`: one gated grant per enemy in
+    the aura, read at ask time because membership and flanking both move,
+    narrowed to a member as the asker because the card gives the copy to
+    this side only."""
     ring = c.aura(5, until=When.ENCOUNTER, on=c.me)
     world, me = c.world, c.me
 
@@ -1120,6 +1129,9 @@ def p16112(c: Cast) -> None:
         c.cannot_be_flanked(
             on=member, until=When.ENCOUNTER, when=only_if_all_are
         )
+    # The copy. Laid after the flanking narrowing above and independent of
+    # it: the two clauses are different sentences on the same card.
+    c.spread_advantage(ring, side="team", until=When.ENCOUNTER)
 
 
 # ---------------------------------------------------------------- x7_982 --
