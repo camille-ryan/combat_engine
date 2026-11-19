@@ -161,7 +161,21 @@ def p9433(c: Cast) -> None:
       the creature it was already aimed at, not on a second one.
 
     What the card asks for is a **standing** hold that turns a miss on one
-    creature into a hit on another, and none of the three is that."""
+    creature into a hit on another, and none of the three is that.
+
+    **And the obvious composition was tried and measured, 2026-11-18, so
+    the next reader need not.** From an `AttackRolled` watcher in
+    `Window.BEFORE`, on a blow that would miss (total 7 against defence
+    21):
+
+        c.redirect(to=other)        False -- refused outside an interrupt
+        c.hit_becomes(True, ev=ev)  True
+        the attack then announced   Hit, on the ORIGINAL target
+
+    So forcing the hit works and lands it on the creature already aimed at,
+    which is what the third bullet above says, and redirect does not reach
+    from that window at all. The two do not compose into the printed
+    clause."""
     victim = c.target
     if victim is None:
         return

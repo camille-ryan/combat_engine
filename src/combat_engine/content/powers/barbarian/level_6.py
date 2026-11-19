@@ -215,13 +215,36 @@ def p14423(c: Cast) -> None:
     keywords=PRIMAL,
     trigger=_ROLLED_INITIATIVE,
     on=Trigger(InitiativeRolled, when=about_me, text=_ROLLED_INITIATIVE),
-    dropped=("c.boost_initiative()",),
 )
 def p4834(c: Cast) -> None:
-    """The bonus to the initiative check itself is not written: the roll has
-    been made and the creature placed in the order by the time the event
-    carrying it is announced, and nothing re-reads a modifier afterwards --
-    the reading `p10605` settled."""
+    """**Both halves are written, and the dropped one was false on two
+    counts.**
+
+    The note said "the roll has been made and the creature placed in the
+    order by the time the event carrying it is announced". The roll has
+    been made; the creature has **not** been placed.
+    `Encounter._roll_initiative` rolls for everybody, then announces
+    `InitiativeRolled` for everybody, and only then sorts -- its own
+    docstring gives that ordering as the reason the announcements are a
+    second pass.
+
+    And "nothing re-reads a modifier afterwards" -- `c.initiative` hands
+    its amount to `Encounter.adjust_initiative`, which writes the component
+    the sort reads back and, after the order exists, lifts the creature out
+    and splices it in again. That verb's own docstring is about this exact
+    printed clause, and eight rows across five classes already call it.
+
+    So the +5 is one line. `kind=` is not passed because the amount goes on
+    the component rather than through `Mods`: "power bonus" names the
+    stacking rule, and there is nothing here for it to stack against.
+
+    The +2 is `once=True`, which `c.bonus` knows a spend moment for --
+    "your first attack roll during the encounter" is spent by the roll.
+    """
+    # `on=c.me` explicitly: `c.initiative` follows `c.target` because
+    # every other row printing it hands the bonus to a list, and this
+    # card says "**you** gain a +5 power bonus to your initiative".
+    c.initiative(5, on=c.me)
     c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, kind="power", once=True)
 
 

@@ -17385,6 +17385,96 @@ def an_origin_can_be_a_bare_square(out: Result) -> None:
                  f"{moved}")
 
 
+def an_initiative_bonus_moves_the_order(out: Result) -> None:
+    """*"Trigger: You roll initiative. Effect: You gain a +5 power bonus to
+    your initiative. You also gain a +2 power bonus to your first attack
+    roll during the encounter."* -- `p4834`.
+
+    **The marker said the initiative half could not be written and both of
+    its reasons were false.**
+
+    "The roll has been made and the creature placed in the order by the
+    time the event carrying it is announced." The roll has been made; the
+    creature has **not** been placed. `Encounter._roll_initiative` rolls
+    for everybody, announces `InitiativeRolled` for everybody, and only
+    then sorts -- its own docstring gives that ordering as the reason the
+    announcements are a second pass. Asserted below, because it is the
+    whole premise.
+
+    "Nothing re-reads a modifier afterwards." `c.initiative` hands its
+    amount to `Encounter.adjust_initiative`, which writes the component the
+    sort reads back and, once the order exists, lifts the creature out and
+    splices it in again. **Eight rows across five classes already call
+    it.**
+
+    The bonus is read off the component, not off the event: setting
+    `InitiativeRolled.rolled` changes a copy the sort never looks at, which
+    is what `adjust_initiative`'s docstring records.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Initiative
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import InitiativeRolled
+    from combat_engine.engine.turns import Encounter
+
+    # -- the premise: a bonus applied on the announcement reaches the order
+    #
+    # **Asserted behaviourally, not by reading `Encounter.order` at
+    # announcement time.** It is populated then -- with the unsorted
+    # candidate list -- so an "is it empty" test is simply wrong, and that
+    # was this rule's first version. What matters is whether the sort has
+    # run, and the way to ask is to move a creature and see where it lands.
+    world, me, _ = _board("p4834", 1)
+    enc = Encounter(world)
+    world.encounter = enc
+    announced: list[int] = []
+
+    def bump(ev: InitiativeRolled) -> None:
+        announced.append(ev.actor)
+        if ev.actor == me:
+            enc.adjust_initiative(me, 100)
+
+    world.bus.on(InitiativeRolled, bump)
+    enc.start()
+    out.that(bool(announced),
+             "initiative is announced for every creature -- the premise",
+             f"{len(announced)} announcement(s)")
+    out.that(enc.order and enc.order[0] == me,
+             "and a creature given +100 while answering its own"
+             " announcement comes out FIRST in the finished order -- so the"
+             " listener is earlier than the sort, which is exactly what the"
+             " marker said was impossible",
+             f"order {enc.order[:3]}, caster {me}")
+
+    # -- the row moves the number ----------------------------------------
+    world2, me2, _ = _board("p4834", 1)
+    world2.encounter = Encounter(world2)
+    init = world2.get(me2, Initiative) or world2.add(me2, Initiative())
+    init.rolled = 10
+    c = Cast(world=world2, me=me2, ref="p4834")
+    REGISTRY["p4834"].body(c)
+    after = must(world2.get(me2, Initiative), "the initiative").rolled
+    out.that(after == 15,
+             "the row adds its printed +5 to the initiative count -- read"
+             " off the component, which is what the sort reads",
+             f"10 -> {after}")
+
+    # -- and the +2 is spent by one roll ---------------------------------
+    world3, me3, _ = _board("p4834", 1)
+    world3.encounter = Encounter(world3)
+    c3 = Cast(world=world3, me=me3, ref="p4834")
+    REGISTRY["p4834"].body(c3)
+    from combat_engine.engine.components import Mods
+
+    mods = world3.get(me3, Mods)
+    out.that(mods is not None and mods.total("attack", {}) >= 2,
+             "and the attack bonus is laid -- the card's second half, which"
+             " was already written and is asserted here so a change to one"
+             " half cannot quietly take the other",
+             f"{mods.total('attack', {}) if mods else None}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -99858,6 +99948,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "initiative_bonus": (an_initiative_bonus_moves_the_order,
+                         "a +5 to initiative that reaches the order,"
+                         " because the sort has not run yet"),
     "origin_square": (an_origin_can_be_a_bare_square,
                       "a bare square as the point of origin, held by a"
                       " marker nothing else can see"),
