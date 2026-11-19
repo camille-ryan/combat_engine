@@ -17806,6 +17806,95 @@ def a_shot_round_a_corner_is_allowed_by_waiver_only(out: Result) -> None:
              f"asked about {sorted(set(asked))}")
 
 
+def a_chosen_shape_brings_its_own_modes(out: Result) -> None:
+    """*"You assume the form of a Tiny natural beast... you have the senses
+    of your chosen form and gain its movement modes."* -- `p14130`.
+
+    **The marker said nothing stores a sub-choice of this kind and cited
+    `#758`.** That issue is closed, and what it landed is
+    `chargen.BUILD_OPTIONS` -- a **build-time** store, for choices made
+    when a feat was taken. This card picks a shape when the power is
+    *used*, so there is nothing to store and `c.choose` is the whole
+    mechanism. `c.form(modes=)` was already a parameter.
+
+    **The pool is a query, not a hand-written list.** `monster` carries
+    `size`, `origin`, `kind`, `modes` and `senses`, and "a Tiny natural
+    beast" is the first three. Nine rows answer it, between them carrying
+    `fly 6`, `fly 7`, `fly 8`, `climb 3` and `climb 6`.
+
+    **Two forms with different blocks, which is the assertion.** A row
+    that assumed a shape and handed over nothing would pass "the form is
+    assumed"; what the card buys is the chosen beast's own numbers, so one
+    pick must bring a mode the other does not and the same for the senses.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.powers.themes.batch_g import (
+        _tiny_natural_beasts,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Movement
+    from combat_engine.engine.dsl import REGISTRY
+
+    pool = _tiny_natural_beasts()
+    out.that(len(pool) >= 2,
+             "the compendium answers 'a Tiny natural beast' with more than"
+             " one shape -- the premise, since one shape cannot show that"
+             " the chosen one is what is read",
+             f"{len(pool)} shape(s)")
+    flying = sorted(r for r, (modes, _s) in pool.items() if "fly" in modes)
+    grounded = sorted(r for r, (modes, _s) in pool.items() if not modes)
+    seeing = sorted(r for r, (_m, sen) in pool.items()
+                    if "low-light" in sen.lower())
+    out.that(bool(flying) and bool(grounded),
+             "and they differ: some print a fly speed and some print no"
+             " mode at all",
+             f"flying {flying[:3]}, grounded {grounded[:3]}")
+    out.that(bool(seeing),
+             "and at least one prints low-light vision, which is the only"
+             " sense in the pool",
+             f"{seeing}")
+    if not (flying and grounded and seeing):
+        return
+
+    def wearing(ref: str) -> tuple[dict, int]:
+        """Assume that shape; answer the modes and the low-light radius."""
+        world, me, _ = _board("p14130", 1)
+        world.decider = (
+            lambda a, k, options, prompt="":
+            ref if ref in options else (options[0] if options else None)
+        )
+        REGISTRY["p14130"].body(Cast(world=world, me=me, ref="p14130"))
+        mv = must(world.get(me, Movement), "the caster moves")
+        mods = world.get(me, Mods)
+        return dict(mv.modes), (mods.total("low_light", {}) if mods else 0)
+
+    as_bird = wearing(flying[0])
+    as_beast = wearing(grounded[0])
+    out.that("fly" in as_bird[0],
+             f"wearing {flying[0]}, which prints a fly speed, the caster"
+             " gains it",
+             f"{as_bird[0]}")
+    out.that("fly" not in as_beast[0],
+             f"and wearing {grounded[0]}, which prints none, it does not --"
+             " the control, and the assertion a row handing over a fixed"
+             " set of modes fails",
+             f"{as_beast[0]}")
+
+    as_sharp = wearing(seeing[0])
+    blind = sorted(r for r, (_m, sen) in pool.items()
+                   if "low-light" not in sen.lower())
+    out.that(bool(blind), "a shape printing no senses line, to compare",
+             f"{blind[:3]}")
+    if blind:
+        as_dull = wearing(blind[0])
+        out.that(as_sharp[1] > 0 and as_dull[1] == 0,
+                 "the shape printing low-light vision grants it and the one"
+                 " printing none does not -- the senses half, which is"
+                 " separate from the modes half and would otherwise ride on"
+                 " it",
+                 f"{seeing[0]} {as_sharp[1]}, {blind[0]} {as_dull[1]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -100279,6 +100368,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "chosen_shape": (a_chosen_shape_brings_its_own_modes,
+                     "a polymorph that brings the chosen beast's own modes"
+                     " and senses, not a fixed set"),
     "shot_round_a_corner": (
         a_shot_round_a_corner_is_allowed_by_waiver_only,
         "line of effect waived in targeting, and only where a card says"),

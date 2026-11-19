@@ -25,6 +25,7 @@ like a class would be dealt to every character of it.
 
 from __future__ import annotations
 
+from functools import cache
 from typing import Any
 
 from combat_engine.engine import (
@@ -834,6 +835,34 @@ def p14129(c: Cast) -> None:
     c.move(6)
 
 
+#: The shapes `p14130` may take, by ref, each with its movement modes and
+#: its printed senses line. **A query and not a list**: `monster` carries
+#: `size`, `origin` and `kind`, and "a Tiny natural beast" is those three.
+#: Nine rows answer it today; a compendium rebuild that adds a tenth gets
+#: it for nothing.
+@cache
+def _tiny_natural_beasts() -> dict[str, tuple[dict[str, int], str]]:
+    """Every Tiny natural beast, with what wearing its shape is worth."""
+    import json
+
+    from combat_engine.db import game
+
+    out: dict[str, tuple[dict[str, int], str]] = {}
+    for row in game().execute(
+        "SELECT ref, modes, senses FROM monster "
+        "WHERE lower(size)='tiny' AND lower(origin)='natural' "
+        "AND lower(kind) LIKE '%beast%'"
+    ):
+        try:
+            modes = json.loads(row["modes"] or "{}")
+        except ValueError:
+            modes = {}
+        out[row["ref"]] = (
+            {k: int(v) for k, v in modes.items()}, row["senses"] or "",
+        )
+    return out
+
+
 @power(
     "p14130",
     level=10,
@@ -843,7 +872,6 @@ def p14129(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.POLYMORPH],
-    dropped=("c.form(chosen=)",),
     narrative=("skill:insight",),
 )
 def p14130(c: Cast) -> None:
@@ -854,22 +882,47 @@ def p14130(c: Cast) -> None:
     carry that, so no `defect=` can close and the marker both refused a
     written row and claimed a source gap that does not exist.
 
-    `c.form(modes=)` is already a parameter -- the gap is not the door but
-    what to hand it, which is the player's pick, and nothing stores a
-    sub-choice of this kind. Same shape as `c.deals(chosen=)`, and the same
-    missing store the `c.race_option()` / `c.set_build()` family waits on.
-    #758.
+    **`c.form(modes=)` is already a parameter and the chosen form is a
+    use-time pick, not a stored one -- which is where the old note went
+    wrong.** It said "nothing stores a sub-choice of this kind" and cited
+    `#758`, the family of choices made *when a feat was taken*. That issue
+    is closed and what it landed is `chargen.BUILD_OPTIONS`, a build-time
+    store; this card picks a shape when the power is used, so there is
+    nothing to store and `c.choose` is the whole of the mechanism.
 
-    What plays: the form is assumed and the attack prohibition holds, so
-    the row is `dropped=` rather than `todo=`. What is missing is the
-    senses and movement modes of whichever beast was picked.
+    What to offer comes off the compendium rather than a hand-written
+    list: `monster` carries `size`, `origin`, `kind`, `speed`, `modes` and
+    `senses`, and *"a Tiny natural beast"* is exactly a query over the
+    first three. **Nine rows answer it**, between them carrying `fly 6`,
+    `fly 7`, `fly 8`, `climb 3` and `climb 6` -- so the movement modes the
+    card is bought for are real numbers off real blocks.
+
+    Two sub-clauses need nothing and are worth saying so:
+
+    * *"If your chosen form has the aquatic keyword, you also gain it"* --
+      none of the nine prints `aquatic`, so this is vacuous for the whole
+      pool rather than dropped. Measured, not assumed.
+    * *"If you are flying when you return to your normal form, you descend
+      to the ground without taking falling damage"* -- `falling.AIRBORNE`
+      keeps a flier up and nothing drops it on reverting, so there is no
+      fall to soften. The same reading `p11296` rests on.
 
     The Insight clause is the narrative one: it is a DC for an observer
     deciding whether the shape looks supernatural, which is a question
     nothing on a board ever asks.
     """
-    c.form(until=When.EONT, revert=MINOR, label=c.ref)
+    # "A Tiny natural beast" -- the pool is a query over the compendium's
+    # own columns, not a hand-written list.
+    shapes = _tiny_natural_beasts()
+    pick = c.choose(sorted(shapes), f"{c.ref}: which shape") if shapes else None
+    modes, senses = shapes.get(pick or "", ({}, ""))
+    c.form(until=When.EONT, revert=MINOR, label=c.ref, modes=modes or None)
     c.cannot_attack(on=c.me, until=When.EONT)
+    # "You have the senses of your chosen form." Two of the nine print
+    # low-light vision and none prints darkvision or blindsight, so this is
+    # the only sense there is to gain from the pool.
+    if "low-light" in senses.lower():
+        c.low_light(on=c.me, until=When.EONT)
 
 
 # ---------------------------------------------------------------- x7_862
