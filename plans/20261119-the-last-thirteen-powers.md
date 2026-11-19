@@ -1,5 +1,12 @@
 # The last thirteen powers
 
+> **Updated the same day: it is now TEN.** `p12236`, `p16497` and
+> `p16112` were built after this file was written -- items 2, 4 and 7
+> of the order below -- so the cheap end of the list is gone and what
+> remains is the subsystem programme. The per-row measurements stand;
+> the three finished ones are struck through in the order at the end.
+> `p12162`'s two candidate routes are measured on `#1374`.
+
 Written after taking the census 19 -> 13 in one run. Every row that could be
 finished **without new infrastructure** now is. These thirteen cannot, and
 this file records what each needs and what was measured, so the next session
@@ -176,17 +183,35 @@ target list"* — true only for an interrupt on something the **body** emits.
 
 ## Suggested order, cheapest first
 
-1. **`p16539`'s symbol** — a ruling, not a build. #1385.
-2. **`p12236`** — one field, one call site, and one real question
-   (re-resolution). The smallest of the engine designs.
+1. ~~**`p16539`'s symbol** — a ruling, not a build.~~ **Parked with an ELI5
+   on #1385 and waiting on Camille.** Still the cheapest item: the two rows
+   disagree about whether the compulsion is a rules change or a policy
+   decision, and `p16539` has the better argument.
+2. ~~**`p12236`**~~ — **done.** `Power.effect_before`, plus `use` dropping a
+   pre-resolved target list for an *each* line. The re-resolution question
+   this file raised was the real one.
 3. **`p14141`** — the `Sheet` field is trivial; scope the work as "re-arm
    persisted effects at encounter start", which is general and would serve
-   more than this row.
-4. **`p16497`** — `body_alt` is easy; branch-aware triggered dispatch is the
-   piece, and it would also make `action_alt` reachable from a trigger.
+   more than this row. **Confirmed the hard way:** `c.replace_roll` is an
+   event-time verb, so persisting the faces without a re-arm makes them
+   unusable next fight. #1378.
+4. ~~**`p16497`**~~ — **done.** `body_alt` plus `Trigger.branch`, and it
+   found a real bug: `_ask` checked affordability against the branch and
+   spent `p.action`. Two instruments had to learn about branches with it.
 5. **`p15894`** — a time model is a `story/` subsystem with its own value
-   beyond this row.
-6. Then `p12162`, `p16112`, `p13611`, `p16557`, `p16005`.
+   beyond this row. **Confirmed:** `Party` has one field and there is no
+   clock anywhere in `story/`. #1383.
+6. ~~**`p16112`**~~ — **done**, and the instructive one: its marker said the
+   question needed an "exclude one effect" capability. I built
+   `has_combat_advantage(without=)`, could not red it with a plant in either
+   form, measured that `_IN_FLIGHT` already prevents the loop, and removed
+   the parameter again.
+7. **`p12162`** — the only remaining item that is a plain engine change
+   rather than a subsystem, and it lands in `dsl.use`. Two routes measured
+   on #1374; route B (an exemption read where targets are chosen) needs no
+   re-ordering and looks right.
+8. Then `p13611`, `p16557`, `p16005` — each of which needs a reader that
+   lives partly in the layer the AI-policy ruling excludes.
 
 ## Rules this run re-learnt the hard way
 
