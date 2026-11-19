@@ -36,11 +36,13 @@ Two gaps this file is the first to need, confirmed absent before marking:
   `actions.py` zeroes `Budget.standard/move/minor` unconditionally once a
   charge resolves, with no override a row can reach. m5858a0.
 
-One more, found while writing: `ConditionApplied` is a plain `Event`, fired
-*after* a condition has already landed, while `ForcedMove` is a cancellable
-`Decision`. "Makes a saving throw to negate the triggering effect" can only
-be answered for the push/pull/slide half of m1937a3's trigger -- there is
-nothing to interrupt for the immobilized/restrained half.
+One more, found while writing and **since fixed, so do not inherit it**:
+this said `ConditionApplied` is a plain `Event` fired after the condition
+has already landed, so "makes a saving throw to negate the triggering
+effect" could only be answered for the push/pull/slide half of m1937a3's
+trigger. `#1384` made it a `Decision` -- a refusal backs the condition out
+rather than holding the install back -- so both halves of that trigger are
+declared now.
 """
 
 from __future__ import annotations
@@ -128,6 +130,7 @@ from combat_engine.engine import (
 from combat_engine.engine.events import (
     AttackDeclared,
     Bloodied,
+    ConditionApplied,
     DamageApplied,
     DamageRolled,
     Dropped,
@@ -178,6 +181,25 @@ def _would_force_move_me(world: World, me: int, ev: ForcedMove) -> bool:
     """`ForcedMove` names its subject `target`, not `actor` -- `about_me`
     reads only the latter and would be false here forever."""
     return getattr(ev, "target", None) == me
+
+
+def _would_hold_me(world: World, me: int, ev: ConditionApplied) -> bool:
+    """*"It would be immobilized, restrained ..."* -- the other half of
+    `m1937a3`'s trigger, beside `_would_force_move_me`.
+
+    `ConditionApplied` names its subject `target`, like `ForcedMove`, so
+    `about_me` is false here forever for the same reason.
+
+    **Only the two conditions the card names.** The trigger line lists
+    immobilized and restrained; a predicate taking any condition would let
+    the saving throw negate a daze, which is a stronger ability than the
+    stat block prints.
+    """
+    return (
+        getattr(ev, "target", None) == me
+        and getattr(ev, "condition", None)
+        in (Condition.IMMOBILIZED, Condition.RESTRAINED)
+    )
 
 
 def _enemy_shifted_from_beside_me(world: World, me: int, ev: Moved) -> bool:
@@ -974,15 +996,33 @@ def m1937a2(c: Cast) -> None:
 @power(
     "m1937a3", level=8, usage=AT_WILL, action=INTERRUPT, reach=PERSONAL, target=NO_TARGET,
     trigger="it would be immobilized, restrained, pushed, pulled, or slid",
-    on=Trigger(ForcedMove, _would_force_move_me, "it would be pushed, pulled, or slid"),
-    dropped=("ConditionApplied.cancel",),
+    on=(
+        Trigger(ForcedMove, _would_force_move_me,
+                "it would be pushed, pulled, or slid"),
+        Trigger(ConditionApplied, _would_hold_me,
+                "it would be immobilized or restrained"),
+    ),
 )
 def m1937a3(c: Cast) -> None:
-    """Only the forced-move half can be caught before it lands:
-    `ForcedMove` is a cancellable `Decision` and `ConditionApplied` is a
-    plain `Event`, announced after the condition is already on -- there is
-    nothing to interrupt for the immobilized/restrained half. Its own
-    trigger line misprints "m1936" for itself."""
+    """*"Makes a saving throw. On a save, the triggering effect is
+    negated."* Both halves of the printed trigger are declared.
+
+    **The condition half used to be unanswerable and now is not.** The note
+    here said `ForcedMove` is a cancellable `Decision` while
+    `ConditionApplied` is a plain `Event` announced after the condition is
+    already on, so there was nothing to interrupt. `#1384` made it a
+    `Decision`: a refusal **backs the condition out** rather than holding
+    the install back, which is what lets the announce stay where it is.
+
+    One body serves both, because `c.cancel` refuses whatever triggered
+    this -- so the save is rolled once and the thing it negates is
+    whichever of the two happened.
+
+    **Only immobilized and restrained**, which the predicate narrows: the
+    card lists those two, and answering any `ConditionApplied` would let
+    this save shrug off a daze.
+
+    Its own printed trigger line misprints `m1936` for itself."""
     if c.save(bare=True, on=c.me):
         c.cancel()
 

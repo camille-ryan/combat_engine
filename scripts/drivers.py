@@ -20250,6 +20250,184 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_condition_can_be_refused_by_an_interrupt(out: Result) -> None:
+    """*"Instead of suffering the triggering effect, you lose a healing
+    surge, and you are dazed (save ends)."* -- `p16408`.
+
+    **Two faults, and the second is much bigger than the row.**
+
+    `ConditionApplied` was a plain `Event`, so `c.cancel` had nothing to
+    refuse and the clause was approximated by *curing* the condition --
+    which plays almost the same and is not the same: a rider reading "when
+    you become stunned" still fired, because the stun had genuinely
+    happened. It is a `Decision` now.
+
+    **And nothing in that family could fire at all.** `_shrugging` is the
+    waiver for exactly this shape and its docstring states the whole
+    argument: `Effects.apply` installs a condition *then* announces it, so
+    a row printed *"immediate interrupt: when you are stunned"* is offered
+    to a creature that is already stunned, and stunning forbids acting.
+    The waiver is plumbed through **five** functions -- `can_act`,
+    `can_react`, `can_spend`, `usable` and `use`, every one of which takes
+    `ignoring=` -- and the dispatcher passed it at **one of four** places
+    it asks. So each refusal was the same condition read again without the
+    waiver:
+
+    | asked in | was it waived |
+    |---|---|
+    | `_offer` -> `can_act` | no |
+    | `_answers` -> `can_spend` | **yes** |
+    | `_answers` -> `usable` | no |
+    | `_ask` -> `use` (which re-checks) | no |
+
+    **Ten rows print that trigger and nine of them carried no marker**, so
+    they reported finished, were armed correctly, and could never fire --
+    the silently-false failure this component's own file is about. Measured
+    over the four that are powers: all four fire now.
+
+    The two behaviours are deliberately both asserted, because they are
+    different clauses: `p16408` and `p14385` print *"instead of"* and
+    **refuse** the condition, while `p8244` and `p11676` fire and leave it
+    standing, which is right -- their printed effects are not refusals. A
+    rule asserting only "the condition goes" would have called those two
+    broken.
+
+    The refusal is honoured by **backing the condition out**, not by
+    holding the install back -- see `ConditionApplied`'s docstring. So the
+    announce did not move and every other listener sees what it saw.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import Condition
+
+    def stun(ref: str, *, known_: bool = True, stale: bool = False) -> dict:
+        """Stun the caster and report what the row did about it.
+
+        `stale=True` stuns a round early and then stuns again, which is the
+        negative control for the waiver's narrowness: a creature stunned
+        *before* this announce must still be unable to answer.
+        """
+        world, me, _ = _board(ref, 1)
+        known = world.get(me, Powers)
+        if known_:
+            if ref not in known.all:
+                known.known.append(ref)
+        else:
+            while ref in known.known:
+                known.known.remove(ref)
+        enc = Encounter(world)
+        world.encounter = enc
+        enc.start()
+        foe = sorted(enemies(world, me))[0]
+        hurt = world.get(me, Health)
+        surges = hurt.surges
+        c = Cast(world=world, me=foe, ref="drivers:stun")
+        if stale:
+            # Already stunned, by something else, before the announce under
+            # test. The waiver covers the condition being announced and
+            # nothing else.
+            c.condition(Condition.STUNNED, on=me, until=When.ENCOUNTER)
+        fired: list[int] = []
+        world.bus.on(PowerUsed, lambda ev: fired.append(1))
+        eff = c.condition(Condition.STUNNED, on=me, until=When.SAVE_ENDS)
+        return {
+            "fired": bool(fired),
+            "stunned": is_(world, me, Condition.STUNNED),
+            "dazed": is_(world, me, Condition.DAZED),
+            "left": tuple(eff.conditions) if eff is not None else (),
+            "spent": surges - hurt.surges,
+        }
+
+    # -- the row the clause belongs to ------------------------------------
+    got = stun("p16408")
+    out.that(got["fired"],
+             "`p16408` fires on a stun at all -- which it could not before"
+             " `_shrugging` reached the other three gates, and it carried no"
+             " symptom: the row was armed, correct and unreachable",
+             f"{got}")
+    out.that(not got["stunned"],
+             "**and the stun is refused** -- *'instead of suffering the"
+             " triggering effect'*, which `c.cancel` says now that"
+             " `ConditionApplied` is a `Decision`", f"{got['stunned']}")
+    out.that(got["left"] == (),
+             "and it is dropped from the effect too, so no saving throw is"
+             " owed for a condition nobody holds -- a refusal that left the"
+             " tuple alone would hand the creature a save every turn"
+             " against nothing", f"{got['left']}")
+    out.that(got["dazed"] and got["spent"] == 1,
+             "while the printed price and payload both land: one surge, and"
+             " dazed (save ends)", f"spent {got['spent']}, dazed {got['dazed']}")
+
+    # -- it is not one row, which is the point ----------------------------
+    also = stun("p14385")
+    out.that(also["fired"] and not also["stunned"],
+             "`p14385` prints the same *'instead of'* and also refuses --"
+             " the mechanism, not a special case", f"{also}")
+    for ref in ("p8244", "p11676"):
+        other = stun(ref)
+        out.that(other["fired"] and other["stunned"],
+                 f"`{ref}` fires and LEAVES the stun standing -- its printed"
+                 " effect is not a refusal, and a rule asserting the"
+                 " condition always goes would have called it broken",
+                 f"{other}")
+
+    # -- the controls -----------------------------------------------------
+    unknown = stun("p16408", known_=False)
+    out.that(not unknown["fired"] and unknown["stunned"],
+             "with the row off the sheet the stun lands -- `triggers._answers`"
+             " walks `Powers.all`, so this is the control that says the"
+             " refusal is the row's doing", f"{unknown}")
+    stale = stun("p16408", stale=True)
+    out.that(not stale["fired"],
+             "**and a creature stunned a round EARLIER cannot answer** --"
+             " `_shrugging` waives the one condition being announced and"
+             " nothing else, which is what keeps this from becoming a"
+             " general 'stunned creatures may act'", f"{stale}")
+
+    # -- the monster half of the same sentence ----------------------------
+    # `m1937a3` is the other row that was marked `ConditionApplied.cancel`,
+    # and `todo.py` caught it the moment the symbol arrived -- which is
+    # that gate doing its job. Its trigger names immobilized/restrained,
+    # so this is both the generalisation past `p16408` AND the narrowing
+    # check: the predicate must not answer a daze.
+    from combat_engine.engine.query import is_ as _is
+
+    # **Sampled, because the row rolls a saving throw.** One trial cannot
+    # tell a narrowed predicate from a widened one that happened to fail
+    # its save: a d20 against 10 negates about half the time, so a single
+    # daze landing proves nothing. The plant that widens the predicate
+    # passed on one trial and reds over a sample.
+    def held_every_time(cond: Condition, tries: int) -> tuple[int, int]:
+        kept = 0
+        for seed in range(1, tries + 1):
+            world, me, _ = _board("m1937a3", seed)
+            enc = Encounter(world)
+            world.encounter = enc
+            enc.start()
+            foe = next(iter(sorted(enemies(world, me))), -1)
+            if foe < 0:
+                continue
+            c = Cast(world=world, me=foe, ref="drivers:hold")
+            c.condition(cond, on=me, until=When.SAVE_ENDS)
+            kept += bool(_is(world, me, cond))
+        return kept, tries
+
+    kept, asked = held_every_time(Condition.DAZED, SAMPLE)
+    out.that(asked > 0 and kept == asked,
+             "`m1937a3` does NOT answer a daze, on EVERY board -- its card"
+             " lists immobilized and restrained, and a predicate taking any"
+             " condition would let this saving throw shrug off a daze."
+             " Sampled rather than asked once: the row rolls a save, so one"
+             " trial is a coin flip and the plant that widens the predicate"
+             " passed on it",
+             f"the daze held on {kept} of {asked} board(s)")
+
+
 def a_minor_buys_a_refusal_instead_of_a_penalty(out: Result) -> None:
     """*"Special: You can spend a minor action when you use this power to
     enhance it. If you do so, the target cannot make opportunity attacks or
@@ -103246,6 +103424,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "refuse_condition": (a_condition_can_be_refused_by_an_interrupt,
+                         "an immediate interrupt can refuse a condition"
+                         " being applied, and the family could not fire"),
     "minor_trade": (a_minor_buys_a_refusal_instead_of_a_penalty,
                     "a minor action buys a refusal of opportunity and"
                     " immediate attacks INSTEAD OF an attack penalty"),

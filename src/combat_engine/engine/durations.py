@@ -738,7 +738,7 @@ class Effects:
             conds = self.world.add(eff.owner, Conditions())
         if not conds.add(cond):
             return False
-        self.world.bus.emit(_with_weapon(
+        told = self.world.bus.emit(_with_weapon(
             ConditionApplied(
                 source=source or eff.owner, target=eff.owner,
                 condition=cond, duration=eff.when.value,
@@ -749,6 +749,17 @@ class Effects:
             ),
             eff,
         ))
+        # **Refusable here too, and leaving this site out would have been
+        # the bug.** This is the escalation a *failed save* imposes, which
+        # is exactly the moment a card printing "instead of suffering the
+        # triggering effect" is answered -- so a `Decision` honoured at one
+        # of two emit sites would refuse a daze laid by a power and not the
+        # same daze laid by a worsening save. Backed out the same way, and
+        # the return says nothing changed.
+        if told.cancelled:
+            conds.remove(cond)
+            eff.conditions = tuple(x for x in eff.conditions if x != cond)
+            return False
         return True
 
     # -- installing and lifting ----------------------------------------------
@@ -806,17 +817,33 @@ class Effects:
         conds = self.world.get(eff.owner, Conditions)
         if conds is None and eff.conditions:
             conds = self.world.add(eff.owner, Conditions())
-        for c in eff.conditions:
-            if conds is not None and conds.add(c):
-                self.world.bus.emit(
-                    _with_weapon(
-                        ConditionApplied(
-                            source=source, target=eff.owner, condition=c,
-                            duration=duration, power=eff.by,  # ty: ignore[unresolved-attribute]
-                        ),
-                        eff,
-                    )
+        # `tuple(...)` because a refused condition is dropped from
+        # `eff.conditions` inside the loop, and mutating what you iterate
+        # skips the next entry.
+        for c in tuple(eff.conditions):
+            if conds is None or not conds.add(c):
+                continue
+            told = self.world.bus.emit(
+                _with_weapon(
+                    ConditionApplied(
+                        source=source, target=eff.owner, condition=c,
+                        duration=duration, power=eff.by,  # ty: ignore[unresolved-attribute]
+                    ),
+                    eff,
                 )
+            )
+            # **Refused, so it is backed out rather than held back.**
+            # `ConditionApplied` is a `Decision` for `p16408`'s *"instead of
+            # suffering the triggering effect"*. The announce stays where it
+            # was -- see the event's own docstring, and the comment in
+            # `apply` about mods going on first -- so every listener sees
+            # what it always saw and `can_react(ignoring=)` keeps its
+            # meaning. The condition is taken off again here, and dropped
+            # from the effect so no save is owed for a condition nobody
+            # holds and nothing re-installs it on a resume.
+            if told.cancelled:
+                conds.remove(c)
+                eff.conditions = tuple(x for x in eff.conditions if x != c)
 
     def _lift(self, eff: Effect, why: str) -> None:
         """Take off everything the effect installed. It stays standing.

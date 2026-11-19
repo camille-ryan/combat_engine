@@ -329,8 +329,34 @@ class Triggers:
             # meant no row of that shape could ever be offered to anybody.
             # Three were already written and none of them had ever fired.
             about_itself = getattr(ev, "actor", None) == eid
+            # **And a creature may answer a condition just laid on IT**,
+            # which is a second case the `actor` test above cannot reach:
+            # `ConditionApplied` names its subject `target`, and
+            # `Effects._install_conditions` installs the condition *before*
+            # announcing it -- deliberately, see `Effects.apply`. So by the
+            # time the offer is made, `can_act` is already False for the
+            # very condition the row exists to refuse, and the creature was
+            # skipped here.
+            #
+            # `Condition.STUNNED` sets `cannot_act`, so a card reading
+            # *"when you are stunned or dominated"* could fire on the
+            # domination -- `DOMINATED` sets only `one_action` -- and never
+            # on the stun. Half of a printed "or", dead, with nothing
+            # saying so.
+            #
+            # **`_shrugging` is that waiver and already existed** -- it was
+            # passed to `can_spend` in `_answers` and not to `can_act`
+            # here, so a row could pass the budget test it was written for
+            # and be skipped one check earlier. Reused rather than
+            # re-derived: it also handles the conditions that arrive as a
+            # `RelationSet` and are never announced as conditions at all,
+            # which a hand-rolled `ev.condition` read would miss.
+            # `alive` is still required, unlike the `actor` branch -- a
+            # death throe answering its own `Dropped` is a different
+            # argument and keeps its own case. #1384.
             if not about_itself and not (
-                alive(self.world, eid) and can_act(self.world, eid)
+                alive(self.world, eid)
+                and can_act(self.world, eid, ignoring=_shrugging(ev, eid))
             ):
                 continue
             for ref in self._answers(eid, ev, window):
@@ -370,7 +396,17 @@ class Triggers:
                 eid, p.action, ignoring=_shrugging(ev, eid)
             ):
                 continue
-            ok, _why = usable(self.world, eid, p, dying=dying)
+            # **`ignoring=` here too, and leaving it off was the bug.**
+            # `_shrugging` was threaded into `can_spend` two lines up and
+            # into nothing else, so a row printed *"immediate interrupt:
+            # when you are stunned"* passed the budget gate it was written
+            # for and was then refused by `usable` with "cannot act" --
+            # which is the same condition, read a second time without the
+            # waiver. `usable` has taken `ignoring` all along.
+            ok, _why = usable(
+                self.world, eid, p, dying=dying,
+                ignoring=_shrugging(ev, eid),
+            )
             if ok:
                 out.append(ref)
         return out
@@ -418,8 +454,16 @@ class Triggers:
 
         # `use` adds the pair itself, so nothing is added here -- doing both
         # would have the inner check refuse every triggered row.
+        # **`ignoring=` on the way in, which is the fourth and last site.**
+        # `_shrugging` is plumbed through `can_act`, `can_react`,
+        # `can_spend`, `usable` and `use` -- every gate takes it -- and the
+        # dispatcher passed it at **one** of the four places it asks. So a
+        # row printed *"immediate interrupt: when you are stunned"* cleared
+        # the budget gate, cleared `usable` once that was threaded, and was
+        # then refused a third time inside `use`, which re-checks. Each
+        # refusal was the same condition read again without the waiver.
         use(self.world, eid, ref, targets=self._at(p, eid, ev), trigger=ev,
-            variant=variant)
+            variant=variant, ignoring=_shrugging(ev, eid))
 
     def _at(self, p, eid: int, ev: Event) -> list[int] | None:  # noqa: ANN001
         """Who a triggered row is aimed at: whoever the event was about.

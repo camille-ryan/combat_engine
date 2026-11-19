@@ -1218,8 +1218,32 @@ class Died(Event):
 
 
 @dataclass
-class ConditionApplied(Event):
+class ConditionApplied(Decision):
     """A condition went on. `source` is who imposed it.
+
+    **A `Decision`, so an immediate interrupt can refuse it** -- *"instead
+    of suffering the triggering effect"*, which `p16408` and `m1937a3`
+    print and which had to be *undone* rather than prevented. It was an
+    ordinary `Event`, so `c.cancel` -- which enforces the interrupt pairing
+    -- had nothing to refuse.
+
+    **The announce did NOT move, and that is the whole of why this is
+    safe.** `Effects.apply` installs mods and relations *before* any
+    announce, deliberately: announcing first let a listener end the effect
+    while the mods list was still empty, leaving a modifier on a creature
+    with no live effect to take it off. And the condition itself is
+    installed before this event too, which `query.can_react`'s `ignoring=`
+    parameter exists for -- a row answering "when you are dazed" is offered
+    while already holding the daze.
+
+    So a refusal is honoured by **backing the condition out** in
+    `Effects._install_conditions` rather than by holding the install back:
+    every listener sees exactly what it saw before, `ignoring=` keeps its
+    meaning, and the only new behaviour is that a cancel removes what was
+    laid. Nothing else about the ordering is touched.
+
+    No new field, either: `cancelled` and `reason` are `Event`'s, so the
+    wire format and every committed fixture are unchanged. #1384.
 
     **`power` is the row that laid it**, and four rows need it: "whenever
     you daze or stun an enemy with a **primal** power", "using a **psionic**

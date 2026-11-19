@@ -1146,25 +1146,50 @@ def p16407(c: Cast) -> None:
                 lambda w, me, ev: getattr(
                     w.get(me, Health), "surges", 0) > 0),
            "you are stunned or dominated and have a surge left",
-       ), dropped=("ConditionApplied.cancel",))
+       ))
 def p16408(c: Cast) -> None:
-    """`ConditionApplied` is a plain announcement rather than a `Decision`,
-    so an interrupt cannot refuse it and "instead of suffering the
-    triggering effect" has to be undone rather than prevented. Curing it on
-    the spot is the nearest thing; a rider reading "when you become
-    stunned" would still have fired.
+    """*"Instead of suffering the triggering effect, you lose a healing
+    surge, and you are dazed (save ends)."*
 
-    **Re-checked rather than inherited.** `ConditionApplied.__mro__` is
-    `(ConditionApplied, Event, object)` -- no `Decision` in it -- and its
-    own docstring opens "a condition went on", past tense, so the emit is
-    after the fact as well as uncancellable. `cancel` is a `Decision`
-    method and not a field, so the #1224 dataclass-field trap does not
-    apply here and `Decision.cancel` resolving True is the arrived control:
-    the owner is reachable and the False means this class has no `cancel`.
-    `m1937a3` reaches the same verdict from the other half of the same
-    sentence and waits on the same symbol, which is the group kept."""
-    c.spend_surge(on=c.me)
-    c.cure(Condition.STUNNED, Condition.DOMINATED, on=c.me)
+    **`c.cancel` says it now, where the row used to undo it.**
+    `ConditionApplied` was a plain announcement, so an interrupt had
+    nothing to refuse and the clause was approximated by curing the
+    condition on the spot -- which plays almost the same and is not the
+    same: a rider reading "when you become stunned" still fired, because
+    the stun had genuinely happened and been announced.
+
+    `#1384` made the event a `Decision`. Two things about that are worth
+    knowing here, because they are why the fix is small:
+
+    * **The announce did not move.** `Effects.apply` installs mods and
+      relations before any announce, and the condition before this event,
+      and both orderings are load-bearing -- the first for a listener that
+      ends the effect mid-announce, the second for
+      `query.can_react(ignoring=)`, which exists precisely so a row
+      answering *"when you are stunned"* can be offered while already
+      stunned. So a refusal is honoured by **backing the condition out**
+      in `Effects._install_conditions`, not by holding the install back.
+      Every other listener sees exactly what it saw before.
+    * **Both emit sites honour it.** The second is the escalation a *failed
+      save* imposes, which is the same printed moment; refusing at one
+      only would have refused a stun laid by a power and not the same stun
+      laid by a worsening save.
+
+    `c.cancel` is reachable from here because this card is an immediate
+    interrupt and `ConditionApplied` is not one of the four attack
+    decisions the printed interrupt-only rule covers.
+
+    **The surge is spent first, deliberately.** It is the price of the
+    refusal rather than a consequence of it, and `c.spend_surge` answering
+    False -- no surges left -- must not leave the condition refused for
+    free. The trigger already requires one, so this is the belt on a
+    declared gate rather than a second gate.
+
+    `m1937a3` prints the other half of the same sentence and was waiting on
+    the same symbol."""
+    if not c.spend_surge(on=c.me):
+        return
+    c.cancel()
     c.dazed(until=When.SAVE_ENDS, on=c.me)
 
 
