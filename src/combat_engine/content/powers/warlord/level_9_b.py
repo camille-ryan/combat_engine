@@ -555,10 +555,25 @@ def p2593(c: Cast) -> None:
     else:
         c.half_damage(c.w(3), c.str_mod)
         c.mark(until=When.EOTNT)
+    # *"...cannot recharge its powers ... as long as it is marked by this
+    # power."* The recharge half is written now: `actions.recharge` reads
+    # `no_recharge` after rolling the die, which is that function's
+    # documented order -- every draw is recorded, so the row is refused its
+    # return rather than refused its roll.
+    #
+    # Gated on the mark being **this** row's and still standing, so it
+    # lapses exactly when the mark does, whichever clock the mark took.
+    victim = c.target
+    if victim is not None:
+        c.cannot_recharge(
+            on=victim,
+            until=When.SAVE_ENDS,
+            when=lambda ctx, v=victim: c.marked(v, via=c.ref),
+        )
     c.note(
-        f"{c.ref}: while marked by this, {c.target} could not recharge its powers nor spend "
-        "action points -- the recharge roll has nothing to consult and action points are "
-        "not modelled"
+        f"{c.ref}: while marked by this, {c.target} cannot spend action "
+        "points -- that half is still unwritten, because the action-point "
+        "economy has no per-creature refusal"
     )
 
 

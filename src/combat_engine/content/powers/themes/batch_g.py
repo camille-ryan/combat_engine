@@ -1094,7 +1094,6 @@ def p14221(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("actions.recharge(disadvantage=)",),
 )
 def p14222(c: Cast) -> None:
     """The penalty is laid on each enemy with a live "am I inside" gate, so
@@ -1124,6 +1123,20 @@ def p14222(c: Cast) -> None:
         c.penalty(
             "attack",
             2,
+            on=foe,
+            until=When.EONT,
+            when=lambda ctx, f=foe: c.in_my_aura(f, label=c.ref),
+        )
+        # *"...and must roll twice and use the lower result when attempting
+        # to recharge a power."* The same live "am I inside" gate as the
+        # penalty above, so a creature that walks in later is covered and
+        # one that walks out is not.
+        #
+        # `lower=True` rather than a negative bonus, because the printed
+        # sentence is about the **die**: two dice and the worse one is a
+        # different distribution from a flat penalty.
+        c.recharge_bonus(
+            lower=True,
             on=foe,
             until=When.EONT,
             when=lambda ctx, f=foe: c.in_my_aura(f, label=c.ref),

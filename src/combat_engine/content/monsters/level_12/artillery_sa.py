@@ -2333,7 +2333,6 @@ def m2555a3(c: Cast) -> None:
     keywords=[Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=15),
     damage=Damage("1d8", 5, dtype=DamageType.LIGHTNING),
-    dropped=("actions.recharge(bonus=)",),
 )
 def m2555a4(c: Cast) -> None:
     """Everybody in the burst, its own side included -- which is what the
@@ -2354,6 +2353,18 @@ def m2555a4(c: Cast) -> None:
     c.hit()
     if crowd:
         c.flat(crowd, dtype=DamageType.LIGHTNING)
+    # *"Any ally damaged by the attack gains a +1 bonus to any recharge
+    # rolls at the start of its next turn."* `actions.recharge` reads the
+    # `recharge` key now.
+    #
+    # **`EOTNT`, and it is exactly the printed window rather than a turn
+    # too long.** The clause names one moment -- the start of that
+    # creature's next turn -- and `SOTNT` would expire at it rather than
+    # cover it. A recharge roll only ever happens at a turn's start, so a
+    # hold running to the end of that same turn offers precisely one
+    # recharge opportunity: the printed one.
+    if c.target in c.allies():
+        c.recharge_bonus(1, on=c.target, until=When.EOTNT)
 
 
 # ==========================================================================

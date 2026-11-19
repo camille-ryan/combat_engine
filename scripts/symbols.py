@@ -684,6 +684,10 @@ CATEGORIES: dict[str, dict] = {
                 # and a row's own use, and a reader looking for the daily
                 # counter needs the pair together.
                 "restore_per_day",
+                # The three shapes four cards print for a recharge roll:
+                # a bonus, a roll-twice-take-lower, and a refusal. Read by
+                # `actions.recharge`, which consulted no modifier before.
+                "cannot_recharge", "recharge_bonus",
                 "restore_use", "spend_charge", "spend_per_day",
                 # `c.more_uses` here and not beside the `restore_*` pair,
                 # which is the distinction worth keeping: those hand back a

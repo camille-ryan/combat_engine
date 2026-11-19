@@ -57,6 +57,8 @@ Things a creature spends, and the budget it spends them from.
 
 - `c.ammunition(self, ev: 'Any' = None) -> 'bool'`
   - Was that shot fired from the ammunition **this row belongs to**?
+- `c.cannot_recharge(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - *"The target cannot recharge its powers as long as it is marked
 - `c.charge_left(self, key: 'str', limit: 'int' = 1) -> 'int'`
   - How much of a per-encounter charge is left, for this creature.
 - `c.milestone(self) -> 'int'`
@@ -65,6 +67,8 @@ Things a creature spends, and the budget it spends them from.
   - "You gain one more use of `p12668` per encounter." Returns the
 - `c.per_day_left(self, ref: 'str', limit: 'int', *, on: 'int | None' = None) -> 'int'`
   - How many of a daily allowance are left today, for this creature.
+- `c.recharge_bonus(self, n: 'int' = 0, *, lower: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - Move somebody's recharge roll. *"A +1 bonus to any recharge
 - `c.regain_power(self, ref: 'str' = '', *, daily: 'bool' = False, on: 'int | None' = None) -> 'str'`
   - Give back the use of one expended power. DMG2's mid-fight refresh.
 - `c.restore_charge(self, key: 'str', *, on: 'int | None' = None) -> 'bool'`

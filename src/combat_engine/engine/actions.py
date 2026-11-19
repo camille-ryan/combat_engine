@@ -3652,6 +3652,31 @@ def recharge(world: World, actor: int) -> None:
         # drop a draw a fixture has already recorded. Asking the state first
         # would have re-recorded every replay fixture holding a recharge row.
         rolled = world.rng.roll("1d6").total if p.recharge > 0 else 0
+        # **And now the modifiers, which this roll consulted none of.**
+        # Four cards print one and three of them had written down that it
+        # could not be said: `p14222` ("roll twice and use the lower
+        # result"), `m2555a4` and `m2867a4` ("a +1 bonus to any recharge
+        # rolls"), and `p2593` ("cannot recharge its powers as long as it
+        # is marked"). Two carried markers naming `actions.recharge`; the
+        # other two carried a `c.note` and no marker at all.
+        #
+        # **Read after the die, never before**, which is this block's one
+        # constraint and the reason it sits here: the comment above states
+        # the contract -- every draw is recorded in `Rng.rolls` in order,
+        # so short-circuiting on a state before rolling would drop a draw a
+        # fixture has already recorded.
+        #
+        # The **second** die is rolled only when disadvantage is live, for
+        # the same reason: rolling it unconditionally would add a draw to
+        # every fixture holding a recharge row.
+        held = world.get(actor, Mods)
+        if held is not None and held.items:
+            gate = {"actor": actor, "power": ref}
+            if held.total("no_recharge", gate) > 0:
+                continue
+            if p.recharge > 0 and held.total("recharge_low", gate) > 0:
+                rolled = min(rolled, world.rng.roll("1d6").total)
+            rolled += held.total("recharge", gate)
         by_die = p.recharge > 0 and rolled >= p.recharge
         back = by_die
         if not back and p.recharge_while is not None:

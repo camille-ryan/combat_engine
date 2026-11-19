@@ -1060,6 +1060,55 @@ class Cast:
             until=until, kind="untyped", when=when,
         )
 
+    def recharge_bonus(
+        self, n: int = 0, *, lower: bool = False, on: int | None = None,
+        until: When = When.EONT,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """Move somebody's recharge roll. *"A +1 bonus to any recharge
+        rolls"* (`m2555a4`, `m2867a4`) and *"must roll twice and use the
+        lower result when attempting to recharge a power"* (`p14222`).
+
+        **`actions.recharge` consulted no modifier at all**, which three of
+        the four cards printing one had each written down -- two as markers
+        naming `actions.recharge`, two as a `c.note` with no marker.
+
+        `lower=True` is the disadvantage, and it is a separate key rather
+        than a negative bonus because the printed sentence is about the
+        **die** and not the total: two dice and the worse one is not the
+        same distribution as a flat penalty.
+
+        The second die is rolled only when this is live, so a fixture
+        holding a recharge row keeps its recorded draws.
+        """
+        who = on if on is not None else self.me
+        if lower:
+            self.bonus("recharge_low", 1, on=who, until=until,
+                       kind="untyped", when=when)
+        if not n:
+            return None
+        return self.bonus("recharge", n, on=who, until=until,
+                          kind="untyped", when=when)
+
+    def cannot_recharge(
+        self, *, on: int | None = None, until: When = When.EONT,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """*"The target cannot recharge its powers as long as it is marked
+        by this power."* -- `p2593`, which carried a `c.note` saying so and
+        no marker.
+
+        Read in `actions.recharge` **after** the die is rolled, which is
+        that function's documented contract: every draw is recorded in
+        order, so refusing before rolling would drop a draw a fixture has
+        already recorded. The row comes back or not; the die is thrown
+        either way.
+        """
+        return self.bonus(
+            "no_recharge", 1, on=on if on is not None else self.me,
+            until=until, kind="untyped", when=when,
+        )
+
     def cannot_stand(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
         when: Callable[[dict[str, Any]], bool] | None = None,

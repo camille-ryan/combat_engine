@@ -19877,6 +19877,130 @@ def a_reroll_may_be_aimed_at_a_different_creature(out: Result) -> None:
              f"99 -> {missed.result.target_defence}, wanted {want}")
 
 
+def a_recharge_roll_can_be_moved(out: Result) -> None:
+    """*"A +1 bonus to any recharge rolls"*, *"must roll twice and use the
+    lower result when attempting to recharge a power"*, *"cannot recharge
+    its powers as long as it is marked"*.
+
+    **Four cards print one of those and `actions.recharge` consulted no
+    modifier of any kind.** Counted over `power`, `feat`, `item`,
+    `item_block`, `monster_power`, `class_feature` and `racial_trait`, and
+    three of the four had written the gap down:
+
+    | | printed | how it was recorded |
+    |---|---|---|
+    | `p14222` | roll twice, take the lower | `dropped=("actions.recharge(disadvantage=)",)` |
+    | `m2555a4` | +1 to recharge rolls | `dropped=("actions.recharge(bonus=)",)` |
+    | `m2867a4` | +1 to recharge rolls | a `c.note`, **no marker** |
+    | `p2593` | cannot recharge while marked | a `c.note`, **no marker** |
+
+    **The one constraint on where the read goes is written at the roll
+    site**, and it decides the shape: *"the die is rolled first, and that
+    ordering is deliberate ... every draw is recorded in `Rng.rolls` in
+    order, so short-circuiting on a state that happens to be true would
+    drop a draw a fixture has already recorded."* So the modifiers are read
+    **after** the roll -- a blocked row is refused its return, not its
+    roll -- and the **second** die for disadvantage is thrown only when
+    disadvantage is live. Both are asserted against `Rng.rolls`, because
+    getting either wrong re-records every replay fixture holding a recharge
+    row.
+
+    `lower=True` is a separate key from the bonus and not a negative one:
+    the printed sentence is about the **die**, and two dice taking the
+    worse is a different distribution from a flat penalty.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions, dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.types import Usage
+
+    ref = next(
+        (r for r, row in sorted(dsl.REGISTRY.items())
+         if row.usage is Usage.RECHARGE and row.recharge > 0
+         and not row.unfinished), "")
+    out.that(bool(ref), "the corpus has a declared recharge row to roll for",
+             f"{ref}")
+    if not ref:
+        return
+    need = dsl.REGISTRY[ref].recharge
+
+    def trial(**kw: int) -> tuple[int, int]:
+        back = draws = 0
+        for seed in range(1, SAMPLE + 1):
+            world, me, _ = _board(ref, seed)
+            known = world.get(me, Powers)
+            if ref not in known.all:
+                known.known.append(ref)
+            # `used[ref] = 1` is what `Powers.spent` reads -- it is a
+            # property over `used`, not a field, which cost a probe.
+            known.used[ref] = 1
+            c = Cast(world=world, me=me, ref="drivers:probe")
+            if kw.get("bonus"):
+                c.recharge_bonus(kw["bonus"], on=me, until=When.ENCOUNTER)
+            if kw.get("lower"):
+                c.recharge_bonus(lower=True, on=me, until=When.ENCOUNTER)
+            if kw.get("block"):
+                c.cannot_recharge(on=me, until=When.ENCOUNTER)
+            was = len(world.rng.rolls)
+            actions.recharge(world, me)
+            draws += len(world.rng.rolls) - was
+            # `restore` leaves the count at 0 rather than dropping the key,
+            # and `PowerRecharged` carries `ref` and not `power` -- two
+            # wrong observables, each of which read as a dead rule.
+            back += known.used.get(ref, 0) == 0
+        return back, draws
+
+    plain, plain_draws = trial()
+    out.that(0 < plain < SAMPLE,
+             f"`{ref}` needs {need}+ on a d6, so plainly it comes back on"
+             " some boards and not others -- the baseline, and a roll that"
+             " always or never landed would make every line below vacuous",
+             f"{plain} of SAMPLE")
+    out.that(plain_draws == SAMPLE,
+             "and throws exactly one die a board", f"{plain_draws}")
+
+    helped, helped_draws = trial(bonus=5)
+    out.that(helped == SAMPLE,
+             "a +5 brings it back every time -- the bonus is added to the"
+             " die rather than ignored", f"{helped} of SAMPLE")
+    out.that(helped_draws == SAMPLE,
+             "and a creature carrying a recharge modifier that is NOT"
+             " disadvantage still throws one die. This is the assertion"
+             " that catches an unconditional second roll: the plain trial"
+             " cannot, because the second-die line sits inside the \"has"
+             " any modifier\" block and a board with none never reaches it",
+             f"{helped_draws} for SAMPLE boards")
+    out.that(helped > plain, "and strictly more often than plain",
+             f"{plain} -> {helped}")
+
+    worse, worse_draws = trial(lower=True)
+    out.that(worse < plain,
+             "rolling twice and taking the lower brings it back LESS often",
+             f"{plain} -> {worse}")
+    out.that(worse_draws == 2 * SAMPLE,
+             "and throws two dice a board -- where plain throws one, which"
+             " is why the second is rolled only when this is live: an"
+             " unconditional second draw re-records every fixture holding a"
+             " recharge row", f"{worse_draws} for SAMPLE boards")
+
+    blocked, blocked_draws = trial(block=True)
+    out.that(blocked == 0,
+             "and a refusal stops it coming back at all", f"{blocked}")
+    out.that(blocked_draws == SAMPLE,
+             "while still throwing the die -- refused its return, not its"
+             " roll, which is the ordering the roll site's own comment"
+             " demands", f"{blocked_draws}")
+
+    # -- and the four rows carry it ---------------------------------------
+    for which in ("p14222", "m2555a4", "m2867a4", "p2593"):
+        row = dsl.REGISTRY.get(which)
+        out.that(row is not None and not row.unfinished,
+                 f"`{which}` is declared and carries no marker",
+                 f"{row.unfinished if row else 'absent'}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -102511,6 +102635,9 @@ DRIVERS = {
     "reroll_elsewhere": (a_reroll_may_be_aimed_at_a_different_creature,
                          "a reroll may be aimed at another creature, and is"
                          " re-measured against its defence"),
+    "recharge_moved": (a_recharge_roll_can_be_moved,
+                       "a recharge roll takes a bonus, a disadvantage or a"
+                       " refusal, and the die is still thrown"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),
