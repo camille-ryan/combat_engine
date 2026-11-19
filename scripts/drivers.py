@@ -18394,6 +18394,150 @@ def a_silenced_creature_cannot_be_heard(out: Result) -> None:
              f"{[ln.strip() for ln in code.splitlines() if ln.strip()][:2]}")
 
 
+def a_pact_clause_can_be_a_granted_row(out: Result) -> None:
+    """*"Gloom Pact (Binder): Until the end of your turn, you can use a
+    minor action to deal necrotic damage equal to your Dexterity modifier
+    to one creature adjacent to the target."* -- `p13905`.
+
+    **The marker named the gap exactly and the row it asked for is the
+    whole fix.** Its note ended *"what this wants is a granted row, which
+    is `c.grant_row` plus a row to grant, and the row does not exist"* --
+    so `p13905b` is written, and nothing else was missing: `c.grant_row`
+    puts a ref into `Powers.known` for a duration, the action menu offers
+    it, the action economy limits it to the one minor a turn the card
+    assumes, and the target choice is made afresh each use.
+
+    Two things decided the shape and both are asserted below.
+
+    **The grant is bought by *using* the power, not by landing it.** The
+    pact line is printed beside `Hit:` rather than under it. That is why
+    the granted row cannot find "the target" through the slow the parent
+    lays -- on a miss nothing is slowed -- and reads
+    `query.my_hits_this_turn` and `my_misses_this_turn` instead, narrowed
+    by the event's own `power`.
+
+    **And the pact gates it.** The board's warlock takes `infernal`, so the
+    premise here is a negative: the grant must *not* happen until the build
+    is `gloom`, which is what tells a real gate from a line that always
+    runs.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Position, Powers
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import (
+        adjacent,
+        enemies,
+        my_hits_this_turn,
+        my_misses_this_turn,
+    )
+
+    def stage(seed: int = 1, *, gloom: bool = True) -> tuple[Any, int, int, int]:
+        world, me, _ = _board("p13905", seed)
+        if gloom:
+            world.get(me, Build).choices.add("gloom")
+        foes = sorted(enemies(world, me))
+        victim, neighbour = foes[0], foes[1]
+        # Stand the second enemy beside the first, which is the geometry
+        # the printed clause is about and which the board does not arrange.
+        seat, near = world.get(victim, Position), world.get(neighbour, Position)
+        square = next(iter(seat.squares))
+        beside = (square[0] + 1, square[1])
+        world.grid.place(neighbour, frozenset({beside}))
+        near.square = beside
+        near.spans = frozenset({beside})
+        return world, me, victim, neighbour
+
+    # -- the pact gates the grant -----------------------------------------
+    world, me, victim, neighbour = stage(gloom=False)
+    out.that(not Cast(world=world, me=me, ref="p13905").build("gloom"),
+             "the board's warlock is NOT a gloom pact -- the premise, and"
+             " the only thing that tells a real gate from a clause that"
+             " always runs", "infernal")
+    c = Cast(world=world, me=me, ref="p13905")
+    c.target = victim
+    dsl.REGISTRY["p13905"].body(c)
+    out.that("p13905b" not in set(world.get(me, Powers).all),
+             "so the rider is not granted", "p13905b absent")
+
+    # -- and with the pact, it is ------------------------------------------
+    world, me, victim, neighbour = stage()
+    out.that(adjacent(world, neighbour, victim),
+             "the fixture stands a second enemy beside the target",
+             f"{neighbour} beside {victim}")
+    c = Cast(world=world, me=me, ref="p13905")
+    c.target = victim
+    dsl.REGISTRY["p13905"].body(c)
+    hand = set(world.get(me, Powers).all)
+    out.that("p13905b" in hand,
+             "a gloom warlock is granted the rider, so the action menu can"
+             " offer it -- `Powers.all` is the list both `arm_traits` and"
+             " `triggers._answers` walk, and a row outside it cannot be"
+             " reached at all", "p13905b present")
+    # **Named exactly, and no `or` escape.** The first version read
+    # `any(... EOT ...) or bool(held)`, where `held` was computed off the
+    # same labels -- so the duration half could not fail. `c.grant_row`
+    # labels its effect `"<parent> grants <child>"`, so the assertion can
+    # name it and the clock it must carry.
+    grant = [e for e in world.effects.of(me)
+             if e.label == "p13905 grants p13905b"]
+    out.that(len(grant) == 1 and grant[0].when is When.EOT,
+             "and the grant is one effect pinned to the END OF THE TURN,"
+             " which is what the card prints -- `c.grant_row` defaults to"
+             " the encounter, so a row taking that default would hand the"
+             " rider over for the whole fight",
+             f"{[(e.label, e.when.name) for e in grant]}")
+
+    # -- the rider's own targeting -----------------------------------------
+    offered: list[list[int]] = []
+    world.decider = (
+        lambda actor, kind, options, prompt="":
+        (offered.append([o for o in options if isinstance(o, int)])
+         or options[0])
+    )
+    struck: list[Any] = []
+    world.bus.on(DamageApplied, lambda ev: struck.append(ev), owner=me)
+    rider = Cast(world=world, me=me, ref="p13905b")
+    dsl.REGISTRY["p13905b"].body(rider)
+    out.that(bool(offered) and neighbour in offered[-1],
+             "the rider offers the creature standing beside the target",
+             f"{offered[-1] if offered else None}")
+    out.that(bool(offered) and victim not in offered[-1],
+             "and NOT the target itself -- *'one creature adjacent to the"
+             " target'* is the ring, not the creature",
+             f"{offered[-1] if offered else None}")
+    out.that(any(ev.amount == rider.dex_mod for ev in struck),
+             "and it deals the printed Dexterity modifier -- read off a"
+             " `DamageApplied` rather than off hit points, which the"
+             " board's own ongoing damage also moves",
+             f"dex {rider.dex_mod}, dealt {[ev.amount for ev in struck]}")
+
+    # -- bought by using it, not by landing it ----------------------------
+    granted = missed = 0
+    for seed in range(1, SAMPLE + 1):
+        world, me, victim, neighbour = stage(seed)
+        c = Cast(world=world, me=me, ref="p13905")
+        c.target = victim
+        dsl.REGISTRY["p13905"].body(c)
+        granted += "p13905b" in set(world.get(me, Powers).all)
+        missed += bool([
+            ev for ev in my_misses_this_turn(world, me)
+            if getattr(ev, "power", "") == "p13905"
+        ]) and not bool([
+            ev for ev in my_hits_this_turn(world, me)
+            if getattr(ev, "power", "") == "p13905"
+        ])
+    out.that(granted == SAMPLE and missed > 0,
+             "over SAMPLE boards the rider is granted EVERY time, and some"
+             " of those swings missed -- the pact line is printed beside"
+             " `Hit:` and not under it, so using the power buys it. This is"
+             " also why the rider reads the swing records rather than the"
+             " slow: on a miss nothing is slowed",
+             f"granted {granted} of SAMPLE, {missed} of them after a miss")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -100989,6 +101133,9 @@ DRIVERS = {
                         " stripped ends the hold"),
     "silenced": (a_silenced_creature_cannot_be_heard,
                  "a silenced creature cannot be heard, and can still hear"),
+    "granted_rider": (a_pact_clause_can_be_a_granted_row,
+                      "a pact clause that is a repeatable minor action is a"
+                      " granted row, and the pact gates it"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

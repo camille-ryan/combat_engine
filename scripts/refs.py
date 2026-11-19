@@ -111,7 +111,17 @@ _MINTED = (
 #: **unable to fire** -- nothing handed it to a creature -- which is a
 #: different fault from the one this instrument watches for and was found
 #: while fixing it.
-_BY_HAND = frozenset({"f2793b"})
+_BY_HAND = frozenset({
+    "f2793b",
+    # `p13905`'s Gloom Pact clause -- *"until the end of your turn, you can
+    # use a minor action to ..."* -- is a repeatable granted action, so it
+    # needs a row of its own to be offered and taken more than once. It is
+    # a sentence inside one card rather than a second card block, so the
+    # importer mints nothing and there is nothing to split. Caught by the
+    # pattern above on the commit after it landed, which is the gate doing
+    # its job rather than a problem with it.
+    "p13905b",
+})
 
 
 def _minted_without_a_row() -> list[str]:

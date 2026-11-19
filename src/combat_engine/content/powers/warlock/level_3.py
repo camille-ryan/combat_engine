@@ -22,12 +22,15 @@ from combat_engine.content.powers.warlock.shared import riposte as _riposte
 from combat_engine.content.powers.warlock.shared import thunderclap as _thunderclap
 from combat_engine.content.powers.warlock.shared import unnerve as _dismay
 from combat_engine.engine import (
+    AT_WILL,
     CHA,
     CON,
     EACH_OTHER,
     ENCOUNTER,
     FORT,
     INTERRUPT,
+    MINOR,
+    NO_TARGET,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -288,7 +291,6 @@ def p12891(c: Cast) -> None:
 @power(
     "p13905",
     level=3,
-    dropped=("c.grant_minor_row()",),
     cls="warlock",
     usage=ENCOUNTER,
     action=STANDARD,
@@ -312,13 +314,98 @@ def p13905(c: Cast) -> None:
     creature do an **ordinary** thing for a different action -- its own
     docstring is "allies within 3 squares can stand up as a minor" --
     and it raises on a word no reader looks for, which is the right
-    answer here rather than a loophole. What this wants is a granted
-    *row*, which is `c.grant_row` plus a row to grant, and the row does
-    not exist.
+    answer here rather than a loophole.
+
+    **The old note ended "what this wants is a granted *row*, which is
+    `c.grant_row` plus a row to grant, and the row does not exist". That
+    was the whole of the gap, and the row is written now** -- `p13905b`,
+    below. Nothing else was missing: `c.grant_row` puts a ref into
+    `Powers.known` for a duration, so the action menu offers it, the
+    action economy limits it to the one minor a turn the card assumes, and
+    the target choice is made afresh on each use.
+
+    **The grant sits outside the hit**, because the pact clause is printed
+    at the same level as `Hit:` rather than under it. So it is bought by
+    *using* the power, not by landing it -- which is what decided how the
+    granted row finds "the target": a slow laid on a hit cannot be the
+    answer, since on a miss there is no slow.
     """
+    if c.build("gloom"):
+        # Before `c.strike()`, so the swing the granted row looks for is
+        # already findable when a reader follows the order, and so the
+        # grant cannot be lost to an early return.
+        c.grant_row("p13905b", on=c.me, until=When.EOT)
     if c.strike():
         c.damage("2d8", c.cha_mod, dtype=DamageType.NECROTIC)
         c.slowed()
+
+
+@power(
+    "p13905b",
+    level=3,
+    cls="",
+    usage=AT_WILL,
+    action=MINOR,
+    reach=Ranged(10),
+    target=NO_TARGET,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC, Keyword.SHADOW],
+)
+def p13905b(c: Cast) -> None:
+    """*"Gloom Pact (Binder): Until the end of your turn, you can use a
+    minor action to deal necrotic damage equal to your Dexterity modifier
+    to one creature adjacent to the target."* -- the second half of
+    `p13905`.
+
+    Its own row because the clause is a **repeatable granted action**: it
+    has to appear in the action menu, be takeable again, and carry a fresh
+    target choice each time. A body cannot do any of those three.
+
+    **"The target" is the creature this turn's swing was aimed at, hit or
+    missed.** `query.my_hits_this_turn` and `my_misses_this_turn` are the
+    readers -- the same records `Target.hit_by_me_this_turn` is tested
+    against -- narrowed to `p13905` by the event's own `power`. The slow
+    the parent lays would have been the easier handle and is the wrong
+    one: the pact clause is printed beside `Hit:` rather than under it, so
+    it is bought on a miss too, and on a miss nothing is slowed.
+
+    `target=NO_TARGET` with the choice in the body, because the legal set
+    is "adjacent to a creature I just swung at", which no `Target` field
+    can say -- `affected_by` names a creature carrying an effect, not the
+    ring around one, and 163 cards print *"adjacent to the target"* while
+    every other one of them resolves it inside a body that still has
+    `c.target` to hand. This one does not; it runs later.
+    """
+    from combat_engine.engine.query import (
+        adjacent,
+        my_hits_this_turn,
+        my_misses_this_turn,
+    )
+
+    # Built with an explicit `isinstance` rather than a comprehension
+    # minus `{None}`: subtracting the sentinel leaves the element type
+    # `int | None`, so `adjacent` below is handed a maybe-None and
+    # `types.py` says so. Narrowing here is also the honest shape -- an
+    # event with no target is skipped rather than smuggled through.
+    swung: set[int] = set()
+    for ev in (*my_hits_this_turn(c.world, c.me),
+               *my_misses_this_turn(c.world, c.me)):
+        if getattr(ev, "power", "") != "p13905":
+            continue
+        who = getattr(ev, "target", None)
+        if isinstance(who, int):
+            swung.add(who)
+    if not swung:
+        return
+    beside = sorted(
+        foe for foe in c.enemies()
+        if foe not in swung and any(adjacent(c.world, foe, v) for v in swung)
+    )
+    if not beside:
+        return
+    pick = c.choose(beside, f"{c.ref}: which creature beside the target")
+    if pick is None:
+        return
+    c.flat(c.dex_mod, dtype=DamageType.NECROTIC, on=pick)
 
 
 @power(
