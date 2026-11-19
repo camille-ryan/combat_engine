@@ -335,7 +335,6 @@ def p13701(c: Cast) -> None:
 
 @power(
     "p13702",
-    dropped=("c.undo_riders()",),
     level=2,
     cls="ranger",
     usage=ENCOUNTER,
@@ -357,11 +356,28 @@ def p13702(c: Cast) -> None:
     """Answered on the roll rather than on the blow, because a reduction has
     to happen before the damage lands; `DamageApplied` is past arguing with.
 
-    "If you take no damage from the attack because of this reduction, you
-    are not affected by any conditions it would have caused" is dropped --
-    nothing undoes a rider an attack has not applied yet.
+    **The rider clause is written. "Nothing undoes a rider an attack has
+    not applied yet" was true of *preventing* one and not of undoing it**,
+    which is what the marker asked for by name. `ConditionApplied` and
+    `EffectApplied` both announce what landed -- two events because the
+    first fires only for an effect that imposes a condition, so a save-ends
+    effect carrying nothing but ongoing damage announces the second alone.
+    `c.undo_riders` watches both and takes them off.
+
+    Undone rather than prevented, which is one tick's difference and no
+    turn: preventing it means making `ConditionApplied` a `Decision` and
+    moving the application into the emit callback, on the one path 333 call
+    sites lay conditions through, for three printed rows. Not taken.
+
+    **Only when the reduction really took the whole blow**, which is the
+    printed condition and is read off the event after `c.reduce` rather
+    than computed: `c.reduce` answers how much it actually took off, and
+    the amount left is what the card asks about.
     """
     c.reduce(max(1, c.level // 2 + c.wis_mod))
+    # "If you take no damage from the attack because of this reduction..."
+    if getattr(c.trigger, "amount", 1) <= 0:
+        c.undo_riders(c.trigger)
 
 
 @power(

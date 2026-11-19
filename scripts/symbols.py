@@ -221,6 +221,11 @@ CATEGORIES: dict[str, dict] = {
                 # "not a basic attack" or "against that creature".
                 # Deliberately NOT a condition -- see the verb.
                 "deals_half",
+                # Takes a rider back off: the condition or effect an
+                # attack landed, when the blow itself was absorbed
+                # whole. Beside `cure`, which is the one-condition
+                # version a row names directly.
+                "undo_riders",
                 "weakened", "zone_condition",
             ]),
             # `c.cannot_approach` sits beside `c.leash` and not beside

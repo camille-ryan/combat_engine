@@ -17021,6 +17021,88 @@ def half_damage_can_be_narrowed(out: Result) -> None:
                  f"monster {his}, bystander {hers}")
 
 
+def a_blow_absorbed_whole_carries_no_rider(out: Result) -> None:
+    """*"Reduce the damage you take from the triggering attack... If you take
+    no damage from the attack because of this reduction, then you are not
+    affected by any conditions or effects this attack would have caused on a
+    hit."* -- `p13702`.
+
+    **"Nothing undoes a rider an attack has not applied yet" was true of
+    *preventing* one and not of undoing it**, which is what the marker asked
+    for by name. `ConditionApplied` is a plain `Event`, not a `Decision` --
+    its `cancelled` field is a thing no emitter honours -- so prevention
+    would mean moving the application into an emit callback on the one path
+    333 call sites lay conditions through, for three printed rows. Undoing
+    needs only the two announcements.
+
+    **The ordering is the whole of why this works, and getting it wrong is
+    silent.** Measured: `EffectApplied` fires **before**
+    `Effects._install_conditions` walks `Effect.conditions` and writes each
+    one into the creature's `Conditions` component. So `c.undo_riders`
+    empties that tuple and *then* ends the effect, leaving the installer
+    nothing to install. Two earlier versions both failed against correct
+    code:
+
+        cure on `ConditionApplied`      the effect is registered by then,
+                                       but `Effects.cure` walks `self.live`
+                                       and the effect this ended is no
+                                       longer in it
+        end on `EffectApplied` alone   the conditions were still installed
+                                       afterwards, onto a component with no
+                                       effect under them
+
+    **The partly-absorbed arm is the control.** A row that undid riders on
+    every reduction would pass the absorbed arm; the card gates on the blow
+    being taken *whole*.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.query import active, enemies
+    from combat_engine.engine.types import Condition, DamageType
+
+    def played(blow: int) -> tuple[int, bool]:
+        """Answer (damage that got through, is the rider standing)."""
+        world, me, _ = _board("p13702", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return -1, False
+        foe = foes[0]
+        c = Cast(world=world, me=me, ref="p13702")
+        ev = DamageRolled(source=foe, target=me, amount=blow,
+                          dtype=DamageType.UNTYPED, detail="drivers")
+        c.trigger = ev
+        REGISTRY["p13702"].body(c)
+        # The attacker's own rider, applied after the reduction the way a
+        # hit line applies one after its damage.
+        rider = Cast(world=world, me=foe, ref="drivers:rider")
+        rider.target = me
+        rider.dazed(on=me, until=When.EONT)
+        return ev.amount, Condition.DAZED in set(active(world, me))
+
+    absorbed = played(1)
+    partial = played(40)
+
+    out.that(absorbed[0] == 0,
+             "a small blow is absorbed whole -- the printed condition for the"
+             " rider clause",
+             f"{absorbed[0]} left")
+    out.that(not absorbed[1],
+             "and the rider does not stand: the condition the attack would"
+             " have caused is undone",
+             f"dazed: {absorbed[1]}")
+    out.that(partial[0] > 0,
+             "a big blow is only partly absorbed -- the control's premise",
+             f"{partial[0]} left")
+    out.that(partial[1],
+             "and its rider DOES stand, because damage got through -- the"
+             " control, and the assertion a row undoing riders on every"
+             " reduction fails",
+             f"dazed: {partial[1]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -99494,6 +99576,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "absorbed_whole": (a_blow_absorbed_whole_carries_no_rider,
+                       "a blow taken whole carries no rider; one that got"
+                       " partly through still does"),
     "narrowed_half": (half_damage_can_be_narrowed,
                       "half damage gated on the power, on the target, or on"
                       " nothing -- and not the weakened condition"),

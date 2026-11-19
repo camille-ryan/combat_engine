@@ -27,6 +27,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - (no docstring)
 - `c.unconscious(self, *, until: 'When' = <When.SAVE_ENDS: 'save ends'>, on: 'int | None' = None) -> 'Effect | None'`
   - (no docstring)
+- `c.undo_riders(self, ev: 'Any' = None, *, on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'Effect | None'`
+  - "You are not affected by any conditions or effects this attack
 - `c.weakened(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - (no docstring)
 - `c.zone_condition(self, zone: 'int', *conditions: 'Condition', side: 'str' = 'enemy') -> 'None'`

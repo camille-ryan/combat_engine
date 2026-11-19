@@ -6894,6 +6894,98 @@ class Cast:
     def blinded(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         return self.condition(Condition.BLINDED, until=until, on=on)
 
+    def undo_riders(
+        self, ev: Any = None, *, on: int | None = None,
+        until: When = When.EOT,
+    ) -> Effect | None:
+        """"You are not affected by any conditions or effects this attack
+        would have caused."
+
+        `p13702`, whose note said "nothing undoes a rider an attack has not
+        applied yet". Nothing prevents one -- `ConditionApplied` is a plain
+        `Event`, not a `Decision`, so its `cancelled` field is a thing no
+        emitter honours -- but both halves of what the card names are
+        **announced**, and undoing them is what the marker asked for by
+        name:
+
+            ConditionApplied   -> `c.cure` takes the condition off
+            EffectApplied      -> the effect is ended
+
+        **Both, because the card says both and one would be half of it.**
+        `EffectApplied`'s own docstring records why they are two events:
+        `ConditionApplied` fires only for effects that impose a condition,
+        so a save-ends effect carrying nothing but ongoing damage announces
+        the second and not the first.
+
+        **Undone rather than prevented, and the difference is one tick.**
+        A listener watching `ConditionApplied` sees the condition land
+        before this takes it off again; no turn passes, so nothing a board
+        can do with a condition happens in between. Preventing it properly
+        means making `ConditionApplied` a `Decision` and moving the
+        application into the emit callback -- a change to the one path 333
+        call sites lay conditions through, for the three printed rows that
+        want it. Not taken here.
+
+        Matched on the attacker so a second creature's blow in the same
+        window is left alone, and held until the end of the turn: the
+        attack that triggered this is resolving now.
+        """
+        from .events import ConditionApplied, EffectApplied
+
+        source = ev if ev is not None else self.trigger
+        attacker = getattr(source, "attacker", None)
+        if attacker is None:
+            attacker = getattr(source, "source", None)
+        who = on if on is not None else self.me
+        if attacker is None:
+            return None
+        hold = self.effect(f"{self.ref} unharmed", until=until, on=who)
+        if hold is None:
+            return None
+
+        def effect_landed(hit: EffectApplied) -> None:
+            """Take the whole effect off, conditions and all.
+
+            **The conditions are emptied before the effect is ended, and
+            the order is the entire trick.** `EffectApplied` is announced
+            *before* `Effects._install_conditions` walks
+            `Effect.conditions` and writes each one into the creature's
+            `Conditions` component -- so clearing the tuple here leaves
+            that loop nothing to install, where ending the effect alone
+            left the conditions behind on the component with no effect
+            under them.
+
+            Ending first and curing afterwards cannot work either:
+            `Effects.cure` walks `self.live`, so an effect already ended is
+            invisible to it. That was the first version and it left the
+            creature dazed.
+            """
+            if hit.target != who or hit.source != attacker:
+                return
+            for live in list(self.world.effects.of(who)):
+                if live.label == hit.label and not live.ended:
+                    live.conditions = ()
+                    self.world.effects.end(live, f"{self.ref}: no damage")
+
+        def condition_landed(hit: ConditionApplied) -> None:
+            """The ones that do not arrive on an effect.
+
+            Marked, grabbed and dominated are held by `relations` and only
+            mirrored into `Conditions`, so `effect_landed` never sees them.
+            `Cast.cure` clears those through its `IMPLIES` branch, which
+            needs no live effect.
+            """
+            if hit.target != who or hit.source != attacker:
+                return
+            self.cure(hit.condition, on=who)
+
+        # `EffectApplied` first, so the effect-borne conditions are gone
+        # before `condition_landed` is asked about anything.
+        for kind, fn in ((EffectApplied, effect_landed),
+                         (ConditionApplied, condition_landed)):
+            hold.subs.append(self.world.bus.on(kind, fn, owner=who))
+        return hold
+
     def cure(self, *conditions: Condition, on: int | None = None) -> list[Condition]:
         """Take standing conditions off a creature. Returns what actually went.
 
