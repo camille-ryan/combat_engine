@@ -17475,6 +17475,94 @@ def an_initiative_bonus_moves_the_order(out: Result) -> None:
              f"{mods.total('attack', {}) if mods else None}")
 
 
+def a_grant_tied_to_one_weapon_in_hand(out: Result) -> None:
+    """*"Target: One weapon you're holding... The first target you attack
+    with a weapon affected by this power grants you combat advantage for
+    that attack."* -- `p11750`.
+
+    **The marker named the key and not the verb, and it was right to.** It
+    said the attack context "is built without it -- 23 keys and no
+    weapon". It has **26** now and `weapon` is among them, beside `group`,
+    so a `when=` gate can compare and the ask is paid rather than
+    re-pointed.
+
+    **Asserted on `gains_ca_when` and not on `AttackRolled.advantage`**,
+    which is the part worth knowing: that flag is true whenever the
+    attacker has combat advantage for *any* reason, and the audit board
+    hands out flanking and more besides. An earlier draft read it and
+    passed with both weapons -- the board was granting the advantage, not
+    this row.
+
+    Two weapons, one chosen, and the gate read with each in turn: the only
+    thing that changes between the two reads is the weapon key.
+    """
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Mods
+    from combat_engine.engine.types import Keyword
+
+    world, me, _ = _board("p11750", 1)
+    gear = must(world.get(me, Gear), "the character's gear")
+    out.that(bool(gear.held),
+             "the character is holding a weapon -- the printed target line",
+             f"{[getattr(w, 'ref', '') for w in gear.held]}")
+    if not gear.held:
+        return
+
+    # Two one-handers, so both are in hand at once and the narrowing has
+    # something to be narrow about.
+    first = gear.held[0]
+    chosen = replace(first, ref="w9001", hands="one-handed",
+                     properties=frozenset())
+    other = replace(first, ref="w9002", hands="one-handed",
+                    properties=frozenset())
+    gear.weapons = [chosen, other]
+    gear.stowed = set()
+    out.that(len(gear.held) == 2,
+             "two weapons are in hand, which is the only case where the"
+             " printed reading and 'any weapon attack' part company",
+             f"{[getattr(w, 'ref', '') for w in gear.held]}")
+
+    picked: list[str] = []
+    world.decider = (
+        lambda ac, k, o, prompt="":
+        (picked.append(str(getattr(o[0], "ref", o[0]))) or o[0]) if o else None
+    )
+    dsl.REGISTRY["p11750"].body(Cast(world=world, me=me, ref="p11750"))
+    out.that(picked and picked[0] == "w9001",
+             "the row offers the weapons and takes the one chosen",
+             f"{picked[:1]}")
+
+    weapon_row = next(
+        (r for r, row in sorted(dsl.REGISTRY.items())
+         if getattr(row, "keywords", None)
+         and Keyword.WEAPON in row.keywords), "")
+    out.that(bool(weapon_row),
+             "there is a weapon-keyword row to ask the gate about, so the"
+             " keyword half of it passes and the weapon half is what the"
+             " two reads below differ on",
+             f"{weapon_row}")
+    mods = must(world.get(me, Mods), "the character's modifiers")
+
+    def granted(weapon: str) -> int:
+        return mods.total("gains_ca_when", {
+            "power": weapon_row, "weapon": weapon,
+            "attacker": me, "target": me,
+        })
+
+    out.that(granted("w9001") > 0,
+             "attacking with the CHOSEN weapon gains the advantage",
+             f"{granted('w9001')}")
+    out.that(granted("w9002") == 0,
+             "and attacking with the other weapon in the same hand does"
+             " not -- the printed narrowing, and the assertion a grant on"
+             " 'any weapon attack' fails",
+             f"{granted('w9002')}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -99948,6 +100036,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "one_weapon_grant": (a_grant_tied_to_one_weapon_in_hand,
+                         "a grant spent by one named weapon, not by any"
+                         " weapon attack"),
     "initiative_bonus": (an_initiative_bonus_moves_the_order,
                          "a +5 to initiative that reaches the order,"
                          " because the sort has not run yet"),

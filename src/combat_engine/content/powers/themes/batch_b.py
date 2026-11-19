@@ -104,7 +104,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Defences
 from combat_engine.engine.grid import Square, spread
-from combat_engine.engine.query import bloodied, light_level
+from combat_engine.engine.query import bloodied, holding, light_level
 from combat_engine.engine.skills import SKILLS
 from combat_engine.engine.types import Light
 
@@ -276,7 +276,9 @@ def _tagged(ref: str, kw: Keyword) -> bool:
     return row is not None and kw in row.keywords
 
 
-def _one_shot_advantage(c: Cast, who: int, kw: Keyword, until: When) -> None:
+def _one_shot_advantage(
+    c: Cast, who: int, kw: Keyword, until: When, weapon: str = "",
+) -> None:
     """"The target gains combat advantage on his or her next <kw> attack."
 
     `c.gains_advantage` is the half the two markers here said was absent:
@@ -289,16 +291,30 @@ def _one_shot_advantage(c: Cast, who: int, kw: Keyword, until: When) -> None:
     `AttackDeclared`, so the default AFTER window `c.on_attack` uses sees a
     swing that has already had its advantage -- which makes it the right
     place to spend the grant and the wrong place to lay one.
+
+    **`weapon` narrows it to one weapon in hand**, which `p11750` prints:
+    *"the first target you attack with a weapon affected by this power"*.
+    The attack context carries `weapon` -- it did not when that row's
+    marker was written, which is what the marker said and is no longer
+    true -- so the gate can compare, and the spend reads the same key off
+    the event's own `ctx`. Empty means any weapon of the keyword, which is
+    what the other callers want.
     """
     spent: list[int] = []
+
+    def mine(ctx: dict) -> bool:
+        """The right keyword, and the right weapon if one was named."""
+        if not _tagged(str(ctx.get("power", "")), kw):
+            return False
+        return not weapon or str(ctx.get("weapon", "")) == weapon
+
     held = c.gains_advantage(
-        lambda ctx: not spent and _tagged(str(ctx.get("power", "")), kw),
-        until=until,
-        on=who,
+        lambda ctx: not spent and mine(ctx), until=until, on=who,
     )
 
     def spend(ev: AttackDeclared) -> None:
-        if spent or not _tagged(ev.power, kw):
+        if spent or not mine({"power": ev.power,
+                              **(getattr(ev, "ctx", None) or {})}):
             return
         spent.append(1)
         c.end_effect(held, on=who, why="spent")
@@ -423,30 +439,39 @@ def p11749(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    dropped=("resolve.ctx(weapon=)",),
 )
 def p11750(c: Cast) -> None:
     """An invisible weapon has no combat consequence of its own, so the row
     is the combat advantage it buys on one future weapon attack -- and
     `c.gains_advantage` does hold that, which the old marker denied.
 
-    Dropped: the card says a weapon *affected by this power*, and the gate
-    is handed `attacker`, `target` and `power` and no weapon, so the grant
-    is spent on the first weapon attack of any kind. The two readings part
-    company only for a character holding two weapons.
+    **The weapon narrowing is written, and the marker named the right
+    thing: the key, not the verb.** It said the attack context "is built
+    without it -- 23 keys and no weapon". It has 26 now and `weapon` is
+    among them, beside `group`, so a `when=` gate can compare and the
+    marker is paid rather than re-pointed.
 
-    **Re-pointed off `c.gains_advantage(weapon=)`, which named the wrong
-    half.** A parameter on the verb would have nothing to compare against:
-    `resolve.attack` already takes a `weapon=`, stamps it on
-    `AttackResult.weapon` and puts it on all four attack events -- and the
-    **attack context** a `when=` gate is handed is built without it. 23
-    keys and no weapon, measured off the dict `resolve.attack` builds,
-    which is also the set `lint.py` derives its legal keys from. So the
-    key is the gap, the verb is not, and the spelling is the one
-    `resolve.ctx(origin=)` on `p16653` and `resolve.ctx(from_attack=)` on
-    `m115743a0` already use for this exact shape. No other row carried the
-    old symbol."""
-    _one_shot_advantage(c, c.me, Keyword.WEAPON, When.ENCOUNTER)
+    So the row names the weapon it was cast on: `query.holding` is what the
+    printed target line comes to -- *"one weapon you're holding"* -- and
+    `c.choose` picks when there is more than one, which is the only case
+    where the two readings part company at all.
+
+    The invisibility has no combat consequence of its own, which is why
+    this row is the combat advantage it buys. `resolve.ctx(origin=)` on
+    `p16653` and `resolve.ctx(from_attack=)` on `m115743a0` still want
+    their own keys; those two are not this one.
+    """
+    arms = [w for w in holding(c.world, c.me) if getattr(w, "ref", "")]
+    if not arms:
+        return
+    picked = (arms[0] if len(arms) == 1
+              else c.choose(arms, f"{c.ref}: which weapon goes unseen"))
+    if picked is None:
+        return
+    _one_shot_advantage(
+        c, c.me, Keyword.WEAPON, When.ENCOUNTER,
+        weapon=str(getattr(picked, "ref", "")),
+    )
 
 
 @power(
