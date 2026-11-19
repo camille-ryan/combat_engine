@@ -1785,6 +1785,28 @@ class Power:
     #: `combat_engine.dc`, because this card prints a flat 10 rather than a
     #: band.
     by_ally_check: tuple[str, int] | None = None
+    #: **A printed Effect line that runs BEFORE the row picks its
+    #: targets.** `p12236`: *"Before the attack, you move your speed."* A
+    #: burst settles its targets before any body runs -- `use` builds the
+    #: `Cast` after `_auto_targets`, and an offered action is priced with
+    #: resolved targets earlier still -- so a move taken in the body would
+    #: attack whoever was adjacent **before** it.
+    #:
+    #: The shape `Power.check` is in, but it has to sit **earlier** than
+    #: that field: `use` rolls the check after the target list is chosen,
+    #: which is right for a gate and useless for a move that decides who
+    #: is in the burst.
+    #:
+    #: **Pre-resolved targets are dropped for an "each" line.** A caller
+    #: that already aimed the row -- the action menu does -- aimed it from
+    #: the old position. Re-picked only when `target.count > 1`, which is
+    #: the area shape (`EACH_ENEMY` is 99); a `count == 1` line is somebody
+    #: choosing, and re-picking would overrule them.
+    #:
+    #: Takes the `Cast` and returns nothing. `Attack.bonus_for` already
+    #: builds a throwaway `Cast` before the real one, so a pre-targeting
+    #: `Cast` is established rather than new.
+    effect_before: Callable[[Any], None] | None = None
     #: A printed Trigger line. Set for immediate and opportunity actions.
     trigger: str = ""
     #: The same line in a form the dispatcher can act on. With it the row is
@@ -2542,6 +2564,7 @@ def power(
     requires_alt: Callable[[World, int], bool] | None = None,
     action_alt: ActionType | None = None,
     by_ally_check: tuple[str, int] | None = None,
+    effect_before: Callable[[Any], None] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
     recharge: int = 0,
@@ -2802,6 +2825,7 @@ def power(
             requires_alt=requires_alt,
             action_alt=action_alt,
             by_ally_check=by_ally_check,
+            effect_before=effect_before,
             trigger=trigger,
             on=on,
             recharge=recharge,
@@ -5354,6 +5378,21 @@ def use(
     # rows can otherwise hand a swing back and forth until the stack dies.
     if not reentrant and (actor, ref) in _IN_FLIGHT:
         return False
+
+    # **The printed Effect that runs before the row aims.** See
+    # `Power.effect_before`. It is here and not lower because everything
+    # below settles the target list, and the whole point of the clause is
+    # that the move decides who is in the burst.
+    if p.effect_before is not None:
+        early = Cast(world=world, me=actor, ref=ref, branch=branch,
+                     augment=augment)
+        p.effect_before(early)
+        # Anything the caller already aimed was aimed from the old square.
+        # Re-picked only for an "each" line -- a `count == 1` line is
+        # somebody's choice and re-picking would overrule them.
+        if (targets is not None and p.target is not None
+                and p.target.count > 1):
+            targets = None
 
     if targets is not None:
         chosen = [

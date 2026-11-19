@@ -20250,6 +20250,281 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_printed_effect_can_run_before_the_row_aims(out: Result) -> None:
+    """*"Effect: Before the attack, you move your speed. Each enemy that
+    makes an opportunity attack against you during this movement takes
+    damage equal to your primary ability modifier and is pushed 1 square
+    after its attack."* -- `p12236`, a close burst 1.
+
+    **The marker's diagnosis was exact and named the layer.** It said the
+    body is the one place that cannot move first -- `dsl.use` builds the
+    `Cast` **after** `_auto_targets` settles the list, and an offered
+    action is priced with resolved targets earlier still -- so a marker
+    naming a body verb (`c.move_before_targeting()`, which it had been
+    re-pointed off) waits for ever. It said the gap was a header field "the
+    shape `Power.check` is in" that had to sit **earlier** than that field.
+    `Power.effect_before` is that.
+
+    **Two halves, and the second is the one a field alone would not
+    give.** `use` drops a caller's pre-resolved target list when the row's
+    line is an "each" one (`target.count > 1`, and `EACH_ENEMY` is 99),
+    because those targets were aimed from the old square. A `count == 1`
+    line is somebody choosing and is left alone.
+
+    So the load-bearing assertion is an enemy **left behind**: adjacent
+    when the row is used, out of the burst after the move, and therefore
+    hit by nothing. Before this change it was caught, because the burst had
+    already been aimed.
+
+    **Two things the fixture has to supply, and both are honest.**
+
+    * `c.move` with no `toward=` asks `World.decide`, and with no decider
+      the first option wins -- which is the lowest square, not away from
+      anybody. The card lets the *player* choose, so the fixture installs a
+      decider that walks away. Without it the caster shuffles one square
+      and stays in its own burst, and the assertion below cannot
+      distinguish the two implementations.
+    * nobody answers an `OpportunityWindow` without a policy installed, so
+      no real opportunity attack happens on this board. The stimulus is
+      emitted instead -- a `Miss` carrying `opportunity=True`, which is the
+      flag `Swung` uses and the one the punishment reads. `Hit` and `Miss`
+      both carry it, because the card punishes *making* the attack rather
+      than landing it.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import EnterSquare, Miss
+    from combat_engine.engine.grid import distance
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import Encounter
+
+    row = REGISTRY["p12236"]
+    out.that(row.effect_before is not None and row.target is not None
+             and row.target.count > 1,
+             "`p12236` declares an `effect_before` and an *each* target"
+             " line -- the pair that makes the re-aim apply: a `count == 1`"
+             " line is somebody choosing and `use` leaves it alone",
+             f"effect_before={row.effect_before is not None},"
+             f" count={row.target.count}")
+
+    def pose(seed: int, *, swings: int = 0, walk_away: bool = True,
+             aim_first: bool = False, plain_swing: bool = False) -> dict | None:
+        """One board.
+
+        `aim_first` hands `use` a pre-resolved target list, the way the
+        action menu does -- which is the ONLY path the re-aim in `use`
+        touches. Without it `targets` is None, `_auto_targets` runs after
+        `effect_before` anyway, and the plant that deletes the re-aim
+        passes.
+
+        `plain_swing` has the bystander make an ORDINARY attack during the
+        move. Without one, nothing distinguishes "reads `opportunity`"
+        from "punishes every swing", and that plant passes too.
+        """
+        world, me, _ = _board("p12236", seed)
+        known = world.get(me, Powers)
+        if known is None:
+            return None
+        if "p12236" not in known.all:
+            known.known.append("p12236")
+        world.encounter = Encounter(world)
+        world.encounter.start()
+        foes = sorted(enemies(world, me))
+        if len(foes) < 2:
+            return None
+        spot = world.get(me, Position)
+        if spot is None:
+            return None
+        here = spot.square
+        swinger, bystander = foes[0], foes[1]
+        place(world, swinger, (here[0] + 1, here[1]))
+        place(world, bystander, (here[0] + 1, here[1] + 1))
+        hs = world.get(swinger, Health)
+        hb = world.get(bystander, Health)
+        if hs is None or hb is None:
+            return None
+        hs.hp, hb.hp = hs.max_hp, hb.max_hp
+        left_at = must(world.get(swinger, Position), "the swinger").square
+
+        if walk_away:
+            # The player's choice, which the card gives them.
+            real = world.decide
+
+            def decide(actor, kind, options, prompt, _r=real, _s=left_at):  # noqa: ANN001,ANN202
+                if kind == "move" and options:
+                    return max(options, key=lambda sq: distance(sq, _s))
+                return _r(actor, kind, options, prompt)
+
+            world.decide = decide
+
+        made: list[int] = []
+        plain: list[int] = []
+
+        def opening(ev: EnterSquare) -> None:
+            if getattr(ev, "actor", None) != me:
+                return
+            if swings and len(made) < swings:
+                made.append(1)
+                world.bus.emit(Miss(attacker=swinger, target=me, power="",
+                                    opportunity=True))
+            if plain_swing and not plain:
+                plain.append(1)
+                # **Not an opportunity attack.** The flag is the only
+                # difference, which is what makes this the control.
+                world.bus.emit(Miss(attacker=bystander, target=me,
+                                    power=""))
+
+        if swings or plain_swing:
+            world.bus.on(EnterSquare, opening)
+
+        # **Snapshot after the move, before the attack.** The punishment
+        # and the burst both hurt the same creature when it is not walked
+        # away from, so a total cannot tell them apart -- and the plant
+        # deleting the punishment passed on one.
+        after_move: dict[str, int] = {}
+
+        def mark(ev: EnterSquare) -> None:
+            # **The LAST square, not the first.** `opening` is subscribed
+            # first, so by the time this runs the punishment for that step
+            # is paid -- and overwriting each step leaves the reading taken
+            # after the whole move and before the attack, which is the
+            # window the punishment lives in. `setdefault` kept the first
+            # step and so missed a second opportunity attack entirely.
+            after_move["swinger"] = hs.hp
+
+        world.bus.on(EnterSquare, mark)
+
+        ran = use(world, me, "p12236", targets=[swinger] if aim_first else None)
+        end = must(world.get(me, Position), "the caster").square
+        now = must(world.get(swinger, Position), "the swinger").square
+        return {
+            "ran": bool(ran),
+            "moved": end != here,
+            "away": distance(end, left_at),
+            "swings": len(made),
+            "plain": len(plain),
+            "swinger_took": hs.max_hp - hs.hp,
+            # What the PUNISHMENT cost, isolated from the burst: hp lost by
+            # the time the caster had finished moving.
+            "punished": hs.max_hp - after_move.get("swinger", hs.max_hp),
+            "pushed": distance(left_at, now),
+            "bystander_took": hb.max_hp - hb.hp,
+        }
+
+    # -- the move, and the targets re-picked after it ----------------------
+    walked = [g for g in (pose(seed) for seed in (1, 2, 3, 4)) if g]
+    out.that(bool(walked) and all(g["moved"] for g in walked),
+             "the caster moves before the row aims -- *'before the attack,"
+             " you move your speed'*",
+             f"{sum(g['moved'] for g in walked)} of {len(walked)} moved")
+    if not walked:
+        return
+    out.that(all(g["away"] > 1 for g in walked),
+             "and far enough that the enemy it started beside is out of a"
+             " close burst 1 -- the premise, supplied by a decider because"
+             " `c.move` with no `toward=` takes the first option offered"
+             " and would shuffle one square",
+             f"distances {[g['away'] for g in walked]}")
+    out.that(all(g["swinger_took"] == 0 for g in walked),
+             "**so the enemy left behind is hit by nothing** -- the burst"
+             " was aimed from where the caster ENDED. Before the re-aim it"
+             " was caught, because the targets had already been picked",
+             f"{[g['swinger_took'] for g in walked]}")
+
+    # -- the punishment ---------------------------------------------------
+    hit_back = [g for g in (pose(seed, swings=1, walk_away=False)
+                            for seed in (2, 3, 4)) if g]
+    out.that(bool(hit_back) and all(g["swings"] == 1 for g in hit_back),
+             "one opportunity attack is made against the caster during the"
+             " move -- emitted with `opportunity=True`, because nothing"
+             " answers an `OpportunityWindow` without a policy installed",
+             f"{[g['swings'] for g in hit_back]}")
+    if not hit_back:
+        return
+    out.that(all(g["punished"] > 0 for g in hit_back),
+             "**and that enemy takes damage for it** -- *'takes damage"
+             " equal to your primary ability modifier'*. Measured as the hp"
+             " gone by the time the MOVE finished, not as a total: this arm"
+             " does not walk away, so the burst hurts the same creature and"
+             " a total cannot tell the two apart. The plant deleting the"
+             " punishment passed on one",
+             f"{[g['punished'] for g in hit_back]}")
+    out.that(all(g["pushed"] == 1 for g in hit_back),
+             "**and is pushed exactly 1 square** -- the printed number,"
+             " and the half a damage-only reading would drop silently",
+             f"{[g['pushed'] for g in hit_back]}")
+    # -- once per ENEMY, which is the printed subject ---------------------
+    # *"Each enemy that makes an opportunity attack ... takes damage"*: the
+    # subject is the enemy, so a creature with two openings in one move is
+    # one enemy and is punished once. That is the conservative reading of
+    # an ambiguous line, and it is asserted rather than left implicit --
+    # with one swing in the fixture, dropping the latch changed nothing.
+    # Walking away, because two openings need two squares of movement:
+    # standing still takes the first offered square, fires one
+    # `EnterSquare`, and cannot pose a second attack at all.
+    twice = [g for g in (pose(seed, swings=2) for seed in (2, 3, 4)) if g]
+    out.that(bool(twice) and all(g["swings"] == 2 for g in twice),
+             "the same enemy makes TWO opportunity attacks during one move",
+             f"{[g['swings'] for g in twice]}")
+    # **Paired per SEED, never across seeds.** The punishment is the
+    # caster's primary ability modifier, so two different boards have two
+    # different numbers and comparing seed 2's single swing against seed
+    # 3's double proves nothing -- that is how the first version of this
+    # assertion failed on a correct engine.
+    pairs = []
+    for seed in (2, 3, 4):
+        one, two = pose(seed, swings=1), pose(seed, swings=2)
+        if one and two and one["swings"] == 1 and two["swings"] == 2:
+            pairs.append((one["punished"], two["punished"], two["pushed"]))
+    out.that(bool(pairs),
+             "the same board is played with one opportunity attack and"
+             " with two, so the two readings are compared on one character",
+             f"{len(pairs)} pair(s)")
+    if pairs:
+        out.that(all(a == b for a, b, _ in pairs),
+                 "**and the second attack costs nothing extra** --"
+                 " *'each enemy that makes an opportunity attack'*, so the"
+                 " subject is the enemy and one creature is punished once."
+                 " The conservative reading of an ambiguous line, and the"
+                 " plant dropping the latch reds it",
+                 f"one vs two: {[(a, b) for a, b, _ in pairs]}")
+        out.that(all(p == 1 for _, _, p in pairs),
+                 "and pushed 1 square in total rather than 2",
+                 f"{[p for _, _, p in pairs]}")
+
+    # -- `Swung.opportunity` is read, not every swing punished -----------
+    plain = [g for g in (pose(seed, swings=1, walk_away=False,
+                              plain_swing=True) for seed in (2, 3, 4)) if g]
+    out.that(bool(plain) and all(g["plain"] == 1 for g in plain),
+             "the bystander makes an ORDINARY attack during the same move",
+             f"{[g['plain'] for g in plain]}")
+    if plain:
+        out.that(all(g["bystander_took"] == 0 for g in plain),
+                 "**and is punished for nothing** -- `Swung.opportunity` is"
+                 " read rather than every swing punished. Without a plain"
+                 " swing in the fixture, deleting that test changed nothing"
+                 " and its plant passed",
+                 f"{[g['bystander_took'] for g in plain]}")
+
+    # -- the re-aim, which only a pre-resolved target list reaches --------
+    aimed = [g for g in (pose(seed, aim_first=True) for seed in (1, 2, 3)) if g]
+    out.that(bool(aimed) and all(g["away"] > 1 for g in aimed),
+             "handed a pre-resolved target list -- the way the action menu"
+             " hands one -- the caster still walks out of its own burst",
+             f"{[g['away'] for g in aimed]}")
+    if aimed:
+        out.that(all(g["swinger_took"] == 0 for g in aimed),
+                 "**and the creature that list named is hit by nothing** --"
+                 " `use` drops a pre-aimed list for an *each* line, because"
+                 " it was aimed from the old square. This is the only path"
+                 " that reaches the re-aim: with `targets=None`,"
+                 " `_auto_targets` runs after `effect_before` anyway and"
+                 " the plant deleting the re-aim passes",
+                 f"{[g['swinger_took'] for g in aimed]}")
+
+
 def an_ally_may_spend_its_action_to_free_a_row(out: Result) -> None:
     """*"Special: As a standard action, an adjacent ally can make a DC 10
     Heal check to allow you to use this power without spending an action
@@ -103866,6 +104141,10 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "aim_after_moving": (a_printed_effect_can_run_before_the_row_aims,
+                         "a printed Effect runs before the row aims, and"
+                         " the burst is re-aimed from where the caster"
+                         " ended"),
     "ally_unlocks": (an_ally_may_spend_its_action_to_free_a_row,
                      "an adjacent ally spends a standard and a check so the"
                      " owner may use a row without paying an action"),

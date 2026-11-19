@@ -402,6 +402,58 @@ def p12235(c: Cast) -> None:
     c.watch(TurnStart, sting, until=When.EONT, on=c.me)
 
 
+def _p12236_run_up(c: Cast) -> None:
+    """*"Before the attack, you move your speed. Each enemy that makes an
+    opportunity attack against you during this movement takes damage equal
+    to your primary ability modifier and is pushed 1 square after its
+    attack."*
+
+    Declared as `effect_before=` rather than written in the body, because
+    the burst settles its targets before any body runs -- so a move taken
+    in the body would attack whoever was adjacent *before* it. See
+    `Power.effect_before`.
+
+    **The punishment reads `Swung.opportunity`**, which is the flag that
+    tells an opportunity attack from any other swing; `Hit` and `Miss` both
+    carry it, so the damage lands whether the swing connected or not --
+    the card punishes *making* the attack, not landing it.
+
+    **Watched on `Hit`/`Miss` rather than on `OpportunityWindow`**, and the
+    card decides which: *"after its attack"*. A window opening is not an
+    attack made, and a punishment hung there would pay out against an
+    enemy that was offered an opening and declined it.
+
+    The subscriptions come off in a `finally`, so a move that raises does
+    not leave the punishment armed for the rest of the fight.
+    """
+    from combat_engine.engine.query import squares  # noqa: F401
+
+    mod = c.attack_mod
+    me = c.me
+    paid: set[int] = set()
+
+    def punish(ev: Any) -> None:
+        if getattr(ev, "target", None) != me:
+            return
+        if not getattr(ev, "opportunity", False):
+            return
+        foe = getattr(ev, "attacker", None)
+        # Once each, which is "each enemy that makes an opportunity attack"
+        # -- a creature with two openings in one move is one enemy.
+        if foe is None or foe in paid or foe not in c.enemies():
+            return
+        paid.add(foe)
+        c.flat(mod, on=foe, from_attack=False)
+        c.push(1, on=foe)
+
+    subs = [c.world.bus.on(Hit, punish), c.world.bus.on(Miss, punish)]
+    try:
+        c.move(c.speed_of(me), who=me)
+    finally:
+        for sub in subs:
+            c.world.bus.off(sub)
+
+
 @power(
     "p12236",
     level=9,
@@ -412,26 +464,30 @@ def p12235(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*MARTIAL_WEAPON, Keyword.STANCE],
     attack=Attack(Pick.PRIMARY, vs=AC),
-    dropped=("Power.effect_before",),
+    effect_before=_p12236_run_up,
 )
 def p12236(c: Cast) -> None:
-    """The printed "before the attack, you move your speed" cannot be said:
-    a burst picks its targets before the body runs, so a move taken here
-    would attack whoever was adjacent before it. The punishment for
-    opportunity attacks made during that move goes with it.
+    """**The run-up is declared, not written here**, and the marker's
+    diagnosis was exactly right about why: *"the body is the one place that
+    cannot move first."* `dsl.use` builds the `Cast` **after**
+    `_auto_targets` settles the list, and an offered action is priced with
+    resolved targets earlier still -- so a marker naming a body verb
+    (`c.move_before_targeting()`, which this was re-pointed off) waits for
+    ever.
 
-    **Re-pointed off `c.move_before_targeting()`, which no verb can ever
-    satisfy.** `dsl.use` builds the `Cast` *after* `_auto_targets` has
-    settled the list, and for an offered action the targets are settled
-    earlier still -- `actions.options` prices every offer with its resolved
-    targets. So the body is the one place that cannot move first, and a
-    marker naming a body verb waits for ever.
+    It said the gap was a header one "the shape `Power.check` is in", and
+    that it had to sit **earlier** than that field. `Power.effect_before`
+    is that, and `_p12236_run_up` is the clause: the move, plus the
+    punishment for every enemy that takes an opportunity attack during it.
 
-    The gap is a header one, the shape `Power.check` is in: a printed line
-    the engine runs once, above the per-target loop. It has to sit earlier
-    than that field, though -- `use` rolls the check *after* the target
-    list is chosen, which is right for a gate and useless for a move that
-    decides who is in the burst.
+    **The targets are re-picked after the move**, which is the half a field
+    alone would not have given. `use` drops a caller's pre-resolved target
+    list when the row's line is an "each" one (`target.count > 1`), because
+    those were aimed from the old square; a `count == 1` line is somebody
+    choosing and is left alone.
+
+    The rest of the card -- the stance, and the per-turn grind on adjacent
+    enemies -- is below and was always written.
     """
     if c.strike():
         c.damage(c.w(2), c.attack_mod)
