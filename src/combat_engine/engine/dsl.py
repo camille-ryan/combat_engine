@@ -148,7 +148,11 @@ def _other_holds(world: World, actor: int, state: str) -> bool:
         # second vocabulary is minted. Of the caster, like the other three.
         from .query import holding
 
-        return holding(world, actor, "heavy blade")
+        # `bool(...)`, because `holding` answers a **list** of the matching
+        # weapons and this function is annotated `-> bool`. Truthiness was
+        # already correct, so this changes no behaviour -- it stops the
+        # signature lying, which `ty` named the moment this file moved.
+        return bool(holding(world, actor, "heavy blade"))
     if state == "aquatic":
         # **The encounter, not the creature.** `Cast.terrain`'s own note
         # records that `World.terrain` is empty today (#539), so this reads
