@@ -20520,7 +20520,8 @@ def a_bloodied_enemy_can_be_cowed_into_surrender(out: Result) -> None:
 
     > *"make sure you build the intimidate to surrender thing as its own
     > functionality rather than just part of the power. It's something all
-    > characters can do, the yakuza power just grants special timing"*
+    > characters can do, the [x7_936] power just grants special timing"*
+    (the ref is substituted into the quote; Camille named the theme)
 
     So `actions._cowing` offers it as a **standard action** beside
     stabilising and hiding, `Cast.surrender` holds the rule, and `p16005`

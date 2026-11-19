@@ -330,7 +330,8 @@ def _cowing(world: World, encounter: Encounter, actor: int) -> list[Action]:
 
     > *"make sure you build the intimidate to surrender thing as its own
     > functionality rather than just part of the power. It's something all
-    > characters can do, the yakuza power just grants special timing"*
+    > characters can do, the [x7_936] power just grants special timing"*
+    (the ref is substituted into the quote; Camille named the theme)
 
     So the offer is here, beside `_stabilising` and `_hiding` -- the two
     other things anybody may do with an action and a skill -- and `p16005`

@@ -1521,7 +1521,8 @@ def p16005(c: Cast) -> None:
 
     > *"make sure you build the intimidate to surrender thing as its own
     > functionality rather than just part of the power. It's something all
-    > characters can do, the yakuza power just grants special timing"*
+    > characters can do, the [x7_936] power just grants special timing"*
+    (the ref is substituted into the quote; Camille named the theme)
 
     So the attempt lives in `Cast.surrender` and is offered to every
     character as a **standard action** by `actions._cowing`, beside
