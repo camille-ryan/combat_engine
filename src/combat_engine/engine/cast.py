@@ -16148,6 +16148,7 @@ class Cast:
         difficult: bool = False,
         blocks_sight: bool = False,
         height: int = 0,
+        adjacent: bool = False,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = ActionType.MINOR,
     ) -> int:
@@ -16165,14 +16166,27 @@ class Cast:
             blocks_sight=blocks_sight, height=height, exempt=exempt,
             sustain=sustain if until is When.SUSTAIN else None,
         )
-        self.burns(zone, amount, dtype)
+        self.burns(zone, amount, dtype, adjacent=adjacent)
         return zone
 
     def burns(
-        self, zone: int, amount: str | int, dtype: DamageType = DamageType.UNTYPED
+        self, zone: int, amount: str | int,
+        dtype: DamageType = DamageType.UNTYPED, *, adjacent: bool = False,
     ) -> None:
         """Give an existing zone teeth: enter it or start a turn in it and it
         bites, once per turn.
+
+        **`adjacent=True` adds the third printed moment**, which 41 rows
+        across every spec table state: *"any creature that enters the zone,
+        starts its turn there, **or starts its turn adjacent to it**"*.
+
+        Deliberately only the turn start and **not** entry: widening the
+        zone to its own ring would make *stepping into* the ring bite,
+        which no printed line says. That is the reading `p11275`'s marker
+        was written to avoid, and it was right to.
+
+        The once-per-round cap is shared, so a creature both inside and
+        adjacent -- a Large one straddling the edge -- bites once.
 
         Split out of `hazard` so a zone somebody else made can have them --
         a conjuration's aura is created with the conjuration, and the thing
@@ -16215,7 +16229,25 @@ class Cast:
                 bite(ev.actor)
 
         def on_turn(ev: TurnStart) -> None:
-            if not ev.ghost and ev.actor in self.world.zones.occupants(zone):
+            if ev.ghost:
+                return
+            if ev.actor in self.world.zones.occupants(zone):
+                bite(ev.actor)
+                return
+            if not adjacent:
+                return
+            # **The ring is read at the moment it is asked about**, not
+            # frozen when the zone was made: a zone that moves takes its
+            # ring with it, and `c.move_zone` is a printed minor action.
+            from .grid import spread as _spread
+            from .query import squares as _squares
+
+            standing = dict(self.world.zones.all()).get(zone)
+            if standing is None:
+                return
+            edges = frozenset(standing.squares)
+            ring = _spread(edges, 1) - edges
+            if _squares(self.world, ev.actor) & ring:
                 bite(ev.actor)
 
         held = dict(self.world.zones.all()).get(zone)

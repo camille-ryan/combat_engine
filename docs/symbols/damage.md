@@ -13,7 +13,7 @@ Points off and points back on, and the dice behind them.
   - Coat a weapon in hand. `bite(ev)` runs on the next hit with it.
 - `c.b(self, count: 'int' = 1) -> 'str'`
   - `count`[B]: the **companion's** damage dice, that many times.
-- `c.burns(self, zone: 'int', amount: 'str | int', dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>) -> 'None'`
+- `c.burns(self, zone: 'int', amount: 'str | int', dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, adjacent: 'bool' = False) -> 'None'`
   - Give an existing zone teeth: enter it or start a turn in it and it
 - `c.cushion(self, amount: 'int' = 0) -> 'bool'`
   - Soften the fall being answered. With no number, all of it.

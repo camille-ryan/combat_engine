@@ -17180,6 +17180,120 @@ def a_second_vantage_adds_rather_than_moves(out: Result) -> None:
              f"{sorted(after)}")
 
 
+def a_zone_that_bites_the_ring_only_on_a_turn_start(out: Result) -> None:
+    """*"Any creature that enters the zone, starts its turn there, or starts
+    its turn adjacent to it takes fire damage... A creature can take this
+    damage only once per turn."* -- `p11275`.
+
+    **41 rows across every spec table print "starts its turn adjacent to
+    it"** and `c.burns` knew two of the three moments. The third is
+    `adjacent=True`.
+
+    **Only the turn start, and the old marker was written to protect
+    exactly that.** Widening the zone to its own ring would make *stepping
+    into* the ring bite, which no printed line says -- so the ring arm
+    hangs on `TurnStart` and nothing else, and the control below is a
+    creature that walks into the ring and takes nothing.
+
+    The once-per-round cap is shared between all three arms, so a creature
+    both inside and adjacent bites once.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied, TurnStart
+    from combat_engine.engine.query import enemies
+
+    #: What the zone's own damage is labelled. **Asserted on, instead of on
+    #: hit points**, and that is not fussiness: the audit board already has
+    #: an ongoing poison on these creatures, so a `TurnStart` costs them 2
+    #: before this zone bites at all. An earlier draft read the hit-point
+    #: delta and passed with the ring arm switched off -- the board's own
+    #: effect was doing the work.
+    BITE = "p11275 zone"
+
+    def staged():  # noqa: ANN202
+        """The row cast, where its zone is, and a log of its own bites."""
+        world, me, _ = _board("p11275", 1)
+        foes = sorted(enemies(world, me))
+        if len(foes) < 3:
+            return None
+        c = Cast(world=world, me=me, ref="p11275")
+        c.target = foes[0]
+        world.rng.loaded = 20
+        REGISTRY["p11275"].body(c)
+        spot = must(world.get(foes[0], Position), "the victim stands").square
+        bites: list[int] = []
+        world.bus.on(DamageApplied,
+                     lambda ev: bites.append(ev.target)
+                     if BITE in (getattr(ev, "detail", "") or "") else None)
+        return world, me, foes, spot, bites
+
+    def put(world, who: int, square) -> None:  # noqa: ANN001
+        world.grid.lift(who)
+        pos = must(world.get(who, Position), "the creature stands")
+        pos.square = square
+        world.grid.place(who, pos.squares)
+
+    got = staged()
+    out.that(got is not None,
+             "the board fields three enemies, so the three arms can be told"
+             " apart",
+             f"{got is not None}")
+    if got is None:
+        return
+    world, _me, foes, spot, bites = got
+
+    # -- starting a turn ADJACENT bites ----------------------------------
+    beside = foes[1]
+    put(world, beside, (spot[0] + 1, spot[1]))
+    world.bus.emit(TurnStart(actor=beside, round=world.round))
+    out.that(beside in bites,
+             "a creature that starts its turn ADJACENT to the zone takes"
+             " THE ZONE'S damage -- the third printed moment, read off the"
+             " labelled event rather than off hit points",
+             f"bitten: {bites}")
+
+    # -- and starting it far away does not -------------------------------
+    far = foes[2]
+    put(world, far, (spot[0] + 6, spot[1] + 6))
+    world.bus.emit(TurnStart(actor=far, round=world.round))
+    out.that(far not in bites,
+             "and one six squares off is not bitten -- so the arm is the"
+             " ring and not the board",
+             f"bitten: {bites}")
+
+    # -- WALKING into the ring takes nothing: the whole narrowing ---------
+    got2 = staged()
+    if got2 is None:
+        return
+    world2, _me2, foes2, spot2, bites2 = got2
+    walker = foes2[1]
+    ring_square = (spot2[0] + 1, spot2[1])
+    put(world2, walker, (spot2[0] + 2, spot2[1]))
+    # **`walk`, not `step`.** `MoveEnd` is emitted by `walk` and `shift`
+    # and never by a bare `step`, so a plant hooking it to bite on entry
+    # was unreachable from a `step`: the plant passed and the code was
+    # right for the wrong reason.
+    movement.walk(world2, walker, [ring_square])
+    # **And the arrival is asserted, not assumed.** A first version started
+    # the walker four squares out and it got one square before something
+    # blocked it -- so it never reached the ring and the line below was
+    # true of a creature that had not entered anything.
+    landed = must(world2.get(walker, Position), "the walker").square
+    out.that(landed == ring_square,
+             "the creature really is standing in the ring now, one square"
+             " off the zone -- the premise the whole control rests on",
+             f"{landed} against {ring_square}")
+    out.that(walker not in bites2,
+             "and walking INTO the ring is not bitten. This is the whole of"
+             " the narrowing: no printed line says entering the ring bites,"
+             " and a zone widened to its own ring would have charged for it",
+             f"bitten: {bites2}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -99653,6 +99767,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "bites_the_ring": (a_zone_that_bites_the_ring_only_on_a_turn_start,
+                       "a zone that bites a creature starting its turn"
+                       " beside it, and not one walking past"),
     "second_vantage": (a_second_vantage_adds_rather_than_moves,
                        "a second place to see from, where the sibling verb"
                        " moves the only one"),

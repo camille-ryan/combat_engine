@@ -25,7 +25,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Lay ground where the ground is against you: a bridge, a plank.
 - `c.grow(self, squares_: 'int' = 1, *, on: 'int | None' = None) -> 'bool'`
   - Spread a map feature into the clear ground beside it.
-- `c.hazard(self, area: 'Iterable[Square]', amount: 'str | int', dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, difficult: 'bool' = False, blocks_sight: 'bool' = False, height: 'int' = 0, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'int'`
+- `c.hazard(self, area: 'Iterable[Square]', amount: 'str | int', dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, difficult: 'bool' = False, blocks_sight: 'bool' = False, height: 'int' = 0, adjacent: 'bool' = False, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'int'`
   - A zone that hurts whoever is standing in it.
 - `c.illuminate(self, *settings: 'tuple[Light, int] | None', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Bright (10 squares), dim (5 squares), or off" -- one of a printed

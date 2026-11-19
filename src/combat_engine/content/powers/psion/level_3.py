@@ -62,13 +62,16 @@ PSIONIC_PSYCHIC = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC]
         Augment(1),
         Augment(2, reach=AreaBurst(1, 10), target=EACH_CREATURE),
     ),
-    dropped=("c.burns(adjacent=)",),
 )
 def p11275(c: Cast) -> None:
     """The zone is the target's own square on the two cheaper forms.
-    "Starts its turn adjacent to it" is dropped -- widening the zone to the
-    ring would also make entering the ring burn, which the printed line
-    does not say. Augment 1 makes that one square totally obscured.
+    **"Starts its turn adjacent to it" is written**, and the old note's
+    reason for dropping it was the right one to be careful about: widening
+    the zone to its own ring would also make *entering* the ring burn,
+    which the printed line does not say. `c.burns(adjacent=)` adds the turn
+    start alone, so the ring bites nobody who merely steps into it.
+
+    Augment 1 makes that one square totally obscured.
 
     Augment 2 is an area burst against each creature in it, which is the
     header, so it is declared there -- and with the burst declared, its
@@ -90,6 +93,10 @@ def p11275(c: Cast) -> None:
     c.hazard(
         {where}, c.wis_mod, DamageType.FIRE, until=When.EONT, sustain=None,
         blocks_sight=spent == 1,
+        # "or starts its turn adjacent to it" -- the third printed moment,
+        # and only the turn start: stepping into the ring is not a moment
+        # the card names.
+        adjacent=True,
     )
 
 
