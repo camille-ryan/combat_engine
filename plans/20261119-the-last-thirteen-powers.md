@@ -1,5 +1,19 @@
 # The last thirteen powers
 
+> **Updated the same day: it is now NINE.** `p14141` landed too --
+> `Power.resume`, plus `Powers.kept_rolls` and `Sheet.kept_rolls` -- which
+> was the first genuine subsystem of the run and is general: state that
+> outlives a fight, with the watches re-hung over it at
+> `Encounter.start`. This file's guess about it held exactly: the `Sheet`
+> field was three lines and the re-arm was the work.
+>
+> **And `p12162` should NOT be next, which reverses the order below.** The
+> clause is unique in the corpus -- 1 row of 23,883 prints *"does not
+> target you"* -- so the exemption it needs would serve one row from inside
+> `dsl.candidates`, the pool builder that runs on every menu draw. Measured
+> on `#1374`, which also corrects what I filed there: the attack half is
+> already right, and only the Effect-only area case is missing.
+>
 > **Updated the same day: it is now TEN.** `p12236`, `p16497` and
 > `p16112` were built after this file was written -- items 2, 4 and 7
 > of the order below -- so the cheap end of the list is gone and what
