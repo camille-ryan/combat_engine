@@ -1301,11 +1301,56 @@ class Check:
     """
 
     #: Which skill. One of `engine.skills.SKILLS`, checked at declaration.
-    skill: str
+    #:
+    #: Defaulted, because a `Check` may name an **ability** or a **list**
+    #: instead -- see `ability` and `skills` below. Exactly one of the
+    #: three has to be given and the declaration gate says so.
+    skill: str = ""
     #: Which DC band, indexed into `dc.py` against the roller's level.
     band: str = "moderate"
     #: A stated DC, which wins over the band. 0 means "use the band".
     dc: int = 0
+    #: **An ability check instead of a skill check**, by the printed word --
+    #: `x2_118` is *"Strength check (DC 20) to overturn the x2_118"*.
+    #:
+    #: The cards keep the two apart deliberately and
+    #: `skills.ability_check`'s own note records why folding them together
+    #: is wrong: one card prints *"ability check or skill check"* as two
+    #: things, so an invented skill name would make every rider watching
+    #: for a **skill** fire on an ability roll. The roller already exists
+    #: and announces `SkillCheck` under its own key; only the header could
+    #: not say so.
+    #:
+    #: Exclusive with `skill`: a `Check` is one roll, and declaring both
+    #: would leave the gate choosing.
+    ability: str = ""
+    #: **A choice of skills**, for a card that prints several --
+    #: `x2_120` is *"Arcana, Nature, or Religion check (hard DC)"*.
+    #:
+    #: Resolved as **one roll against the best of them**, which is a
+    #: reading and is written down as one. One roll because this tree has
+    #: already paid for the alternative: `affliction.tick`'s first draft
+    #: called `check` twice for one printed check and could clear one DC
+    #: and fail the other on two different dice. Best because the choice
+    #: is the character's and a player picks their best; `skills.modifier`
+    #: is what ranks them.
+    #:
+    #: **And "best" is this file's own established reading, not a new
+    #: one.** `Attack.ability` has taken a tuple since it existed, for the
+    #: cards printing *"Strength or Dexterity vs. AC"*, and resolves it
+    #: `max(self.ability, key=stats.mod)`. Same question, same answer, two
+    #: fields apart.
+    #:
+    #: **Not "take the first", which is the thing deliberately refused
+    #: elsewhere.** `affliction.printed()` drops a two-skill disease
+    #: rather than guess, on the ground that *"a choice is a decision
+    #: about which skill the character uses, not arithmetic"*. Taking the
+    #: best is a different rule from taking the first: it is the one
+    #: answer no character would argue with, and it is deterministic.
+    #:
+    #: `skill` stays the single-skill spelling and 13 of the 14 rows use
+    #: it; this is for the one that prints a list.
+    skills: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2785,7 +2830,33 @@ def power(
     if check is not None:
         from combat_engine.dc import BANDS as _BANDS
 
-        if check.skill not in SKILLS:
+        from .types import Ability as _Ability
+
+        # **Exactly one of the three, refused at import rather than left to
+        # the gate.** Two of them would make the gate choose which roll the
+        # card meant, and none of them is a `Check` that cannot be rolled.
+        named = [bool(check.skill), bool(check.ability), bool(check.skills)]
+        if sum(named) != 1:
+            raise ValueError(
+                f"{ref}: a check names exactly one of skill=, ability= or "
+                f"skills=; this names {sum(named)}. One roll, one source."
+            )
+        if check.ability:
+            # By the ability's own name, which is what the card prints --
+            # "Strength check (DC 20)".
+            allowed = {a.value for a in _Ability} | {a.name.lower() for a in _Ability}
+            if check.ability.lower() not in allowed:
+                raise ValueError(
+                    f"{ref}: check names ability {check.ability!r}, which is "
+                    f"not one of {sorted(a.value for a in _Ability)}."
+                )
+        for one in (check.skills or ()):
+            if one not in SKILLS:
+                raise ValueError(
+                    f"{ref}: check names {one!r} among skills=, which is not "
+                    f"one of the {len(SKILLS)} skills."
+                )
+        if check.skill and check.skill not in SKILLS:
             raise ValueError(
                 f"{ref}: check names {check.skill!r}, which is not one of "
                 f"the {len(SKILLS)} skills. The printed line is "
@@ -5589,7 +5660,38 @@ def use(
         if not want:
             stats = world.get(actor, _Stats)
             want = _dc(stats.level if stats else 1, p.check.band)
-        if not cast.check(p.check.skill, want):
+        # **One roll, whichever of the three forms the card named.** Never
+        # two: `affliction.tick`'s first draft rolled one printed check
+        # twice -- once per DC -- and a character could clear one and fail
+        # the other on different dice. The same trap with the same answer.
+        if p.check.ability:
+            from .types import Ability as _Ability
+
+            want_ability = next(
+                (a for a in _Ability
+                 if p.check.ability.lower() in (a.value, a.name.lower())),
+                None,
+            )
+            rolled = (
+                want_ability is not None
+                and cast.ability_check(want_ability, want)
+            )
+        elif p.check.skills:
+            # **The best of the printed skills, one roll.** The choice is
+            # the character's and a player picks their best;
+            # `skills.modifier` is the fixed part of each check, so ranking
+            # on it ranks the checks. See `Check.skills` for why this is
+            # "best" rather than "first".
+            from .skills import modifier as _modifier
+
+            pick = max(
+                p.check.skills,
+                key=lambda one: _modifier(world, actor, one),
+            )
+            rolled = cast.check(pick, want)
+        else:
+            rolled = cast.check(p.check.skill, want)
+        if not rolled:
             # **`PowerResolved` still fires**, with no rolls and the
             # targets that were aimed at. The power *was* used and came to
             # nothing, so a watcher waiting on the use completing must see

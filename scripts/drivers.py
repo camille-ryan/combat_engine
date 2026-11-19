@@ -20264,6 +20264,136 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_declared_check_may_name_an_ability_or_a_choice(out: Result) -> None:
+    """`Check:` lines that are not one named skill, and there are two shapes.
+
+    A printed `Check:` gates the rest of a terrain power -- `#1106` -- and
+    `Check` held exactly one skill name. Two of the fourteen rows print
+    something else:
+
+        x2_118   Check: Strength check (DC 20) to overturn the x2_118.
+        x2_120   Check: Arcana, Nature, or Religion check (hard DC) ...
+
+    **An ability check is not a skill check**, which the cards keep apart
+    deliberately: `skills.ability_check`'s own note records that one card
+    prints *"ability check or skill check"* as two things, so folding them
+    together under an invented skill name would make every rider watching
+    for a **skill** fire on an ability roll. The roller already existed and
+    announces under its own `ability:<name>` key; only the header could not
+    say so.
+
+    **A choice resolves to the best, one roll.** That is `Attack.ability`'s
+    established reading two fields away -- it has taken a tuple since it
+    existed, for *"Strength or Dexterity vs. AC"*, and resolves
+    `max(self.ability, key=stats.mod)`. Not "take the first", which is what
+    `affliction.printed()` deliberately refuses to do with a two-skill
+    disease.
+
+    **One roll is the assertion that matters most**, and it is why `x2_118`
+    lost the `c.ability_check` call from its body. A declared check is
+    rolled by `dsl.use` before targeting; leaving the body call in would
+    roll one printed check **twice**, on two different dice -- the trap
+    `affliction.tick`'s first draft paid for with two DCs and one printed
+    check.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine import dsl
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.skills import modifier as skill_modifier
+
+    def rolled(ref: str, seed: int = 1) -> tuple[list[str], bool]:
+        """The checks one use announced, and whether the body then ran."""
+        from combat_engine.engine.events import AttackDeclared
+
+        world, caster, _ = audit_board(ref, seed)
+        seen: list[str] = []
+        swung: list[int] = []
+        world.bus.on(SkillCheck, lambda ev: seen.append(getattr(ev, "skill", "?")))
+        world.bus.on(AttackDeclared, lambda ev: swung.append(ev.attacker))
+        dsl.use(world, caster, ref, board=True)
+        return seen, bool(swung)
+
+    # --- the ability form.
+    #
+    # **Both outcomes, on seeds chosen because they produce them.** The
+    # first draft asserted "rolled exactly once" on seed 1 alone, where the
+    # Strength check rolls 16 against DC 20 and **fails** -- so the body
+    # never ran and "once" was true for the wrong reason. A plant putting
+    # the body's own `c.ability_check` back, which is the double-roll this
+    # rule exists to forbid, **passed**. Measured over ten seeds: 7 and 9
+    # clear DC 20 (22 and 21) and the other eight do not.
+    PASSES, FAILS = 7, 1
+
+    keys, ran = rolled("x2_118", PASSES)
+    out.that(
+        len(keys) == 1 and ran,
+        "x2_118's declared Strength check is rolled exactly ONCE on a seed"
+        " that CLEARS it, and the body then runs -- so a second roll in the"
+        f" body would show here ({len(keys)} roll(s): {keys}, body ran {ran})",
+    )
+    out.that(
+        bool(keys) and keys[0].startswith("ability:"),
+        "and it announces under an `ability:` key rather than a skill one,"
+        " so a rider watching for a skill check does not fire on it"
+        f" (announced {keys})",
+    )
+
+    missed, ran_anyway = rolled("x2_118", FAILS)
+    out.that(
+        len(missed) == 1 and not ran_anyway,
+        "and on a seed that FAILS it the power is abandoned before the"
+        " body -- which is what a declared check is for (#1106)"
+        f" ({len(missed)} roll(s): {missed}, body ran {ran_anyway})",
+    )
+
+    # --- the choice form, and the choice is asserted against the modifiers
+    # rather than against a remembered answer: the board's caster can move.
+    world, caster, _ = audit_board("x2_120", 1)
+    offered = dsl.REGISTRY["x2_120"].check.skills
+    out.that(
+        len(offered) == 3,
+        f"x2_120 declares all three printed skills ({offered})",
+    )
+    mods = {one: skill_modifier(world, caster, one) for one in offered}
+    picked, _ = rolled("x2_120")
+    out.that(
+        len(picked) == 1,
+        f"and rolls exactly one check for them ({len(picked)}: {picked})",
+    )
+    out.that(
+        bool(picked) and mods.get(picked[0]) == max(mods.values()),
+        "and rolls the BEST of the three, which is `Attack.ability`'s own"
+        f" reading for a tuple (rolled {picked}, modifiers {mods})",
+    )
+
+    # --- the declaration gate. Exactly one source, refused at import.
+    from combat_engine.engine.dsl import Check as _Check
+
+    for bad, why in (
+        ({"skill": "arcana", "ability": "str"}, "two sources"),
+        ({}, "no source"),
+        ({"ability": "strength!"}, "an ability that is not one"),
+        ({"skills": ("arcana", "not-a-skill")}, "a skill that is not one"),
+    ):
+        try:
+            dsl.power("x2_probe", level=1, check=_Check(**bad))(lambda c: None)
+        except ValueError:
+            refused = True
+        except Exception:
+            refused = False
+        else:
+            refused = False
+        out.that(refused, f"a check declaring {why} is refused at import ({bad})")
+
+    for ref in ("x2_118", "x2_120"):
+        row = dsl.REGISTRY.get(ref)
+        out.that(
+            row is not None and not row.unfinished,
+            f"{ref} carries no marker for the field it waited on",
+        )
+
+
 def the_audit_board_does_not_depend_on_what_ran_before_it(out: Result) -> None:
     """`audit.board` builds the same board whatever mode the process is in.
 
@@ -105363,6 +105493,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "check_forms": (a_declared_check_may_name_an_ability_or_a_choice,
+                    "a printed Check: line may name an ability or a choice"
+                    " of skills, and is rolled exactly once either way"),
     "board_is_pinned": (the_audit_board_does_not_depend_on_what_ran_before_it,
                         "audit.board deals the same board whatever mode the"
                         " calling process left chargen in"),

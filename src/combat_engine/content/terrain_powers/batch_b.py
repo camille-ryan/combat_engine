@@ -32,7 +32,10 @@ names this for `EACH_CREATURE` and has no gate for the single-target
 spelling, where it had to be read off `show.py`: `x2_120` was aiming at the
 user until it was. See `EACH_OTHER`'s own comment in `dsl`.
 
-What is new here, and the four markers, row by row:
+What is new here, and the markers that are left, row by row. **Two of the
+four are gone and this list said four until 2026-11-19** -- `x2_118` and
+`x2_120` both waited on a `Check` field and both have one now, so only
+`x2_117`'s pair survives:
 
 * **`x2_116`** is the first row in the tree whose target line is a *path*:
   *"each creature whose space it enters"*, over `1d6` squares. Not an area,
@@ -47,15 +50,15 @@ What is new here, and the four markers, row by row:
   the area is centred on that object rather than on the user
   (`c.area_origin()`). Aiming at the object is written -- #1216.
 * **`x2_118`** prints `Check: Strength check (DC 20)`, which is an
-  **ability** check and not a skill one -- `Check.skill` is validated
-  against `engine.skills.SKILLS` and refuses it at declaration. The gate is
-  rolled and honoured in the body instead, so the row plays exactly as
-  printed; what is missing is the header *field*, which is what the page
-  and the AI policy read without running anything.
-* **`x2_119`** is the one row here needing no marker.
-* **`x2_120`** prints a check the user may make with any of three skills.
-  `Check.skill` holds one, where `Attack.ability` has taken a tuple for
-  exactly this shape since the field existed.
+  **ability** check and not a skill one. `Check(ability=)` holds it now and
+  the roll moved out of the body -- a declared check is rolled once by
+  `dsl.use` before targeting, so leaving the body call would have rolled
+  one printed check twice.
+* **`x2_119`** needed no marker from the start.
+* **`x2_120`** prints a check the user may make with any of three skills,
+  which is `Check(skills=)`: one roll against the best of them, the same
+  reading `Attack.ability` has used for a tuple since it existed
+  (`max(..., key=stats.mod)`).
 """
 
 from __future__ import annotations
@@ -77,7 +80,7 @@ from combat_engine.engine.dsl import (
 from combat_engine.engine.durations import When
 from combat_engine.engine.grid import distance, spread
 from combat_engine.engine.query import squares as squares_of
-from combat_engine.engine.types import Ability, ActionType, DamageType, Defense, Light, Usage
+from combat_engine.engine.types import ActionType, DamageType, Defense, Light, Usage
 from combat_engine.engine.zones import Zone
 
 
@@ -237,37 +240,37 @@ def x2_117(c: Cast) -> None:
 @power("x2_118", level=1, usage=Usage.AT_WILL, action=ActionType.STANDARD,
        reach=CloseBlast(3), target=EACH_OTHER,
        attack=Attack(printed=18, vs=Defense.REF),
-       dropped=("dsl.Check(ability=)",))
+       check=Check(ability="str", dc=20))
 def x2_118(c: Cast) -> None:
     """Tip it over and the coals go everywhere: a blast, and whoever is in
     it burns until they shake it off.
 
-    **The printed gate is an ability check, which the header cannot hold.**
-    The page prints `Check: Strength check (DC 20)`, and `Check.skill` is
-    validated against `engine.skills.SKILLS` at declaration -- rightly, a
-    misspelling there is a check that cannot be rolled and therefore reads
-    as a pass. A Strength check is not an Athletics check: Athletics adds
-    the +5 for training that `skills.check` applies and this roll does not,
-    so naming the skill would be a substitution and not a translation.
-    `skills.ability_check` exists for precisely this distinction and says
-    why in its own docstring.
+    **The printed gate is an ability check, and the header holds one now.**
+    The page prints `Check: Strength check (DC 20)`. A Strength check is
+    not an Athletics check -- Athletics adds the +5 for training that
+    `skills.check` applies and this roll does not -- so naming the skill
+    would have been a substitution rather than a translation.
+    `skills.ability_check` exists for precisely that distinction and says
+    why in its own docstring; what was missing was only a way for the
+    *header* to say it.
 
-    So the gate is rolled in the body, **once**, and the whole power is
-    abandoned on a failure -- which is what the header field does and is
-    the entire content of `#1106`. That needs the body to resolve every
-    target in one call rather than once each, because a body that runs per
-    target cannot stop the next one; `powers/monk/level_1.p13221` is the
-    established shape for that and is written in here. The row therefore
-    plays exactly as printed.
+    `Check(ability="str", dc=20)` is that, and it is what the marker named.
+    The roll moved **out of the body**: `dsl.use` rolls a declared check
+    once, before targeting, and abandons the whole power on a failure --
+    which is the entire content of `#1106`. The body's own
+    `c.ability_check` call is gone, because keeping both would roll one
+    printed check twice on two different dice.
 
-    What is dropped is the header *declaration*. `Attack` and `Check` sit
-    in the header so the page and the AI policy can read a row **without
-    running it**, and a gate living in the body is invisible to both: the
-    menu cannot say the use might come to nothing, and `cards.py` compares
-    the printed `Check:` line against a field that is empty here.
-    `dsl.Check(ability=)` is the symbol -- one field beside `skill`,
-    resolved through `Cast.ability_check` the way `band` already resolves
-    through `combat_engine.dc.dc`.
+    Why the declaration was worth having rather than leaving the body gate
+    alone: `Attack` and `Check` sit in the header so the page and the AI
+    policy can read a row **without running it**. A gate living in the body
+    is invisible to both -- the menu cannot say the use might come to
+    nothing, and `cards.py` compares the printed `Check:` line against a
+    field that was empty here.
+
+    The `c.first` guard and the loop over `c.targets` stay. Those are about
+    a body running **once per target**, which the header check does not
+    change; `powers/monk/level_1.p13221` is the established shape.
 
     `Attack(printed=18)`: see `x2_117`, same reading and same caveat.
 
@@ -277,8 +280,11 @@ def x2_118(c: Cast) -> None:
     """
     if not c.first:
         return
-    if not c.ability_check(Ability.STR, 20):
-        return
+    # **The Strength check is NOT rolled here any more.** It is declared --
+    # `check=Check(ability="str", dc=20)` -- and `dsl.use` rolls it once
+    # before the body, abandoning the whole power on a failure. Leaving the
+    # body call in would roll one printed check **twice** on two different
+    # dice, which is the trap `affliction.tick`'s first draft paid for.
     for victim in list(c.targets):
         if c.strike(on=victim):
             c.ongoing(10, DamageType.FIRE, on=victim)
@@ -330,9 +336,8 @@ def x2_119(c: Cast) -> None:
 
 @power("x2_120", level=1, usage=Usage.AT_WILL, action=ActionType.STANDARD,
        reach=CloseBurst(5), target=Target("other", 1),
-       check=Check("arcana", "hard"),
-       attack=Attack(level_plus=3, vs=Defense.REF),
-       dropped=("dsl.Check(skills=)",))
+       check=Check(skills=("arcana", "nature", "religion"), band="hard"),
+       attack=Attack(level_plus=3, vs=Defense.REF))
 def x2_120(c: Cast) -> None:
     """Set it off at one creature in the burst.
 
