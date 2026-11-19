@@ -2264,18 +2264,42 @@ def m3828a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.in_zone(label=)",),
+    todo=("etl.unresolved_ref",),
 )
 def m3828a4(c: Cast) -> None:
     """Two clauses and neither can be laid.
 
-    The first is about a zone another row (m43) puts on the board: this
-    creature is not blinded inside it and the zone does not block its line of
-    sight. Nothing can ask whether a creature is standing in *somebody
-    else's* zone -- `c.in_my_aura` reads the caster's own auras and
-    `c.conjurations` hands back ids with no membership test -- so the gate
-    the first half needs cannot be written, and laying the immunity ungated
-    would be strictly stronger than print.
+    The first is about a zone another row puts on the board: this creature
+    is not blinded inside it and the zone does not block its line of sight.
+
+    **This note blamed the engine and the engine was not the problem.** It
+    said *"nothing can ask whether a creature is standing in somebody
+    else's zone"*, and that is false twice over:
+
+    * `World.zones.all()` enumerates every zone with its `label`, `owner`
+      and `squares`, and `powers/druid/level_6_b.p5052` already walks it on
+      a written row -- so the membership test is ordinary content work;
+    * `Zone.exempt` is read by `query.cover_between`'s sight pass as
+      exactly the waiver the second half of the sentence prints
+      (`if zone.blocks_sight and attacker not in zone.exempt`).
+
+    **The real blocker is that the zone's ref resolves to nothing.** The
+    card names a power ref and that ref is in **no table** of `game.db` --
+    it is one of 21 `x12_<hash>` refs the ETL mints where it cannot match a
+    name, every one of which resolves to no row. So nothing can lay the
+    zone, the gate would be always-False, and `x5_51`'s note is the rule
+    that applies: *"a gate that is always False is a clause that is never
+    laid."*
+
+    Re-pointed to `etl.unresolved_ref`, which is the gap. 38 declared rows
+    cite one of those refs and **29 carry no marker at all**, so they
+    report finished while referring to something absent; `refs.py` cannot
+    see it, because it walks refs named in tracked prose and these live in
+    `game.db`'s `spec` columns. `#1392` has the measurement.
+
+    `triage.json` judged the old symbol `mis-marked, found:
+    World.zones.all()` and was right about the engine and silent about the
+    dead ref -- which is the half that blocks the row.
 
     The second is a type word other stat blocks' rows read, and that word is
     a printed name. `c.set_origin` is the verb and nothing is missing from
