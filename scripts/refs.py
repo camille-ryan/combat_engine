@@ -92,7 +92,26 @@ _MINTED = (
     re.compile(r"m\d+a\d+$"),              # a monster ability
     re.compile(r"cf:[a-z-]+-f\d+(?:s\d+)?$"),  # a class feature or sub-option
     re.compile(r"i\d+[px]\d+$"),           # an item power or property
+    # **A second printed card inside one entry**, which the importer mints
+    # when the compendium entry holds two full card blocks. 369 of the 370
+    # declared `...b` rows have a database row, so this family is
+    # importer-minted exactly like the three above and was missing from this
+    # list for the same reason they are on it: a renumbering that stopped
+    # emitting one would re-point live content in silence.
+    re.compile(r"[pfi]\d+b$"),
 )
+
+#: The declared `...b` rows the importer deliberately does **not** mint,
+#: because the second mode is a *sentence* inside one card rather than a
+#: second card block -- so there is nothing for the ETL to split.
+#:
+#: Named one at a time, never a pattern, because the whole value of the
+#: entry above is that it is otherwise exhaustive. One row today, and it
+#: earned its place the hard way: `f2793b` was declared, audited green and
+#: **unable to fire** -- nothing handed it to a creature -- which is a
+#: different fault from the one this instrument watches for and was found
+#: while fixing it.
+_BY_HAND = frozenset({"f2793b"})
 
 
 def _minted_without_a_row() -> list[str]:
@@ -125,7 +144,8 @@ def _minted_without_a_row() -> list[str]:
             continue
     return sorted(
         ref for ref in REGISTRY
-        if ref not in held and any(p.match(ref) for p in _MINTED)
+        if ref not in held and ref not in _BY_HAND
+        and any(p.match(ref) for p in _MINTED)
     )
 
 
