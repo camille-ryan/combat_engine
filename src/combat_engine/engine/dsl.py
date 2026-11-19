@@ -401,6 +401,20 @@ def MeleeOrRanged(melee: int = 1, ranged: int = 10, *, by_weapon: bool = False) 
 
 PERSONAL = Range("personal", 0)
 
+#: A personal reach with a **second branch**, for a card whose own Special
+#: is a different action cost on the same power.
+#:
+#: Two branches of the same kind, which is what `Range.alt` has always
+#: allowed -- the field has never cared that the halves were a melee and a
+#: ranged one, and `MeleeOrRanged` is a three-line factory over it. Paired
+#: with `Power.action_alt`, which is the one thing `_aiming_branch` still
+#: took from the row rather than from the branch.
+#:
+#: A factory rather than exporting `Range` into `content/`: a row should not
+#: have to know the constructor to say "this card prints two action costs".
+def PersonalPair() -> Range:
+    return Range("personal", 0, alt=Range("personal", 0))
+
 
 @dataclass(frozen=True)
 class Augment:
@@ -1720,6 +1734,20 @@ class Power:
     #: is the melee branch's requirement and the ranged branch's, and
     #: checking it whole says yes to both when only one is true.
     requires_alt: Callable[[World, int], bool] | None = None
+    #: A second printed **action cost** for the second branch.
+    #:
+    #: `m1171a1` prints *"standard or opportunity action"* and `p14124`
+    #: prints a Special that sustains a different kind of hold for a minor
+    #: where its base line is a free action -- one card, two costs, and
+    #: `Power.action` is a single `ActionType`.
+    #:
+    #: The branch axis already carried everything else a second printed
+    #: form needs: `reach_of`, `attack_of`, `damage_of` and `requires_of`
+    #: are all read off it, and `Range.alt` has never cared that the two
+    #: halves were a melee and a ranged one. The cost was the one thing
+    #: `_aiming_branch` still took from the row rather than from the
+    #: branch, which is why `p14124`'s marker named this field.
+    action_alt: ActionType | None = None
     #: A printed Trigger line. Set for immediate and opportunity actions.
     trigger: str = ""
     #: The same line in a form the dispatcher can act on. With it the row is
@@ -2252,6 +2280,17 @@ class Power:
         """
         return self.requires_alt if branch else self.requires
 
+    def action_of(self, branch: int = 0) -> ActionType:
+        """What this branch costs to use.
+
+        `action_alt or action` rather than bare `action_alt`, unlike
+        `requires_of` above: a branch with no printed cost of its own costs
+        what the card's action line says, where a branch with no printed
+        Requirement genuinely has none. The two fields differ in what their
+        absence means, which is why they read differently.
+        """
+        return (self.action_alt or self.action) if branch else self.action
+
     def can_branch(self, world: World, actor: int, branch: int = 0) -> bool:
         """Is this branch open to this creature, given what it is holding?
 
@@ -2464,6 +2503,7 @@ def power(
     #: `Power.reads_parity` -- `p5845` is the only reader. #1302.
     reads_parity: bool = False,
     requires_alt: Callable[[World, int], bool] | None = None,
+    action_alt: ActionType | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
     recharge: int = 0,
@@ -2722,6 +2762,7 @@ def power(
             basic_at=tuple(basic_at),
             reads_parity=reads_parity,
             requires_alt=requires_alt,
+            action_alt=action_alt,
             trigger=trigger,
             on=on,
             recharge=recharge,

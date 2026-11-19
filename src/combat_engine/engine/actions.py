@@ -226,7 +226,14 @@ def _powers(world: World, encounter: Encounter, actor: int, include_blocked: boo
                 for n in affordable(world, actor, p)
                 if n
             )
-        if not encounter.can_spend(actor, p.action):
+        # **Any branch it can pay for**, not the base line's cost. A card
+        # printing two action costs -- `m1171a1`'s "standard or opportunity
+        # action" -- is usable when either is affordable, and asking only
+        # `p.action` refused the whole row on a turn when the alternative
+        # was the affordable one.
+        if not any(
+            encounter.can_spend(actor, p.action_of(b)) for b in p.branches
+        ):
             ok, why = False, "no action left"
         if not ok:
             if include_blocked:
@@ -1104,7 +1111,7 @@ def _aimings(world: World, actor: int, ref: str, *, cost: ActionType | None = No
 
 
 def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: ActionType | None = None, augment: int = 0, variant: int = 0) -> list[Action]:  # noqa: ANN001, E501
-    cost = cost or p.action
+    cost = cost or p.action_of(branch)
     reach = p.reach_of(branch, augment)
     aim_at = p.target_of(augment)
 

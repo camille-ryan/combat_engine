@@ -57,6 +57,7 @@ from .dsl import (
     Damage,
     Melee,
     MeleeOrRanged,
+    PersonalPair,
     Pick,
     Power,
     Ranged,

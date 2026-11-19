@@ -19168,6 +19168,110 @@ def commanding_a_summon_needs_line_of_effect(out: Result) -> None:
                  f"summoned {made}, waived {held}")
 
 
+def a_card_may_print_two_action_costs(out: Result) -> None:
+    """*"Effect: You sustain a power that normally requires a minor action
+    to sustain. Special: You can use this power as a minor action to sustain
+    a power that normally requires a move action to sustain."* -- `p14124`.
+
+    **The marker named `Power.action_alt` and it was the right field.** Its
+    note had the diagnosis exact: "`Power.action` is a single `ActionType`
+    and nothing in the header forbids a second, so this is a field that is
+    missing and not a field that was refused".
+
+    It also said the other three `_alt` fields "are read off `branch`,
+    which is which half of a `MeleeOrRanged` line is being swung, and
+    neither this card nor `m1171a1` is a two-range row -- so the second
+    mechanism is needed". That last step is the one this change undoes:
+    `Range.alt` has never cared that the two halves were a melee and a
+    ranged one, and `MeleeOrRanged` is a three-line factory over it. A
+    personal reach with a personal `alt` gives two branches without moving
+    where the power reaches, which is what `PersonalPair` is.
+
+    So the only thing genuinely missing was the **cost**, which
+    `_aiming_branch` still took from the row (`cost or p.action`) where it
+    took everything else from the branch.
+
+    The 2x2 at the end is the clause: each branch reaches a different pool
+    of holds and neither reaches the other's. Read off `EffectSustained`,
+    because `Effects.sustain` sets `sustained` and emits -- it does not move
+    the clock, which is what the first probe watched and why it read four
+    Falses.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions, dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import EffectSustained
+    from combat_engine.engine.types import ActionType
+
+    row = dsl.REGISTRY["p14124"]
+    out.that(row.branches == (0, 1),
+             "the card declares two branches off one personal reach",
+             f"{row.branches}")
+    out.that(row.action_of(0) is ActionType.FREE
+             and row.action_of(1) is ActionType.MINOR,
+             "and they cost the two printed actions -- a FREE action for"
+             " the Effect line and a MINOR for the Special",
+             f"{row.action_of(0)} / {row.action_of(1)}")
+    plain = dsl.REGISTRY["p12608"]
+    out.that(plain.action_of(1) is plain.action,
+             "a row with no `action_alt` answers its own cost on branch 1"
+             " rather than `None` -- the asymmetry with `requires_of`, where"
+             " an absent gate means there is none",
+             f"{plain.action_of(1)}")
+
+    # -- the menu prices them apart --------------------------------------
+    world, me, _ = _board("p14124", 1)
+    known = world.get(me, Powers)
+    if "p14124" not in known.all:
+        known.known.append("p14124")
+    for cost in (ActionType.MINOR, ActionType.MOVE):
+        held = world.effects.apply(
+            me, me, When.SUSTAIN, label=f"drivers:hold:{cost.value}",
+            by="drivers:probe")
+        held.sustain_cost = cost
+    world.turn = me
+    offers = {
+        a.branch: a.cost
+        for a in actions.legal(world, world.encounter, me)
+        if getattr(a, "ref", "") == "p14124"
+    }
+    out.that(offers.get(0) is ActionType.FREE
+             and offers.get(1) is ActionType.MINOR,
+             "and the action menu offers BOTH, each at its own price -- the"
+             " half `_aiming_branch` was getting wrong, since it read"
+             " `cost or p.action` where it read everything else off the"
+             " branch", f"{offers}")
+
+    # -- the clause: each branch reaches its own pool ---------------------
+    def sustains(branch: int, laid: ActionType) -> bool:
+        world, me, _ = _board("p14124", 1)
+        held = world.effects.apply(
+            me, me, When.SUSTAIN, label="drivers:hold", by="drivers:probe")
+        held.sustain_cost = laid
+        seen: list[Any] = []
+        world.bus.on(EffectSustained, lambda ev, s=seen: s.append(ev),
+                     owner=me)
+        c = Cast(world=world, me=me, ref="p14124")
+        c.branch = branch
+        dsl.REGISTRY["p14124"].body(c)
+        return any(e.what == "drivers:hold" for e in seen)
+
+    out.that(sustains(0, ActionType.MINOR),
+             "the free branch sustains a hold that normally costs a minor --"
+             " the printed Effect", "sustained")
+    out.that(not sustains(0, ActionType.MOVE),
+             "and not one that costs a move", "untouched")
+    out.that(sustains(1, ActionType.MOVE),
+             "the minor branch sustains the move-sustain hold -- the printed"
+             " Special", "sustained")
+    out.that(not sustains(1, ActionType.MINOR),
+             "and not the minor-sustain one, so the two branches reach"
+             " disjoint pools rather than one being a superset -- which a"
+             " body ignoring `c.branch` could not do", "untouched")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -101784,6 +101888,9 @@ DRIVERS = {
     "command_sight": (commanding_a_summon_needs_line_of_effect,
                       "commanding a summon needs line of effect, and two"
                       " cards waive it"),
+    "two_costs": (a_card_may_print_two_action_costs,
+                  "one card, two printed action costs, offered as two"
+                  " branches at their own prices"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

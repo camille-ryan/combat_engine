@@ -71,6 +71,7 @@ from combat_engine.engine import (
     Miss,
     MoveEnd,
     MoveStart,
+    PersonalPair,
     Pick,
     PowerResolved,
     Ranged,
@@ -776,10 +777,14 @@ def p14123(c: Cast) -> None:
     cls="x7_851",
     usage=DAILY,
     action=FREE,
-    reach=PERSONAL,
+    # **The Special is the second branch.** A personal reach with an `alt`
+    # of the same kind gives two branches without changing where the power
+    # reaches, which is what `Range.alt` has always been -- the two halves
+    # were never required to be a melee and a ranged one.
+    reach=PersonalPair(),
+    action_alt=MINOR,
     target=SELF,
     keywords=[Keyword.ARCANE],
-    dropped=("Power.action_alt",),
 )
 def p14124(c: Cast) -> None:
     """Sustains one of my own holds now, without paying the minor for it.
@@ -811,10 +816,16 @@ def p14124(c: Cast) -> None:
     action sustains the minor-cost holds below, and the minor-action half
     sustains the move-cost ones.
     """
+    # Branch 0 is the printed Effect -- a **free** action sustaining a hold
+    # that normally costs a minor. Branch 1 is the Special: a **minor**
+    # action sustaining one that normally costs a move. Same body, and the
+    # only thing that differs is which pool of holds is eligible, which is
+    # why this is one row with two branches rather than two rows.
+    wants = ActionType.MOVE if c.branch else ActionType.MINOR
     held = [
         eff
         for eff in c.world.effects.sustaining(c.me)
-        if eff.sustain_cost is ActionType.MINOR
+        if eff.sustain_cost is wants
     ]
     if not held:
         return
