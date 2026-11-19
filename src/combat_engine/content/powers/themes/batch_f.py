@@ -739,13 +739,19 @@ def p16099(c: Cast) -> None:
     is out of reach. So the symbol names one thing -- making a creature
     threaten, and swing, as though it occupied a square it does not.
 
-    **Found while writing this and not fixed here**: each `c.conjure` gets
-    its own effect carrying `sustain_cost=MINOR` (cast.py:5560), and
+    **A fault reported here has since been fixed, and the report is left
+    with its correction rather than deleted.** This note said: each
+    `c.conjure` gets its own effect carrying `sustain_cost=MINOR`, and
     `durations._sustain_by_default` spends a minor out of the budget per
-    effect -- so of three guardians wanting a minor a round, one is kept and
-    two lapse at the first turn end. That is a fault in every row conjuring
-    more than one sustained thing, not in this clause, and closing it means
-    one carrier governing three conjurations rather than three carriers."""
+    effect -- so of three guardians wanting a minor a round, one is kept
+    and two lapse at the first turn end.
+
+    That was `#819`, closed 2026-10-21. Measured again 2026-11-18: two
+    conjurations laid `until=When.SUSTAIN` with `sustain=MINOR` both
+    survive a `TurnEnd`. So the paragraph is kept as a record of what was
+    wrong and is no longer a thing to go and fix -- which is what it read
+    as, and what would have cost the next reader an afternoon.
+    """
     spots = [sq for sq in sorted(c.area()) if not c.in_squares([sq])][:3]
     guards = tuple(
         eid

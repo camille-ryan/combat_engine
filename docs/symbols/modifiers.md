@@ -114,6 +114,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Hide with any cover, if you moved far enough from where you were.
 - `c.ignore_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, once: 'bool' = False, concealment_only: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "You ignore cover and concealment when attacking."
+- `c.ignore_line_of_effect(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, once: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - "Can be behind blocking terrain or otherwise out of line of
 - `c.ignores_long_range(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "You take no penalty to attack rolls for attacking at long range."
 - `c.invisible(self, *, to: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.SONT: "start of source's next turn">) -> 'Effect | None'`

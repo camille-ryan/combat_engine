@@ -230,9 +230,16 @@ MANOEUVRE_GRANTED_ATTACK = "manoeuvre:granted-attack"
 #: is the record of what leaving a key out costs -- four rows raised
 #: because `no_cover` was missed. A key read during an attack belongs here
 #: whether or not a row has yet asked for it once. #1301.
+#: `ignore_line_of_effect` is read **earlier** than any of the above --
+#: `dsl.candidates` asks it while picking targets, which is before the
+#: attack is declared, let alone rolled. It belongs here all the same and
+#: for the set's own stated reason: what this set decides is *when a
+#: one-shot is spent*, and "the next target you attack" (`i3146p1`) is
+#: spent by that attack. Reading it before the roll and spending it on the
+#: roll is one attack's worth of hold, which is what the card says.
 _SPENT_ON_ATTACK = frozenset({
     "attack", "range", "reach", "ignore_cover", "no_cover",
-    "ignore_concealment", "no_concealment",
+    "ignore_concealment", "no_concealment", "ignore_line_of_effect",
 })
 
 
@@ -10103,6 +10110,43 @@ class Cast:
                     lambda h=hold: self.world.effects.end(h, "sight came back")
                 )
         return worn
+
+    def ignore_line_of_effect(
+        self, *, on: int | None = None, until: When = When.EONT,
+        once: bool = False,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"Can be behind blocking terrain or otherwise out of line of
+        effect."
+
+        Two printed items say it -- `i3146p1` and `i660x1` -- and until
+        this existed the whole benefit of both was unsayable: line of
+        effect is checked when targets are picked, in `dsl.candidates`,
+        and nothing relaxed it.
+
+        **Read in `candidates` and not inside `query.line_of_effect`**,
+        which is deliberate: that function is also what trap-finding, a
+        borrowed origin's proviso and the renderer ask, and none of those
+        is what either card waives. A flag inside it would have widened
+        three things to fix one.
+
+        `once=True` for *"the next target you attack"*, spent by the roll
+        -- `ignore_cover` is on `c.bonus`'s list of keys with a known spend
+        moment and this follows it.
+
+        **`when` is handed `attacker` and `target`**, because one of the
+        two cards is conditional on which enemy: `i660x1` waives it only
+        *"while you have line of effect to a square adjacent to an enemy"*.
+        `dsl.candidates` asks per candidate for that reason.
+
+        **Not `c.ignore_cover`**, which is the near miss and is the other
+        half of `i3146p1`'s own sentence: cover and concealment are
+        penalties on a roll against a target that was legal to pick, and
+        this is about whether it may be picked at all.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("ignore_line_of_effect", 1, on=who, until=until,
+                          once=once, when=when)
 
     def ignore_cover(
         self,

@@ -426,7 +426,13 @@ CATEGORIES: dict[str, dict] = {
                 "conceal", "conceal_in", "cover", "cover_in",
                 "damage_disadvantage",
                 "gains_advantage", "grants_advantage", "had_advantage",
-                "hide", "ignore_cover", "ignores_long_range", "invisible",
+                "hide", "ignore_cover",
+                # Beside `ignore_cover` because the pair is one
+                # printed sentence on `i3146p1` -- and they are
+                # different questions: cover is a penalty on a roll
+                # against a target that was legal to pick, this is
+                # whether it may be picked at all.
+                "ignore_line_of_effect", "ignores_long_range", "invisible",
                 # `c.hides_with_cover` beside `c.hide` because it is that
                 # verb with the printed cover requirement attached, and
                 # `c.counts_as_nearest` here because what it changes is

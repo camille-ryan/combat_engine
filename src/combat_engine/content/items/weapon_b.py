@@ -1670,7 +1670,6 @@ def i3066p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.ignore_line_of_effect()",),
 )
 def i3146p1(c: Cast) -> None:
     """Shooting round blocking terrain is a waiver of line of effect, which
@@ -1679,6 +1678,11 @@ def i3146p1(c: Cast) -> None:
     "cover **and** concealment" by its own docstring, and `once=True` is the
     printed "the next target you attack", spent on the roll that uses it
     rather than standing until the end of the next turn."""
+    # "Can be behind blocking terrain or otherwise out of line of effect",
+    # which is the half `c.ignore_cover` is not: cover is a penalty on a
+    # roll against a target that was legal to pick, and this is about
+    # whether it may be picked at all.
+    c.ignore_line_of_effect(on=c.me, until=When.EONT, once=True)
     c.ignore_cover(on=c.me, until=When.EONT, once=True)
 
 

@@ -4110,12 +4110,39 @@ def candidates(
     # a spirit round the corner reaches what *it* can see rather than what
     # its shaman can.
     eyes = origins(world, actor, reach, p)
+    # **"Can be behind blocking terrain or otherwise out of line of
+    # effect"**, which two printed items say in as many words -- `i3146p1`
+    # and `i660x1`. Read once here rather than inside `line_of_effect`,
+    # because that function is also what traps, lenders and the renderer
+    # ask, and none of those is what either card waives.
+    from .components import Mods
+
+    # **Asked per candidate, because one of the two cards is conditional on
+    # the target.** `i3146p1` waives it outright; `i660x1` waives it only
+    # "while you have line of effect to a square adjacent to an enemy", so
+    # the gate needs to know which enemy.
+    #
+    # The existence check is a scan of `Mods.items` rather than a
+    # `total()`, and that is the whole of what keeps this off the hot path:
+    # `total` evaluates every gate, and this runs inside the targeting
+    # filter. Nobody carries the key, so the scan answers False once and
+    # the per-candidate call never happens.
+    mine = world.get(actor, Mods)
+    waived = mine is not None and any(
+        m.what == "ignore_line_of_effect" for m in mine.items
+    )
+
+    def unblocked(aim: int) -> bool:
+        return bool(waived and mine is not None and mine.total(
+            "ignore_line_of_effect", {"attacker": actor, "target": aim}) > 0)
+
     return [
         c
         for c in pool
         if can_aim(c)
         and squares(world, c) & area
-        and any(line_of_effect(world, eye, c) for eye in eyes)
+        and (unblocked(c)
+             or any(line_of_effect(world, eye, c) for eye in eyes))
     ]
 
 

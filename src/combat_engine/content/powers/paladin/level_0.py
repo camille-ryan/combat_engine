@@ -296,7 +296,15 @@ def p13819(c: Cast) -> None:
     fixed at the moment the hold is laid, and this clause is about
     whoever happens to be standing beside the servant at the time. A
     creature walking into that ring afterwards is not covered by a hold
-    laid before it got there."""
+    laid before it got there.
+
+    **And a ring zone would not do it either**, which is the obvious way
+    round and worth ruling out here rather than once per reader: the card
+    gives the servant a `Move Action (Teleportation)` command, so the ring
+    moves whenever it does. `_while_in` covers arrivals, which is the half
+    a fixed hold misses, but a zone that has to be re-laid on every
+    teleport trades one staleness for another. What the clause wants is a
+    geometric route in `query.has_combat_advantage`."""
     spot = _free_square(c, 2)
     if spot is None:
         return

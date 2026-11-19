@@ -2006,7 +2006,7 @@ def p16050(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL, Keyword.SUMMONING],
-    dropped=("c.ignore_line_of_effect()",),
+    dropped=("actions.command_needs_line_of_effect()",),
 )
 def p16089(c: Cast) -> None:
     """**Off `defect=`: the block is `x10_62` and it is in the table.** The
@@ -2045,14 +2045,32 @@ def p16089(c: Cast) -> None:
     `Companion`, so `c.companion()` would answer with whatever companion the
     character already had; the despawn names the entity this row made.
 
-    `dropped=` is the one clause missing: "you don't need line of effect to
-    it in order to command it". `query.line_of_effect` answers that question
-    and nothing sets it aside, and `c.ignore_line_of_effect()` is the symbol
-    `i3146p1` and `i660x1` already wait on for the same waiver. The rest of
-    that sentence -- "you share knowledge but not senses" -- wants nothing
-    laid, and `c.cast_from` in particular would be wrong: it lends the
-    summoner's square for line of sight and effect, which is the senses the
-    card withholds.
+    **The clause is `dropped=` still, and the marker is re-pointed one
+    layer down.** It read `c.ignore_line_of_effect()`, which exists now --
+    `i3146p1` and `i660x1` use it, and `dsl.candidates` reads it. It is
+    not what this row wants.
+
+    *"You don't need line of effect to the zephyr to command it"* is a
+    waiver, and measured 2026-11-18 **there is nothing here to waive**:
+    `Cast.command` checks no line of effect, and the only
+    `query.line_of_effect` call in `actions.py` is the one that finds
+    hidden traps. Commanding a summon is not gated on sight at all, so
+    laying the waiver would be a no-op dressed as a fix -- which is
+    exactly what `p16066`'s note records about its own clause, and the
+    same reading applies.
+
+    What is missing is the **printed rule underneath**: commanding a
+    summoned creature should require line of effect to it in the first
+    place. That is an engine-wide change touching every summon rather than
+    this row's clause, so the marker names it. Until it lands this row is
+    stronger than its card by nothing at all -- the waiver and the absent
+    requirement cancel -- which is why it plays correctly today and still
+    owes a marker.
+
+    The rest of that sentence -- "you share knowledge but not senses" --
+    wants nothing laid, and `c.cast_from` in particular would be wrong: it
+    lends the summoner's square for line of sight and effect, which is the
+    senses the card withholds.
     """
     from combat_engine.content.loader import spawn_associate
     from combat_engine.engine.query import squares as squares_of

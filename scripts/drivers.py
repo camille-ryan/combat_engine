@@ -17707,6 +17707,105 @@ def the_attack_context_says_where_the_swing_came_from(out: Result) -> None:
              f"nowhere {from_nowhere}, inside {from_inside}")
 
 
+def a_shot_round_a_corner_is_allowed_by_waiver_only(out: Result) -> None:
+    """*"The next target you attack with this weapon can be behind blocking
+    terrain or otherwise out of line of effect."* -- `i3146p1`. And
+    `i660x1`: *"While you have line of effect to a square adjacent to an
+    enemy, you can attack that enemy using this ammunition."*
+
+    **Three rows waited on `c.ignore_line_of_effect()` and only two of them
+    wanted it.** The third, `p16089`, prints a waiver on *commanding a
+    summon* -- and nothing in the engine gates that on sight, so there was
+    nothing to waive. Its marker is re-pointed a layer down; see its note.
+
+    For these two the check is real: `dsl.candidates` traces line of effect
+    from the attack's origin, so a blocked creature is not offered at all.
+    The waiver is read **there** and not inside `query.line_of_effect`,
+    which is also what trap-finding, a borrowed origin's proviso and the
+    renderer ask -- a flag inside it would have widened three things to fix
+    one.
+
+    **`i660x1` is the conditional one**, which is why the waiver takes a
+    `when=` and `candidates` asks per candidate: it allows the shot only
+    while there is line of effect to a square *adjacent* to the enemy.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+
+    ranged = next(
+        (r for r, row in sorted(dsl.REGISTRY.items())
+         if row.attack is not None and row.reach is not None
+         and row.reach.kind == "ranged" and row.reach.size >= 10), "")
+    out.that(bool(ranged), "a long ranged row to aim with", f"{ranged}")
+    if not ranged:
+        return
+    aiming = must(dsl.get(ranged), ranged)
+
+    def staged():  # noqa: ANN202
+        """An enemy six squares off with a wall in between."""
+        world, me, _ = _board("i3146p1", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return None
+        foe = foes[0]
+        here = must(world.get(me, Position), "the shooter stands").square
+        spot = must(world.get(foe, Position), "the enemy stands")
+        world.grid.lift(foe)
+        spot.square = (here[0] + 6, here[1])
+        world.grid.place(foe, spot.squares)
+        for dy in range(-2, 3):
+            world.grid.blocking.add((here[0] + 3, here[1] + dy))
+        return world, me, foe
+
+    got = staged()
+    out.that(got is not None, "the board fields an enemy to wall off",
+             f"{got is not None}")
+    if got is None:
+        return
+    world, me, foe = got
+
+    def pickable(w=world, m=me, f=foe) -> bool:  # noqa: ANN001
+        return f in dsl.candidates(w, m, aiming, None, 0, 0)
+
+    out.that(not pickable(),
+             "with a wall between them the enemy cannot be picked at all --"
+             " the premise, and what both cards are bought to get round",
+             f"{pickable()}")
+    Cast(world=world, me=me, ref="drivers:loe").ignore_line_of_effect(
+        on=me, until=When.ENCOUNTER)
+    out.that(pickable(),
+             "and the waiver makes it pickable -- read in `candidates`,"
+             " which is where the trace happens",
+             f"{pickable()}")
+
+    # -- the conditional form, which is `i660x1`'s --------------------
+    got2 = staged()
+    if got2 is None:
+        return
+    world2, me2, foe2 = got2
+
+    def pickable2() -> bool:
+        return foe2 in dsl.candidates(world2, me2, aiming, None, 0, 0)
+
+    asked: list[int] = []
+    Cast(world=world2, me=me2, ref="drivers:loe").ignore_line_of_effect(
+        on=me2, until=When.ENCOUNTER,
+        when=lambda ctx: (asked.append(ctx.get("target") or -1) or False),
+    )
+    out.that(not pickable2(),
+             "a waiver whose gate says no leaves the enemy unpickable --"
+             " so the gate really decides it",
+             f"{pickable2()}")
+    out.that(foe2 in asked,
+             "and the gate is asked about the candidate itself, which is"
+             " what `i660x1` needs: its waiver depends on which enemy",
+             f"asked about {sorted(set(asked))}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -100180,6 +100279,9 @@ DRIVERS = {
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),
+    "shot_round_a_corner": (
+        a_shot_round_a_corner_is_allowed_by_waiver_only,
+        "line of effect waived in targeting, and only where a card says"),
     "attack_origin": (the_attack_context_says_where_the_swing_came_from,
                       "where a swing comes from: own square, lent square,"
                       " or an area's placed origin"),

@@ -1987,12 +1987,41 @@ def i3471x1(c: Cast) -> None:
 
 @power("i660x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
-       todo=("c.ignore_line_of_effect()",))
+       )
 def i660x1(c: Cast) -> None:
-    """The whole benefit is being allowed to shoot a creature you have no
-    line of effect to; line of effect is checked in targeting and nothing
-    relaxes it. Treating the enemy as having cover is the price, not the
-    benefit."""
+    """**The whole benefit is written now.** It was "being allowed to shoot
+    a creature you have no line of effect to", and the note was right that
+    line of effect is checked in targeting -- `dsl.candidates` -- and that
+    nothing relaxed it. `c.ignore_line_of_effect` is that relaxation.
+
+    **Conditional, which is why the waiver takes a `when=`.** The card
+    allows the shot *"while you have line of effect to a square adjacent to
+    an enemy"*, so the gate is asked per candidate and reads the target out
+    of the context. `world.grid.line_of_effect` is the square-level form;
+    `query.line_of_effect` takes two creatures and there is no creature in
+    the square being traced to.
+
+    Treating the enemy as having cover is the price rather than the
+    benefit, and `c.cover` lays it on this shot alone.
+    """
+    foe = c.target
+    if foe is None:
+        return
+
+    def round_the_corner(ctx: dict[str, Any]) -> bool:
+        """Line of effect to any square beside that enemy."""
+        aim = ctx.get("target")
+        if aim is None:
+            return False
+        beside = spread(squares(c.world, aim), 1) - squares(c.world, aim)
+        return any(
+            c.world.grid.line_of_effect(mine, sq)
+            for mine in squares(c.world, c.me)
+            for sq in beside
+        )
+
+    c.ignore_line_of_effect(on=c.me, until=When.EOT, when=round_the_corner)
+    c.cover(on=foe, until=When.EOT)
 
 
 @power("i1097x1", level=8, cls=ITEM, action=ActionType.NONE,
