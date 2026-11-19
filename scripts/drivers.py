@@ -20264,6 +20264,115 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_bridge_puts_an_already_prone_creature_over_the_side(out: Result) -> None:
+    """`x2_130`, and the depth belongs to the map rather than the card.
+
+    *"The target is knocked prone. If the target is already prone, it falls
+    off the bridge."* The card calls the drop only *"a deep gap"* and
+    prints no number, and the row's own note had read that as a gap in what
+    a region records -- marked `Zone.depth`, for a field a `Zone` would
+    carry.
+
+    **It is not a missing field.** `Grid.elevation` already records what is
+    under a square and `falling.ground` runs at the end of every step,
+    settling a creature onto the floor of the square it is in -- its
+    docstring says *"walking off a ledge ... leaves the creature standing
+    above its own floor, and that is a fall"*. So putting the creature into
+    a square beside the span falls it exactly as far as the map says, and
+    the card prints no number **because the number is the map's**.
+
+    `triage.json` had the symbol as `mis-marked, found: Grid` and was
+    right; the row's docstring was the stale half. That is the mirror of
+    `c.on_save()` re-judged the same day, where the verdict was stale and
+    the row was right -- neither source is reliably the correct one.
+
+    **The third assertion is the load-bearing one**: move the elevation and
+    the fall distance moves with it. Without that, "it falls 4 squares"
+    is equally consistent with a 4 somebody wrote down.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import When, dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.events import Fell
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition
+    from combat_engine.engine.zones import Zone
+
+    SPAN = [(5, 5), (6, 5), (7, 5)]
+
+    def span(*, prone: bool, deep: int) -> tuple[list, tuple, int, bool]:
+        """A span over a gap `deep` squares down, and one creature on it."""
+        world, caster, _ = _board()
+        foe = sorted(enemies(world, caster))[0]
+        for sq in SPAN:
+            world.grid.bridged.add(sq)
+        for x in range(4, 9):
+            for y in (4, 6):
+                world.grid.elevation[(x, y)] = -deep
+        for who, at in ((foe, (6, 5)), (caster, (6, 7))):
+            world.grid.lift(who)
+            world.get(who, Position).square = at
+            world.grid.place(who, at)
+        setup = Cast(world=world, me=caster, ref="drivers-span")
+        zone = setup.zone(set(SPAN), label="x2_130", until=When.ENCOUNTER)
+        held = world.get(zone, Zone)
+        if held is not None:
+            held.power = "x2_130"
+        if prone:
+            setup.condition(Condition.PRONE, on=foe, until=When.ENCOUNTER)
+        fell: list = []
+        world.bus.on(Fell, lambda ev: fell.append(getattr(ev, "squares", None)))
+        was = world.get(foe, Health).hp
+        cast = Cast(world=world, me=caster, ref="x2_130")
+        cast.target = foe
+        cast.targets = [foe]
+        dsl.REGISTRY["x2_130"].body(cast)
+        here = world.get(foe, Position).square
+        hurt = was - world.get(foe, Health).hp
+        return fell, here, hurt, here in set(SPAN)
+
+    # --- already prone: over the side.
+    fell, where, hurt, still_on = span(prone=True, deep=4)
+    out.that(
+        fell == [4],
+        "an already-prone creature falls off the span, and falls as far as"
+        f" the MAP says -- 4 squares of recorded elevation (Fell {fell})",
+    )
+    out.that(
+        not still_on and hurt > 0,
+        "it ends in a square the region does not cover and takes the fall"
+        f" ({where}, {hurt} damage)",
+    )
+
+    # --- not prone: knocked prone, and it stays put.
+    fell2, where2, _, on2 = span(prone=False, deep=4)
+    out.that(
+        not fell2 and on2,
+        "a creature that was NOT already prone is knocked prone instead and"
+        f" stays on the span (Fell {fell2}, at {where2})",
+    )
+
+    # --- the depth is the map's, which is the whole point.
+    deeper, _, hurt_deep, _ = span(prone=True, deep=9)
+    out.that(
+        deeper == [9],
+        "and a deeper gap falls it further -- the distance is read off"
+        " `Grid.elevation` and is nowhere in the row, so no number was"
+        f" invented (Fell {deeper} at depth 9 against {fell} at depth 4)",
+    )
+    out.that(
+        hurt_deep >= hurt,
+        f"a longer fall hurts at least as much ({hurt_deep} vs {hurt})",
+    )
+
+    row = dsl.REGISTRY.get("x2_130")
+    out.that(
+        row is not None and not row.unfinished,
+        "x2_130 carries no marker: the field it waited on was not needed",
+    )
+
+
 def a_declared_check_may_name_an_ability_or_a_choice(out: Result) -> None:
     """`Check:` lines that are not one named skill, and there are two shapes.
 
@@ -105493,6 +105602,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "bridge_fall": (a_bridge_puts_an_already_prone_creature_over_the_side,
+                    "a span puts an already-prone creature over the side,"
+                    " and the fall is as deep as the map records"),
     "check_forms": (a_declared_check_may_name_an_ability_or_a_choice,
                     "a printed Check: line may name an ability or a choice"
                     " of skills, and is rolled exactly once either way"),

@@ -307,8 +307,7 @@ def x2_129(c: Cast) -> None:
 @power("x2_130", level=1, usage=Usage.AT_WILL, action=ActionType.STANDARD,
        reach=Ranged(10), target=EACH_CREATURE,
        check=Check("athletics", "moderate"),
-       attack=Attack(level_plus=3, vs=Defense.REF),
-       dropped=("Zone.depth",))
+       attack=Attack(level_plus=3, vs=Defense.REF))
 def x2_130(c: Cast) -> None:
     """Heave on the rickety span and put whoever is on it over the side.
 
@@ -323,13 +322,34 @@ def x2_130(c: Cast) -> None:
     bound -- *standing on*, so reach 0 and the region's squares themselves.
     Same arrangement as `x2_123` and for the same reason.
 
-    **`Zone.depth` is the second half of the hit line.** *"The target is
-    knocked prone. If the target is already prone, it falls off"* -- and a
-    region records nothing about what is underneath it, so there is no
-    distance to fall. `falling.drop` exists and takes a number of squares;
-    the card prints none, calling it only *"a deep gap"*, so the gap is in
-    what the region knows rather than in the vocabulary. Inventing a depth
-    here would be inventing a damage expression.
+    **The second half of the hit line is written, and `Zone.depth` was
+    never needed.** *"The target is knocked prone. If the target is already
+    prone, it falls off."* This note said a region *"records nothing about
+    what is underneath it, so there is no distance to fall"*, and that the
+    gap was in what the region knows. Both halves were wrong about where
+    the number lives.
+
+    **The map records it.** `Grid.elevation` is what is under a square and
+    `falling.ground` runs at the end of every step, settling a creature
+    onto the floor of the square it is in -- its own docstring: *"walking
+    off a ledge ... leaves the creature standing above its own floor, and
+    that is a fall."* So putting the creature into a square beside the span
+    falls it exactly as far as the map says, and the card prints no number
+    **because the number is not the card's to print**. Measured: a span
+    over a 4-square gap falls it 4 and a 9-square gap falls it 9, with no
+    distance anywhere in this row.
+
+    So the right reading of *"inventing a depth here would be inventing a
+    damage expression"* was the opposite of the conclusion drawn from it --
+    not that the row must wait for a field, but that it must not supply the
+    number at all. `drivers.bridge_fall` plants a hard-coded 4 and the
+    depth-9 case still reports a 4-square fall, which is what that plant is
+    for.
+
+    `triage.json` had the symbol as `mis-marked, found: Grid` and was
+    right. Worth saying because the same day's `c.on_save()` was the
+    mirror -- verdict stale, row correct -- so neither source wins by
+    default.
 
     **Read before the condition is applied, not after.** `c.prone()` would
     make `c.is_(Condition.PRONE)` true for every target, so asking
@@ -339,8 +359,35 @@ def x2_130(c: Cast) -> None:
     if _off_region(c, 0):
         return
     already = c.is_(Condition.PRONE)
-    if c.strike() and not already:
+    if not c.strike():
+        return
+    if not already:
         c.prone()
+        return
+    # *"If the target is already prone, it falls off the bridge."* Over the
+    # side, into a square the region does not cover -- and nothing here
+    # says how far it falls, because the map does. `falling.ground` runs at
+    # the end of every step and settles a creature onto the floor of the
+    # square it is in; a square beside the span has the gap's elevation, so
+    # the drop is whatever `Grid.elevation` recorded and the damage follows
+    # from it.
+    region = _region(c)
+    victim = c.target
+    if region is None or victim is None:
+        return
+    #
+    # **Measured against the SPAN's floor, not the victim's square.**
+    # `_off_region(c, 0)` above has already refused a target that is not
+    # standing on the region, so the two are the same number -- and the
+    # span is reachable without a per-creature square reader.
+    span = min(c.world.grid.floor(sq) for sq in region.squares)
+    over = sorted(
+        sq
+        for sq in spread(region.squares, 1) - set(region.squares)
+        if c.world.grid.floor(sq) < span
+    )
+    if over:
+        c.slide(1, on=victim, to=over[0])
 
 
 @power("x2_131", level=1, usage=Usage.AT_WILL, action=ActionType.STANDARD,
