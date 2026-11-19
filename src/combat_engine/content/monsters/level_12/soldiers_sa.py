@@ -104,6 +104,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Melee,
+    MeleePair,
     Miss,
     MoveEnd,
     MoveStart,
@@ -1079,21 +1080,34 @@ def m1171a0(c: Cast) -> None:
     usage=Usage.RECHARGE,
     recharge=5,
     action=STANDARD,
-    reach=Melee(1),
+    action_alt=ActionType.OPPORTUNITY,
+    reach=MeleePair(1),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("3d8", 8, kind=LIMITED),
     requires_text="the m1171 must be wielding its longsword",
-    dropped=("Power.action_alt",),
 )
 def m1171a1(c: Cast) -> None:
     """The blade is held in the wound, so it cannot swing while it holds.
 
-    "Standard or opportunity action" is two action costs on one card and
-    `Power.action` holds one, so the opportunity half is named. The ban runs
-    on the same clock as the restraint, which is the printed duration for
-    both.
+    **"Standard or opportunity action" is declared now**, as a second
+    branch: `action=STANDARD` with `action_alt=OPPORTUNITY` over a
+    `MeleePair(1)`, which is one melee line with two branches rather than
+    two reaches. `Power.action_of` reads the cost off the branch, so
+    branch 0 costs a standard and branch 1 an opportunity action -- and the
+    body is identical either way, because the card's effect does not depend
+    on which was paid.
+
+    **The marker was stale and no gate could see it.** It read
+    `Power.action_alt`, and that field had already landed for `p14124` --
+    which was using it. `todo.py` is the gate for exactly this and stayed
+    green, because `blocked._surface` indexed `dsl.Power` and not bare
+    `Power`, so `_one("Power.action_alt")` answered False for every `Power`
+    field whether or not it existed. Fixed in the same commit; `#1231`.
+
+    The ban runs on the same clock as the restraint, which is the printed
+    duration for both.
     """
     if not c.strike():
         return
@@ -1202,17 +1216,22 @@ def m1178a0(c: Cast) -> None:
     usage=Usage.RECHARGE,
     recharge=5,
     action=STANDARD,
-    reach=Melee(1),
+    action_alt=ActionType.OPPORTUNITY,
+    reach=MeleePair(1),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("3d8", 7, kind=LIMITED),
     requires_text="m1178 must be wielding his longsword",
-    dropped=("Power.action_alt",),
 )
 def m1178a1(c: Cast) -> None:
-    """As m1171a1: the blade is held in the wound and the opportunity half of
-    "standard or opportunity action" has nowhere to be declared."""
+    """As `m1171a1`, including the second branch: *"standard or
+    opportunity"* is `action_alt=OPPORTUNITY` over a `MeleePair(1)`.
+
+    Both rows carried the same stale `Power.action_alt` marker and neither
+    was visible to `todo.py` until `blocked._surface` indexed bare `Power`
+    -- which is why this one turned up only when that was fixed. I knew
+    about `m1171a1` and not about this."""
     if not c.strike():
         return
     c.hit()

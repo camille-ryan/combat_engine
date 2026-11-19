@@ -20250,6 +20250,97 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_second_action_cost_carries_the_row_alone(out: Result) -> None:
+    """*"(standard or opportunity; requires longsword, recharge)"* --
+    `m1171a1` and `m1178a1`, the same card on two monsters.
+
+    **`Power.action_alt` is how a second cost is declared and it already
+    existed.** Both rows carried `dropped=("Power.action_alt",)` while
+    `p14124` -- written hours earlier -- was using the field. So the
+    markers were stale, and the measurement behind them had been right on
+    the day it was written: `Power.action` is one `ActionType`.
+
+    **No gate could see that, and the gate is the finding.** `todo.py`
+    exists to catch a marker whose symbol has arrived, and it stayed green:
+    `blocked._surface` indexed `dsl.Power` and **not** bare `Power`, so
+    `_one("Power.action_alt")` answered False for every `Power` field
+    whether or not it existed. Bare `Range` resolved all along, because
+    `triggers` and `events` happen to re-export it -- so `Range.alt` was
+    answerable and `Power.action_alt` was not, for no reason a reader could
+    have guessed. `#1231`.
+
+    Fixing the surface found **two** rows where I knew of one: `m1178a1`
+    turned up only once `todo.py` could see it.
+
+    **`MeleePair(1)` rather than `Melee(1, alt=...)`**, because `branches`
+    is read off `Range.alt` and these cards print two *costs* over one
+    *reach*. An `alt` among `Melee`'s seven keywords reads as a different
+    reach, which is what `Ranged(alt=)` means and the opposite of this.
+
+    **Distinct from `drivers.two_costs`, which covers `p14124`.** That rule
+    asserts each branch reaches a different *pool* of sustainable holds;
+    this one asserts a branch is *affordable* when the other is not. Same
+    field, two different things it has to do.
+
+    The load-bearing assertion is the last pair: on a board where the
+    creature has no standard action left, the opportunity branch is still
+    affordable. That is the whole of what declaring the second cost buys,
+    and it is what a one-branch row could not do -- which is why the plant
+    that removes `action_alt` reds it.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+
+    for ref in ("m1171a1", "m1178a1"):
+        world, me, _ = _board(ref, 1)
+        world.encounter = enc = Encounter(world)
+        enc.start()
+        p = get(ref)
+        out.that(p.branches == (0, 1),
+                 f"`{ref}` declares two branches -- one melee line, two"
+                 " printed costs, which is what `MeleePair` is for",
+                 f"{p.branches}")
+        if p.branches != (0, 1):
+            continue
+        out.that(p.action_of(0) is ActionType.STANDARD
+                 and p.action_of(1) is ActionType.OPPORTUNITY,
+                 "and `action_of` reads a different cost off each --"
+                 " *'standard or opportunity'*, in that order",
+                 f"{p.action_of(0).value} / {p.action_of(1).value}")
+
+        # **The pair that matters.** The board hands the turn to somebody
+        # else, so the monster's standard is gone and its opportunity
+        # action is not. A row whose only cost is a standard is simply
+        # unusable here; this one is not, and that is the printed point.
+        standard = enc.can_spend(me, ActionType.STANDARD)
+        opening = enc.can_spend(me, ActionType.OPPORTUNITY)
+        out.that(not standard and opening,
+                 "the board leaves it no standard action and an opportunity"
+                 " one -- the premise, and without it the line below passes"
+                 " whatever the header says",
+                 f"standard={standard} opportunity={opening}")
+        if standard or not opening:
+            continue
+        # **Asked of `actions.legal`, not of `usable`.** The first draft
+        # asserted `usable(...)[0]` and that is not the gate: `usable`
+        # answers about the card, and the affordability test lives in
+        # `actions._powers` -- "any branch it can pay for", whose own
+        # comment names this very row. So the plant that narrows that gate
+        # to branch 0 passed, because the assertion never consulted it.
+        offered = [a for a in actions.legal(world, enc, me)
+                   if a.kind == "power" and a.ref == ref and not a.blocked]
+        out.that(bool(offered),
+                 "**and the row is still OFFERED** -- `actions._powers`"
+                 " asks whether any branch is affordable, so the"
+                 " opportunity half carries the row when the standard is"
+                 " spent. A single-cost row is refused here, and the plant"
+                 " narrowing that gate to branch 0 reds this line",
+                 f"{len(offered)} offer(s) of this row")
+
+
 def a_condition_can_be_refused_by_an_interrupt(out: Result) -> None:
     """*"Instead of suffering the triggering effect, you lose a healing
     surge, and you are dazed (save ends)."* -- `p16408`.
@@ -103424,6 +103515,10 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "opportunity_half": (a_second_action_cost_carries_the_row_alone,
+                         "a monster card printing 'standard or opportunity'"
+                         " declares both, and the second carries the row"
+                         " when the standard is spent"),
     "refuse_condition": (a_condition_can_be_refused_by_an_interrupt,
                          "an immediate interrupt can refuse a condition"
                          " being applied, and the family could not fire"),

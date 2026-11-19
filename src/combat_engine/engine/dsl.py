@@ -416,6 +416,25 @@ def PersonalPair() -> Range:
     return Range("personal", 0, alt=Range("personal", 0))
 
 
+def MeleePair(n: int = 1) -> Range:
+    """A melee line with two branches at the same reach.
+
+    `PersonalPair`'s melee sibling, and for the same reason: `branches` is
+    read off `Range.alt`, so a card with **two action costs and one reach**
+    needs a second branch to hang the second cost on. `m1171a1` and
+    `m1178a1` both print *"standard or opportunity"* over one melee 1
+    attack.
+
+    **Not `Melee(alt=)`**, deliberately: `Melee` takes seven keyword
+    arguments describing one reach, and an `alt` among them reads as a
+    *different* reach -- which is what `Ranged(alt=)` means and is the
+    opposite of this. A named constructor says "two branches, same line"
+    once, where a kwarg would invite `Melee(1, alt=2)` and quietly change
+    where the power reaches.
+    """
+    return Range("melee", n, alt=Range("melee", n))
+
+
 @dataclass(frozen=True)
 class Augment:
     """One printed "Augment N" clause, declared in the header.

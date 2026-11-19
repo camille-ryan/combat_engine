@@ -846,14 +846,36 @@ def _surface() -> dict[str, object]:
     """
     sys.argv = sys.argv[:1]
     from combat_engine.engine import cast as cast_mod
-    from combat_engine.engine import events, query, triggers
+    from combat_engine.engine import dsl, events, query, triggers
 
     have: dict[str, object] = {
         f"c.{n}": getattr(cast_mod.Cast, n)
         for n in dir(cast_mod.Cast)
         if not n.startswith("_")
     }
-    for mod, prefix in ((query, "query."), (triggers, ""), (events, "")):
+    # **`dsl` under a BARE name as well, and leaving it out was #1231.**
+    # A marker names a header field by its class -- `Power.action_alt`,
+    # `Target.label`, `Attack.vs` -- which is how an author writes it and
+    # how `docs/` prints it. `dsl.Power` was indexed and bare `Power` was
+    # not, so `_one("Power.action_alt")` answered **False for every
+    # `Power` field whether or not it existed**, while
+    # `_one("dsl.Power.action_alt")` answered True.
+    #
+    # And the asymmetry was an accident rather than a decision: bare
+    # `Range` resolved all along, because `triggers` and `events` happen to
+    # re-export it and this loop indexes those two with no prefix. So
+    # `Range.alt` was answerable and `Power.action_alt` was not, for no
+    # reason a reader could have guessed.
+    #
+    # What it cost: `m1171a1` sat marked `Power.action_alt` while the field
+    # existed and a sibling row was already using it. `todo.py` -- the one
+    # gate whose whole job is catching a marker whose symbol has arrived --
+    # could not see it, and a blind gate looks exactly like a parked row.
+    #
+    # `setdefault` below, so a bare name already claimed by `triggers` or
+    # `events` keeps its owner and this only fills gaps.
+    for mod, prefix in ((query, "query."), (triggers, ""), (events, ""),
+                        (dsl, "")):
         for n in dir(mod):
             if not n.startswith("_"):
                 have.setdefault(f"{prefix}{n}", getattr(mod, n))
