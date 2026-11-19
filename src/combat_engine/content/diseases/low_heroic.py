@@ -157,7 +157,7 @@ def x5_23(c: Cast) -> None:
 
 @power("x5_91", cls="disease", level=5, usage=AT_WILL,
        action=ActionType.NONE, target=NO_TARGET, reach=Melee(0),
-       dropped=("affliction.tick(no_improve=)", "affliction.tick(fatal=)"))
+       dropped=("affliction.tick(no_improve=)", "affliction.tick(dies=)"))
 def x5_91(c: Cast) -> None:
     """Will rather than Reflex in the trio, and two clauses stage 3 adds.
 
@@ -186,6 +186,29 @@ def x5_91(c: Cast) -> None:
     both decisions `affliction.tick` makes, and it makes one three-way
     comparison for every stage of every disease with no way to be told a
     stage's own exception -- so neither is a clause this row could carry.
+
+    **Re-pointed from `affliction.tick(fatal=)` to `dies=`, because the two
+    were one need spelled twice.** Measured over all four disease rows that
+    print a death, 2026-11-19 -- the printed phrasing differs and the
+    mechanism does not:
+
+    * `x5_18` and `x5_66` print death as the **last stage itself** --
+      *"Final State: The target dies"*;
+    * this row and `x5_81` print it as **worsening while already at the
+      top** -- *"If the stage of the disease increases at this stage, the
+      target dies."*
+
+    Both reduce to one datum: the highest stage a character can occupy and
+    live. `tick` caps a worsening at `worst()`, so the only difference is
+    whether that cap is the death stage or the stage below it. A symbol per
+    phrasing could not go green correctly for either half -- this tree's
+    "a marker names one gap" the other way round, two names for one gap
+    rather than one name for two. `#1385` is the same fault found the same
+    day on an opportunity-attack compulsion spelled three ways.
+
+    `no_improve=` stays its own symbol and is genuinely separate: it is
+    about a **successful** check being refused its improvement, not about a
+    failed one killing.
     """
     if c.stage == 1:
         lost_surges(c, 1)
