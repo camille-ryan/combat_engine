@@ -15762,10 +15762,26 @@ def a_free_hop_inside_the_zone(out: Result) -> None:
     the zone, performing it actually moves the creature, and the cost is
     free.
 
-    The reading is recorded rather than asserted as fact: the walk is
-    bounded by speed because "move from one square to another" does not say
-    whether it is a relocation, the phrasing is unique in the corpus, and
-    the conservative half was built.
+    **The reading was a filed question and Camille settled it on `#1370`:**
+
+    > *"yeah, walking. Speed doesn't matter really, because the free action
+    > can be repeated. So I think the only relevant part is the opportunity
+    > attack"*
+
+    So the walk is confirmed, which is what shipped. **The ruling's useful
+    half is the second sentence, and it named a clause this rule did not
+    test**: the hop provokes. That is asserted at the end now, with an
+    enemy stood next to the caster and `OpportunityWindow` counted.
+
+    **And "speed doesn't matter really" was measured rather than acted
+    on.** Dropping the `speed` filter from the offer looked like the
+    obvious follow-through and is a change with nothing behind it: on this
+    board it excludes **zero** squares of the granted zone -- 17 priced
+    either way, because a close burst is a few squares of cost against an
+    ordinary speed -- and where it could bind, a slowed character, it still
+    denies no destination, for exactly the reason the ruling gives. A
+    capped hop is a shorter hop taken more often. It costs clicks, never an
+    outcome. `actions._movement` carries the measurement beside the filter.
     """
     import combat_engine.content  # noqa: F401
     from combat_engine.engine import actions
@@ -15773,9 +15789,10 @@ def a_free_hop_inside_the_zone(out: Result) -> None:
     from combat_engine.engine.components import Position
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.durations import When
-    from combat_engine.engine.events import TurnStart
-    from combat_engine.engine.movement import reachable
-    from combat_engine.engine.query import speed
+    from combat_engine.engine.events import OpportunityWindow, TurnStart
+    from combat_engine.engine.grid import spread
+    from combat_engine.engine.movement import place, reachable
+    from combat_engine.engine.query import enemies, speed
     from combat_engine.engine.turns import Encounter
     from combat_engine.engine.types import ActionType
     from combat_engine.engine.zones import Zone
@@ -15869,6 +15886,30 @@ def a_free_hop_inside_the_zone(out: Result) -> None:
              f"{sum(a.dest in wrong for a in after_spare)} wrong offer(s)"
              f" of {len(after_spare)}")
 
+    # -- **it provokes**, which is the half Camille's ruling calls the only
+    # relevant one, and which this rule did not test before `#1370`.
+    # An enemy is stood beside the caster so there is somebody to swing,
+    # and `OpportunityWindow` is counted across the hop: a relocation --
+    # the reading the ruling rejected -- would open none.
+    foes = sorted(enemies(world, me))
+    beside = next(
+        (sq for sq in sorted(spread({here}, 1))
+         if sq != here and world.grid.passable(sq)
+         and world.grid.occupant(sq) is None), None)
+    staged = -1
+    if foes and beside is not None:
+        place(world, foes[0], beside)
+        staged = foes[0]
+    out.that(staged >= 0,
+             "an enemy is stood next to the caster, so the hop has somebody"
+             " to provoke -- the premise, and without it the count below is"
+             " zero on a correct engine",
+             f"foe {staged} at {beside}")
+
+    windows: list[int] = []
+    world.bus.on(OpportunityWindow,
+                 lambda ev: windows.append(getattr(ev, "actor", -1)))
+
     was = must(world.get(me, Position), "the caster stands").square
     ran = actions.perform(world, enc, me, offered[0])
     now = must(world.get(me, Position), "the caster stands").square
@@ -15878,6 +15919,14 @@ def a_free_hop_inside_the_zone(out: Result) -> None:
              " zone -- the clause, rather than an offer that draws and does"
              " nothing",
              f"{was} -> {now}")
+    if staged >= 0:
+        out.that(staged in windows,
+                 "**and the hop PROVOKED the adjacent enemy** -- Camille on"
+                 " `#1370`: *'the only relevant part is the opportunity"
+                 " attack'*. `perform` runs `movement.walk`, so leaving a"
+                 " threatened square opens the window; the relocation"
+                 " reading the ruling rejected would open none",
+                 f"windows opened for {sorted(set(windows))}")
 
 
 def a_doubled_range_is_proportional(out: Result) -> None:
@@ -32702,17 +32751,55 @@ def armour_is_conjured_onto_a_creature(out: Result) -> None:
                  f"{gear.armour} at {defence(world, me, Defense.AC)},"
                  f" was {heavy} at {was2}")
 
-    out.that("plate" in LADDER and not REGISTRY["p16411"].todo,
-             "p16411 is no longer refused in play",
+    out.that("plate" in LADDER and not REGISTRY["p16411"].todo
+             and not REGISTRY["p16411"].dropped,
+             "p16411 is neither refused in play nor marked -- all three"
+             " printed enders are written",
              f"todo {REGISTRY['p16411'].todo!r},"
              f" dropped {REGISTRY['p16411'].dropped!r}")
-    out.that(REGISTRY["p16411"].dropped == ("c.strip_armor()",),
-             "**and carries a `dropped=` for the one clause left** --"
-             " 'until it is removed from you'. Nothing strips worn armour"
-             " from a creature, so that clause has no subject rather than"
-             " no verb, which is why the symbol is not a parameter on the"
-             " verb this commit added",
-             f"dropped {REGISTRY['p16411'].dropped!r}")
+
+    # -- *"until it is removed from you"* ---------------------------------
+    # **This replaced an assertion pinning `dropped=("c.strip_armor()",)`,
+    # and the marker it pinned had a false premise.** It read "nothing
+    # strips worn armour from a creature, so that clause has no subject
+    # rather than no verb" -- and `c.destroy(on=, armour=True)` is exactly
+    # that, going through `equipment.unequip`. The two cards the old note
+    # reasoned from happen to be self-destruction, but `on=` is general.
+    #
+    # So the row dropped the marker and this rule went red *pinning the
+    # retired claim*. Asserting the behaviour instead is strictly
+    # stronger: a marker string cannot tell a written clause from an
+    # unwritten one, and the watch either ends the hold or it does not.
+    world, me, _ = _audit.board("p16411", 1)
+    c = Cast(world=world, me=me, ref="p16411")
+    before = {e.id for e in world.effects.of(me)}
+    use(world, me, "p16411")
+    # **By label, not by count.** The row lays two effects with
+    # `by == "p16411"` -- the armour hold and the `c.watch` that carries
+    # the `ItemDestroyed` subscription -- so `len(...) == 1` failed on the
+    # rule's own arithmetic rather than on the row.
+    conjured = [e for e in world.effects.of(me)
+                if e.id not in before and e.label == "p16411 armour"]
+    out.that(len(conjured) == 1,
+             "the row lays exactly one hold for the conjured suit --"
+             " diffed against what the board already held, and picked by"
+             " label because the watch is a second effect of this row's",
+             f"{[str(e) for e in world.effects.of(me) if e.id not in before]}")
+    if len(conjured) != 1:
+        return
+    worn = world.get(me, Gear)
+    out.that(bool(worn is not None and worn.armour),
+             "and the creature is wearing it", f"{worn.armour if worn else None}")
+    stripped = c.destroy(on=me, armour=True)
+    out.that(stripped,
+             "`c.destroy(on=, armour=True)` takes the suit off somebody"
+             " else's body -- the verb the retired marker said did not"
+             " exist", f"returned {stripped}")
+    out.that(conjured[0].ended,
+             "**and the conjured hold goes with it** -- *'until it is"
+             " removed from you'*, which the `ItemDestroyed` watch answers."
+             " This is the assertion that replaced a pinned marker string",
+             f"ended={conjured[0].ended}")
 
 
 def a_passive_check_is_lent_across_creatures(out: Result) -> None:

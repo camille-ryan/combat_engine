@@ -55,9 +55,9 @@ PSIONIC = [Keyword.PSIONIC]
 )
 def p11273(c: Cast) -> None:
     """Held aloft: the immobilisation is refreshed each time the hold is
-    sustained, which is what the printed Sustain Minor line does. The
-    free-action and minor-action ways of letting go are dropped -- ending an
-    effect early is not in `Cast`.
+    sustained, which is what the printed Sustain Minor line does. Both
+    printed ways of letting go are declared -- see `c.endable(also=)`
+    below.
 
     **"One ally, helpless enemy, or object": all three are aimed at now.**
     Three pools, one of them a narrowed enemy, which is the shape
@@ -80,13 +80,12 @@ def p11273(c: Cast) -> None:
     on the hold still being live, so it costs nothing once the effect is
     gone.
 
-    **Marked for the one printed line that cannot be written: two creatures
-    may end this effect, at two different costs.** *"You can end this
-    effect as a free action ... If the target is a creature, it can end the
-    effect as a minor action."* An `Effect` carried a single `drop_cost`
-    and a single `drop_by`, so only one of the two could be declared --
-    and `c.endable(also=)` is exactly what this note said an author would
-    reach for, so that is what it is.
+    **The line that was marked is written, and the marker is gone.** *"You
+    can end this effect as a free action ... If the target is a creature, it
+    can end the effect as a minor action."* An `Effect` carried a single
+    `drop_cost` and a single `drop_by`, so only one of the two could be
+    declared; `c.endable(also=)` is the second, which is what this note
+    once said an author would reach for.
 
     The hold sits on the **target** -- `c.effect` defaults `on` to
     `c.target` -- and `actions.legal` offers a `drop` to the owner, so the

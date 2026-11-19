@@ -329,15 +329,18 @@ def p9340(c: Cast) -> None:
 
     `cover_between` counts only the **target's own side** as bodies, so an
     enemy in the line never shelters anybody -- which is exactly what this
-    card changes. It cannot be said by extending that trace, so the cover is
-    carried instead: `c.cover` lays the modifier `query._carried_cover`
-    reads, gated on this shooter, and handed back in the `AttackDeclared`
-    AFTER window once the whole attack is past.
+    card changes. Extending that trace was the wrong route rather than the
+    clause being unwritable, so the cover is **carried**: `c.cover` lays the
+    modifier `query._carried_cover` reads, gated on this shooter, and handed
+    back in the `AttackDeclared` AFTER window once the whole attack is
+    past.
 
-    Dropped: the reroll against one of the shields. `c.redirect` moves an
-    attack and `c.reroll_attack` rolls it again, and neither does the
-    printed thing -- rolling a *fresh* attack against a creature that was
-    never targeted, after the first one has already been announced a miss.
+    **The reroll against one of the shields is written**, on the `Miss`
+    below. It was once dropped on the reading that `c.redirect` moves an
+    attack and `c.reroll_attack` rolls it again and neither rolls a *fresh*
+    attack against a creature that was never targeted --
+    `c.reroll_attack(against=)` is that, and it re-aims the blow and
+    re-reads the new target's defence rather than carrying the old result.
     """
     foe = getattr(c.trigger, "attacker", None)
     if foe is None:

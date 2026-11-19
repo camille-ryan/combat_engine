@@ -1321,13 +1321,26 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # walk could reach, so this is a cheaper move action and not a
     # teleport.
     #
-    # **The second bound is a reading, and the card does not settle it.**
-    # "Move from one square to another" could mean an unbounded relocation
-    # within the zone; the phrasing is unique in the corpus, so nothing
-    # else settles it either. The conservative reading is taken and the
-    # question is filed: a walk provokes and pays for terrain, where a
-    # relocation would do neither, and the generous reading can be widened
-    # later without taking anything back.
+    # **Camille settled the reading on `#1370` and it is the walk:**
+    #
+    # > *"yeah, walking. Speed doesn't matter really, because the free
+    # > action can be repeated. So I think the only relevant part is the
+    # > opportunity attack"*
+    #
+    # So this stays a walk and `perform` runs `movement.walk`, which is
+    # what makes it provoke and pay for difficult terrain -- the half the
+    # ruling calls the relevant one, and `drivers.zone_hop` pins it.
+    #
+    # **The `speed` filter below stays, and the ruling does not ask for it
+    # to go.** Measured on the audit board: it excludes **zero** squares of
+    # the granted zone (17 priced either way), because a close burst is at
+    # most a few squares of cost against an ordinary speed. And where it
+    # could bind -- a slowed character -- it still denies no destination,
+    # for the reason the ruling gives: the free action repeats, so a capped
+    # hop is a shorter hop taken more often, not a square taken away. It
+    # costs clicks and never an outcome, which is why "speed doesn't matter
+    # really" is the right reading and why removing the filter would be a
+    # change with nothing behind it.
     if can_move(world, actor):
         for (what, cost), _n in sorted(_granted(world, actor).items()):
             if what != "move_in_zone":

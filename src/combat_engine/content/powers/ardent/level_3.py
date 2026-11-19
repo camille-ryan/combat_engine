@@ -334,10 +334,12 @@ def p12947(c: Cast) -> None:
     rows. Augment 1 answers the non-basic attack with a slide instead of
     penalising it.
 
-    Augment 2 is left out: "deals half damage with any attack that is not a
-    basic attack" is `Condition.WEAKENED`, which `query.deals_half` reads off
-    the creature and not off the attack, so there is nothing to gate and the
-    augmented form would halve its basic attacks too."""
+    **Augment 2 is written**, and the reason it once was not is the reason
+    it needed a gate rather than a condition: *"deals half damage with any
+    attack that is not a basic attack"* is not `Condition.WEAKENED`, which
+    `query.deals_half` reads off the **creature** and would halve its basic
+    attacks too. `c.deals_half(when=)` takes the same `not_basic` test the
+    unaugmented form uses for its penalty, pointed at the damage context."""
     spent = augment(c, 1, 2)
     victim = c.target
     if victim is None or not c.strike():

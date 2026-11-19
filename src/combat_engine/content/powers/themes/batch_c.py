@@ -1384,13 +1384,32 @@ def p16590(c: Cast) -> None:
     happens to stand in, on the same companion-modifier mechanism `toward`
     and `beside` use.
 
-    **One reading is taken rather than guessed at silently.** "Move from one
-    square in the zone to another" could be an unbounded relocation inside
-    the zone or a cheaper ordinary move that has to end in it; the phrasing
-    is unique in the corpus, so nothing else settles it. The conservative
-    one is built -- a walk, which provokes and pays for terrain, bounded by
-    the character's speed -- and the question is filed, because the
-    generous reading can be widened later without taking anything back.
+    **The reading was filed as a question and Camille settled it, `#1370`:**
+
+    > *"yeah, walking. Speed doesn't matter really, because the free action
+    > can be repeated. So I think the only relevant part is the opportunity
+    > attack"*
+
+    So it is the walk, which is what shipped: *"move from one square in the
+    zone to another"* could have been an unbounded relocation inside the
+    zone, and the phrasing is unique in the corpus, so nothing in the book
+    settled it.
+
+    The ruling's second sentence is the operative one and it named a clause
+    nothing tested: **the hop provokes**. `drivers.zone_hop` asserts that
+    now, with an enemy stood beside the caster and `OpportunityWindow`
+    counted, and the plant swapping `movement.walk` for a placement -- the
+    relocation reading -- reds it.
+
+    **"Speed doesn't matter really" was measured, not acted on.** Dropping
+    the offer's `speed` filter looked like the follow-through and is a
+    change with nothing behind it: it excludes **zero** squares of the
+    granted zone on the audit board, 17 priced either way, because a close
+    burst is a few squares of cost against an ordinary speed. Where it
+    could bind -- a slowed character -- it still denies no destination, for
+    the reason the ruling gives: the free action repeats, so a capped hop
+    is a shorter hop taken more often. Clicks, never an outcome.
+    `actions._movement` carries that measurement beside the filter.
 
     The grant is laid on the turn start it is printed for and lasts that
     turn: "when you or an ally starts his or her turn in the zone, that

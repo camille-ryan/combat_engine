@@ -65,11 +65,12 @@ def _my_area_power(world: Any, me: int, ev: Any) -> bool:
     keywords=[Keyword.DIVINE, Keyword.ZONE],
 )
 def p11298(c: Cast) -> None:
-    """**A marker now, where the prose admitted the gap and declared
-    nothing.** A zone that stays centred on the caster is an aura, and
-    `c.aura` takes `radius`, `label`, `until`, `on`, `sustain` and
-    `difficult` -- no obscurity of any kind. So "squares inside the zone
-    are heavily obscured" cannot be said here.
+    """**Both halves play.** This row was once marked, on the true-at-the-
+    time reading that `c.aura` took `radius`, `label`, `until`, `on`,
+    `sustain` and `difficult` and no obscurity of any kind -- so *"squares
+    inside the zone are heavily obscured"* had nowhere to go on an aura.
+    `Zones.aura` passes `obscured` through now; the history is below
+    because the near miss is still worth knowing.
 
     Checked against the near miss rather than assumed: `c.zone` **does**
     take `obscured=` with `obscured_for=`, and eight other rows of this

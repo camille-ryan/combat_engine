@@ -1611,9 +1611,9 @@ def p16368(c: Cast) -> None:
 )
 def p16369(c: Cast) -> None:
     """`side="ally"` and not `"team"`: the card says "each ally", and the
-    caster is not in that pool. "Who can hear you" is dropped -- the
-    resistance was handed out by geometry and nothing filtered it by what a
-    creature can perceive.
+    caster is not in that pool. *"Who can hear you"* is filtered, where it
+    once was not -- the resistance used to be handed out by geometry with
+    nothing narrowing it by what a creature can perceive.
 
     **It is filtered now, and the reader existed.** `query.can_hear`
     answers *"who can hear you"* -- composed from `Condition.DEAFENED` and

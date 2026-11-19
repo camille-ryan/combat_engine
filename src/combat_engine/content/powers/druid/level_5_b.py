@@ -66,8 +66,11 @@ BEAST_FORM = "you must be in beast form"
     keywords=[*PRIMAL_IMPLEMENT, Keyword.AREA, Keyword.CONJURATION],
 )
 def p2702(c: Cast) -> None:
-    """The printed three extra squares are charged now. The wall's height
-    still has nowhere to go: the board is flat.
+    """The printed three extra squares are charged, and the printed height
+    is declared: `height=4` is read at `movement.py`'s `height_at`, where a
+    climber pays the height in squares and a flier crosses regardless. The
+    board is flat in the sense that nothing else has an altitude, which is
+    not the same as the field going unread.
 
     **`extra_cost=3` rather than `difficult=True`, and the card decides
     which.** It prints a cost and never the words "difficult terrain", so the

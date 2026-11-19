@@ -585,11 +585,12 @@ def p7641(c: Cast) -> None:
     `dsl.Summon.commands` names the pair. `MeleeOrRanged(1, 5)` is the
     printed choice of shape. #1360.
 
-    Checked rather than assumed, and it holds: `dsl.Summon`'s fields are
-    `hp, speed, defences, per_defence, size, attack, damage, modes,
-    instinctive, label` -- one `attack`, so a second printed command line
-    has nowhere to be declared. Same symbol as `p11842` and `p7657`, which
-    want the same field for the same reason."""
+    The shape this replaced, kept because the near miss is the thing worth
+    knowing: `dsl.Summon` carried `hp, speed, defences, per_defence, size,
+    attack, damage, modes, instinctive, label` -- **one** `attack`, so a
+    second printed command line had nowhere to be declared. `commands` is
+    that place, and `actions._commands` is what offers them. `p11842` and
+    `p7657` wanted the same field for the same reason."""
     servant = c.summon_inline(get(c.ref).summon, at=c.origin)
     if not servant:
         return
