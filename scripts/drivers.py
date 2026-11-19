@@ -19877,6 +19877,206 @@ def a_reroll_may_be_aimed_at_a_different_creature(out: Result) -> None:
              f"99 -> {missed.result.target_defence}, wanted {want}")
 
 
+def a_zone_can_wander_and_catch(out: Result) -> None:
+    """*"When a creature saves against the ongoing damage from this power,
+    place the flames in a square adjacent to that creature. When a creature
+    is in the same square as the flames, that creature gains ongoing 5 fire
+    damage (save ends) and you remove the flames from the board. ... A
+    creature can be affected by these flames only once in an encounter. If
+    no creature is currently affected by the flames, move the flames 1
+    square at the start of your turn."* -- `p4803`.
+
+    **The marker was `c.place_scenery()` and nothing new was needed.** Its
+    note said "nothing puts an unowned, self-moving token on the board" and
+    both halves misread the card: the flames are placed by *"you"* and move
+    *"at the start of your turn"*, so they are owned, which is what a
+    `Zone` is; and `c.move_zone` has existed since the rows printing *"as a
+    move action you can move the zone"*.
+
+    **The row's one real bug was found by this rule's step 3 and is worth
+    the paragraph.** `Zones.refresh` assigns `self.inside[eid] = now`
+    **after** its emit loop, so inside a `ZoneEntered` handler
+    `Zones.occupants` still answers the *old* set -- empty, for a zone
+    nobody had stood in. The first draft read `occupants` there and the
+    whole loop was a no-op while every piece of it worked in isolation: the
+    flames arrived, the creature was an occupant a moment later, and
+    nothing had happened. The creature comes off the event now.
+
+    **`movement.place` does not refresh zones**, which cost a probe its own
+    diagnosis before that. `Zones.__init__` subscribes `refresh` to
+    `MoveEnd`, `EnterSquare` and `LeaveSquare`, and `place` emits none of
+    the three -- so a fixture that teleports a creature into a zone has to
+    refresh by hand or the zone never notices. That is the harness, not the
+    row.
+
+    Six steps, in the printed order, each the premise of the next.
+
+    **Two notes on what the plants can and cannot reach**, because one of
+    each turned up here:
+
+    * A plant emptying the board made `flames()[0][...]` raise
+      `IndexError` rather than fail, so the rule died mid-way and the
+      `FAIL` grep read like a short pass. Every board read goes through
+      `where()`, which answers `None`.
+    * *"If no creature is currently affected by the flames"* has **no
+      plant of its own**, and that is structural rather than a weak
+      assertion: the flames are on the board exactly when nobody is
+      burning, because catching somebody takes them off. So there is no
+      "drop the condition" edit to make -- an off-board token has no zone
+      id to move. What proves the conditionality is the plant that stops
+      `catch` taking them off: the flames then sit on the board beside a
+      burning creature, and step 3 reds.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    world, me, _ = _board("p4803", 1)
+    foes = sorted(enemies(world, me))
+    out.that(len(foes) >= 2,
+             "the board fields a target to burn and a second creature for"
+             " the flames to catch -- the loop needs both", f"{foes}")
+    if len(foes) < 2:
+        return
+    victim, bystander = foes[0], foes[1]
+    place(world, victim, (5, 5))
+    place(world, bystander, (14, 14))
+
+    def flames() -> list[tuple[int, list[tuple[int, int]]]]:
+        return [(eid, sorted(z.squares)) for eid, z in world.zones.all()
+                if z.label == "p4803 flames"]
+
+    def where() -> tuple[int, int] | None:
+        """The flames' square, or None when they are off the board.
+
+        **Every read goes through this.** A plant that empties the board
+        made `flames()[0][...]` raise `IndexError` instead of failing, so
+        the rule died mid-way and the `FAIL` grep read like a short pass.
+        """
+        found = flames()
+        return found[0][1][0] if found else None
+
+    def fire_on(who: int) -> list[str]:
+        return [str(e) for e in world.effects.of(who)
+                if e.ongoing and e.ongoing[1] is DamageType.FIRE
+                and not e.ended]
+
+    # **Diffed against what the board already laid.** It poses two ongoing
+    # effects on this target before the row runs, one of them a burn, so a
+    # count of burns would have read the board's and called the row green.
+    before = set(world.effects.live)
+    c = Cast(world=world, me=me, ref="p4803")
+    c.target = victim
+    dsl.REGISTRY["p4803"].body(c)
+    laid = [e for eid, e in world.effects.live.items() if eid not in before
+            and e.ongoing and e.ongoing[1] is DamageType.FIRE]
+    out.that(len(laid) == 1 and not flames(),
+             "1. the hit lays one fire burn and NO flames -- the Effect's"
+             " trigger is a save, so a token on the board now would be the"
+             " row jumping its own clause",
+             f"burn {[str(e) for e in laid]} / flames {flames()}")
+    if len(laid) != 1:
+        return
+    burn = laid[0]
+
+    def shake(eff: object) -> bool:
+        for _ in range(40):
+            if getattr(eff, "ended", False):
+                return True
+            world.effects.save(eff)
+        return bool(getattr(eff, "ended", False))
+
+    out.that(shake(burn) and len(flames()) == 1,
+             "2. it saves, and the flames are placed -- *'when a creature"
+             " saves against the ongoing damage from this power'*",
+             f"{flames()}")
+    if len(flames()) != 1:
+        return
+    spot = where()
+    gap = max(abs(spot[0] - 5), abs(spot[1] - 5)) if spot else -1
+    out.that(gap == 1,
+             "and ADJACENT to the creature that saved, not anywhere --"
+             " *'in a square adjacent to that creature'*. `== 1` and not"
+             " `<= 1`: 0 is the saver's own square, which `beside` refuses"
+             " and which would catch it instantly",
+             f"{spot} is {gap} from (5, 5)")
+
+    # **`place` then `refresh` by hand**, because `place` emits none of the
+    # three events `Zones` subscribes `refresh` to. Walking the creature in
+    # is the printed case; the fixture is not allowed to be the reason it
+    # does or does not catch.
+    if spot is None:
+        return
+    place(world, bystander, spot)
+    world.zones.refresh()
+    out.that(len(fire_on(bystander)) == 1 and not flames(),
+             "3. a creature in that square burns AND the flames leave the"
+             " board -- both halves of one printed sentence, and the step"
+             " that found the row reading a stale `Zones.occupants`",
+             f"burn {fire_on(bystander)} / flames {flames()}")
+    if not fire_on(bystander):
+        return
+
+    second = next(e for e in world.effects.of(bystander)
+                  if e.ongoing and e.ongoing[1] is DamageType.FIRE
+                  and not e.ended)
+    out.that(shake(second) and len(flames()) == 1,
+             "4. and when IT saves they come back beside IT -- *'this"
+             " process continues'*, which is the loop rather than one"
+             " placement", f"{flames()}")
+    if len(flames()) != 1:
+        return
+
+    again = where()
+    if again is None:
+        return
+    place(world, bystander, again)
+    world.zones.refresh()
+    out.that(not fire_on(bystander) and where() == again,
+             "5. the SAME creature standing in them again takes nothing and"
+             " the flames stay put -- *'only once in an encounter'*",
+             f"burn {fire_on(bystander)} / flames {flames()}")
+
+    was = where()
+    world.bus.emit(TurnStart(actor=me, round=2))
+    now = where()
+    out.that(was is not None and now is not None and now != was,
+             "6. and at the start of my turn with nobody burning they walk"
+             " a square -- *'if no creature is currently affected by the"
+             " flames, move the flames 1 square'*", f"{was} -> {now}")
+    out.that(was is not None and now is not None
+             and max(abs(now[0] - was[0]), abs(now[1] - was[1])) == 1,
+             "ONE square, which is the number printed -- `c.move_zone`"
+             " takes a distance and a larger one would read as the clause"
+             " working", f"{was} -> {now}")
+
+    # -- the negative control: a creature IS burning, so they stay ---------
+    out.that(len(foes) >= 3, "the board fields a third creature, so the"
+             " move clause has a negative control", f"{foes}")
+    if len(foes) < 3:
+        return
+    third = foes[2]
+    if now is None:
+        return
+    place(world, third, now)
+    world.zones.refresh()
+    out.that(not flames(),
+             "it catches the third creature and goes off the board",
+             f"{flames()}")
+    if flames():
+        return
+    world.bus.emit(TurnStart(actor=me, round=3))
+    out.that(not flames(),
+             "and with that creature still burning, my turn moves nothing"
+             " -- the flames are OFF the board, which is what *'no creature"
+             " is currently affected'* comes to, and the control that says"
+             " the move is conditional", "still off the board")
+
+
 def a_recharge_roll_can_be_moved(out: Result) -> None:
     """*"A +1 bonus to any recharge rolls"*, *"must roll twice and use the
     lower result when attempting to recharge a power"*, *"cannot recharge
@@ -102843,6 +103043,10 @@ DRIVERS = {
     "reroll_elsewhere": (a_reroll_may_be_aimed_at_a_different_creature,
                          "a reroll may be aimed at another creature, and is"
                          " re-measured against its defence"),
+    "wandering_zone": (a_zone_can_wander_and_catch,
+                       "a one-square zone is placed by a save, catches"
+                       " whoever stands in it, and walks when nobody is"
+                       " burning"),
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),

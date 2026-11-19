@@ -20,8 +20,10 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    SavingThrow,
     TurnStart,
     When,
+    ZoneEntered,
     power,
 )
 
@@ -176,15 +178,140 @@ def p3952(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
     attack=Attack(INT, vs=AC),
-    dropped=("c.place_scenery()",),
 )
 def p4803(c: Cast) -> None:
-    """The printed Effect is a marker that walks the board on its own,
-    catching whoever stands on it and moving a square a round when nobody
-    does. Nothing puts an unowned, self-moving token on the board, so the
-    burn is the row and the wandering flame is not written."""
-    if c.strike():
-        c.damage("1d10", c.int_mod, dtype=DamageType.FIRE)
-        c.ongoing(5, DamageType.FIRE)
-    else:
+    """The printed Effect is a token that walks the board, catching whoever
+    stands on it and moving a square a round when nobody is burning.
+
+    **`c.place_scenery()` was the wrong symbol and nothing new was
+    needed.** The old note said "nothing puts an unowned, self-moving token
+    on the board", and both halves of that misread what the card wants:
+
+    * It is not **unowned**. The flames move *"at the start of your turn"*
+      and are placed by *"you"*, so they are this character's, which is
+      what a zone already is -- `Zone.owner`.
+    * It is not **self-moving**. `c.move_zone` has existed since the five
+      rows printing *"as a move action you can move the zone"*, and it is
+      the same verb: a zone moved a square, keeping its shape.
+
+    So the token is a one-square `c.zone` and the loop is three watches.
+    Each of the four mechanics was driven before the row was written:
+
+    * **a one-square zone** -- `c.zone({sq})`, and `Zones.occupants`
+      reports who stands in it.
+    * **moving it** -- `c.move_zone(z, 1, to=sq)` returns True and the
+      footprint moves.
+    * **moving it ONTO somebody** -- `move_zone` calls `Zones.refresh`,
+      which diffs occupancy and announces `ZoneEntered`, so **one** watch
+      covers walking in *and* being walked over. That is the mechanic the
+      row would otherwise need a second, separate check for.
+    * **the save that re-places it** -- `effects.save` announces
+      `SavingThrow` with `against == str(eff)`, which is the match
+      `_saves_against_mine` already uses.
+
+    **On the board exactly when nobody is burning**, which is what makes
+    the move clause a one-line test rather than a census. Catching a
+    creature takes the flames off (`Zones.end`), and its save puts them
+    back beside it -- so *"if no creature is currently affected by the
+    flames"* is "the token is on the board", and no separate bookkeeping
+    says which.
+
+    **The hit's own burn is not the flames**, so the creature this lands on
+    can still be caught once. The Effect line distinguishes them in as many
+    words -- *"the ongoing damage from this power"* against *"these
+    flames"* -- and the once-per-encounter limit is printed about the
+    second.
+
+    Two narrowings, both named rather than approximated:
+
+    * **The flames land on a free square.** `beside` skips an occupied one,
+      so they are never placed straight onto a creature. The card does not
+      forbid that, and placing them there would catch instantly; this is
+      the conservative reading and the convention three sibling rows in
+      this file already use.
+    * **A zone ends when its owner dies** -- `Zones.refresh`'s Death Ends
+      rule, which is engine-wide and not this card's. The card says the
+      flames last to the end of the encounter.
+    """
+    victim = c.target
+    if not c.strike():
         c.half_damage("1d10", c.int_mod, dtype=DamageType.FIRE)
+        return
+    c.damage("1d10", c.int_mod, dtype=DamageType.FIRE)
+    burn = c.ongoing(5, DamageType.FIRE)
+    if burn is None or victim is None:
+        return
+
+    # The token's zone id while it is on the board, and empty while a
+    # creature is burning. One list because the watches below close over it.
+    token: list[int] = []
+    #: Whoever the flames have already caught. *"A creature can be affected
+    #: by these flames only once in an encounter."*
+    scorched: set[int] = set()
+    #: The burns whose save puts the flames back -- the hit's own, and then
+    #: one per creature caught. Matched on `str(eff)`, which is
+    #: `_saves_against_mine`'s reading: `Effect.__str__` opens with `e<id>`,
+    #: so it pins the one effect without parsing the display string.
+    watched: set[str] = {str(burn)}
+
+    def catch(who: int) -> None:
+        """One creature standing in the flames burns, and they go out.
+
+        **Takes the creature rather than reading `Zones.occupants`**, and
+        that is not a style choice. `Zones.refresh` assigns
+        `self.inside[eid] = now` **after** its emit loop, so inside a
+        `ZoneEntered` handler `occupants()` still answers the *old* set --
+        empty, for a zone nobody had stood in. Reading it there made the
+        whole loop a no-op while every piece of it worked in isolation:
+        the flames arrived, the creature was an occupant a moment later,
+        and nothing had happened.
+        """
+        if not token or who in scorched:
+            return
+        caught = c.ongoing(5, DamageType.FIRE, on=who)
+        if caught is None:
+            return
+        scorched.add(who)
+        watched.add(str(caught))
+        # *"And you remove the flames from the board."*
+        c.world.zones.end(token.pop(), "the flames are taken up")
+
+    def arrive(near: int) -> None:
+        """*"Place the flames in a square adjacent to that creature."*"""
+        if token:
+            return
+        spot = beside(c, near)
+        if spot is None:
+            return
+        token.append(c.zone({spot}, until=When.ENCOUNTER, label=f"{c.ref} flames"))
+        # A creature may already be standing there: `beside` refuses a
+        # square with an *occupant*, but a big creature's footprint spans
+        # squares the grid does not call its own. Safe to read `occupants`
+        # here -- no `ZoneEntered` is in flight, which is the one moment it
+        # answers staleley.
+        for who in c.world.zones.occupants(token[0]):
+            catch(who)
+
+    def entered(ev: ZoneEntered) -> None:
+        if token and ev.zone == token[0]:
+            catch(ev.actor)
+
+    def saved(ev: SavingThrow) -> None:
+        if not ev.saved or ev.against not in watched:
+            return
+        watched.discard(ev.against)
+        arrive(ev.actor)
+
+    def my_turn(ev: TurnStart) -> None:
+        # *"If no creature is currently affected by the flames, move the
+        # flames 1 square at the start of your turn."* The token being on
+        # the board **is** no creature being affected, so this needs no
+        # other test. `move_zone` refreshes, so walking the flames onto
+        # somebody announces the entry `entered` answers.
+        if ev.ghost or ev.actor != c.me or not token:
+            return
+        c.move_zone(token[0], 1)
+
+    c.watch(ZoneEntered, entered, until=When.ENCOUNTER)
+    c.watch(SavingThrow, saved, until=When.ENCOUNTER)
+    c.watch(TurnStart, my_turn, until=When.ENCOUNTER)
