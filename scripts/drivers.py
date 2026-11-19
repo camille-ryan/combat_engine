@@ -20441,6 +20441,7 @@ def a_miss_can_land_on_the_creature_you_ride(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health, Position
     from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Miss as _Miss
     from combat_engine.engine.movement import place
     from combat_engine.engine.query import enemies
     from combat_engine.engine.turns import Encounter
@@ -20491,34 +20492,58 @@ def a_miss_can_land_on_the_creature_you_ride(out: Result) -> None:
         if hurt_v is None or hurt_m is None:
             return None
         hurt_v.hp, hurt_m.hp = hurt_v.max_hp, hurt_m.max_hp
+        # **Count the misses.** A board that posed the hold and then never
+        # swung cannot test the clause -- see `sweep`.
+        missed: list[int] = []
+        world.bus.on(_Miss, lambda ev: missed.append(1))
         sw = Cast(world=world, me=swinger, ref="drivers:swing")
         for _ in range(8):
             sw.basic(on=me)
         return {
             "landed": True,
+            "misses": len(missed),
             "victim": hurt_v.max_hp - hurt_v.hp,
             "rider": hurt_m.max_hp - hurt_m.hp,
         }
 
     def sweep(*, swinger_is_victim: bool,
               kinds: tuple[str, ...] | None = None) -> tuple[int, int, int]:
-        """(boards where the hold landed, boards hurting the victim, total)"""
-        laid = hurt = 0
-        for seed in range(1, max(6, SAMPLE // 10) + 1):
+        """(boards that produced a miss, boards hurting the victim, asked)
+
+        **Boards with a MISS, not boards with the hold**, and the
+        difference was a real failure in this rule. A board can land the
+        hold and then produce no swing at all -- seed 9 of 25 does exactly
+        that, 0 misses and 0 hits, because the swinger never attacks -- so
+        counting it among the boards that should have hurt the victim
+        failed the clause for the fixture's reasons.
+
+        It passed at `--tries 40` and failed in the wide sweep at the
+        default 250, because the seed count below scales with `SAMPLE`: 6
+        seeds reached none of the quiet boards and 25 reached one. So a
+        reduced `--tries` here moves **coverage** and not only sample
+        size, which is sharper than the usual loosening and is why the
+        plant list records both figures.
+        """
+        swung = hurt = 0
+        asked = max(6, SAMPLE // 10)
+        for seed in range(1, asked + 1):
             got = ride(seed, swinger_is_victim=swinger_is_victim, kinds=kinds)
             if got is None or not got["landed"]:
                 continue
-            laid += 1
+            if not got.get("misses"):
+                continue
+            swung += 1
             hurt += bool(got["victim"])
-        return laid, hurt, max(6, SAMPLE // 10)
+        return swung, hurt, asked
 
     laid, hurt, asked = sweep(swinger_is_victim=False)
     out.that(laid > 0,
-             "the row lands and leaves a redirect hold on at least one"
-             " board -- the premise, and it needs the target placed in"
-             " reach first: `p9433` is melee 1 and the board does not do"
-             " that, so `c.strike()` refuses for distance and 24 seeds"
-             " read as misses", f"{laid} of {asked} board(s) landed it")
+             "the row lands, leaves a redirect hold, and a swing at the"
+             " rider actually MISSES on at least one board -- the premise."
+             " The target has to be placed in reach first: `p9433` is melee"
+             " 1 and the board does not do that, so `c.strike()` refuses"
+             " for distance and 24 seeds read as misses",
+             f"{laid} of {asked} board(s) posed a miss")
     if not laid:
         return
     out.that(hurt == laid,
