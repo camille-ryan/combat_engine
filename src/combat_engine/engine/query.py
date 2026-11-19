@@ -2280,6 +2280,54 @@ def ignores_difficult(
     return word in scoped or "*" in scoped
 
 
+def grants_ca_beside(world: World, eid: int) -> bool:
+    """Does standing next to this conjuration make a creature grant combat
+    advantage?
+
+    `c.conjure(grants_ca=True)` lays the modifier read here, exactly as
+    `c.can_flank` lays `can_flank` for the sibling clause one function
+    below. One row prints it: a shadow servant beside which *"creatures
+    other than you grant combat advantage"*.
+    """
+    mods = world.get(eid, Mods)
+    return mods is not None and bool(mods.items) and mods.total("ca_ring") > 0
+
+
+def _beside_a_granting_conjuration(world: World, target: int) -> bool:
+    """Is that creature standing next to a conjuration whose ring it is not
+    exempt from?
+
+    **A geometric route rather than a held effect**, which is the whole
+    reason the clause needed one. `c.grants_advantage` names the creature
+    that grants at the moment the hold is laid, and this clause is about
+    whoever happens to be standing there when the question is asked -- a
+    creature that walks into the ring afterwards is not covered by a hold
+    laid before it arrived. A ring *zone* would not do it either: the card
+    gives the servant a move-action teleport, so the ring travels with it,
+    and a zone would have to be re-laid on every hop.
+
+    **"Creatures other than you"**: the conjurer is exempt, and it is free
+    to ask -- `Conjuration.by` is already the conjurer's entity id, so no
+    new field and no context key are needed to say it.
+
+    Not `Effect.source`, which is what this reached for first and is a
+    silent wrong answer here: `Conjuration.effect` is an effect **id**, an
+    `int`, so `getattr(conj.effect, "source", None)` is always `None` and
+    the exemption never fired. It takes a board where the conjurer is
+    beside its own servant to see that, which is why it is written down.
+    """
+    from .components import Conjuration
+
+    for other, conj in world.each(Conjuration):
+        if other == target or not grants_ca_beside(world, other):
+            continue
+        if conj.by == target:
+            continue
+        if adjacent(world, other, target):
+            return True
+    return False
+
+
 def can_flank(world: World, eid: int) -> bool:
     """May this companion stand in the far square and count?
 
@@ -2543,6 +2591,15 @@ def _has_combat_advantage(
     if grants_ca(world, target):
         return True
     if world.relations.holds(Relation.GRANTS_CA_TO, target, attacker):
+        return True
+    # **The geometric route**, which none of the held forms above can say:
+    # they each name the granting creature when the hold is laid, and this
+    # one is about whoever is standing beside a conjuration right now.
+    #
+    # Asked without the gate context deliberately -- the only narrowing the
+    # printed line carries is "creatures other than you", which is the
+    # conjurer and is read off the conjuration itself.
+    if _beside_a_granting_conjuration(world, target):
         return True
     # The gated form of the same sentence. `c.grants_advantage(when=)` cannot use the
     # relation above, because a relation carries no predicate and this function returns

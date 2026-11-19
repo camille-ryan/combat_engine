@@ -15,7 +15,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - The attackable body of a wall, given the zone `c.wall` returned.
 - `c.climb_dc(self, change: 'int', squares: 'Iterable[Square]', *, until: 'When | None' = <When.ENCOUNTER: 'end of encounter'>) -> 'int'`
   - Move the Athletics DC of climbing those squares. Returns how many.
-- `c.conjure(self, at: 'Square | None' = None, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>, speed: 'int' = 0, aura: 'int' = 0, burn: 'tuple[int, DamageType] | None' = None, solid: 'bool' = False, defences: 'int' = 0, defences_of: 'int | None' = None, defences_plus: 'int' = 0, defences_each: 'Mapping[Defense, int] | None' = None, hp: 'int' = 0, flanks: 'bool' = False) -> 'int'`
+- `c.conjure(self, at: 'Square | None' = None, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>, speed: 'int' = 0, aura: 'int' = 0, burn: 'tuple[int, DamageType] | None' = None, solid: 'bool' = False, defences: 'int' = 0, defences_of: 'int | None' = None, defences_plus: 'int' = 0, defences_each: 'Mapping[Defense, int] | None' = None, hp: 'int' = 0, flanks: 'bool' = False, grants_ca: 'bool' = False) -> 'int'`
   - Put a conjuration on the board and return its entity id.
 - `c.dim(self, radius: 'int' = 2, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "This candle sheds dim light in a 2-square radius."

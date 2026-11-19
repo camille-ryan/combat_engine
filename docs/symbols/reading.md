@@ -198,6 +198,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Who may hold the other side of a creature for `eid`.
 - `query.grants_ca(world: 'World', eid: 'int') -> 'bool'`
   - True when the creature grants combat advantage to everyone.
+- `query.grants_ca_beside(world: 'World', eid: 'int') -> 'bool'`
+  - Does standing next to this conjuration make a creature grant combat
 - `query.has_combat_advantage(world: 'World', attacker: 'int', target: 'int', power: 'str' = '', hand: 'str' = '') -> 'bool'`
   - (no docstring)
 - `query.shield_bonus(world: 'World', eid: 'int') -> 'int'`

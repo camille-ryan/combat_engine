@@ -18006,6 +18006,115 @@ def a_day_lock_sits_on_the_ally(out: Result) -> None:
              f"{after}")
 
 
+def a_ring_round_a_conjuration_grants_advantage(out: Result) -> None:
+    """*"Creatures other than you grant combat advantage while adjacent to
+    the servant."* -- `p13819`.
+
+    **The marker named the wrong verb**, and the row's old note had the
+    diagnosis right while looking one layer too high.
+    `c.grants_advantage(while_adjacent_to=)` cannot say this: that verb
+    fixes the granting creature when the hold is laid, and this clause is
+    about whoever happens to be standing there when the question is asked.
+    A creature walking into the ring afterwards is not covered by a hold
+    laid before it arrived. So it belongs on `c.conjure`, beside the
+    `flanks=True` already there -- both are standing geometric facts about
+    a conjuration, read at ask time, which is also what survives the
+    servant's printed teleport command.
+
+    **The premise is the load-bearing line here, not the payoff.** The
+    audit board poses one ally `DAZED`, so `grants_ca` is already True for
+    it and `has_combat_advantage` answers True for reasons that have
+    nothing to do with this clause -- every assertion below would have
+    passed before the code was written. The rule therefore picks an ally
+    the board has **not** pre-set and asserts that it grants nothing to
+    begin with.
+
+    The pair that matters is one creature measured before and after it
+    moves, and it is moved **after** the conjuration exists -- which is
+    exactly the case a fixed hold cannot cover.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conjuration, Position
+    from combat_engine.engine.query import allies, enemies, grants_ca
+
+    world, me, _ = _board("p13819", 1)
+    foes = sorted(enemies(world, me))
+    clean = [a for a in sorted(allies(world, me)) if not grants_ca(world, a)]
+    out.that(bool(foes) and bool(clean),
+             "the board deals an enemy to swing and an ally the board has"
+             " NOT already made grant combat advantage -- it poses one"
+             " `DAZED`, which would make every line below vacuous",
+             f"foes {foes} / clean allies {clean}")
+    if not foes or not clean:
+        return
+    shooter, mate = foes[0], clean[0]
+    out.that(not query.has_combat_advantage(world, shooter, mate),
+             "and that ally grants nothing to begin with -- the baseline,"
+             " and the whole reason a clean ally had to be picked",
+             f"{shooter} vs {mate}")
+
+    c = Cast(world=world, me=me, ref="p13819")
+    dsl.REGISTRY["p13819"].body(c)
+    made = [e for e, _ in world.each(Conjuration)]
+    out.that(len(made) == 1, "the row conjures exactly one servant", f"{made}")
+    if len(made) != 1:
+        return
+    servant = made[0]
+    seat = world.get(servant, Position)
+    out.that(seat is not None, "and it has a square to stand beside", f"{seat}")
+    if seat is None:
+        return
+    here = next(iter(seat.squares))
+    out.that(query.grants_ca_beside(world, servant),
+             "`grants_ca=True` marks the servant itself -- the modifier"
+             " `c.can_flank` lays for the sibling clause, read the same way",
+             f"{servant} at {here}")
+    out.that(world.get(servant, Conjuration).by == me,
+             "and the conjuration records its conjurer, which is what the"
+             " printed exemption is read off -- NOT `Effect.source`:"
+             " `Conjuration.effect` is an effect **id**, so reaching for"
+             " `.source` on it is `None` every time and the exemption"
+             " silently never fires",
+             f"by={world.get(servant, Conjuration).by} me={me}")
+
+    def put(eid: int, sq: tuple[int, int]) -> None:
+        pos = world.get(eid, Position)
+        if pos is None:
+            return
+        world.grid.place(eid, frozenset({sq}))
+        pos.square = sq
+        pos.spans = frozenset({sq})
+
+    beside = (here[0] + 1, here[1])
+    away = (here[0] + 4, here[1])
+
+    put(mate, away)
+    out.that(not query.has_combat_advantage(world, shooter, mate),
+             "standing four squares off it still grants nothing -- the"
+             " control that makes the next line about adjacency rather than"
+             " about the servant merely existing", f"{away}")
+    put(mate, beside)
+    out.that(query.has_combat_advantage(world, shooter, mate),
+             "and stepping beside the servant, it grants -- moved there"
+             " AFTER the conjuration, which is the case a hold naming"
+             " creatures at lay time cannot cover", f"{beside}")
+
+    put(me, beside)
+    out.that(not query.has_combat_advantage(world, shooter, me),
+             "the CONJURER in that same square grants nothing -- 'creatures"
+             " other than you', and the assertion a ring that tolled"
+             " everybody cannot pass", f"caster {me} at {beside}")
+
+    for eff in list(world.effects.of(servant)):
+        world.effects.end(eff, "destroyed")
+    out.that(not query.has_combat_advantage(world, shooter, mate),
+             "and the ring goes with the servant -- the card destroys it on"
+             " any hit, so a ring outliving it would be a standing penalty"
+             " nobody could lift", f"ally still at {beside}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -100593,6 +100702,9 @@ DRIVERS = {
     "day_locked_ally": (a_day_lock_sits_on_the_ally,
                         "an ally this landed on cannot be targeted again"
                         " until that ally's own extended rest"),
+    "ca_ring": (a_ring_round_a_conjuration_grants_advantage,
+                "anyone beside the servant grants combat advantage, and the"
+                " conjurer does not"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

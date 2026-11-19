@@ -8221,6 +8221,7 @@ class Cast:
         defences_each: Mapping[Defense, int] | None = None,
         hp: int = 0,
         flanks: bool = False,
+        grants_ca: bool = False,
     ) -> int:
         """Put a conjuration on the board and return its entity id.
 
@@ -8419,6 +8420,17 @@ class Cast:
             # conjuration, which `_banish` removes outright, so a duration
             # here would be a second clock on a thing that already has one.
             self.can_flank(on=eid, until=until)
+        if grants_ca:
+            # **The sibling of `flanks=` and laid the same way**: a standing
+            # geometric fact about the conjuration, read by
+            # `query._beside_a_granting_conjuration` at ask time rather than
+            # held on whoever was adjacent when the servant appeared.
+            #
+            # `until` rather than the encounter, so the ring cannot outlive
+            # the thing it is a ring around -- and a destroyed conjuration
+            # takes its own modifiers with it, which is what makes the
+            # printed "destroyed if it is hit by an attack" end this too.
+            self.bonus("ca_ring", 1, on=eid, until=until, kind="untyped")
         return eid
 
     def _banish(self, eid: int) -> None:

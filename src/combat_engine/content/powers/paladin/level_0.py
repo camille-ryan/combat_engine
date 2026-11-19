@@ -283,28 +283,44 @@ def p13816(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.SHADOW, Keyword.CONJURATION],
-    dropped=("c.grants_advantage(while_adjacent_to=)",),
 )
 def p13819(c: Cast) -> None:
     """`solid=True` is the opt-in: the printed line says the servant occupies
     its square, and a conjuration is walked through by default.
 
-    "Creatures other than you grant combat advantage while adjacent to it"
-    is a standing rule about geometry rather than an effect on anybody,
-    which is the marker. `c.grants_advantage` exists and takes `on=` for
-    who grants it and `to=` for who benefits -- but both name creatures
-    fixed at the moment the hold is laid, and this clause is about
-    whoever happens to be standing beside the servant at the time. A
-    creature walking into that ring afterwards is not covered by a hold
-    laid before it got there.
+    **"Creatures other than you grant combat advantage while adjacent to
+    it" is written now, and the marker named the wrong verb.** The old note
+    had the diagnosis right and then looked one layer too high.
+
+    `c.grants_advantage` cannot say it: `on=` and `to=` both name creatures
+    fixed at the moment the hold is laid, and this clause is about whoever
+    happens to be standing beside the servant at the time. A creature
+    walking into that ring afterwards is not covered by a hold laid before
+    it got there.
 
     **And a ring zone would not do it either**, which is the obvious way
-    round and worth ruling out here rather than once per reader: the card
-    gives the servant a `Move Action (Teleportation)` command, so the ring
-    moves whenever it does. `_while_in` covers arrivals, which is the half
-    a fixed hold misses, but a zone that has to be re-laid on every
-    teleport trades one staleness for another. What the clause wants is a
-    geometric route in `query.has_combat_advantage`."""
+    round and worth keeping here rather than re-deriving once per reader:
+    the card gives the servant a `Move Action (Teleportation)` command, so
+    the ring moves whenever it does, and a zone re-laid on every teleport
+    trades one staleness for another.
+
+    The route is `c.conjure(grants_ca=True)` -- the sibling of the
+    `flanks=True` already on that verb, which is *"your allies can flank
+    with it"*: the same kind of clause, laid the same way and read the same
+    way. Both are standing geometric facts about a conjuration rather than
+    effects on any creature, so both are asked at the moment the question
+    is put, and that is exactly what survives the teleport.
+
+    Three things made it a kwarg rather than a subsystem.
+    `query.can_flank` is the precedent line for line. The context
+    `query._has_combat_advantage` builds already carries `target`, and the
+    creature that *grants* is the target, so no new context key. And
+    **"other than you" is free**: `Effect.source` is the conjurer, so the
+    exemption reads off the conjuration itself with no new field.
+
+    The branch sits below the two blanket suppressions and the held forms
+    in `_has_combat_advantage`, because it is a route **in** and those are
+    refusals."""
     spot = _free_square(c, 2)
     if spot is None:
         return
@@ -314,6 +330,7 @@ def p13819(c: Cast) -> None:
         sustain=None,
         speed=6,
         solid=True,
+        grants_ca=True,
         label=f"{c.ref} servant",
     )
 

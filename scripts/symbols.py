@@ -1142,7 +1142,8 @@ READERS: dict[str, list[str]] = {
         # here. #1233.
         "block_categories",
         "attack_penalty", "can_flank", "deals_damage", "deals_half", "defence", "difficulty",
-        "flanked_by", "flankers", "grants_ca", "has_combat_advantage",
+        "flanked_by", "flankers", "grants_ca", "grants_ca_beside",
+        "has_combat_advantage",
         "shield_bonus", "takes_half",
     ],
     "what a creature may do": [
