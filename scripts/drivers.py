@@ -18283,6 +18283,117 @@ def a_conjured_suit_comes_off_the_class_page(out: Result) -> None:
              f"{asked[-1] if asked else None}")
 
 
+def a_silenced_creature_cannot_be_heard(out: Result) -> None:
+    """*"The target cannot speak intelligibly or deliver any effect that
+    relies on speech (save ends)."* -- `p16619`.
+
+    **The marker asked for a condition and the gap was the missing half of
+    a read that already existed.** `query.can_hear` composes hearing out of
+    `Condition.DEAFENED` on the **listener** and `query.sealed` on both
+    parties -- so every clause in it was about the listener or about being
+    shut in, and a creature struck silent was still heard by everybody.
+
+    `c.cannot_speak` is the speaker's side. Not a second condition,
+    deliberately, and `Condition.DEAFENED` is the argument for that: its
+    `Rules` entry sat entirely default, laid by seven rows and consulted by
+    none, until `can_hear` became its first reader. A state nobody asks
+    about is this component's documented way of being silently false.
+
+    **The asymmetry is the load-bearing assertion.** A fix shaped like
+    deafness would stop the silenced creature *hearing*, which the card does
+    not say. So the rule asserts both directions: nobody can hear it, and it
+    can still hear everybody.
+
+    And it has teeth rather than being a flag nothing reads:
+    `skills/dungeoneering.py` filters its allies through `c.can_hear` and
+    `skills/perception.py` reads it directly, so the silenced creature's own
+    "allies who can hear you" rows find nobody -- which is the second half
+    of the printed clause.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, enemies
+
+    world, me, _ = _board("p16619", 1)
+    foes, mates = sorted(enemies(world, me)), sorted(allies(world, me))
+    out.that(bool(foes) and bool(mates),
+             "the board fields a target to silence and a third creature to"
+             " listen -- the listener has to be somebody else, or the"
+             " asymmetry below cannot be seen",
+             f"foes {foes[:3]} / allies {mates[:3]}")
+    if not foes or not mates:
+        return
+    foe, mate = foes[0], mates[0]
+
+    out.that(query.can_hear(world, mate, foe),
+             "before anything is laid, the ally can hear that creature --"
+             " the premise, and `can_hear` is True by default so a broken"
+             " verb would look like a working one without it",
+             f"{mate} hears {foe}")
+
+    c = Cast(world=world, me=me, ref="p16619")
+    c.cannot_speak(on=foe, until=When.SAVE_ENDS)
+
+    out.that(not query.can_hear(world, mate, foe),
+             "silenced, it cannot be heard", f"{mate} hears {foe}: False")
+    out.that(query.can_hear(world, foe, mate),
+             "and it can still HEAR -- the asymmetry, and the assertion a"
+             " deafness-shaped fix cannot pass. The card takes speech away,"
+             " not hearing", f"{foe} hears {mate}: True")
+    out.that(not Cast(world=world, me=foe, ref="drivers:probe").can_hear(mate),
+             "read through `c.can_hear` as well, which is the door content"
+             " uses -- `skills/dungeoneering.py` filters its allies through"
+             " it, so the silenced creature's own 'allies who can hear you'"
+             " rows now find nobody", "False")
+
+    held = [e for e in world.effects.of(foe) if "cannot_speak" in str(e.mods)]
+    out.that(len(held) == 1 and held[0].when is When.SAVE_ENDS,
+             "it is one hold and it SAVES, which the card prints -- a"
+             " modifier riding on a visible effect rather than a state with"
+             " no clock",
+             f"{[(h.label, h.when.name) for h in held]}")
+
+    # -- and the row itself lays it, off a hit ----------------------------
+    #
+    # **Over seeds, not once.** The clause hangs on the attack, so a single
+    # board asserts whatever that roll happened to be -- and the first
+    # version of this line read `bool(laid) or True`, which cannot fail at
+    # all. Counting across seeds asserts both halves at once: the body does
+    # reach the verb, and it is gated, because a row laying it
+    # unconditionally would hit SAMPLE out of SAMPLE.
+    landed = 0
+    for seed in range(1, SAMPLE + 1):
+        world, me, _ = _board("p16619", seed)
+        foe = sorted(enemies(world, me))[0]
+        c = Cast(world=world, me=me, ref="p16619")
+        c.target = foe
+        dsl.REGISTRY["p16619"].body(c)
+        landed += any("cannot_speak" in str(e.mods)
+                      for e in world.effects.of(foe))
+    out.that(0 < landed < SAMPLE,
+             "over SAMPLE boards the silence lands on some swings and not"
+             " others -- so the body reaches the verb AND the attack gates"
+             " it. All of SAMPLE would mean the hit test does nothing; none"
+             " would mean the verb is never called",
+             f"{landed} of SAMPLE")
+    # **The docstring has to come off before grepping the body**, and the
+    # first version of this line did not: `inspect.getsource` includes the
+    # docstring, which names the verb in prose, so reverting the call to the
+    # placeholder hold left this assertion green. Planting it is what showed
+    # that -- the seeded line below went red and this one did not.
+    import inspect as _inspect
+
+    whole = _inspect.getsource(dsl.REGISTRY["p16619"].body)
+    code = whole.split('"""')[-1]
+    out.that("c.cannot_speak" in code,
+             "and it is THIS verb the row's CODE calls, not the placeholder"
+             " hold it used to lay -- the assertion that survives a roll"
+             " going either way",
+             f"{[ln.strip() for ln in code.splitlines() if ln.strip()][:2]}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -100876,6 +100987,8 @@ DRIVERS = {
     "conjured_armour": (a_conjured_suit_comes_off_the_class_page,
                         "the page decides which rungs are offered, and being"
                         " stripped ends the hold"),
+    "silenced": (a_silenced_creature_cannot_be_heard,
+                 "a silenced creature cannot be heard, and can still hear"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

@@ -463,6 +463,12 @@ CATEGORIES: dict[str, dict] = {
                 # nor `cannot_attack`. #p16673.
                 "cannot_act",
                 "cannot_attack", "cannot_be_flanked",
+                # The speaker's half of `query.can_hear`, which only ever
+                # asked about the listener. A refusal rather than a
+                # condition, and the verb says why: hearing already has
+                # exactly one reader, and `Condition.DEAFENED` sat inert
+                # for seven rows until that reader existed.
+                "cannot_speak",
                 # Beside `cannot_be_flanked` and not folded into it:
                 # that one is about being flanked and this is about
                 # flanking, which are different creatures' clauses

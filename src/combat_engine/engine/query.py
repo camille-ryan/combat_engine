@@ -3991,6 +3991,18 @@ def can_hear(world: World, listener: int, speaker: int) -> bool:
     """
     if is_(world, listener, Condition.DEAFENED):
         return False
+    # **And whether the speaker can speak, which this never asked.** Every
+    # clause above is about the listener or about being shut in; a creature
+    # struck silent was still heard by everybody, so *"cannot speak
+    # intelligibly or deliver any effect that relies on speech"* named a
+    # clause with no mechanism. `c.cannot_speak` lays the modifier.
+    #
+    # Read here rather than as a second condition for the reason this
+    # docstring already gives about `Condition.DEAFENED`: a state nobody
+    # consults is inert, and hearing already has exactly one reader.
+    mine = world.get(speaker, Mods)
+    if mine is not None and mine.items and mine.total("cannot_speak") > 0:
+        return False
     return not sealed(world, listener) and not sealed(world, speaker)
 
 

@@ -1014,6 +1014,37 @@ class Cast:
 
         return _can_hear(self.world, who, self.me)
 
+    def cannot_speak(
+        self, *, on: int | None = None, until: When = When.SAVE_ENDS,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """*"The target cannot speak intelligibly or deliver any effect that
+        relies on speech."*
+
+        **The speaker's half of `query.can_hear`, which only ever asked
+        about the listener.** That reader composes hearing out of
+        `Condition.DEAFENED` on the listener and `query.sealed` on both
+        parties -- so a creature could be struck silent and still be heard
+        by everybody. This is the modifier it now reads on the speaker, and
+        it is what makes *"any effect that relies on speech"* mean
+        something rather than naming a clause with no mechanism.
+
+        It is **not** a separate condition, deliberately. The printed
+        sentence is about being heard, and hearing already has one reader;
+        a second state nobody consulted is this component's documented way
+        of being silently false. `Condition.DEAFENED` is the precedent and
+        the warning -- its own `Rules` entry sat entirely default, laid by
+        seven rows and read by none, until `can_hear` became its first
+        reader.
+
+        `until=When.SAVE_ENDS` by default because that is what the card
+        prints, and the hold stays visible and saveable like any other.
+        """
+        return self.bonus(
+            "cannot_speak", 1, on=on if on is not None else self.me,
+            until=until, kind="untyped", when=when,
+        )
+
     def bloodied(self, on: int | None = None) -> bool:
         """Is this creature bloodied -- by its hit points, or by a card.
 

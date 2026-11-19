@@ -2208,20 +2208,50 @@ def p16539(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM],
     attack=Attack(Pick.HIGHEST, plus=2, vs=WILL),
-    dropped=("c.cannot_speak()",),
 )
 def p16619(c: Cast) -> None:
     """"Highest ability modifier + 2 vs. Will" is `Pick.HIGHEST` with
-    `plus=2`, resolved per caster. What the hold should stop -- speech, and
-    any effect delivered by it -- is still not a condition the engine has, so
-    the named hold stands in for it: it can be seen and saved against.
+    `plus=2`, resolved per caster.
 
-    The card prints the clause as an Effect rather than a Hit, beside an
-    attack line that then decides nothing; it is hung on the hit here,
-    because a roll with no consequence is the less likely reading of the two.
-    Worth confirming against the page."""
+    **The silence is `c.cannot_speak` now, which is the speaker's half of
+    `query.can_hear`.** The old note said speech "is still not a condition
+    the engine has, so the named hold stands in for it" -- true about a
+    condition, and it looked one layer too high. Hearing already had a
+    reader, and that reader asked only about the **listener**: it composes
+    `Condition.DEAFENED` on the listener with `query.sealed` on both
+    parties, so a creature struck silent was still heard by everybody.
+
+    So the clause needed no new condition, only the missing side of a read
+    that was already there. It has teeth because `can_hear` has callers:
+    `skills/dungeoneering.py` filters its allies through `c.can_hear`, and
+    `skills/perception.py` reads it directly -- so a silenced creature's own
+    "allies who can hear you" rows now find nobody, which is *"or deliver
+    any effect that relies on speech"*.
+
+    A modifier on the hold rather than a second condition, and
+    `Condition.DEAFENED` is the warning that argues for it: its `Rules`
+    entry was entirely default, laid by seven rows and consulted by none,
+    until `can_hear` became its first reader. The hold is still visible and
+    still saves.
+
+    **The hit-versus-effect question the old note asked to confirm is
+    measured and still open, and the reading is unchanged.** The card prints
+    `Attack:` and `Effect:` and **no `Hit:`** -- read literally, 4e's Effect
+    line applies whether the attack hits or misses, which would make the
+    attack roll decide nothing. 18 of the 2,353 cards with an Attack line
+    have no Hit line, so the shape is rare but not an extraction artefact,
+    and in every declared one of those the Effect is unconditional -- but
+    each has its own reason for that (`p2880`, `p4016` and `p7641` are
+    summons, whose Attack line belongs to the summoned creature; `p843`
+    carries a Trigger). None of them is this shape, so they do not settle
+    it.
+
+    Left hung on the hit, which is the conservative reading: a save-ends
+    silence landing off a minor action whatever the roll is the stronger of
+    the two, and this is the half that can be corrected without taking
+    anything away."""
     if c.strike():
-        c.effect(c.ref, until=When.SAVE_ENDS, on=c.target)
+        c.cannot_speak(on=c.target, until=When.SAVE_ENDS)
 
 
 @power(
