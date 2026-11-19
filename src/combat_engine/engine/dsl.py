@@ -1767,6 +1767,24 @@ class Power:
     #: `_aiming_branch` still took from the row rather than from the
     #: branch, which is why `p14124`'s marker named this field.
     action_alt: ActionType | None = None
+    #: **A skill check an adjacent ally may spend its own action on, to let
+    #: this creature use the row for nothing.** `("skill:heal", 10)` is
+    #: `p11546`'s *"As a standard action, an adjacent ally can make a DC 10
+    #: Heal check to allow you to use this power without spending an action
+    #: yourself."*
+    #:
+    #: **Not a `Cast` verb, which is where its marker pointed.** A body
+    #: cannot reach this: the body runs once the row has already been used,
+    #: and the clause is about who *pays* for using it. So it is a header
+    #: field read by an offer in `actions`, the way `GRANTABLE`'s words
+    #: are -- `actions._ally_unlocks` builds the offer and
+    #: `actions.perform`'s `ally_check` branch runs it.
+    #:
+    #: `(skill, dc)`. The skill is a `skill:<name>` key like any other
+    #: check; the DC is the printed number and is **not** read from
+    #: `combat_engine.dc`, because this card prints a flat 10 rather than a
+    #: band.
+    by_ally_check: tuple[str, int] | None = None
     #: A printed Trigger line. Set for immediate and opportunity actions.
     trigger: str = ""
     #: The same line in a form the dispatcher can act on. With it the row is
@@ -2523,6 +2541,7 @@ def power(
     reads_parity: bool = False,
     requires_alt: Callable[[World, int], bool] | None = None,
     action_alt: ActionType | None = None,
+    by_ally_check: tuple[str, int] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
     recharge: int = 0,
@@ -2782,6 +2801,7 @@ def power(
             reads_parity=reads_parity,
             requires_alt=requires_alt,
             action_alt=action_alt,
+            by_ally_check=by_ally_check,
             trigger=trigger,
             on=on,
             recharge=recharge,

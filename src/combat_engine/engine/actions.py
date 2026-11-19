@@ -161,6 +161,7 @@ def legal(
     out.extend(_action_points(world, encounter, actor))
     out.extend(_manoeuvres(world, encounter, actor))
     out.extend(_stabilising(world, encounter, actor))
+    out.extend(_ally_unlocks(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
     out.extend(_searching(world, encounter, actor))
     out.extend(_spotting(world, encounter, actor))
@@ -317,6 +318,54 @@ def _stabilising(world: World, encounter: Encounter, actor: int) -> list[Action]
             continue
         out.append(Action(kind="stabilise", cost=ActionType.STANDARD,
                           targets=(friend,)))
+    return out
+
+
+def _ally_unlocks(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """A check this creature can spend an action on to free an ally's row.
+
+    *"As a standard action, an adjacent ally can make a DC 10 Heal check to
+    allow you to use this power without spending an action yourself."* --
+    `p11546`, and `Power.by_ally_check` is where the skill and the DC live.
+
+    **Shaped on `_stabilising` above, which is the same kind of offer**: an
+    adjacent ally spends its own action on a check aimed at somebody else.
+    That is the pattern this reuses rather than inventing, and it is why
+    the clause needed no `Cast` verb -- a body cannot reach it, because the
+    body runs once the row has already been used and this is about who
+    *pays* for using it.
+
+    **Adjacent only**, which is the card's word. Offered only while the
+    owner could actually use the row -- `usable` is asked -- so a spent
+    daily or a creature with no surge left does not advertise a check that
+    would do nothing.
+
+    One offer per (ally, row), so a creature standing between two allies
+    who both carry such a row is shown both.
+    """
+    from .dsl import get as _get
+    from .dsl import usable as _usable
+    from .query import allies as _friends
+
+    out: list[Action] = []
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return out
+    for friend in _friends(world, actor):
+        if friend == actor:
+            continue
+        if distance_between(world, actor, friend) > 1:
+            continue
+        known = world.get(friend, Powers)
+        if known is None:
+            continue
+        for ref in known.all:
+            p = _get(ref)
+            if p is None or p.by_ally_check is None:
+                continue
+            if not _usable(world, friend, p)[0]:
+                continue
+            out.append(Action(kind="ally_check", cost=ActionType.STANDARD,
+                              ref=ref, targets=(friend,)))
     return out
 
 
@@ -3440,6 +3489,41 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # this neither duplicates the destination search nor trusts the
         # menu's view of a board that may have moved since it was drawn.
         return Cast(world=world, me=actor, ref="move_zone").move_zone(zone, reach)
+
+    if action.kind == "ally_check":
+        from .cast import Cast as _Cast
+        from .dsl import get as _get
+        from .dsl import usable as _usable
+        from .dsl import use as _use_row
+
+        # **Re-checked here rather than trusted from the menu**, like the
+        # branches below and for the stated reason: the owner may have used
+        # the row, moved away or spent its last surge since the offer was
+        # drawn.
+        #
+        # **Defensive, and no fixture reds it**: `drivers.ally_unlocks`
+        # draws the menu and performs immediately, so nothing moves in
+        # between, and the plant deleting this re-check passes. Kept
+        # because every neighbouring branch keeps the same one on the same
+        # argument -- not claimed as load-bearing.
+        owner = action.targets[0] if action.targets else -1
+        p = _get(action.ref or "")
+        if p is None or p.by_ally_check is None or owner < 0:
+            return False
+        if distance_between(world, actor, owner) > 1:
+            return False
+        if not _usable(world, owner, p)[0]:
+            return False
+        skill, dc = p.by_ally_check
+        # The ALLY rolls it -- `who=actor` -- and the ref is the row being
+        # freed, so the check is logged against the card it belongs to.
+        helper = _Cast(world=world, me=actor, ref=action.ref or "")
+        if not helper.check(skill, dc, who=actor):
+            return False
+        # **The owner uses the row and pays no action for it.** `perform`
+        # has already charged the ALLY its standard; `use` charges the
+        # usage -- the daily -- to the owner, which is the printed split.
+        return bool(_use_row(world, owner, action.ref or ""))
 
     if action.kind == "move_in_zone":
         from .movement import walk as _walk

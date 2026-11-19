@@ -305,18 +305,29 @@ def p9315(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.HEALING],
-    dropped=("c.heal_check()",),
+    by_ally_check=("skill:heal", 10),
 )
 def p11546(c: Cast) -> None:
     """The Healing keyword is the difference from `p12163`: this surge pays
     out, so it is `c.surge` and not `c.spend_surge`.
 
-    Dropped: the Special, which lets an adjacent ally spend a standard
-    action on a DC 10 check to set this off instead. Nothing offers that
-    check as an action in a fight, so no `SkillCheck` with that skill is
-    ever announced -- the same absence `f1390` and `f3710` already wait on.
-    The clause is also about who pays for *using* this row, which a body
-    cannot reach: the body only runs once the row has been used.
+    **The Special is declared, not written in the body, and the marker
+    pointed at the wrong layer.** It read `c.heal_check()`, and the old
+    note beside it had already worked out why no body verb could ever
+    satisfy it: *"the clause is about who pays for using this row, which a
+    body cannot reach -- the body only runs once the row has been used."*
+    That is exactly right, and it means the gap was an **action offer**
+    rather than a verb.
+
+    So `by_ally_check=("skill:heal", 10)` is the header half, and the
+    offer is `actions._ally_unlocks` -- shaped on `actions._stabilising`,
+    which was already the same kind of thing: an adjacent ally spending its
+    own action on a check aimed at somebody else. The economy splits the
+    way the card does: `perform` charges the **ally** the standard, and
+    `use` charges the **owner** the daily.
+
+    The other half of the old note was also true and is now stale: nothing
+    offered such a check as an action in a fight. Something does.
     """
     c.surge(on=c.me)
 

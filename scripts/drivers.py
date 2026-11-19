@@ -20250,6 +20250,156 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def an_ally_may_spend_its_action_to_free_a_row(out: Result) -> None:
+    """*"Special: As a standard action, an adjacent ally can make a DC 10
+    Heal check to allow you to use this power without spending an action
+    yourself."* -- `p11546`.
+
+    **The marker pointed at the wrong layer and its own note said why.** It
+    read `c.heal_check()`, and the note beside it had the diagnosis exact:
+    *"the clause is about who pays for using this row, which a body cannot
+    reach -- the body only runs once the row has been used."* So no `Cast`
+    verb could ever have satisfied it. The gap was an **action offer**.
+
+    `Power.by_ally_check` is the header half and `actions._ally_unlocks`
+    the offer, shaped on `actions._stabilising` -- which was already the
+    same kind of thing: an adjacent ally spending its own action on a
+    check aimed at somebody else. Nothing new underneath.
+
+    **The economy splits the way the card does**, and that is the
+    assertion worth reading: `perform` charges the **ally** the standard
+    action, and `use` charges the **owner** the daily and the surge. A
+    version that charged the owner an action would read as working -- the
+    heal still lands -- and would be the whole point of the Special
+    missing.
+
+    **A failed check spends the action for nothing**, which is also
+    printed, and is why this is sampled rather than asked once: DC 10 off
+    a Heal check lands a bit over half the time, so a single trial proves
+    neither arm. Measured totals across seeds: 1, 7, 16, 16.
+
+    **The helper must be the creature holding the turn.** A standard
+    action needs one, so asking the menu of an ally who is not the current
+    actor returns nothing -- which reads exactly like an offer that was
+    never built. Four of twelve seeds pose this at all.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.query import allies
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+
+    def pose(seed: int, *, apart: bool = False) -> dict | None:
+        """`apart=True` stands the helper out of reach, which is the only
+        thing that distinguishes the adjacency test -- with the helper
+        always placed beside the owner, deleting it changed nothing and
+        its plant passed."""
+        world, owner, _ = _board("p11546", seed)
+        known = world.get(owner, Powers)
+        if known is None:
+            return None
+        if "p11546" not in known.all:
+            known.known.append("p11546")
+        world.encounter = enc = Encounter(world)
+        enc.start()
+        mates = [a for a in sorted(allies(world, owner)) if a != owner]
+        if not mates:
+            return None
+        # The turn-holder, because the offer costs a standard action.
+        helper = world.turn if world.turn in mates else mates[0]
+        spot = world.get(owner, Position)
+        if spot is None:
+            return None
+        from combat_engine.engine.movement import place
+
+        place(world, helper,
+              (spot.square[0] + (6 if apart else 1), spot.square[1]))
+        offers = [a for a in actions.legal(world, enc, helper)
+                  if a.kind == "ally_check"]
+        if apart:
+            return {"offers": len(offers), "apart": True}
+        if not offers:
+            return None
+        hurt = world.get(owner, Health)
+        if hurt is None:
+            return None
+        hurt.hp = max(1, hurt.max_hp // 2)
+        was, surges = hurt.hp, hurt.surges
+        ran = actions.perform(world, enc, helper, offers[0])
+        return {
+            "offer": offers[0],
+            "ran": bool(ran),
+            "healed": hurt.hp > was,
+            "surge_spent": surges - hurt.surges,
+            "ally_standard_left": enc.can_spend(helper, ActionType.STANDARD),
+            "owner_used": "p11546" in (world.get(owner, Powers).used or {}),
+            "helper": helper,
+            "owner": owner,
+        }
+
+    seen = [got for got in (pose(seed) for seed in range(1, 13)) if got]
+    out.that(bool(seen),
+             "the adjacent ally is offered the check at all -- and it has"
+             " to be the creature holding the turn, since the offer costs a"
+             " standard action: asking any other ally's menu returns"
+             " nothing and reads like an offer that was never built",
+             f"{len(seen)} of 12 board(s) posed it")
+    if not seen:
+        return
+
+    first = seen[0]
+    out.that(first["offer"].cost is ActionType.STANDARD
+             and first["offer"].ref == "p11546"
+             and first["offer"].targets == (first["owner"],),
+             "the offer is a STANDARD action, names the row, and is aimed"
+             " at the ally that owns it -- *'an adjacent ally can ...'*",
+             f"{first['offer'].cost.value} / {first['offer'].ref}"
+             f" / {first['offer'].targets}")
+
+    out.that(all(not g["ally_standard_left"] for g in seen),
+             "**the ALLY pays the standard, on every board** -- including"
+             " the ones where the check failed, which is printed: the"
+             " action is spent on the attempt",
+             f"{sum(not g['ally_standard_left'] for g in seen)} of {len(seen)}")
+
+    won = [g for g in seen if g["ran"]]
+    lost = [g for g in seen if not g["ran"]]
+    out.that(bool(won) and bool(lost),
+             "and the sample holds BOTH outcomes of the DC 10 check --"
+             " without both, one arm of the clause is untested and a rule"
+             " that always succeeded would pass on a row that never failed",
+             f"{len(won)} made it, {len(lost)} did not")
+    if not won:
+        return
+
+    out.that(all(g["healed"] and g["surge_spent"] == 1 for g in won),
+             "**on a success the OWNER spends the surge and heals** -- the"
+             " row ran on the creature whose card it is, not on the ally"
+             " that paid for it",
+             f"{[g['surge_spent'] for g in won]}")
+    out.that(all(g["owner_used"] for g in won),
+             "and the owner's daily is spent, which is the other half of"
+             " the split: the ally's action, the owner's usage",
+             f"{[g['owner_used'] for g in won]}")
+    if lost:
+        out.that(all(not g["healed"] for g in lost),
+             "while a FAILED check heals nobody -- the action is gone and"
+             " nothing happened", f"{[g['healed'] for g in lost]}")
+
+    # -- *"an ADJACENT ally"* ---------------------------------------------
+    far = [g for g in (pose(seed, apart=True) for seed in range(1, 13)) if g]
+    out.that(bool(far),
+             "the same boards pose a helper standing six squares off",
+             f"{len(far)} board(s)")
+    out.that(bool(far) and all(g["offers"] == 0 for g in far),
+             "**and none of them is offered the check** -- *'an ADJACENT"
+             " ally'*. The fixture above always stands the helper beside"
+             " the owner, so deleting the adjacency test changed nothing"
+             " and its plant passed until this arm existed",
+             f"{sum(g['offers'] for g in far)} offer(s) at range")
+
+
 def a_miss_can_land_on_the_creature_you_ride(out: Result) -> None:
     """*"Any melee or ranged attack that misses you hits the target
     instead, unless the target is the attacker."* -- `p9433`, while the
@@ -95760,6 +95910,23 @@ UNNAMED_KINDS_OWED = frozenset(
         # either, while the table would claim a decision had been made.
         "aid_attack",
         "aid_defence",
+        # **`ally_check` is owed for the same reason and by the same
+        # standing ruling.** It is `p11546`'s *"as a standard action, an
+        # adjacent ally can make a DC 10 Heal check to allow you to use
+        # this power"* -- `actions._ally_unlocks`. What it is worth is a
+        # judgement about somebody else's resources: the ally spends a
+        # whole standard action so that the owner may spend a daily and a
+        # surge, which is only the better play when the owner's own minor
+        # is worth more than the ally's standard. That is the deferred
+        # capability `#293` is about.
+        #
+        # Owed rather than priced, deliberately, and this is NOT the
+        # instrument being loosened to go green: Camille's ruling this
+        # round is *"we are not working on AI policy AT ALL here"*, so
+        # inventing a weight would be doing the one thing that was
+        # excluded -- and `#1098`'s rule says a declared 0.0 is worse than
+        # owing it, because it claims the kind was priced at nothing.
+        "ally_check",
         "bull_rush",
         # **Owed and not priced, which is the same call as the three above
         # and not a new judgement.** `move_in_zone` is `p16590`'s free hop
@@ -103674,6 +103841,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "ally_unlocks": (an_ally_may_spend_its_action_to_free_a_row,
+                     "an adjacent ally spends a standard and a check so the"
+                     " owner may use a row without paying an action"),
     "miss_rides": (a_miss_can_land_on_the_creature_you_ride,
                    "a miss on the rider lands on the creature it rides,"
                    " unless that creature is the one swinging"),
