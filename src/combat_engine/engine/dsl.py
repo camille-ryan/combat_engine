@@ -893,6 +893,31 @@ class Target:
     #: nothing for those. Narrowing `suffering` to `by` would change a verb
     #: with live callers and is not done here.
     affected_by: str = ""
+    #: *"Once anyone has used this power on an ally, that ally cannot be
+    #: targeted by the power again until after he or she finishes an extended
+    #: rest."* The ref whose day-lock the candidate must **not** be carrying.
+    #:
+    #: Reads `Powers.per_day`, which is the only store in the engine whose
+    #: clock is an extended rest: `story._wear` mirrors it in per party
+    #: member, `story.harvest` mirrors it back out, and only
+    #: `sheet.per_day.clear()` on an *extended* rest empties it. So the
+    #: printed clause needs no new state and no new duration -- the lock is
+    #: written on the **ally** rather than the caster, which is what makes
+    #: "once **anyone** has used this power" true without asking who did.
+    #:
+    #: **A header field rather than a body check, for `affected_by`'s
+    #: reason**: a body that refused a locked ally would have spent the
+    #: power to do it. Both arms read this predicate, so the locked ally is
+    #: off the offered menu *and* refused when handed in explicitly.
+    #:
+    #: One row in the corpus prints it (`p14141`), measured over `power`,
+    #: `feat`, `item`, `item_block`, `monster_power`, `class_feature` and
+    #: `racial_trait` on four phrasings. It is a field and not a one-off
+    #: because the two callers must not disagree -- which is the whole of
+    #: `_stands_right`'s docstring -- and because the alternative spellings
+    #: cannot say it: `conditions_without` wants a `Condition` and
+    #: `affected_by` reads an `Effect`, and no effect outlives an encounter.
+    day_locked_by: str = ""
     #: "While it has a creature grabbed, it can use this only against the
     #: grabbed creature."
     #:
@@ -4046,6 +4071,11 @@ def candidates(
         or aim.hit_by_me_this_turn
         or aim.missed_by_me_this_turn
         or aim.affected_by
+        # Named here as well as tested in `_stands_right`, which this guard's
+        # own comment demands: a target field tested in the predicate and
+        # missing from this list leaves the explicit-target arm honouring it
+        # and the offered menu silently not.
+        or aim.day_locked_by
         or aim.only_grabbed
         or aim.holding
         or aim.carrying
@@ -4604,6 +4634,15 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
     `candidates()` offered a target zero times and `use` rolled the attack --
     and a second copy of this logic would reproduce it one field over.
     """
+    if aim.day_locked_by:
+        from .components import Powers
+
+        known = world.get(target, Powers)
+        if known is not None and known.per_day.get(aim.day_locked_by, 0):
+            # **Asked of the target, not the actor.** The printed sentence
+            # is "once *anyone* has used this power on an ally", so the lock
+            # belongs to the ally and any caster reads the same answer.
+            return False
     if aim.affected_by and not any(
         getattr(eff, "by", "") == aim.affected_by and not eff.suspended
         for eff in world.effects.of(target)

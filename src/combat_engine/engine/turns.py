@@ -994,6 +994,19 @@ def extended_rest(world: World) -> None:
         powers.forbidden.clear()
         powers.charges.clear()
         powers.vestiges_used.clear()      # `#1046`, as the short rest does
+        # **The day's allowances, which "everything comes back" never
+        # included.** `Powers.per_day` is the board half of
+        # `story.Sheet.per_day` and the sheet half *is* emptied here --
+        # `story.rest` clears it inside its `if extended` fork, which is
+        # why the omission is invisible in a campaign. It is reachable from
+        # `fight.py` and `replay.py`, which play more than one encounter in
+        # one `World` and call this between them: a count of uses "today"
+        # outlived the day there.
+        #
+        # The short rest deliberately does **not** do this: that is the
+        # whole distinction the `charges` comment above draws, and a day
+        # allowance a short rest refilled would be a per-encounter one.
+        powers.per_day.clear()
     for _, health in world.each(Health):
         health.hp = health.max_hp
         health.temp = 0

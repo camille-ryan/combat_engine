@@ -17895,6 +17895,117 @@ def a_chosen_shape_brings_its_own_modes(out: Result) -> None:
                  f"{seeing[0]} {as_sharp[1]}, {blind[0]} {as_dull[1]}")
 
 
+def a_day_lock_sits_on_the_ally(out: Result) -> None:
+    """*"Special: Once anyone has used this power on an ally, that ally
+    cannot be targeted by the power again until after he or she finishes an
+    extended rest."* -- `p14141`, the only row in the corpus printing it.
+
+    **The marker said this needed a mark on the target that nothing could
+    store, and `Powers.per_day` was already it.** The note claimed that
+    counter "counts uses of a row, which is not this"; both halves were
+    wrong. Its key is an arbitrary string -- `story._wear` says so in as
+    many words, because a class feature's allowance is keyed on a row the
+    holder does not know -- and `_wear`/`story.harvest` mirror it inside a
+    per-party-member loop, so a count written on the *ally* travels on the
+    ally's sheet.
+
+    So the clock is right by construction rather than by arrangement:
+    `sheet.per_day.clear()` sits inside `story.rest`'s `if extended` fork,
+    and nothing else empties it.
+
+    What this rule asserts, in the order the clause reads: the lock lands on
+    the **ally**; the locked ally comes off the offered menu while its
+    sibling stays on it; the explicit-target arm refuses it too; a **short**
+    rest leaves it; an **extended** rest lifts it; and a *different* caster
+    reads the same answer, which is the "once anyone" half and the reason
+    the count is stored on the target rather than the caster.
+
+    The short-rest line is the control that makes the extended-rest one mean
+    something: a lock cleared by any rest would pass without it.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, turns
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.query import allies
+
+    p = dsl.REGISTRY["p14141"]
+
+    def fresh() -> tuple[Any, int, list[int]]:
+        world, me, _ = _board("p14141", 1)
+        return world, me, sorted(allies(world, me))
+
+    world, me, mates = fresh()
+    out.that(len(mates) >= 2,
+             "the board deals two allies, so a refusal can be told from an"
+             " empty pool", f"{mates}")
+    if len(mates) < 2:
+        return
+    mate, other = mates[0], mates[1]
+    offered = sorted(dsl.candidates(world, me, p))
+    out.that(mate in offered and other in offered,
+             "and both are offered before the power is used", f"{offered}")
+
+    c = Cast(world=world, me=me, ref="p14141")
+    c.target = mate
+    p.body(c)
+
+    known = world.get(mate, Powers)
+    out.that(known is not None and known.per_day.get("p14141", 0) == 1,
+             "using it writes the day-lock on the ALLY -- not on the caster,"
+             " which is what lets 'once anyone has used this' be true"
+             " without asking who did",
+             f"{dict(known.per_day) if known else None}")
+    mine = world.get(me, Powers)
+    out.that(mine is None or not mine.per_day.get("p14141", 0),
+             "and nothing is written on the caster -- the control that"
+             " tells this store from the ordinary daily allowance",
+             f"{dict(mine.per_day) if mine else None}")
+
+    now = sorted(dsl.candidates(world, me, p))
+    out.that(mate not in now,
+             "the locked ally is off the offered menu", f"{now}")
+    out.that(other in now,
+             "and its sibling is still on it -- so the filter refused that"
+             " ally and did not empty the pool", f"{now}")
+    out.that(not dsl._stands_right(world, me, p.target, mate, "p14141"),
+             "the explicit-target arm refuses it too, which is the"
+             " disagreement `_stands_right` exists to prevent: a body-side"
+             " check would have spent the power to refuse",
+             f"{mate}")
+    out.that(not dsl._stands_right(world, other, p.target, mate, "p14141"),
+             "and a DIFFERENT caster reads the same refusal -- 'once"
+             " anyone', and the whole reason the count is on the target",
+             f"asked as {other}")
+
+    # -- the clock, both ways ---------------------------------------------
+    world, me, mates = fresh()
+    mate = mates[0]
+    c = Cast(world=world, me=me, ref="p14141")
+    c.target = mate
+    p.body(c)
+    turns.short_rest(world)
+    out.that(mate not in sorted(dsl.candidates(world, me, p)),
+             "a SHORT rest leaves the lock in place -- the control, and"
+             " without it a lock any rest cleared would pass the line below",
+             f"{sorted(dsl.candidates(world, me, p))}")
+
+    world, me, mates = fresh()
+    mate = mates[0]
+    c = Cast(world=world, me=me, ref="p14141")
+    c.target = mate
+    p.body(c)
+    turns.extended_rest(world)
+    after = sorted(dsl.candidates(world, me, p))
+    out.that(mate in after,
+             "and an EXTENDED rest lifts it, so the ally can be targeted"
+             " again -- the printed clock, and `turns.extended_rest` had to"
+             " learn to clear `per_day` to say it: 'everything comes back'"
+             " left out the day's allowances, which `fight.py` and"
+             " `replay.py` reach by playing two fights in one world",
+             f"{after}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -100441,6 +100552,9 @@ DRIVERS = {
     "printed_kind": (a_card_knows_whether_it_is_a_utility,
                      "the word at the top of the card was a column nothing"
                      " read; an attack is not a utility"),
+    "day_locked_ally": (a_day_lock_sits_on_the_ally,
+                        "an ally this landed on cannot be targeted again"
+                        " until that ally's own extended rest"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

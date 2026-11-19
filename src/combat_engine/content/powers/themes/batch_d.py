@@ -59,6 +59,7 @@ from combat_engine.engine import (
     Melee,
     Pick,
     Ranged,
+    Target,
     Trigger,
     Usage,
     When,
@@ -1009,9 +1010,9 @@ def p14103(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=Target("ally", 1, day_locked_by="p14141"),
     keywords=[Keyword.ARCANE],
-    dropped=("story.extended_rest_lock()",),
+    dropped=("durations.When.DAY",),
 )
 def p14141(c: Cast) -> None:
     """Three recorded results standing in for the next three d20 rolls of
@@ -1033,19 +1034,58 @@ def p14141(c: Cast) -> None:
     the DM's discretion clause is explicitly about declining trivial rolls,
     so `c.may` is put to the creature whose roll it is.
 
-    **`dropped=` for the day-scale half**, which is two clauses and one
-    mechanism: "when you next take an extended rest, the effect ends", and
-    the Special -- an ally who has had this cannot be targeted again until
-    after an extended rest. Both are a lock that outlives the encounter.
-    `Powers.per_day` is the board half of `story.Sheet.per_day` and counts
-    *uses of a row*, which is not this: this is a mark on the **target**
-    that has to survive into the next fight. The row plays without it; what
-    it loses is the restriction, which is the clause that makes it weaker,
-    so the shape of the error is a power slightly too available rather than
-    one that does nothing."""
+    **The Special is built and it is the clause that makes the row weaker,
+    so it is the half worth having.** *"Once anyone has used this power on
+    an ally, that ally cannot be targeted by the power again until after he
+    or she finishes an extended rest."*
+
+    The note here used to say `Powers.per_day` "counts *uses of a row*,
+    which is not this: this is a mark on the target". Both halves of that
+    were wrong. The key is an **arbitrary string**, not a ref the holder
+    must know -- `story._wear`'s own note says so, because a class
+    feature's allowance is keyed on a row that is not in `powers.known` at
+    all. And the store is **per creature**: `_wear` and `story.harvest`
+    mirror `Powers.per_day` inside a per-party-member loop, so a count
+    written on the *ally* travels on the ally's sheet. `sheet.per_day`
+    is emptied only by `sheet.per_day.clear()`, which sits inside the
+    `if extended` fork -- so the clock is an extended rest and nothing
+    else, which is the clause verbatim.
+
+    So the lock is `c.spend_per_day(c.ref, 1, on=mate)` -- the `on=` is the
+    only new thing, a kwarg on a verb that was already here -- and
+    `Target(day_locked_by=)` is the refusal. **A header field rather than a
+    body check**, for the reason `affected_by` gives: a body refusing a
+    locked ally would have spent the power to do it.
+
+    "Once **anyone**" needs no bookkeeping about who cast it, because the
+    count is on the ally: three different casters read the same number.
+
+    **`dropped=` is now one clause, not two**, and it is a duration rather
+    than a lock: *"when you next take an extended rest, the effect ends"*
+    implies the recorded faces survive the fight, and `When.ENCOUNTER` is
+    the longest duration this engine has -- `durations._UNREACHABLE`'s own
+    note says nothing routine ends it, and the encounter ending does. So
+    the watches are bounded **tighter** than printed.
+
+    That is a real narrowing and not pedantry, because the DM-discretion
+    sentence is only about rolls *"in nondangerous or nonstressful
+    situations"* -- it presumes the faces are still there out of combat.
+    Carrying them needs a `When` past the encounter and effect state on the
+    `Sheet`, which is a subsystem and not a kwarg: `Sheet` persists a fixed
+    field per mechanism (`afflictions`, `withheld`, `per_day`) and has no
+    general effect store.
+
+    The residue is small and bounded in the generous direction: an ally
+    makes several d20 rolls in a fight, so the common case spends all three
+    faces inside the encounter that bought them."""
     mate = c.target
     if mate is None:
         return
+    # The day-lock, on the ally. `Target(day_locked_by=)` refuses an ally
+    # already carrying it on **both** arms -- the offered menu and the
+    # explicit-target one -- so a False here would mean the row landed on a
+    # target neither arm could have given it, and there is no such path.
+    c.spend_per_day(c.ref, 1, on=mate)
     kept = [c.roll("1d20") for _ in range(3)]
 
     def spend(ev: Any, kind: str, *, whose: int) -> None:

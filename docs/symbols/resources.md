@@ -63,7 +63,7 @@ Things a creature spends, and the budget it spends them from.
   - How many milestones the party has reached today. `c.milestone()`.
 - `c.more_uses(self, ref: 'str', extra: 'int' = 1, *, on: 'int | None' = None) -> 'int'`
   - "You gain one more use of `p12668` per encounter." Returns the
-- `c.per_day_left(self, ref: 'str', limit: 'int') -> 'int'`
+- `c.per_day_left(self, ref: 'str', limit: 'int', *, on: 'int | None' = None) -> 'int'`
   - How many of a daily allowance are left today, for this creature.
 - `c.regain_power(self, ref: 'str' = '', *, daily: 'bool' = False, on: 'int | None' = None) -> 'str'`
   - Give back the use of one expended power. DMG2's mid-fight refresh.
@@ -75,7 +75,7 @@ Things a creature spends, and the budget it spends them from.
   - "You regain the use of your second wind."
 - `c.spend_charge(self, key: 'str', limit: 'int' = 1, *, on: 'int | None' = None) -> 'bool'`
   - Take one from a per-encounter charge. False when none is left.
-- `c.spend_per_day(self, ref: 'str', limit: 'int') -> 'bool'`
+- `c.spend_per_day(self, ref: 'str', limit: 'int', *, on: 'int | None' = None) -> 'bool'`
   - Take one from a daily allowance. False when none is left.
 
 ## actions and turns

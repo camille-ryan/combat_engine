@@ -12992,8 +12992,15 @@ class Cast:
             on_end=[settle],
         )
 
-    def per_day_left(self, ref: str, limit: int) -> int:
+    def per_day_left(self, ref: str, limit: int, *, on: int | None = None) -> int:
         """How many of a daily allowance are left today, for this creature.
+
+        `on` asks it of somebody else -- defaulting to the caster, which is
+        every existing caller. One printed line puts the day's count on the
+        **target** instead ("once anyone has used this power on an ally,
+        that ally cannot be targeted again until after an extended rest"),
+        and a count on the caster cannot say it: three casters would each
+        have their own.
 
         "A number of times per day" is a count that outlives an encounter,
         and `Powers.used` is not it -- both rests clear that, so a row
@@ -13006,24 +13013,32 @@ class Cast:
         """
         from .components import Powers
 
-        known = self.world.get(self.me, Powers)
+        who = self.me if on is None else on
+        known = self.world.get(who, Powers)
         if known is None:
             return limit
         return max(0, limit - known.per_day.get(ref, 0))
 
-    def spend_per_day(self, ref: str, limit: int) -> bool:
+    def spend_per_day(self, ref: str, limit: int, *, on: int | None = None) -> bool:
         """Take one from a daily allowance. False when none is left.
 
         Returns whether the spend happened, so a row can gate the thing it
         was paying for -- and a row that ignores the answer has bought
         something for free, which is why this is not a bare increment.
+
+        `on` writes the count on somebody else, defaulting to the caster.
+        See `per_day_left`: a lock whose printed clock is the **target's**
+        extended rest has to be stored on the target, and `story._wear` and
+        `story.harvest` mirror `Powers.per_day` per party member, so it
+        survives the fight on whoever it was written on.
         """
         from .components import Powers
 
-        if self.per_day_left(ref, limit) <= 0:
+        who = self.me if on is None else on
+        if self.per_day_left(ref, limit, on=who) <= 0:
             return False
-        known = self.world.get(self.me, Powers) or self.world.add(
-            self.me, Powers()
+        known = self.world.get(who, Powers) or self.world.add(
+            who, Powers()
         )
         known.per_day[ref] = known.per_day.get(ref, 0) + 1
         return True
