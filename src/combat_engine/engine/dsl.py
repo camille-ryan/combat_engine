@@ -328,11 +328,33 @@ def Melee(
 
 
 def Ranged(
-    n: int, *, by_weapon: bool = False, from_: str = "",
+    n: int, *, alt: int = 0, by_weapon: bool = False, from_: str = "",
     other_size: int = 0, other_when: str = "",
 ) -> Range:
+    """**`alt` is a second printed range for the same kind of attack**, and
+    it is the branch axis doing what it already does rather than a new one.
+
+    `Range.branches` is `(0, 1) if self.alt else (0,)` -- it has never cared
+    that the two halves were a melee and a ranged one, and `MeleeOrRanged`
+    is a three-line factory over the same field. So a card printing one
+    range in its header and another for one leg of its class's fork is two
+    branches, gated the way every branch is: `requires` on branch 0 and
+    `requires_alt` on branch 1, read by `Power.requires_of` and enforced by
+    `can_branch`.
+
+    `p3404` is the case -- *"Ranged 5"* with *"The range is 10 instead of
+    5"* on the Dark Pact leg. Its marker asked for a
+    `Power.range_from_build`, and the reason it gave was exact: the range
+    "has to hold while the engine picks targets, and targeting is settled
+    from the header before this body is entered". That is precisely what a
+    branch is, so no new field was needed.
+
+    **Exactly one branch is open per character**, because the two gates are
+    complements -- so this does not add a redundant menu entry, and
+    `usable` refuses the row only when *no* branch is open."""
     return Range("ranged", n, by_weapon=by_weapon, from_=from_,
-                 other_size=other_size, other_when=other_when)
+                 other_size=other_size, other_when=other_when,
+                 alt=Range("ranged", alt) if alt else None)
 
 
 def CloseBurst(

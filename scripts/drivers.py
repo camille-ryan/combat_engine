@@ -18538,6 +18538,92 @@ def a_pact_clause_can_be_a_granted_row(out: Result) -> None:
              f"granted {granted} of SAMPLE, {missed} of them after a miss")
 
 
+def a_build_may_print_its_own_range(out: Result) -> None:
+    """*"`cf:warlock-f1s0`: The range is 10 instead of 5."* -- `p3404`.
+
+    **The marker asked for `Power.range_from_build` and its own reasoning
+    showed the field was unnecessary.** It said the range "has to hold
+    while the engine picks targets, and targeting is settled from the
+    header before this body is entered", and that a `c.bonus("range", 5)`
+    laid in the body would widen the **next** use rather than this one.
+    Both exactly right -- and a thing settled from the header, with two
+    printed alternatives and a gate on each, is a **branch**.
+
+    `Range.branches` is `(0, 1) if self.alt else (0,)` and has never cared
+    that the two halves were a melee and a ranged one; `MeleeOrRanged` is a
+    three-line factory over that same field. So `Ranged(5, alt=10)` is the
+    whole mechanism.
+
+    **The two gates are complements, which is what makes it "instead of"**
+    rather than "as well as": `requires` on branch 0, `requires_alt` on
+    branch 1, and exactly one open per character. The last pair of
+    assertions is the behavioural half -- a creature standing at 7 squares,
+    out of reach for one pact and in reach for the other -- because the
+    header reading alone would pass on a row whose branches nothing
+    consulted.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.components import Build, Position
+    from combat_engine.engine.query import distance_between, enemies
+
+    row = dsl.REGISTRY["p3404"]
+    out.that(row.branches == (0, 1),
+             "the row declares two branches off one printed range line",
+             f"{row.branches}")
+    out.that(str(row.reach_of(0)) == "Ranged 5"
+             and str(row.reach_of(1)) == "Ranged 10",
+             "and they are the two printed numbers, 5 and 10 -- not a bonus"
+             " laid on one of them",
+             f"{row.reach_of(0)} / {row.reach_of(1)}")
+
+    def pact(leg: str) -> tuple[Any, int, int, list[int]]:
+        world, me, _ = _board("p3404", 1)
+        build = world.get(me, Build)
+        build.choices.discard("dark")
+        if leg == "dark":
+            build.choices.add("dark")
+        foe = sorted(enemies(world, me))[0]
+        here = next(iter(world.get(me, Position).squares))
+        far = (here[0] + 7, here[1])
+        seat = world.get(foe, Position)
+        world.grid.place(foe, frozenset({far}))
+        seat.square = far
+        seat.spans = frozenset({far})
+        opens = [b for b in row.branches if row.can_branch(world, me, b)]
+        return world, me, foe, opens
+
+    world, me, foe, opens = pact("infernal")
+    out.that(opens == [0],
+             "a warlock on another pact opens branch 0 alone -- the printed"
+             " 5, and NOT both: *'instead of'* is a complement, not an"
+             " extra option", f"{opens}")
+    ok, why = dsl.usable(world, me, row)
+    out.that(ok, "and the card is still usable, which is the half a gate on"
+             " branch 0 could have broken -- `usable` refuses only when NO"
+             " branch is open", f"{ok} {why!r}")
+    out.that(distance_between(world, me, foe) == 7,
+             "the fixture stands an enemy at 7 squares -- between the two"
+             " printed ranges, which is the only distance that can tell"
+             " them apart", f"{distance_between(world, me, foe)}")
+    reach = sorted(dsl.candidates(world, me, row, branch=opens[0]))
+    out.that(foe not in reach,
+             "and it is out of reach on that pact", f"{reach}")
+
+    world, me, foe, opens = pact("dark")
+    out.that(opens == [1],
+             "a dark warlock opens branch 1 alone -- the printed 10, and"
+             " not the 5 as well", f"{opens}")
+    ok, why = dsl.usable(world, me, row)
+    out.that(ok, "and the card is usable for it too", f"{ok} {why!r}")
+    reach = sorted(dsl.candidates(world, me, row, branch=opens[0]))
+    out.that(foe in reach,
+             "and the same enemy at the same 7 squares IS in reach -- the"
+             " clause, measured through `candidates` rather than off the"
+             " header, so a branch nothing consulted could not pass",
+             f"{reach}")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -101136,6 +101222,9 @@ DRIVERS = {
     "granted_rider": (a_pact_clause_can_be_a_granted_row,
                       "a pact clause that is a repeatable minor action is a"
                       " granted row, and the pact gates it"),
+    "build_range": (a_build_may_print_its_own_range,
+                    "one leg of a class fork prints a longer range, which is"
+                    " a branch and not a new header field"),
     "trap_sourced_save": (a_save_against_a_traps_effect,
                           "a save against a TRAP's effect, read off the"
                           " source where a label could not say it"),

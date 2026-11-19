@@ -23,6 +23,7 @@ on a state the board never reaches.
 
 from __future__ import annotations
 
+from combat_engine.content.features.builds import on_leg
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -67,6 +68,16 @@ from combat_engine.engine.query import distance_between, team
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
 
 _CRIT_OR_SAVE = "an enemy within 10 squares scores a critical hit or saves"
+
+
+#: The non-dark half of `p3404`'s two ranges. A plain complement rather
+#: than an `on_leg`, which means it carries no `.leg` attribute -- so the
+#: borrowed-row waiver and `audit.board`'s fork reader both ignore it and
+#: stay fail-closed, which is the right direction for a gate nobody can
+#: read. The **dark** branch carries the real `on_leg("dark")`, so the
+#: board can still pose the case that was missing.
+def _not_dark(world: World, eid: int) -> bool:
+    return not on_leg("dark")(world, eid)
 
 
 def _enemy_near(world: World, me: int, who: int | None) -> bool:
@@ -227,11 +238,12 @@ def p3403(c: Cast) -> None:
 @power(
     "p3404",
     level=1,
-    dropped=("dsl.Power.range_from_build",),
     cls="warlock",
     usage=ENCOUNTER,
     action=STANDARD,
-    reach=Ranged(5),
+    reach=Ranged(5, alt=10),
+    requires=_not_dark,
+    requires_alt=on_leg("dark"),
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.POISON],
     attack=Attack(CHA, vs=REF),
@@ -240,13 +252,26 @@ def p3404(c: Cast) -> None:
     """The advantage is read off the roll that was made, not asked again: a
     one-shot grant has been spent by then.
 
-    **The dark rider is marked rather than written, and the old reason was
-    wrong.** "No leg" was false -- `c.build("dark")` answers. The real
-    obstacle is *when*: "the range is 10 instead of 5" has to hold while
-    the engine picks targets, and targeting is settled from the header
-    before this body is entered. A `c.bonus("range", 5)` laid here would
-    widen the **next** use of the row and not this one, which is a
-    different card and a worse bug than the missing clause.
+    **The dark rider is written now, and the marker's reason is what
+    showed where it went.** *"`cf:warlock-f1s0`: The range is 10 instead of
+    5."* The note said the range "has to hold while the engine picks
+    targets, and targeting is settled from the header before this body is
+    entered", and that a `c.bonus("range", 5)` laid in the body would widen
+    the **next** use rather than this one. Both exactly right -- and a
+    thing settled from the header before the body runs, with two printed
+    alternatives and a gate on each, is a **branch**.
+
+    `Range.branches` is `(0, 1) if self.alt else (0,)` and has never cared
+    that the two halves were a melee and a ranged one; `MeleeOrRanged` is a
+    three-line factory over the same field. So `Ranged(5, alt=10)` is the
+    whole mechanism, and `Power.range_from_build` was a field that did not
+    need to exist.
+
+    The two gates are **complements**, so exactly one branch is ever open:
+    `requires=_not_dark` on branch 0, `requires_alt=on_leg("dark")` on
+    branch 1. `usable` refuses a row only when *no* branch is open, so
+    neither pact is refused the card and neither is offered the other's
+    range.
 
     So it waits for a way to say a range from a build at declaration
     time. #1346.
