@@ -127,5 +127,5 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - "It loses insubstantial until the end of its next turn."
 - `c.suspend_when(self, held: 'Effect | None', event: 'type[Event]', pred: 'Callable[[Any], bool] | None' = None, *, for_: 'When' = <When.SONT: "start of source's next turn">, label: 'str' = '') -> 'Effect | None'`
   - Switch an effect off when something happens, and back on later.
-- `c.watch(self, event: 'type[Event]', fn: 'Callable[[Any], None]', *, until: 'When' = <When.EONT: "end of source's next turn">, window: 'Window' = <Window.AFTER: 2>, on: 'int | None' = None, once: 'bool' = False, label: 'str' = '') -> 'Effect'`
+- `c.watch(self, event: 'type[Event]', fn: 'Callable[[Any], None]', *, until: 'When' = <When.EONT: "end of source's next turn">, window: 'Window' = <Window.AFTER: 2>, on: 'int | None' = None, once: 'bool' = False, label: 'str' = '', late: 'bool' = False) -> 'Effect'`
   - Arm a trigger that expires with a duration.

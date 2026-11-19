@@ -2213,7 +2213,6 @@ def _hit_while_bloodied(world: World, me: int, ev: object) -> bool:
         Trigger(Bloodied, about_me, "an attack bloodies you"),
         Trigger(Hit, _hit_while_bloodied, "you are hit while bloodied"),
     ),
-    dropped=("c.must_take_opportunities()",),
 )
 def p16539(c: Cast) -> None:
     """Both printed triggers are declared -- half of an "or" declared looks
@@ -2247,17 +2246,25 @@ def p16539(c: Cast) -> None:
     openings nobody enumerated, including ones made after the stance was
     assumed.
 
-    **Still dropped, and it is the next printed sentence rather than this
-    one: "you must make every opportunity attack that you can."** That
-    removes the choice instead of creating the opening, and nothing here
-    compels an attack -- `c.refuses_forced_attack` is the only thing in the
-    neighbourhood and it refuses one. Marked
-    `c.must_take_opportunities()`.
+    **"...and you must make every opportunity attack that you can" is
+    written now, and this row had the argument right before the ruling
+    came.** This note said it is *"a **rules** compulsion and not an AI
+    preference ... the window must stop being declinable, and what a
+    chooser would have preferred does not come into it"*. Camille, asked
+    directly on `#1385`, 2026-11-19:
 
-    It is a **rules** compulsion and not an AI preference, which is why it
-    is marked rather than left to the policy: the window must stop being
-    declinable, and what a chooser would have preferred does not come into
-    it."""
+    > *"it's a rules change. declining is forbiden."*
+
+    So the reasoning here was correct and `p16059`'s was not -- it prints
+    the same sentence and had been re-pointed to a `policy.` symbol on the
+    opposite reading, which is how one gap came to be spelled three ways
+    across the tree.
+
+    `c.must_take_openings` is the kernel verb: it reads the opportunity
+    action's own slot, and still-unspent after every other listener has had
+    its say **is** a decline. `until=When.STANCE` because the card joins
+    this to the clause above with an "and", inside the same *"Until your
+    p16535 ends"*."""
     c.stance(label=c.ref)
     c.bonus("attack", 2, kind="power", on=c.me, until=When.STANCE)
     c.bonus("damage", 0, dice="1d6", on=c.me, until=When.STANCE,
@@ -2265,6 +2272,10 @@ def p16539(c: Cast) -> None:
     # "Until your p16535 ends" -- the stance's own clock, which is what
     # `When.STANCE` holds to.
     c.provoked_by_allies(on=c.me, until=When.STANCE)
+    # *"...and you must make every opportunity attack that you can."* The
+    # card joins this to the sentence above with an "and", inside the same
+    # "Until your p16535 ends", so it rides the same clock.
+    c.must_take_openings(on=c.me, until=When.STANCE)
 
 
 # -- x7_1010: the trickster --------------------------------------------------

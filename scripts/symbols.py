@@ -101,6 +101,14 @@ CATEGORIES: dict[str, dict] = {
                 # punish an opening somebody ELSE left -- the only one of
                 # the three that is about a side rather than a set.
                 "provoked_by_allies",
+                # Fourth in the same place: the author's question is still
+                # "who gets the opening", and this one answers the half the
+                # other three leave out -- not who may swing or at whom,
+                # but whether the creature offered the swing is allowed to
+                # say no. Camille ruled that a rules change rather than an
+                # AI preference (#1385), which is why it is a `Cast` verb
+                # sitting here and not a `policy/` term.
+                "must_take_openings",
                 # Beside `redirect` because an author's question is the
                 # same -- "this blow should land somewhere else" -- and the
                 # answer differs: `redirect` moves a blow with its live

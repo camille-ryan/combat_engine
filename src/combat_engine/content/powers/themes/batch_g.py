@@ -1404,7 +1404,6 @@ def p16058(c: Cast) -> None:
     keywords=[Keyword.ELEMENTAL],
     trigger="you make an attack roll and miss",
     on=Trigger(Miss, by_me, "you miss with an attack"),
-    dropped=("policy.must_take_openings()",),
 )
 def p16059(c: Cast) -> None:
     """"Use either result" is `keep="best"`. The price half plays now.
@@ -1427,17 +1426,27 @@ def p16059(c: Cast) -> None:
     really is about the step, since an opportunity window answers the
     square being left.
 
-    Still dropped: "you must make every opportunity attack you can". That
-    takes the choice away from whoever is deciding, and nothing content
-    writes reaches into how an opening is answered.
+    **"You must make every opportunity attack you can" is written now, and
+    this note had the component wrong.** It argued the sentence belonged to
+    `policy/` -- that a `Cast` verb "could lay the compulsion and nothing
+    would read it", because how an opening is answered is decided there.
+    Camille ruled otherwise, asked directly on `#1385`, 2026-11-19:
 
-    **Re-pointed to say so.** The marker read `c.must_take_openings()`,
-    which is a `Cast` verb, and this row's own next sentence had already
-    worked out that it is a `policy/` sentence instead -- the two
-    disagreed, and the symbol is what `blocked.py` groups by. A `Cast`
-    verb could lay the compulsion and nothing would read it: how an
-    opening is answered is decided in `policy/`, which is the one place
-    content does not reach.
+    > *"it's a rules change. declining is forbiden."*
+
+    So the opening stops being refusable as a rule of the game. The
+    distinction is not academic: the two readings part company the moment a
+    **human** holds this character, because a rules change binds them and a
+    policy preference does not.
+
+    `c.must_take_openings` is the kernel verb. What it reads is the
+    opportunity action's own slot -- still unspent after every other
+    listener has had its say **is** a decline, and the swing happens there.
+    It cannot double-swing, because the thing it tests is the thing a swing
+    spends.
+
+    `until=When.EONT` to match the clause above: the card wraps both
+    sentences in one *"Until the end of your next turn"*.
     """
     c.reroll_attack(keep="best")
     mine = c.me
@@ -1454,6 +1463,10 @@ def p16059(c: Cast) -> None:
             c.provoke(mine, on=ev.actor, why=f"{c.ref}: an ally broke away")
 
     c.watch(Moved, slipped, until=When.EONT, label=f"{c.ref} openings")
+    # *"You must make every opportunity attack you can."* Same duration as
+    # the sentence above it -- the card wraps both in one "Until the end of
+    # your next turn".
+    c.must_take_openings(on=mine, until=When.EONT)
 
 
 @power(

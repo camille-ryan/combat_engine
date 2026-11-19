@@ -69,8 +69,8 @@ def _defences(c: Cast, *which: Defense) -> None:
 
 @power("x5_51", cls="disease", level=12, usage=AT_WILL,
        action=ActionType.NONE, target=NO_TARGET, reach=Melee(0),
-       dropped=("c.treats_allies_as_enemies()", "c.must_take_opportunity()",
-                "story.site_radius()", "story.npc_takeover()"))
+       dropped=("c.treats_allies_as_enemies()", "story.site_radius()",
+                "story.npc_takeover()"))
 def x5_51(c: Cast) -> None:
     """The one printed word this card has that the engine already holds is
     its final state's condition. Everything else on it is about a place.
@@ -108,12 +108,25 @@ def x5_51(c: Cast) -> None:
       carried by both later stages, and `c.provoke` opens one window for one
       named creature rather than changing who a side is. `m6088a1` waits on
       the same symbol for the same sentence.
-    * **Nothing compels a creature to take an opportunity window it is
-      offered.** That is a different need from `c.must_attack(on=,
-      against=)`, which three rows wait on: those constrain what a creature
-      does with **its own turn**, and this one is about a reaction the
-      window already hands out and the chooser may decline. One symbol
-      serving both could not go green correctly for either.
+    * **The compulsion verb exists now and this clause is still not
+      writable, which is why only its symbol came off.**
+      `c.must_take_openings` landed on `#1385` (Camille: *"it's a rules
+      change. declining is forbiden."*), so the thing this row was waiting
+      on is built -- but the card gates *this* copy of the sentence on a
+      place: *"**While within 1 mile of the tomb** that is the source of
+      the x5_51, the target must make opportunity attacks against any
+      creature except those also afflicted ... or other guardians"*. Two
+      sentences, and only the first of stage 1 is unconditional. So the
+      live blocker is `story.site_radius()` above, plus a faction to
+      exempt the guardians, and the clause stays dropped under those
+      rather than under a verb that now exists.
+
+      The distinction this bullet drew was right and is worth keeping:
+      `c.must_attack(on=, against=)`, which four rows wait on, constrains
+      what a creature does with **its own turn**, where this is about a
+      reaction the window already hands out and the chooser may decline.
+      One symbol serving both could not go green correctly for either, and
+      `#1385` records that the opening half was itself spelled three ways.
 
     Stage 3's hostility half takes `story.npc_takeover()`, which `x5_93`
     already waits on: a character that considers the party its enemies and

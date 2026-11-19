@@ -11294,6 +11294,111 @@ class Cast:
         return self.bonus("step_over", squares_, on=who, until=until,
                           stacks=False)
 
+    def must_take_openings(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EONT,
+    ) -> Effect | None:
+        """*"You must make every opportunity attack you can."*
+
+        **A rules change, not an AI preference**, which is Camille's ruling
+        and decided where this lives. Asked directly whether the sentence
+        makes the opening non-refusable or merely tells the computer player
+        to always swing, 2026-11-19:
+
+        > *"it's a rules change. declining is forbiden."*
+
+        That rules out `policy/`. The reading matters because the two
+        differ the moment a *human* holds the character: a rules change
+        binds them too, and a policy preference does not. So the compulsion
+        is in the kernel, and `p16059`'s own docstring -- which had worked
+        out that a `Cast` verb "could lay the compulsion and nothing would
+        read it" -- is answered by the verb reading it itself.
+
+        **How it works, and why nothing new had to decide anything.** The
+        engine opens an `OpportunityWindow` and deliberately never chooses
+        what goes in it; a controller answers, and declining is answering
+        with nothing. This lays a `late` watch on that window, so it runs
+        after every ordinary listener including the controller's, and asks
+        one question: **is the opportunity action still unspent?**
+
+        * the controller swung -- the slot is stamped, so this does
+          nothing, and the creature keeps whatever opportunity action it
+          chose rather than having a basic attack substituted;
+        * the controller declined -- the slot is unspent, so the swing
+          happens here.
+
+        That is self-limiting by construction: it cannot double-swing,
+        because the thing it tests is the thing a swing spends. No new
+        bookkeeping, and no "did anybody answer" flag to go stale.
+
+        **The payout is `use(..., opportunity=True)`, never `c.basic`.**
+        `actions.py` records why where a readied action does the same
+        thing: `opportunity=True` is how this engine *costs* a reaction
+        and is what the attack context reads, so a row printing "+2 AC
+        against opportunity attacks" applies to it. A `c.basic` swing
+        would land the same damage uncosted and invisible to every row
+        written about reactions.
+
+        No reach test, also measured rather than assumed: `use` already
+        refuses an out-of-reach melee swing on its explicit-target arm
+        (`#381`, which found 100 of them) and does it with `_reach_of`, so
+        a reach weapon gets the squares it really reaches. An explicit
+        guard here was written first and a plant proved it dead.
+
+        **What it does not do.** Nothing can *ask* whether a creature is
+        compelled -- there is no modifier, because the only reader would be
+        a UI greying out a button nobody has built. Say so rather than lay
+        a modifier nothing consults.
+
+        `#1385`. `p16059` and `p16539` print this sentence and are written
+        on it. `x5_51` prints it too and stays blocked: its copy is gated
+        on being within a mile of a located site, which is
+        `story.site_radius()` and does not exist.
+        """
+        # **Function-local, all three**, which is this tree's rule rather
+        # than a style: a module-level `dsl` import from here is the
+        # import cycle `engine -> content` already dodges at four sites,
+        # and widening it would widen every batch that touches this file.
+        from .components import Powers
+        from .dsl import use as _use
+        from .events import OpportunityWindow
+        from .query import alive as _alive
+
+        me = on if on is not None else self.me
+        if me is None:
+            return None
+
+        def compel(ev: OpportunityWindow) -> None:
+            if getattr(ev, "actor", None) != me or ev.cancelled:
+                return
+            fight = self.world.encounter
+            if fight is None:
+                return
+            # **The slot is the whole test.** Unspent means nobody took
+            # this window, which is what declining looks like from here.
+            if not fight.can_spend(me, ActionType.OPPORTUNITY):
+                return
+            foe = getattr(ev, "provoker", None)
+            if foe is None or not _alive(self.world, foe):
+                return
+            held = (self.world.get(me, Powers) or Powers()).basic
+            if not held:
+                return
+            _use(self.world, me, held, targets=[foe], opportunity=True,
+                 granted_via=self.ref)
+
+        return self.watch(
+            OpportunityWindow,
+            compel,
+            until=until,
+            window=Window.AFTER,
+            on=me,
+            late=True,
+            label=f"{self.ref} must swing",
+        )
+
     def provoked_by_allies(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -16179,6 +16284,7 @@ class Cast:
         on: int | None = None,
         once: bool = False,
         label: str = "",
+        late: bool = False,
     ) -> Effect:
         """Arm a trigger that expires with a duration.
 
@@ -16261,7 +16367,21 @@ class Cast:
             if once and holder and did:
                 self.world.effects.end(holder[0], "used")
 
-        sub = self.world.bus.on(event, fire, window=window, owner=self.me)
+        # **`late` puts this handler after every ordinary one in its
+        # window**, which `Bus._run` implements by running the not-late subs
+        # first. Default False, so nothing already written moves.
+        #
+        # The one caller is `must_take_openings`, and it needs the guarantee
+        # rather than the accident: policy's `OpportunityWindow` listener is
+        # registered at `policy.install`, so a watch laid *during* the fight
+        # happens to run after it -- and a trait armed by `Encounter.start`
+        # would not. Being early there would not look broken, either: the
+        # compelled creature would still swing, but with the engine's basic
+        # attack instead of whatever opportunity action its controller would
+        # have chosen, which is a quieter wrong answer than no swing.
+        sub = self.world.bus.on(
+            event, fire, window=window, owner=self.me, late=late,
+        )
         effect = self.world.effects.apply(
             who, self.me, until, label=label or f"{self.ref} trigger", subs=[sub],
             by=self.ref,

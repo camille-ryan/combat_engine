@@ -20264,6 +20264,205 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_compelled_creature_cannot_decline_an_opening(out: Result) -> None:
+    """*"You must make every opportunity attack you can."*
+
+    **A rules change, by ruling.** Camille, asked on `#1385` whether the
+    sentence makes the opening non-refusable or merely tells the computer
+    player to always swing, 2026-11-19:
+
+    > *"it's a rules change. declining is forbiden."*
+
+    Which settles where it lives. The readings part company the moment a
+    **human** holds the character -- a rules change binds them, a policy
+    preference does not -- so `c.must_take_openings` is a kernel verb and
+    not a `policy/` term. `p16539`'s docstring had argued exactly this
+    before the ruling; `p16059`'s had argued the opposite and been
+    re-pointed to a `policy.` symbol, which is how one gap came to be
+    spelled three ways in the tree.
+
+    **Declining is tested as "nobody answered", which is its strongest
+    form.** `drivers.py` already records that nobody answers an
+    `OpportunityWindow` without a policy installed, so a board with no
+    policy *is* a board whose controller declines every opening. The
+    negative control is the same board without the compulsion.
+
+    **The `late` assertion is the subtle one and needs a rival listener to
+    mean anything.** The verb's watch is `late=True` so it runs after every
+    ordinary listener, including the controller's. Being early would not
+    look broken: the creature would still swing, but with the engine's
+    basic attack instead of the opportunity action its controller chose --
+    a quieter wrong answer than no swing at all. So one case registers a
+    stand-in controller *after* the compulsion and asserts the controller's
+    choice survives, which is false if `late` is dropped.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import When, dsl, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Movement, Position
+    from combat_engine.engine.events import AttackDeclared, OpportunityWindow
+    from combat_engine.engine.query import enemies
+
+    LANE = [(7, 5), (8, 5), (9, 5)]
+
+    def board() -> tuple[World, int, int]:
+        """Me at (5,5) with one foe beside me; every other foe parked off.
+
+        **One watcher, deliberately.** The board fields seven enemies and
+        any of them adjacent to the lane would open a second window, so a
+        count of swings would stop being a statement about this rule.
+        """
+        w, me, _ = _board()
+        foes = sorted(enemies(w, me))
+        foe = foes[0]
+        for other in foes[1:]:
+            w.grid.lift(other)
+            w.get(other, Position).square = (30, 30)
+            w.grid.place(other, (30, 30))
+        w.grid.lift(me)
+        w.get(me, Position).square = (5, 5)
+        w.grid.place(me, (5, 5))
+        w.grid.lift(foe)
+        w.get(foe, Position).square = (6, 5)
+        w.grid.place(foe, (6, 5))
+        mv = w.get(foe, Movement)
+        if mv is not None:
+            mv.speed = 10
+        return w, me, foe
+
+    def run(
+        *, compel: bool, prespend: bool = False, rival: bool = False
+    ) -> tuple[list[int], list[int], int]:
+        w, me, foe = board()
+        mine: list = []
+        w.bus.on(AttackDeclared,
+                 lambda ev: mine.append(ev.attacker) if ev.attacker == me else None)
+        if compel:
+            Cast(world=w, me=me, ref="probe").must_take_openings(until=When.ENCOUNTER)
+        took: list = []
+        if rival:
+            # A stand-in for a controller: registered AFTER the compulsion,
+            # so only `late=True` puts the compulsion behind it. It spends
+            # the slot the way a real swing would.
+            def answer(ev: OpportunityWindow) -> None:
+                if ev.actor != me:
+                    return
+                budget = w.get(me, Budget)
+                fight = w.encounter
+                if budget is None or fight is None:
+                    return
+                budget.opportunity_turn = fight._turn_stamp()
+                took.append(ev.provoker)
+            w.bus.on(OpportunityWindow, answer)
+        if prespend:
+            budget = w.get(me, Budget)
+            fight = w.encounter
+            if budget is not None and fight is not None:
+                budget.opportunity_turn = fight._turn_stamp()
+        movement.walk(w, foe, list(LANE))
+        return mine, took, foe
+
+    # --- the rule, and its negative control on the same board.
+    declined, _, _ = run(compel=False)
+    out.that(
+        not declined,
+        "without the compulsion an opening nobody answers is declined, and"
+        f" no swing happens ({len(declined)} swing(s))",
+    )
+
+    forced, _, _ = run(compel=True)
+    out.that(
+        len(forced) == 1,
+        "a compelled creature swings at an opening nobody answered"
+        f" ({len(forced)} swing(s), wanted 1)",
+    )
+
+    # **The target is asserted, not assumed.** A swing at the wrong
+    # creature would satisfy the count above.
+    w2, me2, foe2 = board()
+    hits: list = []
+    w2.bus.on(AttackDeclared, lambda ev: hits.append((ev.attacker, ev.target)))
+    Cast(world=w2, me=me2, ref="probe").must_take_openings(until=When.ENCOUNTER)
+    movement.walk(w2, foe2, list(LANE))
+    aimed = [t for a, t in hits if a == me2]
+    out.that(
+        aimed == [foe2],
+        "and it swings at the creature that provoked, not at something else"
+        f" (swung at {aimed}, provoker {foe2})",
+    )
+
+    # --- self-limiting: it cannot double-swing.
+    spent, _, _ = run(compel=True, prespend=True)
+    out.that(
+        not spent,
+        "a compelled creature whose opportunity action is already spent"
+        f" swings no second time ({len(spent)} swing(s))",
+    )
+
+    # --- `late`: the controller's choice must survive the compulsion.
+    added, taken, _ = run(compel=True, rival=True)
+    out.that(
+        len(taken) == 1,
+        f"the stand-in controller answers the window ({len(taken)} answer(s))",
+    )
+    out.that(
+        not added,
+        "and the compulsion adds nothing on top of it -- a `late` watch"
+        " runs after the controller, so a swing it already took is not"
+        f" replaced by a basic attack ({len(added)} extra swing(s))",
+    )
+
+    # --- the two rows that print the sentence, asserted on BEHAVIOUR.
+    #
+    # **Not on the marker, which a plant proved worthless here.** The first
+    # draft checked `not row.unfinished` and a plant deleting the
+    # `c.must_take_openings` call from `p16059` left all nine assertions
+    # green -- the same fault this session found in `flier_hops`, where an
+    # assertion read a row's bookkeeping instead of what it does. A marker
+    # is a claim; the swing is the fact.
+    for ref in ("p16059", "p16539"):
+        w3, me3, foe3 = board()
+        swung: list = []
+        # Both loop variables bound as defaults: `swung` is rebound every
+        # iteration, so a closure over it would have the *last* row's list
+        # for every row -- which `ruff`'s B023 is about and which would
+        # have made the second assertion read the first row's swing.
+        w3.bus.on(
+            AttackDeclared,
+            lambda ev, m=me3, seen=swung: (
+                seen.append(ev.attacker) if ev.attacker == m else None
+            ),
+        )
+        c3 = Cast(world=w3, me=me3, ref=ref)
+        c3.target = me3
+        dsl.REGISTRY[ref].body(c3)
+        movement.walk(w3, foe3, list(LANE))
+        out.that(
+            len(swung) == 1,
+            f"{ref} lays the compulsion: after its body runs, an opening"
+            f" nobody answers is still swung at ({len(swung)} swing(s))",
+        )
+        row = dsl.REGISTRY.get(ref)
+        out.that(
+            row is not None and not row.unfinished,
+            f"{ref} carries no marker for it either",
+        )
+
+    # **`x5_51` prints it too and must stay marked**, which is the half
+    # that keeps the two rows above from reading as "the gap is closed".
+    # Its copy is gated on a located site -- *"while within 1 mile of the
+    # tomb ... except those also afflicted, or other guardians"* -- so the
+    # verb existing does not make the clause writable.
+    disease = dsl.REGISTRY.get("x5_51")
+    owed = tuple(disease.todo or ()) + tuple(disease.dropped or ()) if disease else ()
+    out.that(
+        disease is not None and disease.unfinished
+        and not any("must_take" in sym for sym in owed),
+        "x5_51 keeps a marker for the located site its copy is gated on,"
+        f" and none for the verb that now exists ({owed})",
+    )
+
+
 def a_flier_hops_over_the_ground_it_crosses(out: Result) -> None:
     """Camille's flier rule, which is three waivers and one exception.
 
@@ -35033,13 +35232,27 @@ def a_shove_may_refuse_a_square(out: Result) -> None:
     out.that(not REGISTRY["p11582"].dropped,
              "p11582 carries no marker",
              f"marks {REGISTRY['p11582'].dropped!r}")
-    out.that(REGISTRY["p16059"].dropped == ("policy.must_take_openings()",),
-             "**and `p16059`'s marker names `policy/` rather than a `Cast`"
-             " verb** -- its own note had already worked out that 'you must"
-             " make every opportunity attack you can' is decided where"
-             " content does not reach, while the symbol said otherwise, and"
-             " the symbol is what `blocked.py` groups by",
-             f"marks {REGISTRY['p16059'].dropped!r}")
+    # **An assertion about `p16059`'s marker used to live here and is gone,
+    # which is a ruling overturning a check rather than a check being
+    # loosened.** It read:
+    #
+    #     REGISTRY["p16059"].dropped == ("policy.must_take_openings()",)
+    #
+    # on the argument that *"you must make every opportunity attack you
+    # can"* is decided in `policy/`, where content does not reach. Camille
+    # ruled the opposite on `#1385`, 2026-11-19 -- *"it's a rules change.
+    # declining is forbiden."* -- so the sentence is a kernel verb,
+    # `p16059` carries no marker for it at all, and the thing this line
+    # asserted is now deliberately false.
+    #
+    # Deleted rather than inverted, for two reasons. It was in the wrong
+    # rule: `push_avoid` is about `c.push(avoid=)` and this was a
+    # marker-shape claim about an unrelated row, riding along because the
+    # two were touched in one commit. And `drivers.must_swing` now covers
+    # it **more strongly** -- it runs `p16059`'s body and asserts the
+    # forced swing actually happens, where this only ever read a tuple. A
+    # plant deleting the row's `c.must_take_openings` call reds that one
+    # and could never have redded this one.
 
 
 def being_bloodied_is_a_question_with_an_asker(out: Result) -> None:
@@ -105084,6 +105297,10 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "must_swing": (a_compelled_creature_cannot_decline_an_opening,
+                   "a creature told it must make every opportunity attack it"
+                   " can cannot decline an opening, and does not displace a"
+                   " swing its controller already took"),
     "flier_hops": (a_flier_hops_over_the_ground_it_crosses,
                    "a flier ignores rough ground, hazards and opportunity"
                    " attacks except where it starts and lands -- and a zone"
