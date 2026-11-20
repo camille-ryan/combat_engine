@@ -189,8 +189,34 @@ def p259(c: Cast) -> None:
 
     A creature already held is not held twice -- stacking a second save-ends
     copy on every step it finishes in the mud would need two saves to undo
-    one effect, and the printed line reads as one condition, reapplied.
+    one effect, and the printed line reads as one condition, reapplied. Both
+    conditions count for that, not only the one this use lays.
+
+    **`i1461x1` is written here**, which is `#550`'s arrangement: the
+    property swaps the *zone* clause alone -- restrained rather than
+    immobilized for a creature that ends its move in it -- and leaves the
+    hit line above as printed. `c.credit` so the harder condition is the
+    property's doing and not this row's.
+
+    **`c.feat` is the reader, and it is not a misuse.** That verb asks
+    whether a ref is in `Powers.known`, and `equipment.equip` is what puts
+    an item's rows there -- so for an item property it answers "is this
+    item equipped on the caster", which is as close as the engine gets to
+    the printed "through this tome": `equipment._base_for` only binds an
+    implement item to an implement that was **in hand**. It is also the
+    one spelling `lint.py` accepts as the reader behind this row's
+    `implemented_in=` pointer (`#553`).
+
+    The looseness, said rather than hidden: stowing the tome mid-fight does
+    not take the row back out of `Powers.known`, so the swap would outlive
+    the hand. `c.held(what="magic")` plus `Weapon.item` is the narrower
+    question and would answer that one; it is the same answer for every
+    character `chargen` builds, since `item=` is set nowhere but `equip`.
+
+    Read once, in the body, because "through this tome" is a fact about the
+    use and not about each later move.
     """
+    tome = c.feat("i1461x1")
     if c.strike():
         c.immobilized(until=When.SAVE_ENDS)
     if not c.first:
@@ -201,7 +227,16 @@ def p259(c: Cast) -> None:
     c.zone(area, label="p259", until=When.ENCOUNTER, difficult=True)
 
     def caught(ev: MoveEnd) -> None:
-        if ev.actor in c.in_squares(area) and not c.is_(Condition.IMMOBILIZED, on=ev.actor):
+        if ev.actor not in c.in_squares(area):
+            return
+        if c.is_(Condition.IMMOBILIZED, on=ev.actor) or c.is_(
+            Condition.RESTRAINED, on=ev.actor
+        ):
+            return
+        if tome:
+            with c.credit("i1461x1"):
+                c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS, on=ev.actor)
+        else:
             c.immobilized(until=When.SAVE_ENDS, on=ev.actor)
 
     c.watch(MoveEnd, caught, until=When.ENCOUNTER, label="p259")

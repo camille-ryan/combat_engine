@@ -3404,9 +3404,18 @@ def i2715p1(c: Cast) -> None:
 
 
 @power("i1037x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.death_threshold()",))
+       reach=PERSONAL, target=SELF)
 def i1037x1(c: Cast) -> None:
-    """Three failures is written into `turns._death_saves` as a literal."""
+    """**The 3 is not a literal**, which is what the old marker here
+    assumed. `turns._death_save` kills on
+    `health.failures >= health.dies_at_failures` and `c.dies_at_failures`
+    is the one door to that field -- `p4288` moves it *down* to two off the
+    same verb, so this is the same clause in the other direction.
+
+    `When.ENCOUNTER` because a trait is re-armed at the start of every
+    fight, and the hold puts back whatever the threshold was rather than
+    the printed 3."""
+    c.dies_at_failures(4, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1037p1", level=7, cls=ITEM, usage=DAILY, action=ActionType.NONE,

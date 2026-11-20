@@ -27,6 +27,7 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_ENEMY,
     ENCOUNTER,
@@ -54,6 +55,7 @@ from combat_engine.engine import (
     Gear,
     Hit,
     Keyword,
+    PowerUsed,
     Ranged,
     SavingThrow,
     SecondWind,
@@ -66,7 +68,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import PowerResolved
-from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.query import distance_between, squares, team
 
 DIVINE = [Keyword.DIVINE]
 DIVINE_HEAL = [Keyword.DIVINE, Keyword.HEALING]
@@ -517,12 +519,69 @@ def f507(c: Cast) -> None:
     c.save(on=c.me)
 
 
+#: The two printed words, which are narrower than `AREA_OR_CLOSE` by exactly
+#: one member: a wall is an area and is neither a burst nor a blast, so it is
+#: subtracted off the shared tuple rather than the three being written out
+#: again -- which is the fault `lint._reinvented_area_tuple` exists to catch.
+_BURST_OR_BLAST = frozenset(AREA_OR_CLOSE) - {"wall"}
+
+
 @power("f509", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, todo=("c.allies_in_area()",))
+    reach=PERSONAL, target=SELF)
 def f509(c: Cast) -> None:
     """+1 to attack with a burst or blast implement power **if an ally is
-    inside it**. The attack context carries the target and not the area,
-    so there is nothing to ask who else is standing in it."""
+    inside it**.
+
+    **The premise this was marked on is gone.** `PowerUsed.area` carries
+    the squares the use actually covered (#1103), populated for exactly the
+    shapes this card names, and the announcement is made *above* the body
+    -- so the ally test is asked before the first roll rather than after
+    it, and standing in the area is a membership question rather than an
+    approximation off somebody's distance.
+
+    **Gated on the ref and on the target set, not laid flat.** The card
+    pays "against the power's targets", so an unconditioned +1 running to
+    the end of the next turn would also pay for the character's basic
+    attacks and for whatever else it swings in between. `PowerResolved`
+    then takes the modifier off, which is what keeps a *second* use of the
+    same row -- with nobody in the blast that time -- from collecting it
+    again off the first use's clock.
+    """
+    me = c.me
+    live: list[Any] = []
+
+    def before_the_rolls(ev: PowerUsed) -> None:
+        if ev.actor != me or not ev.area:
+            return
+        aimed = get(ev.power)
+        if aimed is None or aimed.reach is None:
+            return
+        if aimed.reach.kind not in _BURST_OR_BLAST:
+            return
+        if Keyword.IMPLEMENT not in c.keywords_of(aimed):
+            return
+        if not any(squares(c.world, mate) & ev.area for mate in c.allies()):
+            return
+        caught = set(ev.targets)
+        held = c.bonus(
+            "attack", 1, on=me, until=When.EONT,
+            when=lambda ctx: (
+                ctx.get("power") == ev.power and ctx.get("target") in caught
+            ),
+        )
+        if held is not None:
+            live.append(held)
+
+    def after_the_rolls(ev: PowerResolved) -> None:
+        if ev.actor != me:
+            return
+        while live:
+            c.end_effect(live.pop(), why="that use is over")
+
+    c.watch(PowerUsed, before_the_rolls, until=When.ENCOUNTER, on=me,
+            label=c.ref)
+    c.watch(PowerResolved, after_the_rolls, until=When.ENCOUNTER, on=me,
+            label=c.ref)
 
 
 @power("f511", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

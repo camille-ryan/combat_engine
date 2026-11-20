@@ -3,15 +3,18 @@
 Four short lists in one file because three of them are four or five rows
 long. Two gaps run through the whole thing and neither is new:
 
-* **The class feature that announces nothing.** The swordmage's aegis
-  punishes an attacker from inside a `c.watch` callback, so a feat hanging
-  off it has nothing to declare a trigger against. **Two classes have come
-  off this list.** The monk's feature is five declared rows, one per
-  tradition, and `FLURRY` below names them -- so the monk feats here are
-  held by what they do to that use, not by finding it. And the runepriest
-  no longer "counts its own feats by a category the engine has no column
-  for": the column was always in `game.db`, `c.feats(category=)` reads it,
-  and the four rune feats at the foot of this file are written. #692.
+* **The class feature that announces nothing**, which turned out to block
+  far less than it looked. The swordmage's aegis punishes an attacker from
+  inside a `c.watch` callback, so a feat hanging off it has nothing to
+  declare a trigger *against* -- and a clause written **inside** that
+  closure needs no trigger at all, which is `#550`'s convention and how
+  `f1156` and `f1234` are written. The monk's feature is five declared
+  rows, one per tradition, and `FLURRY` below names them -- so the monk
+  feats here are held by what they do to that use, not by finding it. And
+  the runepriest no longer "counts its own feats by a category the engine
+  has no column for": the column was always in `game.db`,
+  `c.feats(category=)` reads it, and the four rune feats at the foot of
+  this file are written. #692.
 * **The distance written into somebody else's body.** A teleport's range
   and the five squares `p9501` measures are constants inside those rows;
   nothing reaches in to add one.
@@ -222,26 +225,31 @@ def f1143(c: Cast) -> None:
 
 
 @power("f1156", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_aegis()",))
+       reach=PERSONAL, target=SELF,
+       implemented_in=("p3322", "p3323", "p5736"))
 def f1156(c: Cast) -> None:
-    """A rider on "the immediate action effect" of the aegis.
+    """A rider on "the immediate action effect" of the aegis, and it wanted
+    no event after all.
 
-    Re-aimed: the naming gap has closed -- the spec prints
-    `cf:swordmage-f1` -- and it was never what stopped this. The three
-    aegis rows `p3322`, `p5736` and `p3323` each roll their punishment
-    inside a closure the minor-action body arms, so using the immediate
-    action emits no `PowerUsed` and no `Hit` that can be told from the
-    aegis row's own. There is nothing to hang this on until that answer
-    announces itself."""
+    The old marker asked for one: each of `p3322`, `p5736` and `p3323`
+    rolls its punishment inside a closure the minor-action body arms, so
+    nothing a feat could watch from outside is emitted. True, and beside
+    the point -- a clause written *inside* that closure needs no event, and
+    the creature the aegis is on is a local there. `#550`'s convention, the
+    same route `f619` took into `p3323`.
+
+    Three hosts because the card says "the immediate action effect of
+    cf:swordmage-f1" and all three legs have one."""
 
 
 @power("f1234", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_reduce()",))
+       reach=PERSONAL, target=SELF, implemented_in=("p3323",))
 def f1234(c: Cast) -> None:
-    """Hangs on p3323 softening a blow. `c.reduce` takes a number off a
-    rolled `DamageRolled` and announces nothing, so "when you reduce
-    damage" has no event -- and the creature it would pay out to is the
-    one that was struck, which only that callback knows."""
+    """Hangs on `p3323` softening a blow. `c.reduce` announces nothing, so
+    there is no event to watch -- but the clause does not need one: written
+    into the closure that calls `c.reduce`, "the same target" is the
+    struck creature it already has and the printed 5/10/15 ladder is the
+    reduction's own."""
 
 
 def _left_me_out(c: Cast, ev: Any) -> bool:

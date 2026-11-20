@@ -95,6 +95,7 @@ from combat_engine.engine import (
     Melee,
     Position,
     Ranged,
+    SkillCheck,
     Square,
     Stats,
     TurnEnd,
@@ -1638,36 +1639,50 @@ def i1691p1(c: Cast) -> None:
 
 
 @power("i2382p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=Melee(1), target=YOU_OR_ONE_ALLY, dropped=("c.bonus(instead=)",))
+       reach=Melee(1), target=YOU_OR_ONE_ALLY)
 def i2382p1(c: Cast) -> None:
-    """Aimed at the escape attempt rather than at Acrobatics generally,
-    which is what the card narrows it to. Still a bonus rather than the
-    printed override -- "use this modifier instead of your normal check
-    modifiers" -- and the marker stands.
+    """A **replacement**, not a bonus: "use this modifier instead of your
+    normal check modifiers".
 
-    **Left, with the three near-misses named.** "Nothing replaces a total"
-    was asserted and not shown, and three verbs are close enough to be
-    worth ruling out in writing:
+    **No new verb was needed, and the marker's premise was the near-miss
+    list rather than the arithmetic.** It is true that `c.boost_check`
+    *adds* -- but it adds to a `SkillCheck` whose `bonus` has already been
+    summed, because `skills.check` runs `finish` as the resolve callback
+    and only then builds its `CheckResult` from the event. So answering in
+    the default after-window with `14 - ev.bonus` leaves `bonus` at
+    exactly 14 and `total` at `natural + 14`, which is the printed
+    sentence and not an approximation of it. `c.boost_check(ev=)` then
+    re-derives `bonus`, `total` and `success` on that same object.
+    `powers/skills/athletics.py`'s `p13690` does the same arithmetic for
+    the same reason.
 
-    * `c.replace_roll` replaces the **die face** -- "use this d20 roll as
-      your result" -- and leaves every modifier in place. The opposite
-      half of this clause.
-    * `c.boost_check` and `c.bonus` both **add**. The printed word is
-      *instead*, so the Acrobatics modifier and anything else on the
-      `"escape"` key have to stop counting, and adding 14 to them is a
-      different number on every character.
-    * `c.substitute_check` swaps **which skill** is rolled, not what the
-      modifiers come to.
+    The other two near-misses stay near-misses: `c.replace_roll` replaces
+    the **die face** and leaves every modifier standing, and
+    `c.substitute_check` swaps **which skill** is rolled.
 
-    `escape.attempt` is where it would land: it calls `skills.check` with
-    `bonus + _mods(world, eid, "escape", ctx)` on top of the skill's own
-    modifier, so an override has to suppress the lot rather than out-shout
-    it. `c.bonus(instead=)` is the symbol -- one modifier on a key that
-    cancels the others -- and that is also the only door, because the
-    printed sentence covers both of the card's two DCs, a restraint's and
-    a grabber's Reflex, and `escape.attempt` is the one path that rolls
-    either."""
-    c.bonus("escape", 14, until=When.ENCOUNTER)
+    Narrowed to the printed circumstance, which is `purpose="escape"` --
+    stamped by `escape.attempt` and kept by `skills.check` -- and that one
+    gate covers both of the card's DCs, a restraint's printed number and a
+    grabber's Reflex, because `escape.attempt` is the one path that rolls
+    either.
+
+    **The skill half is deliberately not gated**, though the card says
+    Acrobatics. `escape._best` picks between acrobatics and athletics by
+    raw modifier and cannot see this override, so gating on the word would
+    make the item inert for every character whose athletics is higher --
+    an engine artefact deciding whether a printed clause pays. The wider
+    reading is the lesser error and is the same judgement the row's
+    `"escape"` key already carried."""
+    who = c.target
+    if who is None:
+        return
+
+    def instead(ev: SkillCheck) -> None:
+        if ev.actor != who or getattr(ev, "purpose", "") != "escape":
+            return
+        c.boost_check(14 - ev.bonus, ev=ev)
+
+    c.watch(SkillCheck, instead, until=When.ENCOUNTER, on=who)
 
 
 @power("i2568p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,

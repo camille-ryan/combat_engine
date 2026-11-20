@@ -30,6 +30,7 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     DamageRolled,
+    DamageType,
     Hit,
     Keyword,
     When,
@@ -70,6 +71,38 @@ def _left_me_out(c: Cast, ev: Any, victim: int) -> bool:
     return distance_between(c.world, c.me, victim) <= 10
 
 
+def _f1156(c: Cast, me: int, victim: int) -> None:
+    """**`f1156`'s clause, on all three punishments.** The printed sentence
+    is about the immediate action effect of `cf:swordmage-f1` against a
+    creature marked by you, and these closures *are* that effect firing
+    against the one creature this aegis is on -- the same argument `f619`'s
+    clause below is written on, and `#550`'s convention.
+
+    A plain "+2 bonus" with no type word printed, so no `kind=`, and attack
+    and damage are two keys rather than one. Not `once=`: the card says
+    "attack rolls and damage rolls", plural, for the whole duration.
+
+    The drawback is the swordmage granting combat advantage, so the effect
+    sits on `me` -- which means `EOTNT` clocks on `me` and not on `victim`.
+    The printed duration is the victim's next turn; aiming the clock at a
+    creature that is neither owner nor source is not something `Effects`
+    can express, so the spelling says the printed duration and the clock is
+    one turn out.
+    """
+    if not c.feat("f1156"):
+        return
+    with c.credit("f1156"):
+        c.grants_advantage(on=me, to=victim, until=When.EOTNT)
+        c.bonus(
+            "attack", 2, on=me, until=When.EONT,
+            when=lambda ctx: ctx.get("target") == victim,
+        )
+        c.bonus(
+            "damage", 2, on=me, until=When.EONT,
+            when=lambda ctx: ctx.get("target") == victim,
+        )
+
+
 @power(
     "p3322",
     level=0,
@@ -99,6 +132,7 @@ def p3322(c: Cast) -> None:
         last["round"] = c.world.round
         c.teleport(20, to=landing)
         c.basic(on=victim)
+        _f1156(c, me, victim)
 
     c.watch(Hit, punish, until=When.ENCOUNTER, on=me, label=f"{c.ref} answer")
 
@@ -156,6 +190,18 @@ def p3323(c: Cast) -> None:
                     "attack", 2, on=me, until=When.EONT, once=True,
                     when=lambda ctx: ctx.get("target") == struck,
                 )
+        # **`f1234`: the reduction pays out to the creature it protected.**
+        # Same argument as `f619` above -- `c.reduce` announces nothing a
+        # feat could watch from outside, and inside the closure "the same
+        # target" is `ev.target`. The printed 5/10/15 ladder is the one
+        # `step` already holds, and `EOTNT` is clocked correctly here
+        # because the effect sits on that creature.
+        if c.feat("f1234"):
+            with c.credit("f1234"):
+                c.resist(
+                    step, DamageType.NECROTIC, on=ev.target, until=When.EOTNT
+                )
+        _f1156(c, me, victim)
 
     c.watch(DamageRolled, soften, until=When.ENCOUNTER, on=me, label=f"{c.ref} answer")
 
@@ -190,5 +236,6 @@ def p5736(c: Cast) -> None:
         last["round"] = c.world.round
         c.teleport(20, who=victim, to=landing)
         c.grants_advantage(on=victim, to="team", until=When.EONT)
+        _f1156(c, me, victim)
 
     c.watch(Hit, haul, until=When.ENCOUNTER, on=me, label=f"{c.ref} answer")

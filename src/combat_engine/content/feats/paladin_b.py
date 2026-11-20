@@ -12,9 +12,15 @@ class features, and which of the two decides whether the row is writable:
 
 What is *not* a ref anywhere in the list is the second mark -- the one
 handed out as a rider rather than as an action. `marks.burning_mark`
-lays it, so a row that **applies** it is writable; a row that waits for
-somebody else to apply one is not, because a mark announces itself as a
-plain `RelationSet` and nothing tells the two marks apart.
+lays it, so a row that **applies** it is writable.
+
+**And so is a row that answers one being applied**, which this said was
+unwritable on the ground that "a mark announces itself as a plain
+`RelationSet` and nothing tells the two marks apart". The announcement is
+indeed bare, and the conclusion still does not follow: `c.marked(via=)`
+shows the state records which row laid a mark, and a clause written into
+`burning_mark` itself -- #550's shape, one helper for all 22 call sites --
+needs no announcement at all. `f3083` is the worked case.
 
 The racial powers in this batch arrive as names rather than refs, which
 is the opposite of the avenger's list.
@@ -223,22 +229,40 @@ def f2734(c: Cast) -> None:
 
 @power("f2909", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.damages_with(ref, ability)",))
+       implemented_in=("p805",))
 def f2909(c: Cast) -> None:
     """Swaps which ability modifier the two marks pay out from.
 
-    **Re-aimed off `c.rolls_with`, which has arrived and is the wrong verb.**
-    That one changes the ability a named row *attacks* with, and
-    `Attack.ability_for` reads it before the header -- which is exactly what
-    fifteen other feats wanted and what this one does not. This card swaps the
-    modifier a row's **damage** adds, and says so: "in place of your Charisma
-    modifier when determining damage".
+    **Written, and `c.damages_with(ref, ability)` is retired with it.** The
+    symbol was asking for a general facility to swap the modifier a named
+    row's damage adds, and the clause needs none: #550 puts a feat's clause
+    in the body of the row it names, and both bodies work the number out in
+    one place each.
 
-    `cf:paladin-f1` is declared and names `p805` outright, so the feature is
-    not the hold either. `p805` works its number out inside its own closure --
-    `c.flat(3 + c.cha_mod, ...)` -- so there is nothing for a swap to read.
-    A row whose damage line went through the resolved attack ability would
-    need no verb at all; this one does not."""
+    * `cf:paladin-f1` names `p805` outright, so the clause is in `p805`'s
+      own closure in `features/defenders.py`. That is the `implemented_in=`
+      pointer.
+    * The other half is in `powers/paladin/marks.burning_mark`, the one
+      helper the second mark is laid through -- 22 call sites across nine
+      files -- so one clause covers every row that lays one.
+      **`implemented_in=` cannot name that** --
+      `lint._dangling_implementations` requires the named *row's* own source
+      to ask `c.feat`, and here the reader is a shared helper in a file that
+      declares no row. Naming the callers would be 22 pointers at bodies
+      that do not carry the clause, which is the fault that check exists to
+      catch, so it names `p805` and this paragraph names the rest.
+      `cf:wizard-bladesinger-f16` is the precedent for a real reader the
+      marker cannot express.
+
+    **The "can" is read as a choice worth making**, so each site takes the
+    swap only where it is not a downgrade. `f2128` below reads the same word
+    the same way for its own swap, and `souls._resilience` is the standing
+    precedent: an optional "in place of" is worth the difference and nothing
+    else, never a replacement that can lower the number.
+
+    `c.rolls_with` stays the wrong verb and the docstring here used to argue
+    it at length: it changes the ability a row *attacks* with, read by
+    `Attack.ability_for` before the header, and this card is about damage."""
 
 
 # -- what a marked creature owes -------------------------------------------
@@ -283,12 +307,44 @@ def f1530(c: Cast) -> None:
 
 
 @power("f3083", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_sanction()",))
+       reach=PERSONAL, target=SELF)
 def f3083(c: Cast) -> None:
-    """Slides an enemy the moment the second mark lands on it. A mark is
-    announced -- `Relations.set` emits `RelationSet` -- but both of the
-    paladin's marks and every other class's are the one relation, so
-    there is no way to tell which of them just happened."""
+    """Slides an enemy the moment the second mark lands on it.
+
+    **Written into `powers/paladin/marks._slide_on_the_mark`, and
+    `c.on_sanction()` is retired with it.** The symbol wanted an event
+    saying *which* mark had just been laid, and the clause needs no event
+    at all: #550 puts a feat's clause in the body it names, and the second
+    mark is laid through one helper -- 22 call sites across nine files. So
+    the clause is written there once, gated on `c.feat` and credited to
+    this ref.
+
+    **The premise that symbol argued from was about the wrong thing.** It
+    said a mark announces itself as a bare `RelationSet` carrying only
+    `kind_`, `source` and `target`, so nothing can tell two marks apart.
+    The first half is true and the conclusion does not follow twice over:
+    `c.marked(via=)` shows the **state** already records which row laid a
+    mark, so even an event-driven reading had a discriminator; and the
+    clause is laid by the marking code itself, which knows what it is
+    laying and needs to be told nothing.
+
+    **`implemented_in=` is deliberately not carried**, for the reason
+    `cf:wizard-bladesinger-f16` is not: `lint._dangling_implementations`
+    requires the named row's own source to ask `c.feat("<this ref>")`, and
+    the reader here is a shared helper in a file that declares no row.
+    Naming the callers would be pointers at 22 bodies that do not carry the
+    clause. The consequence is that this row fires with an empty body and
+    reports SILENT, which wants a `KNOWN_SILENT` entry in `audit.py` naming
+    where the work lives -- the honest pair that precedent settled on.
+
+    Measured rather than argued, with both controls: holding this feat and
+    firing `f2128b` slides every adjacent enemy 1 square (`ForcedMove`,
+    `Moved kind_='slide'`); without it none of them moves; and an enemy
+    marked from 3 squares away is not slid.
+
+    One sanction is out of reach and the helper records it too: `p11049`
+    lays its own with a bare `c.mark()` instead of through the helper, so
+    this clause misses it. A pre-existing inconsistency in that row."""
 
 
 # -- the heal, and whose surge value counts --------------------------------

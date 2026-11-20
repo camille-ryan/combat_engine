@@ -1365,7 +1365,7 @@ def f2801(c: Cast) -> None:
 
 
 @power("f2802", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.forgo_push()",),
+       reach=PERSONAL, target=SELF,
        trigger="you hit with a martial encounter attack power",
        on=Trigger(Hit, _i_hit_with_martial_encounter,
                   "you hit with a martial encounter power"))
@@ -1377,30 +1377,38 @@ def f2802(c: Cast) -> None:
 
     Declared on `Hit` rather than on the end of the power, which nothing
     announces -- so a power that hits two creatures runs this twice
-    where the card says "one target you hit". The dropped clause is the
-    other benefit: turning a push the power grants into a slide.
+    where the card says "one target you hit".
 
-    **The symbol is the wrong shape and no verb is wanted.** `c.pre_empt`
-    is already "when you use <row>, you can X instead of Y", takes `what`
-    as `"push"`, and is reachable from here -- so `c.forgo_push()` names a
-    door that is open. What is missing is the other end of the deal, which
-    `c.pre_empt`'s own docstring states: *"the row has to read it with
-    `instead_of`"*. Both associated powers call `c.push` outright --
-    `powers/fighter/level_3_b.py` for `p10492` and
-    `powers/fighter/level_7_b.py` for `p2466` -- so there is nothing to
-    pre-empt. That is `p1489`'s fault exactly, the worked example in
-    `content/CLAUDE.md`: a row hard-coding a clause blocks a feat on a
-    verb that already exists.
+    **The other benefit -- slide instead of push -- is written into the
+    two associated powers**, `p10492` and `p2466`, gated on `c.feat` there
+    exactly as #550 says. Both hard-coded `c.push`, which is what the old
+    `c.forgo_push()` marker was really naming, and both now read the shove
+    through `c.instead_of` as well, so the door the marker wanted is open
+    for anything that registers against those refs.
 
-    So this is two edits in two other files and not an engine gap, and the
-    marker is left pointing at the verb only because the symbol vocabulary
-    has no spelling for "a sibling row does not offer its push". Whoever
-    takes those two files adds the `c.instead_of("push", ...)` read there
-    and the clause lands here as a `c.pre_empt` per ref.
+    **Not `c.pre_empt` from here, and the old note that asked for it was
+    wrong about where this body runs.** It proposed a registration per ref
+    in this body. This row declares a trigger, so `turns.arm_traits` skips
+    it -- deliberately: *"arming it at the start would fire it once, out of
+    nowhere, and never again"* -- and the body therefore first runs on a
+    `Hit`, after the attack that would have consulted the registration.
+    `instead_of` settles on `c.variant`, which `dsl.use` picked before the
+    body started, so a registration laid mid-attack is read by nothing.
+    Both associated rows are encounter powers, so there is no later use to
+    catch it either.
+
+    **And no `implemented_in=`, which is the second trap here.** It would
+    be true of one clause and fatal to the other: `audit.py` buckets such a
+    row as ELSEWHERE and does not fire it at all, on the reasoning that a
+    pointing row "has no part left here to fire". This one does -- the
+    shift-and-slide below is its own -- so the pointer would silence a
+    working clause. The pair is kept honest by this docstring and by the
+    `c.feat("f2802")` gate in each host, not by `lint.py`'s pointer check.
 
     The second half of the printed sentence -- "1 additional square if the
     power already allows you to slide" -- is moot for both heroic refs:
-    neither slides. It is live only for the three above-heroic rows.
+    neither slides. It is live only for the three above-heroic rows, and
+    none of those three is declared in this tree yet.
     """
     if not _named(c, "w3609", "w3668"):
         return

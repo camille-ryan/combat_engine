@@ -2478,28 +2478,35 @@ def f3635(c: Cast) -> None:
 
 
 @power("f3636", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_invoke_shrouds()",))
+       reach=PERSONAL, target=SELF, implemented_in=("p9400",))
 def f3636(c: Cast) -> None:
-    """`c.spend_shrouds` takes the whole count off in one step and says so
-    to nobody, so "they are not removed" has no moment to answer.
+    """Written into `p9400`, per #550. A pointer, not a gap.
 
-    **The obvious workaround was checked and does not hold**, which is
-    worth writing down because it looks sound for about a minute: read the
-    count on the `Hit` and lay it back afterwards with `c.shroud`, so the
-    end state is the printed one. The invoking is `p9400`'s own
-    `c.watch(Hit, invoke, ...)` -- an **AFTER**-window subscription -- and
-    `Bus._run` walks subscriptions in insertion order, so a second
-    AFTER-window watch is before or after that one according to the order
-    `turns.arm_traits` happened to arm the two rows in. Reading the count
-    first needs `Window.BEFORE` and putting it back needs to be after
-    `p9400`, and `c.watch` takes no `late=` -- that knob exists on
-    `Bus.on` and is not in the content surface. So the restore is right
-    for only one arming order and nothing says which a build got, which is
-    the same fault `_chose_a_school` above is written to avoid.
+    **The old marker asked for an announcement and wanted a branch.** It
+    reasoned from outside: `c.spend_shrouds` takes the whole count off in
+    one step and tells nobody, so a *second* watcher has no moment to put
+    the count back -- and a restore laid from another AFTER-window watch
+    would be right or wrong depending on which order `turns.arm_traits`
+    armed the two rows in. All of that is true of a watcher and none of it
+    applies to the clause living in the body that does the spending:
+    `p9400`'s own `invoke` already holds the `Hit`, so the spend is simply
+    not taken. No ordering, no restore, no new event.
 
-    The symbol therefore stands: what is missing is an announcement at the
-    moment the count is spent, which a watcher could answer wherever it
-    sits in the order."""
+    Two corrections to what that marker said, both checked 2026-11-19:
+
+    * `c.watch` **does** take `late=`, so the premise that the knob exists
+      only on `Bus.on` was false. It is moot here -- the clause needs no
+      watcher at all -- but it was being quoted as a blocker.
+    * The second spend site is a helper in this tree with a `spend=`
+      switch, reached from a row whose trigger is a creature *leaving a
+      zone*. No attack, so no critical hit and no attack power to carry a
+      keyword: this feat's printed sentence cannot reach it, and it is
+      deliberately left alone.
+
+    No `c.credit` block, and that is not an oversight: the clause lays no
+    effect, it declines to end one, so there is nothing for a credit stamp
+    to attach to. `implemented_in=` is what keeps this row out of the
+    sweep."""
 
 
 @power("f3637", level=1, cls="", usage=AT_WILL, action=NONE,

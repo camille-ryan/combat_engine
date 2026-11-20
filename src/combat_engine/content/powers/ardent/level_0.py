@@ -87,8 +87,21 @@ def p10273(c: Cast) -> None:
 )
 def p11060(c: Cast) -> None:
     """"Grants combat advantage" with nobody named means everybody, which is
-    `to="team"` -- the caster and their side."""
+    `to="team"` -- the caster and their side.
+
+    `f2786`'s clause is written in here, `#550`. The aura goes down once
+    behind `c.first` and is then read back with `c.my_aura`, because the
+    body runs once per target and the id has to outlive one pass; the
+    burden itself is per target, so two enemies in the burst each carry
+    their own on their own clock."""
     c.grants_advantage(until=When.SONT, to="team")
+    if c.feat("f2786"):
+        with c.credit("f2786"):
+            if c.first:
+                c.aura(1, label="f2786", until=When.SONT)
+            ring = c.my_aura("f2786")
+            if ring and c.target is not None:
+                c.difficult_for(on=c.target, zone=ring, until=When.SONT)
 
 
 @power(

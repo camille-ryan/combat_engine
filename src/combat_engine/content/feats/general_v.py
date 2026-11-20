@@ -70,6 +70,7 @@ from combat_engine.engine import (
     Condition,
     ConditionApplied,
     ConditionEnded,
+    DamageApplied,
     DamageRolled,
     DamageType,
     Dropped,
@@ -1396,7 +1397,7 @@ def f3529b(c: Cast) -> None:
 
 
 @power("f3530", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.resist(once=)",))
+       reach=PERSONAL, target=SELF)
 def f3530(c: Cast) -> None:
     """**Re-pointed off `ASPECT`, whose premise was false twice over.**
     This said "whenever you choose an aspect of nature" had no moment,
@@ -1408,19 +1409,49 @@ def f3530(c: Cast) -> None:
     carries no marker for it. Re-choosing is an extended-rest rule that
     no fight reaches, so the choosing is the moment this row is armed.
 
-    What is left is the one gap the marker still names: resistance
-    **spent by the first hit that reads it**. The printed line is resist
-    5 for the *next* attack that hits and deals that type; laying it for
-    the encounter instead is a row stronger than its card, so nothing is
-    written rather than half of it.
+    **"For the next attack that hits you and deals that type" wanted no
+    flag after all, and `c.resist(once=)` was the wrong shape to ask
+    for.** `c.bonus(once=)` cannot be forwarded: the gated path of
+    `c.resist` lays a `"resist <type>"` mod, which is none of the keys
+    with a spend moment, so since `drivers.once_spend_moments` it raises
+    rather than quietly spending the hold on the resisting creature's own
+    next swing.
 
-    `c.bonus(once=)` is not that flag forwarded. `c.resist`'s gated path
-    lays a `"resist <type>"` mod, which is neither a `Defense` nor
-    `damage`, `save`, `skill`, `crit_range` nor `forced` -- and since
-    `drivers.once_spend_moments`, a key with no spend moment **raises**
-    rather than being quietly handed to the attack roll. So it now fails
-    loudly where it used to spend the resistance on the resisting
-    creature's own next swing. Either way there is no flag."""
+    The window is instead a **hold taken off after the first blow**, which
+    is `consumable._ending_after_one_blow`'s mechanism verbatim:
+    resistance comes off *above* `DamageApplied`, so the blow that spends
+    the one-shot keeps its benefit and the next one does not. `once=True`
+    on the watch is spent only when the handler did something, so damage
+    of another type -- or on somebody else -- leaves it armed, which is
+    the printed "and deals that damage type". `i804p1` ships the same
+    shape for a vulnerability.
+
+    The type is a build choice where the chassis records one and is put to
+    the world's decider where it does not, exactly as `f1224` does: a
+    hard-coded element would be inventing half the feat, and a build bound
+    to an element outside the card's four is not a choice this row may
+    take.
+
+    The 11th- and 21st-level steps are arithmetic on `c.level` rather than
+    a clause, so they cost nothing to carry out of tier."""
+    pick = c.element(on=c.me)
+    if pick not in ELEMENTS:
+        pick = c.choose(list(ELEMENTS), "resist which damage type")
+    if pick is None:
+        return
+    held = c.resist(
+        5 + 5 * (c.level >= 11) + 5 * (c.level >= 21), pick,
+        on=c.me, until=When.ENCOUNTER,
+    )
+    if held is None:
+        return
+
+    def spent(ev: DamageApplied) -> None:
+        if ev.target == c.me and pick in ev.types():
+            c.end_effect(held, why="the next attack of that type")
+
+    c.watch(DamageApplied, spent, until=When.ENCOUNTER, on=c.me, once=True,
+            label=f"{c.ref} spent")
 
 
 @power("f3531", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

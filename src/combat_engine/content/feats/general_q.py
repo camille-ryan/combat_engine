@@ -127,8 +127,10 @@ from combat_engine.engine.events import (
     DamageRolled,
     EffectApplied,
     EffectExpired,
+    ForcedMove,
     Hit,
     Miss,
+    Moved,
     MoveEnd,
     MoveStart,
     PowerResolved,
@@ -144,6 +146,11 @@ from combat_engine.engine.query import (
     squares,
     team,
 )
+
+#: The three `Moved.kind_` words a shove arrives under, which is how a step
+#: taken under somebody else's push is told from one the creature walked.
+#: `f3020` carries the same tuple for the same pairing of events.
+_FORCED = ("push", "pull", "slide")
 
 #: A power the spec names in prose and that has no ref **anywhere** --
 #: not in the tree, not in the compendium. Nothing can watch it and
@@ -1085,8 +1092,7 @@ _swap("f3208", "f3208b", Swap(9, Usage.DAILY))
 @power("f3208b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
        attack=Attack(STR, vs=AC), requires=_wielding("gouge"),
-       requires_text="wielding the weapon this chain names",
-       dropped=("c.after_forced(fn)",))
+       requires_text="wielding the weapon this chain names")
 def f3208b(c: Cast) -> None:
     """"Cannot stand up" is `c.prone(held=...)`: the condition is pinned
     rather than reapplied, which is the difference between a creature
@@ -1117,16 +1123,28 @@ def f3208b(c: Cast) -> None:
     whose arrival changes nothing cannot report this row ready or unready,
     and it was doing duty for a second clause as well.
 
-    What is actually dropped is the shift: "when you push, pull, or slide
-    the target while it is grabbed by you, you can shift your speed to a
-    square adjacent to the target". Whose shove it is *is* answerable --
-    `ForcedMove` carries `source`, which is what `f2972` records about the
-    same event -- but `movement.shove` emits that announcement **before**
-    the first step and emits nothing afterwards, where every other move in
-    the file ends on a `MoveEnd`. So there is no moment at which the
-    target's final square is known, and "a square adjacent to the target"
-    cannot be aimed. Paying it off the per-step `Moved` instead would shift
-    once per square of a push 3."""
+    **The shift is written now, and the blocker was answerable from two
+    events rather than one.** It said there is no moment at which the
+    target's final square is known: `movement.shove` announces
+    `ForcedMove` **before** the first step and announces nothing
+    afterwards, and paying off the per-step `Moved` instead would shift
+    once per square of a push 3. Both halves are true and
+    `f3020` already pairs them -- `ForcedMove` carries `source` and the
+    agreed distance, `Moved` carries the landing square and fires once per
+    square, so the shove is noted and the steps counted down and the
+    clause acts on the **last** one. That is the moment the card is about.
+
+    The known divergence `f3020` ships with is inherited and is in the
+    safe direction: a shove cut short by a wall leaves a stale count, so
+    the clause under-pays there rather than over-paying. The next shove of
+    the same creature overwrites it.
+
+    `toward=` offers the squares nearest-first, which is "a square
+    adjacent to the target" as closely as a destination constraint can be
+    stated here -- the same reading `f3206b` above takes.
+
+    Gated on the hold still being live: the grab is what the card's clause
+    hangs on, and `AttackDeclared` above can end it mid-fight."""
     victim = c.target
     if c.strike():
         c.damage(c.w(3), c.str_mod)
@@ -1143,6 +1161,29 @@ def f3208b(c: Cast) -> None:
 
     c.watch(AttackDeclared, elsewhere, on=c.me, until=When.ENCOUNTER,
             label=f"{c.ref} let go")
+
+    left: list[int] = []
+
+    def shoved(ev: ForcedMove) -> None:
+        if ev.source == c.me and ev.target == victim:
+            left[:] = [ev.squares]
+
+    def stepped(ev: Moved) -> None:
+        if not left or ev.actor != victim:
+            return
+        if getattr(ev, "kind_", "") not in _FORCED:
+            return
+        if left[0] > 1:
+            left[0] -= 1
+            return
+        left.clear()
+        if hold.id in c.world.effects.live:
+            c.shift(c.speed_of(), toward=victim)
+
+    c.watch(ForcedMove, shoved, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} shove")
+    c.watch(Moved, stepped, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} close in")
 
 
 def _theme_attacks(theme: str) -> tuple[str, ...]:

@@ -197,19 +197,44 @@ def f2827(c: Cast) -> None:
 
 
 @power("f2831", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.instead_of(move=)",),
+       reach=PERSONAL, target=SELF,
        trigger="you use p9401 inside your p2473",
        on=Trigger(PowerUsed, _used("p9401"), "you use that teleport"))
 def f2831(c: Cast) -> None:
-    """Combat advantage from whoever you land beside.
+    """Combat advantage from whoever you land beside, and the distance the
+    card substitutes for `p9401`'s own.
 
-    The distance is dropped: "instead, teleport a number of squares equal
-    to your Dexterity modifier" replaces another row's own move, and a
-    teleport of my own laid here would be a second one on top of it.
+    **The distance is written now, through the pair this tree already
+    uses.** `p9401` reads its printed step with `c.instead_of("teleport",
+    …)`, so the clause registered here *replaces* it rather than adding a
+    second teleport on top -- which is the thing a bare `c.teleport` laid
+    in this body would have done, and why it was dropped.
+
+    **`forced=True`, because the card imposes it.** The sentence is "you
+    can instead teleport", not a second menu entry to pick: an ordinary
+    `c.pre_empt` becomes its own clickable variant of `p9401`, which would
+    offer the printed three squares beside the Dexterity one and let the
+    choice be scored. `Powers.forced_clauses` is read before the variant
+    fast path, so the substitution applies whatever the menu said.
+
+    **Spent by the one use, and the registration goes with it.** The gate
+    is "while within the area of your p2473", which is true now and may
+    not be at the next use, so the clause ends its own effect on the way
+    through -- `c.pre_empt` lifts the registration when that effect ends.
+    An `ENCOUNTER` hold would have gone on substituting after the
+    character stepped out of the zone.
+
+    The distance stays read rather than written in, so `f2935`'s extra
+    square still lands on top of the Dexterity modifier -- that card
+    lengthens `p9401`'s teleport and this one re-bases it, which are two
+    different printed clauses and both apply.
 
     Where you land is read off `MoveEnd` rather than here, because
     `PowerUsed` is announced before the body and nothing has moved yet --
-    which is precisely the adjacency the card asks about.
+    which is precisely the adjacency the card asks about. That same
+    ordering is what makes the registration land in time: `cast.used()`
+    runs above `p.body(cast)`, so `p9401`'s `instead_of` read happens
+    after this row has fired.
 
     `p2473` lays its zone with no `label=`, and `Cast.zone` defaults one
     to the casting row's own ref -- so the string `_in_zone` matches on
@@ -219,6 +244,17 @@ def f2831(c: Cast) -> None:
         return
     me = c.me
     done: list[bool] = []
+    offered: list[Any] = []
+
+    def dex_squares_instead(using: Cast) -> None:
+        if offered:
+            c.end_effect(offered.pop(), why="the substitution was for one use")
+        using.teleport(using.squares_for(using.ref, using.dex_mod))
+
+    laid = c.pre_empt("p9401", "teleport", dex_squares_instead, forced=True,
+                      on=me, until=When.EOT)
+    if laid is not None:
+        offered.append(laid)
 
     def on_land(ev: MoveEnd) -> None:
         if ev.actor != me or done:

@@ -64,6 +64,35 @@ def in_form(ref: str) -> Callable[[World, int], bool]:
     return check
 
 
+#: Every heroic row that assumes a guardian form, by its own ref.
+#:
+#: `assume` lays one as `c.stance(label=c.ref)`, so a live form is a stance
+#: wearing the **assuming row's** ref and nothing records that the ref
+#: belongs to a family. A card reading "while you're in a guardian form"
+#: therefore asks a membership question, and this is the membership. Twenty
+#: rows: ten at level 1 in `level_1_b.py` and ten at level 9 in
+#: `level_9.py`, which are every caller of `assume`.
+#:
+#: Hand-written rather than collected, because the fact lives in a call
+#: inside each body and nothing can be asked for it at import time.
+FORMS = (
+    "p5103", "p5104", "p5105", "p5106", "p5532",
+    "p5575", "p5576", "p9822", "p9825", "p11072",
+    "p5126", "p5127", "p5128", "p5129", "p5579",
+    "p9855", "p9858", "p9859", "p9860", "p11078",
+)
+
+
+def in_any_form(world: World, eid: int) -> bool:
+    """Is **a** guardian form live? `in_form` over the whole family.
+
+    `query.in_form` is deliberately not this: it answers **True when no
+    shape is recorded at all**, by a convention that is right for the rows
+    it serves, so a card paying out only inside a form cannot use it.
+    """
+    return any(eff.label in FORMS for eff in world.effects.of(eid))
+
+
 def has_shield(world: World, eid: int) -> bool:
     """"Requirement: You must be wielding a shield."""
     gear = world.get(eid, Gear)

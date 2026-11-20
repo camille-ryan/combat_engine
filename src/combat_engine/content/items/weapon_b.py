@@ -36,6 +36,7 @@ from typing import Any
 
 from combat_engine.content.items.feet import _grabbing
 from combat_engine.content.powers.monk.level_0 import FLURRIES
+from combat_engine.content.powers.warden import in_any_form
 from combat_engine.engine import (
     AC,
     AREA_OR_CLOSE,
@@ -2675,16 +2676,16 @@ def i1820p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.form(class_form=)",),
 )
 def i1840x1(c: Cast) -> None:
     """Pays out only while a particular kind of shape is held.
 
-    **The marker is right and its reason was wrong.** The note here used to
-    say this row asks "whether a *power* belongs to a class's form, which is
-    a keyword on the power rather than a state on the creature". It is the
-    other way round: the card reads "while you're in a **guardian form**",
-    which is a state, and nothing in the tree grants one.
+    **Written, and the marker's last reason was still half wrong.** The
+    note here used to say this row asks "whether a *power* belongs to a
+    class's form, which is a keyword on the power rather than a state on
+    the creature". It is the other way round: the card reads "while you're
+    in a **guardian form**", which is a state, and nothing in the tree
+    grants one.
 
     `Keyword.GUARDIAN_FORM` exists and **0 rows carry it**. The reason given
     here was that "every power that prints it is level 11+ and the tier
@@ -2706,17 +2707,27 @@ def i1840x1(c: Cast) -> None:
     with the *power's own ref* and nothing records that it belongs to a
     family.
 
-    That is what the marker is waiting on, and the symbol is right even
-    though its reason was not: something has to ask whether the live stance
-    is one of a class's forms. `query.in_form` is **not** that reader and
-    must not be used here -- it answers **True when no shape is recorded**,
-    by a documented and correct convention, so a bare call would pay this
-    item out for every character who has never changed shape. That is the
-    wide-direction fault `i1093p1` was fixed for in the same issue.
+    So the question is a **membership test over those twenty refs**, which
+    wanted no facility at all: `warden.in_any_form` is `warden.in_form`'s
+    single-ref check over `warden.FORMS`, beside the rows that are the
+    family and in the one file that already holds the single-ref version.
 
-    `todo=` rather than `dropped=` stays right: there is no payout to
-    withhold until the question can be asked. #478.
+    `query.in_form` is **not** that reader and is not used here -- it
+    answers **True when no shape is recorded**, by a documented and correct
+    convention, so a bare call would pay this item out for every character
+    who has never changed shape. That is the wide-direction fault
+    `i1093p1` was fixed for in the same issue.
+
+    The form is read in the `when=` closure rather than gating the body:
+    the bonus stands for the fight and comes and goes as the shape does,
+    which is `p2724`'s shape for the same sentence. Untyped, because the
+    card prints no type word in front of the number. #478.
     """
+    me = c.me
+    c.bonus(
+        "damage", c.con_mod, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: in_any_form(c.world, me),
+    )
 
 
 @power(

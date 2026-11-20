@@ -62,18 +62,63 @@ def burning_mark(
         if struck.get(who) == c.world.round:
             return  # the first time each round, and no more
         struck[who] = c.world.round
+        # **f2909 swaps which modifier this pays, and only upward.** #550:
+        # the clause belongs in the body it names rather than in the feat.
+        # The printed "you can" is a choice worth making, so the swap is
+        # taken where it is not a downgrade -- `f2128` in `feats/paladin_b.py`
+        # reads the same word the same way, and `souls._resilience` is the
+        # precedent for an optional "in place of" paying the difference and
+        # nothing else. `c.credit`, or the blow is the laying row's alone --
+        # `audit._dealt_by` reads that field beside `detail`, so both the row
+        # and the feat are credited and neither loses the damage.
+        if c.feat("f2909") and c.str_mod > c.cha_mod:
+            with c.credit("f2909"):
+                c.flat(3 + c.str_mod, dtype=DamageType.RADIANT, on=who,
+                       from_attack=False)
+            return
         c.flat(3 + c.cha_mod, dtype=DamageType.RADIANT, on=who, from_attack=False)
 
     if hold is None:
         held = c.mark(until=until, on=who)
         c.watch(AttackDeclared, bite, until=until, on=me, label=f"{c.ref} mark")
-        return held
-    # `via=c.ref` because this branch bypasses `durations._install_state`,
-    # which is where every other mark gets its provenance from `eff.by`. A
-    # paladin's challenge left unlabelled here would read as "laid by no
-    # row", and `i531p1` asks exactly this question of exactly this mark.
-    # #875.
-    c.world.relations.set(Relation.MARKED_BY, me, who, via=c.ref)
-    hold.relations.append((Relation.MARKED_BY, me, who))
-    hold.subs.append(c.world.bus.on(AttackDeclared, bite, owner=me))
-    return hold
+        out: Effect | None = held
+    else:
+        # `via=c.ref` because this branch bypasses `durations._install_state`,
+        # which is where every other mark gets its provenance from `eff.by`. A
+        # paladin's challenge left unlabelled here would read as "laid by no
+        # row", and `i531p1` asks exactly this question of exactly this mark.
+        # #875.
+        c.world.relations.set(Relation.MARKED_BY, me, who, via=c.ref)
+        hold.relations.append((Relation.MARKED_BY, me, who))
+        hold.subs.append(c.world.bus.on(AttackDeclared, bite, owner=me))
+        out = hold
+    _slide_on_the_mark(c, me, who)
+    return out
+
+
+def _slide_on_the_mark(c: Cast, me: int, who: int) -> None:
+    """f3083: "an enemy adjacent to you" is slid 1 the moment it is marked.
+
+    **Written here because this helper is the single door** every divine
+    sanction in the tree goes through -- 22 call sites across nine files --
+    so one clause covers every row that lays one, which is what the card
+    says and what a per-row copy would get wrong twenty-two times. #550
+    puts a feat's clause in the body it names; the body here is shared.
+
+    Two things the next reader needs:
+
+    * **`p11049` lays its sanction with a bare `c.mark()`** rather than
+      through this helper, so it is the one sanction this clause misses.
+      That is a pre-existing inconsistency in that row and not this
+      clause's to fix -- recorded rather than papered over.
+    * The adjacency is measured **from the caster**, which is what
+      `c.adjacent` does, and at the moment the mark lands. A free action
+      costs nothing the engine tracks, so the printed action line needs
+      no verb.
+    """
+    if not c.feat("f3083") or not c.adjacent(who):
+        return
+    if not c.may("slide the marked enemy 1 square", who=me):
+        return
+    with c.credit("f3083"):
+        c.slide(1, on=who)

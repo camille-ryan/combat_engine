@@ -1174,15 +1174,50 @@ def i2518p1(c: Cast) -> None:
 
 
 @power("i3016x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.wall_walk()",))
+       reach=PERSONAL, target=SELF, dropped=("c.surface()",))
 def i3016x1(c: Cast) -> None:
-    """The grid keeps a height and no surface to stand on sideways."""
+    """Walking on walls is a climb speed equal to the walking one, which is
+    what `i3016p1` below says and what `p13061` -- the same printed card,
+    almost word for word -- has said unmarked all along. `movement.height`
+    lets a climb speed cross a height and `movement.climbs` exempts it
+    from the Athletics check, which is the whole of "as if they were
+    horizontal surfaces" on a grid.
+
+    **The old marker's premise was true of the grid and is not how the
+    tree treats this card.** A sideways surface to stand on is not
+    recorded, so nothing could be waited for.
+
+    The turn-start Requirement *is* askable, and it is asked here in the
+    body rather than as a `requires=`: a trait's `requires=` is evaluated
+    once by `turns.arm_traits` and a false one refuses the row for the
+    whole fight, so a character who starts the fight airborne would never
+    get the property back. `query.on_the_ground` is the printed test --
+    height and how the creature is moving, not whether it has a fly speed.
+
+    **Dropped: the fall.** "If you are not on a horizontal surface
+    sufficient to bear your weight at the end of your move, you fall" has
+    nothing to read. What a square is made of and which way it faces is
+    recorded nowhere, which is the gap `f3719` and `m4356a5` already name,
+    so there is no square the grid would call unsupporting and no moment
+    the drop could fire. `p13061` drops the same clause carrying no marker
+    at all."""
+    def arm(ev: TurnStart) -> None:
+        if ev.actor != c.me or not query.on_the_ground(c.world, c.me):
+            return
+        c.mode("climb", c.speed_of(), until=When.EONT)
+
+    c.watch(TurnStart, arm, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i3016p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.wall_walk()",))
+       reach=PERSONAL, target=SELF)
 def i3016p1(c: Cast) -> None:
-    """Same gap, for the whole encounter instead of one turn."""
+    """One line, and the same one `p13061` is written as: a climb speed
+    equal to the walking one is what "walk on walls as if they were
+    horizontal surfaces" comes to on a grid. No turn-start Requirement and
+    no fall clause on this half of the card, so there is nothing to
+    drop."""
+    c.mode("climb", c.speed_of(), until=When.ENCOUNTER)
 
 
 @power("i570x1", level=10, cls=ITEM, action=ActionType.NONE,

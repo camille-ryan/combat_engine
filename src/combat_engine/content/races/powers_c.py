@@ -377,7 +377,36 @@ def p16043(c: Cast) -> None:
     on=Trigger(Hit, targets_me, "you are hit by an attack"),
 )
 def p1452(c: Cast) -> None:
-    """`keep="new"` is the printed "even if it is lower"."""
+    """`keep="new"` is the printed "even if it is lower".
+
+    **`f216`'s clause is written here**, per #550: a feat naming one power
+    lives in that power's body, gated on `c.feat`, and the feat row stays
+    declared as a pointer.
+
+    Its -2 goes on the **attacker** and not on me, which is the whole
+    reason it was marked unwritable for a while. `c.reroll_attack` re-sums
+    `who = ctx.get("attacker", ...)`'s own `Mods` -- as the *difference*
+    between a context carrying `reroll_by` and one without -- so a penalty
+    laid on the creature swinging, gated on this row's ref, lands on the
+    second roll and on nothing else. A gate naming any other row's reroll
+    does not apply, which is what keeps one magic weapon's reroll clear of
+    it.
+
+    Laid before `c.reroll_attack` because that call is where it is read,
+    and `until=When.EOT` because the read happens on the next line -- the
+    duration is a bound, not a window the card prints.
+    """
+    if c.feat("f216"):
+        with c.credit("f216"):
+            c.penalty(
+                # No `once=`: the spend moment for an attack modifier is
+                # the attacker's next `AttackRolled`, which has already
+                # happened by the time this interrupt runs, and the gate
+                # is False in that context anyway -- so the hold would
+                # never be given back. The duration ends it instead.
+                "attack", 2, on=c.trigger.attacker, until=When.EOT,
+                when=lambda ctx: ctx.get("reroll_by") == "p1452",
+            )
     c.reroll_attack(keep="new")
 
 

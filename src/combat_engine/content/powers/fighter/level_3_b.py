@@ -29,6 +29,7 @@ from combat_engine.engine import (
     AttackRolled,
     Cast,
     CloseBurst,
+    Gear,
     Keyword,
     Melee,
     MoveEnd,
@@ -57,6 +58,28 @@ from .holds import grabbed_by, holds_somebody
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 MARTIAL = [Keyword.MARTIAL]
+
+
+#: The two weapon rows `f2802` is gated on, by ref. `grips.wielding_any`
+#: asks the *group*, which cannot answer a card that names two rows of the
+#: weapon table -- see `query`/`Gear.melee`. Written out here rather than
+#: imported from the feat file: nothing under `powers/` imports `feats/`,
+#: and this read is four lines.
+_F2802_BLADES = ("w3609", "w3668")
+
+
+def _f2802_may_slide(c: Cast) -> bool:
+    """Does `f2802`'s "slide instead of pushing" apply to this swing?
+
+    Two halves of one printed sentence: the feat is held, and the gate the
+    whole feat sits behind -- one of the two named weapons is in hand.
+    """
+    gear = c.world.get(c.me, Gear)
+    return (
+        c.feat("f2802")
+        and gear is not None
+        and any(w.ref in _F2802_BLADES for w in gear.melee)
+    )
 
 
 def _adjacent_foe_swinging(world: World, me: int, ev: Any, *, at_allies: bool) -> bool:
@@ -268,9 +291,32 @@ def p10491(c: Cast) -> None:
 )
 def p10492(c: Cast) -> None:
     """The follow-up is aimed at somebody the sweep already caught, so the
-    pool is read off the burst *before* the step moves it."""
+    pool is read off the burst *before* the step moves it.
+
+    **`f2802`'s swap is written here**, per #550: a feat naming one power
+    carries its clause in that power's body. The shove is read through
+    `c.instead_of` as well, so a card registering a substitution against
+    this ref has something to replace -- it had hard-coded `c.push` and
+    that is what the feat's old marker was really naming."""
     if c.strike():
-        c.push(1)
+        shove = 1
+
+        def shoved() -> None:
+            c.push(shove)
+
+        # "Instead of pushing the enemy, you can slide the enemy the same
+        # distance" -- a printed **can**, so it is a real choice and the
+        # swap goes first in the list, which is where the engine's own
+        # default pick lands. The second printed half, one extra square
+        # when the power already slides, is moot here: this one pushes.
+        if (
+            _f2802_may_slide(c)
+            and c.choose(["slide", "push"], f"{c.ref}:instead") == "slide"
+        ):
+            with c.credit("f2802"):
+                c.slide(shove)
+        else:
+            c.instead_of("push", shoved)
     if not c.last:
         return
     caught = sorted(c.in_squares(c.area(), side="enemy"))

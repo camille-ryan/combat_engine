@@ -327,6 +327,20 @@ def p805(c: Cast) -> None:
         if struck.get(mark) == c.world.round:
             return  # the first time each round, and no more
         struck[mark] = c.world.round
+        # **f2909 swaps which modifier this pays, and only upward.** #550:
+        # the feat names this row, so its clause lives here gated on
+        # `c.feat` rather than reaching in from the feat's own body. The
+        # printed "you can" is a choice worth making, so the swap is taken
+        # only where it is not a downgrade -- `f2128` in
+        # `feats/paladin_b.py` reads the same word the same way. `c.credit`,
+        # or the blow is this row's alone -- `audit._dealt_by` reads that
+        # field beside `detail`, so both are credited and neither loses the
+        # damage. The other half of the same card is in
+        # `powers/paladin/marks.burning_mark`.
+        if c.feat("f2909") and c.str_mod > c.cha_mod:
+            with c.credit("f2909"):
+                c.flat(3 + c.str_mod, dtype=DamageType.RADIANT, on=mark)
+            return
         c.flat(3 + c.cha_mod, dtype=DamageType.RADIANT, on=mark)
 
     c.watch(AttackDeclared, on_attack, until=When.ENCOUNTER, on=me, label="paladin mark")

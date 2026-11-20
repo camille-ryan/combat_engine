@@ -356,13 +356,27 @@ def f3278(c: Cast) -> None:
 
 @power("f2786", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       todo=("c.zone(side=)",))
+       implemented_in=(BLOODIED_ADVANTAGE,))
 def f2786(c: Cast) -> None:
-    """Re-aimed. The row it rides is the class feature `cf:ardent-f0c1`,
-    which the prerequisite names by ref -- not a racial power at all,
-    and not the naming gap this was marked for. What is left is the
-    effect: difficult terrain that only the power's targets suffer, and
-    a zone's rough going is the ground's property and has no side."""
+    """Re-aimed, then written into the power it names -- `#550`.
+
+    The row it rides is the class feature `cf:ardent-f0c1`, which the
+    prerequisite names by ref; the power that prints it is
+    `BLOODIED_ADVANTAGE`, and the clause lives in that body gated on
+    `c.feat`.
+
+    **`c.zone(side=)` was never the gap.** A zone's rough going is the
+    ground's property and has no side, which is why that symbol could not
+    be built -- but the card does not want a sided zone. It wants
+    difficult terrain for *one creature at a time*, the power's targets
+    and nobody else, and `c.difficult_for(on=, zone=)` is exactly that:
+    the burden goes into `Zone.difficult_for` by entity id, per target,
+    on each target's own clock. #831.
+
+    An aura 1, because "squares adjacent to you" follows the character --
+    `Zones.refresh` re-centres it, so a snapshot of squares would have
+    been right for the moment of the trigger and stale by the target's
+    turn, which is the turn the clause is about."""
 
 
 #: The racial trait this rides on is a declared row and its whole body is

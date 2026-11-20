@@ -3696,8 +3696,7 @@ def f2870(c: Cast) -> None:
 
 
 @power("f2725", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.grant_action(when=)",))
+       reach=PERSONAL, target=SELF)
 def f2725(c: Cast) -> None:
     """Standing as a minor action is the half `c.grant_action` actually
     understands -- it takes `shift` and `stand` and eats anything else.
@@ -3707,19 +3706,38 @@ def f2725(c: Cast) -> None:
     is the whole point: the companion's adjacency changes every round and writing
     it in when the feat armed would freeze it.
 
-    `c.grant_action(when=)` is the clause still dropped, for exactly the reason
-    that one is not: the stand is offered from the action economy and the gate
-    would have to be read when the option is *built*, not when it is taken.
+    **And the stand is gated now, by the same argument `f2242` records.**
+    `c.grant_action("stand", MINOR)` is one `c.bonus` under the key
+    `"stand as minor"`, and the reader is `query.granted_actions`, which
+    totals that key through `Mods.total(m.what, {})`. An empty ctx is not
+    an absent gate -- `Mod.applies` still calls the predicate with it -- so
+    a `when=` that reads the **board** rather than the ctx is consulted
+    every time the action menu is built, which is exactly when "if your
+    companion is adjacent to you" has to be asked. Granting it for the
+    whole fight paid while the companion was across the room.
+
+    **The carrier is written out rather than reached through
+    `c.grant_action`**, which takes no gate; `"stand"` is in
+    `actions.GRANTABLE`, which is the half that verb raises over, and the
+    key is built off `MINOR.value` so it tracks the enum `actions._granted`
+    partitions on. The gate belongs on the `Mod` rather than the `Effect`,
+    so there is no door here that does not go through `c.bonus`.
 
     **Only the reducing half.** The card offers "either increase or reduce", and a
     choice between two signs is not a modifier -- it is a decision somebody makes
     per shove, and `c.may` cannot be asked from inside a gate that `Mods.total`
     evaluates. Reducing is the half a creature always wants when it is being
     shoved, so it is the half that is right to take unasked."""
-    c.grant_action("stand", ActionType.MINOR, on=c.me, until=When.ENCOUNTER)
+    me = c.me
+
+    def beside_the_companion(ctx: dict[str, Any]) -> bool:
+        pet = c.companion()
+        return pet is not None and c.adjacent(pet)
+
+    c.bonus(f"stand as {MINOR.value}", 1, on=me, until=When.ENCOUNTER,
+            kind=c.ref, when=beside_the_companion)
     c.resist_forced(
-        2, on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: (pet := c.companion()) is not None and c.adjacent(pet),
+        2, on=me, until=When.ENCOUNTER, when=beside_the_companion,
     )
 
 

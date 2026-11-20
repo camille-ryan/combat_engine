@@ -201,6 +201,19 @@ def p9400(c: Cast) -> None:
             # are is the board's business and no feat's.
             face = c.dice_for(c.ref, "1d6").split("d")[-1]
             c.flat(c.roll(f"{count}d{face}") + count * per, on=ev.target)
+        # **`f3636`'s clause, written here per #550.** It keeps the count
+        # on the target when the blow that invoked them was a critical hit
+        # with a shadow power. The event answers both halves -- `Miss`
+        # carries no `critical` at all, so a miss never reaches it -- and
+        # the keyword is the attacking row's, not this feature's.
+        aimed = get(ev.power)
+        if (
+            getattr(ev, "critical", False)
+            and aimed is not None
+            and Keyword.SHADOW in aimed.keywords
+            and c.feat("f3636")
+        ):
+            return
         c.spend_shrouds()
 
     c.watch(Hit, invoke, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} shrouds")
@@ -222,11 +235,15 @@ def p9400(c: Cast) -> None:
 def p9401(c: Cast) -> None:
     """"To a square adjacent to a different creature" is a constraint on the
     destination and `c.teleport` has no way to carry one, so the square is
-    left to the world's decider."""
+    left to the world's decider.
+
+    Through `c.instead_of` so that `f2831` can replace the distance
+    outright. The printed clause is the `default`, so the row is unchanged
+    for anybody with nothing registered."""
     # Read rather than written in, so `f2935` can lengthen it. #502.
-    c.teleport(
+    c.instead_of("teleport", lambda: c.teleport(
         c.squares_for(c.ref, 3 if c.level < 11 else (4 if c.level < 21 else 5))
-    )
+    ))
 
 
 @power(

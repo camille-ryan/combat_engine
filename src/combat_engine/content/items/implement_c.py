@@ -2218,31 +2218,34 @@ def i1293x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.modify_power()",),
+    implemented_in=("p259",),
 )
 def i1461x1(c: Cast) -> None:
-    """**The symbol stays and its reason was wrong.** "Nothing edits a
-    power" states a facility gap; what is owed is an *edit*, and #550
+    """**Written, and the marker was never a facility request.** "Nothing
+    edits a power" stated a gap; what was owed is an *edit*, and #550
     settled that a clause naming one power is written into that power's
     body rather than reached from outside it.
 
     `p259` lays the hold this card changes inside a `MoveEnd` watch of its
     own -- immobilized, save ends, for a creature that ends its move in the
     zone -- and that clause alone is what the card swaps, not the hit line
-    above it, which applies the same condition and is left as printed. So
-    the work is one branch in `powers/wizard/level_5.py`, gated on the
-    caster holding this item, which `c.held(on=..., what="magic")` answers
-    through `Weapon.item`. The reader exists; the branch does not.
+    above it, which applies the same condition and is left as printed. The
+    branch is in `powers/wizard/level_5.py`, gated on the caster having
+    this item equipped -- `c.feat("i1461x1")`, since `equipment.equip` is
+    what puts an item's rows into `Powers.known` -- and credited to this
+    ref with `c.credit` so the restrained hold is the property's doing
+    rather than the power's. That row's docstring carries the one
+    looseness and the narrower reader (`c.held(what="magic")` plus
+    `Weapon.item`) it would take to close it.
 
-    `c.pre_empt(ref, what, clause)` is the sanctioned route for a clause
-    reaching into a named row and still needs that file: `what=` is read by
-    the row itself with `c.instead_of`, and `p259` calls neither.
+    `c.pre_empt(ref, what, clause)` was the other candidate and still needs
+    that file: `what=` is read by the row itself with `c.instead_of`, and
+    `p259` calls neither.
 
-    So the symbol is a stand-in for work this file cannot do -- the same
-    reading `i1098x1` above records, for the same reason, since a marker
-    cannot name a file. Said plainly so the next reader does not go and
-    build a power-editing facility, which is the thing #550 decided
-    against."""
+    So this row is the pointer and carries `implemented_in=`, which
+    `audit.py` buckets as ELSEWHERE rather than firing. Said plainly so the
+    next reader does not go and build a power-editing facility, which is
+    the thing #550 decided against."""
 
 
 @power(

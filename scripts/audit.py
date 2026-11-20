@@ -839,6 +839,27 @@ KNOWN_SILENT = {
                                  " miss; a trigger is header data, so the"
                                  " work is in their headers and this row is"
                                  " the pointer",
+    # **`f3083` is the bladesinger shape one layer down, and `implemented_in=`
+    # genuinely cannot express it.** Its clause is written into
+    # `marks._slide_on_the_mark`, the single helper every divine sanction goes
+    # through -- **22 call sites across nine files** -- so there is no one row
+    # to point at: `lint._dangling_implementations` requires the *named* row's
+    # own source to carry the literal `c.feat("f3083")`, and naming all 22
+    # callers would be 22 pointers at bodies that do not carry the clause.
+    # The honest pair is a plainly declared row plus this entry, which is what
+    # `cf:wizard-bladesinger-f16` above already does.
+    #
+    # Proven on a board rather than argued: with the feat held, firing
+    # `f2128b` slides all four adjacent marked enemies 1 square
+    # (`ForcedMove`, `Moved kind_='slide'`); without it none moves; one marked
+    # from 3 squares away is not slid. The row itself arms nothing by design.
+    #
+    # One sanction is missed and it is pre-existing: `p11049`
+    # (`paladin/level_2_sa.py:84`) lays its mark with a bare `c.mark()`
+    # instead of going through the helper. #1412.
+    "f3083": "the clause is in `marks._slide_on_the_mark`, the one door all 22"
+             " sanction call sites use, so no single row can be named in"
+             " `implemented_in=`; the row itself arms nothing",
     "cf:fighter-knight-f10": "adds a pick to another row's fork; the pick is"
                              " chargen's and this row has no body",
     "cf:fighter-slayer-f6": "adds a pick to another row's fork; the pick is"

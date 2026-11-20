@@ -32,6 +32,7 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     Condition,
+    Gear,
     Keyword,
     Melee,
     MoveEnd,
@@ -53,6 +54,28 @@ from .grips import hand_free, has_shield, heavy_rider, two_handed, two_melee
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 MARTIAL = [Keyword.MARTIAL]
+
+
+#: The two weapon rows `f2802` is gated on, by ref -- the same pair
+#: `level_3_b` reads for the other associated power. `grips.wielding_any`
+#: asks the weapon *group* and cannot answer a card naming two rows of the
+#: table, and nothing under `powers/` imports `feats/`, so the read is
+#: written out rather than shared from the feat file.
+_F2802_BLADES = ("w3609", "w3668")
+
+
+def _f2802_may_slide(c: Cast) -> bool:
+    """Does `f2802`'s "slide instead of pushing" apply to this swing?
+
+    The feat is held, and the gate the whole feat sits behind is met --
+    one of the two named weapons is in hand.
+    """
+    gear = c.world.get(c.me, Gear)
+    return (
+        c.feat("f2802")
+        and gear is not None
+        and any(w.ref in _F2802_BLADES for w in gear.melee)
+    )
 
 
 def _hit_my_friend_in_melee(world: World, me: int, ev: Any) -> bool:
@@ -371,6 +394,11 @@ def p2133(c: Cast) -> None:
     requires_text="needs two melee weapons",
 )
 def p2466(c: Cast) -> None:
+    """**`f2802`'s swap is written here**, per #550: a feat naming one
+    power carries its clause in that power's body. The shove is read
+    through `c.instead_of` as well, so a card registering a substitution
+    against this ref has something to replace -- it had hard-coded
+    `c.push`, which is what the feat's old marker was really naming."""
     result = c.strike()
     if not result:
         return
@@ -378,7 +406,25 @@ def p2466(c: Cast) -> None:
         c.w(1, hand="main" if c.first else "off"),
         c.str_mod + (c.dex_mod if result.advantage else 0),
     )
-    c.push(1 + max(0, c.dex_mod))
+    shove = 1 + max(0, c.dex_mod)
+
+    def shoved() -> None:
+        c.push(shove)
+
+    # "Instead of pushing the enemy, you can slide the enemy the same
+    # distance" -- the same distance, so `shove` is read once and both
+    # branches use it. A printed **can**, so it is a real choice, and the
+    # swap goes first because that is where the engine's default pick
+    # lands. The extra square for a power that already slides is moot:
+    # this one pushes.
+    if (
+        _f2802_may_slide(c)
+        and c.choose(["slide", "push"], f"{c.ref}:instead") == "slide"
+    ):
+        with c.credit("f2802"):
+            c.slide(shove)
+    else:
+        c.instead_of("push", shoved)
 
 
 @power(

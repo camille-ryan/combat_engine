@@ -662,24 +662,56 @@ def f3026(c: Cast) -> None:
 # -- riders on any infusion -------------------------------------------------
 
 
-@power("f3027", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.save(conditions=)",),
+@power("f3027", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you use an infusion",
        on=Trigger(PowerUsed, _used_infusion, "you use an infusion"))
 def f3027(c: Cast) -> None:
     """A saving throw only for a target actually carrying one of the two
     named conditions, so the row does nothing to anybody else.
 
-    Which effect the save is rolled against is dropped. `c.save` does
-    take an `against=`, so that is not the gap -- it matches a fragment
-    of the effect's *label*, and a label is the ref of the row that
-    laid it rather than the name of a condition. So on a target
-    carrying both a daze and a burn this may shake off the burn.
-    `c.save(conditions=)` is the thing that would say it.
+    **Which effect the save is rolled against is said now, and the old
+    marker's reading of `against=` stopped being true.** It matched only a
+    fragment of the effect's *label* -- which is the laying row's ref, so
+    a condition word could never match one -- and it matches a condition
+    **by name** as well since `#1408`: `Condition` is a `str` enum, so
+    `.value` is the printed word, which is the spelling `items/alchemical`,
+    `powers/seeker/level_6` and `powers/themes/batch_g` already pass. So
+    a target carrying both a daze and a burn no longer risks shaking off
+    the burn.
+
+    The card offers *"a dazed or dominated condition"*, so a target
+    carrying both is asked which -- the target's own choice, since it is
+    the one making the throw.
+
+    **`AT_WILL`, which un-marking the row exposed.** `lint.py` skips this
+    header check on an unfinished row, so the `ENCOUNTER` this carried was
+    hidden behind the old marker: a *declared* trigger is not armed by
+    `turns.arm_traits`, so an encounter usage would spend on the first
+    firing, and the card prints no such limit -- the infusion it answers
+    is where the per-day limit lives.
+
+    One honest gap, and it is a layer below this row: `c.dominate` files
+    `Relation.DOMINATED_BY` and no `conditions=` at all -- `IMPLIES`
+    mirrors the condition into the count rather than onto the effect -- so
+    `against="dominated"` cannot see a domination laid that way. Eight
+    content rows lay one with that verb against 93 through
+    `c.condition(Condition.DOMINATED, ...)`, which this does see.
     """
     for who in c.trigger.targets:
-        if c.is_(Condition.DAZED, on=who) or c.is_(Condition.DOMINATED, on=who):
-            c.save(on=who)
+        carried = [
+            word.value
+            for word in (Condition.DAZED, Condition.DOMINATED)
+            if c.is_(word, on=who)
+        ]
+        if not carried:
+            continue
+        picked = (
+            carried[0] if len(carried) == 1
+            else c.choose(carried, "which condition to shake off", who=who)
+        )
+        if picked:
+            c.save(on=who, against=picked)
 
 
 #: The nine legs this card prints, in the order the race offers them, by

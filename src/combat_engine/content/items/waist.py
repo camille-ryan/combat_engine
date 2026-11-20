@@ -82,6 +82,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    MoveStart,
     Position,
     Ranged,
     SavingThrow,
@@ -2175,20 +2176,35 @@ def i733x1(c: Cast) -> None:
 @power("i1341x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.no_teleport_within()",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i1341x1(c: Cast) -> None:
     """The enemy's own half is `c.forbid(keyword=Keyword.TELEPORTATION)` --
     the "powers that have the keyword" half of that verb -- on the target's
     own clock, because the printed duration is the end of *its* next turn.
 
-    The second half is still missing and is a different mechanism: fencing
-    off the squares around a creature against anybody's teleport, following
-    it as it moves. Nothing refuses a teleport by where it lands.
+    **The second half is written, and the marker's reason was false.**
+    "Nothing refuses a teleport by where it lands" was the claim; unlike
+    `walk` and `shift`, the teleport site announces its *destination* --
+    `MoveStart` carries `kind_` and `to`, and `movement.teleport` reads the
+    `.cancelled` back. So the fence is one `Window.BEFORE` watch refusing
+    any teleport whose `to` falls within 2 of the target's footprint.
 
-    One hold per creature, refreshed rather than stacked. A quiver is shot
-    round after round, and the original reason was that
-    `Powers.forbidden_keywords` was an uncounted set, so an older hold
+    Following the target as it moves costs nothing: the handler reads its
+    squares at teleport time rather than snapshotting them.
+
+    `to=None` means the destination is not knowable -- forced movement goes
+    through `ForcedMove` -- so that case does not fire, which is what the
+    field's own note asks for.
+
+    The watch sits on the **target**, not the wearer: `When.EOTNT` is
+    clocked by whoever carries the effect, and the printed duration is the
+    end of the target's next turn. It also means the fence drops with the
+    creature it surrounds.
+
+    One hold per creature, refreshed rather than stacked -- both halves,
+    which is why the sweep matches the row's own ref rather than one
+    label. A quiver is shot round after round, and the original reason was
+    that `Powers.forbidden_keywords` was an uncounted set, so an older hold
     expiring would lift the newer shot's bar. It counts now (#526). The
     refresh stays on its own merits: the printed duration is the end of the
     target's next turn, and the newest shot is the one that sets that
@@ -2199,9 +2215,18 @@ def i1341x1(c: Cast) -> None:
     if foe is None:
         return
     for eff in list(c.world.effects.of(foe)):
-        if eff.source == c.me and eff.label.startswith(f"{c.ref} forbids"):
+        if eff.source == c.me and eff.label.startswith(c.ref):
             c.world.effects.end(eff, "a later shot replaces it")
     c.forbid(keyword=Keyword.TELEPORTATION, on=foe, until=When.EOTNT)
+
+    def refuse(ev: MoveStart) -> None:
+        if ev.kind_ != "teleport" or ev.to is None:
+            return
+        if ev.to in spread(squares(c.world, foe), 2):
+            ev.cancel("the space is fenced off")
+
+    c.watch(MoveStart, refuse, until=When.EOTNT, on=foe,
+            window=Window.BEFORE, label=f"{c.ref} fences")
 
 
 @power("i551x1", level=9, cls=ITEM, action=ActionType.NONE,

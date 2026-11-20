@@ -364,21 +364,22 @@ def f471(c: Cast) -> None:
 
 @power("f216", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.penalty(on_attacker=)",))
+       implemented_in=("p1452",))
 def f216(c: Cast) -> None:
-    """**Re-pointed. The reroll half landed in #496 and was not the hold.**
+    """Written into `p1452`, per #550. A pointer, not a gap.
 
-    `f217` one row down is the same sentence and is now written in three
-    lines, because its +2 lands on the holder's own roll and a standing
-    modifier gated on `reroll_by` reaches it. This one does not: `p1452`
-    makes the creature *attacking you* roll again, and
-    `resolve._mods(world, attacker, "attack", ctx)` reads the attacker's
-    own `Mods`. A penalty imposed by the defender has nowhere to sit.
+    **The old marker had the diagnosis right and the conclusion wrong.** It
+    said a penalty imposed by the defender "has nowhere to sit", because
+    `c.reroll_attack` re-sums the *attacker's* own `Mods`. True -- and that
+    is exactly where the clause goes: `p1452` runs as an immediate
+    interrupt with `c.trigger.attacker` in hand, so the -2 is laid on that
+    creature, gated on `reroll_by == "p1452"`, before the reroll is asked
+    for. Nothing has to be laid at arming and nothing is missed when a
+    creature joins the fight late, which was the near miss the marker
+    rejected.
 
-    Laying it on every enemy at arming is the near miss and is wrong: it
-    misses anything that joins the fight later, and the hole is invisible.
-    What is wanted is a penalty the defender carries and the attacker's roll
-    consults -- which is a real engine gap and not this row's to invent.
+    `f217` one row down uses the identical door for its own +2; the only
+    difference is which creature carries the modifier.
     """
 
 
