@@ -342,6 +342,37 @@ KNOWN_SILENT = {
               " this board's wizard is usually an arcanist/sha-ir build --"
               " it fires on a draw that happens to land one, so this entry"
               " oscillates. Proved in drivers.school_summon instead",
+    # **The third of the `p13984` shape, and the cleanest case of it yet
+    # measured.** This row's own first line is
+    # `if c.chosen_option("cf:warlord-marshal-f3") != "cf:warlord-marshal-f3":
+    # return` -- it is one of three forks under a single ref (`#1296`,
+    # Camille's "Do A"), so it does nothing at all unless the draw picked
+    # *this* fork. The oscillation is therefore in the row's own gate rather
+    # than anywhere in this instrument.
+    #
+    # Measured across five consecutive whole-corpus runs, which is why it is
+    # being excused rather than chased:
+    #
+    #     baseline 14d0f927b   silent
+    #     sweep 1              fires
+    #     sweep 2              silent
+    #     sweep 3              fires
+    #     sweep 4              silent
+    #
+    # Alternating every time, on batches that touched neither the row nor
+    # `chargen`. Acting on any single one of those readings would have
+    # deleted an excuse on Monday and restored it on Wednesday, which is the
+    # cost `scripts/CLAUDE.md` names for exactly this trap.
+    #
+    # Proved where a draw cannot move it: `drivers.the_marshals_two_choices`
+    # asserts `chargen.deal_build_option(None, FORK)` returns this very ref
+    # as the **fixed** answer, so a board with no stream sees the marshal as
+    # it always was. An excuse for a row with a driver behind it is a
+    # statement about the board, which is what this list is for. #1410.
+    "cf:warlord-marshal-f3": "one of three forks under one ref, so its first"
+              " line returns unless the draw picked this one -- measured"
+              " alternating across five consecutive wide sweeps. Proved in"
+              " drivers.the_marshals_two_choices instead",
     # "You hit a cursed target with an arcane power using this rod." The row
     # is correct and `_pose_cursed` below now curses every enemy, verified at
     # the moment it is laid -- but the one creature the provocation swings at
