@@ -7172,7 +7172,7 @@ def the_board_keeps_the_row_it_is_measuring(out: Result) -> None:
         world = World(Grid(12, 12), Rng(7), Bus())
         who = chargen.Character(row.cls, max(1, row.level), [ref, *features])
         eid = chargen.spawn(world, who, (6, 8), keep=keep)
-        return ref in (world.get(eid, Powers).known or ())
+        return ref in (must(world.get(eid, Powers), "Powers").known or ())
 
     # Three of the 92, at the three levels the swap band covers, so a fix
     # that happened to rescue one level is not mistaken for the rule.
@@ -7466,7 +7466,7 @@ def a_barred_charge_leaves_the_walk_alone(out: Result) -> None:
         world, caster, _ = audit.board("p15984", 1)
         hand = Cast(world=world, me=caster, ref="drivers:no_charge")
         foe = sorted(hand.enemies())[0]
-        here = world.get(caster, Position).square
+        here = must(world.get(caster, Position), "Position").square
         place(world, foe, (here[0] + 4, here[1]))
         return world, hand, foe
 
@@ -18165,13 +18165,13 @@ def a_ring_round_a_conjuration_grants_advantage(out: Result) -> None:
              "`grants_ca=True` marks the servant itself -- the modifier"
              " `c.can_flank` lays for the sibling clause, read the same way",
              f"{servant} at {here}")
-    out.that(world.get(servant, Conjuration).by == me,
+    out.that(must(world.get(servant, Conjuration), "Conjuration").by == me,
              "and the conjuration records its conjurer, which is what the"
              " printed exemption is read off -- NOT `Effect.source`:"
              " `Conjuration.effect` is an effect **id**, so reaching for"
              " `.source` on it is `None` every time and the exemption"
              " silently never fires",
-             f"by={world.get(servant, Conjuration).by} me={me}")
+             f"by={must(world.get(servant, Conjuration), 'Conjuration').by} me={me}")
 
     def put(eid: int, sq: tuple[int, int]) -> None:
         pos = world.get(eid, Position)
@@ -18251,7 +18251,7 @@ def a_conjured_suit_comes_off_the_class_page(out: Result) -> None:
 
     def bare(level: int = 1) -> tuple[Any, int, Any, list[list[str]]]:
         world, me, _ = _board("p16411", 1)
-        world.get(me, Stats).level = level
+        must(world.get(me, Stats), "Stats").level = level
         gear = world.get(me, Gear)
         gear.armour = "cloth"          # the printed Requirement
         asked: list[list[str]] = []
@@ -18500,7 +18500,7 @@ def a_pact_clause_can_be_a_granted_row(out: Result) -> None:
     def stage(seed: int = 1, *, gloom: bool = True) -> tuple[Any, int, int, int]:
         world, me, _ = _board("p13905", seed)
         if gloom:
-            world.get(me, Build).choices.add("gloom")
+            must(world.get(me, Build), "Build").choices.add("gloom")
         foes = sorted(enemies(world, me))
         victim, neighbour = foes[0], foes[1]
         # Stand the second enemy beside the first, which is the geometry
@@ -18522,7 +18522,7 @@ def a_pact_clause_can_be_a_granted_row(out: Result) -> None:
     c = Cast(world=world, me=me, ref="p13905")
     c.target = victim
     dsl.REGISTRY["p13905"].body(c)
-    out.that("p13905b" not in set(world.get(me, Powers).all),
+    out.that("p13905b" not in set(must(world.get(me, Powers), "Powers").all),
              "so the rider is not granted", "p13905b absent")
 
     # -- and with the pact, it is ------------------------------------------
@@ -18533,7 +18533,7 @@ def a_pact_clause_can_be_a_granted_row(out: Result) -> None:
     c = Cast(world=world, me=me, ref="p13905")
     c.target = victim
     dsl.REGISTRY["p13905"].body(c)
-    hand = set(world.get(me, Powers).all)
+    hand = set(must(world.get(me, Powers), "Powers").all)
     out.that("p13905b" in hand,
              "a gloom warlock is granted the rider, so the action menu can"
              " offer it -- `Powers.all` is the list both `arm_traits` and"
@@ -18584,7 +18584,7 @@ def a_pact_clause_can_be_a_granted_row(out: Result) -> None:
         c = Cast(world=world, me=me, ref="p13905")
         c.target = victim
         dsl.REGISTRY["p13905"].body(c)
-        granted += "p13905b" in set(world.get(me, Powers).all)
+        granted += "p13905b" in set(must(world.get(me, Powers), "Powers").all)
         missed += bool([
             ev for ev in my_misses_this_turn(world, me)
             if getattr(ev, "power", "") == "p13905"
@@ -18647,7 +18647,7 @@ def a_build_may_print_its_own_range(out: Result) -> None:
         if leg == "dark":
             build.choices.add("dark")
         foe = sorted(enemies(world, me))[0]
-        here = next(iter(world.get(me, Position).squares))
+        here = next(iter(must(world.get(me, Position), "Position").squares))
         far = (here[0] + 7, here[1])
         seat = world.get(foe, Position)
         world.grid.place(foe, frozenset({far}))
@@ -18790,14 +18790,14 @@ def a_disease_can_be_improved_by_stages(out: Result) -> None:
 
     # -- the verb itself, where a stage CAN fall without curing ----------
     world, me, mate = stage()
-    world.get(mate, Afflictions).contracted["x5_23"] = 5
+    must(world.get(mate, Afflictions), "Afflictions").contracted["x5_23"] = 5
     moved = Cast(world=world, me=me, ref="probe").improve_disease(2, on=mate)
     # **`.get`, not `[...]`.** The first version subscripted, and a plant
     # that makes `improve_disease` delete instead of subtract then raises a
     # `KeyError` rather than failing this line -- so the rule died where it
     # should have reported, and a grep for `FAIL` found nothing and read as
     # a passing plant.
-    now = dict(world.get(mate, Afflictions).contracted)
+    now = dict(must(world.get(mate, Afflictions), "Afflictions").contracted)
     out.that(moved == 1 and now.get("x5_23") == 3,
              "and from a stage the pages never reach in play, 5, it falls by"
              " exactly 2 rather than curing -- the arithmetic, which the"
@@ -18859,7 +18859,7 @@ def a_prohibition_may_lift_on_a_position(out: Result) -> None:
     c.cannot_stand(on=foe, until=When.ENCOUNTER,
                    when=lambda ctx: c.adjacent_to(me, foe))
 
-    here = next(iter(world.get(me, Position).squares))
+    here = next(iter(must(world.get(me, Position), "Position").squares))
     seat = world.get(foe, Position)
 
     def put(square: tuple[int, int]) -> None:
@@ -18893,7 +18893,7 @@ def a_prohibition_may_lift_on_a_position(out: Result) -> None:
     if beast is None:
         return
     seat = world.get(foe, Position)
-    at = next(iter(world.get(beast, Position).squares))
+    at = next(iter(must(world.get(beast, Position), "Position").squares))
     world.grid.place(foe, frozenset({(at[0] + 1, at[1])}))
     seat.square = (at[0] + 1, at[1])
     seat.spans = frozenset({seat.square})
@@ -18985,7 +18985,7 @@ def a_conjuration_may_lend_its_square_to_a_threat(out: Result) -> None:
              " would satisfy the line above as well", f"{len(lent)} squares")
 
     def walk_away(world: Any, me: int, where: Any, foe: int) -> list[int]:
-        at = next(iter(world.get(where, Position).squares))
+        at = next(iter(must(world.get(where, Position), "Position").squares))
         beside, away = (at[0] + 1, at[1]), (at[0] + 3, at[1])
         seat = world.get(foe, Position)
         world.grid.place(foe, frozenset({beside}))
@@ -19005,7 +19005,7 @@ def a_conjuration_may_lend_its_square_to_a_threat(out: Result) -> None:
     world, me, guards, foe = staged(False)
     out.that(not guards, "the control board has no guardians", f"{guards}")
     world, me, guards, foe = staged(False)
-    here = next(iter(world.get(me, Position).squares))
+    here = next(iter(must(world.get(me, Position), "Position").squares))
     far = (here[0] + 6, here[1])
     seat = world.get(foe, Position)
     world.grid.place(foe, frozenset({far}))
@@ -19177,7 +19177,7 @@ def commanding_a_summon_needs_line_of_effect(out: Result) -> None:
         row.body(c)
         made = sorted({e for e, _ in world.each(Position)} - before)
         pet = made[0]
-        here = next(iter(world.get(me, Position).squares))
+        here = next(iter(must(world.get(me, Position), "Position").squares))
         at = (here[0] + 4, here[1])
         seat = world.get(pet, Position)
         world.grid.place(pet, frozenset({at}))
@@ -19616,7 +19616,7 @@ def a_summon_may_carry_an_ally_and_set_it_down(out: Result) -> None:
         dsl.REGISTRY["p11296"].body(Cast(world=world, me=me, ref="p11296"))
         angel = sorted({e for e, _ in world.each(Companion)} - before)[0]
         mate = sorted(a for a in allies(world, me) if a != angel)[-1]
-        at = next(iter(world.get(angel, Position).squares))
+        at = next(iter(must(world.get(angel, Position), "Position").squares))
         beside = (at[0] + 1, at[1])
         seat = world.get(mate, Position)
         world.grid.place(mate, frozenset({beside}))
@@ -19642,12 +19642,12 @@ def a_summon_may_carry_an_ally_and_set_it_down(out: Result) -> None:
              "and lifts it four squares, so the fall has something to"
              " measure", f"{falling.height(world, mate)}")
     hp = world.get(mate, Health)
-    was, where = hp.hp, next(iter(world.get(mate, Position).squares))
+    was, where = hp.hp, next(iter(must(world.get(mate, Position), "Position").squares))
     dsl.REGISTRY["p11296c0"].body(Cast(world=world, me=angel, ref="p11296c0"))
-    out.that(next(iter(world.get(mate, Position).squares)) != where,
+    out.that(next(iter(must(world.get(mate, Position), "Position").squares)) != where,
              "the command carries the ally -- it does not end where it"
              " started", f"{where} -> "
-             f"{next(iter(world.get(mate, Position).squares))}")
+             f"{next(iter(must(world.get(mate, Position), 'Position').squares))}")
     out.that(falling.height(world, mate) == 0,
              "and sets it down, which is *'the ally must land at the end of"
              " this movement'*", f"{falling.height(world, mate)}")
@@ -19715,7 +19715,7 @@ def the_attacker_may_pick_a_new_target(out: Result) -> None:
     def staged(*, far: bool) -> tuple[Any, int, int, list[int]]:
         world, me, _ = _board("p16502", 1)
         shooter = sorted(enemies(world, me))[0]
-        at = next(iter(world.get(shooter, Position).squares))
+        at = next(iter(must(world.get(shooter, Position), "Position").squares))
         seat = world.get(me, Position)
         spot = (at[0] + (9 if far else 1), at[1])
         world.grid.place(me, frozenset({spot}))
@@ -19868,7 +19868,7 @@ def a_reroll_may_be_aimed_at_a_different_creature(out: Result) -> None:
     world, me, _ = _board("p9340", 1)
     foes = sorted(enemies(world, me))
     shooter, shield = foes[0], foes[1]
-    here = next(iter(world.get(me, Position).squares))
+    here = next(iter(must(world.get(me, Position), "Position").squares))
 
     def put(eid: int, square: tuple[int, int]) -> None:
         seat = world.get(eid, Position)
@@ -20312,7 +20312,7 @@ def a_bridge_puts_an_already_prone_creature_over_the_side(out: Result) -> None:
                 world.grid.elevation[(x, y)] = -deep
         for who, at in ((foe, (6, 5)), (caster, (6, 7))):
             world.grid.lift(who)
-            world.get(who, Position).square = at
+            must(world.get(who, Position), "Position").square = at
             world.grid.place(who, at)
         setup = Cast(world=world, me=caster, ref="drivers-span")
         zone = setup.zone(set(SPAN), label="x2_130", until=When.ENCOUNTER)
@@ -20323,13 +20323,13 @@ def a_bridge_puts_an_already_prone_creature_over_the_side(out: Result) -> None:
             setup.condition(Condition.PRONE, on=foe, until=When.ENCOUNTER)
         fell: list = []
         world.bus.on(Fell, lambda ev: fell.append(getattr(ev, "squares", None)))
-        was = world.get(foe, Health).hp
+        was = must(world.get(foe, Health), "Health").hp
         cast = Cast(world=world, me=caster, ref="x2_130")
         cast.target = foe
         cast.targets = [foe]
         dsl.REGISTRY["x2_130"].body(cast)
-        here = world.get(foe, Position).square
-        hurt = was - world.get(foe, Health).hp
+        here = must(world.get(foe, Position), "Position").square
+        hurt = was - must(world.get(foe, Health), "Health").hp
         return fell, here, hurt, here in set(SPAN)
 
     # --- already prone: over the side.
@@ -20622,13 +20622,13 @@ def a_compelled_creature_cannot_decline_an_opening(out: Result) -> None:
         foe = foes[0]
         for other in foes[1:]:
             w.grid.lift(other)
-            w.get(other, Position).square = (30, 30)
+            must(w.get(other, Position), "Position").square = (30, 30)
             w.grid.place(other, (30, 30))
         w.grid.lift(me)
-        w.get(me, Position).square = (5, 5)
+        must(w.get(me, Position), "Position").square = (5, 5)
         w.grid.place(me, (5, 5))
         w.grid.lift(foe)
-        w.get(foe, Position).square = (6, 5)
+        must(w.get(foe, Position), "Position").square = (6, 5)
         w.grid.place(foe, (6, 5))
         mv = w.get(foe, Movement)
         if mv is not None:
@@ -20835,10 +20835,10 @@ def a_flier_hops_over_the_ground_it_crosses(out: Result) -> None:
             else:
                 sq = (30 + i, 30)
             w.grid.lift(foe)
-            w.get(foe, Position).square = sq
+            must(w.get(foe, Position), "Position").square = sq
             w.grid.place(foe, sq)
         w.grid.lift(me)
-        w.get(me, Position).square = (2, 2)
+        must(w.get(me, Position), "Position").square = (2, 2)
         w.grid.place(me, (2, 2))
         return w, me, tags
 
@@ -21114,7 +21114,7 @@ def a_bloodied_enemy_can_be_cowed_into_surrender(out: Result) -> None:
             "ran": bool(ran),
             "down": is_(w, them0, Condition.SURRENDERED),
             "acts": can_act(w, them0),
-            "barred": (w.get(them0, Mods).total("no_surrender", {})
+            "barred": (must(w.get(them0, Mods), "Mods").total("no_surrender", {})
                        if w.get(them0, Mods) is not None else 0),
         }
         if got["down"]:
@@ -21128,7 +21128,7 @@ def a_bloodied_enemy_can_be_cowed_into_surrender(out: Result) -> None:
             # immunity passed against an `offered_again == 0` reading.
             # `no_surrender` is the mechanism and is readable directly.
             got["barred_after"] = (
-                w.get(them0, Mods).total("no_surrender", {})
+                must(w.get(them0, Mods), "Mods").total("no_surrender", {})
                 if w.get(them0, Mods) is not None else 0)
             # And the menu too, with the action given back, so both halves
             # are asserted rather than one standing in for the other.
@@ -22043,7 +22043,7 @@ def an_ally_may_spend_its_action_to_free_a_row(out: Result) -> None:
             "healed": hurt.hp > was,
             "surge_spent": surges - hurt.surges,
             "ally_standard_left": enc.can_spend(helper, ActionType.STANDARD),
-            "owner_used": "p11546" in (world.get(owner, Powers).used or {}),
+            "owner_used": "p11546" in (must(world.get(owner, Powers), "Powers").used or {}),
             "helper": helper,
             "owner": owner,
         }
@@ -35471,7 +35471,7 @@ def a_shove_may_refuse_a_square(out: Result) -> None:
     def shove(ring_it: bool, *, filtered: bool = True) -> tuple[Square, Square, int, int, int]:
         world, me, _ = _audit.board("p11582", 1)
         victim = sorted(enemies(world, me))[0]
-        here = world.get(victim, Position).square
+        here = must(world.get(victim, Position), "Position").square
         ring = sorted(spread({here}, 1) - {here})
         laid = 0
         if ring_it:
@@ -35488,7 +35488,7 @@ def a_shove_may_refuse_a_square(out: Result) -> None:
             1, on=victim,
             avoid=hindering_at if filtered else None,
         )
-        return here, world.get(victim, Position).square, moved, laid, len(ring)
+        return here, must(world.get(victim, Position), "Position").square, moved, laid, len(ring)
 
     was, now, moved, _, _ = shove(False)
     out.that(moved == 1 and now != was,
@@ -35520,7 +35520,7 @@ def a_shove_may_refuse_a_square(out: Result) -> None:
     # was not -- the same hole `p13442`'s flag had two commits ago.
     world, me, _ = _audit.board("p11582", 1)
     victim = sorted(enemies(world, me))[0]
-    here = world.get(victim, Position).square
+    here = must(world.get(victim, Position), "Position").square
     ring = sorted(spread({here}, 1) - {here})
     Cast(world=world, me=me, ref="drivers-hinder").zone(
         set(ring), label="drivers-fire", until=When.ENCOUNTER,
@@ -35529,10 +35529,10 @@ def a_shove_may_refuse_a_square(out: Result) -> None:
     REGISTRY["p11582"].body(Cast(
         world=world, me=me, ref="p11582", target=victim, targets=[victim],
     ))
-    out.that(world.get(victim, Position).square == here,
+    out.that(must(world.get(victim, Position), "Position").square == here,
              "**and p11582 itself refuses the square** -- run through its"
              " own body, ringed by hindering ground",
-             f"{here} -> {world.get(victim, Position).square}")
+             f"{here} -> {must(world.get(victim, Position), 'Position').square}")
 
     out.that(not REGISTRY["p11582"].dropped,
              "p11582 carries no marker",
@@ -36276,7 +36276,7 @@ def a_parameter_the_printed_line_needed(out: Result) -> None:
              " named here rather than inferred from the arm below",
              f"used={used}, usable={why}, foe {foe} at"
              f" {_distance_between(world, me, foe)} squares")
-    mine = world.get(me, Position).squares
+    mine = must(world.get(me, Position), "Position").squares
     offered = []
     saw = []
     for friend in [a for a in allies(world, me) if a != me]:
@@ -36318,8 +36318,8 @@ def a_parameter_the_printed_line_needed(out: Result) -> None:
     # -- `c.set_build` ADDS a leg, which is all this needs.
     Cast(world=world, me=me, ref="drivers-p9432").set_build("f1s2")
     world.rng.loaded = 20
-    theirs = world.get(victim, Position).squares
-    here = world.get(me, Position).squares
+    theirs = must(world.get(victim, Position), "Position").squares
+    here = must(world.get(me, Position), "Position").squares
     was = min(distance(a, b) for a in here for b in theirs)
     use(world, me, "p9432", targets=[victim], spend=False)
     grants = granted_actions(world, me)
@@ -36484,7 +36484,7 @@ def a_row_may_grant_a_second_action_row(out: Result) -> None:
         world, me, _ = _audit.board("p12423", seed)
         foe = enemies(world, me)[0]
         use(world, me, "p12423", targets=[foe], spend=False)
-        here = world.get(me, Position).square
+        here = must(world.get(me, Position), "Position").square
 
         # The farthest offered square, so the distance is observable at
         # all: `c.move` hands its destinations to the decider and the
@@ -36500,7 +36500,7 @@ def a_row_may_grant_a_second_action_row(out: Result) -> None:
         world.decider = decide
         mark = len(world.bus.log)
         use(world, me, "p12423c0", targets=[], spend=False)
-        gone = world.get(me, Position).square
+        gone = must(world.get(me, Position), "Position").square
         far = max(abs(gone[0] - here[0]), abs(gone[1] - here[1]))
         d4 = next(
             (r.total for r in reversed(world.rng.rolls) if r.expr == "1d4"), 0,
@@ -36745,8 +36745,8 @@ def an_aspect_lends_its_augment_to_a_whole_class(out: Result) -> None:
         if hit:
             world.rng.loaded = 20
         targets = foes[1:1 + aim]
-        before = {f: world.get(f, Health).hp for f in targets}
-        temp = world.get(me, Health).temp
+        before = {f: must(world.get(f, Health), "Health").hp for f in targets}
+        temp = must(world.get(me, Health), "Health").temp
         mark = len(world.bus.log)
         use(world, me, row, targets=targets, spend=False)
         blows = [
@@ -36756,8 +36756,8 @@ def an_aspect_lends_its_augment_to_a_whole_class(out: Result) -> None:
         return {
             "world": world, "me": me, "targets": targets,
             "spent": _augment.spent_on(me, row),
-            "temp_gained": world.get(me, Health).temp - temp,
-            "dealt": {f: before[f] - world.get(f, Health).hp for f in targets},
+            "temp_gained": must(world.get(me, Health), "Health").temp - temp,
+            "dealt": {f: before[f] - must(world.get(f, Health), "Health").hp for f in targets},
             "blows": blows,
             "known": known,
         }
@@ -36781,7 +36781,7 @@ def an_aspect_lends_its_augment_to_a_whole_class(out: Result) -> None:
              " that would have made the lend unreachable")
 
     # -- p11158: both halves of its Augment 1 ----------------------------
-    wis = (world.get(me, Stats).scores.get(Ability.WIS, 10) - 10) // 2
+    wis = (must(world.get(me, Stats), "Stats").scores.get(Ability.WIS, 10) - 10) // 2
     run = play("p11158", AT_WILL)
     if run is None:
         out.skip("the board could not field an aspect and two foes")
@@ -46044,7 +46044,7 @@ def a_power_that_fires_when_you_die(out: Result) -> None:
     # ---- door one: still a standard action a creature may choose
     world, me, _ = _board("p16654")
     out.that(
-        "p16654" in (world.get(me, Powers).all if world.get(me, Powers) else []),
+        "p16654" in (must(world.get(me, Powers), "Powers").all if world.get(me, Powers) else []),
         "the board deals this row to the creature under test, which every"
         " arm below depends on",
         "the caster does not know p16654",
