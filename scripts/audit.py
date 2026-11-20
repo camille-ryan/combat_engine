@@ -1792,6 +1792,15 @@ DID_SOMETHING = {
     # all, so eight rows whose only state-changing verb it is could not be
     # seen, seven of them on `silent_refs`. #1410.
     "SurgeRegained", "ShroudLaid",
+    # **Three more `Note`-only verbs, prioritised by BLOCKED rows rather
+    # than by call sites, which is the correction worth keeping.** The
+    # census on `#1410` counted call sites and badly misranked the work:
+    # `.amount +=` has 37 call sites and **2** blocked rows,
+    # `c.spend_shrouds` has 3 and **0**, while `c.give` has 15 and **6**.
+    # A verb is only worth an event where its rows have no other clause
+    # that emits. Measured against the committed baseline:
+    # give 6, prepare 5, grant_action_point 4+1 never.
+    "OneShotGiven", "RowPrepared", "ActionPointGranted",
     # `UsesRaised` and `RollsTwice` on `UseRestored`'s own argument: a row
     # whose entire effect is raising an allowance, or granting a second
     # d20 on a check, is silent without one. #642.

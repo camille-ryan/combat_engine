@@ -1684,6 +1684,66 @@ class PointsRegained(Event):
 
 
 @dataclass
+class OneShotGiven(Event):
+    """A one-shot was put in somebody's hands for them to spend later.
+
+    The seed, the scroll, the four berries. `c.give` announced this as a
+    `Note`, which `audit.DID_SOMETHING` refuses because a `Note` carries no
+    `by` -- so six rows whose whole printed Effect is handing one over fired,
+    worked, and reported inert.
+
+    `who` is the carrier, `label` the ref it will spend, `uses` how many
+    charges went with it, and `by` the ref that made it -- which is never the
+    carrier, since the point of the verb is that the maker and the spender
+    differ.
+    """
+
+    who: int
+    label: str
+    uses: int
+    by: str
+
+
+@dataclass
+class RowPrepared(Event):
+    """A row was prepared into somebody's book, possibly displacing another.
+
+    `c.prepare` announced a `Note` only, so five rows whose printed Effect is
+    swapping what is prepared could not be seen. `instead_of` is `""` when
+    the card adds rather than exchanges, which is the difference a reader of
+    the log most wants and the one a note buried in prose.
+
+    `who` is whose book changed -- the caster by default, because it is your
+    book -- and `by` the ref that changed it.
+    """
+
+    who: int
+    power: str
+    instead_of: str
+    by: str
+
+
+@dataclass
+class ActionPointGranted(Event):
+    """An action point was handed over outside the usual limit.
+
+    The mirror of `ActionPointSpent`, and declared for the reason
+    `SurgeRegained` and `PointsRegained` were: the spend has been announced
+    all along and the gift was a `Note`. Five rows wanted it.
+
+    `count` is how many were given and `free` the pool afterwards. `free`
+    rather than a total because these are the ones outside the per-encounter
+    limit -- *"if you do not spend it before the end of the encounter, it is
+    lost"* -- so the two numbers are different questions.
+    """
+
+    who: int
+    count: int
+    free: int
+    by: str
+
+
+@dataclass
 class SurgeRegained(Event):
     """A healing surge was handed back.
 

@@ -21041,9 +21041,15 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             return 0
         pool = self._points(who)
         pool.free += count
+        from .events import ActionPointGranted
         self.world.bus.emit(
             Note(text=f"{who} gains {count} action point(s) outside the limit")
         )
+        # `ActionPointSpent` has been announced all along; the gift was a
+        # `Note`, which carries no `by`. The same half-announced pair as
+        # SurgeSpent/SurgeRegained. #1410.
+        self.world.bus.emit(ActionPointGranted(
+            who=who, count=count, free=pool.free, by=self.ref))
         return pool.free
 
     # -- power points --------------------------------------------------------
@@ -21485,9 +21491,14 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         known = self.world.get(who, Powers)
         if known is None or not known.prepare(ref, instead_of=instead_of):
             return False
+        from .events import RowPrepared
         self.world.bus.emit(
             Note(text=f"{who} prepares {ref}" + (f" instead of {instead_of}" if instead_of else ""))
         )
+        # The note carries no `by`, so five rows whose printed Effect is a
+        # swap in the book audited as rows that did nothing. #1410.
+        self.world.bus.emit(RowPrepared(
+            who=who, power=ref, instead_of=instead_of, by=self.ref))
         return True
 
     # -- a companion that rolls its own line ---------------------------------
@@ -23740,7 +23751,13 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 ref=label, owner=who, by=self.me, uses=uses, spend=fn, cost=cost.value
             )
         )
+        # **A real event beside the note.** A `Note` carries no `by`, which is
+        # why `audit.DID_SOMETHING` refuses it, so six rows whose whole
+        # printed Effect is handing a one-shot over reported inert. #1410.
+        from .events import OneShotGiven
         self.world.bus.emit(Note(text=f"{who} carries {label} ({uses} left)"))
+        self.world.bus.emit(
+            OneShotGiven(who=who, label=label, uses=uses, by=self.ref))
         return item
 
     def carrying(self, ref: str = "", *, on: int | None = None) -> list[int]:
