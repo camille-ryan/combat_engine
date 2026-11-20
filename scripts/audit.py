@@ -9975,13 +9975,33 @@ def _wants_terrain(ref: str) -> tuple[str, ...]:
     # case the `terrain("word")` form below exists to exclude.
     said = (f"{getattr(row, 'requires_text', '') or ''} "
             f"{getattr(row, 'trigger', '') or ''}").lower()
-    if not body and not said.strip():
+    # **And the `requires=` predicate's own source, which is a third place
+    # the question lives and the only one nothing read.** A Requirement
+    # printed as terrain is written as a gate, and a gate gets
+    # `(world, eid)` and **no `Cast`** -- so it cannot call `c.terrain` and
+    # the two tests above both miss it. Measured on `i1664p1`, `i1933p1` and
+    # `i2022p1`: all three share one predicate, their `requires_text` prints
+    # one word and the vocabulary word is a quoted literal in the code --
+    # `"aquatic" in getattr(world, "terrain", frozenset())` -- so
+    # `_wants_terrain` returned `()` and the board stayed dry.
+    #
+    # **The needle is the quoted word, not a `terrain(` call.** The sweep
+    # that found this recommended matching the call form, which finds
+    # nothing here for the reason above. A quoted literal is the same
+    # discipline the body test applies for the same reason: it excludes the
+    # word appearing in prose. The predicate's own docstring is the worked
+    # case -- it says the printed word and never the vocabulary one, so a
+    # bare-word match would have been right by luck and a docstring
+    # mentioning any of the eighteen would have dressed a board. #1411.
+    gate = _source_of(getattr(row, "requires", None), ref)
+    if not body and not said.strip() and not gate:
         return ()
     return tuple(
         word for word in sorted(TERRAIN_WORDS)
         # The call, not the bare word: `c.terrain("ice")` dresses a board
         # and the word "ice" in a docstring does not.
         if f'terrain("{word}")' in body or f"terrain('{word}')" in body
+        or f'"{word}"' in gate or f"'{word}'" in gate
         or word in said
     )
 
