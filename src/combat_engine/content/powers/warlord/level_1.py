@@ -536,8 +536,34 @@ def p620(c: Cast) -> None:
     """
     arena = c.declare("Arena Fighting", "f975")
     helpers = _beside(c, c.target)
+    stepped = None
     if helpers:
-        c.shift(1, who=c.choose(helpers, "who steps before the blow"))
+        stepped = c.choose(helpers, "who steps before the blow")
+        # **`f1305`: *"the ally you designate is immune to the effect of
+        # your p2473 for its duration."*** Recorded in `Zone.exempt`, which
+        # `p2473`'s blinding watch and `query.cover_between`'s sight pass
+        # both read -- one entry for both printed effects.
+        #
+        # **Before the shift, deliberately.** `p2473` blinds on occupancy
+        # and re-reads it on `MoveEnd`, so the shift below is what makes it
+        # look again -- and it must find the exemption already there.
+        # Exempting afterwards left the ally unblinded only because this
+        # row reached in and ended the effect, which desynced `p2473`'s own
+        # `held` book-keeping: it still believed the ally blinded, so it
+        # would never have re-blinded them even with the exemption gone. A
+        # plant removing `p2473`'s read of `exempt` passed because of it.
+        #
+        # Gated on the caster standing in the cloud, which the card states:
+        # *"while you and the target are within the area"*.
+        if c.feat("f1305"):
+            with c.credit("f1305"):
+                for _zid, cloud in c.world.zones.all():
+                    if cloud.label != "p2473" or cloud.owner != c.me:
+                        continue
+                    if c.here not in cloud.squares:
+                        continue
+                    cloud.exempt = frozenset({*cloud.exempt, stepped})
+        c.shift(1, who=stepped)
     if c.strike():
         if c.feat("f1102") and c.is_kind("undead"):
             with c.credit("f1102"):

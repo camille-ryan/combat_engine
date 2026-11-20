@@ -20264,6 +20264,133 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def f1305_exempts_a_designated_ally_from_its_own_cloud(out: Result) -> None:
+    """*"The ally you designate is immune to the effect of your p2473 for
+    its duration."*
+
+    `p2473` lays a cloud that blocks sight, obscures, and blinds whoever is
+    inside -- *"you are immune to these effects"* being the caster's own
+    exemption, written as `w != c.me`. `f1305` extends that to one ally,
+    and `p620` is the row that designates one (*"an ally adjacent to you or
+    to the target can shift 1 square"*).
+
+    **`Zone.exempt` is the single record**, which is what makes this one
+    clause rather than two. `query.cover_between`'s sight pass already
+    reads it (`if zone.blocks_sight and attacker not in zone.exempt`), and
+    `p2473`'s blinding watch now reads it too -- so one entry answers both
+    printed effects instead of a second set beside the first.
+
+    **The second half is the timing, and it is the half a lazier test would
+    miss.** `p2473` blinds on occupancy and only re-reads it on `MoveEnd`
+    or `EnterSquare`, so an ally already standing in the cloud when it is
+    designated stays blinded until somebody moves. Recording the exemption
+    alone leaves the clause correct at the *next* pass and wrong at the
+    moment it is used, which is not what *"is immune ... for its
+    duration"* says. So `p620` also ends what the cloud has already laid on
+    that ally, and the rule asserts the blindness is gone rather than only
+    that the exemption is recorded.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Condition
+
+    def play(
+        feat: str | None, *, then_move: bool = False
+    ) -> tuple[bool, list[int]] | None:
+        world, me, _ = _board("p620", 1)
+        foes = sorted(enemies(world, me))
+        mates = sorted(allies(world, me))
+        if not foes or not mates:
+            return None
+        foe, mate = foes[0], mates[0]
+        here = must(world.get(me, Position), "Position").square
+        movement.place(world, foe, (here[0] + 1, here[1]))
+        movement.place(world, mate, (here[0], here[1] + 1))
+        if feat:
+            held = must(world.get(me, Powers), "Powers")
+            if feat not in (held.known or []):
+                held.known.append(feat)
+        # The cloud first, so the ally is already blinded when p620 runs --
+        # which is the case the timing half is about.
+        dsl.REGISTRY["p2473"].body(Cast(world=world, me=me, ref="p2473"))
+        cast = Cast(world=world, me=me, ref="p620")
+        cast.target = foe
+        cast.targets = [foe]
+        dsl.REGISTRY["p620"].body(cast)
+        if then_move:
+            # **Makes the cloud re-read occupancy**, which is the half the
+            # exemption itself is for: `p2473`'s watch fires on `MoveEnd`,
+            # and a creature not in `exempt` is blinded again on the way
+            # past. Without this arm, `p620` lifting the standing blindness
+            # is enough to pass -- measured, a plant removing `p2473`'s
+            # read of `exempt` went green.
+            at = must(world.get(mate, Position), "Position").square
+            movement.walk(world, mate, [(at[0], at[1] + 1), at])
+        spared = sorted(
+            {w for _zid, z in world.zones.all() if z.label == "p2473"
+             for w in z.exempt}
+        )
+        return cast.is_(Condition.BLINDED, on=mate), spared
+
+    plain = play(None)
+    out.that(plain is not None, "the board fields an ally and a foe")
+    if plain is None:
+        return
+    blinded, spared = plain
+    out.that(
+        blinded and not spared,
+        "without f1305 the ally standing in the cloud is blinded and the"
+        f" cloud exempts nobody (blinded {blinded}, exempt {spared})",
+    )
+
+    with_feat = play("f1305")
+    if with_feat is None:
+        return
+    blinded, spared = with_feat
+    out.that(
+        bool(spared),
+        f"with f1305 the designated ally joins the cloud's exempt set ({spared})",
+    )
+    out.that(
+        not blinded,
+        "and the blindness the cloud had already laid on it is lifted --"
+        " recording the exemption alone would leave this True until"
+        f" somebody moved (blinded {blinded})",
+    )
+
+    # --- and it stays immune when the cloud re-reads occupancy.
+    walked = play("f1305", then_move=True)
+    if walked is not None:
+        blinded, spared = walked
+        out.that(
+            not blinded and bool(spared),
+            "and is still not blinded after stepping out of the cloud and"
+            " back in -- which is what `for its duration` asks and what"
+            f" `Zone.exempt` is read for (blinded {blinded}, exempt {spared})",
+        )
+    plainly_walked = play(None, then_move=True)
+    if plainly_walked is not None:
+        out.that(
+            plainly_walked[0],
+            "while an ally without the feat is blinded again on the way"
+            f" back in ({plainly_walked[0]})",
+        )
+
+    row = dsl.REGISTRY.get("f1305")
+    owed = tuple(row.todo or ()) + tuple(row.dropped or ()) if row else ()
+    out.that(
+        not any("zone_exempt" in sym for sym in owed),
+        f"f1305 carries no marker for the exemption ({owed})",
+    )
+    out.that(
+        any("move_zone" in sym for sym in owed),
+        f"and still names its other clause, which is untouched ({owed})",
+    )
+
+
 def f1308_widens_who_the_riposte_answers_for(out: Result) -> None:
     """*"You can riposte if the target attacks you **or any ally adjacent to
     you**."*
@@ -106039,6 +106166,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "cloud_exempt": (f1305_exempts_a_designated_ally_from_its_own_cloud,
+                     "f1305 exempts a designated ally from the caster's own"
+                     " cloud, and lifts what it already laid"),
     "riposte_widens": (f1308_widens_who_the_riposte_answers_for,
                        "f1308 lets p653's riposte answer an attack on an"
                        " adjacent ally, not only on the caster"),

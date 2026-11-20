@@ -2071,7 +2071,7 @@ _riders("f1304", {}, implemented_in=("p87", "p653", "p992", "p4541"))
 # file is in `audit.WIDE` and a wide sweep is not worth one clause. This
 # change is batched with that sweep.
 _riders("f1305", {}, implemented_in=("p992", "p2248"),
-        dropped=("c.move_zone(with_me=)", "c.zone_exempt()"))
+        dropped=("c.move_zone(with_me=)",))
 
 # p2105 and p4542 both put the exploit in the place of a charge's melee
 # basic attack -- but only "during the surprise round", and `c.as_basic`

@@ -586,7 +586,19 @@ def p2473(c: Cast) -> None:
     held: dict[int, Any] = {}
 
     def refresh(_ev: Any = None) -> None:
-        inside = {w for w in c.in_squares(area) if w != c.me}
+        # **`Zone.exempt` is the record of who this cloud does not touch**,
+        # and the caster is only the first entry. *"You are immune to these
+        # effects"* is the `w != c.me` below; `f1305` adds *"the ally you
+        # designate"* from inside `p620`, which is the one row that
+        # designates one. Reading the field here rather than a second set
+        # keeps one answer to "is this creature immune to the cloud" --
+        # `query.cover_between` already reads the same field for the
+        # sight-blocking half.
+        spared = {c.me}
+        for _zid, zone in c.world.zones.all():
+            if zone.label == c.ref and zone.owner == c.me:
+                spared |= set(zone.exempt)
+        inside = {w for w in c.in_squares(area) if w not in spared}
         for who in inside - set(held):
             blind = c.blinded(on=who, until=When.EONT)
             if blind is not None:
