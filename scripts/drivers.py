@@ -20264,6 +20264,70 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def f3209_marks_on_a_theme_attack(out: Result) -> None:
+    """*"When you hit an enemy with one of your <theme> attacks, you can
+    mark that enemy until the end of your next turn."*
+
+    **The set is the theme's `cls`.** `x7_661` is a `cls` value like any
+    other, four of its eleven rows carry an attack, and those four are the
+    set the card names. The row was marked `dsl.powers_of(cls)` and then
+    argued down to *"the set the spec names is empty in the source"* --
+    both wrong, because the spec cites `cf:druid-f1s0` where the page
+    prints a theme, and the extraction put an unrelated class feature's
+    ref in its place.
+
+    **The negative control is a theme attack's sibling**, not an arbitrary
+    power: `p12259` is in the same theme and carries no attack, so it is
+    outside the set for the reason the set is defined, and a body matching
+    on `cls` alone rather than on `attack is not None` would mark on it.
+    """
+    from combat_engine.content import loader
+    from combat_engine.content.feats.general_q import _theme_attacks
+    from combat_engine.engine import Bus, Grid, Team, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.rng import Rng
+
+    mine = _theme_attacks("x7_661")
+    out.that(
+        len(mine) == 4 and "p12258" in mine,
+        f"the theme's attack rows are a non-empty set ({mine})",
+    )
+    inside = [r for r in REGISTRY
+              if REGISTRY[r].cls == "x7_661" and REGISTRY[r].attack is None]
+    out.that(
+        bool(inside),
+        "and the theme holds rows with NO attack, so the attack test is"
+        f" doing work rather than being implied by the cls ({inside[:3]})",
+    )
+
+    def swung(power: str) -> bool:
+        """Lay the trait, then report a hit with that ref. Is the foe marked?"""
+        world = World(Grid(16, 12), Rng(5), Bus())
+        me = loader.spawn(world, "m5624", (3, 3), team=Team.PC)
+        foe = loader.spawn(world, "m5624", (4, 3), team=Team.ENEMY)
+        cast = Cast(world=world, me=me, ref="f3209")
+        cast.target = me
+        cast.targets = [me]
+        REGISTRY["f3209"].body(cast)
+        world.bus.emit(Hit(attacker=me, target=foe, power=power, critical=False))
+        return bool(cast.marked(foe))
+
+    out.that(swung("p12258"),
+             "a hit with a theme ATTACK marks the enemy")
+    if inside:
+        out.that(not swung(inside[0]),
+                 "a hit with a theme row carrying no attack does NOT"
+                 f" ({inside[0]})")
+    out.that(not swung("p1"),
+             "nor does a hit with a power outside the theme (p1)")
+
+    row = REGISTRY.get("f3209")
+    out.that(row is not None and not row.unfinished,
+             "and f3209 carries no marker")
+
+
 def f1027_moves_the_second_helping(out: Result) -> None:
     """*"When you use p3773, you can choose one ally within 2 squares of
     the target to regain the additional hit points, instead of an ally
@@ -106571,6 +106635,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "theme_mark": (f3209_marks_on_a_theme_attack,
+                   "f3209 marks on a hit with one of its theme's attack"
+                   " rows, and on nothing else"),
     "second_helping": (f1027_moves_the_second_helping,
                        "f1027 moves p3773's second helping to an ally near"
                        " the target instead of one beside the spirit"),

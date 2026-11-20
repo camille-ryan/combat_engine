@@ -186,25 +186,6 @@ DEFECT = (
     " ClassFeature rows name it, and the 2 Power rows whose names mention"
     " defiling are paragon powers that consume it (#878)"
 )
-#: A rider on a *set* of powers the card names by category rather than by ref.
-#:
-#: **One row, not two, and the symbol is probably no longer the right one.**
-#: The ten-row half (`f3247`) is written: `_wild_talents` below filters
-#: `dsl.REGISTRY` by `cls`, which is what `items/misc.py` has always done for
-#: an arcane class's attack rows, so nothing was missing there. `f3209` keeps
-#: this marker because it is still refused, but read its docstring before
-#: going looking for the filter: what blocks it is the ref its own spec
-#: prints, not any enumeration.
-#:
-#: **Re-aimed off `etl.build.CLASSES`, which was never able to go green.** That
-#: marker said the powers were missing from `data/game.db` -- and they are not:
-#: the eleven theme classes (`x7_661` and the rest) and `wild talent` are all in
-#: the `power` table today, so the import gap it named is closed. Worse, the
-#: symbol it named *already existed*, so `todo.py` could only ever report it
-#: arrived, which is exactly what it did. A marker has to name something absent
-#: or it is not a marker. Nothing enumerates the registry by class, so that is
-#: the gap, and it is one gap for both rows.
-NO_IMPORT = ("dsl.powers_of(cls)",)
 #: "You swap one of your level N powers for this one." The card is handed
 #: over; giving a power up is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
@@ -1164,60 +1145,79 @@ def f3208b(c: Cast) -> None:
             label=f"{c.ref} let go")
 
 
-@power("f3209", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=NO_IMPORT)
-def f3209(c: Cast) -> None:
-    """A mark hung on a set of attacks the card names rather than lists.
+def _theme_attacks(theme: str) -> tuple[str, ...]:
+    """The attack rows a theme prints, by ref.
 
-    **The filter arrived; the set is still not nameable.** `dsl.REGISTRY`
-    can be asked by `cls` -- `_wild_talents` above does it, and `f3247`
-    carried this same marker and is written -- so enumerating a class's
-    rows is no longer what blocks this.
+    `_wild_talents` above with the `cls` value changed and the attack test
+    added -- a theme's `cls` is its `x7_` ref, exactly as a class's is its
+    name, which is what `#1393` settled when themes turned out to have
+    been inside the powers count all along.
 
-    What blocks it is the row's own spec. It names `cf:druid-f1s0` as the
-    thing whose attacks these are, and that ref is one arm of a fork whose
-    whole content is an ability substitution for AC: it prints no attack,
-    grants none, and `features/primal_divine.py` skips it deliberately as a
-    restatement of `cf:druid-f1`. Nothing ties a set of attack rows to it,
-    so there is no set to resolve and the mark has nothing to hang on.
-    Referred up rather than guessed at.
-
-    **Read out of the compendium since**, which settles that this is not a
-    naming near-miss: the `class_feature` row for `cf:druid-f1s0` is the
-    ability substitution for AC and nothing else, and its three siblings
-    are a speed bonus, a damage reduction and an attack bonus. None of the
-    four grants a power. So the set this card names is empty in the
-    source, not merely unresolvable here.
-
-    **The marker is therefore a placeholder and `todo.py` cannot help.**
-    `dsl.powers_of(cls)` is what this row *used* to wait on and it is not
-    the gap -- `_wild_talents` above filters `dsl.REGISTRY` by `cls`
-    already, and arriving under a better name would still leave the set
-    empty -- while a symbol naming the real absence ("the attack rows of a
-    class feature") could only ever resolve to nothing for this ref, which
-    is the one shape a marker must not have. There is no symbol to wait
-    for, which is `defect=`'s description, and that marker is not an
-    authoring agent's to set: it needs the page read. Left as it stands and
-    referred up a second time rather than swapped for a synonym.
-
-    **Re-pointed to `spec.ref` by the main session, which read the page.**
-    The spec says *"when you hit an enemy with one of your
-    `cf:druid-f1s0` attacks"*, and that feature is an ability
-    substitution for AC -- it grants no attacks at all, and nor do its
-    three siblings (a speed bonus, a damage reduction, an attack bonus).
-    So the set the spec names is empty and `dsl.powers_of(cls)` could
-    never answer it.
-
-    The compendium says something else. The raw card names a **build**,
-    not a feature -- the extraction replaced a printed build name with the
-    ref of one of that build's features, which is the `spec.ref` pattern
-    eleven other rows already carry. So the data is there and the
-    extraction mangled it; this is not a `defect=`, which is for a page
-    that does not say what the row needs.
-
-    What lands when the ref is right: the build's own attack rows, which
-    `get(ref).cls` already answers for every other row of this shape.
+    **A filter rather than a hand-written tuple**, unlike `_F3210` below,
+    because that tuple is an Associated Powers line the card prints and
+    this is a set the card names by reference. A row added to the theme
+    belongs to the set the moment it is declared.
     """
+    return tuple(
+        ref
+        for ref, row in sorted(REGISTRY.items())
+        if row.cls == theme and row.attack is not None
+    )
+
+
+@power("f3209", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f3209(c: Cast) -> None:
+    """A mark on a hit with one of a theme's attacks, until the end of your
+    next turn.
+
+    **Both of this row's previous answers were wrong, and the second was
+    wrong because it believed the first.** It was marked
+    `dsl.powers_of(cls)` -- a filter over `REGISTRY` by `cls`, which
+    `_wild_talents` above already is. Re-reading it then found the spec
+    naming `cf:druid-f1s0`, which is an ability substitution for AC that
+    grants no attacks, and concluded *"the set the spec names is empty in
+    the source, not merely unresolvable here"*, re-pointed the marker at
+    `spec.ref` in prose, and referred it up twice.
+
+    The page says neither. Its prerequisite is a **theme**, and the
+    sentence is *"when you hit an enemy with one of your <theme>
+    attacks"*. The extraction replaced the theme's printed name with the
+    ref of an unrelated class feature, so the `cf:` ref was never the
+    card's and the emptiness was an artefact of the mangling.
+
+    So the set is nameable and non-empty: `x7_661` is the theme's `cls`
+    and four of its eleven rows carry an attack. `dsl.powers_of(cls)` was
+    the right *shape* all along and arrived under another name, which is
+    the commonest thing a marker in this tree turns out to be.
+
+    **The header never followed the docstring.** It still named the
+    `powers_of` symbol the prose below it had spent two paragraphs
+    refuting and said in as many words had been *"re-pointed to
+    `spec.ref`"* -- so `todo.py` would have reported this row ready the
+    day a `powers_of` verb landed, which would not have written it. Worth
+    saying because a header and a docstring disagreeing is invisible to
+    every gate here: `blocked.py` reads the header and a reader reads the
+    prose.
+
+    "You can mark" is `c.may`: the mark is optional and a marked enemy
+    carries a real cost, so it is a consent question rather than a
+    resource one. `c.mark` defaults its marker to the caster, which is
+    what "you can mark that enemy" says, and `When.EONT` is printed.
+
+    No `once=`: the card prints no limit, and a `once=` here would narrow
+    it to one mark a fight silently.
+    """
+    me = c.me
+    mine = _theme_attacks("x7_661")
+
+    def marks(ev: Hit) -> None:
+        if ev.attacker != me or ev.power not in mine:
+            return
+        if c.may("mark that enemy", who=me):
+            c.mark(on=ev.target, until=When.EONT)
+
+    c.watch(Hit, marks, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 _F3210 = ("p2105", "p10733", "p10889", "p919")
