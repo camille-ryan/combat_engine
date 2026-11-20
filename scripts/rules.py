@@ -47,7 +47,10 @@ question -- #939, closed.
 
 from __future__ import annotations
 
+import json
+import re
 import sys
+from pathlib import Path
 
 from combat_engine.db import game
 
@@ -418,6 +421,80 @@ def _skills(out: list[str]) -> int:
     return 0
 
 
+#: The traps whose printed text carries a save-ends rider that nothing
+#: applies. A **shrinking** baseline, the shape `keywords.json` and
+#: `targets.json` use: it may lose refs and may never gain one.
+TRAP_RIDERS = Path(__file__).resolve().parent / "fixtures" / "trap_riders.json"
+
+#: What a rider looks like in a printed trap. Deliberately the loose form
+#: -- `save ends` without requiring the parentheses -- because both appear
+#: and the strict one undercounts by 39: 264 against 303.
+_RIDER = re.compile(r"save\s+ends", re.I)
+
+
+def _trap_riders(out: list[str]) -> int:
+    """Does anything apply the save-ends riders printed traps carry?
+
+    **No, and the point of this pass is that nothing counted them.**
+    `#1367` is the issue and its sharpest line is not the number but the
+    invisibility: a trap is not a declared row, so it is in no
+    `dsl.REGISTRY`, which puts it outside `never_refs`, `silent_refs` and
+    `blocked.py` alike -- the only three places this project counts
+    incompleteness. `cards.py` cannot reach one either, because it compares
+    a *declared* ability's header against its stat block.
+
+    `content/terrain.arm` resolves a trap from three columns -- the printed
+    attack bonus, the defence it rolls against, and the damage expression.
+    There is no body, so there is nothing to carry a rider, and every
+    printed one is dropped. `t:5` is the worked case: the pit damage lands
+    and the ongoing poison and the prone do not.
+
+    **A shrinking baseline rather than a count against zero**, which is
+    this suite's own rule: a check that cannot pass is the same failure as
+    one that cannot fail. So the 303 are listed, the list may shrink as
+    riders start being applied, and a **new** trap arriving with an
+    unapplied rider is red. That is strictly stronger than the number --
+    it cannot confuse 303 healing and 303 new ones.
+    """
+    if not _has_table("trap"):
+        return 0
+    printed = {
+        ref: spec
+        for ref, spec in game().execute(
+            "SELECT ref, spec FROM trap WHERE spec IS NOT NULL"
+        )
+    }
+    live = {ref for ref, spec in printed.items() if _RIDER.search(spec)}
+    if not TRAP_RIDERS.exists():
+        out.append(
+            f"  {len(live)} trap(s) print a save-ends rider and no baseline"
+            f" records them -- write one with `--record-traps`"
+        )
+        return 1
+    held = set(json.loads(TRAP_RIDERS.read_text()))
+    new = sorted(live - held)
+    gone = sorted(held - live)
+    if new:
+        out.append(
+            f"  {len(new)} trap(s) print a save-ends rider the baseline does"
+            f" not hold: {', '.join(new[:8])}"
+            + (" ..." if len(new) > 8 else "")
+        )
+        return 1
+    if gone:
+        out.append(
+            f"  the trap rider baseline holds {len(gone)} ref(s) that no"
+            f" longer print one: {', '.join(gone[:8])} -- re-record"
+        )
+        return 1
+    out.append(
+        f"  {len(live)} of {len(printed)} printed traps carry a save-ends"
+        f" rider and `terrain.arm` applies none of them -- the baseline"
+        f" holds all {len(held)}, so none is new. #1367"
+    )
+    return 0
+
+
 def _has_table(name: str) -> bool:
     """Is that table in the built database?"""
     return bool(game().execute(
@@ -425,10 +502,33 @@ def _has_table(name: str) -> bool:
         (name,)).fetchone())
 
 
+def _record_traps() -> int:
+    """Write the save-ends baseline from what the database prints now.
+
+    Separate flag rather than part of a run, for the reason every baseline
+    writer here is: re-recording to clear a red is the one move that turns
+    a gate into a rubber stamp. This is for the first write and for a
+    genuine shrink, and the diff is meant to be read.
+    """
+    live = sorted(
+        ref
+        for ref, spec in game().execute(
+            "SELECT ref, spec FROM trap WHERE spec IS NOT NULL"
+        )
+        if _RIDER.search(spec)
+    )
+    TRAP_RIDERS.write_text(json.dumps(live, indent=2) + "\n")
+    print(f"wrote {len(live)} ref(s) to {TRAP_RIDERS.name}")
+    return 0
+
+
 def main() -> int:
+    if "--record-traps" in sys.argv:
+        return _record_traps()
     problems: list[str] = []
     bad = (_dc(problems) | _complexity(problems)
-           | _conditions(problems) | _skills(problems))
+           | _conditions(problems) | _skills(problems)
+           | _trap_riders(problems))
     for line in problems:
         print(line)
     return bad
