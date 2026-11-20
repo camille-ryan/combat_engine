@@ -105,7 +105,6 @@ from combat_engine.engine import (
     Window,
     World,
     ZoneEntered,
-    ally_within,
     both,
     by_keyword,
     by_me,
@@ -3011,6 +3010,32 @@ def i780x1(c: Cast) -> None:
     c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, when=rerolling)
 
 
+def _ally_of_r3_r16_near(world: World, me: int, ev: Any) -> bool:
+    """An ally of either named race within 10 of the **caster**.
+
+    **`ally_within(10)` could never be true here, and `both(by_me, ...)`
+    made it a contradiction.** That helper measures from the creature the
+    event is *about* -- `actor`, else `attacker`, else `target` -- and opens
+    `if who is None or who == me: return False`. `by_me` forces that
+    creature to be the caster, so the second half then refuses for being
+    the caster. The conjunction was False on every event that has ever
+    existed.
+
+    The distance the card prints is from the caster to the ally, which is
+    what this measures. The race half is the other half of the printed
+    sentence and was missing: the sibling row directly above asks it the
+    same way, by ref, through `c.race_of`. #1412.
+    """
+    from combat_engine.engine.query import allies, distance_between, race_of
+
+    return any(
+        a != me
+        and race_of(world, a) in ("r3", "r16")
+        and distance_between(world, me, a) <= 10
+        for a in allies(world, me)
+    )
+
+
 @power(
     "i780p1",
     level=8,
@@ -3019,9 +3044,10 @@ def i780x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    trigger="you miss with the bow while an elf ally is within 10 squares",
+    trigger="you miss with the bow while an ally of r3 or r16 is within 10 squares",
     on=Trigger(
-        Miss, both(by_me, ally_within(10)), "you miss with an ally near"
+        Miss, both(by_me, _ally_of_r3_r16_near),
+        "you miss with an ally of either race near",
     ),
 )
 def i780p1(c: Cast) -> None:

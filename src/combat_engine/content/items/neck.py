@@ -441,8 +441,23 @@ def _ally_about_to_be_bloodied(world: World, me: int, ev: Any) -> bool:
 
 
 def _hit_from_hiding(world: World, me: int, ev: Any) -> bool:
+    """"When you hit a creature that cannot see you".
+
+    **The two arguments were the wrong way round, so this was False in every
+    fight.** `query.hidden_from(world, eid)` answers *"who cannot see this
+    creature"*, so `me in hidden_from(world, foe)` asks whether the **caster**
+    is blind to the foe -- the opposite of the printed clause, and a thing
+    the attacker could not be doing while hitting it.
+
+    Measured on the audit board: `hidden_from(caster) == {<one foe>}` and
+    `hidden_from(foe) == set()` for all five foes, which is the board setting
+    `HIDDEN_FROM` from the caster exactly as it says it does. So the old
+    spelling could never be true and the new one is true for that foe. #1412.
+    """
     foe = getattr(ev, "target", None)
-    return getattr(ev, "attacker", None) == me and me in query.hidden_from(world, foe)
+    if getattr(ev, "attacker", None) != me or foe is None:
+        return False
+    return foe in query.hidden_from(world, me)
 
 
 def _hit_with_cover(world: World, me: int, ev: Any) -> bool:

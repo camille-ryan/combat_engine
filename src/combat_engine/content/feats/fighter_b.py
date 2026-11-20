@@ -68,7 +68,7 @@ from combat_engine.engine.events import (
     RelationSet,
 )
 from combat_engine.engine.grid import distance, neighbours
-from combat_engine.engine.query import allies, can_act, enemies, holding, squares
+from combat_engine.engine.query import allies, can_act, enemies, squares
 from combat_engine.engine.types import Forced, Relation
 
 from .styles import among, hit_with_one_of, used_one_of
@@ -1184,8 +1184,17 @@ def f1738(c: Cast) -> None:
 
     The printed action is the limit, so at-will and an immediate
     interrupt rather than a once-a-fight trait (#210).
+
+    **The shield gate was `query.holding(world, me, "shield")`, which can
+    never be true.** That reader walks `Gear.held` -- a property over
+    `Gear.weapons` -- and a shield is `Gear.shield`, an `int`. So the row
+    returned on its first line in every fight. `c.wielding("shield")` is
+    the question, reads the right field, and also honours the `counts_as`
+    waiver a class feature can lay (#1276) that no weapon walk can see.
+    The near-miss is that this file's own `_holding(c, *groups)` helper is
+    the one used 19 times above and matches weapon *groups*. #1412.
     """
-    if not holding(c.world, c.me, "shield"):
+    if not c.wielding("shield"):
         return
     ev = c.trigger
     foe = ev.actor if isinstance(ev, Moved) else ev.attacker
@@ -1215,8 +1224,12 @@ def f1739(c: Cast) -> None:
 
     A penalty buckets by the ref of the row that laid it, so the -2 is
     this row's alone and cannot swallow anybody else's.
+
+    **The shield gate could never be true** -- see `f1738` next door for the
+    whole of it: `query.holding` walks weapons and a shield is an `int` on
+    `Gear`. #1412.
     """
-    if not holding(c.world, c.me, "shield"):
+    if not c.wielding("shield"):
         return
     if c.wis_mod > 0:
         c.heal(c.wis_mod, on=c.me)
