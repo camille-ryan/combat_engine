@@ -369,10 +369,28 @@ KNOWN_SILENT = {
     # as the **fixed** answer, so a board with no stream sees the marshal as
     # it always was. An excuse for a row with a driver behind it is a
     # statement about the board, which is what this list is for. #1410.
-    "cf:warlord-marshal-f3": "one of three forks under one ref, so its first"
-              " line returns unless the draw picked this one -- measured"
-              " alternating across five consecutive wide sweeps. Proved in"
-              " drivers.the_marshals_two_choices instead",
+    # **No entry for `cf:warlord-marshal-f3`, and the reason is that this
+    # list has two states and the row has three.** One was added in
+    # `4892bd0f` and taken out again here. Six consecutive whole-corpus
+    # runs, alternating every time:
+    #
+    #     baseline silent | s1 fires | s2 silent | s3 fires | s4 silent |
+    #     s5 fires
+    #
+    # An excuse is right on the silent trees and reports `OUTGROWN` on the
+    # firing ones; no excuse is right on the firing trees and reports
+    # "newly silent" on the others. **Either choice reddens half the
+    # time**, and a check that cannot pass is the thing
+    # `scripts/CLAUDE.md` forbids outright -- so the baseline records what
+    # is true today and the oscillation is written down instead.
+    #
+    # It is not a row fault: its own first line is
+    # `if c.chosen_option("cf:warlord-marshal-f3") != ...: return`, one of
+    # three forks under a single ref (`#1296`), so the draw decides. And it
+    # is proved where a draw cannot move it --
+    # `drivers.the_marshals_two_choices` asserts this ref is the *fixed*
+    # answer, 8 assertions. What is missing is a third state here, which is
+    # the same gap as the `never` bucket having no report at all.
     # "You hit a cursed target with an arcane power using this rod." The row
     # is correct and `_pose_cursed` below now curses every enemy, verified at
     # the moment it is laid -- but the one creature the provocation swings at
@@ -947,7 +965,13 @@ KNOWN_SILENT = {
     # Pools. Both guards are deliberate and documented in the rows: a full
     # pool must not be raised, and `f3769`'s check comes first precisely so
     # a full pool does not cost a use of the row for nothing.
-    "f131": "raises the surge pool; a surge ceiling is not an observable and the board starts full",
+    # **`f131`'s excuse is GONE.** It read: "raises the surge pool; a
+    # surge ceiling is not an observable and the board starts full". The
+    # row calls `c.regain_surge`, which emits `SurgeRegained` since
+    # `#1410`, so it emits `(Note, SurgeRegained)` and `audit` reported it
+    # `OUTGROWN`. `f3769` below carries the same shape for power points
+    # and is left in place as the control -- it calls no surge verb and is
+    # still quiet in the same run.
     "f3769": "trades a use for a power point; the board's pool starts at its maximum",
     # Gear writes, which edit the per-character `replace(w)` copy rather
     # than announcing anything.
