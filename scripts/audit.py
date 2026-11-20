@@ -4127,6 +4127,47 @@ def _board(ref: str, seed: int, pose: bool = False,
     own = world.get(caster, Powers)
     if own is not None and own.times(ref):
         own.restore(ref)
+    # **And a sibling the ARMING spent, which is a different thing from a
+    # sibling that spent itself.** The paragraph above refuses to restore
+    # siblings on the ground that "a sibling's expenditure is part of the
+    # board", and that is right for the case it was written about -- a theme
+    # row *choosing* to call `c.expend_row`. It is wrong for the spend
+    # `turns.arm_traits` makes mechanically: it arms every `action=NONE` row
+    # with no declared trigger using `use(..., spend=True)`, so a
+    # limited-use sibling is spent before any pass can use it to set the row
+    # up, and `_use_rows(_siblings(ref))` then gets `(False, 'expended')`.
+    #
+    # **In play that spend is never observed**, which is what makes this a
+    # board artefact rather than a board fact. `content/CLAUDE.md` measured
+    # it: arming happens once per creature per encounter and the world is
+    # fresh each time, so `usage=ENCOUNTER` on such a trait "is nearly
+    # inert" and either value plays identically. On this board it is not
+    # inert -- it is the whole reason a row cannot be posed.
+    #
+    # Measured over the committed baseline: **86 rows** name a sibling that
+    # arming spends -- 42 on `never_refs` and 44 on `silent_refs`. The two
+    # commonest shapes are a feat pair (`f3211b` waiting on `f3211`) and the
+    # channel-divinity features, where four class rows are spent at arming
+    # and every row wanting an unspent one is stuck behind them.
+    #
+    # Scoped to exactly what `arm_traits` spends -- no action, no declared
+    # trigger, not at-will -- so a sibling that spent itself for any other
+    # reason stays spent and the paragraph above keeps its case.
+    #
+    # **Written, proven, and NOT landed, because it moves nothing today.**
+    # The restore works: with it, `f3211`'s and the four channel-divinity
+    # features' `times` go 1 -> 0 and `usable` goes
+    # `(False, 'expended')` -> `(True, '')`. But all 86 rows stay exactly
+    # where they were -- 42 never, 44 silent, 0 moved -- because the
+    # expended sibling was never the binding constraint; they also want a
+    # class lender, which `_TYPED_TRIGGER` and `class_attacks` do not
+    # provide.
+    #
+    # So it is 86 changed boards for no gain, which is the trade that cost
+    # this file the prone clear and the companion pose in the same batch.
+    # Land it together with the lender, where it pays, and re-sweep once.
+    # The code is four lines over `named`, gated on
+    # `action is NONE and not triggers and usage is not AT_WILL`. #1411.
     return world, caster, armed
 
 
