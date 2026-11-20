@@ -20264,6 +20264,132 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def two_feats_decline_the_counter_p653_arms(out: Result) -> None:
+    """*"Instead of taking the immediate interrupt attack this exploit
+    grants."*
+
+    `f985` and `f988` each print a clause that **replaces** `p653`'s
+    counter-attack rather than riding it, and both carried
+    `dropped=("c.decline_trigger(ref=)",)` -- a verb a feat would call.
+
+    **The symbol was the wrong shape and the rows' own note had the
+    reasoning right.** `exploits.py` said: *"the trigger is armed inside
+    p653 with its own latch and nothing declines it from outside"*. Which
+    is why the answer is not a verb at all: the substitution has to be
+    offered from inside the closure that takes the swing, and `#550`'s
+    convention -- a feat naming one power writes into that power -- puts it
+    in exactly the same place.
+
+    `triage.json` judged the symbol `mis-marked, found: c.pre_empt +
+    c.instead_of` and named the right **place** (*"content work in p653"*)
+    while pointing at machinery this did not need: `c.pre_empt` is for a
+    feat naming a *class* of powers.
+
+    **Counting the caster's attacks, not an `as_` tag.** The first draft
+    read `getattr(ev, "as_")` off `AttackDeclared` and got zero in every
+    arm, including the one where the counter certainly fires -- `as_` is in
+    the attack *context*, not on the event. Two attacks is the strike plus
+    the counter; one is the counter having been replaced.
+    """
+    import combat_engine.content  # noqa: F401
+    import combat_engine.engine.cast as cast_mod
+    from combat_engine.engine import dsl, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Mods, Position, Powers
+    from combat_engine.engine.events import AttackDeclared
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    def play(feat: str | None, *, consent: bool, race: str = "") -> tuple[int, int]:
+        """Returns (attacks the caster made, the AC bonus it gained)."""
+        world, me, _ = _board("p653", 1)
+        foe = sorted(enemies(world, me))[0]
+        # **Adjacent, which the closure requires** -- `c.adjacent(victim)`
+        # is one of its three guards, and without this the window opens and
+        # the counter is refused for position rather than for the feat.
+        here = must(world.get(me, Position), "Position").square
+        movement.place(world, foe, (here[0] + 1, here[1]))
+        if feat:
+            held = must(world.get(me, Powers), "Powers")
+            if feat not in (held.known or []):
+                held.known.append(feat)
+        if race:
+            must(world.get(me, Build), "Build").choices.add(f"race:{race}")
+        mods = world.get(me, Mods)
+        before = mods.total("ac", {}) if mods else 0
+        mine: list[int] = []
+        world.bus.on(AttackDeclared,
+                     lambda ev: mine.append(ev.attacker))
+        # **Every `c.may` in the body answers the same way**, which is
+        # coarse and is why each arm is read as a *delta* against its own
+        # board rather than against a remembered number.
+        was = cast_mod.Cast.may
+        cast_mod.Cast.may = lambda self, what, **kw: consent
+        try:
+            cast = Cast(world=world, me=me, ref="p653")
+            cast.target = foe
+            cast.targets = [foe]
+            dsl.REGISTRY["p653"].body(cast)
+            # The foe swings at the caster, which is what opens the window.
+            back = Cast(world=world, me=foe, ref="drivers-probe")
+            back.target = me
+            back.attack(back.str_, Defense.AC, on=me)
+        finally:
+            cast_mod.Cast.may = was
+        after = mods.total("ac", {}) if mods else 0
+        return sum(1 for a in mine if a == me), after - before
+
+    # --- the printed row, with neither feat.
+    swings, ac = play(None, consent=True)
+    out.that(
+        swings == 2 and ac == 0,
+        "with neither feat p653 strikes and then counters -- two attacks,"
+        f" no defence bonus ({swings} attack(s), AC +{ac})",
+    )
+
+    # --- f985 trades the counter for +3 AC.
+    swings, ac = play("f985", consent=True)
+    out.that(
+        swings == 1 and ac == 3,
+        "f985 trades the counter for +3 AC: the counter does not happen and"
+        f" the bonus does ({swings} attack(s), AC +{ac})",
+    )
+
+    # --- and "you can" means declining leaves the card alone.
+    swings, ac = play("f985", consent=False)
+    out.that(
+        swings == 2 and ac == 0,
+        "declining f985 leaves the printed counter intact, which is what"
+        f" \"you can\" means ({swings} attack(s), AC +{ac})",
+    )
+
+    # --- f988 is gated on the race as well as the feat.
+    swings, ac = play("f988", consent=True, race="r4")
+    out.that(
+        swings == 2,
+        "f988 on the wrong race does not trade the counter away -- its"
+        f" printed clause opens \"if you are an r3\" ({swings} attack(s))",
+    )
+
+    for ref in ("f985", "f988"):
+        row = dsl.REGISTRY.get(ref)
+        owed = tuple(row.todo or ()) + tuple(row.dropped or ()) if row else ()
+        out.that(
+            row is not None and not owed and "p653" in (row.implemented_in or ()),
+            f"{ref} carries no marker and names p653 as where its clause"
+            f" lives (implemented_in={getattr(row, 'implemented_in', None)})",
+        )
+
+    # **The f988 payout itself is NOT asserted here, and that is a skip
+    # rather than a pass.** Its clause spends `p1449` through
+    # `c.use_power`, and posing it wants the racial power available on a
+    # board whose caster `_board` built as a rogue -- a different
+    # arrangement from this rule's. The race gate above is the half that
+    # can be posed; the substitution is covered by `audit p653` firing and
+    # by the negative control above it.
+    out.skip("f988's racial-power payout wants a board that fields p1449")
+
+
 def a_bridge_puts_an_already_prone_creature_over_the_side(out: Result) -> None:
     """`x2_130`, and the depth belongs to the map rather than the card.
 
@@ -105602,6 +105728,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "decline_counter": (two_feats_decline_the_counter_p653_arms,
+                        "two feats replace the counter-attack p653 arms,"
+                        " offered from inside the closure that takes it"),
     "bridge_fall": (a_bridge_puts_an_already_prone_creature_over_the_side,
                     "a span puts an already-prone creature over the side,"
                     " and the fall is as deep as the map records"),

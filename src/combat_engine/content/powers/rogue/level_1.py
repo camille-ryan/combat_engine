@@ -324,6 +324,41 @@ def p653(c: Cast) -> None:
                 c.bonus("attack", c.int_mod, on=c.me, until=When.SONT,
                         once=True,
                         when=lambda ctx: ctx.get("as_") == "riposte")
+        # **Two feats print a clause that replaces this counter rather
+        # than riding it**, and both are written here because `#550`'s
+        # convention is that a feat naming one power writes into that
+        # power. `f985` and `f988` each carried
+        # `dropped=("c.decline_trigger(ref=)",)` for exactly this, and the
+        # verb they wanted was never the gap -- the substitution had to be
+        # *offered* from inside the closure that takes the swing, which is
+        # here and nowhere a feat can reach.
+        #
+        # `c.may` and not a bare `if`: both cards say *"you can"*, so
+        # declining leaves the printed counter-attack intact. Asked in
+        # printed order and first consent wins -- a character holding both
+        # is choosing between two alternatives to one swing, not stacking
+        # them.
+        if c.feat("f985") and c.may(f"{c.ref}: +3 AC instead of the counter"):
+            with c.credit("f985"):
+                # *"A +3 bonus to AC against that attack"* -- against the
+                # one blow that opened this window, so it is spent by the
+                # next roll that reads it rather than held for the turn.
+                c.bonus(AC, 3, on=c.me, until=When.SONT, once=True,
+                        kind="feat")
+            return
+        if (
+            c.feat("f988")
+            and c.race_of(on=c.me) == "r3"
+            and c.may(f"{c.ref}: the racial power instead of the counter")
+        ):
+            with c.credit("f988"):
+                # *"...you can use your p1449 racial power, if it is
+                # available, as an immediate reaction."* `use_power`
+                # answers False when it is spent, which is the printed
+                # *"if it is available"* -- and a refusal must not eat the
+                # counter, so the printed swing is taken below instead.
+                if c.use_power("p1449", on=victim):
+                    return
         # `as_="riposte"` so the counter can be told from the opening blow:
         # both carry this row's `power`, and two feats print a clause about
         # the counter alone.
