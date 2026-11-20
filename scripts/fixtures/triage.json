@@ -1305,6 +1305,15 @@
     "verdict": "probable",
     "why": "c.gains_advantage lays the attacker-side Mod that query.has_combat_advantage reads, and its sibling c.grants_advantage already has the spend-once machinery, so p11750/p12339 look one `once=` short. f631b and f2468 are a different half - a banked d20 reroll - and would want c.arm_trigger plus keep=\"best\". I would check whether once= can be added to gains_advantage's Mod."
   },
+  "c.after_forced(fn)": {
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "f3020's ForcedMove-countdown idiom",
+    "refused_rows": 1,
+    "rows": 1,
+    "verdict": "mis-marked",
+    "why": "record ev.squares on ForcedMove, count down on each forced Moved, act only on the last. Known divergence inherited from f3020: a shove cut short by a wall leaves a stale count, so the clause under-pays. NEW entry -- this symbol had no triage verdict."
+  },
   "c.aim(at=)": {
     "at": "2026-10-13",
     "by": "singleton-sweep",
@@ -1333,13 +1342,13 @@
     "why": "i3282p1 and f1351 both want 'against evil creatures' and no component records an alignment -- the only occurrence in the ETL is etl/feat._KINDS classifying the *word* in a prerequisite line. f1351 also needs how much a modifier contributed to a roll already made, which is c.amplify_bonus's gap."
   },
   "c.allies_in_area()": {
-    "at": "2026-10-12",
-    "by": "slice1",
-    "found": "nothing",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "PowerUsed.area",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "real",
-    "why": "The attack context carries attacker/target/power and not the area that was struck, so there is nothing to ask who else stands inside a burst. No candidate scored at all."
+    "verdict": "mis-marked",
+    "why": "#1103 added the field on 2026-11-05 against a marker of 2026-09-27. PowerUsed precedes the body, so a handler intersecting ally squares with ev.area stands before the roll. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.altitude_limit()": {
     "at": "2026-10-12",
@@ -1695,13 +1704,13 @@
     "why": "SavingThrow carries actor/against/saved and f305b matches str(eff) against ev.against to recover the hold"
   },
   "c.bonus(instead=)": {
-    "at": "2026-10-13",
-    "by": "singleton-sweep",
-    "found": "c.watch(SkillCheck, window=AFTER)",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "c.boost_check(ev=) in Window.AFTER",
     "refused_rows": 0,
     "rows": 1,
-    "verdict": "probable",
-    "why": "Bus.emit runs BEFORE/resolve/AFTER and skills.check builds its CheckResult after AFTER returns; unconfirmed this is a supported route, no row overrides a total this way"
+    "verdict": "mis-marked",
+    "why": "skills.check builds its CheckResult from the event after the bus finishes, so boost_check re-derives the total -- a replacement, not an addition. athletics.py:140 is the precedent. Was 'probable' on 2026-10-13 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.bonus(multiply=)": {
     "at": "2026-10-12",
@@ -2431,13 +2440,13 @@
     "why": "CORRECTED from mis-marked. The lane0 verdict claimed dsl.REGISTRY[ref].damage.dice IS the printed damage expression, so a row could read another row's die. Measured over the set these rows actually choose from -- c.borrowed_rows, i.e. class rows, at-will, standard action, carrying an attack -- 359 rows, and ZERO carry header damage. Header damage is the MONSTER convention; a class power rolls its dice in its body via c.damage(\"1d8\"), so REGISTRY[chosen].damage.dice is None.dice. Samples with no header damage: p10274 p10275 p10276 p11061 p12932. The roll-time route is closed too -- DamageRolled carries amount, dtype, detail, dtypes and NO dice expression -- so nothing can read the face before or during the roll. The .keywords half of the old verdict is sound (absence of Keyword.WEAPON is askable); the die is not. The three dropped=('c.damage_of(ref)',) markers on f1281b/f1283b/f1287b are correct as written. general_r.py carries a sibling symbol for the same family (DICE = ('c.change_dice()',)) and this may want grouping there."
   },
   "c.damages_with(ref, ability)": {
-    "at": "2026-10-12",
-    "by": "slice3",
-    "found": "c.rolls_with (the attack half only)",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "the two marks' payouts themselves",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "real",
-    "why": "rolls_with is read by Attack.ability_for and never by damage, and the named row works its number out inside its own closure (`c.flat(3 + c.cha_mod, ...)`), so there is nothing for a swap to be read by. The row's own analysis checks out."
+    "verdict": "mis-marked",
+    "why": "written into p805 and marks.burning_mark's bite closure under c.feat/c.credit -- #550. Both payouts are literally c.flat(3 + c.cha_mod, ...), so the swap is an in-body gate rather than an engine verb. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.deals(add=True)": {
     "at": "2026-10-12",
@@ -2569,13 +2578,13 @@
     "why": "i3180x1 says the failure count 'has no counter anywhere'. Health.failures exists, turns.py increments it and kills at three, resolve.py and c.reanimate both reset it. What is missing is a Cast door onto a counter the engine already keeps."
   },
   "c.death_threshold()": {
-    "at": "2026-10-12",
-    "by": "slice2",
-    "found": "nothing",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "c.dies_at_failures",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "real",
-    "why": "i1037x1 is accurate: three failed death saves is a literal inside `turns._death_saves`, with no field on the creature for a row to raise."
+    "verdict": "mis-marked",
+    "why": "the field and verb were built for a card moving the threshold DOWN -- p4288 calls c.dies_at_failures(2) -- and turns.py:833 comments that the 3 is not a literal. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.decay(magic=False)": {
     "at": "2026-10-12",
@@ -3320,13 +3329,13 @@
     "why": "`Healed` is negotiable before it applies -- half_healing halves the amount that way rather than clawing it back -- and a surge spend is refusable, so refusing the hit points a second wind puts back is writable today. Only f2005's half is different: suppressing one clause of another row's body is not a healing question."
   },
   "c.forgo_push()": {
-    "at": "2026-10-13",
-    "by": "singleton-sweep",
-    "found": "c.pre_empt(ref, 'push', clause)",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "c.pre_empt/c.instead_of, then the host bodies",
     "refused_rows": 0,
     "rows": 1,
-    "verdict": "probable",
-    "why": "that is the substitution machinery and general_l.py:2318 pre-empts a push already; unconfirmed whether the rows this feat names expose c.instead_of('push', ...)"
+    "verdict": "mis-marked",
+    "why": "the pre_empt half CANNOT work: f2802 declares on=Trigger(Hit,...), so arm_traits skips it and the body runs after the attack that would have read the registration. Written inline in both host bodies instead, with the instead_of door still laid. Was 'probable' on 2026-10-13 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.forgo_save()": {
     "at": "2026-10-12",
@@ -3355,13 +3364,13 @@
     "why": "Every piece is in the tree: c.choose makes the live pick, c.form(modes=, label=, name=) plus c.in_form/query.in_form store and read the shape, c.chosen_option/c.set_build/c.element cover a build-time sub-choice, and monster.modes/senses are columns content reads. What does not fit is the JOIN: nothing turns a chosen monster REF into senses and modes to hand c.form, and c.form takes no senses at all. So this is a content helper plus possibly a db reader, not a Cast gap."
   },
   "c.form(class_form=)": {
-    "at": "2026-10-12",
-    "by": "slice3",
-    "found": "Keyword.GUARDIAN_FORM (carried by 0 rows)",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "a stance-label membership test",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "real",
-    "why": "The keyword landed but every power printing it is above the imported tier, so there is no form anything can enter and no state to gate on. `todo=` rather than `dropped=` is right: there is no payout to withhold."
+    "verdict": "mis-marked",
+    "why": "all 20 warden forms go through warden.assume as c.stance(label=c.ref), and warden.in_form already does the single-ref version. Added warden.FORMS + in_any_form. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.form(forbids=)": {
     "at": "2026-10-13",
@@ -3649,13 +3658,13 @@
     "why": "f3210 and f3204 both gate a granted shift on a trigger by laying c.grant_action from inside a watch, so the watch is the condition"
   },
   "c.grant_action(when=)": {
-    "at": "2026-10-13",
-    "by": "singleton-sweep",
-    "found": "nothing",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "c.bonus on grant_action's own carrier",
     "refused_rows": 0,
     "rows": 1,
-    "verdict": "real",
-    "why": "the signature has no gate and the option is built in actions.legal rather than evaluated at arming"
+    "verdict": "mis-marked",
+    "why": "query.granted_actions totals the key through Mods.total(m.what, {}), and an empty ctx still calls the predicate. f2242 carried this identical marker and retired it on a measurement. Was 'real' on 2026-10-13 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.grant_armor()": {
     "at": "2026-10-12",
@@ -4310,13 +4319,13 @@
     "why": "m5641a2's Requirement is that a named installation off the board is running; `c.scenery` is map furniture inside the fight and `c.terrain` is what sort of place it is, and nothing holds a standing off-board arrangement."
   },
   "c.instead_of(move=)": {
-    "at": "2026-10-13",
-    "by": "singleton-sweep",
-    "found": "c.extend_move('p9401', n)",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "c.pre_empt(forced=True) + c.instead_of",
     "refused_rows": 0,
     "rows": 1,
-    "verdict": "probable",
-    "why": "p9401 reads its distance through c.squares_for so a modifier reaches it; unconfirmed because squares_for entries add where this card replaces"
+    "verdict": "mis-marked",
+    "why": "the pair is written twice already -- rogue/level_1.py with exploits.py, and general_l.py for teleport. p9401 already reads c.squares_for. Was 'probable' on 2026-10-13 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.instead_of_slide()": {
     "at": "2026-10-13",
@@ -4773,13 +4782,13 @@
     "why": "c.mode writes max(speed, had) so it can only raise a mode; nothing takes a printed fly speed off the block"
   },
   "c.modify_power()": {
-    "at": "2026-10-12",
-    "by": "slice4",
-    "found": "nothing",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "p259's own MoveEnd watch",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "real",
-    "why": "Swapping one condition for another inside another row's zone needs a hold on that row's body, and the ref-keyed override family (change_dice, change_amount, extend_move) all require the target row to read the modifier -- there is no route that edits a row from outside it."
+    "verdict": "mis-marked",
+    "why": "the marker was a deliberate stand-in rather than a facility request: #550 writes the clause into the named power's body. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.move(ends_on=)": {
     "at": "2026-10-13",
@@ -5146,13 +5155,13 @@
     "why": "c.forbid's own docstring names this sentence: 'p12344's \"cannot teleport\" is the same sentence about a different keyword', and it takes both keyword= and lacking=, which is i2908p1's 'in both directions'. c.no_walk is the mode-barring mirror and is three lines -- a Mods key plus a reader in query.can_walk."
   },
   "c.no_teleport_within()": {
-    "at": "2026-10-13",
-    "by": "singleton-sweep",
-    "found": "nothing",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "a cancellable MoveStart carrying `to`",
     "refused_rows": 0,
     "rows": 1,
-    "verdict": "real",
-    "why": "c.leash tethers the creature it is laid on and c.forbid(keyword=) bars its own rows; nothing refuses a teleport by where it lands"
+    "verdict": "mis-marked",
+    "why": "unlike walk and shift, the teleport emit site knows its destination (movement.py:1237). The row's 'nothing refuses a teleport by where it lands' was false. Was 'real' on 2026-10-13 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.no_turn(who)": {
     "at": "2026-10-13",
@@ -5215,13 +5224,13 @@
     "why": "c.reshape_area(into, ref=, kinds=, keyword=, cls=) is the nearest and is genuinely close (it rewrites ANOTHER row's area and is gated the same five ways), but into is Callable[[Range], Range]: the replacement is a SHAPE, and \"burst 2 with one square missing\" is not a Range. The area is computed from the Range in dsl.aim_points and nothing subtracts from the result."
   },
   "c.on_aegis()": {
-    "at": "2026-10-12",
-    "by": "slice5",
-    "found": "c.use_power / c.grant_row as the announcing door",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "the three swordmage punishment closures",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "probable",
-    "why": "The blocker f1156 names is purely that the three aegis rows roll their punishment inside a closure the minor-action body arms, so nothing distinguishable is emitted - and a punishment written as its own row would announce PowerUsed. That is a content restructure rather than an engine gap; I would check whether an aegis punishment can be split out without changing what it does."
+    "verdict": "mis-marked",
+    "why": "the closures ARE the immediate-action effect firing and hold the victim; f619's clause already sat in one of them. Written as _f1156, called from p3322/p3323/p5736. Was 'probable' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.on_any_sustain()": {
     "at": "2026-10-12",
@@ -5374,13 +5383,13 @@
     "why": "c.hide calls c.invisible on the same HIDDEN_FROM relation with the same label, so one event cannot say which happened and a row firing on it would answer by hiding again. The moment is the gap, not the mechanism."
   },
   "c.on_invoke_shrouds()": {
-    "at": "2026-10-12",
-    "by": "slice2",
-    "found": "nothing",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "p9400's invoke",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "real",
-    "why": "f3636 is accurate: `c.spend_shrouds` clears the whole count in one step and emits nothing, so 'they are not removed' has no moment to answer. `c.shroud`/`c.shrouds` read and lay them but announce no invocation."
+    "verdict": "mis-marked",
+    "why": "gated its final c.spend_shrouds() on ev.critical + Keyword.SHADOW + c.feat. invoke already holds the Hit/Miss event. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.on_miss_all()": {
     "at": "2026-10-12",
@@ -5438,13 +5447,13 @@
     "why": "The _racial helper's own text says the hold is that 'the racial power is named in prose with no ref', and f2817's note says 'c.expend_row is the spending and c.restore_use is the payout, so f2830 next door is this row written out'. No hook is missing; the brief's missing ref is, which is c.race_option()'s family and build._racial_powers' territory."
   },
   "c.on_reduce()": {
-    "at": "2026-10-12",
-    "by": "slice1",
-    "found": "c.reduce -- the act, with no announcement",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "p3323's own c.reduce closure",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "real",
-    "why": "c.reduce takes a number off a rolled DamageRolled and emits nothing, and the creature the payout is owed to is known only inside that callback."
+    "verdict": "mis-marked",
+    "why": "written inline beside f619's clause, using the reduction's own 5/10/15 step. c.reduce also emits DamageSpared since #1410, so an outside watch was available too. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.on_return_to_play()": {
     "at": "2026-10-12",
@@ -5465,13 +5474,13 @@
     "why": "content ends other creatures' effects freely; unconfirmed a form laid by another creature carries a label matchable from that ref, since c.form takes an explicit label="
   },
   "c.on_sanction()": {
-    "at": "2026-10-12",
-    "by": "slice3",
-    "found": "events.RelationSet (kind_, source, target)",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "marks.burning_mark",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "real",
-    "why": "The event names the relation and the two creatures and not the row that set it, and every class's mark is the same relation value, so there is no way to tell which mark just landed. Nothing else announces a mark."
+    "verdict": "mis-marked",
+    "why": "the single door all 22 sanction call sites use; clause written into marks._slide_on_the_mark. No event needed. The row carries a KNOWN_SILENT entry because implemented_in= cannot name 22 callers. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.on_save()": {
     "at": "2026-11-19",
@@ -5685,13 +5694,13 @@
     "why": "skills.passive is 10 + modifier(...) and modifier's ctx carries only actor, skill and target, so no when= can tell a passive read from a rolled one"
   },
   "c.penalty(on_attacker=)": {
-    "at": "2026-10-12",
-    "by": "slice4",
-    "found": "nothing",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "c.penalty on the attacker plus the reroll_by ctx key",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "real",
-    "why": "resolve._mods(world, attacker, \"attack\", ctx) reads the *attacker's* own Mods, so a penalty imposed by the defender has nowhere to sit. The row also rules out the near miss (laying it on every enemy at arming misses anything that joins later) and f217 next door proves the holder-side version already works."
+    "verdict": "mis-marked",
+    "why": "c.reroll_attack re-sums the ATTACKER's Mods with {'reroll_by': self.ref}, so a penalty gated on that lands on the new roll only. f217 one row down uses the identical door, and drivers.py:12158 proves it with a negative control. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.penalty(through_zone=)": {
     "at": "2026-10-13",
@@ -6415,12 +6424,12 @@
     "why": "p8240:augment1 is ALREADY WRITTEN at psion/level_7.py:393-399 (held = c.resistances().get(PSYCHIC, 0) then c.resist(-held, PSYCHIC, on=c.target, until=EONT)), and the row's docstring records the correction. c.resistances is the reader and c.ignore_resistance's docstring names c.resist(-n, on=foe) as this exact sentence. The docs/blocked.json entry wanting c.strip_resistance is stale."
   },
   "c.resist(once=)": {
-    "at": "2026-11-19",
-    "by": "plan-step-5",
-    "found": "nothing -- c.bonus(once=) forwarded one level RAISES",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "consumable._ending_after_one_blow",
     "rows": 1,
-    "verdict": "real",
-    "why": "Re-judged from `mis-marked`. The verdict said *'When when= is passed, c.resist returns self.bonus(what, amount, kind=..., when=when)' and c.bonus already takes once=*, so the kwarg was one forward away. Measured: forwarding it raises. c.resist's gated path lays a mod keyed 'resist <type>', and c.bonus(once=) refuses any key with no registered spend moment -- 'For \"resist fire\" there is no event to end the hold on, so it would be spent by the next attack roll instead, which is the bug this refusal replaces.' f3530's own docstring says exactly this and is correct. Adding the branch was attempted and reverted: the spend moment is damage application, but `DamageApplied.resisted` is the TOTAL resistance from any source, so gating on it spends the hold on a packet of the wrong type (measured: cold, cold, fire spent it on the second cold). Gating on the type alone did not help either, because c.bonus's own read-count spends the mod on whatever reads it and the gate decides what reads it. A correct spend wants the machinery to know this mod was the one consulted, which is a change to once=, not a kwarg."
+    "verdict": "mis-marked",
+    "why": "that helper's docstring is this card's mechanism verbatim: DamageApplied is announced after resistance comes off, so the blow that spent the one-shot keeps its benefit. i804p1 ships the shape for a vulnerability. Was 'real' on 2026-11-19 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.resist_from()": {
     "at": "2026-10-12",
@@ -6698,13 +6707,13 @@
     "why": "c.end_effect(save_ends=True) collects only When.SAVE_ENDS holds and ends them without rolling; nothing grants a throw against a fixed duration"
   },
   "c.save(conditions=)": {
-    "at": "2026-10-13",
-    "by": "singleton-sweep",
-    "found": "nothing",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "c.save(against=<condition word>)",
     "refused_rows": 0,
     "rows": 1,
-    "verdict": "real",
-    "why": "c.save filters only on 'ongoing' or a label fragment; c.end_effect has the condition pool filter but never rolls, so the logic is in the wrong verb"
+    "verdict": "mis-marked",
+    "why": "the named branch landed 2026-11-20 in ca1ceb35 (#1408); Condition is a str enum so .value is the printed word. Was 'real' on 2026-10-13 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.save_against_prone()": {
     "at": "2026-10-13",
@@ -7889,13 +7898,13 @@
     "why": "movement.costs is binary, 2 if rough else 1, and Grid.difficult's string is the sort of going rather than a price. Same gap p16653 names as c.zone(cost=)"
   },
   "c.wall_walk()": {
-    "at": "2026-10-12",
-    "by": "slice6",
-    "found": "nothing",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "c.mode('climb', c.speed_of())",
     "refused_rows": 2,
     "rows": 2,
-    "verdict": "real",
-    "why": "i3016x1: 'the grid keeps a height and no surface to stand on sideways'. Grid has no vertical surfaces for a creature to occupy, and c.mode/c.phasing grant ways of crossing a square rather than a place to stand."
+    "verdict": "mis-marked",
+    "why": "read at movement.py:396 and :841. p13061 is the same printed card written unmarked as that one line. Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.water()": {
     "at": "2026-10-12",
@@ -7987,13 +7996,13 @@
     "why": "the walk-into pop is reachable as m5602a3 despawns its conjuration; the other half needs the conjuration to have defences, this row's other marker, so it cannot go green alone"
   },
   "c.zone(side=)": {
-    "at": "2026-10-12",
-    "by": "slice4",
-    "found": "Zone.owner exists and no terrain property reads it",
+    "at": "2026-11-20",
+    "by": "batch0",
+    "found": "c.difficult_for(on=, zone=)",
     "refused_rows": 1,
     "rows": 2,
-    "verdict": "real",
-    "why": "Read the component: Zone carries owner, but Zones.difficult_squares returns a plain square-to-kind dict and blocks_sight is documented as 'binary and symmetric: it blinds both sides, which is terrain'. obscured is directional through the looker's senses, not by team. So nothing keys a terrain property on a side, and the field a side would hang off is unread."
+    "verdict": "mis-marked",
+    "why": "its own docstring names this card's shape as one of the two it was built for; Zone.difficult_for is a per-creature set with per-id durations (#831). Was 'real' on 2026-10-12 and right when written -- the facility arrived later, or a sibling route was never considered."
   },
   "c.zone(sight_limit=)": {
     "at": "2026-10-13",
