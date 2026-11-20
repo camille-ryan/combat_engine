@@ -42088,7 +42088,7 @@ def at_most_one_applies(out: Result) -> None:
 #: Returned by `_gate_census`'s `credited` when a `c.credit` block's ref
 #: cannot be read statically -- a block opened for a parameter. It means
 #: "this body attributes what its gate causes", which is the only question
-#: this census asks; `credited`'s docstring carries the cost. #1405.
+#: this census asks; `credited`'s docstring carries the cost. #1406.
 ANY_CREDIT = "<computed>"
 
 UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
@@ -42403,7 +42403,7 @@ def _gate_census() -> tuple[list[tuple[str, str, str]], list[str]]:
         read of a parameter can answer. Resolving it properly would mean
         propagating the literal arguments of `pick("f788", 1)` into the
         parameter, which is real dataflow and a bigger change than this
-        gate wants; `#1405` holds that.
+        gate wants; `#1406` holds that.
 
         The cost is named so nobody has to guess it: a body that opens a
         parametrised credit block for the **wrong** ref is now invisible

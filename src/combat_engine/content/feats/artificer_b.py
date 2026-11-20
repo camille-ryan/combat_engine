@@ -145,15 +145,6 @@ def _item_dailies(c: Cast, who: int) -> list[str]:
     return out
 
 
-def _feature(ref: str, what: str, todo: tuple[str, ...]) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=todo)
-    def feat(c: Cast) -> None: ...
-
-    feat.__name__ = ref
-    feat.__doc__ = f"{what} The feature has no row and cannot have one."
-
-
 # -- riders on a power the engine has ---------------------------------------
 
 
