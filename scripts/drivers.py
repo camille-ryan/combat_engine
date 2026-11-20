@@ -20264,6 +20264,81 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def m4388a3_sharpens_only_the_drag_of_a_small_enough_creature(out: Result) -> None:
+    """*"When a m4388 moves a grabbed target of Medium size or smaller, it
+    gains a +5 bonus to the Strength attack."*
+
+    **The roll exists and the row's note said it did not.** It claimed
+    *"moving something already held is a separate manoeuvre with no roll of
+    its own anywhere in the engine"*, and `c.move_grabbed` is that roll --
+    *"drag a creature you have hold of. A Strength attack vs Fortitude"* --
+    stamping `as_="move_grabbed"`, which is what a modifier gates on.
+
+    The note was right to reject `c.grab_attempt`: that rolls to **take**
+    hold and stamps `as_="grab"`, so a bonus gated on it would sharpen the
+    wrong attack. `triage.json` named that sibling and was right about the
+    facility existing. Both halves of the diagnosis were half right.
+
+    **Four readings, because three of them are the controls.** A bonus
+    gated on neither the manoeuvre nor the size would pass a test that
+    only asked about the qualifying case while sharpening every swing this
+    creature makes.
+
+    **And the trait is NOT re-armed by this rule**, which is the trap the
+    first draft fell into: `action=NONE`, so `Encounter.start` arms it
+    already, and calling the body again laid the hold twice and read
+    **10**. The board pre-sets the number being measured.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.components import Mods, Position
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Size
+
+    world, me, _ = _board("m4388a3", 1)
+    foes = sorted(enemies(world, me))
+    out.that(bool(foes), "the board fields something to drag")
+    if not foes:
+        return
+    foe = foes[0]
+    mods = must(world.get(me, Mods), "Mods")
+
+    def bonus(as_: str, size: Size) -> int:
+        must(world.get(foe, Position), "Position").size = size
+        return mods.total(
+            "attack", {"attacker": me, "target": foe, "as_": as_}
+        )
+
+    qualifying = bonus("move_grabbed", Size.MEDIUM)
+    out.that(
+        qualifying == 5,
+        "dragging a Medium creature gains the printed +5"
+        f" ({qualifying})",
+    )
+    out.that(
+        bonus("move_grabbed", Size.LARGE) == 0,
+        "dragging a LARGE one gains nothing -- the printed narrowing is"
+        f" \"Medium size or smaller\" ({bonus('move_grabbed', Size.LARGE)})",
+    )
+    out.that(
+        bonus("grab", Size.MEDIUM) == 0,
+        "and the roll to TAKE hold gains nothing, which is the sibling"
+        f" manoeuvre the old note correctly rejected ({bonus('grab', Size.MEDIUM)})",
+    )
+    out.that(
+        bonus("", Size.SMALL) == 0,
+        f"nor does an ordinary attack ({bonus('', Size.SMALL)})",
+    )
+
+    from combat_engine.engine import dsl
+
+    row = dsl.REGISTRY.get("m4388a3")
+    out.that(
+        row is not None and not row.unfinished,
+        "m4388a3 carries no marker now that the manoeuvre it needed was"
+        " found to exist",
+    )
+
+
 def f619_rides_the_aegis_interrupt_it_cannot_observe(out: Result) -> None:
     """*"+2 bonus to the next attack roll ... against the foe that triggered
     the p3323 immediate interrupt."*
@@ -106261,6 +106336,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "drag_bonus": (m4388a3_sharpens_only_the_drag_of_a_small_enough_creature,
+                   "a +5 reaches the drag of a Medium-or-smaller grabbed"
+                   " creature and no other roll"),
     "aegis_rider": (f619_rides_the_aegis_interrupt_it_cannot_observe,
                     "f619 rides p3323's aegis interrupt from inside it,"
                     " which needs no event"),

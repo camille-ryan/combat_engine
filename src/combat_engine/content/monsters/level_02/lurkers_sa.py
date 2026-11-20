@@ -62,6 +62,7 @@ from combat_engine.engine import (
     MeleeOrRanged,
     Ranged,
     Relation,
+    Size,
     Target,
     UpTo,
     Usage,
@@ -973,6 +974,12 @@ def m4388a2(c: Cast) -> None:
         c.hit()
 
 
+#: *"a grabbed target of **Medium size or smaller**"*, for `m4388a3`.
+#: `Size` is not orderable, so the categories are named -- the same shape
+#: `feats/general_o._MEDIUM_OR_SMALLER` uses.
+_MEDIUM_OR_SMALLER_M4388 = (Size.TINY, Size.SMALL, Size.MEDIUM)
+
+
 @power(
     "m4388a3",
     level=2,
@@ -980,16 +987,42 @@ def m4388a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.on_grab_attack()",),
 )
 def m4388a3(c: Cast) -> None:
-    """The whole of this row is a bonus to the roll that drags a held creature
-    about, and nothing announces that roll for a modifier to find.
+    """A +5 to the Strength attack that drags a held creature about.
 
-    **Not `c.grab_attempt`**, which rolls to *take* hold and stamps
-    `as_="grab"` for the modifiers that gate on it. Moving something already
-    held is a separate manoeuvre with no roll of its own anywhere in the
-    engine, so there is still nothing for the +5 to attach to."""
+    **The roll exists and this note said it did not.** It claimed *"moving
+    something already held is a separate manoeuvre with no roll of its own
+    anywhere in the engine"*, and `c.move_grabbed` is that roll -- *"drag
+    a creature you have hold of. A Strength attack vs Fortitude"* -- and
+    it stamps `as_="move_grabbed"`, which is exactly what a modifier gates
+    on.
+
+    The old note was right to reject `c.grab_attempt`: that rolls to
+    **take** hold and stamps `as_="grab"`, so a bonus gated on it would
+    sharpen the wrong attack. `triage.json` named that verb and was right
+    about the facility existing while pointing at its sibling.
+
+    **Medium or smaller is the printed narrowing**, read off the target in
+    the attack context rather than at arming time -- a creature can be
+    enlarged mid-fight, and the card asks about the one being dragged now.
+    `Size` is **not** orderable -- `Size.SMALL <= Size.MEDIUM` raises --
+    so the test is the explicit tuple four other rows already use
+    (`feats/general_o._MEDIUM_OR_SMALLER`,
+    `monsters/level_04/skirmishers_sa`, and a `_medium_or_smaller` helper
+    in two more files).
+    """
+    # The bonus is standing -- the card is `(no action; at-will)` -- and
+    # gated per roll, so a creature enlarged mid-fight stops qualifying
+    # without the hold being re-laid.
+    c.bonus(
+        "attack", 5, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("as_") == "move_grabbed"
+            and ctx.get("target") is not None
+            and c.size_of(ctx["target"]) in _MEDIUM_OR_SMALLER_M4388
+        ),
+    )
 
 
 # --------------------------------------------------------------------------
