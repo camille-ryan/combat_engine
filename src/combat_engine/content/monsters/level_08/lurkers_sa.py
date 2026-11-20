@@ -1685,6 +1685,22 @@ def m5581a6(c: Cast) -> None:
 
     `m5581a4` needs nothing done to it. Its `requires=_has_twisted` already
     reads the hold this lays, so "gains access to" is the effect existing.
+    
+
+    **This marker can never clear, and `#1395` asks what to do about it.**
+    `compendium.insubstantial_trait` names a gap in the **source**: the
+    page never grants her insubstantial, so the printed *"loses her ...
+    insubstantial"* has nothing to remove. `todo.py` asks whether the
+    symbol has arrived, and no engine work puts a trait on a page that
+    does not print one -- so this sits in the owed queue permanently.
+
+    Seven other rows are in the same position with a `compendium.*`
+    symbol. The marker set has no word for a clause-level source gap:
+    `defect=` is the right meaning and drops the **whole** stat block,
+    which is why this row refuses it, and `declined_clause=`'s own import
+    gate steers away (*"a clause the engine is merely missing is `dropped=`
+    on its own"*). Whether the refusal is right or contradicts Camille's
+    2026-10-15 ruling is the question `#1395` puts to her.
     """
     me = c.me
     c.effect(_M5581_TWISTED, on=me, until=When.ENCOUNTER)
