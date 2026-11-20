@@ -4058,6 +4058,35 @@ def _board(ref: str, seed: int, pose: bool = False,
     # and a weapon put in hand afterwards is one it never saw. #663.
     if arm:
         _put_in_hand(world, caster, arm)
+    # **There is no `armour` axis, and it was built and measured before being
+    # left out.** The board deals `scale` on every seed, so a row printing
+    # "while wearing hide" or "in light armour" is never reached, and
+    # `KNOWN_SILENT`'s `f1873` entry says *"the dummy posing a character in
+    # light armour would retire this"*. The axis is 30 lines on
+    # `_wants_terrain`'s shape -- a `_wants_armour(ref)` reader, a block in
+    # `_attempts`, and `worn` set here before the traits arm.
+    #
+    # Three measurements stopped it, and the third is the one that matters:
+    #
+    # * **13 rows** compare `Gear.armour` against a word, of 111 that mention
+    #   armour at all, and a quoted-literal matcher gives **16** an axis.
+    # * The two rows it exists for are **not among them**. `f1873` tests
+    #   `gear.armour in _HEAVY_ARMOUR` and `i3262x1` imports `LIGHT` from
+    #   `chargen` -- both **named constants**, which a literal matcher cannot
+    #   see. That is the third instance of this blindness in one batch, after
+    #   `_wants_terrain` missing a word inside a `requires=` predicate and
+    #   the 767 factory-built rows whose closure source shows only parameter
+    #   names.
+    # * And `f1839`, which the matcher **does** catch, emits **nothing under
+    #   either armour** -- run directly with `Gear.armour` forced to `scale`
+    #   and to `hide`, 0 events both times. Its clause lays the *difference*
+    #   between two ability terms and only "when the difference is positive",
+    #   which is a sheet question and not a wardrobe one.
+    #
+    # So armour is **not the binding constraint** for these rows, and the
+    # 32-row figure on `#1411` overstates what the axis buys. Whoever builds
+    # it should pick a row whose body gates on the word and nothing else, and
+    # resolve module constants rather than matching literals. #1411.
     # **The day's milestone count, set before the traits arm**, beside `arm`
     # and for exactly its reason. `f3536` is an `action=NONE` row, so it does
     # its work as the encounter starts and a count raised afterwards is one
