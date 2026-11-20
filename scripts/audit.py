@@ -3068,6 +3068,11 @@ def _board(ref: str, seed: int, pose: bool = False,
     # which three `drivers` rules build a board from -- died on an
     # `UnboundLocalError` rather than on anything to do with diseases.
     diseased = False
+    # Same hoist, same reason, and the two reads it feeds are 600 lines
+    # below. The `else` branch computes the class the caster is actually
+    # dealt -- which is never empty, since it falls back to fighter or
+    # ranger -- and a monster row never reaches it. #1411.
+    cls = ""
 
     if MONSTER_ABILITY.match(ref):
         caster = loader.spawn(world, ref.split("a")[0], (6, 8), team=Team.ENEMY)
@@ -3679,7 +3684,18 @@ def _board(ref: str, seed: int, pose: bool = False,
     # failure the silent check exists to catch, produced by the instrument
     # rather than the content. Placed two squares off so "adjacent to your
     # companion" and "not adjacent" are both reachable.
-    if declared.cls:
+    #
+    # **`cls`, not `declared.cls`, and that one word is why the paragraph
+    # above never came true for a feat.** `declared.cls` is the *row's*
+    # declared class and it is `""` on all 2,536 feats -- so the knob written
+    # for "roughly sixty rows across shaman and ranger" skipped every feat
+    # that reads "your beast" or "your spirit companion", which is most of
+    # them. `cls` is the class the caster is actually *dealt*. Measured:
+    # 185 rows tree-wide read a companion (`c.companion(` 127, `c.mount(` 37,
+    # `c.familiar(` 21) and `c.companion()` returned `None` on every seed of
+    # every board. Monster abilities are untouched -- `cls` is `""` for all
+    # 13,454 of them, exactly as `declared.cls` was. #1411.
+    if cls:
         pet = Cast(world=world, me=caster, ref="audit:setup")
         companion = pet.call_companion(at=(5, 9))
         # And something for it to shake off, for the same reason the caster
@@ -3693,7 +3709,15 @@ def _board(ref: str, seed: int, pose: bool = False,
     # and a bard's aura, a warlock's curse and an avenger's oath are all
     # level-0 rows that later rows read. Three bard rows reported SILENT
     # because the aura their card hangs an effect on had never been raised.
-    if declared.cls:
+    #
+    # **`cls` here too, for the reason above.** This one is self-limiting, so
+    # widening it cannot deal anybody a feature they were not given:
+    # `_use_class_features` fires the level-0 rows the caster *already knows*
+    # (`known.all`, filtered to `level == 0`), so a row whose `features` list
+    # came out empty still gets nothing. What it buys is the feat case --
+    # a feat gated on its own class's curse, quarry or mark had the thing
+    # that does the cursing withheld from it.
+    if cls:
         foes_now = sorted(_foes(world, caster))
         if foes_now:
             _use_class_features(world, caster, foes_now[0], skip=ref)
