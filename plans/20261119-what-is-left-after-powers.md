@@ -438,3 +438,96 @@ broke both sides identically and the plant went green with 19 of 19
 assertions. It compares against `weapons.Printed` column by column
 instead: 10 columns over all 117 rows, independent of the mapper, and the
 same plant now names 102 rows.
+
+## Do this first, before anything else: one commit message is a landmine
+
+`5bff3bde`..`ca532c0a` are **unpushed**, and the `weapons.py` commit's
+message ends with the sentence:
+
+> *"Closes #1397 is NOT claimed: that is the ETL half and needs a
+> rebuild."*
+
+GitHub's keyword parser does not read the negation. **Pushing that closes
+`#1397`**, which is a live ETL bug with 30 unread power rows behind it.
+The commit is not `HEAD`, and interactive rebase is unavailable here, so
+the fix is not a reword:
+
+```
+push, then immediately:  gh issue reopen 1397
+                         and comment saying a commit message closed it by
+                         accident, so the thread does not read as resolved
+```
+
+**The general lesson, which is new and belongs in `scripts/CLAUDE.md` if
+it recurs:** a commit message that *mentions* a close keyword in order to
+say it does not apply still closes the issue. Write "the ETL half is not
+claimed here (`#1397`)" -- the bare ref -- never the keyword.
+
+## Agent use-case 2: issues already resolved. Camille's suggestion, and it needs aiming
+
+> *"I wonder if another good agent use-case would be to go through the gh
+> issue backlog and see if any have already been resolved"*
+
+Worth doing, and **the broad version of it was measured here and
+refuted**, so it has to be aimed. The refuted version is "triage the
+backlog for neglect": 67% of closed issues close within 24h (median
+**6 hours**), nothing open is older than 22 days, and `issues.py --stale`
+found **1 real close in 31 candidates**. The open set survives because it
+is blocked, large, or waiting on a decision.
+
+"Already resolved" is a different question. Three mechanical forms, two
+measured in this session:
+
+**Form 1 -- a commit already claimed it. Measured: 0, mechanism sound.**
+Every `Closes|Fixes|Resolves #N` across all history, cross-referenced
+against the 167 open issues:
+
+```
+issues claimed by a commit keyword, still open:  0
+```
+
+So `Closes #N` is working and this form is dead. Do not pay an agent for
+it. The one real risk in this family is the landmine above -- a *message*
+closing something nobody meant to.
+
+**Form 2 -- parked on a blocker that has since closed. Measured: 4, and
+that is a floor.**
+
+```
+#1143  cites closed #1114                       -- only closed blockers
+#1265  cites closed #1037                       -- only closed blockers
+#1369  cites closed #712                        -- only closed blockers
+#1102  cites closed #326, and #314 is still open -- premise needs re-reading
+```
+
+This is the high-yield form and `CLAUDE.md` already says why: *"a closed
+blocker reads exactly like a live one, so the issue looks correctly parked
+rather than wrong"*, and the pointers **chain**. The hand sweep on
+2026-11-02 found **9 of 63** by reading; the regex above found 4 of 167,
+so it is a floor and not a measure -- the same *"an issue's census is a
+floor"* rule, applied to the sweep itself.
+
+Cost per issue: **one command**, `gh issue view N --json state`. The
+cheapest check in the whole repo by an order of magnitude.
+
+**Form 3 -- the gap the issue names is closed in the tree. Not measured.**
+An issue about a symbol that no longer has rows waiting on it, or about a
+marker that has been re-pointed since. `blocked.py --group` is one side of
+that join and the issue bodies are the other. This is the form most likely
+to pay and the only one that needs actual reading, which is why it is the
+agent job rather than a script.
+
+**The aimed agent task, then:** for each open non-`question` issue, resolve
+every `#N` it cites with `gh issue view N --json state`, check whether the
+symbol or marker it names still appears in `blocked.py --group`, and report
+one of *live* / *blocker closed, premise needs re-reading* / *gap closed,
+candidate to close*. Report, never close -- closing with the measurement
+is a judgement, and `CLAUDE.md` requires the close comment to say what
+landed, what moved and how it was verified, plus what was **not** done.
+
+**And read every comment, not the body.** This is the repo's first rule and
+it bites hardest on exactly this job: `#217`'s last comment reverses its own
+verdict while the body still says the old thing, `#213`'s entire design is
+in comments, `#214`'s body opens with a number 369 rows wrong. An agent
+reading bodies alone will produce confident nonsense. `gh issue view N
+--comments`.
