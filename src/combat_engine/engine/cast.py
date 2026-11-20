@@ -2026,13 +2026,38 @@ class Cast:
                 )
             )
             return ev.saved
+        from .durations import keywords_of as _keywords_of
         from .query import is_trap
 
         for effect in self.world.effects.of(who):
             if against == "ongoing" and effect.ongoing is None:
                 continue
-            if against and against not in ("ongoing", "") and against not in effect.label:
-                continue
+            if against and against not in ("ongoing", ""):
+                # **A condition or a keyword by NAME, not just a label
+                # substring.** `against` used to be tested only against
+                # `effect.label`, and `c.condition` labels an effect with the
+                # laying row's **ref** -- so a row asking to save against
+                # `"dazed"` was asking whether `"dazed"` appears inside a
+                # ref, which it never does. Proven with a save-ends DAZED
+                # hold standing: `against="dazed"` gave False and zero
+                # events, `against="<the laying ref>"` gave True plus
+                # `SavingThrow` and `ConditionEnded`.
+                #
+                # Both `Condition` and `Keyword` are `str` enums, so `.value`
+                # is already the lowercase word a card prints and there is no
+                # translation layer to get wrong.
+                #
+                # The label test stays as the **fallback**, so every row that
+                # passes a ref or a display string keeps the match it had --
+                # `monsters/level_10/soldiers_sa` deliberately writes
+                # `c.save(against=f"{c.ref} prone")` and still works. This is
+                # a widening of what can match, never a narrowing. #1408.
+                want = against.lower()
+                named = {c.value for c in effect.conditions}
+                kinds = {k.value for k in _keywords_of(effect)}
+                if (want not in named and want not in kinds
+                        and against not in effect.label):
+                    continue
             # **"An effect caused by a trap", which a label cannot say.**
             # `against` matches the laying row's ref, and a trap's effect
             # carries the trap entity in `Effect.source` -- so this is the
