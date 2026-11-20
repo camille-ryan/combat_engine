@@ -3034,3 +3034,46 @@ class Weapon:
 #: already imports `cast` function-locally to dodge a cycle. `components` is
 #: below both.
 STEALTH_RESULT = "stealth:result"
+
+
+def weapon_from_printed(ref: str, **over: Any) -> Weapon | None:
+    """A `Weapon` off the printed table, or `None` if the table has no row.
+
+    **The one mapper, because the mapping is not the table.**
+    `combat_engine.weapons` holds the columns and sits below every
+    component -- it must not import the engine, or it would stop being a
+    table -- so turning a row into a `Weapon` happens here, at the lowest
+    layer that knows what a `Weapon` is. Two callers:
+    `chargen._printed_weapons` for everything a character can be dealt,
+    and `Cast.as_weapon(base=)` for a card that changes an item's shape.
+
+    Before this, the mapping lived in `chargen` and so did the read. That
+    was right while `chargen` was the only reader and became the `#852`
+    situation the moment the kernel wanted it: `engine -> chargen` is
+    contractually **zero** with no `ignore_imports`, so a verb in
+    `cast.py` could reach these columns neither by importing chargen nor
+    by reading the table a second time.
+
+    `over` sets fields the table is not the authority on -- `enhancement`
+    and `item` are per-character, which is why `chargen._FROM_TABLE`
+    names them as deliberate exclusions.
+    """
+    from combat_engine import weapons
+
+    row = weapons.printed().get(ref)
+    if row is None:
+        return None
+    return Weapon(
+        ref=row.ref,
+        slug=row.slug,
+        category=row.category,
+        hands=row.hands,
+        damage=row.damage,
+        proficiency=row.proficiency,
+        reach=row.reach,
+        ranged=row.ranged,
+        thrown=row.thrown,
+        group=row.group,
+        properties=row.properties,
+        **over,
+    )

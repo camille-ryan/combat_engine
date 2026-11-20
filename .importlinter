@@ -116,6 +116,7 @@ allow_indirect_imports = True
 source_modules =
     combat_engine.armour
     combat_engine.dc
+    combat_engine.weapons
 forbidden_modules =
     combat_engine.engine
     combat_engine.content
@@ -140,3 +141,16 @@ forbidden_modules =
 # #949's swim clause put a second reader in the kernel, where `engine -> story`
 # is zero and two contracts above keep it so. Moving the table down is the same
 # answer as #334 and #852 rather than a new one. #949, #1001.
+#
+# `weapons.py` is the third and is #852's situation exactly, one table over.
+# `chargen._printed_weapons` had read the `weapon` table into `Weapon` objects
+# since #339 -- correctly, and in more detail than anything else here -- and
+# `engine -> chargen` is a contract above held at **zero with no
+# `ignore_imports`**, because #852 removed that edge rather than allow-listing
+# it. So `Cast.as_weapon(base=)` could reach those columns neither by importing
+# chargen nor by reading the table a second time.
+#
+# The split that lets it sit this low: `weapons.py` holds the **columns** and
+# `components.weapon_from_printed` builds the **`Weapon`**, because `Weapon` is
+# an engine component and a printed table that imported the engine would not be
+# a table any more. Two callers, one read, one mapper.

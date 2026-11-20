@@ -20264,6 +20264,166 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_weapon_takes_another_weapons_shape(out: Result) -> None:
+    """`c.as_weapon(base=)`: this item becomes a different printed weapon.
+
+    Two cards, one mechanism, and they carried two symbols for it --
+    `c.as_weapon(base=)` on `i553p1` (five named shapes) and
+    `c.reshape_weapon()` on `i1153p1` (any melee weapon). The second was
+    a synonym.
+
+    **The replacement is the whole point and a count is what proves it.**
+    `as_weapon`'s literal form *appends* a weapon and stows it, because a
+    shield used as a pick is a second weapon; a shape change is not. So
+    the weapon count must not move, and a plant that appends reds here
+    rather than passing on a correct-looking new profile.
+
+    **Reshaping twice must revert to the ORIGINAL**, which is the subtle
+    half. Ending a shape runs `restore`, so `_reshape` ends any shape the
+    row already holds *before* reading the profile it will put back --
+    otherwise `was` closes over the previous shape and a weapon reshaped
+    twice reverts to its first new form and keeps it. Both halves are
+    individually correct and nothing else would report it.
+    """
+    import dataclasses
+
+    from combat_engine import chargen, weapons
+    from combat_engine.content.items.weapon_c import _I553_SHAPES
+    from combat_engine.engine import ActionType, Bus, Grid, When, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, weapon_from_printed
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.rng import Rng
+
+    table = weapons.printed()
+    swung = weapons.melee()
+    out.that(
+        len(table) > 100 and swung,
+        f"the printed weapon table reads ({len(table)} weapons,"
+        f" {len(swung)} of them melee)",
+    )
+    # The card names three categories; the table carries exactly those
+    # three, so "any melee category" is every melee weapon. Asserted
+    # rather than assumed, because the row's docstring says it.
+    named = weapons.melee("simple", "military", "superior")
+    out.that(
+        named == swung,
+        "and the three categories i1153p1 names ARE every melee weapon"
+        f" ({len(named)} vs {len(swung)})",
+    )
+
+    # **The mapper copies every column, checked against the TABLE and not
+    # against `chargen.PRINTED`.** The first draft compared those two and
+    # the comparison was vacuous: `chargen.PRINTED` is *built by*
+    # `weapon_from_printed` now, so breaking the mapper breaks both sides
+    # identically. A plant blanking `properties` in the mapper passed with
+    # 19 of 19 green. `weapons.Printed` is the independent source.
+    columns = ("slug", "category", "hands", "damage", "proficiency",
+               "reach", "group", "properties", "ranged", "thrown")
+    drift = [
+        (ref, col)
+        for ref, row in table.items()
+        for col in columns
+        if getattr(must(weapon_from_printed(ref), ref), col) != getattr(row, col)
+    ]
+    out.that(
+        not drift,
+        f"weapon_from_printed copies all {len(columns)} printed columns for"
+        f" every one of the {len(table)} rows ({len(drift)} differ:"
+        f" {drift[:4]})",
+    )
+    # And `chargen.PRINTED` goes through it, so there is one reader rather
+    # than two -- which is what let the table move below the engine.
+    out.that(
+        chargen.PRINTED.get("w3610") == weapon_from_printed("w3610"),
+        "and chargen.PRINTED is the mapper's output, not a second read",
+    )
+
+    def board(ref: str, item: str) -> tuple[Any, int, Any]:
+        world = World(Grid(16, 12), Rng(5), Bus())
+        me = chargen.spawn(world, chargen.Character(
+            cls="fighter", level=10, build="", feats=[], powers=[]), (3, 3))
+        gear = must(world.get(me, Gear), "Gear")
+        gear.weapons[0] = dataclasses.replace(
+            gear.weapons[0], item=item, enhancement=2)
+        return world, me, gear
+
+    for ref, item, allowed in (("i553p1", "i553", _I553_SHAPES),
+                               ("i1153p1", "i1153", swung)):
+        world, me, gear = board(ref, item)
+        was, count = gear.weapons[0], len(gear.weapons)
+        cast = Cast(world=world, me=me, ref=ref)
+        cast.target = me
+        cast.targets = [me]
+        REGISTRY[ref].body(cast)
+        now = gear.weapons[0]
+        out.that(
+            now.ref != was.ref and now.ref in allowed,
+            f"{ref} becomes a weapon from its own printed set"
+            f" ({was.ref} -> {now.ref})",
+        )
+        out.that(
+            len(gear.weapons) == count,
+            f"and REPLACES rather than adds ({count} weapons before,"
+            f" {len(gear.weapons)} after)",
+        )
+        out.that(
+            now.enhancement == was.enhancement == 2 and now.item == item,
+            f"keeping the enhancement and the item ({now.enhancement},"
+            f" {now.item!r})",
+        )
+        out.that(
+            now.damage == must(table.get(now.ref), "printed row").damage,
+            f"with the PRINTED dice rather than hand-written ones"
+            f" ({now.damage})",
+        )
+        held = [e for e in world.effects.of(me) if e.by == ref]
+        wants_drop = ref == "i1153p1"
+        out.that(
+            bool(held) and (held[0].drop_cost == ActionType.MINOR) is wants_drop,
+            f"{ref}: the shape is endable for a minor only where the card"
+            f" prints it ({[e.drop_cost for e in held]},"
+            f" expected {wants_drop})",
+        )
+        out.that(
+            not REGISTRY[ref].unfinished,
+            f"and {ref} carries no marker",
+        )
+
+    # -- the double reshape -------------------------------------------
+    world, me, gear = board("i553p1", "i553")
+    origin = gear.weapons[0]
+    cast = Cast(world=world, me=me, ref="i553p1")
+    cast.target = me
+    cast.targets = [me]
+    first = cast.as_weapon(base="w3636", until=When.ENCOUNTER)
+    middle = gear.weapons[0].ref
+    second = cast.as_weapon(base="w3594", until=When.ENCOUNTER)
+    out.that(
+        middle == "w3636" and gear.weapons[0].ref == "w3594"
+        and first is not None and second is not None,
+        f"two shapes in a row both take ({middle}, {gear.weapons[0].ref})",
+    )
+    world.effects.end(second, "the rule ends it")
+    out.that(
+        gear.weapons[0].ref == origin.ref,
+        "and ending the second reverts to the ORIGINAL, not to the first"
+        f" shape ({gear.weapons[0].ref}, origin {origin.ref}, first"
+        f" {middle})",
+    )
+    out.that(
+        len([e for e in world.effects.of(me) if e.by == "i553p1"]) == 0,
+        "with no shape left holding -- the second use ended the first,"
+        " which is the printed \"until it changes shape into another\"",
+    )
+
+    # A ref the table has no row for is refused rather than invented.
+    out.that(
+        cast.as_weapon(base="w:rod") is None,
+        "a base the printed table does not carry is refused",
+    )
+
+
 def f3209_marks_on_a_theme_attack(out: Result) -> None:
     """*"When you hit an enemy with one of your <theme> attacks, you can
     mark that enemy until the end of your next turn."*
@@ -58268,7 +58428,7 @@ def moving_an_attack_onto_somebody_else(out: Result) -> None:
     |---|---|
     | `f3695` | **nothing** -- `resolve.attack` reads the target back |
     | `f3319` | the mirror of `c.add_target`, and then a window |
-    | `f1027` | a clause's beneficiary, published like a number |
+    | `f1027` | a clause's beneficiary -- **written**, see below |
     | `m976a2` | a standard action the stat block gives no ref |
 
     **`f3695` is asserted off the `Hit` event and not off the field**, and
@@ -58465,10 +58625,27 @@ def moving_an_attack_onto_somebody_else(out: Result) -> None:
              f"grabbing {c.grabbing()}")
 
     # -- the four markers are four different things now -------------------
+    # **`f1027`'s is now empty, and that is the mechanism and not a
+    # concession.** None of `c.retarget()`'s four shapes fitted it: the
+    # beneficiary is picked by a local list inside `p3773`, so nothing
+    # outside that body can move the pick, and a second heal laid from the
+    # feat would pay the hit points twice rather than instead. `#550`'s
+    # convention is the answer -- the clause lives in `p3773`, gated on
+    # `c.feat("f1027")` -- and `drivers.second_helping` is where it is
+    # asserted, on a hand-built board where the two candidate pools are
+    # disjoint.
     for ref, want in (
         ("f3695", ()),
         ("f3319", ("c.swap_target()",)),
-        ("f1027", ("c.change_beneficiary()",)),
+        # **Landed, and this line pinned the marker for two commits.** The
+        # expected tuple said `c.change_beneficiary()` and the row no
+        # longer carries it -- `p3773` branches on `c.feat("f1027")` and
+        # returns, which is `#550`'s convention. So the *check's
+        # definition* was the stale thing and not the row, which is the
+        # call `drivers.grant_armor` needed too. It stays an exact tuple
+        # rather than becoming a `not unfinished`, so a marker coming back
+        # under any name still reds.
+        ("f1027", ()),
         # **`c.extra_action()` was the second guess and `todo.py` refused
         # it in one run** -- that verb exists, so the marker claimed the
         # thing had arrived. What is absent is a *ref*: the printed second
@@ -106635,6 +106812,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "weapon_shape": (a_weapon_takes_another_weapons_shape,
+                     "c.as_weapon(base=) replaces an item's weapon profile"
+                     " with a printed one, reversibly"),
     "theme_mark": (f3209_marks_on_a_theme_attack,
                    "f3209 marks on a hit with one of its theme's attack"
                    " rows, and on nothing else"),

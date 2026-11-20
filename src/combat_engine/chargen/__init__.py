@@ -377,55 +377,29 @@ def _printed_weapons() -> dict[str, Weapon]:
     nothing can check, and a wrong one leaves every power working and the
     character quietly weaker.
 
-    A weapon filed under two printed groups keeps the first as its
-    `group` and carries the rest as properties, which is where
-    `_fits_base` already looks: a khopesh is an axe that a heavy-blade
-    item may still be laid on.
+    **The read and the mapping moved out and this is now a loop over
+    them.** They were here, correctly and in detail, for as long as
+    `chargen` was the only reader; `combat_engine.weapons` holds the
+    columns and `components.weapon_from_printed` builds the `Weapon`,
+    because `engine -> chargen` is contractually zero and
+    `Cast.as_weapon(base=)` wanted the same table. Same `#852` argument
+    as `armour.py`, one table over -- and the behaviour is identical,
+    which the baseline diff is the evidence for.
+
+    The notes that moved with it: the `melee` flag splitting `ranged`
+    from `thrown` (`#214`), a weapon filed under two printed groups
+    keeping the first as its `group` and the rest as properties, and the
+    slug being the printed word a card names a weapon by (`#339`). All
+    three are in `weapons.Printed` now.
     """
-    from combat_engine.db import game
+    from combat_engine import weapons
+    from combat_engine.engine.components import weapon_from_printed
 
     out: dict[str, Weapon] = {}
-    try:
-        rows = list(game().execute("SELECT * FROM weapon"))
-    except Exception:            # no database yet; the sixteen still work
-        return out
-    for row in rows:
-        out[row["ref"]] = Weapon(
-            ref=row["ref"],
-            # The printed word a card can name this weapon by. The ref used to
-            # be this string and three sites un-slugged it to ask; see
-            # `Weapon.slug`. #339.
-            slug=row["slug"] or "",
-            category=row["category"],
-            hands=row["hands"] or "",
-            damage=row["damage"],
-            proficiency=row["proficiency"],
-            reach=row["reach"],
-            # A thrown melee weapon is not a ranged one: a dagger has a
-            # printed range and is still swung, and `Gear.ranged` picking
-            # it up would hand a rogue a ranged basic attack it does not
-            # have. `melee` is the page's own word for the difference.
-            ranged=(
-                (row["range_short"], row["range_long"])
-                if row["range_short"] and not row["melee"]
-                else None
-            ),
-            # **The other half of the same two columns, and it used to be
-            # thrown away.** The comment above is still right -- a thrown melee
-            # weapon is not a ranged one, and `Gear.ranged` must not pick it up
-            # -- but "not a ranged weapon" was being read as "has no range",
-            # so a dagger's printed 5/10 and a javelin's 10/20 reached nothing.
-            # A row printing `Ranged weapon` then fell back to whatever number
-            # the card happened to have, which over-threw a dagger and
-            # under-threw a javelin. #214.
-            thrown=(
-                (row["range_short"], row["range_long"])
-                if row["range_short"] and row["melee"]
-                else None
-            ),
-            group=row["grp"],
-            properties=frozenset([*json.loads(row["properties"] or "[]"), row["hands"]]),
-        )
+    for ref in weapons.printed():
+        arm = weapon_from_printed(ref)
+        if arm is not None:
+            out[ref] = arm
     return out
 
 

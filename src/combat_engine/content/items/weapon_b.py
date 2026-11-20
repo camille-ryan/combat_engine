@@ -122,6 +122,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.types import Light
 from combat_engine.engine.zones import Zone
+from combat_engine.weapons import melee as melee_weapons
 
 ITEM = "item"
 
@@ -5047,55 +5048,39 @@ def i848p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    todo=("c.as_weapon(base=)",),
 )
 def i1153p1(c: Cast) -> None:
-    """Becomes a different weapon of the wielder's choosing, until the
-    encounter ends or a minor action ends it.
+    """Becomes any printed melee weapon until the encounter ends, or until
+    the wielder ends it.
 
-    **The marker stands and its stated reason was false.** This said
-    *"`Weapon` is a column set no body rewrites"*. There are four
-    per-character writers and `c.weapon_group`'s own docstring counts them
-    -- `c.weapon_dice`, `c.gains_property`, `c.weapon_range` and itself --
-    and `feats.general_h.f1277` rewrites three fields of one weapon in
-    three lines. So the fields are writable; a general-absence claim about
-    them is the shape this tree keeps getting wrong.
+    **The marker named two gaps and one of them was not a gap.** The real
+    half was a reversible whole-weapon swap: the four existing writers
+    each set one column and are one-way, where this card moves the dice,
+    the group, the category, the proficiency, the reach and the properties
+    together and hands the old profile back. That is
+    `c.as_weapon(base=)`, which `i553p1` wanted for the same mechanism and
+    which landed with this.
 
-    It named **two** gaps, which is the one shape a marker must not have,
-    and one of the two is not a gap at all:
+    The half that was not: *the choice*. `c.choose` has offered a list of
+    refs to the player for years. What was true is narrower and belonged
+    to the swap -- nothing **read** the `weapon` table into a `Weapon`
+    outside `chargen`, and `engine -> chargen` is contractually zero.
 
-    * **A whole-weapon swap** -- real. The four writers each set one
-      column, and becoming a different weapon moves the dice, the group,
-      the category, the proficiency, the reach and the properties
-      together, with the old values kept, because this one ends and hands
-      the weapon back where every existing writer is one-way.
-      `c.weapon_group` deliberately *adds* a group rather than replacing
-      it ("every printed line here adds an identity rather than trading
-      one"), which is the opposite of what this card does.
-    * **The choice** -- not a gap. `c.choose` already offers a list of
-      refs to the player and `items/misc.py` has used it over a
-      `REGISTRY` filter for years. The `weapon` table carries `category`
-      in exactly the three words this card prints, plus a `melee` flag,
-      so "any weapon from any melee category" is a filter over printed
-      data, not a facility. What was true is the narrower thing: nothing
-      **reads** that table into a `Weapon` -- `chargen` hand-writes six
-      -- and that belongs to the swap half.
+    **"Any melee category (simple, military, or superior)" is every melee
+    weapon**, which is worth saying because it reads like a narrowing and
+    is not: the table carries exactly those three categories and nothing
+    else, so the three words are 102 of 117 rows and the 15 left out are
+    the ranged ones. `weapons.melee()` is named with all three anyway, so
+    the call says what the card says rather than what the data happens to
+    make of it.
 
-    **Re-pointed to `c.as_weapon(base=)`, which `i553p1` already carries
-    for the same mechanism.** That card takes the shape of one of five
-    named weapons and *"takes on the statistics normal for that weapon
-    until it changes shape into another"*; this one takes the shape of
-    any melee weapon until the encounter ends. Same reversible profile
-    replacement, same reason the existing `c.as_weapon` cannot say it --
-    its numbers are literals and it arms a *second* weapon rather than
-    replacing the one in hand. Two rows, one gap; `c.reshape_weapon()`
-    was the synonym.
-
-    `c.split_weapon()` is **not** this, and was checked rather than
-    assumed: `f1237` and `i2011p1` want one weapon to occupy two hands,
-    which is `Gear.melee` holding two entries for one object, and no
-    profile changes.
+    "Or until you end it as a minor action" is `c.endable`, whose default
+    cost is already a minor.
     """
+    pick = c.choose(list(melee_weapons("simple", "military", "superior")),
+                    "which weapon to become")
+    if pick:
+        c.endable(c.as_weapon(base=pick, until=When.ENCOUNTER))
 
 
 @power(

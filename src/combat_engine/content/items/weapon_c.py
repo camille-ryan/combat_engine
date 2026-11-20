@@ -3316,6 +3316,13 @@ def i553x1(c: Cast) -> None:
         )
 
 
+#: The five shapes `i553p1` prints, by ref -- refs because a weapon's
+#: printed word is a name, however mechanical `Weapon.slug` is allowed to
+#: be in a *field*. Hand-written because the card lists them; a filter
+#: would be inventing the set.
+_I553_SHAPES = ("w3594", "w3610", "w3611", "w3632", "w3636")
+
+
 @power(
     "i553p1",
     level=10,
@@ -3324,42 +3331,39 @@ def i553x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.as_weapon(base=)",),
 )
 def i553p1(c: Cast) -> None:
-    """Becomes a different base weapon, taking its dice, its reach and its
-    group. The base item is a column and no body swaps it.
+    """Becomes one of five printed base weapons and takes its statistics.
 
-    **Confirmed against the verb rather than guessed, and the parameter is
-    the smaller half of what `base=` has to mean.** `c.as_weapon` exists
-    and is close: it builds a `Weapon` and appends it to `Gear.weapons` so
-    `c.w()`, `c.wielding` and `Gear.main` all find it. Two things stop it
-    saying this card.
+    **The diagnosis in the old marker was right and is now the
+    implementation**, so it is worth keeping: `c.as_weapon` existed and
+    was close, and two things stopped it saying this card. Its numbers
+    were literals, which is correct for the four rows it was written for
+    -- shields and rods, which have **no row in the `weapon` table** --
+    and wrong here, because these five are printed base items whose dice
+    and group are data. And it does not arm what it builds, because a
+    shield used as a pick is a *second* weapon; a shape change is not.
 
-    The numbers. It takes `damage=`, `group=`, `properties=` and `hands=`
-    as literals, which is right for the four rows it was written for --
-    shields and rods, which have no row in the `weapon` table at all -- and
-    is exactly what this file's header forbids: the five shapes this card
-    names are printed base items, so their dice and group are data to be
-    read, never hand-written here.
+    `base=` is both halves: it reads the columns through
+    `combat_engine.weapons` and **replaces** the profile of the weapon
+    this block's item already is, keeping the `item` and the
+    `enhancement`, so a +2 weapon is still +2 in its new shape.
 
-    And the hand. `as_weapon` deliberately does not arm what it builds --
-    `gear.stowed.add(arm.ref)`, so `actions._wielding` offers the draw --
-    because a shield used as a pick is a *second* weapon. A shape change is
-    not: it replaces the profile of the thing already in the hand, and
-    laying a second weapon beside it would leave the wielder choosing
-    between two forms of one item.
+    **"Until it changes shape into another weapon" needs nothing here.**
+    `_reshape` ends any shape this row is already holding before laying a
+    new one, which is that sentence -- and is also what keeps the
+    *original* profile as the thing a shape reverts to. Without it a
+    weapon reshaped twice would revert to its first new form.
 
-    `c.counts_as` is the other near miss and is a different sentence: it
-    lets a power written for one group accept another, and changes no
-    dice.
+    `c.counts_as` is the near miss and is a different sentence: it lets a
+    power written for one group accept another, and changes no dice.
 
-    **`i1153p1` carries this symbol too**, re-pointed off
-    `c.reshape_weapon()`: it becomes any weapon from any melee category
-    until the encounter ends, where this one becomes one of five named
-    shapes. Two cards, one mechanism, and the synonym was holding them
-    apart -- the same fault `f1237` records checking for and not finding
-    on `c.split_weapon()`. Whichever lands should land for both."""
+    `i1153p1` is the same mechanism over a wider set and landed with
+    this.
+    """
+    pick = c.choose(list(_I553_SHAPES), "which shape")
+    if pick:
+        c.as_weapon(base=pick, until=When.ENCOUNTER)
 
 
 @power(

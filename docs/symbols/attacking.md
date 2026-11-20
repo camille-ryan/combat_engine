@@ -17,7 +17,7 @@ Making an attack, and what the attack turns out to be.
   - "The next melee attack you make becomes a ranged attack with a
 - `c.as_though_hit_by(self, ref: 'str', *, on: 'int | None' = None, by: 'int | None' = None) -> 'bool'`
   - "The target is subject to effects as though hit by the chosen attack."
-- `c.as_weapon(self, *, damage: 'str', group: 'str', proficiency: 'int' = 0, properties: 'frozenset[str]' = frozenset(), hands: 'str' = 'one-handed', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.as_weapon(self, *, damage: 'str' = '', group: 'str' = '', base: 'str' = '', proficiency: 'int' = 0, properties: 'frozenset[str]' = frozenset(), hands: 'str' = 'one-handed', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "This shield can be used as a one-handed melee weapon."
 - `c.attack(self, bonus: 'int', vs: 'Defense', *, on: 'int | None' = None, advantage: 'bool | None' = None, from_: 'int | None' = None, ignore_cover: 'bool' = False, keep: 'str' = '', hand: 'str' = 'main', as_: 'str' = '') -> 'AttackResult'`
   - `as_` names *which* swing this is, when one row makes more than one.

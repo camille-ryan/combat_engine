@@ -3870,8 +3870,9 @@ class Cast:
     def as_weapon(
         self,
         *,
-        damage: str,
-        group: str,
+        damage: str = "",
+        group: str = "",
+        base: str = "",
         proficiency: int = 0,
         properties: frozenset[str] = frozenset(),
         hands: str = "one-handed",
@@ -3879,6 +3880,43 @@ class Cast:
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
         """"This shield can be used as a one-handed melee weapon."
+
+        **`base=` is the other half and does the opposite**, which is why
+        it is a keyword here rather than a verb of its own: it takes a
+        printed weapon's ref and **replaces the profile of the weapon
+        this row's item already is**, reversibly, where the literal form
+        below *adds* a second weapon to the belt.
+
+            c.as_weapon(base="w3610", until=When.ENCOUNTER)
+
+        Two cards want it -- *"takes the shape of"* one of five named
+        weapons, and *"change the weapon into a different weapon from any
+        melee category"*. They carried two symbols for it,
+        `c.as_weapon(base=)` and `c.reshape_weapon()`, and were one gap.
+
+        **It reads the columns and hand-writes nothing**, which the
+        literal form cannot do and should not: a shield used as a pick
+        has no row in the `weapon` table, so its dice are on the card and
+        belong in the call. A printed base weapon's dice are data, and
+        `combat_engine.weapons` is where they are read --
+        `components.weapon_from_printed` is the one mapper, shared with
+        `chargen.PRINTED`.
+
+        **What survives the change**: `item`, so the thing is still that
+        item; `enhancement`, so a +2 weapon is still +2 in its new shape;
+        `dtype` and `as_implement`, which are laid by other rows and are
+        not the base weapon's business. Everything else is the new base's.
+
+        **What makes it reversible** is the effect's own `on_suspend`,
+        which `Effects._lift` also runs on expiry -- the same hook the
+        literal form uses to take its weapon off the belt. The old
+        `Weapon` object is closed over and written back whole, so nothing
+        has to know which fields moved.
+
+        Returns `None` if the table has no row for `base` -- an implement
+        ref like `w:rod` -- or if this row's item is not a weapon in that
+        creature's gear, which is the case a card cannot pose and a plant
+        can.
 
         Four item rows print a full weapon profile on something that is not
         a weapon -- two shields and two rods -- and the `weapon` table has
@@ -3908,6 +3946,8 @@ class Cast:
         gear = self.world.get(who, Gear)
         if gear is None:
             return None
+        if base:
+            return self._reshape(gear, who, base, until)
         arm = Weapon(
             ref=self.ref,
             slug="",
@@ -3942,6 +3982,84 @@ class Cast:
             gear.stowed.add(arm.ref)
 
         effect.on_resume.append(rearm)
+        return effect
+
+    def _reshape(
+        self, gear: Any, who: int, base: str, until: When
+    ) -> Effect | None:
+        """`as_weapon(base=)`'s half: this item becomes a different weapon.
+
+        Separate because the two halves share only their first four lines
+        and nothing else -- one appends and stows, this one substitutes in
+        place -- and reading them interleaved was how the first draft put
+        the new weapon on the belt beside the old.
+        """
+        from .components import weapon_from_printed
+        from .events import WeaponChanged
+
+        def mine() -> int:
+            return next(
+                (n for n, w in enumerate(gear.weapons)
+                 if w.item == self._my_item),
+                -1,
+            )
+
+        if mine() < 0:
+            return None
+        # **A second shape ends the first, and this is not tidiness.** One
+        # card says *"until it changes shape into another weapon"*, so
+        # ending it is the printed sentence -- and ending it runs
+        # `restore`, which is why `was` is read **after** this loop. Read
+        # before it, `was` would close over the **previous shape** instead
+        # of the original, so a weapon reshaped twice would expire back to
+        # its first new form and keep it for good. Both halves correct
+        # individually, and nothing would have reported it.
+        for shed in list(self.world.effects.of(who)):
+            if shed.by == self.ref:
+                self.world.effects.end(shed, f"{self.ref}: reshaped again")
+        here = mine()
+        if here < 0:
+            return None
+        was = gear.weapons[here]
+        want = weapon_from_printed(
+            base,
+            item=was.item,
+            enhancement=was.enhancement,
+            dtype=was.dtype,
+            as_implement=was.as_implement,
+        )
+        if want is None:
+            return None
+        effect = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} is a {base}",
+            by=self.ref,
+        )
+        if effect is None:
+            return None
+
+        def restore() -> None:
+            for n, w in enumerate(gear.weapons):
+                if w.item == was.item:
+                    gear.weapons[n] = was
+                    self.world.bus.emit(WeaponChanged(
+                        actor=who, weapon=was.ref, field="base", what=was.ref,
+                    ))
+                    return
+
+        def shape() -> None:
+            for n, w in enumerate(gear.weapons):
+                if w.item == was.item:
+                    gear.weapons[n] = want
+                    self.world.bus.emit(WeaponChanged(
+                        actor=who, weapon=was.ref, field="base", what=base,
+                    ))
+                    return
+
+        shape()
+        # `on_suspend` only -- `Effects._lift` runs it on expiry too, which
+        # is the "until the end of the encounter" half of both cards.
+        effect.on_suspend.append(restore)
+        effect.on_resume.append(shape)
         return effect
 
     def counts_as_keyword(
