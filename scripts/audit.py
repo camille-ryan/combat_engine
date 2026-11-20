@@ -1713,6 +1713,12 @@ DID_SOMETHING = {
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
+    # **Two verbs that mutated state and announced nothing**, so every row
+    # whose whole Effect was one of them was silent by construction: 26
+    # feat/item rows call `c.initiative` and nothing else, and 38 call
+    # `c.as_implement` and nothing else. #1164 and `UseRestored`'s own
+    # argument, #899.
+    "InitiativeChanged", "WeaponIsImplement",
     # `UsesRaised` and `RollsTwice` on `UseRestored`'s own argument: a row
     # whose entire effect is raising an allowance, or granting a second
     # d20 on a check, is silent without one. #642.

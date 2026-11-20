@@ -1684,6 +1684,74 @@ class PointsRegained(Event):
 
 
 @dataclass
+class InitiativeChanged(Event):
+    """A creature's place in the order moved without a reroll.
+
+    `Encounter.adjust_initiative` does the work -- it writes
+    `Initiative.rolled` and re-splices the order -- and announced
+    **nothing**, which is `#1164`: *"an initiative change leaves no event,
+    so 37 of 74 rows that make one report silent while working"*.
+
+    `UseRestored`'s argument (`#899`) exactly, and the third time this
+    file has had to make it: a row whose whole printed Effect is *"you
+    gain a +N bonus to your initiative check"* did the thing, changed the
+    order, and reported SILENT, because nothing it touched was
+    observable. Measured over the feat and item rows alone, **26 of them
+    call `c.initiative` and nothing else**, so the verdict was a
+    statement about the engine's vocabulary and not about the rows.
+
+    **Announced from `Cast.initiative` rather than from
+    `adjust_initiative`**, and the reason is the one `UseRestored` gives:
+    `by` is the whole point. The encounter method knows the creature and
+    the amount but not the row that paid, and an event that cannot be
+    attributed is one `audit.DID_SOMETHING` must refuse -- which is why a
+    `Note` was never enough. A change made by some future caller that is
+    not a row will therefore not announce; that is the honest trade and
+    it is the same one every other verb in this family makes.
+
+    `total` is the creature's new count, which is what
+    `adjust_initiative` returns, so a reader does not have to go and ask.
+    """
+
+    who: int
+    amount: int
+    total: int
+    by: str
+
+
+@dataclass
+class WeaponIsImplement(Event):
+    """A held weapon now counts as an implement for its wielder.
+
+    `c.as_implement` sets `Weapon.as_implement` on the main hand and
+    announced nothing, so **38 feat and item rows that call it and
+    nothing else** reported SILENT while working -- the commonest single
+    property in the magic weapon slot, and the largest silent-by-
+    construction cluster in the feat and item corpus.
+
+    Same argument as `InitiativeChanged` above and `UseRestored`
+    (`#899`): the state it writes is read by `Gear.implement` and by
+    `Cast._enhancement_of`, neither of which is an announcement, so there
+    was nothing for the harness to see.
+
+    **Not to be confused with `WeaponChanged`**, which is already in
+    `DID_SOMETHING`: that one is a weapon's *numbers* moving --
+    `c.weapon_dice`, `c.gains_property` -- and this is a capability being
+    added to the weapon the holder already has. `#1009` is why the
+    distinction is sharp rather than pedantic: an earlier version of this
+    verb rewrote `group` instead of setting a flag, and 32 of 225 dealt
+    characters lost their melee basic attack to it.
+
+    `weapon` is the ref of the arm that gained it, so a rule can tell
+    which of two held weapons was meant.
+    """
+
+    who: int
+    weapon: str
+    by: str
+
+
+@dataclass
 class RollsTwice(Event):
     """A creature may now roll two d20s on named skill checks.
 

@@ -6517,7 +6517,18 @@ class Cast:
         encounter = getattr(self.world, "encounter", None)
         if who is None or encounter is None:
             return 0
-        return encounter.adjust_initiative(who, amount)
+        total = encounter.adjust_initiative(who, amount)
+        # **Announced here and not in `adjust_initiative`, because `by` is
+        # the point.** The encounter method knows the creature and the
+        # amount and not the row that paid, and an event that cannot be
+        # attributed is one `audit.DID_SOMETHING` refuses -- which is why
+        # the `Note` this used to leave was never enough. #1164, and
+        # `UseRestored`'s argument from #899.
+        from .events import InitiativeChanged
+
+        self.world.bus.emit(InitiativeChanged(
+            who=who, amount=amount, total=total, by=self.ref))
+        return total
 
     def swap_initiative(self, other: int) -> bool:
         """"You and one ally switch places in the initiative order."
@@ -16110,6 +16121,15 @@ class Cast:
             replace(w, as_implement=True) if w is arm else w
             for w in gear.weapons
         ]
+        # **The grant is read by `Gear.implement` and `_enhancement_of`,
+        # neither of which is an announcement**, so 38 feat and item rows
+        # whose whole Effect is this line reported SILENT while working.
+        # The same silent-by-construction shape as `#1164` above and
+        # `UseRestored` (#899).
+        from .events import WeaponIsImplement
+
+        self.world.bus.emit(WeaponIsImplement(
+            who=self._who(on) or self.me, weapon=arm.ref, by=self.ref))
 
     def revives_unless(self, *types: DamageType, on: int | None = None) -> None:
         """Say that this creature gets back up unless finished with `types`. #318.
