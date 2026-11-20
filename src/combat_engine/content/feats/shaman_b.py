@@ -403,13 +403,25 @@ def f1861(c: Cast) -> None:
 
 
 @power("f1027", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_beneficiary()",))
+       reach=PERSONAL, target=SELF, implemented_in=("p3773",))
 def f1027(c: Cast) -> None:
     """Moves p3773's second helping from an ally beside the spirit to one
-    within 2 squares of the target. The choice is made inside that
-    power's own body, and nothing lets a row outside it change who
-    another row picks -- healing the wider ally from here would pay the
-    hit points twice rather than instead."""
+    within 2 squares of the target.
+
+    **The old marker's reasoning was right and its conclusion was not.**
+    It read: *"the choice is made inside that power's own body, and
+    nothing lets a row outside it change who another row picks -- healing
+    the wider ally from here would pay the hit points twice rather than
+    instead."* Every clause of that is true, and it argues for writing
+    the clause **in p3773** rather than for `c.change_beneficiary()`
+    existing -- which is `#550`'s convention for a feat naming one power,
+    and is where it now lives, gated on `c.feat("f1027")` and credited.
+
+    So this row is a pointer. `triage.json` named `c.pre_empt` paired
+    with `c.instead_of`; that is the shape for a feat naming a *class* of
+    powers, and it would have had the same doubling problem, since
+    p3773's pick is a local list rather than a clause anything registers
+    against."""
 
 
 # -- speak with spirits, which is a skill check ------------------------------

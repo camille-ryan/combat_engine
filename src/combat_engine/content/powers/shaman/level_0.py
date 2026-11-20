@@ -260,8 +260,43 @@ def p9733(c: Cast) -> None:
 )
 def p3773(c: Cast) -> None:
     """The second creature only heals if the first actually spent a surge,
-    which is what `c.surge` returning 0 says."""
+    which is what `c.surge` returning 0 says.
+
+    **`f1027` moves who gets the second helping**, from an ally beside the
+    spirit to one within 2 squares of the target, and the clause lives here
+    rather than in the feat for `#550`'s reason: the choice is made in this
+    body, so a row outside it could only *add* a heal. `f1027`'s own
+    docstring had that right -- *"healing the wider ally from here would
+    pay the hit points twice rather than instead"* -- and the conclusion it
+    drew from it, that nothing can express the clause, was the wrong one.
+    The `return` is what makes it instead: one heal on either branch.
+
+    `triage.json` pointed at `c.pre_empt`/`c.instead_of`, which is the
+    shape for a feat naming a *class* of powers; `f1027` names one.
+
+    The feat only moves the *location* clause, so "other than the target"
+    survives it. `c.me` needs no excluding in either pool -- `side="ally"`
+    already leaves the caster out -- and is named anyway so the two pools
+    read alike.
+
+    **The `c.credit` block stamps nothing observable here**, and is written
+    anyway. `credit` is read in `Effects.apply`, so it reaches the 148
+    effect verbs and not a heal: `c.heal` passes `self.ref` straight to
+    `resolve.heal`, so `Healed.power` says this power either way. It is the
+    convention `drivers.every_held_gate_is_credited` asks of any body
+    gating on a feat, and it is already right for the day this clause grows
+    an effect. What makes the attribution legible today is `f1027`'s
+    `implemented_in=`, which buckets the feat out of the sweep rather than
+    leaving it to report SILENT.
+    """
     if not c.may("spend a healing surge") or not c.surge():
+        return
+    if c.feat("f1027"):
+        wider = [a for a in c.within(2, of=c.target, side="ally")
+                 if a not in (c.me, c.target)]
+        if wider:
+            with c.credit("f1027"):
+                c.heal(c.roll("1d6"), on=wider[0])
         return
     mates = [a for a in beside(c) if a not in (c.me, c.target)]
     if mates:

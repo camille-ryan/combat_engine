@@ -20264,6 +20264,110 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def f1027_moves_the_second_helping(out: Result) -> None:
+    """*"When you use p3773, you can choose one ally within 2 squares of
+    the target to regain the additional hit points, instead of an ally
+    adjacent to your spirit companion."*
+
+    Written into `p3773`, not into `f1027`, and the old marker's own
+    reasoning is why: *"healing the wider ally from here would pay the hit
+    points twice rather than instead."* True, and an argument for `#550`'s
+    convention rather than for a `c.change_beneficiary()` verb.
+
+    **The board is built by hand because the audit board cannot tell the
+    two pools apart.** On it both allies stand adjacent to the spirit
+    *and* within 2 of the target, so each branch heals the same creature
+    and a probe there reports identical output with the clause present or
+    absent -- a control that cannot distinguish two implementations.
+    Here the pools are **disjoint**: one ally beside the spirit and eight
+    squares from the shaman, one beside the shaman and far from the
+    spirit. So the ref that gets healed names the branch that ran.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Grid, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Health, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Healed
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.rng import Rng
+
+    def staged(feat: str | None) -> tuple[dict[str, int], list[int]]:
+        world = World(Grid(24, 16), Rng(3), Bus())
+        me = chargen.spawn(world, chargen.Character(
+            cls="shaman", level=9, build="", feats=[], powers=[]), (5, 5))
+        near = chargen.spawn(world, chargen.Character(
+            cls="fighter", level=9, build="", feats=[], powers=[]), (6, 5))
+        far = chargen.spawn(world, chargen.Character(
+            cls="cleric", level=9, build="", feats=[], powers=[]), (13, 5))
+        # **The spirit is called, not spawned with the shaman.** A
+        # hand-spawned shaman has no `Companion` at all -- `p6515` is the
+        # minor-action row that puts one on the board -- and the first
+        # draft of this rule went red on exactly that.
+        call = Cast(world=world, me=me, ref="p6515")
+        call.target = me
+        call.targets = [me]
+        REGISTRY["p6515"].body(call)
+        spirit = next((e for e in world.having(Companion)
+                       if must(world.get(e, Companion), "Companion").owner == me),
+                      None)
+        if spirit is None:
+            return {}, []
+        place(world, spirit, (12, 5))
+        # Hurt both, or `c.heal` pays nothing and the measurement is of an
+        # empty event list either way.
+        for who in (me, near, far):
+            hurt = must(world.get(who, Health), "Health")
+            hurt.hp = max(1, hurt.max_hp // 2)
+        if feat:
+            held = must(world.get(me, Powers), "Powers")
+            held.known.append(feat)
+        got: list[int] = []
+        world.bus.on(Healed, lambda ev: got.append(ev.target))
+        cast = Cast(world=world, me=me, ref="p3773")
+        cast.target = me
+        cast.targets = [me]
+        REGISTRY["p3773"].body(cast)
+        return {"me": me, "beside the spirit": far,
+                "beside the shaman": near}, got
+
+    who, plain = staged(None)
+    out.that(bool(who), "the board poses a shaman with a spirit companion")
+    if not who:
+        return
+    # The premise: the two pools really are disjoint on this board, or
+    # neither assertion below is about the clause.
+    out.that(
+        who["beside the spirit"] not in (who["me"], who["beside the shaman"]),
+        f"the two allies are distinct creatures ({who})",
+    )
+    # `plain` holds the surge the target spends first, then the second
+    # helping -- so the LAST heal is the one the clause chooses.
+    out.that(
+        plain and plain[-1] == who["beside the spirit"],
+        "as printed, the second helping goes to the ally beside the SPIRIT"
+        f" ({plain} vs {who})",
+    )
+    _, with_feat = staged("f1027")
+    out.that(
+        with_feat and with_feat[-1] == who["beside the shaman"],
+        "with f1027 it goes to the ally within 2 of the TARGET instead"
+        f" ({with_feat} vs {who})",
+    )
+    out.that(
+        len(with_feat) == len(plain) == 2,
+        "two heals either way -- the surge and ONE helping, so the feat"
+        f" moved the helping rather than adding one ({plain} vs {with_feat})",
+    )
+
+    row = REGISTRY.get("f1027")
+    out.that(
+        row is not None and not row.unfinished
+        and getattr(row, "implemented_in", ()) == ("p3773",),
+        "and f1027 is a pointer at p3773 rather than a marked row",
+    )
+
+
 def f2823_teleports_instead_of_shifting(out: Result) -> None:
     """*"You teleport instead of shift when using p7443."*
 
@@ -106467,6 +106571,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "second_helping": (f1027_moves_the_second_helping,
+                       "f1027 moves p3773's second helping to an ally near"
+                       " the target instead of one beside the spirit"),
     "teleport_instead": (f2823_teleports_instead_of_shifting,
                          "f2823 replaces p7443's shift with a teleport,"
                          " one move rather than two"),
