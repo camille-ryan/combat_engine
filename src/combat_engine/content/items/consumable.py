@@ -88,6 +88,7 @@ from combat_engine.engine import (
     CloseBlast,
     CloseBurst,
     Condition,
+    ConditionApplied,
     DamageApplied,
     DamageType,
     Defense,
@@ -1813,9 +1814,17 @@ def i3300p1(c: Cast) -> None:
 #: honest label there: nobody is at home in that ground and nobody is meant
 #: to be.
 _EGGS: tuple[tuple[tuple[DamageType, ...], str, bool | str], ...] = (
-    # Avalanche and Earthquake are one entry: both save-or-fall-prone, both
-    # exempt earth walk. The card's two varieties differ only in a clause
-    # about standing up, which `_egg_rider` does not carry either.
+    # **One entry for the two untyped varieties, and what it now means has
+    # narrowed.** Both print the same damage, the same save-or-fall-prone
+    # and the same earth-walk exemption; they differ in one clause each,
+    # and this entry used to carry *neither* of those. It now carries the
+    # first -- the owner's opportunity-action slide of whatever falls prone
+    # inside the zone, armed in the body because only the body has the
+    # zone -- so the entry reads as that variety outright and the other is
+    # simply not offered. Splitting the pair is a content change rather
+    # than an engine gap and so takes no symbol: `c.cannot_stand` already
+    # says the other one's clause exactly, and a fourth element on this
+    # tuple is what would tell two otherwise identical signatures apart.
     ((DamageType.UNTYPED,), "", "rubble"),
     ((DamageType.COLD,), Light.DARK, "ice"),
     ((DamageType.COLD, DamageType.LIGHTNING), Light.DIM, True),
@@ -1845,7 +1854,7 @@ def _egg_rider(c: Cast, kinds: tuple[DamageType, ...], who: int) -> None:
 
 @power("i3569p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(5, 10), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.on_prone_in(zone)",))
+       dropped=("c.grant_inline()",))
 def i3569p1(c: Cast) -> None:
     """Seven eggs on one card, asked of the decider the way `_element`
     asks for a damage type -- the choice *is* the variety.
@@ -1867,14 +1876,55 @@ def i3569p1(c: Cast) -> None:
     other earth walker on the board too."* `_EGGS` carries the going per
     variety.
 
-    **Still dropped, and the symbol is corrected.** *"As an opportunity
-    action, you slide a creature that falls prone in the zone up to 2
-    squares"* is not a line in the action menu at all -- it is a trigger
-    with a slide as its payout, fired by a creature falling prone inside a
-    zone this creature owns. It carried `actions.granted_target` with three
-    other rows and `#1305` found that symbol to be four different gaps; a
-    granted word with a derivable victim, which is what landed there, does
-    nothing for this one.
+    **The prone-slide is written and `c.on_prone_in(zone)` was never an
+    engine gap.** The old note had the shape of it right -- *"as an
+    opportunity action, you slide a creature that falls prone in the zone
+    up to 2 squares"* "is not a line in the action menu at all; it is a
+    trigger with a slide as its payout" -- and then marked the trigger as
+    missing. Every piece of it was already here:
+
+    * falling prone is announced as a `ConditionApplied` carrying
+      `Condition.PRONE`, and ending or answering a hold from inside that
+      window is the tree's settled arrangement -- `Effects.apply` installs
+      before it announces, so nothing gets a turn in between
+      (`powers/fighter.p2230`, `powers/warlord.p10128`,
+      `monsters/level_02/misc_sa._shrug_off_prone`);
+    * *"in the zone"* is `c.world.zones.occupants`, which the `TurnStart`
+      watcher above already asks and which `Zones.refresh` keeps current on
+      every square a creature leaves or enters -- so a creature knocked
+      down where it stands is answered for correctly;
+    * and this row **lays most of that prone itself**, in `_egg_rider`'s
+      save-or-fall branch. A watch rather than a line appended there,
+      because the card says *"a creature that falls prone in the zone"* and
+      not "a creature this zone knocks down": a shove, a feat or another
+      card putting somebody down inside the region is the same sentence.
+      One watch covers both and cannot double-pay -- `_egg_rider`'s own
+      prone arrives through the same announcement.
+
+    **The opportunity action is modelled as the once-per-turn bound and
+    nothing else**, which is `c.latched(..., per_turn=True)`: the window is
+    `(round, initiative slot)`, so a second creature falling in the same
+    region on the same turn is not slid and one falling on the next turn
+    is. What that does not model is the other half of an opportunity
+    action -- that it is not available on your own turn -- and the only way
+    to reach that here is for the owner to be standing in its own zone and
+    fall down in it.
+
+    **The untyped variety is now one printed variety rather than two.**
+    See `_EGGS`: the entry pays this slide, so it reads as the variety that
+    prints it, and the sibling that prints a standing-up clause instead is
+    not offered. That is a content split -- `c.cannot_stand` says the other
+    clause exactly -- so it takes no symbol here, because a symbol would
+    claim an engine gap that does not exist.
+
+    **Still dropped: `c.grant_inline()`.** Two other varieties print a
+    granted minor action of their own -- a slide of every slowed creature
+    in the zone, and a pull of every creature toward its central square
+    with a fall for anything pulled into it. Those are actions printed in
+    full with no ref of their own, offered to the owner for the rest of the
+    encounter, which is the gap `items/misc.i2980p1` and
+    `i1188p1` already carry and is a different question from this trigger.
+    The old marker named neither of them.
     """
     kinds, dark, rough = c.choose(list(_EGGS), "the egg's element") or _EGGS[0]
     zone = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER,
@@ -1889,6 +1939,23 @@ def i3569p1(c: Cast) -> None:
         _egg_rider(c, kinds, who)
 
     c.watch(TurnStart, at_dawn, until=When.ENCOUNTER, label=f"{c.ref} bite")
+
+    if kinds != (DamageType.UNTYPED,):
+        return
+
+    spent = f"{c.ref} footing"
+
+    def fell(ev: ConditionApplied) -> None:
+        if ev.condition is not Condition.PRONE:
+            return
+        if ev.target not in c.world.zones.occupants(zone):
+            return
+        if c.latched(spent, per_turn=True):
+            return
+        c.latch(spent, per_turn=True)
+        c.slide(2, on=ev.target)
+
+    c.watch(ConditionApplied, fell, until=When.ENCOUNTER, label=spent)
 
 
 @power("i3577p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,

@@ -1004,6 +1004,51 @@ def _bought_with_a_point(ev: Any) -> bool:
     return bool(getattr(ev, "action_point", False))
 
 
+def _gamble_sharpened(c: Cast, ally: int) -> None:
+    """The two feats that ride on the gamble being taken up. #550.
+
+    Both print the same sentence with a different number: the ally gains
+    either a bonus to the attack roll or a bonus to speed for the move
+    action, the ally's choice. **The moment they name is the opt-in, not
+    the point spend** -- which is why they were blocked: watching
+    `ActionPointSpent` on its own would pay out for every ally who
+    declined the gamble, and the line above is where one is accepted.
+
+    "The attack roll" is the one the presence's own trigger is about --
+    the swing bought with the point -- so the bonus is gated on the same
+    `action_point` flag `_bought_with_a_point` reads off the event, and
+    `once=True` spends it on that swing rather than on the ally's whole
+    turn. "The move action" is the one the presence hands out below.
+
+    Neither card prints a bracketed category, so these are plain `if`s
+    and both can apply to one use; untyped bonuses add, which is what
+    `kind` defaults to. Each asks its own choice, because each card gives
+    the ally one.
+
+    The choice is offered attack-first: an engine with nobody playing
+    takes the first option, so that is the answer in every headless
+    fight, and it is the half with a narrowing to get wrong.
+    """
+    def pick(ref: str, amount: int) -> None:
+        with c.credit(ref):
+            if c.choose(["the attack roll", "the move action"],
+                        f"{ref}: what {ally} takes", who=ally) \
+                    == "the move action":
+                c.bonus("speed", amount, on=ally, until=When.EOT)
+                return
+            c.bonus("attack", amount, on=ally, until=When.EOT, once=True,
+                    when=lambda ctx: bool(ctx.get("action_point")))
+
+    if c.feat("f788"):
+        pick("f788", 1)
+    # "When a **bloodied** ally uses your presence", asked of the ally and
+    # asked here, where the opt-in is taken -- the gate is about the ally's
+    # state at that moment. `on=` because a trait has no target and the bare
+    # call would ask about nobody.
+    if c.feat("f759") and c.bloodied(on=ally):
+        pick("f759", 2)
+
+
 @power(
     "cf:warlord-marshal-f4s0",
     level=0,
@@ -1031,6 +1076,10 @@ def warlord_presence_gamble(c: Cast) -> None:
     The free basic attack needs somebody to swing at and the card does not
     name one, so it goes to an enemy already next to the ally; with none
     adjacent, the move action is what is left and is taken instead.
+
+    `f788` and `f759` are written into this body under #550's convention --
+    `_gamble_sharpened` below the opt-in -- because the moment they print is
+    the ally accepting the gamble and nothing else announces it.
     """
     me = c.me
 
@@ -1038,6 +1087,8 @@ def warlord_presence_gamble(c: Cast) -> None:
         ally = _paying_ally(c, ev)
         if ally is None or not c.may("gamble on the presence", who=ally):
             return
+        # Taken up, which is the moment two feats print. See the helper.
+        _gamble_sharpened(c, ally)
         done = {"yet": False}
 
         def landed(hit: Hit) -> None:

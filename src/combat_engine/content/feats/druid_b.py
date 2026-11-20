@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.feats.general_l import _borrowed
 from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
     AT_WILL,
@@ -41,6 +42,7 @@ from combat_engine.engine import (
     Condition,
     Escaped,
     Hit,
+    Keyword,
     SecondWind,
     TotalDefence,
     Trigger,
@@ -452,36 +454,126 @@ def f1876(c: Cast) -> None:
     is left is the narrowing: `c.instinctive` sets a standing summon
     going, and the attack it then makes is announced as an ordinary
     attack by an ordinary creature, so the bonus cannot be held to the
-    instinctive action the card charges it to."""
+    instinctive action the card charges it to.
+
+    **`query.acting_independently` is not the reader, and this is
+    measured rather than argued.** It is the obvious candidate -- "is
+    this companion acting on its own this round?", `Companion.commanded
+    != world.round`, and `turns._uncommanded` reads exactly it to decide
+    whether to run the instinctive effect at all. But the instinctive
+    effect reaches its attack through `Cast.command`, which stamps
+    `commanded = world.round` **before** it rolls. Probed on an
+    `m145a0` board with a `c.bonus("attack", ..., when=)` gate recording
+    what it saw: independent `True` before `Cast.instinctive`, and the
+    gate read `False` at the roll. A *commanded* swing stamps the same
+    field, by the same line for a summon and by `actions.perform`'s
+    `"command"` branch for a beast -- so the gate is False for both
+    kinds of attack, a uniformly dead gate, which is the one shape
+    worse than no clause at all.
+
+    So the gap is unchanged: nothing marks an attack as *instinctive*
+    while it is being rolled. `ctx` carries `power`, `granted_by` and
+    `granted_via`, and the instinctive and commanded paths are
+    identical in all three -- both roll the summoning block's own
+    `summon=` line under that block's ref."""
 
 
 @power("f2033", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(no_provoke=)",))
+       reach=PERSONAL, target=SELF)
 def f2033(c: Cast) -> None:
     """Uses another feat's granted card while shaped, for a cheaper
-    action and without giving an opening. `c.recast` says the cheaper
-    action and the card is a ref -- what is missing is the no-provoke,
-    which `Power.no_provoke` is header data for and cannot be lent to
-    one use."""
+    action and without giving an opening.
+
+    **Three printed halves, and only two of them are work.** The old
+    note here read "`c.recast` says the cheaper action ... what is
+    missing is the no-provoke, which `Power.no_provoke` is header data
+    for and cannot be lent to one use". Both clauses of that are wrong:
+
+    * `f2023b` is **already** `action=minor`, so the cheaper action is
+      print's own cost and `c.recast` is not owed for it.
+    * `c.no_provoke(when=)` reads `ctx["by"]` -- the row that opened the
+      window, which `dsl.use` stamps on it for every ranged or area use
+      -- so the waiver is lent to one card by a gate rather than by
+      header data. `items/arms.py`'s `_alchemical_opening` is the live
+      caller of the same shape.
+
+    The half the old note did not mention is the one with teeth.
+    *Being able to use it at all* while shaped is a real permission:
+    `forms.take_beast_form` lays `c.forbid(lacking=Keyword.BEAST_FORM)`
+    and `dsl.usable` reads it through `dsl.keywords_of`, so in beast
+    form `f2023b` is refused outright. Measured on a `p5032` board:
+    usable before the shape, `"needs the beast form keyword"` in it,
+    and usable again once this row grants the keyword. `keywords_of` is
+    per-character, so the grant is this druid's copy of the card and
+    nobody else's.
+
+    Granted for the encounter rather than gated on the shape, because
+    the bar only exists while shaped -- the grant is inert out of it.
+    `forms.beast_row` reads the printed header and not the grant, so no
+    beast-form damage rider leaks onto the card either, which is right:
+    the sentence is permission, not a retype.
+
+    The no-provoke **is** gated on the shape, because that one is a
+    standing waiver that would otherwise cover a humanoid's use of the
+    same card."""
+    me = c.me
+    c.counts_as_keyword("f2023b", Keyword.BEAST_FORM, on=me,
+                        until=When.ENCOUNTER)
+    c.no_provoke(
+        on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("by") == "f2023b" and in_beast_form(c.world, me)
+        ),
+    )
 
 
 @power("f2880", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.RaceLine.granted(second=)",))
+       reach=PERSONAL, target=SELF, dropped=("forms.beast_row(creature)",))
 def f2880(c: Cast) -> None:
     """Gives a racial trait's chosen power the printed keyword this
-    package gates on. `forms.beast_row` reads that keyword off the row's
-    `requires=`, so it could be granted -- but nothing records which
-    power the trait was pointed at, the same gap f604 named.
+    package gates on.
 
-    **The premise in the sentence above is doubtful and wants a card read
-    before this is written.** `general_f.f602` -- written, unmarked -- reads
-    exactly which manifestation a character holds, off its own rows via
-    `_holds`, and `RaceLine.granted(pick)` deals exactly one. So *which
-    power the trait was pointed at* is already recorded. If that is all this
-    row needed, it is writable today and the marker is residue.
+    **The marker was residue and the card settles it.** The old note's
+    premise -- "nothing records which power the trait was pointed at,
+    the same gap f604 named" -- is false: `rt:r6-t3` picks through
+    `c.borrow_row`, which records the pick under the trait's own ref,
+    and `c.stored_row(of="rt:r6-t3")` reads it back. So
+    `chargen.RaceLine.granted(second=)` was never this row's gap; that
+    is f604's, and the two readings the old note said could not both be
+    right were indeed one marker doing duty for two needs.
 
-    Kept marked rather than un-marked because the clause has not been read
-    against its printed card, and this row's own note says its gap is *"the
-    same gap f604 named"* -- and f604's real gap is a **second**
-    manifestation, which is what the marker now points at. Those two
-    readings cannot both be right. #1029, #1112."""
+    `general_l._borrowed` rather than a bare read, for its own measured
+    reason: `turns.arm_traits` walks a creature's rows in its own
+    order, and on the audit board a feat of this family arms *before*
+    the trait -- so a read at arming time is `""` for half the orders
+    and nothing says which this build has. It lays now if the pick is
+    recorded and otherwise waits for the `RowStored` the trait's own
+    arming emits.
+
+    What the grant buys: `forms.take_beast_form` lays
+    `c.forbid(lacking=Keyword.BEAST_FORM)` and `dsl.usable` reads it
+    through `dsl.keywords_of`, which is per-character -- so the picked
+    card stops being refused for lacking the keyword while shaped. That
+    is the clause's whole working meaning in a fight today. Measured on
+    an `f2880` board put on the borrowing leg of the trait's printed
+    fork, asked with the grant and again with it cleared: the refusal
+    `"needs the beast form keyword"` is present without it and gone
+    with it, leaving only whatever the picked card requires on its own
+    account.
+
+    **What is dropped**: the card says *treat it as though it has the
+    keyword*, which should also pick up the package's "with beast form
+    powers" riders. `forms.beast_row` takes a `ctx` holding only
+    `power` and reads the printed header, so a per-character grant is
+    invisible to it -- `forms.py`'s own note records exactly this and
+    names this row. Two of its five callers pass a ctx with no creature
+    in it at all, so the reader wants widening before the grant can
+    reach them; that is a `forms.py` change and not this file's.
+    #744, #1029, #1112."""
+    me = c.me
+
+    def retype(pick: str) -> None:
+        c.counts_as_keyword(pick, Keyword.BEAST_FORM, on=me,
+                            until=When.ENCOUNTER)
+
+    _borrowed(c, retype)

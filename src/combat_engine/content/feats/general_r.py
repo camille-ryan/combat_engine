@@ -2168,12 +2168,19 @@ def p13853(c: Cast) -> None:
     card is one who took `f3620`, whose own clause widens the trigger to any
     melee at-will. So the gate is the wider sentence, which is the one that
     can ever be true.
+
+    **The die is read rather than written, for `i3525x1`.** That block's
+    whole printed Property is "you roll d12s instead of d10s for that
+    power's damage", and `c.change_dice` is a modifier only a row calling
+    `c.dice_for` obeys -- so a literal here would have made it a hold
+    nobody consults. `"1d10"` is still what the card prints and is still
+    what every character without that implement rolls.
     """
     ev = c.trigger
     victim = getattr(ev, "target", None)
     if victim is None:
         return
-    c.flat(c.roll("1d10"), on=victim)
+    c.flat(c.roll(c.dice_for(c.ref, "1d10")), on=victim)
     c.regain_surge(on=c.me)
 
 

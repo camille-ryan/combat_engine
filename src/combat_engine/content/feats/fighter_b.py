@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.racial import _holds
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -871,6 +872,13 @@ def f2332(c: Cast) -> None:
 #: calls `c.basic`, so that is the ref the grant is stamped with.
 CHALLENGE = "p7419"
 
+#: The power `rt:r33-s2` deals, which is how "manifesting that leg" is read.
+#: A race's sub-option is not a row; `RaceLine.granted` records the leg by
+#: putting its power in `Powers.known`, and the sub-option's own spec names
+#: that power. The same join `general_f._MANIFESTED_DAMAGE` makes, and it
+#: agrees with this card: that leg is the lightning one.
+MANIFESTED = "p1769"
+
 
 def _challenged(c: Cast, ev: Any) -> list[int]:
     """Who the swing Combat Challenge granted actually hit."""
@@ -925,22 +933,52 @@ def f2180(c: Cast) -> None:
 
 
 @power("f795", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.deals(chosen=)",))
+       reach=PERSONAL, target=SELF)
 def f795(c: Cast) -> None:
-    """**Re-aimed twice, and down to one symbol.** The granted swing is
-    readable -- it carries `granted_via`, and `f1732` beside it gates on
-    exactly that. Which manifestation the character is in is readable
-    too: `rt:r33-t0` no longer claims the choice is recorded
-    nowhere, it is the one of the thirteen racial rows in `Powers.known`,
-    and `c.element` names the type that leg is sworn to.
+    """Written. **The marker's blocker was stale and the symbol it named
+    does not need to exist.**
 
-    What is genuinely left is the middle of the sentence: retyping one
-    attack's damage. `c.deals` is an unconditional override held as a
-    labelled effect and read by `Cast._retyped`, which sees no context,
-    so "only the swing Combat Challenge granted" cannot be attached to
-    it. Laying and ending the override around the swing would recolour
-    everything else in the window, which is worse than not saying it."""
+    It said `c.deals` "is an unconditional override ... which sees no
+    context, so 'only the swing Combat Challenge granted' cannot be
+    attached to it", and that `ref` narrowing it wanted was already
+    there: `c.deals(ref=)` is compared against the row being *rolled* in
+    `Cast._retyped`, and `once=True` is spent by the blow it recolours.
+    So the retype is confined to one swing by two existing kwargs rather
+    than by a new one. `m2044a1` is the precedent for the pair.
+
+    **`PowerUsed` is the moment, and it is early enough on purpose.** It
+    carries `granted_by`/`granted_via` -- the read `_challenged` above
+    already makes -- and it is announced *before* the swing's body runs,
+    so a retype laid in this handler is standing when that body rolls its
+    damage. `PowerResolved`, which `f1736` and `f2180` use, is too late:
+    the damage is dealt by then.
+
+    **Two narrowings, not one, and each on its own axis.** `ref=ev.power`
+    is the row being swung and `once=True` is the single blow; `until`
+    is `EONT` rather than the default encounter so that a swing which
+    never rolls damage -- a miss -- cannot leave the override standing
+    for a later basic attack of the same ref.
+
+    The manifestation gate is `MANIFESTED` above, and the choice is a
+    real `c.choose(optional=True)` because the card prints "can": the
+    decline goes last, so a headless run takes the first printed type.
+    """
+    def granted(ev: Any) -> None:
+        if ev.actor != c.me or ev.granted_by != c.me:
+            return
+        if ev.granted_via != CHALLENGE or not _holds(c, MANIFESTED):
+            return
+        picked = c.choose(
+            [DamageType.THUNDER, DamageType.LIGHTNING],
+            f"{c.ref}: which damage type the granted swing deals",
+            optional=True,
+        )
+        if picked is None:
+            return
+        c.deals(picked, on=c.me, ref=ev.power, until=When.EONT, once=True)
+
+    c.watch(PowerUsed, granted, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} retype")
 
 
 # -- the rest of the gaps, each named exactly -------------------------------

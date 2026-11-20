@@ -548,11 +548,45 @@ def i2527x1(c: Cast) -> None:
 
 @power("i2656x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.passive_only()", "c.surprise_round()"))
+       dropped=("actions.legal(minor_despite_surprised=)",))
 def i2656x1(c: Cast) -> None:
-    """`skills.passive` is 10 plus the same modifier an active check uses,
-    so a passive-only bonus cannot be separated from the rolled one."""
-    _skills(c, 2, "perception")
+    """**A passive read is separable from a rolled one**, which the note
+    that stood here denied. `skills.modifier` puts `natural` -- the die
+    face -- into the modifier context *only when a real check is
+    resolving*: `check()` and `ability_check()` pass it from inside their
+    resolve callbacks and every other caller leaves it `None`, so
+    `skills.passive`'s own call carries no such key at all. `ctx.get(
+    "natural") is None` is therefore "nobody rolled this". `f2804` reads
+    the same key the other way round, for a parity gate.
+
+    What the separation costs, said plainly because it is a real cost: a
+    **standalone** read passes no face either, so the page's skill list
+    shows this +2 beside an active check that does not get it, and so does
+    an instrument measuring what a check would come to. A display
+    inaccuracy -- where laying the bonus flat, which is what stood here,
+    was a *rules* inaccuracy, paying out on every rolled check the card
+    never touches. The mechanical consumers of `skills.passive` are
+    exactly where the card aims: the DC a hider is measured against, and
+    noticing a trap. The sibling `i1371x1` records that a plain
+    `skill:perception` bonus is read by that passive, so the separation
+    was the only thing missing.
+
+    **The minor action while surprised stays dropped, and the old
+    `c.surprise_round()` marker was pointed at something already built**
+    -- `conditions` lays the surprised hold with `cannot_act`, `turns`
+    applies it, and four content files already answer "is this the
+    surprise round" off the live holds. The refusal is a layer down and
+    deliberate: `c.waive` relaxes four named words of a condition's cost
+    and raises on `cannot_act`, and relaxing it wholesale would hand over
+    a whole turn rather than one action -- far better than the card.
+    `query.can_act` is all-or-nothing and `actions.legal` returns `end`
+    and nothing else when it is False, so the gap is a per-kind carve-out
+    there. The two `actions.legal(free_despite_stun=)` rows want the
+    general form of the same thing; this one wants a minor, and a symbol
+    naming free actions and stun would report this row ready when it is
+    not."""
+    c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER,
+            kind="item", when=lambda ctx: ctx.get("natural") is None)
 
 
 @power("i3230p1", level=5, cls=ITEM, usage=AT_WILL, action=MINOR,
@@ -914,10 +948,61 @@ def i1371x1(c: Cast) -> None:
 
 
 @power("i1371p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=Melee(1), target=NO_TARGET, todo=("c.disable_trap()",))
+       reach=Melee(1), target=NO_TARGET)
 def i1371p1(c: Cast) -> None:
-    """A trap is a creature to the board -- `c.is_trap` finds one -- and
-    there is no verb for taking one out of action with a check."""
+    """**The marker's premise was stale by a whole action kind.** It said
+    "there is no verb for taking one out of action with a check";
+    `actions.py` carries a complete `disable` branch -- it guards on
+    found / sprung / disabled / skill / DC / adjacent, rolls a check
+    against the trap's own numbers, calls `traps.disable` on success and
+    implements the printed fail-by-5 rule -- and `traps.disable` has set
+    `Trap.disabled` since `#955`.
+
+    So this row is the same move at a **different cost**: the printed
+    action is a standard with the trap's own countermeasure skill, and
+    this card gives it as a minor and names the skill itself. Hence the
+    hard-named `"thievery"` rather than `trap.disable_skill`, which is the
+    one place the card overrides the block: a trap countered by some other
+    skill still yields to these hands, because the card says which check
+    is made and says nothing about which trap.
+
+    `trap.disable_dc` is still required, because there is no number to
+    beat without it and inventing one is the fabrication `perception_dc`'s
+    own note warns about -- 477 printed blocks carry no countermeasure at
+    all. Found, unsprung, not already disabled and adjacent are the other
+    four, copied from the standard action for the same reasons its
+    docstring gives; reach is `Melee(1)` for the last of them.
+
+    **Missing by 5 or more sets the trap off at the fumbler.** PHB p189 is
+    a general rule about the check and not about the action that pays for
+    it, so a cheaper action does not make it safer. `traps.fire` refuses a
+    suppressed trap by itself, so a second disarm of something already
+    asleep cannot go off.
+
+    One trap, not every trap in reach: hands on one mechanism, which is
+    the argument the standard action's branch makes against the search
+    action's single roll over all candidates. `world.each` is ordered, so
+    which one is deterministic."""
+    from combat_engine.engine import traps
+    from combat_engine.engine.components import Trap
+
+    me = c.me
+    for eid, trap in c.world.each(Trap):
+        if (
+            not trap.found
+            or trap.sprung
+            or trap.disabled
+            or trap.disable_dc is None
+            or not query.adjacent(c.world, me, eid)
+        ):
+            continue
+        dc = trap.disable_dc
+        rolled = c.check("thievery", dc)
+        if rolled:
+            traps.disable(c.world, eid)
+        elif dc - getattr(rolled, "total", dc) >= 5:
+            traps.fire(c.world, eid, me, by=me, why="disable")
+        return
 
 
 @power("i1816p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,

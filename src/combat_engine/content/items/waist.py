@@ -108,6 +108,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Conjuration
 from combat_engine.engine.durations import keywords_of
+from combat_engine.engine.grid import STEPS
 from combat_engine.engine.query import squares
 
 ITEM = "item"
@@ -851,8 +852,26 @@ def i3255p2(c: Cast) -> None:
     c.save(on=c.me, against="ongoing")
 
 
+def _flight_blocked(c: Cast, square: Square) -> bool:
+    """Is that square one a flight could not have **entered**?
+
+    The question a shortfall cannot answer on its own. `movement.forced`
+    returns the squares actually covered and breaks for four different
+    reasons -- a `"forced"` modifier on the flier shortening the shove, an
+    outright refusal, `_over_an_edge`, and `step` refusing the next square
+    -- and only the last of those is a collision. So the square the run
+    stopped short of is asked directly, with the same two tests `step`
+    itself applies and that `monsters/level_02/misc_sa._step_into_vacated`
+    reads for the same purpose. An off-board square is not `inside` the
+    grid and so is not passable, which makes the edge of the map a thing
+    to hit.
+    """
+    return (not c.world.grid.passable(square)
+            or c.world.grid.occupant(square) is not None)
+
+
 @power("i3491p1", level=7, cls=ITEM, action=MOVE,
-       reach=PERSONAL, target=SELF, dropped=("c.collide()",))
+       reach=PERSONAL, target=SELF)
 def i3491p1(c: Cast) -> None:
     """Up and down, or -- once in a hundred -- sideways instead.
 
@@ -866,21 +885,53 @@ def i3491p1(c: Cast) -> None:
     same two-part shape ("Effect: ... Malfunction: on a result of 1 ...")
     and reads it the same way, with a body and a `return`.
 
-    **"A random direction" is the mover's own decider**, which is that
-    sibling's recorded conclusion and holds here for the same reason:
-    there is no way to name a direction, only a square, so choosing one
-    would be less random than letting the decider choose. `c.move` is the
-    only sideways mover there is -- `c.rise` and `c.hover` go up.
+    **The collision is written, and getting there replaced both halves of
+    the old note.** It said *"a random direction is the mover's own
+    decider ... there is no way to name a direction, only a square"*, and
+    then dropped the collision because `c.move` "picks from
+    `World.reachable_paths`, so it routes around whatever is in the way
+    and never arrives at a square it could not enter". The second
+    sentence is exactly right about `c.move` and is why it is gone; the
+    first is what had to change for the collision to be sayable at all.
 
-    Still dropped: "you take 2d10 damage and stop moving if you collide
-    with anything". `c.move` picks from `World.reachable_paths`, so it
-    routes around whatever is in the way and never arrives at a square it
-    could not enter -- there is no collision for the damage to hang on.
-    A shortfall in squares moved cannot stand in for one either, because
-    the decider is equally free to stop short of its own accord."""
+    * **A direction is nameable.** `grid.STEPS` is the board's own eight,
+      and `c.line` walks a straight run between two squares with
+      diagonals costing one, so a `1d8` plus a multiply is a direction.
+      That is also *more* random than the old reading rather than less:
+      a decider is a player, and a player offered a ring of squares
+      picks the useful one, where the card prints a direction nobody
+      chose. The die goes in the log beside the two `1d10`s.
+    * **A straight run can fall short, and `c.slide` says by how much.**
+      `movement.forced`'s `to=` branch walks the line one square at a
+      time, breaks on the first it cannot enter, and returns the squares
+      actually covered -- which is the "stop moving" half of the printed
+      sentence for nothing, since stopping is what breaking out of that
+      loop is.
+
+    **The shortfall is not asked to stand in for the collision**, which
+    would have been wrong for three of the four ways that loop can end
+    early -- an anti-shove modifier on the flier, an outright refusal, and
+    the edge save. See `_flight_blocked`: the square the run stopped short
+    of is tested directly, so a flight cut short by a hold deals nothing
+    and a flight into a wall or a body deals the printed 2d10.
+
+    `c.slide` rather than a move, because the flight is involuntary: the
+    pack throws the wearer and forced movement is the engine's category
+    for that. What that costs is a `ForcedMove` other rows can see, which
+    is the correct announcement for this and not a false one.
+
+    The `2d10` is the wearer's own and is written as such -- `c.damage(...,
+    on=c.me)`, the tree's convention for a row hurting its caster."""
     first, second = c.roll("1d10"), c.roll("1d10")
     if first == 1 and second == 1:
-        c.move(c.roll("1d10"))
+        far = c.roll("1d10")
+        step_x, step_y = STEPS[c.roll("1d8") - 1]
+        here = c.here
+        aim = (here[0] + step_x * far, here[1] + step_y * far)
+        path = c.line(here, aim)
+        flew = c.slide(far, to=aim, on=c.me)
+        if flew < far and _flight_blocked(c, path[flew + 1]):
+            c.damage("2d10", on=c.me, detail=c.ref)
         return
     c.rise(first + second)
     c.fall()

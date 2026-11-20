@@ -673,15 +673,34 @@ def p377(c: Cast) -> None:
 )
 def p7442(c: Cast) -> None:
     """"Or charge it" is the same blow reached differently, so the run is
-    taken only when the enemy is out of reach and the basic attack is the
-    one thing that lands either way."""
+    taken only when the enemy is out of reach.
+
+    **One swing, not two, which is a correction.** This called
+    `c.charge_at(foe)` and then `c.basic(on=foe)`, on the reading that the
+    charge was only the run -- `c.charge_at` runs *and* swings
+    (`use(..., charge=True)` at the end of it), so an out-of-reach enemy
+    took two attacks off a card that prints "either ... or".
+
+    **`f2994` substitutes a ranged basic attack for either**, which is one
+    kwarg: `c.basic(ranged=True)` swings `Powers.ranged`, the creature's
+    real ranged basic. Printed "can", so it is offered rather than taken;
+    out of reach the shot is the one that costs no run and so leads, and
+    beside the enemy the melee swing does. `c.basic` returns False when
+    there is nothing to shoot with, and the printed swing still happens
+    then rather than the reaction being eaten.
+    """
     ev = c.trigger
     foe = ev.attacker if ev is not None else None
     if foe is None:
         return
-    if not c.adjacent(foe):
-        c.charge_at(foe)
-    if c.basic(on=foe):
+    swung = False
+    if c.feat("f2994"):
+        with c.credit("f2994"):
+            if c.may("shoot instead of closing", default=not c.adjacent(foe)):
+                swung = c.basic(on=foe, ranged=True)
+    if not swung:
+        swung = c.basic(on=foe) if c.adjacent(foe) else c.charge_at(foe)
+    if swung:
         c.dazed(on=foe, until=When.EONT)
 
 

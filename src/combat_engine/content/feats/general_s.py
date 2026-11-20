@@ -851,7 +851,7 @@ def f3701(c: Cast) -> None:
 @power("f3702", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        proficiency=("w3597",),
-       todo=("monk.flurry_ongoing_instead()",))
+       implemented_in=("p7448", "p11207", "p13123", "p16131", "p16132"))
 def f3702(c: Cast) -> None:
     """**Both of this row's old markers were false.** It claimed the sickle
     could not be asked for and that the flurry had no ref. Neither holds:
@@ -863,57 +863,50 @@ def f3702(c: Cast) -> None:
     * `c.flurry_of_blows()` arrived with #277 and f3701, directly above, uses
       it for the identical trigger.
 
-    So the proficiency half lands now -- but it is a **column, read by chargen**,
-    and `todo` is still right because the marker is about *play*: in a fight this
-    row does nothing whatever. Written as `dropped` first, and `audit.py` called
-    that out immediately by reporting it SILENT, "fired 24/8 times and did
-    nothing" -- which was true and is the distinction the three markers exist to
-    make. A proficiency is not a thing that happens in a round.
+    The proficiency half is a **column, read by chargen**, and a
+    proficiency is not a thing that happens in a round -- which is why this
+    row sat marked for play while that half worked.
 
-    What is genuinely missing is that the clause is a **replacement**: the
-    chosen target "instead takes ongoing damage equal to the damage that you
-    would have dealt". `PowerUsed` is announced before the body runs, so there
-    is nothing to subtract yet, and by the time the damage lands it is already
-    paid. A watch written here could only *add* the ongoing damage on top,
-    making the row stronger than its card.
+    **The swap half is written now, in the five bodies**, and the route is
+    the one the old note worked out and could not take. The clause is a
+    **replacement**: the chosen target *"instead takes ongoing damage equal
+    to the damage that you would have dealt"*. `PowerUsed` is announced
+    before the body runs, so there is nothing to read yet, and by the time
+    the damage lands it is already paid -- a watch hung here could only
+    *add* the burn on top, which is stronger than the card.
 
-    **Re-pointed, and the old symbol was wrong twice over.** It said
-    `c.pre_empt(ref, clause)` was the window and that 29 rows waited on it.
-    `c.pre_empt` **landed** -- engine/cast.py:9069, with its read half
-    `c.instead_of` at 9165 -- so nothing is waiting on a verb. And it is the
-    wrong route here, which `drivers.flurry_traded` rules on in as many
-    words: this card names the monk's *feature*, a monk holds whichever of
-    the five flurries its tradition granted, and five is a finite list -- so
-    `content/CLAUDE.md`'s rule applies and the clause is written into each
-    of the five bodies behind `c.feat`, not registered from outside.
-    `c.pre_empt` is for a feat naming a *class* of powers with no list to
-    edit. `f3171` is the worked twin and
-    `powers/monk/level_0._forgo_for_necrotic` is the shape: one helper, five
-    call sites, each gating the body's own `c.flat`.
+    `c.pre_empt` is not the route either, and `drivers.flurry_traded` rules
+    on it in as many words: this card names the monk's *feature*, a monk
+    holds whichever of the five `FLURRIES` its tradition granted, and five
+    is a finite list, so `content/CLAUDE.md`'s rule applies and the clause
+    goes into each body behind `c.feat`. `c.pre_empt` is for a feat naming
+    a *class* of powers with no list to edit. `f3171` is the worked twin
+    and `powers/monk/level_0._forgo_for_necrotic` was the shape to copy:
+    one helper, five call sites, each gating the body's own `c.flat`.
 
-    So what is owed is a sibling of that helper -- gated on `c.feat("f3702")`,
-    `_holding_ref(c, "w3597")` and the printed choice, paying
-    `c.ongoing(<the amount the body was about to deal>)` and returning True
-    so each flurry skips its damage line. The amount is computed inside each
-    flurry body, which is why the five bodies change and this one does not;
-    f3702 then carries `implemented_in=` rather than a marker, the
-    convention at `content/feats/exploits.py:1099`.
+    So `powers/monk/level_0._burn_instead` is that sibling -- gated on
+    `c.feat("f3702")`, `query.holding(..., "w3597")` and the printed
+    adjacency, taking the amount the body was about to deal and returning
+    True so the body skips its damage line. The amount is computed inside
+    each flurry off a different ability, which is why the five bodies carry
+    the clause and this row carries only the pointer.
 
-    "Choose one target of the power that is adjacent to you" needs no
-    choosing: all five flurries are `target=ONE_CREATURE` over `Melee(1)`.
-
-    **The symbol cannot resolve, and that is a property of the wait rather
-    than a misspelling.** `blocked._surface` indexes `engine/`,
+    **`implemented_in=` and no marker, which is what `#550` requires and
+    what no symbol was ever going to announce.** The old `todo` could not
+    resolve by construction -- `blocked._surface` indexes `engine/`,
     `chargen/`, `etl/` and `spec` and nothing else, so an owner of `monk`
-    -- or of `powers.monk.level_0`, or any other content path -- is a hard
-    False for ever, which is the failure `f3788`'s note calls the worse of
-    the two. There is no honest alternative spelling here: what is owed is
-    a clause hand-written into five rows that are **declared and
-    finished**, so a ref-shaped marker would resolve True and report this
-    feat ARRIVED with nothing written. So it stays, and whoever writes the
-    five bodies clears it by hand the way `#550` already requires -- this
-    row becomes `implemented_in=`, which no symbol was ever going to
-    announce."""
+    is a hard False for ever -- and a ref-shaped spelling would have been
+    worse, resolving True against five declared rows and reporting this
+    feat ARRIVED with nothing written.
+
+    **One note the old text got wrong**, and it is why the helper asks
+    about adjacency at all: it said *"choose one target of the power that
+    is adjacent to you needs no choosing: all five flurries are
+    `target=ONE_CREATURE` over `Melee(1)`"*. The choosing half is right and
+    the adjacency half is not. `p16132` is `Melee(2)`, and `f3319` lays a
+    `"reach"` stretch that puts any of the five at ten squares -- so the
+    one target is not always next to the monk and the printed word has to
+    be asked."""
 
 
 # -- runepriest -------------------------------------------------------------
@@ -1798,8 +1791,7 @@ def f3755(c: Cast) -> None:
 
 
 @power("f3756", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.lend_check(purpose=)",))
+       reach=PERSONAL, target=SELF)
 def f3756(c: Cast) -> None:
     """*"You gain a +3 feat bonus to Athletics checks to climb."*
 
@@ -1810,18 +1802,66 @@ def f3756(c: Cast) -> None:
     that declares itself inert while naming a check the tree now rolls, and
     that is what found this.
 
-    **Dropped: the half that lends the bonus on.** *"Whenever you make a
-    Dungeoneering check or an Athletics check to climb, one ally adjacent
-    to you gains a +2 feat bonus the next time he or she makes the same
-    sort of check."* Three things are missing at once and they are one
-    gap: a trigger on *having made* a check, a bonus laid on somebody else
-    keyed to the **same purpose**, and a "next time" that is spent by one
-    roll. `c.lend_passive` lends a passive score and `c.lend_checks` is
-    named by one other row; neither carries a purpose."""
+    **The lent half is written too, and all three of the things its old
+    marker called missing were already here.** That note said a trigger on
+    *having made* a check, a bonus keyed to the same purpose, and a "next
+    time" spent by one roll were one gap waiting on `c.lend_check(purpose=)`:
+
+    * `SkillCheck` is announced for every check and carries `purpose` as a
+      plain attribute, so the trigger is `c.watch(SkillCheck, ...)`;
+    * the clause above already gates a modifier on that purpose, so the
+      same `when=` lends it -- `skills.modifier` is handed the purpose on
+      the recipient's roll exactly as it is on this one;
+    * `once=True` on a `skill:` key is spent on a `SkillCheck` rather than
+      on the owner's next swing, which is the branch `cast.py` added for
+      precisely this shape.
+
+    `c.lend_checks`, which the old note named as the near miss, has no
+    definition anywhere in the tree -- it was a marker, not a facility.
+
+    **The residue, which is an engine fault and not this clause's.**
+    `Cast.bonus`'s `spend_check` ends the hold on **any** `SkillCheck` by
+    the recipient without asking `mod.applies(ctx)`, where the damage
+    branch beside it does -- so an ally who rolls something unrelated first
+    loses the lent +2 before the check it was lent for. That is weaker than
+    print, never stronger, it is shared by every `once=True` check bonus in
+    the tree, and it is one line in `engine/cast.py`. Reported rather than
+    worked around here, because a hand-rolled latch in this row would leave
+    the other sites broken and this one unlike them.
+
+    "One ally adjacent to you" is a real choice, so it is `c.choose` over
+    the adjacent allies rather than the first in sort order."""
+    me = c.me
     c.bonus(
-        "skill:athletics", 3, on=c.me, until=When.ENCOUNTER, kind="feat",
+        "skill:athletics", 3, on=me, until=When.ENCOUNTER, kind="feat",
         when=lambda ctx: ctx.get("purpose") == "climb",
     )
+
+    def lent(ev: SkillCheck) -> None:
+        if ev.actor != me:
+            return
+        climbing = getattr(ev, "purpose", "") == "climb"
+        if ev.skill == "athletics":
+            if not climbing:
+                return
+        elif ev.skill != "dungeoneering":
+            return
+        beside = [a for a in c.allies() if c.adjacent(a)]
+        if not beside:
+            return
+        who = c.choose(beside, f"{c.ref}: who is lent the check")
+        if who is None:
+            return
+        c.bonus(
+            f"skill:{ev.skill}", 2, on=who, until=When.EONT, kind="feat",
+            once=True,
+            # "The same sort of check": the key carries the skill, so only
+            # the climb half needs the purpose said again.
+            when=(lambda ctx: ctx.get("purpose") == "climb") if climbing
+            else None,
+        )
+
+    c.watch(SkillCheck, lent, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3757", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2756,39 +2796,53 @@ def f3792(c: Cast) -> None:
 
 @power("f3793", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("p16660.extra_target()",))
+       dropped=("actions.aim_per_creature()",))
 def f3793(c: Cast) -> None:
     """The first clause has nothing to cancel. `rt:r69-t1` is
     declared and declared deliberately inert -- the checks it covers are
     not made in a fight and cost no action there -- so the -4 this feat
     lifts is never laid.
 
-    What is left is widening `p16660`'s target line.
+    What is left is widening `p16660`'s target line, and that is written
+    here rather than in `p16660`'s body.
 
-    **Re-pointed, because the old symbol asserted an absence that is not
-    there.** `c.extra_target()` reads as a verb the engine owes, and the
-    verbs exist: `c.add_target(who)` appends to the use this one is nested
-    inside and announces `TargetAdded`, and `c.drop_target` is its mirror.
-    What they cannot do is reach a use that has not started, which is the
-    half the old note had right.
+    **The verb exists and it is not `c.add_target`.** Both target verbs
+    reach the power running *below* the caller through `dsl.running_below`,
+    so neither can reach a use that has not started -- and neither can
+    reach `p16660`'s own use from inside `p16660`, where `running_below`
+    answers None. `c.extra_target(n, ref=)` is the one built for exactly
+    this printed sentence: it lays an effect carrying **that row's own
+    printed target line** with the count raised, so the side, the
+    conditions and the 34 other `Target` fields survive, where a fresh
+    `UpTo(count + 1)` would keep the number and silently drop them.
 
-    So this is not a facility gap at all -- it is the `#550` clause,
-    written **into** `p16660`'s body (`races/powers_c.py`) and gated on
-    `c.feat("f3793")`: that row already asks `c.choose` per target and
-    takes `Target("ally", 1)`, so the second target is a line there and
-    this row then becomes an `implemented_in=("p16660",)` pointer and the
-    marker goes. One printed power named, so the exception for "a class of
-    powers" does not apply and a rider hung here would be the pre-`#550`
-    shape the convention exists to retire.
+    So this is **not** a `#550` clause, and a body edit would have been the
+    wrong place: the widening is a standing modifier on the character,
+    asked when the targets are settled, not a line the body runs. `p7462`
+    is the written precedent -- the same verb against
+    `monk.level_0.FLURRIES` -- and `drivers.extra_target` drives it.
 
-    Spelled `p16660.extra_target()` -- the row that owes the clause and
-    the hook it has to grow -- on the `p13853.dice_for()` and
-    `p653.riposte_hook` precedent. No content-side symbol resolves through
-    `blocked._one`, which indexes `engine/`, `chargen/`, `etl/` and
-    `spec` and nothing else, so this reports blocked until somebody clears
-    it by hand; naming `p16660` bare would be worse, because a declared and
-    finished ref resolves **True** and the row would read ARRIVED while
-    nothing had been written."""
+    **Dropped: the offer path, which is `f3304`'s gap and now this row's
+    too.** Measured here, `p16660`'s per-creature door goes **1 -> 2** on
+    the call and `dsl._auto_targets` lands on two allies instead of one.
+    What does not move is the **menu**: `p16660` is a standard action, so
+    it reaches the board through `actions.legal`, and that path reads
+    `Power.target_of` -- the printed line. Measured both ways on a board
+    with two adjacent allies: the door says 2 and `legal` still enumerates
+    one target per offer. `dsl.target_of`'s own note says it is *"read in
+    `_auto_targets` and nowhere else, deliberately"* and calls pointing the
+    offer path at it a fair next step; `#1369` is the live issue.
+
+    Spelled `actions.aim_per_creature()` and not `actions.target_of()`,
+    which is `f3304`'s reasoning and worth keeping in step: `blocked._one`
+    falls back to matching a last component anywhere under `engine/`, so
+    the obvious name finds `dsl.target_of` and reports the gap filled. The
+    old symbol here -- `p16660.extra_target()` -- named a content hook that
+    was never the gap, and could not resolve either way."""
+    # `until=When.ENCOUNTER` and not a use-scoped hold: the card says
+    # "whenever you use it", and this row is armed once at the start of the
+    # fight by `turns.arm_traits`.
+    c.extra_target(1, ref="p16660", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3794", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2896,7 +2950,7 @@ def f3796(c: Cast) -> None:
 
 
 @power("f3797", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("p13506.combined_attack()",))
+       reach=PERSONAL, target=SELF, implemented_in=("p13506",))
 def f3797(c: Cast) -> None:
     """A combined attack -- the character and its creature swinging as one
     row -- and the right to use a second row off the back of that hit.
@@ -2905,37 +2959,36 @@ def f3797(c: Cast) -> None:
     different class feature grants, and what the row turns on is the
     pairing of the two attacks rather than the creature.
 
-    Re-aimed off `c.use_power()`: firing `p6189` is one line now, and
-    the whole remaining hold is the combined attack this rides on.
-
-    **Read again, and the hold is no longer a facility.** `p13506`
+    **Written, as the `#550` clause in `p13506`'s body.** That row
     (`powers/druid/level_0.py`) makes both swings in one body and both
-    return a bool, so the pairing the marker names is already there; the
-    remaining work is the #550 clause written *into* that row -- gated on
-    `c.feat("f3797")`, priced with `c.expend_row("p6189")`, paying
-    `p6189`'s own die to each of the two targets -- after which this row
-    becomes an `implemented_in=("p13506",)` pointer and the marker goes.
-    Left marked rather than half-written because the clause belongs in a
-    file this wave did not own, and a rider hung here instead would be the
-    pre-#550 shape the convention exists to retire.
+    return a bool, so the pairing the old marker named was already there
+    and no facility was owed. `powers/druid/level_0._both_hit_for_f3797`
+    is the clause: gated on `c.feat("f3797")`, priced with
+    `c.expend_row("p6189")`, wrapped in `c.credit("f3797")` and paying
+    `p6189`'s own die to each of the two targets. `implemented_in=` rather
+    than a rider hung here, which would be the pre-`#550` shape the
+    convention exists to retire.
 
-    **The symbol is this row's own now, and the old one was flattened.**
-    It shared `c.combined_attack()` with `m3842a3` (level 13), whose want
-    *is* a facility -- one attack rolled on behalf of several creatures --
-    and the module note here argued that re-pointing half of a flattened
-    symbol was worth less than retiring this half outright. Retiring this
-    half outright is what `p13506.combined_attack()` does: one symbol
-    serving two needs can go green correctly for neither, and the two
-    needs are a monster's facility and a content clause in a named row.
-    Spelled on the `p13853.dice_for()` precedent -- the row that owes the
-    clause and the hook it has to grow. `p13506` bare would be wrong:
-    it is declared and finished, so it resolves **True** and this row
-    would read ARRIVED with nothing written.
+    **The judgement that edit had to make, and what it chose.** *"The
+    extra damage from your `p6189` power"* is a die that row picks off the
+    attack that triggered it -- the weapon die for a weapon attack, a flat
+    `1d8` otherwise -- and the two hits are not the same kind of attack.
+    `p13506` carries `Keyword.WEAPON`; the companion's basic is
+    `engine/basic.BEAST`, whose header deliberately omits it because the
+    creature has no hands. So the die is asked **per hit**: the character's
+    half pays the weapon die and the animal's half pays the flat one. The
+    alternative -- one amount settled by the character's own attack and
+    paid twice -- would hand the animal a weapon die off a trigger it does
+    not satisfy, and `p6189`'s own test is what already rules on that.
+    `_racial_die` restates the test rather than firing the row, because
+    `p6189` also hands its damage type on to a lent clause and this clause
+    wants the number only.
 
-    The one judgement that edit still has to make is whether the
-    companion's basic counts as a weapon attack, which decides `c.w()`
-    against `"1d8"` for its half -- the same test `p6189`'s body makes off
-    the triggering row's keywords."""
+    **The old symbol was this row's own and is retired by being written.**
+    It had been split off `c.combined_attack()`, which it shared with
+    `m3842a3` (level 13) whose want really *is* a facility -- one attack
+    rolled on behalf of several creatures. That half stays where it is;
+    one symbol serving two needs can go green correctly for neither."""
 
 
 @power("f3798", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

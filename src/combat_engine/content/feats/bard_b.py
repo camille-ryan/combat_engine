@@ -37,6 +37,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Miss,
+    MoveEnd,
     PowerUsed,
     SavingThrow,
     SurgeSpent,
@@ -179,23 +180,53 @@ def f2563(c: Cast) -> None:
 
 
 @power("f2972", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.moved_by_me()",))
+       reach=PERSONAL, target=SELF)
 def f2972(c: Cast) -> None:
     """A free step whenever you teleport an ally, and a teleport in place
     of `p2339`'s slide.
 
-    The second clause is written now: `p2339` reads `c.instead_of` at its
-    own slide, so "you can teleport the target 1 square instead of sliding
-    the target" is a menu entry on `p2339` rather than a thing that happened
-    as well.
+    The second clause: `p2339` reads `c.instead_of` at its own slide, so
+    "you can teleport the target 1 square instead of sliding the target"
+    is a menu entry on `p2339` rather than a thing that happened as well.
 
-    The first clause is still held. `Moved`, `MoveStart` and `MoveEnd` all
-    carry `kind_`, so "an ally teleports" is sayable -- but none of them
-    carries *who did it*, and `ForcedMove`, which does, covers pushes,
-    pulls and slides only. That is `c.moved_by_me()` and it is the marker
-    this row keeps.
+    **The first clause was marked `c.moved_by_me()` and the marker's
+    premise was true of the event's fields and false of the moment.** It
+    is right that `Moved`, `MoveStart` and `MoveEnd` carry `kind_` and no
+    author -- but the author does not have to be on the event, because
+    `movement.teleport` emits them **synchronously inside the body that
+    called it**. So the use that did the teleporting is still on
+    `dsl._RUNNING` when the watcher runs, and `dsl.running_below` hands it
+    back: a watcher's own `Cast` is long off the stack, so that function
+    falls through to the innermost use running *now*, which is exactly the
+    power doing the blinking. `items/implement_a.py` states and relies on
+    the same fall-through, and four other content files use it.
+
+    What that reads, clause by clause: `below.me == c.me` is "you
+    teleported it", `below.ref != c.ref` keeps this row's own free step
+    from answering itself, and `ev.actor` being an ally other than the
+    bard is "an ally". `c.latch` is the printed "once per turn".
+
+    A monster's own blink and a teleport nobody cast both leave `below`
+    answering None or somebody else, so neither pays.
     """
+    from combat_engine.engine.dsl import running_below
+
+    me = c.me
+
+    def blinked(ev: Any) -> None:
+        if ev.kind_ != "teleport" or ev.actor == me:
+            return
+        if ev.actor not in allies(c.world, me):
+            return
+        below = running_below(c)
+        if below is None or below.me != me or below.ref == c.ref:
+            return
+        if c.latched(c.ref, per_turn=True):
+            return
+        c.latch(c.ref, per_turn=True)
+        c.teleport(1)
+
+    c.watch(MoveEnd, blinked, on=me, until=When.ENCOUNTER, label=c.ref)
     c.pre_empt("p2339", "slide",
                lambda using: using.teleport(1, who=using.target))
 # -- keyword gates, which are the cheap ones -------------------------------

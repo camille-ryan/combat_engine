@@ -16,6 +16,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FORT,
     PERSONAL,
@@ -26,12 +27,14 @@ from combat_engine.engine import (
     Cast,
     Hit,
     Keyword,
+    SavingThrow,
     Summoned,
     Trigger,
     When,
     power,
 )
 from combat_engine.engine.dsl import get
+from combat_engine.engine.events import PowerResolved
 
 #: The five the card lists. Read here rather than inline so the two rows
 #: that want them cannot drift apart.
@@ -56,16 +59,98 @@ def _illusion_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     )
 
 
-@power("f682", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.grants_advantage(until_save=)",),
+@power("f682", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you hit with an arcane illusion power",
        on=Trigger(Hit, _illusion_hit, "you hit with an illusion"))
 def f682(c: Cast) -> None:
-    """Combat advantage against what an illusion hit. The longer form --
-    "until it saves, if the power has a save-ends effect" -- needs a
-    duration that ends on a *particular* effect's save, which `When` has
-    no member for; the end-of-next-turn form is written."""
-    c.grants_advantage(on=c.trigger.target, until=When.EONT)
+    """Combat advantage against what an illusion hit, for a turn or until
+    the target shakes the spell off.
+
+    **Both halves now, and the premise the marker rested on was answered
+    one layer over.** The old note said the longer form *"needs a
+    duration that ends on a particular effect's save, which `When` has no
+    member for"*, and asked for `c.grants_advantage(until_save=)`. A
+    `When` member is the wrong shape -- a duration word cannot name *one*
+    effect, and that is exactly why `features/controllers.py`'s
+    `orb_imposition` ends its own hold off `SavingThrow.against`, which
+    carries `str(effect)` and so tells one of this creature's saves from
+    another. This is the same three lines against the same two readers:
+    `c.world.effects.of(victim)` for the `Effect` handle whose `when is
+    When.SAVE_ENDS`, and the throw against it for when it goes.
+
+    **Which effect is settled at `PowerResolved`, not in the `Hit`
+    window.** The hit is announced inside `resolve.attack`, so the
+    power's own save-ends effect has not been laid yet -- the ordering
+    the old note worried about is real and it is not a blocker. The
+    snapshot taken here plus the one read when the use finishes is the
+    difference, so *"the illusion power has an effect that a save can
+    end"* means an effect **this use** laid rather than one the target
+    was already carrying. `EffectApplied.save_ends` would answer the
+    question for a single effect and carries no `power`, which is why the
+    read is taken off the resolution instead.
+
+    **`c.extend_effect` rather than a second `c.grants_advantage`.** The
+    printed *"instead"* replaces the clock and nothing else, and laying a
+    second relation would hand the character two holds to lose one at a
+    time. `When.ENCOUNTER` is the cap being lifted -- not a claim that
+    the advantage lasts the fight -- and the `SavingThrow` watch is what
+    actually ends it. If the target never saves, the fight is over
+    first, which is the printed reading.
+
+    `sorted(..., key=lambda eff: eff.id)` for `orb_imposition`'s reason:
+    a set of effects has no order and the lowest id is the first one
+    laid, so two save-ends effects from one power pick the same one every
+    time rather than whichever the iteration happened to yield.
+
+    **`AT_WILL`, and the marker was hiding that.** `lint.py` checks the
+    headers of *finished* rows only, so `usage=ENCOUNTER` beside a
+    declared trigger went unreported for as long as the `dropped=` did --
+    and on a triggered trait that means once per fight, where this card
+    prints no limit at all. Un-marking the row is what named it.
+    """
+    me = c.me
+    victim = c.trigger.target
+    cast_ref = c.trigger.power
+    advantage = c.grants_advantage(on=victim, until=When.EONT)
+    if advantage is None:
+        return
+    before = {eff.id for eff in c.world.effects.of(victim)}
+    settled: list[int] = []
+
+    def finished(ev: PowerResolved) -> None:
+        if settled or ev.actor != me or ev.power != cast_ref:
+            return
+        # **The use this hit belonged to, and only that one.** `once=` on
+        # the watch asks whether the handler *did* anything, so a use that
+        # laid no save-ends effect would leave it armed -- and an at-will
+        # illusion cast again before the end of the turn would then be
+        # measured against a stale `before`.
+        settled.append(1)
+        held = next(
+            (
+                eff
+                for eff in sorted(c.world.effects.of(victim), key=lambda e: e.id)
+                if eff.id not in before
+                and eff.source == me
+                and eff.when is When.SAVE_ENDS
+            ),
+            None,
+        )
+        if held is None:
+            return
+        c.extend_effect(advantage, until=When.ENCOUNTER)
+        against = str(held)
+
+        def shook_it_off(throw: SavingThrow) -> None:
+            if throw.actor == victim and throw.against == against and throw.saved:
+                c.world.effects.end(advantage, "saved")
+
+        c.watch(SavingThrow, shook_it_off, until=When.ENCOUNTER, on=victim,
+                label=c.ref)
+
+    c.watch(PowerResolved, finished, until=When.EONT, on=me, once=True,
+            label=c.ref)
 
 
 @power("f1140", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

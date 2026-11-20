@@ -7,20 +7,26 @@ and which of those things it is decides whether the row is writable.
 of them.** `ActionPointSpent` is a real event and action points are
 really spent now, so these are ordinary triggers.
 
-**"Your Inspiring Word" is `p1590`**, which is a ref and a declared
-row, so the two feats riding on it are ordinary watches on `PowerUsed`.
-That was never a class-feature gap: the warlord's heal is a card.
+**The class heal the cards name is `p1590`**, which is a ref and a
+declared row, so the two feats riding on it are ordinary watches on
+`PowerUsed`. That was never a class-feature gap: the warlord's heal is a
+card. (This paragraph used to open by quoting the printed name of
+`p1590`, which is exactly the leak the one rule forbids and which
+`leaks.py --cited` did not catch -- a two-word name is the gate's
+documented blind spot.)
 
-**The leader presences split three ways**, now that the prerequisites
-are read. `cf:warlord-marshal-f4s0` and `-f4s3` are declared rows, and
-`-f4s2` and `-f4s5` are refs nothing declares. A feat on one of the
-first two is blocked on something narrower than "no ref": `-f4s0`
-decides whether it fires inside its own handler and announces nothing
-(`c.on_feature_power()`), and `-f4s3` keeps both its numbers as locals
-in a closure (`c.amplify_bonus()`). The other two are
-`spec.feature_ref()`: nothing is being borrowed -- these are the
-character's own class's presences -- and the whole hold is that the
-option has no row.
+**The leader presences used to split three ways and now do not: no row
+in this file carries a marker.** `cf:warlord-marshal-f4s0`, `-f4s2`,
+`-f4s3` and `-f4s5` are all reachable. The last two had no declared row
+and got one; `-f4s3`'s feats were re-pointed off `c.amplify_bonus()` onto
+`c.change_amount` / `c.amount_for`, which is the note below; and
+`-f4s0`'s two were written into that row's own body under #550, where the
+ally's opt-in is an ordinary line of content rather than a moment needing
+to be announced.
+
+So `BORROW` and `AMPLIFY` below are unused here. They are left because
+other files still name those symbols and `blocked.py --group` reads them
+there, not because anything in this file waits on either.
 """
 
 from __future__ import annotations
@@ -70,9 +76,6 @@ from combat_engine.engine.query import allies, distance_between, team
 BORROW = ("spec.feature_ref()",)
 #: Raising a number a row somebody else wrote already handed out.
 AMPLIFY = ("c.amplify_bonus()",)
-#: The feature has a ref and a row, and its firing is not announced.
-ON_FEATURE = ("c.on_feature_power()",)
-
 #: The warlord's class heal, and the row six of these feats ride on.
 _THE_WORD = "p1590"
 
@@ -223,21 +226,12 @@ def f797(c: Cast) -> None:
             label=f"{c.ref} granted attack")
 
 
-def _feature(ref: str, what: str, marker: tuple[str, ...]) -> None:
-    """One of the rows riding on a class feature that has no ref.
-
-    `marker` is required. It defaulted to a `FEATURE` constant naming
-    `c.class_feature()`, and **both callers passed `ON_FEATURE` instead**, so
-    the default was never taken -- dead in effect while still being the one
-    syntactic reference that kept the constant alive. #814.
-    """
-
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=marker)
-    def feat(c: Cast) -> None: ...
-
-    feat.__name__ = ref
-    feat.__doc__ = what
+# **`_feature()` is gone with its two callers.** It minted a `todo=` row
+# for a feat riding on a class feature that announces nothing, and both of
+# the rows it made -- `f788` and `f759` -- are now written into
+# `cf:warlord-marshal-f4s0` itself under #550. The helper's own note, that
+# its `FEATURE` default was dead because both callers passed `ON_FEATURE`
+# (#814), outlived the thing it described.
 
 
 # **Both written, and `spec.feature_ref()` was never the gap on either.**
@@ -298,14 +292,43 @@ def f790(c: Cast) -> None:
     """
     c.change_amount(PRESENCE_HURT_RAISE, 2, on=c.me, until=When.ENCOUNTER)
     c.change_amount(PRESENCE_CUSHION_RAISE, 2, on=c.me, until=When.ENCOUNTER)
-_feature("f788", "A choice of two bonuses when `cf:warlord-marshal-f4s0` is "
-                 "used. That row is declared, but the ally's opt-in -- the "
-                 "moment the presence is actually taken up -- happens inside "
-                 "its `ActionPointSpent` handler and nothing announces it. "
-                 "Watching the bare point spend would pay out for every "
-                 "ally who declined the gamble.", ON_FEATURE)
-_feature("f759", "The same presence, larger and gated on bloodied, and "
-                 "blocked the same way `f788` is.", ON_FEATURE)
+@power("f788", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       implemented_in=("cf:warlord-marshal-f4s0",))
+def f788(c: Cast) -> None:
+    """A choice of two bonuses when `cf:warlord-marshal-f4s0` is taken up.
+
+    **Written into that row, not laid from here, and the old marker was
+    aimed one layer too high.** It wanted the feature's firing
+    *announced* -- `c.on_feature_power()` -- on the reasoning that the
+    opt-in "happens inside its `ActionPointSpent` handler and nothing
+    announces it". The handler is three lines of content in a file any
+    author can open, and the line that asks the ally whether to gamble is
+    itself the moment the card names. So the row holding the opt-in is the
+    one that can ask, which is #550's whole argument; `p704` is the worked
+    example and `f1817` is the same shape.
+
+    `c.pre_empt` is not the answer either: it registers an *instead-of*
+    with its own action-menu entry, and this clause adds to what the
+    presence already does rather than replacing any part of it.
+
+    Declared as a pointer so the feat is drawable and `audit.py` buckets
+    it as ELSEWHERE rather than reporting it silent."""
+
+
+@power("f759", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       implemented_in=("cf:warlord-marshal-f4s0",))
+def f759(c: Cast) -> None:
+    """The same presence, larger and gated on the ally being bloodied.
+
+    Both halves of the difference are readable where `f788`'s clause is
+    written -- the amount is a literal and `c.bloodied(on=ally)` answers
+    at the opt-in -- so this needed nothing `f788` did not. Neither card
+    prints a bracketed category, so a warlord holding both pays both to a
+    bloodied ally and the two untyped bonuses add.
+
+    See `f788` above for why the marker both rows carried was wrong."""
 
 
 @power("f757", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

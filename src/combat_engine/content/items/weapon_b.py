@@ -35,6 +35,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.items.feet import _grabbing
+from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
     AC,
     AREA_OR_CLOSE,
@@ -603,6 +604,46 @@ def _ac_attack_by_me(world: World, me: int, ev: Any) -> bool:
     return getattr(ev, "attacker", None) == me and getattr(ev, "vs", None) == AC
 
 
+def _a_top_face_rolled(ev: Any) -> bool:
+    """Did **at least one** of the dice behind this blow come up at its own
+    highest face?
+
+    `implement_c._maximum_damage` is the same read with `all` where this has
+    `any` -- *"the maximum result on at least one"* against *"the maximum
+    result on its damage dice"* -- and its docstring carries the evidence
+    for every step: `DamageRolled` holds the live `rng.Roll` as a plain
+    attribute since `#703`, `roll.dice` is the faces that came up, and the
+    face count is read off `roll.expr` because `cast._faces_of` is private
+    to that module. That is the **fourth** hand-rolled split of an
+    expression, not the first -- `powers/seeker.extra_dice` and
+    `implement_b._one_more_die` are the other two -- which is what the
+    marker that stood on `i834x1` had wrong.
+
+    A **critical** is the printed case and not an approximation of it: it
+    maximises every face before anything is rolled, so no `Roll` comes back
+    at all and the tell is `ev.ctx["crit"]`, which the emit site hangs on
+    the event beside the roll. Every face at its highest certainly includes
+    one of them.
+
+    `roll.bonus`, the enhancement and the flat terms are not looked at --
+    they cannot roll high -- which is also why the total is no use here: it
+    carries modifiers the dice know nothing about. A line with no dice
+    answers False, so a flat payout, an ongoing tick and a minion's damage
+    are never "the maximum result".
+    """
+    ctx = getattr(ev, "ctx", None) or {}
+    if ctx.get("crit"):
+        return True
+    roll = getattr(ev, "roll", None)
+    if roll is None or not roll.dice:
+        return False
+    _, _, rest = str(roll.expr).partition("d")
+    face, sign, _tail = rest.partition("+")
+    if not sign:
+        face, _sign, _tail = rest.partition("-")
+    return face.isdigit() and any(d == int(face) for d in roll.dice)
+
+
 # -- level 3 ----------------------------------------------------------------
 
 
@@ -1041,14 +1082,58 @@ def i1630p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
 )
 def i1690x1(c: Cast) -> None:
-    """Rides on one named class row, and the spec prints that row's **name**
-    where every other block in the file prints a ref -- so there is no id to
-    compare `PowerUsed.power` against, and guessing one is exactly what this
-    project forbids. `get(ref).cls` answers the class question these blocks
-    were all marked for; this one is short a ref, not a predicate."""
+    """**`spec.power_ref()` is refuted: the tree already holds the refs.**
+    The marker said the spec prints the named row's *name* where every
+    other block prints a ref, so there was no id to compare
+    `PowerUsed.power` against. True of the spec and false of the tree --
+    `powers/monk/level_0.FLURRIES` is the canonical list of the five rows
+    one of which every such character is granted, and `monk/level_2.py`,
+    `monk/level_5.py`, `feats/general_q.py` and `items/implement_b.py`
+    already import it. So nothing is guessed and no spec or ETL change is
+    owed; the list is imported rather than retyped.
+
+    **The same shape as `i1588p1`, one file over**: the extra damage is a
+    `c.bonus("damage", ...)` gated on `ctx.get("power") in FLURRIES`, not
+    `once=True`, because *"its targets"* is plural and a spent bonus would
+    pay the first of them only.
+
+    **The difference is that this card prints a limit, and the limit is
+    where the obvious spelling goes vacuous.** A bonus laid `until=EOT` on
+    a `PowerUsed` watch pays every flurry still to come in the turn, so a
+    `c.latch` guarding only the *laying* could not be observed: the second
+    use would ride the first laying. So the hold is ended when the use it
+    belongs to resolves -- `PowerResolved` is announced after the body,
+    which is `i1588p1`'s own measurement of these events -- and the
+    per-turn latch is then the thing that refuses a second helping.
+
+    That second use is reachable: all five flurries are `once_per_round`,
+    and `i1197p1` spends one with `again=True`, which waives exactly that.
+    """
+    me = c.me
+    label = c.ref
+
+    def used(ev: PowerUsed) -> None:
+        if ev.actor != me or ev.power not in FLURRIES:
+            return
+        if c.latched(label, per_turn=True):
+            return
+        c.latch(label, per_turn=True)
+        extra = c.bonus(
+            "damage", 2, on=me, until=When.EOT,
+            when=lambda ctx: ctx.get("power") in FLURRIES,
+        )
+        if extra is None:
+            return
+
+        def spent(done: PowerResolved) -> None:
+            if done.actor == me and done.power in FLURRIES:
+                c.world.effects.end(extra, "the flurry it rode on resolved")
+
+        c.watch(PowerResolved, spent, until=When.EOT, label=label)
+
+    c.watch(PowerUsed, used, until=When.ENCOUNTER, label=label)
 
 
 @power(
@@ -2151,34 +2236,48 @@ def i828p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("rng.Roll.faces",),
 )
 def i834x1(c: Cast) -> None:
     """Pays out when one of the weapon's dice comes up at its highest face.
 
-    **Re-pointed, because the premise behind `c.on_damage_die()` expired.**
-    This said *"`DamageRolled` carries the total and nothing carries the
-    faces"*, and that stopped being true at #703: the event carries its
-    live `Roll`, which is what `c.reroll_faces` and `c.set_damage_faces`
-    both read off it, and `roll.dice` is the individual faces. The
-    `set_damage_faces` docstring records the identical correction being
-    made to `p10044`'s marker -- *"this row was marked unwritable and the
-    marker's premise expired"* -- so this is the same stale claim one file
-    over. A watch on `DamageRolled` reaching `ev.roll.dice` is available
-    today and `c.flat(2 * c.enhancement)` is the payout.
+    **Written, and the marker's last standing objection was a count that
+    was wrong.** It said parsing `Roll.expr` for the face count *"would be
+    the first copy"* of a read `rng.normalise` exists to stop. It is the
+    **fourth**: `implement_c._maximum_damage` does exactly this read and
+    its own docstring names `powers/seeker.extra_dice` and
+    `implement_b._one_more_die` as the other two. `_a_top_face_rolled`
+    above is that read with `any` for `all`, which is the only difference
+    between this card and that one. If the duplication is the real
+    objection the answer is a public `faces_of` reader, which is an engine
+    change and not a row's to make -- it is not a reason to refuse the
+    row, and it was a marker (`rng.Roll.faces`) that could never have gone
+    green, since `blocked._one` reads the public surface.
 
-    What is genuinely absent is **how many sides the die had**. "The
-    maximum result" is `max(roll.dice) == faces`, and `faces` exists only
-    as `cast._faces_of`, which is private -- `blocked._one` reads the
-    public surface, so a marker naming it could never go green, and
-    `docs/symbols/` lists no reader for it. Parsing `Roll.expr` here
-    instead is the one read hand-rolled in N files that `rng.normalise`'s
-    own note was written to stop, and it would be the first copy.
+    The earlier half of the re-pointing already stood: `DamageRolled`
+    carries its live `Roll` as a plain attribute since `#703`, which
+    `c.reroll_faces` and `c.set_damage_faces` both read off it.
 
-    Deliberately not `c.on_damage_die()`: a verb name promises a facility,
-    and only one field is missing from a `Roll` that already carries
-    everything else this card asks about.
+    **A separate packet, not a bigger roll.** *"The target takes extra
+    damage"* is this file's `c.flat`/`c.damage` case rather than its
+    `c.bonus` one, and twice the enhancement is a fixed number, so
+    `c.flat` and not `c.damage`. Untyped, because the card names no type.
+
+    `ev.target` and not `c.target`: this is armed as a standing watch on a
+    Property, so there is no target of its own -- the creature that took
+    the blow is on the event. The weapon itself is not gated, per the
+    file's first judgement: the damage context carries no weapon and the
+    character is holding this one for as long as the Property is armed.
     """
+    me = c.me
+
+    def rolled_high(ev: DamageRolled) -> None:
+        if ev.source != me or not _a_top_face_rolled(ev):
+            return
+        # Read in the handler rather than closed over at arming: the
+        # enhancement is the held weapon's, and what is held can change.
+        c.flat(2 * c.enhancement, on=ev.target)
+
+    c.watch(DamageRolled, rolled_high, until=When.ENCOUNTER, label=c.ref)
 
 
 @power(

@@ -372,8 +372,8 @@ def _both_hands(c: Cast, *groups: str) -> bool:
 
 
 def _p87_both_swings(c: Cast, arena: str, doom: bool,
-                     hunts_undead: bool) -> None:
-    """The five clauses on `p87` that are about **both** of its swings.
+                     hunts_undead: bool, unseen: tuple[int, ...] = ()) -> None:
+    """The six clauses on `p87` that are about **both** of its swings.
 
     A `PowerResolved` watcher rather than a reading taken in the body, and
     the reason is that row's target line: it spreads two attacks over one
@@ -428,6 +428,21 @@ def _p87_both_swings(c: Cast, arena: str, doom: bool,
     `f977`'s and `f989`'s as well as the new one. See `_both_hands` above
     for the measurement: that verb follows `c.target`, so all three asked
     the *monster* what it was holding and answered False in every fight.
+
+    **`unseen` is `f1296`'s second sentence and is the sixth clause** --
+    *"you can also remain hidden if you are hidden but miss with both
+    ranged attacks this exploit allows"* -- so it is here for the reason
+    every other clause in this function is: with two targets neither body
+    call can see the other's roll. It is the creatures the caster was
+    hidden from **before the first swing**, read in the body because
+    `resolve.attack` clears every `HIDDEN_FROM` the attacker holds as soon
+    as a blow is announced, so there is nothing left to ask by the time
+    this event arrives.
+
+    `len(ev.rolls) > 1` and not `all_missed` alone: a use that cancelled
+    its second swing rolled once, and that case is paid in the body where
+    the cancelling happens -- so the test is what keeps the two halves of
+    one printed sentence from both paying.
     """
     me, ref = c.me, c.ref
     held: list[Any] = []
@@ -484,6 +499,10 @@ def _p87_both_swings(c: Cast, arena: str, doom: bool,
                 if who is not None:
                     with c.credit("f1102"):
                         c.flat(c.wis_mod, on=who, from_attack=False)
+        if unseen and len(ev.rolls) > 1 and all_missed:
+            with c.credit("f1296"):
+                for watcher in unseen:
+                    c.hide(from_=watcher)
 
     held.append(c.watch(PowerResolved, finished, until=When.EOT, on=me,
                         label=f"{ref} both swings"))
@@ -569,6 +588,26 @@ def p87(c: Cast) -> None:
     * the other three, and `f1304`'s, are about both swings together and
       are in `_p87_both_swings`, which says why.
 
+    **`f1296`'s clause is written in here** (#550), off
+    `feats/general_h.py`, and it is one printed sentence in two halves. The
+    withdrawal -- *"if you miss with the first ranged attack, you can
+    choose to cancel the second attack to remain hidden from your
+    target"* -- is a `break` out of the swing loop under `c.may`, which is
+    what the marker said nothing could do: out in the feat there was no
+    swing to cancel, and in here the second one is simply not taken. The
+    other half, *"miss with both"*, is in `_p87_both_swings`.
+
+    Three things about it. The hidden state is read **before any swing**,
+    because `resolve.attack` clears every `HIDDEN_FROM` the attacker holds
+    once a blow is announced. The re-hide is laid from the body rather than
+    from a `Miss` watch, which `Cast.hide`'s own docstring is explicit
+    about: the clear sits below the `Hit`/`Miss` emit, so a hide laid in a
+    `Miss` handler is wiped and one laid here sticks. And the withdrawal is
+    gated on this use taking two swings at one creature, which is the only
+    arrangement its printed sentence describes -- *"your target"*, singular
+    -- and the only one a per-target body can act on: with two targets the
+    second swing belongs to a call that has not happened yet.
+
     **This body now reads Strength and Dexterity**, which it did not
     before -- `c.attack_mod` is the branch's own ability and
     `chargen._leans_on` does not read it. Every one of the ranger's five
@@ -580,9 +619,15 @@ def p87(c: Cast) -> None:
         "Arena Fighting", "f974", "f977", "f978", "f985", "f989", "f992")
     doom = c.feat("f1304")
     hunts_undead = c.feat("f1102")
-    if c.first and (doom or hunts_undead
+    # `f1296`: who this use's targets could not see, taken before the first
+    # swing announces anything. Narrowed to `c.targets` because the printed
+    # sentence is about "your target" and not about everybody in the room.
+    unseen: tuple[int, ...] = ()
+    if c.feat("f1296") and c.ranged:
+        unseen = tuple(foe for foe in c.targets if c.is_hidden(from_=foe))
+    if c.first and (doom or hunts_undead or unseen
                     or arena in ("f977", "f985", "f989")):
-        _p87_both_swings(c, arena, doom, hunts_undead)
+        _p87_both_swings(c, arena, doom, hunts_undead, unseen)
     shots = 2 if (c.first and c.last) else 1
     landed: list[int] = []
     for swing in range(shots):
@@ -594,6 +639,22 @@ def p87(c: Cast) -> None:
                              for w in c.held(on=c.me)))):
             with c.credit("f978"):
                 c.shift(1)
+        if (unseen and shots == 2 and swing == 0 and not hit
+                and c.may("cancel the second attack to stay hidden",
+                          who=c.me, default=False)):
+            # The withdrawal is the printed cost: the second swing is not
+            # taken at all, so this is a `break` and not a flag.
+            #
+            # `default=False`, which is this tree's spelling for a "you
+            # can" that **costs** something -- "forgo the extra damage",
+            # "deal no damage", "spend a surge" all read that way, and the
+            # first option is the answer in every headless fight. So the
+            # engine takes both shots unless something chooses otherwise,
+            # and on a double miss the sentence's other half pays anyway.
+            with c.credit("f1296"):
+                for watcher in unseen:
+                    c.hide(from_=watcher)
+            break
         if not hit:
             continue
         c.damage(c.w(1, hand=hand), c.attack_mod)

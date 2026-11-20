@@ -9,10 +9,21 @@ either: the item was dealt to whoever is holding it.
 
 Four judgements run through the file.
 
-* **The damage context carries no weapon**, so "using this weapon" is never
-  a gate. The character holds the item for as long as the property is
-  armed, so every swing is treated as the item's. That over-applies only
-  for a character wielding two weapons of which one is magical.
+* **The damage context *does* carry the weapon now, and this bullet said
+  for a long time that it does not.** `#1276` added `ctx["weapon"]` -- the
+  base ref of the weapon the blow came through -- and `ctx["group"]`, and
+  `resolve.deal_damage` has stamped both since; `Cast._swung_weapon` writes
+  it only for a row carrying the weapon keyword, so an implement power and
+  a trait's flat payout arrive with `""`. So "using this weapon" **is**
+  gatable, and `c.my_weapon()` is the other half: the weapon *this block
+  sits on*, matched by `Weapon.item`, which is what tells a character's
+  magic axe from their magic bow. `i1737x1` is written that way.
+
+  The old reading is kept only as the fallback for the case that still
+  cannot be resolved -- `c.my_weapon()` answering None, a block not laid on
+  a carried weapon -- where the character holds the item for as long as the
+  property is armed and every weapon swing is treated as the item's. Rows
+  written before `#1276` are still armed always-on and are not being swept.
 * **"Once per round" is written as "once per turn of mine"**: nothing
   counts rounds for a creature, and a flag cleared on the wielder's own
   `TurnStart` is the same window for every row that prints the phrase.
@@ -84,6 +95,7 @@ from combat_engine.engine import (
     Movement,
     PowerUsed,
     Ranged,
+    Scenery,
     SecondWind,
     Trigger,
     TurnStart,
@@ -2617,50 +2629,72 @@ def i1536p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.multiply_damage(against=)",),
 )
 def i1737x1(c: Cast) -> None:
-    """One gap, not two. Aiming at an object is written --
-    `Target(objects=True)` unions `query.scenery` into the pool and the
-    audit board places a loose one -- but a `Scenery` carries no defences,
-    so there is nothing for an attack against it to roll against:
-    `query.defence` opens `world.need(eid, Defenses)`. `p465`, `p13128`,
-    `i1145p1` and `x2_117` wait on exactly that.
+    """Doubling is `DamageRolled` in the interrupt window, which is
+    `m307a0`'s mechanism and its measurement: *"the event carries the
+    number, `deal_damage` reads it back, and nothing else in the engine
+    multiplies"*. `ev.amount *= 2` in a `Window.BEFORE` watch, and
+    `resolve.deal_damage` reads `rolled.amount` straight back off the emit
+    and `_rescale`s the typed parts to it, so the split by type stays
+    consistent with the doubled total.
 
-    **Re-pointed: `c.double_damage()` was a verb nobody needs.** The old
-    note read "doubling a roll is not a modifier: `c.bonus` adds a number
-    and `c.maximise` takes the top of the dice, and neither is twice",
-    which is true of those two verbs and false as a conclusion -- it never
-    looked at the event. `m307a0` doubles damage today, in the tree, and
-    its own docstring is the measurement: *"doubling is `DamageRolled` in
-    the interrupt window: the event carries the number, `deal_damage`
-    reads it back, and nothing else in the engine multiplies"*. It is
-    `ev.amount *= 2` in a `Window.BEFORE` watch, and `resolve.deal_damage`
-    reads `rolled.amount` straight back off the emit and `_rescale`s the
-    typed parts to it. 366 content sites move `ev.amount` and about twenty
-    raise it.
+    **The marker this row carried was refuted by its own next paragraph,
+    which is the whole finding.** It gave the recipe above in full and then
+    declined to write it, on the premise that the watch "would need the
+    blow's target to be a `Scenery`, which no damage roll in any buildable
+    fight has" -- and the paragraph immediately below it recorded the
+    opposite: the printed defences had arrived, `put()` lays them, and an
+    attack on an object had been *measured* rolling 19 against a Medium
+    object's AC of 5. A thing with defences and hit points is a thing a
+    damage roll can reach. So the clause was writable and the row was
+    refused in play for nothing.
 
-    So the shape of the body is settled and is deliberately not written:
-    the watch would need the blow's target to be a `Scenery`, which no
-    damage roll in any buildable fight has, so writing it would un-refuse
-    the row -- a draw change and a replay re-record -- to buy a clause that
-    cannot fire. `todo=` rather than `dropped=` for the same reason:
-    nothing of this card works yet, and the one symbol says why.
+    Both halves of "double damage **to objects**" read off what is already
+    on the event:
 
-    **Re-pointed: the defences arrived and were never this row's gap.**
-    `terrain.object_defences` is the DMG page-65 table and `put()` lays
-    it, so `p465` and `p13128` are written -- an attack on an object
-    rolls against a real number now (measured: 19 against a Medium
-    object's printed AC of 5).
+    * **the target.** `world.get(ev.target, Scenery)` is the question, and
+      it is sufficient on its own rather than needing a kind: `Health` is
+      optional on a `Scenery` and only the ones carrying it can be aimed at
+      or damaged at all, so anything that reaches a damage roll *and* is
+      scenery is the card's object. A campfire has no hit points and never
+      gets here.
+    * **the weapon.** `ctx["weapon"]` is the base ref of the weapon the blow
+      came through, stamped only for a row carrying the weapon keyword -- so
+      an implement power and a trait's flat payout both arrive with `""` and
+      are correctly left alone. Matched against `c.my_weapon()`, the weapon
+      *this block sits on*, so a character carrying this and a second magic
+      weapon does not double the other one's swings.
 
-    What this card needs is **doubling**, and that is multiplicative
-    where every damage modifier here is additive: `c.bonus("damage")`
-    adds a number and a row cannot know the base to double it, there is
-    no `c.double_damage`, and `c.change_amount` names a mechanic rather
-    than scaling a roll. So the want is a multiplier keyed on the damage
-    context -- which already carries `target`, so the "to objects" half
-    needs nothing new. #1233.
+    **That second gate is this file's header going stale rather than a new
+    convention, and the header is corrected.** It read "the damage context
+    carries no weapon, so using this weapon is never a gate" -- true when
+    it was written and false since `#1276`. Its reasoning survives as the
+    fallback for the one case that still cannot be resolved,
+    `c.my_weapon()` answering None, where any weapon blow counts because
+    the character holds the item for as long as the property is armed.
+
+    Nothing needed building: `c.multiply_damage(against=)` was asking for a
+    verb where one watch and two reads off the context were the whole
+    clause. #1233.
     """
+    me = c.me
+    mine = c.my_weapon()
+
+    def double(ev: DamageRolled) -> None:
+        if ev.source != me or ev.amount <= 0:
+            return
+        if c.world.get(ev.target, Scenery) is None:
+            return
+        swung = ev.ctx.get("weapon") or ""
+        if not swung or (mine is not None and swung != mine.ref):
+            return
+        ev.amount *= 2
+
+    c.watch(
+        DamageRolled, double, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=c.ref,
+    )
 
 
 @power(

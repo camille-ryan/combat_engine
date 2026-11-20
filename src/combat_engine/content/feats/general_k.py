@@ -106,7 +106,14 @@ from combat_engine.engine.basic import MELEE as BASIC_MELEE
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.grid import distance as square_distance
 from combat_engine.engine.grid import neighbours
-from combat_engine.engine.query import allies, distance_between, enemies, team
+from combat_engine.engine.query import (
+    allies,
+    distance_between,
+    enemies,
+    squares,
+    team,
+)
+from combat_engine.engine.zones import Zone
 
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
@@ -1749,12 +1756,78 @@ def f1713b(c: Cast) -> None:
     enemy that arrives later and outliving a wall that is destroyed
     early, since the wall has `Health`. The shape wanted is the mirror
     of the `_in` family: one modifier held on the zone that lands on
-    whoever **aims into or through** it."""
+    whoever **aims into or through** it.
+
+    **The penalty is written now, the `m238a3` way**, and the symbol
+    above is kept for the one thing that shape still cannot do. A gated
+    `c.penalty` on each enemy asks the board at *roll* time -- so a
+    target that walks into the wall, and a wall destroyed early, are both
+    answered without anybody watching the crowd. What it misses is an
+    enemy that **joins the board after the wall goes up**: it was not in
+    `c.enemies()` when the loop ran, so it carries no modifier. That is
+    exactly the loss the zone-held form closes, and it is the same loss
+    `m238a3` already accepts -- a Sustain Minor wall standing over
+    several rounds is the row where it is most likely to show.
+
+    One penalty and one label, unlike `m238a3`'s two: that card prints
+    two sentences that both hold at once, and this prints one condition
+    with an "or" in it. Two labels here would double a single printed -2.
+
+    **"On the other side" is the line, not a half-plane.** `c.line` is
+    the board's own straight run between two squares, so a shot whose
+    path crosses a wall square is through it, and the arithmetic stays
+    where diagonals are already counted properly.
+
+    **`extra_cost=2` rather than `difficult=True`, which is a fix.** That
+    word is worth exactly one extra square and the card charges two, so
+    the row was understating a printed cost. The two are not laid
+    together -- `World.crossing` takes the larger, and passing both reads
+    as a row that meant to stack them. The same correction, with the same
+    reasoning, as `m2090a4`, which was the whole of *its* dropped clause.
+    And the card never prints the words for rough ground, so these squares
+    are not that category -- which matters both ways round: a creature
+    that crosses rough ground free still pays this, and a row asking
+    whether its target stands in difficult terrain does not find it."""
     if c.familiar() is not None:
         c.dismiss_companion()
-    barrier = c.wall(8, difficult=True, solid=False, until=When.EONT,
+    barrier = c.wall(8, extra_cost=2, solid=False, until=When.EONT,
                      sustain=MINOR,
                      height=4,)
+
+    def _square_of(who: int) -> Any:
+        """One square of a creature, stable: a big creature holds several."""
+        held = sorted(squares(c.world, who))
+        return held[0] if held else None
+
+    def behind_it(ctx: dict[str, Any]) -> bool:
+        """Is the thing being shot at inside the wall, or past it?
+
+        `get` rather than `need`: the wall carries `Health`, so it can be
+        destroyed while this modifier is still standing, and the penalty
+        then asks about a zone that is gone.
+        """
+        zone = c.world.get(barrier, Zone)
+        if zone is None:
+            return False
+        victim, shooter = ctx.get("target"), ctx.get("attacker")
+        if victim is None or shooter is None:
+            return False
+        if squares(c.world, victim) & zone.squares:
+            return True
+        here, there = _square_of(shooter), _square_of(victim)
+        if here is None or there is None:
+            return False
+        return any(step in zone.squares for step in c.line(here, there))
+
+    # `ENCOUNTER` rather than the wall's own `EONT`, which `m238a3` also
+    # does and for this reason: the wall is sustainable, so a modifier
+    # clocked to the wall's printed duration would lapse under the first
+    # sustain while the wall stood. The gate *is* the duration -- it asks
+    # for the zone every roll and a zone that has ended or been destroyed
+    # answers False -- so a longer hold cannot outlive the sentence.
+    for foe in c.enemies():
+        c.penalty("attack", 2, on=foe, until=When.ENCOUNTER,
+                  when=behind_it, label="through the wall")
 
     def herd(ev: Any) -> None:
         if ev.ghost or team(c.world, ev.actor) == team(c.world, c.me):

@@ -136,6 +136,7 @@ from combat_engine.engine import (
     RelationSet,
     SurgeSpent,
     Trigger,
+    TurnStart,
     Usage,
     When,
     World,
@@ -1552,13 +1553,17 @@ def f1295b(c: Cast) -> None:
 # argument is the thing a reader would otherwise restore it on.
 
 
-# `_surprise_round` was here -- an enemy still holding
-# `Condition.SURPRISED` *is* the surprise round, which `Encounter.start`
-# lays and the round's end lifts. Both of its callers were f1306's clauses,
-# on p2248 and p87, and both are written into those bodies now (#550) with
-# a copy of the reader each. The encounter's own `_surprise` flag is still
-# private and there is still no query for it, which is why the copies
-# exist.
+# `_surprise_round` was here and **is back**, beside f1306's third clause
+# -- an enemy still holding `Condition.SURPRISED` *is* the surprise round,
+# which `Encounter.start` lays and the round's end lifts. It was deleted
+# when its two callers, f1306's clauses on p2248 and p87, went into those
+# bodies (#550) with a copy of the reader each; the card's clause on p2105
+# and p4542 is about the swing a charge offers and so cannot leave the
+# feat, which gave the reader a caller here again. The encounter's own
+# `_surprise` flag is still private and there is still no query for it,
+# which is why all three copies exist. It is defined down beside
+# `_f1306_setup` rather than up here, so the reader and its one caller
+# read together.
 
 
 # -- the clauses ------------------------------------------------------------
@@ -1704,11 +1709,27 @@ def f1237(c: Cast) -> None:
     armed, which is `todo=` and not `dropped=`."""
 
 
-@_trait("f1296", todo=("query.cover_gained_in_move()", "c.forgo_attack()"))
+@_trait("f1296", implemented_in=("p87",),
+        dropped=("query.cover_gained_in_move()",))
 def f1296(c: Cast) -> None:
-    """Both refs resolve now and neither clause turns on the hit. The
-    second withdraws the second of a two-attack row to stay hidden, which no
-    verb does to a row that is already swinging.
+    """One clause written, one still waiting on a reader.
+
+    **`p87`'s clause is written into `p87`'s body** (#550) and
+    `c.forgo_attack()` is retired with it. That symbol said "nothing
+    cancels a swing a row is already in the middle of taking", which was
+    a true sentence about the wrong place: out here the row was already
+    swinging, and in `p87`'s own body the second swing is a second pass
+    round a `for` loop that is simply not taken. A `break` under `c.may`
+    is the whole of it, and `Cast.hide`'s docstring settles the re-hide --
+    *"it remains hidden if the attack misses"* is true from a power's body
+    and false from a `Miss` watch, because `resolve.attack` clears the
+    hidden relation **below** the `Hit`/`Miss` emit. Both halves of the
+    printed sentence are there: the withdrawal in the swing loop, "miss
+    with both" in `_p87_both_swings`, which is where every clause about
+    that row's two swings together has to live.
+
+    **The marker that stands is `p971`'s**, and the row still plays
+    without it, so this is `dropped=` and no longer `todo=`.
 
     **Re-pointed off `c.cover_from()`, which was wrong about this row and was
     the last of five hanging on it.** That note read "nothing asks what cover
@@ -1738,16 +1759,13 @@ def f1296(c: Cast) -> None:
     `ActionType.FREE`. Per #550 the clause belongs **in `p971`** gated on
     `c.feat`, not in this body.
 
-    **Both symbols re-checked and both stand.** The reading is graded, not
+    **This symbol re-checked and it stands.** The reading is graded, not
     a flag -- `resolve.attack` takes `int(cover_between(...))` and
     subtracts it, so ordinary and superior are different numbers -- which
     is why "gain cover" is a *comparison of two readings* and not a
     boolean flip, and why no existing reader answers it. The one place
     cover is all-or-none is the **waiver**, `from_cover <=
     cover_waived(...)`, which is a different question from this card's.
-    `c.forgo_attack()` is still the second of a two-attack row being
-    withdrawn after the first has missed, and nothing cancels a swing a
-    row is already in the middle of taking.
     """
 
 
@@ -1947,7 +1965,7 @@ def f1302(c: Cast) -> None:
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", dropped=("p620.ally_pool()",))
+@_trait("f1303")
 def f1303(c: Cast) -> None:
     """All four refs resolve. p2099 goes in the place of the melee basic a
     charge swings; p971 rewrites the movement its row prints and p620 the
@@ -1978,28 +1996,38 @@ def f1303(c: Cast) -> None:
     its `PowerResolved` -- the only window the row's own walk can be in.
     `f1301` prints the unqualified sentence and reads the whole turn.
 
-    **Still dropped, and it is p620's clause, not p971's.** "The ally you
-    allow to shift can be within 2 squares of you, instead of adjacent to
-    you or the target" rewrites the pool `warlord/level_1._beside` builds
-    out of two literal `c.within(1, ...)` calls inside `p620`'s own body,
-    and no modifier reaches a literal.
+    **p620's clause is written now and `p620.ally_pool()` is retired.**
+    "The ally you allow to shift can be within 2 squares of you, instead
+    of adjacent to you or the target" rewrites the pool
+    `warlord/level_1._beside` builds out of two literal `c.within(1, ...)`
+    calls, and the marker's whole reasoning was that no modifier reaches a
+    literal. True, and #550 is the answer: the clause does not have to
+    reach the literal from outside, it replaces it from **inside** `p620`'s
+    own body, which is where the pool is built. One `c.within(2,
+    side="ally")` in that body, gated on `c.feat`.
 
-    **Re-pointed off `c.within(extend=)`, which named the answer `#715`
-    rejected.** That symbol asks for a radius a modifier can widen from
-    outside; the ruling went the other way -- the laying row reads the
-    raise, which is what `c.change_amount` / `c.amount_for` is for -- so
-    nobody is going to build it. `i1825x1` was the other claimant and was
-    re-pointed first, onto the line owed in *its* named row; its note says
-    this one "keeps the old spelling until somebody owns
-    `feats/general_h.py`", and this is that.
+    It is a **substitution** and the body writes it as one, which is the
+    part the two symbols this row went through both got wrong.
+    `c.within(extend=)` named the answer `#715` rejected -- a radius a
+    modifier widens from outside -- and widening is not what the card
+    says: within 2 of the caster **drops** the allies standing beside the
+    target and more than 2 away, where a widened radius would have given
+    "within 2 of you *or* of the target", wider than printed.
 
-    This card rejects the old symbol a second way, which is why the two
-    rows shared a shape and not a fix: it **substitutes** the pool rather
-    than growing it, so a parameter that only widens a radius would give
-    "within 2 of you *or* of the target", wider than printed. So the owed
-    line is one line in `p620` -- its Special reading an override instead
-    of building the pool out of two literals -- and that is what the
-    symbol names, by the ref, the way `p13853.dice_for()` does.
+    **No `c.credit` block there, and it is the one #550 clause in this
+    file that wants none.** `c.credit` stamps `Effects.apply` and a pool
+    substitution lays no effect: the step is `p620`'s own Special line,
+    which it would have given some other ally anyway. The stamp exists so
+    a feat whose only work is inside another body does not report SILENT,
+    and this row has three live legs of its own below.
+
+    **No `implemented_in=` even though one clause is now elsewhere**, and
+    that is deliberate: this row has three live legs of its own and
+    `audit.py` does not fire an `implemented_in=` row at all, so claiming
+    the pointer would buy `lint._dangling_implementations` one host and
+    stop the sweep exercising the substitution and the two watchers. The
+    pointer is for a row with nothing left to fire, which `f1296` is and
+    this is not.
 
     No gate on possessing p2099: `dsl.basic_options` refuses a row the
     character does not have, which is the same question asked later and
@@ -2070,25 +2098,99 @@ _riders("f1304", {}, implemented_in=("p87", "p653", "p992", "p4541"))
 # It waited for something else to touch `scripts/audit.py`, since that
 # file is in `audit.WIDE` and a wide sweep is not worth one clause. This
 # change is batched with that sweep.
-_riders("f1305", {}, implemented_in=("p992", "p2248"),
-        dropped=("c.move_zone(with_me=)",))
-
-# p2105 and p4542 both put the exploit in the place of a charge's melee
-# basic attack -- but only "during the surprise round", and `c.as_basic`
-# holds its swap for a stretch of time `When` cannot name. Re-aimed
-# there: it is the duration that is missing, not the substitution.
 #
-# **p2248's and p87's entries are both in those bodies now** (#550). The
-# note here said p87's had deliberately *not* moved, because it was the
-# last live clause this card had out here and migrating it would leave the
-# trait arming no watcher, doing nothing, and reporting silent -- and that
-# `c.credit` could not cover it, since the audit board holds nobody
-# carrying `Condition.SURPRISED` for the clause to pay on. The second half
-# is still true and the conclusion was the wrong answer to it:
-# `implemented_in=` says the clause is written elsewhere and `audit.py`
-# does not fire the row at all, which is the state this card is in.
-_riders("f1306", {}, implemented_in=("p87", "p2248"),
-        dropped=("When.SURPRISE",))
+# **`p620`'s clause is written and this pointer did not say so.** It has
+# been in that row's body since `#1174`'s wave -- `Zone.exempt`, laid
+# before the shift -- and only `p992` and `p2248` were named here, so
+# `lint._dangling_implementations` was checking two of the three hosts that
+# carry a clause of this card. Named now, which is what makes the pointer
+# readable both ways.
+#
+# **Re-aimed off `c.move_zone(with_me=)`, which named a verb that already
+# does the job.** `c.move_zone(zid, n, to=)` translates a zone keeping its
+# shape and refuses only an aura, and `p2473` lays a plain zone -- so
+# "the cloud moves with you" is that call with `to=` set to the step's own
+# delta, from a `Moved` watch in `p87`'s body. The kwarg was never the gap.
+#
+# The gap is one layer down and it is in `p2473`: that row's blinding
+# watch re-reads occupancy against the `area` tuple captured when the zone
+# was cast, not against the zone's current squares. So a cloud this clause
+# moved would block sight from its new footprint -- `Zone.squares` is what
+# `query.cover_between` reads -- and go on blinding whoever stands in the
+# **old** one. Writing the clause against that row as it is would have
+# been a row green on half a card. The symbol names that read, by the ref,
+# the way `p13853.dice_for()` does, and `races/powers_c.py` is one line's
+# work: the `inside` set wants the matching zone's `squares`.
+_riders("f1305", {}, implemented_in=("p620", "p992", "p2248"),
+        dropped=("p2473.live_area()",))
+
+def _surprise_round(c: Cast) -> bool:
+    """Is this the surprise round?
+
+    `Encounter.start` lays `Condition.SURPRISED` on whoever was caught and
+    lifts every one of them when the round ends, so an enemy still holding
+    it *is* the surprise round. The encounter's own `_surprise` flag is
+    private and there is no query for it.
+
+    **Back in this file, having been deleted with f1306's two migrated
+    clauses.** `powers/ranger/level_1.py` and `powers/rogue/level_1_b.py`
+    each hold a copy beside those clauses; this one serves the third
+    clause of the same card, which is the one that cannot leave the feat.
+    """
+    return any(c.is_(Condition.SURPRISED, on=foe) for foe in c.enemies())
+
+
+def _f1306_setup(c: Cast) -> None:
+    """f1306's clause on p2105 and p4542: *"while you charge during the
+    surprise round, you can use this exploit in place of a melee basic
+    attack."*
+
+    **Not in those bodies, and this is #550's stated exception rather than
+    a shortcut.** The sentence is about the swing a charge *offers*, which
+    `dsl.basic_options` reads off `Powers.instead` at the moment the charge
+    hands one out -- so it has to be standing *before* either row is used,
+    and neither body runs until after it has been chosen. `f1303` carries
+    the same printed line and registers it the same way.
+
+    **`When.SURPRISE` was the marker and the duration was never the
+    gap.** `c.as_basic` already takes `until=`, and the span wanted is one
+    turn: laid at the start of a turn in the surprise round and gone by
+    the end of it, which `When.EOT` says exactly. What was missing was a
+    moment to ask the question in.
+
+    **It cannot be asked from `setup` itself**, which is the trap and is
+    worth the line: `turns._arm_traits` runs *before* `Encounter.start`
+    applies the `SURPRISED` effects, so a reading taken while the trait is
+    being armed is False in every fight -- the swap would never be laid
+    once. The caster's own `TurnStart` is past that, and is also the only
+    window where "during the surprise round" and "this turn" are the same
+    span.
+    """
+    me = c.me
+
+    def opened(ev: Any) -> None:
+        if ev.actor != me or not _surprise_round(c):
+            return
+        c.as_basic("p2105", "p4542", window="charge", until=When.EOT)
+
+    c.watch(TurnStart, opened, on=me, until=When.ENCOUNTER,
+            label="f1306 surprise charge")
+
+
+# **p2248's and p87's entries are both in those bodies now** (#550), and
+# p2105's and p4542's are the `setup=` above -- the one clause of this card
+# that cannot live in the row it names, because it is about the swing a
+# charge offers rather than about a use of either row.
+#
+# The pointer stays, so `lint._dangling_implementations` goes on checking
+# the two hosts that do carry a clause. What it costs, said out loud: an
+# `implemented_in=` row is **not fired** by `audit.py`, so the `setup=`
+# here is the one clause in this file the sweep cannot reach, and a
+# `drivers.py` rule is what has to prove it. The alternative is worse --
+# dropping the pointer to buy a firing would retire the check on two hosts
+# and report the row SILENT anyway, since the audit board holds nobody
+# carrying `Condition.SURPRISED` for the clause to pay on.
+_riders("f1306", {}, setup=_f1306_setup, implemented_in=("p87", "p2248"))
 
 
 def _poisoned(c: Cast, who: int) -> bool:

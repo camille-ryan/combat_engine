@@ -224,18 +224,47 @@ def f752(c: Cast) -> None:
 
 @power("f753", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.provoke(ignore_reach=)",),
        trigger="an adjacent enemy makes a melee attack against your beast",
        on=Trigger(AttackDeclared, _swings_at_beast,
                   "an enemy makes a melee attack against your beast"))
 def f753(c: Cast) -> None:
     """The window, opened for the ranger against whoever swung at the beast.
 
-    Dropped is the second sentence: standing next to the beast lets you
-    attack a limb you could not otherwise reach, and the window checks
-    reach like any other.
+    **The second sentence is written and wanted no new keyword.** It was
+    marked `c.provoke(ignore_reach=)`, and `"reach"` is already a
+    first-class modifier key: `dsl._stretched` reads it when
+    `dsl._reach_of` decides what a melee row may touch, and
+    `_opportunity_options` asks `dsl.candidates` -- which comes through
+    that same door -- freshly inside the window. So lending the exact
+    number of squares short *before* the window opens is the clause, and a
+    keyword on the door would have been a second spelling of it.
+
+    Three things keep the loan the size of the printed sentence rather
+    than a standing reach increase:
+
+    * it is only lent when the ranger is beside the companion, which is
+      the condition the card states;
+    * the amount is the shortfall against the ranger's own basic reach, so
+      a glaive is lent nothing and a dagger exactly what it needs;
+    * `once=True` puts `"reach"` in `cast._SPENT_ON_ATTACK`, so the first
+      attack roll ends it, and the hold is taken off by hand the moment
+      `c.provoke` returns -- the window is emitted synchronously, so after
+      that line there is no swing left for a longer reach to help. A
+      declined window therefore leaves nothing behind.
     """
-    c.provoke(c.me, on=c.trigger.attacker, why=c.ref)
+    from combat_engine.engine.components import Powers
+
+    attacker = c.trigger.attacker
+    pet = c.beast()
+    known = c.world.get(c.me, Powers)
+    basic = (known.basic if known is not None else "") or "mba"
+    short = c.distance(attacker) - c.reach(basic)
+    lent = None
+    if short > 0 and pet is not None and c.adjacent(pet):
+        lent = c.bonus("reach", short, on=c.me, until=When.EOT, once=True)
+    c.provoke(c.me, on=attacker, why=c.ref)
+    if lent is not None:
+        c.end_effect(lent)
 
 
 @power("f754", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

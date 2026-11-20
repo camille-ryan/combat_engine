@@ -1002,22 +1002,40 @@ def f2993(c: Cast) -> None:
 
     for covenant in ("cf:invoker-f1s0", "cf:invoker-f1s2"):
         c.pre_empt(covenant, "manifest", stride, until=When.ENCOUNTER)
-@power("f2994", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2994", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.as_basic(ranged)",),
        trigger="you use p7441",
        on=Trigger(PowerUsed, _used("p7441"), "you use that racial power"))
 def f2994(c: Cast) -> None:
     """Three riders on three racial powers, all named by ref.
 
-    `p7441`'s is written. `p7442`'s and `p7443`'s are dropped, and the
-    first has been **re-aimed**: a granted swing is readable now, but
-    this clause does not read one -- it *replaces* the melee basic and
-    the charge that `p7442` makes from inside its own body with a ranged
-    basic. `c.as_basic` files stand-ins by window, and `p7442` names no
-    window, so filing one there would swap the swing in every grant the
-    character is ever handed. `p7443`'s wants a keyword added to a row,
-    which nothing does.
+    `p7441`'s is written here, on this row's own trigger.
+
+    **`p7442`'s is written now, in `p7442`'s body** -- `#550`, gated on
+    `c.feat("f2994")` inside a `c.credit("f2994")` block. The old marker
+    said `c.as_basic(ranged)` and that was the wrong site: `c.as_basic`
+    files a stand-in **by window**, and `p7442` names no window, so a
+    stand-in filed from this body would swap the swing in every grant the
+    character is ever handed. From inside the row that makes the swing the
+    substitution is a kwarg -- `c.basic(ranged=True)` -- and an offered
+    choice.
+
+    **`p7443`'s is written now too, in `p7443`'s body** -- same `#550`
+    convention. It was briefly marked `dropped=("p7443",)` to say it was
+    waiting on that row rather than on a facility, and **that spelling was
+    a mistake worth recording**: a marker naming a ref that is already
+    declared makes `todo.py` report `ARRIVED p7443 exists now` on every
+    run, because the instrument's question is "has the wanted symbol
+    arrived" and a declared row has. The row it really waited on existed;
+    what was missing was a clause *inside* it, which no symbol can say.
+    So the hold was carried by the gate going red rather than by anything
+    a reader could act on.
+
+    Both halves had verbs all along. The damage type is the `dtype=` of
+    the rider `p7443` already lays -- not a second bonus, which would pay
+    the die twice -- and the keyword is `c.counts_as_keyword`, read
+    through `dsl.keywords_of` and per-character, the only way a feat adds
+    one without editing a header every holder of the card shares.
     """
     for foe in c.trigger.targets:
         c.penalty("attack", 1, on=foe, until=When.SONT)

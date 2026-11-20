@@ -141,6 +141,43 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **The board never poses a trap for a row that already fires, so no
+    # row about disarming one can do anything here.** `#1402`.
+    #
+    # `_pose_a_trap` has exactly one call site, at the top of `_provoke`,
+    # and `_provoke` is not entered for a row that fires through the
+    # ordinary path. Instrumented on this ref:
+    #
+    #     _pose_a_trap called: 0
+    #     Result(fired=48, events={'ItemPowerUsed'}, held_it=True)
+    #
+    # So the body walks `world.each(Trap)`, finds nothing, and returns.
+    # `SkillCheck` **is** in `DID_SOMETHING`, so the verdict would be
+    # green the moment a trap were on the board -- posed by hand with
+    # `terrain.arm` and `found = True`, the same body emits
+    # `CheckDeclared` and `SkillCheck` and disables the trap.
+    #
+    # **This is a statement about the board, which is the only thing that
+    # licenses an entry here**, and `drivers.disable_a_trap` is the
+    # evidence: it poses the trap itself and holds all three printed
+    # bands -- made, missed, missed by 5 -- with two negative controls.
+    # Written against the drivers rule rather than against this excuse,
+    # so the row is covered while the board is not.
+    #
+    # Two wrong diagnoses were paid for before this one and are recorded
+    # on `#1402` so they are not re-tried: that the posed trap prints no
+    # countermeasure (true, and irrelevant -- the pose is never reached),
+    # and that its DC is unbeatable (also true at some levels, also
+    # irrelevant). A fix for the second was built, measured over all 84
+    # rows `_wants_a_trap` reaches, moved **no** verdict, and was
+    # reverted rather than landed.
+    #
+    # The wider half, and the reason this should not sit here long: the
+    # same gap means `actions.py`'s own `disable` branch -- the engine's
+    # standard action for taking a trap out of action -- is uncovered too.
+    "i1371p1": "disarms a trap with a Thievery check; the board poses a"
+               " trap only inside `_provoke`, which a firing row never"
+               " reaches. `drivers.disable_a_trap` proves the row. #1402",
     # **The board provokes its all-missed `PowerResolved` with a BASIC
     # ATTACK, and a basic attack has no use to hand back.** `#1143`.
     #

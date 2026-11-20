@@ -23,14 +23,15 @@ Three judgements run through the whole file.
   block is "as the <class>'s <power>", `c.use_power(ref, spend=False)` is
   it, and `c.grant_attack(c.me, ref=...)` where the row is a swing.
 
-  **`by_ref()` is retired and the last two claimants went opposite ways.**
-  `i3525x1`'s ref has arrived too, so the sentence that used to end this
-  paragraph -- "only `i3525x1` still names its power in prose" -- is no
-  longer true of any block here; what holds that row up is in another
-  file's body and its marker says which. `i2801p1` is the one still short
-  of a ref, and it carries `spec.ref`, which is the name nine rows
-  elsewhere already use for that one ETL gap rather than this file's own
-  synonym for it.
+  **`by_ref()` is retired and no block here is waiting on a ref any
+  more.** `i3525x1`'s arrived in the spec and its two lines are written --
+  one here, one in `feats/general_r.py`, because `c.change_dice` means
+  nothing until the named row calls `c.dice_for`. `i2801p1` was the last
+  one short of a ref and it never needed the ETL: the prose name resolves
+  to `p146` by a refer-up, the way `feats/general_j._CHANNEL` resolved the
+  same four class features' power pairs. `spec.power_ref()` is still a
+  real gap for the rows that carry it elsewhere -- `i1690x1`, `i694x1`,
+  two in `weapon_b.py` -- so do not read this as the symbol being retired.
 
 The one gap still recurring here is `c.store_points()` -- an item that
 holds power points, which two blocks of one orb want. "Ongoing 5 fire and
@@ -102,7 +103,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.feats.paladin import _shaken_off
-from combat_engine.content.features.warlock import FELL
+from combat_engine.content.features.warlock import FELL, SPREAD
 from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
@@ -910,48 +911,44 @@ def i3504p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("p13853.dice_for()",),
 )
 def i3525x1(c: Cast) -> None:
     """Rolls bigger dice for a named power's damage when it was triggered by an
     attack made with this implement.
 
-    **`by_ref()` is retired: the ref arrived and the gap moved one file
-    over.** The spec now prints `p13853` where it used to print that row's
-    name, so there is nothing left for the ETL to fix here and the old
-    marker -- which meant "the spec owes a ref", and which `i2801p1` now
-    carries under the tree's own name for it, `spec.ref` -- would never go
-    green again by anything anybody did to a spec.
+    **Written, and it took the two lines in two files the old marker named.**
+    `p13853.dice_for()` was never an engine gap: `c.change_dice(ref, dice)`
+    and `c.dice_for(ref, default)` are the laying and reading halves of one
+    pair, and the hold only means anything to a row that calls the read.
+    `p13853` rolled `c.flat(c.roll("1d10"), ...)` -- a literal -- so the
+    change laid here would have been a modifier nobody consults, which that
+    verb's own docstring calls this component's commonest bug and which is
+    the one outcome worse than leaving a clause unwritten.
 
-    What is in the way is `p13853`'s **body**. `c.change_dice(ref, dice)`
-    is the right verb and is reachable today, but it is a modifier that
-    only a row *reading* it can obey: its own docstring says so, and names
-    a row that hard-codes its die as "this component's commonest bug".
-    `p13853` rolls `c.flat(c.roll("1d10"), ...)` -- a literal -- so
-    `c.change_dice("p13853", "1d12")` written here would lay a hold nobody
-    consults and this row would audit green while doing nothing for the
-    whole life of the item. That is the one outcome worse than leaving it
-    unwritten.
+    So `p13853` now rolls `c.dice_for(c.ref, "1d10")` in
+    `feats/general_r.py` and this row lays the change against that ref.
+    Nothing was needed from the ETL and nothing from the engine: the spec
+    had already stopped printing that row's name in prose, which is why the
+    retired `by_ref()` marker and its successor would both have sat green on
+    a gap nobody had touched.
 
-    So the finished shape is two lines in two files: `p13853` rolls
-    `c.dice_for(c.ref, "1d10")` instead of the literal, and this row lays
-    the change against that ref. `p13853` lives in `feats/general_r.py`,
-    which this wave does not own.
+    **`on=c.me`, which `c.change_dice` does not default to.** Unlike its
+    sibling `c.change_amount` it aims at `c.target`, deliberately -- a die
+    may belong to somebody else's power -- and the die here is the
+    carrier's, so the hold is recorded against the carrier.
 
-    **The symbol is spelled `p13853.dice_for()` deliberately**, and the two
-    obvious alternatives are both worse. A bare `p13853` is a ref, and
-    `blocked._one` resolves a ref against the registry -- that row is
-    declared and finished, so the marker would report **arrived** and red
-    `todo.py` on a gap nobody had touched. `c.dice_for(p13853)` resolves to
-    the verb, which exists and wants no argument added, so it would land in
-    the "one parameter of work" bucket and send somebody to the engine
-    rather than to the row. This spelling resolves to nothing and says
-    which row owes which read, which is the whole of it.
+    `until=When.ENCOUNTER` is the arming's own window: this is an
+    `action=NONE` trait with no declared trigger, so `turns.arm_traits`
+    lays it once at the start of the fight and `p13853` reads it whenever
+    its trigger fires afterwards. `c.dice_for` takes the **first** entry
+    that matches rather than the largest, which is right here: there is one
+    hold and it is this one.
 
-    The trigger half is not part of the gap. "When you trigger it with an
+    The trigger half is not part of the clause. "When you trigger it with an
     attack made with this implement" is the item-wide judgement in the
     module docstring: the damage context carries no weapon, so the hold is
     laid standing on the carrier."""
+    c.change_dice("p13853", "1d12", on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -1570,10 +1567,9 @@ def i1594p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("warlock.amount_for()",),
 )
 def i1825x1(c: Cast) -> None:
-    """The curse-damage half is written; the reach half is dropped.
+    """Both halves are written: the curse-damage bonus and the reach raise.
 
     **`todo` became `dropped` and both symbols were re-aimed.** The curse's
     extra damage was never unreachable: `features/strikers.extra_damage`
@@ -1588,54 +1584,45 @@ def i1825x1(c: Cast) -> None:
     laid -- is this one, so "for that attack" and "until the end of the
     turn" come to the same payment.
 
-    What is left is the other clause. The distance at which `cf:warlock-f1c11` picks
-    its second creature is the literal 3 in `c.within(3, of=victim, ...)`
-    inside *that row's body*, and no modifier reaches a literal.
-    `c.bonus("range", ...)` -- which the old marker pointed at -- is the
-    wrong lever: it lengthens a row's own printed range line, which cf:warlock-f1c11
-    already gets right.
+    **The reach half is written too, and it is the shape #715 ruled for.**
+    The distance at which `cf:warlock-f1c11` picks its second creature was
+    the literal 3 in `c.within(3, of=victim, ...)` inside *that row's
+    body*, and no modifier reaches a literal. `c.bonus("range", ...)` --
+    which the first marker pointed at -- was the wrong lever: it lengthens
+    a row's own printed range line, which `cf:warlock-f1c11` already gets
+    right. The ruling -- *"the answer is for the laying row to READ a raise
+    rather than for this one to reach into it, which is what
+    `c.change_amount` / `c.amount_for` has always been for"* -- is what
+    `i1986p1`, this row's own sibling, is written against as well.
 
-    **The marker is right about the obstacle and wrong about the answer,
-    and the answer is one line in another file.** This tree does not teach
-    a modifier to reach a literal; it teaches the laying row to *read a
-    raise*. #715 settled it -- "the answer is for the laying row to READ a
-    raise rather than for this one to reach into it, which is what
-    `c.change_amount` / `c.amount_for` has always been for" -- and
-    `i1986p1`, this row's own sibling, is written exactly that way.
+    So `cf:warlock-f1c11` now asks `c.amount_for(SPREAD, 3)` and this row
+    lays the raise. `amount_for` takes the **largest**, so the printed 3
+    and the raised 5 coexist and a warlock holding nothing is unaffected.
 
-    So the finished shape is: `cf:warlock-f1c11` asks
-    `c.within(c.amount_for(SPREAD, 3), of=victim, side="enemy")` and this
-    row adds `c.change_amount(SPREAD, 5, on=c.me, until=When.ENCOUNTER)`
-    beside the bonus below. `amount_for` takes the largest, so the printed
-    3 and the raised 5 coexist, and the ordering is not a trap here -- this
-    is a standing trait and `cf:warlock-f1c11` reads the amount when its body runs,
-    which is the half `i1986p1` had to declare a trigger for.
+    **Standing rather than hung on the hit, and the ordering is not a trap
+    here**, which is the half `i1986p1` had to declare a trigger for. This
+    is an `action=NONE` trait with no declared trigger, so
+    `turns.arm_traits` lays the raise once before round 1 and
+    `cf:warlock-f1c11` reads it when its body runs. The printed "when you
+    hit with that power" costs nothing: that row returns early on a miss,
+    so the only code that reads the raise is reached only on a hit.
 
-    Not written because `cf:warlock-f1c11` lives in `features/warlock.py`,
-    which this wave did not own. And not half-written here: a
-    `c.change_amount` laid against a row that does not read it is a hold
-    nobody consults, which `i3525x1` below names as the one outcome worse
-    than leaving a clause unwritten.
+    **`SPREAD` lives in `features/warlock.py`**, beside the row that reads
+    it, for `controllers.IMPOSITION_RAISE`'s reason -- a second spelling on
+    this side would be a hold nobody consults, which `i3525x1` above names
+    as the one outcome worse than leaving a clause unwritten.
 
-    **Re-pointed off `c.within(extend=)`, which named the answer #715
-    rejected.** That symbol asks for a radius a modifier can widen from
-    outside, and the ruling quoted above settled the other way -- the
-    laying row reads the raise -- so nobody is going to build it and the
-    group was two rows parked on an answer neither of them wants.
-    `f1303`, the other claimant, rejects it a second way and says so on
-    its own row: its card **substitutes** the pool rather than growing it,
-    so a widening parameter would give "within 2 of you *or* of the
-    target", wider than print. The two rows do share a shape, but not a
-    fix: the work is one line in `cf:warlock-f1c11` and a different line
-    in `p620`, and whichever lands first cannot clear the other row.
-
-    So this names the line that is owed: `features/warlock.py` reading
-    `c.amount_for` where it now writes a literal 3. `warlock.pay_boon()`
-    on `i698x1` is the same spelling for the same file, and
-    `p13853.dice_for()` is the same shape named by its ref -- which this
-    row cannot do, because `dsl._SYMBOL` admits `p13853.dice_for()` and
-    refuses `cf:warlock-f1c11.amount_for()` at import. `f1303` keeps the
-    old spelling until somebody owns `feats/general_h.py`.
+    **Re-pointed off `c.within(extend=)` before this, which named the
+    answer #715 rejected.** That symbol asked for a radius a modifier can
+    widen from outside, and the ruling settled the other way, so nobody was
+    going to build it. `f1303`, the other claimant, rejects it a second way
+    and says so on its own row: its card **substitutes** the pool rather
+    than growing it, so a widening parameter would give "within 2 of you
+    *or* of the target", wider than print. The two rows share a shape and
+    not a fix -- the work here was one line in `cf:warlock-f1c11` and a
+    different line in `p620` -- so landing this one does not clear `f1303`,
+    which keeps the old spelling until somebody owns
+    `feats/general_h.py`.
 
     **Every `p6855` in this row became `cf:warlock-f1c11` when `#1043`
     retired the duplicate declaration.** They are one printed card and the
@@ -1656,6 +1643,7 @@ def i1825x1(c: Cast) -> None:
         Hit, on_hit, until=When.ENCOUNTER, on=me,
         window=Window.BEFORE, label=c.ref,
     )
+    c.change_amount(SPREAD, 5, on=me, until=When.ENCOUNTER)
 
 
 @power(
@@ -3268,40 +3256,65 @@ def i2782p1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
 )
 def i2801p1(c: Cast) -> None:
-    """Re-aimed. The class feature is not the hold: 115 rows carry
-    `group="channel divinity"`, `c.expended(group=)` reads which are
-    gone and `c.restore_use` hands one back, so "even if you have
-    already used it this encounter" is sayable. What is missing is
-    *which* row -- the spec names the one power in prose and prints no
-    ref, and picking any channel-divinity row the bearer happens to own
-    would be a different card.
+    """Uses one named divine power, past the allowance it belongs to.
 
-    **The symbol is `spec.power_ref()` now.** This said `spec.ref`, and
-    the argument it made for that -- one name for the one gap, rather
-    than a synonym invented in this file holding two rows apart from a
-    group that is a single ETL fix -- is why it moved again rather than
-    in spite of it. `spec.ref` turned out to be **three** gaps wearing one
-    name (`#1229`): four class features whose spec ends "you also gain the
-    following powers" and lists none, one row citing its own ref, and this
-    family -- a printed power name sitting in prose where every other
-    block prints a ref. Landing any one of them reported all eleven ready.
+    **Written. The ref came back from a refer-up, not from the ETL**, which
+    is where `spec.power_ref()` was wrong about this row specifically: the
+    prose name resolves to `p146`, declared in `features/leaders.py` with
+    `group=CHANNEL_DIVINITY`, and the compendium holds exactly one power
+    with that printed name. The precedent for resolving one by hand is
+    already in the tree -- `feats/general_j._CHANNEL` maps these same four
+    class features to their power pairs, and `f1622`'s docstring records
+    the identical prose-to-ref problem being closed the same way. So the
+    marker was describing a real ETL gap that other rows still carry
+    (`i1690x1`, `i694x1`, `weapon_b.py`'s two) and was not this row's hold.
+    Those keep it.
 
-    `spec.power_ref()` is the name `f3401` already carried for exactly
-    this sentence, so this is still the "reuse the symbol, never mint a
-    synonym" rule and not a reversal of it. `by_ref()`, retired earlier,
-    was the synonym; `i3525x1` has since had its ref printed, so nothing
-    is left on it.
+    **The Requirement is not gated, which is this file's own judgement and
+    is measured rather than assumed.** "You must have the class feature to
+    use this power" is the class half of a line, and the module docstring's
+    second judgement says those are not enforced here -- the item was dealt
+    to whoever is holding it. What makes that safe for *this* block rather
+    than merely conventional is the base-item restriction, which is a
+    column: `chargen.treasure` lays an implement item only on an implement
+    the character actually carries, so nothing without the base item this
+    one names is ever handed it.
 
-    `i1690x1` and `i694x1` are on `spec.power_ref()` too -- they were
-    briefly left behind on `spec.ref` when the split landed, because an
-    authoring agent held `weapon_b.py` at the time, which is the split
-    this paragraph warns against happening for half a day.
+    A `requires=` naming the four features was written and taken back out.
+    It is correct and unreachable: an item row carries `cls="item"` and no
+    build leg, so `audit.board` falls through to its fighter default and
+    the row reported UNUSED -- a verdict about the board, not the row. The
+    gate belongs here the day the board can field a divine carrier for an
+    `cls="item"` row; the honest state until then is the file's judgement,
+    said out loud.
 
-    The four class features the card names are all reffed in the spec
-    already; it is the power under them that is prose."""
+    **`again=True` is the printed "even if you have already used it this
+    encounter".** `dsl.usable` puts the per-ref expended test *and*
+    `_group_spent` -- "one `channel divinity` power per encounter" -- inside
+    one `if not spent_ok:`, so the single flag waives exactly the two
+    allowances the sentence names and nothing else. `c.expended(group=)`
+    plus `c.restore_use` was the other route and is worse: it hands back
+    whichever channel-divinity row the bearer happens to own, which is a
+    different card.
+
+    **`spend=False`, because the item's daily use is the price.** A bearer
+    who owns `p146` keeps their own use of it -- the clause buys an extra
+    use, it does not re-spend one -- and the same reading is on `i1825p1`
+    above. A bearer who does not own it has it lent, where `c.use_power`
+    forces the same thing anyway.
+
+    **Not aimed with `on=`**: `p146` is a close burst at each enemy, so it
+    picks its own targets exactly as it would on an ordinary turn, and it
+    filters to the one creature type its own target line names.
+
+    Not settled, and reported rather than guessed: whether the three
+    non-cleric printings of this card name a *different* power. The
+    database holds one power with this printed name and `_CHANNEL` puts it
+    in only one of the four pairs, so one ref is what the evidence
+    supports."""
+    c.use_power("p146", again=True, spend=False)
 
 
 @power(

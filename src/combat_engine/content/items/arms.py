@@ -86,6 +86,8 @@ from combat_engine.engine import (
     When,
     Window,
     World,
+    ZoneEntered,
+    ZoneExited,
     both,
     by_me,
     by_melee,
@@ -889,40 +891,98 @@ def i2475p1(c: Cast) -> None:
 
 
 @power("i2478p1", level=4, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.property_in()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("Weapon.properties(per_source=)",))
 def i2478p1(c: Cast) -> None:
-    """**The wearer's half plays, and the note saying it could not was
-    wrong on both of its claims.** It said "light is not modelled and
-    neither is what a weapon is made of, so both halves of this are absent
-    rather than one". What a weapon is made of is modelled exactly as a
-    weapon property, by this very item's other block: `i1764x1` prints the
-    same sentence without the radius and writes
-    `c.gains_property("silvered", every=True)`, which 15 monster traits
-    read back through `regeneration(unless_struck_by=)`. And
-    `c.gains_property` *does* have an undo -- `c.loses_property`, the same
-    five selectors run backwards. So the wearer is written here, since the
-    wearer is at the centre of its own light and is inside it for as long
-    as it burns.
+    """All three printed sentences, and the two premises that held the last
+    two back were both false.
 
-    **What is left is the membership and not the material.** "You and your
-    allies **within the light**" is a grant whose roll changes as people
-    walk: a property is written once onto each carried `Gear.weapons` copy,
-    so an ally who steps out would keep it and one who steps in would never
-    get it. A `gains_property(in_zone=)` keyword -- which this row waited on
-    -- is the wrong shape for that and the note already argued why without
-    noticing it contradicted its own marker: the zone has to own a
-    membership that changes, the way `c.resist_in` owns a resistance that
-    holds only inside one, which is a verb beside `c.resist` and not a
-    keyword on it. Hence `c.property_in()`.
+    **"Light is not modelled" is stale.** `c.light(radius)` carries a
+    bright radius on the creature and `query.light_level` is the reader, so
+    the first sentence is one call -- and that is also what makes the
+    second one writable, because the dismissal hangs on the effect the
+    light lays: `c.endable(lit, MINOR)` offers the minor action to whoever
+    the effect sits on, which is the wearer, and `then=` dispels the aura
+    with it so the silvering goes out with the light. `Zones.end` announces
+    a `ZoneExited` for every occupant on the way down, so the teardown is
+    the same path a creature walking out takes.
 
-    "You can end this effect as a minor action" is left alone rather than
-    hung on an `Effect.drop_cost` with a `c.loses_property` on `on_end`.
-    Light is genuinely not modelled, so ending the light does nothing that
-    can be observed, and the teardown would reach across blocks -- a
-    wearer who also carries `i1764x1` would have that block's standing
-    silver stripped by this block's dismissal, since `every=True` names the
-    weapons and not who paid for the word."""
-    c.gains_property("silvered", every=True, on=c.me)
+    **The membership is an aura.** "You and your allies within the light"
+    is a set that changes as people walk, and a property is written once
+    onto each carried `Gear.weapons` copy -- so the old marker's
+    `c.property_in()` was asking for a verb to own that. `c.aura` already
+    owns it: it follows the holder and announces arrivals and departures,
+    and the two watchers below lay the word and take it back. The aura is
+    a second object for one printed radius, which is deliberate -- the
+    light is what `query.light_level` reads and the aura is what emits the
+    membership, and neither can do the other's job.
+
+    **The strip is per weapon this row actually changed**, which is the
+    hazard worth writing out. `Weapon.properties` is a plain frozenset
+    with no count of who paid for a word, so a blanket
+    `c.loses_property("silvered", every=True)` on departure would clear
+    the standing grant an ally holds from `i1764x1` -- a correct reading of
+    this card silently breaking another row. So entry records the weapon
+    refs that did **not** already carry the word, and departure strips
+    exactly those. A weapon silvered by anything else is never recorded and
+    so never stripped.
+
+    Dropped, narrowed to what that leaves: two grants that **overlap in
+    time** still cannot be told apart. Two of these lights over one ally
+    means the second records nothing, so the first to end strips a word the
+    second is still paying for. That wants a count per source on the
+    property itself -- `Weapon.properties(per_source=)` -- and no
+    bookkeeping in a row can supply it, because the other source is
+    another row's closure. The re-use guard below keeps one wearer from
+    being both sources."""
+    me = c.me
+    # One light, not two: a second use would lay a second aura whose
+    # bookkeeping cannot see the first's, which is the overlap the marker
+    # is about. Re-usable once this one has gone out.
+    if c.my_aura(c.ref):
+        return
+    lit = c.light(5, on=me)
+    zone = c.aura(5, on=me)
+    #: Which of each creature's weapons this row silvered -- the ones that
+    #: did not already carry the word. Only these are stripped again.
+    lent: dict[int, set[str]] = {}
+
+    def silver(who: int) -> None:
+        if who != me and not _friend(c.world, me, who):
+            return
+        if who in lent:
+            return
+        gear = c.world.get(who, _Gear)
+        if gear is None:
+            return
+        fresh = {w.ref for w in gear.weapons if "silvered" not in w.properties}
+        if not fresh:
+            return
+        for weapon in fresh:
+            c.gains_property("silvered", ref=weapon, on=who)
+        lent[who] = fresh
+
+    def unsilver(who: int) -> None:
+        for weapon in lent.pop(who, set()):
+            c.loses_property("silvered", ref=weapon, on=who)
+
+    def entered(ev: ZoneEntered) -> None:
+        if ev.zone == zone:
+            silver(ev.actor)
+
+    def exited(ev: ZoneExited) -> None:
+        if ev.zone == zone:
+            unsilver(ev.actor)
+
+    c.watch(ZoneEntered, entered, until=When.ENCOUNTER, label=f"{c.ref} in")
+    c.watch(ZoneExited, exited, until=When.ENCOUNTER, label=f"{c.ref} out")
+    # Whoever is standing in it already, the wearer included: `Zones._spawn`
+    # refreshes on creation, so their `ZoneEntered` was announced before the
+    # watchers above existed. Read outside a handler, where `occupants` is
+    # current.
+    for who in list(c.world.zones.occupants(zone)):
+        silver(who)
+    c.endable(lit, MINOR, then=lambda: c.dispel(zone))
 
 
 @power("i2479p1", level=4, cls=ITEM, usage=DAILY, action=REACTION,
@@ -1079,18 +1139,74 @@ def i2122x1(c: Cast) -> None:
     c.watch(Hit, landed, until=When.ENCOUNTER)
 
 
+def _hit_with_both_hands(world: World, eid: int) -> bool:
+    """Did this creature's last power use land a blow from each hand?
+
+    **The hand is on the event.** `resolve.attack` stamps `hand` on every
+    `Hit` and `Miss`, and `Bus.log` keeps them, so "both your main weapon
+    and your off-hand weapon using one power" is a read and not a gap --
+    which is what the note on `i2122p1` denied. The sibling `i2122x1`
+    counts the same tally in a closure; this is the same count made from
+    outside, because a `requires=` gate is handed `(world, eid)` and
+    cannot reach another row's closure.
+
+    "Using one power" is the scope, so the walk stops at this creature's
+    most recent `PowerUsed` -- the blows above it in the log are that
+    power's. Not `PowerResolved.rolls`: an `AttackResult` carries the
+    weapon and no hand.
+    """
+    hands: set[str] = set()
+    for ev in reversed(world.bus.log):
+        if ev.kind == "PowerUsed" and getattr(ev, "actor", None) == eid:
+            break
+        if ev.kind == "Hit" and getattr(ev, "attacker", None) == eid:
+            hands.add(getattr(ev, "hand", "main") or "main")
+    return len(hands) > 1
+
+
 @power("i2122p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
        trigger="you hit with both your main weapon and your off-hand "
                "weapon using one power",
-       dropped=("Cast.basic(hand=)", "query.hit_with_both_hands()"))
+       requires=_hit_with_both_hands,
+       requires_text="you must have hit with both hands using one power",
+       dropped=("Cast.basic(hand=)",))
 def i2122p1(c: Cast) -> None:
-    """Two halves are missing and neither stops the swing. `c.basic` takes
-    no hand, so the basic attack is swung with whatever the creature's
-    basic is; and nothing in the world records that both weapons landed
-    under one power -- the property beside this one counts it in a closure
-    a separate row cannot read -- so the printed Trigger is unenforced."""
-    c.basic()
+    """**The printed condition is enforced now, and the note that said it
+    could not be was false.** It said "nothing in the world records that
+    both weapons landed under one power"; `resolve.attack` has stamped
+    `hand` on every `Hit` since `#501` and `_hit_with_both_hands` reads it
+    back off the log.
+
+    **It is a `requires=`, not an `on=Trigger`, and the prose `trigger=`
+    stays.** The action is a minor, and `triggers.WINDOW_OF` maps no window
+    for one -- so a declared Trigger here would be subscribed by nothing
+    and the body would never run, which `lint.py` refuses by name. A
+    printed "use this power when ..." on an action you choose to take is a
+    condition on acting, which is what a Requirement is.
+
+    Still dropped: `c.basic` takes no hand, so the swing is made with
+    whatever the creature's basic attack is rather than with the off-hand
+    weapon the card names."""
+    # **`on=` is not optional on a `target=SELF` row, and a bare call here
+    # swung at the bearer.** Measured before this line was aimed:
+    # `AttackDeclared(attacker=1, target=1, power='mba')` and the wearer's
+    # hit points 54 -> -15. `c.basic`'s `on=` defaults to `c.target`, and
+    # on a `SELF` row `dsl.use` hands the row *itself* as its target -- so
+    # the extra attack was an attack on the person making it.
+    #
+    # `content/CLAUDE.md` states the general case ("almost every `Cast`
+    # method defaults to `c.target`, not `c.me`") and records that in a
+    # `NO_TARGET` row it is a certainty rather than a risk. `SELF` is the
+    # same certainty wearing a different word, and `lint.py` checks the
+    # `NO_TARGET` case only. #1404.
+    #
+    # The sibling `i1261p1` makes a bare `c.basic()` call **correctly**,
+    # because it is `target=EACH_ENEMY` -- so the verb is right and only
+    # the aim was missing.
+    nearby = sorted(c.within(1, side="enemy"))
+    if nearby:
+        c.basic(on=c.choose(nearby, "who the off-hand catches"))
 
 
 @power("i2492p1", level=5, cls=ITEM, usage=DAILY, action=INTERRUPT,

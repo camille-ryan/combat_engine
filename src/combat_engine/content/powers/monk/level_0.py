@@ -29,6 +29,7 @@ from combat_engine.engine import (
     by_me,
     power,
 )
+from combat_engine.engine.query import holding
 
 HIT_ON_MY_TURN = "you hit with an attack during your turn"
 TRIGGERED = Trigger(Hit, by_me, HIT_ON_MY_TURN)
@@ -160,6 +161,63 @@ def _forgo_for_necrotic(c: Cast) -> bool:
     return True
 
 
+def _burn_instead(c: Cast, amount: int,
+                  dtype: DamageType = DamageType.UNTYPED) -> bool:
+    """`f3702`'s swap: the flurry's damage lands as a burn instead.
+
+    True when it applies, so the caller skips its `c.flat` and nothing
+    else -- the third member of the family `_forgo_for_attack_penalty` and
+    `_forgo_for_necrotic` make up, and the same sanctioned exception: the
+    card names the monk's *feature*, a monk holds whichever of the five
+    `FLURRIES` its tradition granted, and five is a finite list, so the
+    clause is written into each body behind `c.feat` rather than registered
+    from outside through `c.pre_empt`. #550.
+
+    **It takes the amount rather than computing one, which is the whole
+    reason the five bodies change and `f3702` does not.** *"Ongoing damage
+    equal to the damage that you would have dealt to it with the power"* is
+    a replacement for a number each body works out for itself off a
+    different ability and, on `p11207`, off the tier ladder as well. A
+    watch hung on `PowerUsed` -- which the row's old note proposed and then
+    refuted -- is announced before the body runs, so there is nothing to
+    read yet, and by the time the damage lands it is already paid: the only
+    thing such a watch could do is **add** the burn on top.
+
+    **Not optional, because the card prints no "may".** Its two siblings
+    both ask `c.choose` and both say *"you can"*; this one says *"choose
+    one target of the power that is adjacent to you"*, so the swap happens
+    whenever the gate is met. The choosing it does ask for has no work to
+    do here -- all five flurries take `target=ONE_CREATURE` -- but the
+    adjacency it names does, since `f3319` can put this row's one target
+    ten squares out.
+
+    `holding(..., "w3597")` rather than a weapon group: a sickle is filed
+    under light blade with thirteen other things, and `query.holding`
+    matches a ref precisely so a card naming one weapon has something to
+    ask. The proficiency half of the feat is a **column** read by chargen.
+
+    `dtype` because the burn is the damage the body would have dealt, and
+    `p16131`'s is fire. Of one type only the highest applies, which
+    `c.ongoing` enforces, so a second use in the same fight replaces rather
+    than stacking a second save.
+
+    `c.credit` so the hold is the feat's doing rather than the flurry's,
+    which is what stops `f3702` reading SILENT while working.
+    """
+    if amount <= 0 or not c.feat("f3702"):
+        return False
+    if not holding(c.world, c.me, "w3597"):
+        return False
+    # "A target of the power that is adjacent to you" -- `c.adjacent` with
+    # no argument asks about `c.target`, which is the creature this call of
+    # the body is for.
+    if not c.adjacent():
+        return False
+    with c.credit("f3702"):
+        c.ongoing(amount, dtype, on=c.target)
+    return True
+
+
 @power(
     "p11207",
     level=0,
@@ -177,8 +235,10 @@ def p11207(c: Cast) -> None:
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
-        c.flat(3 + c.str_mod
-               + ((2 + 2 * _tier(c.level)) if _elsewhere(c) else 0))
+        amount = (3 + c.str_mod
+                  + ((2 + 2 * _tier(c.level)) if _elsewhere(c) else 0))
+        if not _burn_instead(c, amount):
+            c.flat(amount)
 
 
 @power(
@@ -215,7 +275,9 @@ def p13123(c: Cast) -> None:
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
-        c.flat(2 + c.con_mod)
+        amount = 2 + c.con_mod
+        if not _burn_instead(c, amount):
+            c.flat(amount)
     c.cannot_shift(until=When.SONT)
     victim = c.target
     struck = getattr(c.trigger, "target", None)
@@ -254,7 +316,9 @@ def p16131(c: Cast) -> None:
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
-        c.flat(2 + c.cha_mod, dtype=DamageType.FIRE)
+        amount = 2 + c.cha_mod
+        if not _burn_instead(c, amount, DamageType.FIRE):
+            c.flat(amount, dtype=DamageType.FIRE)
     if _elsewhere(c):
         c.penalty(
             "attack", -2, until=When.EONT, when=lambda ctx: ctx.get("target") == c.me
@@ -279,7 +343,9 @@ def p16132(c: Cast) -> None:
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
-        c.flat(c.str_mod)
+        amount = c.str_mod
+        if not _burn_instead(c, amount):
+            c.flat(amount)
     c.pull(1)
     if _elsewhere(c):
         c.slowed(until=When.EONT)
@@ -305,5 +371,7 @@ def p7448(c: Cast) -> None:
     if _forgo_for_attack_penalty(c):
         return
     if not _forgo_for_necrotic(c):
-        c.flat(2 + c.wis_mod)
+        amount = 2 + c.wis_mod
+        if not _burn_instead(c, amount):
+            c.flat(amount)
     c.slide(1)

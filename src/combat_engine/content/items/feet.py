@@ -820,11 +820,75 @@ def i773p1(c: Cast) -> None:
 
 
 @power("i1478x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.prone_square()",))
+       reach=PERSONAL, target=SELF)
 def i1478x1(c: Cast) -> None:
-    """Falling into a *different* square has no verb -- `c.prone` takes
-    no destination. The advantage half is gated on being prone, so
-    nothing else the wearer grants is cancelled with it."""
+    """Where the body lands, and what being down costs.
+
+    **Written, and the old marker pointed at the attacker's verb.** It
+    said *"falling into a different square has no verb -- `c.prone` takes
+    no destination"*, which is true of `c.prone` and is beside the point:
+    `c.prone` is what somebody **else** calls to knock this creature
+    down, so a destination parameter there would let the attacker choose
+    where the victim lands. This card is the victim's side of the same
+    moment, and the moment is announced.
+
+    `ConditionApplied` carrying `Condition.PRONE` is it. `Effects.apply`
+    installs the condition and *then* says so, which is what makes
+    answering inside the window safe and is the tree's settled
+    arrangement for this exact event -- `powers/fighter.p2230`,
+    `powers/warlord.p10128` and
+    `monsters/level_02/misc_sa._shrug_off_prone` all act there, and
+    nothing gets a turn in between. It also carries the parenthetical for
+    free: dropping to 0 hit points applies `conditions.DROPPED`, which is
+    three conditions in one effect and one of them is this one.
+
+    **`c.shift` is dead in this window and would have been a silently
+    inert row.** `Condition.PRONE` is `Rules(..., no_shift=True)`, and
+    the condition is installed before the announcement -- so
+    `query.can_shift` is already False by the time the handler runs and
+    `movement.shift` returns False without moving anybody. Every square
+    offered would have been refused, in every fight.
+
+    So the relocation is a one-square **slide**, which is the engine's
+    category for a creature being moved other than by its own action:
+    `movement.forced` consults no `can_act`, so it carries the printed
+    "(including when you fall unconscious)" half, which is the one a
+    shift could never have reached whatever the condition said.
+    `items/feet.i2734p1` is the precedent for a creature sliding itself.
+
+    Two things that reading costs, both of them graceful. A hold that
+    shortens or refuses forced movement shortens this, and a shortfall
+    here means the wearer lands where it already was -- which is the
+    card's own default, since the printed clause is an *instead*. And a
+    row watching for the wearer being pushed, pulled or slid sees this
+    one; `i2734p1` is such a row and in this same slot, so the pair is
+    worth a square more than print on the turn the wearer goes down.
+
+    `optional=True` because "you **can** fall into any unoccupied
+    adjacent space" is a choice, and `c.choose` puts the decline last --
+    so the engine with nobody playing takes a square, which is the
+    benefit the item is for.
+
+    The advantage half is gated on being prone, so nothing else the
+    wearer grants is cancelled with it."""
+    me = c.me
+
+    def fell(ev: ConditionApplied) -> None:
+        if ev.target != me or ev.condition is not Condition.PRONE:
+            return
+        here = query.squares(c.world, me)
+        options = sorted(
+            sq for sq in spread(here, 1) - here
+            if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None
+        )
+        if not options:
+            return
+        picked = c.choose(options, f"{c.ref}: where it lands", optional=True)
+        if picked is not None:
+            c.slide(1, to=picked, on=me)
+
+    c.watch(ConditionApplied, fell, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} landing")
     c.no_advantage(on=c.me, until=When.ENCOUNTER,
                    when=lambda ctx: c.is_(Condition.PRONE, on=c.me))
 

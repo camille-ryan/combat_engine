@@ -423,16 +423,83 @@ def f610b(c: Cast) -> None:
     )
 
 
+def _natural_edge(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """A natural 1 or 20 of this character's own, on either roll.
+
+    One predicate for both arms because the two events name the roller
+    differently -- `AttackRolled.attacker`, `SavingThrow.actor` -- and
+    both carry `natural`. `by_me` would answer the attack arm only.
+    """
+    who = getattr(ev, "attacker", None)
+    if who is None:
+        who = getattr(ev, "actor", None)
+    return who == me and getattr(ev, "natural", 0) in (1, 20)
+
+
 _granted("f631", "f631b")
 
 
 @power("f631b", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
     reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY,
-    todo=("c.advantage_on_roll()",))
+    trigger="you roll a natural 1 or a natural 20 on an attack roll or a saving throw",
+    on=(Trigger(AttackRolled, _natural_edge,
+                "you roll a natural 1 or 20 on an attack roll"),
+        Trigger(SavingThrow, _natural_edge,
+                "you roll a natural 1 or 20 on a saving throw")))
 def f631b(c: Cast) -> None:
     """"Roll d20 twice and use whichever you prefer", banked for a *later*
-    roll of the character's choosing. `c.reroll_attack(keep="best")` is the
-    same idea applied to the roll that just happened; nothing holds it."""
+    roll of the character's choosing.
+
+    **Written, and the symbol it waited on named the wrong mechanic.**
+    The old marker asked for `c.advantage_on_roll()`; combat advantage is
+    a flat +2 here rather than a second die, so neither
+    `c.gains_advantage` nor `c.grants_advantage` can say this card at all.
+    What it wants is a reroll keeping the better result, banked -- which
+    is why `c.reroll_attack`/`c.reroll_save` grew `ev=`, their own
+    docstrings saying so: *"a banked reroll is a `c.watch`, and its
+    handler closes over the row's `Cast` rather than the roll"*.
+    `p12321` is the landed precedent for the attack arm.
+
+    **Two watches, one latch.** The card offers the reroll on *either*
+    kind of roll and allows it once, so a per-watch `once=True` would
+    hand over two rerolls -- one of each. `spent` is the shared hold and
+    the two subscriptions are the two printed nouns.
+
+    `keep="best"` is *"use whichever d20 result you prefer"*, not
+    `"new"`, which is the other printed line four rows up.
+
+    `ev is opened` is read rather than assumed: `Bus._run` snapshots its
+    listeners before the window, so a subscription armed inside the
+    triggering roll's own window cannot see that roll -- but the guard is
+    what the *card* says (the banked roll is a later one) and it should
+    not depend on the bus keeping that property.
+
+    `When.EONT` is *"before the end of your next turn"*, measured on the
+    holder, and the once-per-encounter half is the channel divinity
+    budget `group=` already enforces across every such card.
+    """
+    me = c.me
+    opened = c.trigger
+    spent: list[int] = []
+
+    def better(ev: Any) -> None:
+        if spent or ev is opened:
+            return
+        who = getattr(ev, "attacker", None)
+        if who is None:
+            who = getattr(ev, "actor", None)
+        if who != me:
+            return
+        if not c.may("roll it twice and keep the better result", who=me):
+            return
+        spent.append(1)
+        if isinstance(ev, AttackRolled):
+            c.reroll_attack(ev=ev, keep="best")
+        else:
+            c.reroll_save(ev=ev, keep="best")
+
+    for kind in (AttackRolled, SavingThrow):
+        c.watch(kind, better, until=When.EONT, on=me, label=c.ref)
 
 
 # -- the standalone ones ----------------------------------------------------

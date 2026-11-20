@@ -37,6 +37,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Melee,
+    PowerUsed,
     Ranged,
     Square,
     Summon,
@@ -63,6 +64,112 @@ def _companion_of(world: World, owner: int) -> int | None:
         if world.get(eid, Companion).owner == owner:
             return eid
     return None
+
+
+def _racial_die(c: Cast, swung: str) -> str:
+    """What `p6189` pays off a hit made with `swung`.
+
+    `p6189`'s own body is the authority and this is the same test it makes:
+    *"which die is rolled turns on the triggering power's keywords"* -- the
+    weapon die for a weapon attack, a flat `1d8` otherwise. Restated rather
+    than called because that row rolls its die *and* hands the type on to a
+    lent clause, and the clause below wants the number only.
+    """
+    row = get(swung)
+    weapon = row is not None and Keyword.WEAPON in row.keywords
+    return c.w() if weapon else "1d8"
+
+
+def _swings_with(c: Cast, who: int) -> str:
+    """Which row that creature's basic attack actually is.
+
+    **`c.basic`'s own fallback, and it is not the beast row.** `c.basic`
+    reads `Powers.basic` and falls back to `basic.MELEE`, so a companion
+    with no `Powers` component at all -- which is what `c.call_companion`
+    leaves behind when it has no database ref to build from -- swings
+    `mba` and not `bmba`. Measured: the `DamageRolled` for the animal's
+    half carries `detail='mba'`. Reading `BEAST` here instead would have
+    answered the keyword question about a row that did not swing, and the
+    two rows differ in exactly that keyword.
+    """
+    from combat_engine.engine.basic import MELEE
+    from combat_engine.engine.components import Powers
+
+    known = c.world.get(who, Powers)
+    return (known.basic if known is not None else MELEE) or MELEE
+
+
+def _both_hit_for_f3797(c: Cast, beast: int, bitten: int, since: int) -> None:
+    """`f3797`'s clause: both halves of `p13506` paid `p6189`'s extra damage.
+
+    *"You can use your `p6189` power after you hit with your `p13506`
+    power's attack and your animal companion hits ... If you do, your hit
+    and your animal companion's hit both deal the extra damage from your
+    `p6189` power."*
+
+    Written here and not on `f3797` because the printed condition is the
+    **pairing**: `p13506` makes both swings in one body and both return a
+    bool, so this is the one place where "you hit *and* it hit" is a
+    question that can be asked. `#550`'s convention.
+
+    **`c.credit` is here and is honestly inert**, which is worth saying
+    because the convention's stated reason does not apply. The stamp lands
+    on `Effect.credit` inside `Effects.apply`, and `c.damage` lays no
+    effect -- `DamageApplied` carries `detail`, which is the row's ref. So
+    this block credits nothing today: what keeps `f3797` out of the SILENT
+    bucket is its `implemented_in=`, which `audit.py` counts separately,
+    and the measured `detail` on the extra blow reads `p13506`. The block
+    stays because it is the one door every effect verb reaches and the
+    clause may grow one.
+
+    **`p6189` has usually already fired by the time this runs, and that is
+    what the `since` mark is for.** It is a free action off a `Hit` by the
+    character, so the character's own swing above triggers it and it pays
+    its die to that one target -- measured: `PowerUsed(power='p6189',
+    trigger=Hit#...)` lands between the strike and the animal's swing, and
+    `Powers.times("p6189")` is 1 before this clause is reached. So the
+    first draft, which priced the clause with `c.expend_row("p6189")` the
+    way `feats/ranger_c.py`'s `f2419` does, was refused **every time** --
+    there was no use left to buy, and nothing said so.
+
+    What the card actually adds, once that is known, is the animal's half:
+    the character's hit is already paid by `p6189` itself. So:
+
+    * `p6189` fired off this attack -- the common case -- and this clause
+      pays the animal's half and nothing else;
+    * it did not, because the decider declined or it was spent in an
+      earlier round, and the clause buys the use with `c.expend_row` and
+      pays **both** halves. That is the printed *"you can use your `p6189`
+      power"*, which is the permission the sentence opens with.
+
+    Scanned from `since` rather than asked as `c.expended("p6189")`,
+    because the power is once per encounter: "spent" is true all fight
+    after the first use and the question here is whether it answered *this
+    attack*.
+
+    **The judgement the card forces, and the answer.** *"The extra damage
+    from your `p6189` power"* is a die that row picks off the attack that
+    triggered it -- the weapon die for a weapon attack, a flat `1d8`
+    otherwise -- and the two hits need not be the same kind of attack. So
+    the die is asked **per hit**, through `_racial_die`, off the row that
+    actually swung: `p13506`'s own header for the character's half and
+    `_swings_with` for the animal's. The alternative reading -- one amount
+    settled by the character's weapon attack and paid twice -- would hand
+    the animal a weapon die off a trigger it need not satisfy, and
+    `p6189`'s own test is the thing in the tree that already rules on that.
+    """
+    if not c.feat("f3797"):
+        return
+    answered = any(
+        isinstance(e, PowerUsed) and e.actor == c.me and e.power == "p6189"
+        for e in c.world.bus.log[since:]
+    )
+    with c.credit("f3797"):
+        if not answered:
+            if not c.expend_row("p6189"):
+                return
+            c.damage(_racial_die(c, c.ref), on=c.target)
+        c.damage(_racial_die(c, _swings_with(c, beast)), on=bitten)
 
 
 def _companion_hit_near_me(world: World, me: int, ev: Hit) -> bool:
@@ -99,9 +206,18 @@ def p13506(c: Cast) -> None:
     the druid's own swing lands. "Its animal attack" is whatever that
     creature's basic attack is -- `c.basic(who=)` reads `Powers.basic`,
     which is the only place a companion's attack is recorded.
+
+    `_both_hit_for_f3797` is the `#550` clause of the feat that rides on
+    this pairing, and it is written here because the pairing is: the card
+    needs both swings' outcomes in one place and this body is the only
+    place they are both known.
     """
     dice = c.w(3 if c.level >= 27 else 2 if c.level >= 17 else 1)
-    if c.strike():
+    # Marked before the swing, because `p6189` answers this hit from
+    # outside the body and `_both_hit_for_f3797` has to see that it did.
+    since = len(c.world.bus.log)
+    struck = c.strike()
+    if struck:
         c.damage(dice, c.wis_mod)
 
     beast = c.companion()
@@ -109,8 +225,11 @@ def p13506(c: Cast) -> None:
         return
     c.move_companion(c.speed_of(beast))
     reachable = c.within(1, of=beast, side="enemy")
-    if reachable:
-        c.basic(who=beast, on=reachable[0])
+    if not reachable:
+        return
+    bitten = reachable[0]
+    if c.basic(who=beast, on=bitten) and struck:
+        _both_hit_for_f3797(c, beast, bitten, since)
 
 
 @power(

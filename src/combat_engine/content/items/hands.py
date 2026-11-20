@@ -1462,10 +1462,32 @@ def i1431x1(c: Cast) -> None:
     c.watch(DamageRolled, rolled, until=When.ENCOUNTER, on=c.me)
 
 
+#: The charges belong to the item rather than to either of its blocks, which
+#: is the key convention `items/armour.i2017p1` and `items/waist.i1083p1`
+#: set: `Powers.per_day` takes any key at all, and the item naming itself is
+#: what makes two blocks share one pool.
+_I1431_POOL = "i1431"
+#: **How many the pool holds, and where the figure comes from.** It is the
+#: compendium entry's own power usage header, which prints the pool and the
+#: recharge together in the form every charged item uses. `game.db` carries
+#: neither: `item_block.usage` for this row reads `encounter` and
+#: `item.spec` for the item is its one-word Requirement, so the number is
+#: unreadable from the built database and five sessions read it as absent.
+#: Read out of the compendium by the session that can open one and recorded
+#: in the 2026-11-19 triage; the ETL half -- three of 3,752 items print such
+#: a header -- is `#1401`, and when it lands this constant should become
+#: that column rather than stay a number.
+_I1431_CHARGES = 5
+#: What each printed step costs and buys, cheapest first, so the engine with
+#: nobody playing takes the cheap one. Heroic figures: the `Level 18:` and
+#: `Level 28:` lines move the die and are out of scope per the module
+#: docstring.
+_I1431_STEPS: tuple[tuple[int, str], ...] = ((1, "1d6"), (2, "2d6"), (5, "3d6"))
+
+
 @power("i1431p1", level=8, cls=ITEM, usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF,
-       keywords=[Keyword.ACID, Keyword.COLD, Keyword.FIRE],
-       todo=("compendium.item_charges",))
+       keywords=[Keyword.ACID, Keyword.COLD, Keyword.FIRE])
 def i1431p1(c: Cast) -> None:
     """Extra damage priced in charges: one buys 1d6, two buy 2d6, five buy
     3d6.
@@ -1477,45 +1499,70 @@ def i1431p1(c: Cast) -> None:
     are the worked precedent -- `items/armour.i2017p1` and
     `items/waist.i1083p1`, both re-pointed off this identical claim. The
     convention they set is to key on the **item** (`"i1431"`) rather than
-    on the block, because the charges belong to the gloves and not to
+    on the block, because the charges belong to the thing worn and not to
     either card.
 
-    The clock would be right too. `story._rest` clears `Sheet.per_day`
-    only on the extended fork, which is the cadence a charged item
-    recharges on; the per-*encounter* store next door is the wrong one,
-    since `turns.short_rest` empties `Powers.charges` whole and would hand
-    the charges back after a breather.
+    The clock is the printed one rather than a near miss. `story._rest`
+    clears `Sheet.per_day` **only** on the extended fork, which is the
+    cadence a charged item recharges on; the per-*encounter* store next
+    door is the wrong one, since `turns.short_rest` empties
+    `Powers.charges` whole and would hand the charges back after a
+    breather.
 
-    **What is actually missing is a printed number.** The card prices its
-    three steps in charges and says nowhere how many the gloves hold, nor
-    what refills them, and neither does the item's own line -- the whole
-    of `item.spec` for `i1431` is its one-word Requirement, and the
-    Property beside this is about retyping the curse. `i2017x1` is the
-    contrast and the reason this reads as a gap rather than a convention:
-    its Property prints the pool and the recharge in one sentence, and the
-    import carried both. So there is no number here to read, and inventing
-    a pool would be deriving the one figure the row turns on. See
-    *"never derive a number the page prints"*.
+    **The referral came back and the answer was the pool, so the row is
+    written.** What this note said for five sessions -- *"there is no
+    number here to read, and inventing a pool would be deriving the one
+    figure the row turns on"* -- was true of everything an authoring
+    agent can read and false of the compendium. The entry prints the pool
+    and the recharge in its **power usage header**, which is where every
+    charged item puts them and which the import does not carry: measured,
+    `item_block.usage` for this row is `encounter` and `item.spec` for
+    `i1431` is the one-word Requirement, so neither half of the header
+    survives into `game.db`. `_I1431_CHARGES` holds the figure and names
+    its provenance; the ETL half is `#1401`.
 
-    Referred up rather than flagged: whether this is a `defect=` is not an
-    authoring agent's call, and it is not a free one either -- a defect
-    drops the **whole** `i1431` entry, including `i1431x1`, which is
-    written and plays. The narrow question for whoever can open the
-    compendium is whether the entry prints a charge count anywhere, or
-    whether it leans on a general rule about charged items printed in the
-    book `item.books` names for this row -- which is not among the 18 PDFs
-    in `resources/`, so it cannot be checked from here.
+    **Which also settles the `defect=` question the other way**, and it
+    was worth not guessing: a defect drops the **whole** `i1431` entry,
+    `i1431x1` with it, and `i1431x1` is written and plays. The compendium
+    has the page.
 
-    **The "general rule" half of that question has now been asked of what
-    is here, and the answer is no.** `ls resources/*.pdf` is 18, counted
-    rather than quoted, and the one this item names is not one of them --
-    but the two books that would carry a *general* charged-item rule are,
-    so the body word was grepped across both: 221 pages and 322 pages,
-    and `charges` appears **once**, inside a power's printed name on an
-    exploits page. So nothing in reach defines a default pool. That
-    narrows the referral to the entry itself, and it does not settle it:
-    a failed search is not an absent rule, and a reader with the right
-    book should check the entry before anybody reaches for `defect=`."""
+    **The per-use price and the per-day pool are two different numbers**
+    and the card prints both, which is the one thing easy to conflate
+    here: `5 charges` in the printed body is the price of the 3d6 step,
+    not the size of the pool. They happen to be equal, so a reading that
+    mixed them up would look right and would be wrong the moment the
+    `Level 18:` lines or the ETL column moved one of them.
+
+    **Only the steps the pool can still pay for are offered**, which is
+    what makes a partly-spent pool behave: with two charges left the 3d6
+    step is not in the list at all, rather than offered and then
+    half-paid. Cheapest first, so the headless default is the cheap one
+    and `i2017p1`'s reasoning carries over -- spending the lot stays
+    available to whoever asks.
+
+    *"The next attack you make this turn"* is `until=When.EOT` plus
+    `once=True`, which is `powers/vampire/level_3`'s shape for the same
+    sentence, and the type is a choice each use because the card offers
+    three."""
+    left = c.per_day_left(_I1431_POOL, _I1431_CHARGES)
+    steps = [(cost, dice) for cost, dice in _I1431_STEPS if cost <= left]
+    if not steps:
+        return
+    picked = c.choose(steps, f"{c.ref}: charges to spend", optional=True)
+    if picked is None:
+        return
+    cost, dice = picked
+    spent = 0
+    while spent < cost and c.spend_per_day(_I1431_POOL, _I1431_CHARGES):
+        spent += 1
+    if spent < cost:
+        return
+    kind = c.choose([DamageType.ACID, DamageType.COLD, DamageType.FIRE],
+                    f"{c.ref}: which type the extra damage is")
+    if kind is None:
+        return
+    c.bonus("damage", 0, dice=dice, dtype=kind, on=c.me,
+            until=When.EOT, once=True)
 
 
 @power("i1440p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,

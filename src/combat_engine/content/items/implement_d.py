@@ -27,9 +27,12 @@ these rows:
 * **A `Level 13:`/`Level 19:` line is paragon and out of scope.** Only the
   heroic number is written.
 
-Recurring gaps, each named with the symbol it wants rather than
-approximated: `c.kill()` and `c.darkvision()`. `c.reshape_area()` was on
-that list and landed on #614 -- `i2467p1` and `i683p1` both call it.
+**This file has no recurring gap left, and the list that said it had two
+was stale in both entries.** It named `c.kill()` and `c.darkvision()`:
+`c.darkvision` has existed for long enough that `i3188x1` calls it, and
+`c.kill(dead=True)` is the outright death `i3188p1` was marked for.
+`c.reshape_area()` was on the same list and landed on #614 -- `i2467p1`
+and `i683p1` both call it.
 "Ongoing 5 fire **and** necrotic damage" is one number of two types and
 not two numbers, and `c.ongoing(dtypes=)` is it.
 
@@ -2747,7 +2750,6 @@ def i3188x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.slay()",),
 )
 def i3188p1(c: Cast) -> None:
     """The reckoning falls at the **second** turn ending the caster sees,
@@ -2762,16 +2764,24 @@ def i3188p1(c: Cast) -> None:
     turn" reader would be. Nothing had to be written and nothing is owed
     for that clause.
 
-    **What is still owed is the death, and `c.kill` does not cover it.**
-    The card reads "if this damage drops you below 1 hit point, you die",
-    and that is outright death at a threshold of 0. `c.kill` sets hit
-    points to 0 and routes through `resolve._check_down`, which consults
-    `Health.dying_at` -- negative for a character -- so it lays the dying
-    conditions instead, and it refuses outright for a creature already at
-    or below 0, which is exactly where the surge-value blow leaves one.
-    Nothing in the surface drives a creature past `dying_at`, and a body
-    writing `Health.hp` by hand would walk round the engine's one path
-    out of zero. So the clause keeps a marker of its own.
+    **The death clause is written, and the marker that refused it named a
+    verb that already does exactly this.** The old note read "`c.kill`
+    sets hit points to 0 and routes through `resolve._check_down`, which
+    consults `Health.dying_at` ... and it refuses outright for a creature
+    already at or below 0". Both halves are answered by `dead=`:
+    `c.kill(dead=True)` sets `Health.hp` to `Health.dying_at` rather than
+    to 0, so `resolve._die` is reached by the one existing path and
+    `Dropped(dead=...)` comes out right for free, and the refusal guard is
+    `hp <= (dying_at if dead else 0)` -- relaxed, in the verb's own words,
+    "because the verb was refusing exactly the state its one caller
+    needs". Still refused on a creature genuinely past `dying_at`, which
+    is the second `Died` the guard was protecting against.
+
+    So the hand-written `Health.hp` the old note (rightly) refused is not
+    needed either: the component is only *read* here, to ask whether the
+    surge-value blow left the wielder below 1 hit point, which is the
+    card's condition. `diseases/high_heroic.py` reads it the same way for
+    the same sentence.
     """
     c.bonus("attack", 2, kind="item", on=c.me, until=When.EONT, once=True)
     c.bonus(
@@ -2795,6 +2805,13 @@ def i3188p1(c: Cast) -> None:
         turns.append(1)
         if len(turns) == 2 and not killed:
             c.flat(c.surge_value(), on=c.me)
+            # "If this damage drops you below 1 hit point, you die" --
+            # below 1 is `hp <= 0`, asked after the blow has landed so the
+            # gate is about the damage rather than about the hit points
+            # before it.
+            health = c.world.get(c.me, Health)
+            if health is not None and health.hp <= 0:
+                c.kill(on=c.me, dead=True)
 
     c.watch(Dropped, felled, until=When.ENCOUNTER)
     c.watch(TurnEnd, reckon, until=When.ENCOUNTER)

@@ -36,11 +36,14 @@ from combat_engine.engine import (
     SELF,
     ActionType,
     AreaBurst,
+    AttackRolled,
     Cast,
     DamageType,
     Dropped,
     Hit,
     Keyword,
+    Miss,
+    PowerUsed,
     SavingThrow,
     Trigger,
     Usage,
@@ -504,12 +507,23 @@ def f2292(c: Cast) -> None:
             c.prepare(chosen, instead_of=drop)
 
 
-# -- the class feature with no ref -----------------------------------------
+# -- the two that ride on an arcanist mastery -------------------------------
+#
+# This read "the class feature with no ref" and both halves of that have
+# expired: `#642`'s wave declared the options, so each one announces its
+# own use and each of the two rows below is written against it. Neither
+# needs the feature to grow a field.
 
 
-@power("f2030", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+def _wand_mastery(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.actor == me and ev.power == "cf:wizard-arcanist-f0c3"
+
+
+@power("f2030", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("events.Boosted(from=c.bonus)",))
+       trigger="you use your cf:wizard-arcanist-f0c3 class feature",
+       on=Trigger(PowerUsed, _wand_mastery,
+                  "you use your cf:wizard-arcanist-f0c3"))
 def f2030(c: Cast) -> None:
     """A free `f2023b` on a miss with an attack the wand mastery modified.
 
@@ -517,29 +531,62 @@ def f2030(c: Cast) -> None:
     `cf:wizard-arcanist-f0c3` class feature, you can use `f2023b`, if
     available, as a free action against the target you missed."*
 
-    **Re-pointed, because the symbol it named has arrived and the row is
-    still not writable.** It waited on `cf:wizard-arcanist-f0c3` having a
-    row at all -- *"the option still has a ref and no row, so nothing
-    marks which misses it modified"* -- and `#642`'s wave declared it, so
-    `todo.py` went red asking for this row to be finished. It cannot be,
-    and the reason is one layer in from where the old marker pointed.
+    **Written, and no new event was needed.** The old marker asked for
+    `events.Boosted(from=c.bonus)` on the reasoning that *"a `once=`
+    modifier is spent silently"*, so *"the attack roll this feature
+    modified"* named no moment. It does: `cf:wizard-arcanist-f0c3` is a
+    declared row, so `dsl.use` announces its use, and its body lays
+    `c.bonus("attack", c.dex_mod, once=True)` with **no `when=` gate**.
+    `c.bonus`'s one-shot branch ends the hold on the first `AttackRolled`
+    where the attacker is the holder and the gate applies -- and an
+    ungated modifier applies to every roll -- so *the roll this feature
+    modified* is simply the holder's **first** attack roll after that
+    announcement. Nothing has to be told; it is derivable from what the
+    two rows already are.
 
-    **What is missing is an announcement, not a row.** *"An attack roll
-    modified by"* is the same clause `events.Boosted` was filed for --
-    `by` names the row that paid, `roll_kind` tells an attack from a save,
-    and `feats/artificer_b.py`'s `f3029` is the worked example of reading
-    it. But `Boosted` is emitted by `Cast._boosted`, which only
-    `c.boost_roll` reaches: a roll **added to after it was made**.
-    `cf:wizard-arcanist-f0c3` is not that shape. It lays a standing
-    `c.bonus("attack", c.dex_mod, once=True)`, read by the roll that
-    consumes it, and nothing says which roll that was.
+    That is also why this reads the first roll rather than asking which
+    hold was spent: an announcement would have to be matched back to a
+    row anyway, and the arithmetic is the same.
 
-    So the gap is that a `once=` modifier is spent silently. `c.bonus`'s
-    own `once=` branch ends the effect when it is read, so the spend
-    moment exists and is the place an announcement would go; until it
-    does, "the attack this feature modified" names no event and the
-    trigger cannot be written. One row waits on this today.
+    **`result` identity is what pairs the miss to that roll.**
+    `resolve.attack` hangs the live `AttackResult` on `AttackRolled` and
+    on the `Hit`/`Miss` that follows it, as the same object -- so
+    `ev.result is first.result` is the one test that cannot be fooled by
+    a later swing with the same power at the same creature. Comparing
+    `(power, target)` alone would have paid out on the second shot at a
+    target the first one hit.
+
+    `c.use_power` charges no action -- *"its own header has already
+    declared what it costs"* -- which is the printed *"as a free
+    action"*, and it returns False when the card is spent, which is *"if
+    available"*. `c.may` is the printed *"you can"*.
+
+    The one-shot half needs no latch: `rolled` takes the first roll only,
+    and no second `Miss` can carry that roll's `result`.
+
+    **`AT_WILL` and not `ENCOUNTER`.** On a triggered trait `ENCOUNTER`
+    means once per fight, and this card prints no limit -- the limits are
+    the mastery's own usage and `f2023b`'s, and a third here would be a
+    budget nothing printed. `lint.py` names exactly this and the old
+    `todo=` was hiding it.
     """
+    me = c.me
+    rolled: list[Any] = []
+
+    def roll(ev: AttackRolled) -> None:
+        if ev.attacker == me and not rolled:
+            rolled.append(ev)
+
+    def missed(ev: Miss) -> None:
+        if not rolled or ev.attacker != me:
+            return
+        if getattr(ev, "result", None) is not getattr(rolled[0], "result", None):
+            return
+        if c.may("use the wand's card against the target", who=me):
+            c.use_power("f2023b", on=ev.target)
+
+    c.watch(AttackRolled, roll, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(Miss, missed, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2034", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

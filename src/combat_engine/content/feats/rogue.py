@@ -8,9 +8,16 @@ Nor is it the announcement, which was the standing diagnosis here and
 is wrong: `features.strikers.extra_damage` pays out through
 `c.damage(detail=label)`, so the payment arrives as a `DamageRolled`
 carrying the feature's ref, rolled and not yet landed. `f751` trades it
-away from there. What is genuinely missing is the once-a-round latch --
-it lives in a closure and nothing can read or reset it -- and any way
-to reach into the dice another row rolls.
+away from there.
+
+**And the two things this paragraph called missing are both built.** It
+said the once-a-round latch "lives in a closure and nothing can read or
+reset it" and that there was no "way to reach into the dice another row
+rolls". The latch moved onto `Powers.latched` in #569 -- `c.latched`,
+`c.latch` and `c.unlatch` are the three doors, and `c.payment_window`
+carries the per-turn reasoning this card needs. The dice are
+`c.change_dice` and `c.dice_for`, which `f185` writes and `f763` reads.
+Nothing in this file waits on either.
 
 The rest divides into the ordinary -- a critical with combat advantage,
 a damage bonus beside an ally -- and three that turn on traps, which
@@ -29,7 +36,9 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     Condition,
+    DamageApplied,
     DamageRolled,
+    EffectApplied,
     Hit,
     PowerUsed,
     Size,
@@ -138,16 +147,76 @@ def f751(c: Cast) -> None:
 
 
 @power("f763", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.raise_ongoing(by)",))
+       reach=PERSONAL, target=SELF)
 def f763(c: Cast) -> None:
     """Raises ongoing damage by one per die of the class's extra damage.
 
-    **Re-pointed, and the old marker named two things that both exist.**
-    The announcement is `c.damage(..., detail=label)` in `pay_extra`, and
-    the count is `c.dice_for(label, default)` -- the same question
-    `pay_extra` itself asks. `f2766` in `warlock_b.py` is this card word
-    for word with the other striker feature in it, and carries the longer
-    note. What is left is raising an ongoing amount already set. #619."""
+    **The marker said "what is left is raising an ongoing amount already
+    set", and that was never missing.** `Effect.ongoing` is an ordinary
+    mutable field and twelve content sites already write it in place --
+    `monsters/level_10/brutes_sa.py` does `existing.ongoing = (amt +
+    amount, dtype)` for this very sentence, and three files carry a named
+    `_ongoing_amount` helper written for "increases by N". So there was
+    nothing to wait for and `c.raise_ongoing(by)` would have been a
+    thirteenth spelling.
+
+    **The ordering is the part that needed care.** `features/strikers.py`
+    pays the extra damage from a `Hit` watcher, and a power lays its
+    ongoing *after* `c.strike()` returns -- so a raise hung on `Hit` runs
+    before there is anything to raise. It is hung on `EffectApplied`
+    instead, which `durations.apply` emits **after** `self.live[eff.id] =
+    eff`, so the hold is already findable and its `ongoing` already set.
+
+    The two halves are tied together by the payout's own window rather
+    than by one event carrying both: the striker's blow arrives as a
+    `DamageApplied` whose `detail` is the feature's label, and that latches
+    a per-target key for the current turn. The card's "once per turn" is
+    the striker's latch, not a second one, so the window `c.latched(...,
+    per_turn=True)` measures is the same one `pay_extra` spent.
+
+    **One known narrowing, and it is an over-count of one.** `c.dice_for`
+    answers the dice the feature is *declared* to roll, after `f185`'s
+    d8 swap; it cannot see `f952`'s "forgo rolling 1 die", which
+    `features/strikers._forgo` decides inside the payout and announces
+    nowhere. A rogue holding both feats and taking that trade raises the
+    burn by one more than it dealt. #619.
+    """
+    me = c.me
+    sneak = "cf:rogue-scoundrel-f4"
+
+    def paid(ev: Any) -> None:
+        if ev.source != me or ev.amount <= 0:
+            return
+        if getattr(ev, "detail", "") != sneak:
+            return
+        c.latch(f"{c.ref} {ev.target}", per_turn=True)
+
+    def landed(ev: Any) -> None:
+        if ev.source != me:
+            return
+        if not c.latched(f"{c.ref} {ev.target}", per_turn=True):
+            return
+        burn = next(
+            (
+                e for e in c.world.effects.of(ev.target)
+                if not e.ended and e.ongoing and e.source == me
+                and e.label == ev.label
+            ),
+            None,
+        )
+        if burn is None:
+            return
+        dice = c.dice_for(sneak, "2d6")
+        count = int(dice.split("d")[0]) if "d" in dice else 0
+        if count <= 0:
+            return
+        amount, dtype = burn.ongoing
+        burn.ongoing = (amount + count, dtype)
+
+    c.watch(DamageApplied, paid, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} paid")
+    c.watch(EffectApplied, landed, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} raise")
 
 
 @power("f185", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

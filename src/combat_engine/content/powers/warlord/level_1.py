@@ -533,9 +533,29 @@ def p620(c: Cast) -> None:
     never off `c.feat`; `f1102` carries no bracket and stacks with it.
     Crit-gated, which is the printed condition, and `c.crit` is the reader
     for the `ev.critical` its rider used.
+
+    **`f1303`'s clause is written in too** (#550), and it is a
+    **substitution** of the Special line's pool rather than a widening of
+    it: *"the ally you allow to shift can be within 2 squares of you,
+    instead of adjacent to you or the target"*. So it replaces `_beside`'s
+    two rings with one ring of 2 around the caster -- which drops the
+    allies standing beside the target and more than 2 away from the
+    caster, exactly as printed. A radius a modifier could widen from
+    outside would have given "within 2 of you *or* of the target", wider
+    than the card; `feats/general_h.f1303` carried that reading as a
+    marker and this is the line it named.
+
+    **No `c.credit` block on it, and that is measured rather than
+    forgotten.** `c.credit` stamps `Effects.apply`, and a pool
+    substitution lays no effect at all: the step it leads to is this row's
+    own Special line, which it would have taken for some other ally
+    anyway. There is nothing for the stamp to land on, and the feat does
+    not need one -- unlike `f1305` above it has three live legs of its own
+    out in `feats/general_h.py`, so it is not at risk of reporting silent.
     """
     arena = c.declare("Arena Fighting", "f975")
-    helpers = _beside(c, c.target)
+    helpers = (sorted(set(c.within(2, side="ally")) - {c.me})
+               if c.feat("f1303") else _beside(c, c.target))
     stepped = None
     if helpers:
         stepped = c.choose(helpers, "who steps before the blow")

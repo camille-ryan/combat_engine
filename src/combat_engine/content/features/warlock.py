@@ -107,6 +107,18 @@ _AFFINITY_REPLACES = (
 #: of the key would be two resources that look like one.
 FELL = "cf:warlock-f1s4:boon"
 
+#: How far from the target `cf:warlock-f1c11` may settle the curse, as a
+#: raise an item may change. The printed 3 is a literal inside that row's
+#: own body and `i1825x1` prints "can be within 5 squares of the target
+#: instead of 3" -- so the laying row reads the raise rather than the item
+#: reaching into a literal, which is what #715 settled and what
+#: `controllers.IMPOSITION_RAISE` is beside it for.
+#:
+#: Named here rather than in the item file for that reason: this is the
+#: reader, and a second spelling on the laying side would be a hold nobody
+#: consults.
+SPREAD = "warlock:f1c11-spread"
+
 #: The clause name `cf:warlock-f1s4` offers its regain under, so a feat can
 #: replace it. `f3232` is the one that does -- it takes a power point
 #: instead of the charge coming back.
@@ -851,7 +863,13 @@ def warlock_f1c11(c: Cast) -> None:
     # augment is owed to a successful attack, and a hit that finds nobody
     # left to curse is still a successful attack.
     _vestige_augment(c, victim)
-    near = [victim, *(e for e in c.within(3, of=victim, side="enemy") if e != victim)]
+    # **`c.amount_for(SPREAD, 3)` rather than the literal 3**, so
+    # `i1825x1` -- which prints "can be within 5 squares of the target
+    # instead of 3" -- has something to raise. The printed 3 is the
+    # default, so a warlock holding nothing stays at 3; `amount_for` takes
+    # the largest, so the raise wins when it is standing. #715.
+    reach = c.amount_for(SPREAD, 3)
+    near = [victim, *(e for e in c.within(reach, of=victim, side="enemy") if e != victim)]
     # **Everybody in reach, cursed or not.** This filtered the cursed ones
     # out, and that is why the printed "if the creature is already cursed
     # by you" branch could never arise: the pool it reads could not hold

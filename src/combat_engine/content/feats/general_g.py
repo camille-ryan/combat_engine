@@ -731,16 +731,20 @@ def f717(c: Cast) -> None:
 
 
 @power("f1114", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.rider_targets()",))
+       reach=PERSONAL, target=SELF, implemented_in=("p6189",))
 def f1114(c: Cast) -> None:
     """Spreads `p6189`'s extra damage over every target of an area power.
 
-    **Re-pointed: this is not the same gap as the four `p8278` feats.**
-    Those read a rider's *amount*; this one changes who it pays out to,
-    which is a write and not a read. The power is a ref and the rider is a
-    `c.bonus("damage", once=True)`, so what is wanted is "pay this rider
-    on every target hit rather than the first", which nothing expresses.
-    #619."""
+    **Written in `p6189`, which is #550's convention** -- the card names
+    one power, so the clause lives in that power's body gated on
+    `c.feat`, and this row is the pointer.
+
+    **`c.rider_targets()` was the wrong gap, and so was the premise under
+    it.** The old note read `p6189` as laying a
+    `c.bonus("damage", once=True)` whose pay-out had to be re-aimed. It
+    lays no modifier at all: it deals the extra damage outright, inside
+    the `Hit` it answers, so "all targets you hit with the power" is a
+    second deal per target and not a rewrite of somebody's `Mod`. #619."""
 
 
 @power("f997", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1750,34 +1754,60 @@ def f1149(c: Cast) -> None:
 
 
 @power("f1021", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.pre_empt(keyword=)",))
+       reach=PERSONAL, target=SELF)
 def f1021(c: Cast) -> None:
     """A trade offered on every implement attack: two off the roll for
-    two radiant on a hit. `c.may` asks a yes-or-no inside a body that is
-    already running; nothing offers a choice from a standing modifier,
-    so the penalty would be compulsory and the row strictly worse than
-    not having it.
+    two radiant on a hit. Heroic tier, so 2 and 2.
 
-    **`c.pre_empt` is not the near miss it looks like.** That verb keys a
-    substitute to a `(ref, what)` pair and `Powers.pre_empts` turns each
-    registration into its own entry in the action menu. This card names no
-    row -- the trade is on *any* implement attack -- so there is nothing to
-    key it to and no menu entry it could become. The two siblings below
-    each name their rows and are a different gap for that reason.
+    **Written, and `c.pre_empt(keyword=)` was never the shape.** The old
+    note was right that `c.pre_empt` keys a substitute to a `(ref, what)`
+    pair and would turn into its own menu entry, and wrong that a
+    substitution was what the card wants at all. Nothing is replaced: the
+    attack happens either way and the trade is a per-attack yes-or-no.
+    `c.may` asks exactly that, from inside an `AttackDeclared` handler at
+    `Window.BEFORE`, so the penalty is standing when the roll is made.
+    `f2610` prints the same sentence over a weapon property and has been
+    written this way all along; `powers/artificer/level_2.py` asks the
+    same question in the same window.
 
-    **Re-pointed, because `c.opt_in()` was serving two needs and is now
-    down to this one.** `f1097`, `f1098` and `f1099` carried it too and
-    none of them wanted what this row wants: each named *specific* powers,
-    so each belongs to #550's convention -- the clause written into the
-    power, gated on `c.feat` -- and those are written. `f1097`'s was not
-    even an opt-in; its card forgoes nothing.
+    **The gate is the row's keyword and not the hand.** An implement
+    attack is a row carrying `Keyword.IMPLEMENT`, read off the triggering
+    ref -- where `c.wielding` would answer for a character holding an
+    implement *and* a weapon, and so would take the trade on every swing.
 
-    What is left here is precisely the thing the paragraph above describes:
-    a substitution keyed to a **keyword** rather than a ref, so the offer
-    can be made at any implement attack. `c.pre_empt(keyword=)` names
-    that, and `content/CLAUDE.md` already carves out this case -- *"the
-    exception is a feat naming a class of powers -- 'any implement
-    attack'"*. #550."""
+    **The damage half waits for the hit**, for the reason `f2610`'s note
+    gives: a `once=True` damage bonus is spent by `DamageRolled`, so laid
+    at declaration it survives a clean miss and is collected by the next
+    attack -- a -2 paid once buying the extra twice. `elected` is the one
+    blow the question was asked about, so the payout can tell that blow
+    from any other.
+
+    Level 11 and 21 are paragon and out of scope."""
+    me = c.me
+    #: The (target, power) of the attack the trade was elected for.
+    elected: list[tuple[int, str]] = []
+
+    def offer(ev: AttackDeclared) -> None:
+        # Cleared on every declaration, elected or not: a blow nobody paid
+        # for must not collect the previous one's bonus.
+        elected.clear()
+        if ev.attacker != me or not _has({"power": ev.power},
+                                         Keyword.IMPLEMENT):
+            return
+        if not c.may("take -2 to the attack for 2 extra radiant damage",
+                     who=me, default=False):
+            return
+        c.penalty("attack", 2, on=me, until=When.EOT, once=True)
+        elected.append((ev.target, ev.power))
+
+    def pay(ev: Any) -> None:
+        if ev.attacker == me and (ev.target, ev.power) in elected:
+            elected.clear()
+            c.bonus("damage", 2, on=me, until=When.EOT, once=True,
+                    dtype=DamageType.RADIANT)
+
+    c.watch(AttackDeclared, offer, until=When.ENCOUNTER, window=Window.BEFORE)
+    c.watch(Hit, pay, until=When.ENCOUNTER)
 
 
 @power("f1099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

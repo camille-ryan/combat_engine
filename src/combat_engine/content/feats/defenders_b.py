@@ -23,6 +23,7 @@ why that feat is written rather than marked.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.features.defenders_sa import warding
@@ -549,30 +550,102 @@ def f3318(c: Cast) -> None:
     `SavingThrow` is in `wire()`. `#1391`."""
 
 
+def _flurry_with_a_sling(c: Cast, ref: str) -> Callable[[dict[str, Any]], bool]:
+    """`f3319`'s gate: this one flurry, while a sling is in hand.
+
+    `dsl._stretched` is handed a `ctx` carrying the row being measured, so
+    the ref test is what keeps the stretch off the monk's other melee
+    lines. The hand is read off the world rather than out of the `ctx`
+    because the two call sites supply different keys -- `dsl.area` passes
+    `{"power", "range_kind"}` and `_reach_of` adds `"weapon"` -- and
+    because a sling can be put away mid-fight.
+
+    A group and not a ref: a sling *is* one of the printed weapon groups,
+    unlike the sickle `f3702` has to name by ref.
+    """
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return ctx.get("power") == ref and c.wielding("sling")
+
+    return gate
+
+
 @power("f3319", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.swap_target()",))
+       reach=PERSONAL, target=SELF)
 def f3319(c: Cast) -> None:
-    """Swaps one target of the feature for a distant one. The feature is
-    `FLURRY`, the weapon half is `c.wielding("sling")`, and the other half
-    of `c.add_target` landed as `c.drop_target` -- so three of the four
-    pieces are here.
+    """*"When you use your flurry and you have a sling in hand, you can
+    replace one normal target of that power with one creature within 10
+    squares of you. This does not provoke opportunity attacks."*
 
-    **What is left is a window, not a verb, and that is why the symbol
-    moved.** Both target verbs reach the power running *below* this one
-    through `dsl.running_below`, and `dsl.use` pushes the cast onto
-    `_RUNNING` **after** it announces `PowerUsed` -- so a handler on that
-    event, which is the only moment between the targets being chosen and
-    the list being walked, cannot reach the cast whose list it must edit.
-    `PowerUsed.targets` is a `list(...)` copy, which `i2400p1`'s
-    neighbour already records, so editing that reaches nothing either.
+    **Written as a reach, because the target line it was going to edit has
+    exactly one entry.** All five of `monk.level_0.FLURRIES` are
+    `target=ONE_CREATURE` on a fixed melee line, so *"replace one normal
+    target with one creature within 10 squares"* is not a list edit at all
+    -- it is **this use reaching ten**. The set before and the set after
+    differ in nothing but how far the one target may stand, and that is a
+    number `Mods` already carries.
 
-    Probed rather than assumed: a `PowerUsed` handler calling
-    `c.drop_target` gets `running_below() is None` and the list it wanted
-    is empty.
+    `dsl._reach_of` folds a `"reach"` stretch into a fixed-number melee
+    line, and `dsl._stretched`'s `ctx` carries the row being measured --
+    so the widening is gated to the five refs rather than lengthening
+    every melee line the monk has. `feats/barbarian.py`'s `f1010` is the
+    written precedent for narrowing such a modifier to one named row, and
+    its own note is the ruling: *"`c.bonus` has always taken a gate"*.
 
-    An interrupt *inside* the walk works and is not this card: by then the
-    targets are being resolved one at a time, and "replace one normal
-    target" is about the set before any of them is."""
+    **Per ref and not a flat +9**, because `p16132` prints `Melee(2)`: the
+    card says ten squares, so each entry is `10 - <that row's printed
+    reach>` and all five come out at ten rather than four at ten and one
+    at eleven. Read off the header at arming, since the printed number is
+    data.
+
+    **Asked per read.** The sling can leave the monk's hand mid-fight and
+    `dsl._reach_of` is consulted every time the reach is measured -- by the
+    targeting, by `_within_reach` and by the three policy readers, which
+    `_reach_of`'s own note says is the point of computing the stretch in
+    one place.
+
+    **The old symbol named a window that this spelling does not need**, and
+    its diagnosis was accurate: `c.add_target` and `c.drop_target` both
+    reach the power running *below* the caller through `dsl.running_below`,
+    and `dsl.use` pushes the cast onto `_RUNNING` after it announces
+    `PowerUsed` -- so a handler on that event, the one moment between the
+    targets being chosen and the list being walked, cannot reach the cast
+    whose list it must edit. True, probed, and not load-bearing once the
+    clause stops being a list edit.
+
+    **No marker, and the two things that look like residues are not.**
+
+    * **The printed "you can" becomes always-on, and that is faithful.** A
+      reach is an option set rather than an action: reaching ten includes
+      reaching one, so the decider gets exactly the choice the card offers
+      and takes the better target. There is no second branch for a
+      `c.choose` to put, only a nearer target it may still pick.
+    * **"This does not provoke opportunity attacks" is already true.**
+      `Power.provokes_on` opens the window for `ranged`, `area_burst` and
+      `wall` and nothing else, so a melee line reaching ten squares never
+      provokes -- the clause is honoured by construction and there is no
+      gap to name.
+
+    **And the stretch does not leak into the threat zone**, which is the
+    one thing a bare `"reach"` bonus could have got wrong. `movement._threat`
+    is the only other reader of the key and it is doubly closed here: it
+    consults `"reach"` only for a creature carrying `threatening_reach`,
+    which nothing sets, and the `ctx` it passes is
+    `{"attacker", "target"}` with no `"power"` -- so the gate above answers
+    False there whatever happens to that flag. 4e's printed rule is that
+    reach does not threaten, and this clause does not make it."""
+    from combat_engine.content.powers.monk.level_0 import FLURRIES
+
+    me = c.me
+    for ref in FLURRIES:
+        row = get(ref)
+        if row is None or row.reach is None:
+            continue
+        further = 10 - row.reach.size
+        if further <= 0:
+            continue
+        c.bonus("reach", further, on=me, until=When.ENCOUNTER,
+                when=_flurry_with_a_sling(c, ref))
 
 
 @power("f3320", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -134,6 +134,19 @@ def _shadow_concealed(c: Cast) -> bool:
     )
 
 
+def _warlock_row(ref: str) -> bool:
+    """Is that ref one of this class's attack powers?
+
+    The registry carries the class, which is how "a warlock attack" is
+    asked without naming any of them. Split out of `_warlock_attack`
+    below because the same question arrives twice over: once off a damage
+    context's `power`, and once off the `by` of a hold already standing,
+    which is a ref and not a context.
+    """
+    p = get(ref or "")
+    return p is not None and p.cls == "warlock" and p.is_attack
+
+
 def _warlock_attack(ctx: dict[str, Any]) -> bool:
     """Is the blow being rolled one of this class's attack powers?
 
@@ -141,8 +154,7 @@ def _warlock_attack(ctx: dict[str, Any]) -> bool:
     registry carries the class -- which is how "with a warlock power" is
     asked without naming any of them.
     """
-    p = get(ctx.get("power", "") or "")
-    return p is not None and p.cls == "warlock" and p.is_attack
+    return _warlock_row(ctx.get("power", "") or "")
 
 
 def _burning(c: Cast, who: int | None) -> bool:
@@ -438,25 +450,81 @@ def f2764(c: Cast) -> None:
 
 
 @power("f2766", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.raise_ongoing(by)",))
+       reach=PERSONAL, target=SELF)
 def f2766(c: Cast) -> None:
     """Raises ongoing damage by one per curse die rolled. Word for word
-    the rogue's f763 with the other striker feature in it.
+    the rogue's `f763` with the other striker feature in it, so it is
+    written the same way -- see that row for the long form.
 
-    The *announcement* is not the gap: `extra_damage` pays through
-    `c.damage(..., detail=label)`, so the payout arrives as a
-    `DamageRolled`/`DamageApplied` carrying `cf:warlock-f4`.
+    **The marker said the gap was "raising an ongoing amount after it has
+    been set", and there was nothing to wait for.** `Effect.ongoing` is an
+    ordinary mutable field and a dozen content sites already write it in
+    place, so `c.raise_ongoing(by)` would have been one more spelling of
+    something the tree does by hand. `f763` reached the same conclusion
+    first; this row sat on the superseded reading.
 
-    **And the count is not the gap either, which this docstring used to
-    say it was.** It read "the die string is a literal closed over inside
-    `extra_damage` and nothing publishes how many were rolled" -- true when
-    it was written and not since. `pay_extra` asks
-    `c.dice_for(label, dice, ...)` for the string (#569 moved it there so a
-    feat raising d6s to d8s would be read), and a feat can ask the same
-    question and count the dice off the answer.
+    **The ordering doubt dissolves on reading `durations.apply`.**
+    `EffectApplied` is emitted for *every* effect -- including a save-ends
+    hold whose whole content is ongoing damage -- and it is emitted
+    **after** `self.live[eff.id] = eff`, so the burn is already standing
+    and its amount already set when this handler runs. A raise hung on
+    `Hit` would be too early: a power lays its ongoing after `c.strike()`
+    returns, so there would be nothing there to raise.
 
-    What is actually left is raising an **ongoing** amount after it has been
-    set, keyed on a payout in the same blow. #619."""
+    The two halves are tied by the payout's window rather than by one
+    event carrying both: the curse's helping arrives as a `DamageApplied`
+    whose `detail` is `CURSE`, and that latches a per-target key for the
+    turn. The card's limit is the class feature's own latch, not a second
+    one, so `c.latched(..., per_turn=True)` measures the window
+    `pay_extra` spent.
+
+    **"A warlock attack" is read off the hold, not off the event.**
+    `EffectApplied` carries a label and a source and no row, and the curse
+    pays on *any* hit against a cursed enemy -- so the class gate cannot
+    come from the payout. `Effect.by` is the row that laid the burn, which
+    is the power whose ongoing damage the sentence is about.
+
+    One known narrowing, inherited from `f763`: `c.dice_for` answers the
+    dice the feature is *declared* to roll, so a clause deciding inside
+    the payout to roll fewer is invisible here. The `{"target": ...}` ctx
+    is passed because `_pay_curse` passes it -- a gated `change_dice`
+    would otherwise be read with a different question than the one that
+    rolled. #619."""
+    me = c.me
+
+    def paid(ev: Any) -> None:
+        if ev.source != me or ev.amount <= 0:
+            return
+        if getattr(ev, "detail", "") != CURSE:
+            return
+        c.latch(f"{c.ref} {ev.target}", per_turn=True)
+
+    def landed(ev: Any) -> None:
+        if ev.source != me:
+            return
+        if not c.latched(f"{c.ref} {ev.target}", per_turn=True):
+            return
+        burn = next(
+            (
+                e for e in c.world.effects.of(ev.target)
+                if not e.ended and e.ongoing and e.source == me
+                and e.label == ev.label
+            ),
+            None,
+        )
+        if burn is None or not _warlock_row(getattr(burn, "by", "")):
+            return
+        dice = c.dice_for(CURSE, "1d6", {"target": ev.target})
+        count = int(dice.split("d")[0]) if "d" in dice else 0
+        if count <= 0:
+            return
+        amount, dtype = burn.ongoing
+        burn.ongoing = (amount + count, dtype)
+
+    c.watch(DamageApplied, paid, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} paid")
+    c.watch(EffectApplied, landed, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} raise")
 
 
 # -- the curse as a target, which is ordinary -------------------------------

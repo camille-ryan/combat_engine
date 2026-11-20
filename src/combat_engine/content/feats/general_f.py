@@ -40,8 +40,11 @@ from combat_engine.engine import (
     ConditionEnded,
     DamageRolled,
     DamageType,
+    Forced,
+    ForcedMove,
     Hit,
     Keyword,
+    Moved,
     PowerUsed,
     SecondWind,
     Size,
@@ -51,9 +54,9 @@ from combat_engine.engine import (
     ally_within,
     power,
 )
-from combat_engine.engine.components import Stats
+from combat_engine.engine.components import Position, Stats
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import allies, distance_between, enemies
+from combat_engine.engine.query import adjacent, allies, distance_between, enemies
 
 #: A racial power the benefit line names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
@@ -517,17 +520,109 @@ def f604(c: Cast) -> None:
 # The prerequisites name `cf:bard-f1s0` and `cf:bard-f1s2` by ref, and
 # neither is a row: `cf:bard-f1` writes both of those virtues *inline*,
 # forking on the derived `second-int` and `second-con` legs, and only the
-# third virtue got a row of its own (`cf:bard-f1s1`). So the feature is
-# reachable as a name and not as a moment.
+# third virtue got a row of its own (`cf:bard-f1s1`). So the leg is
+# reachable as a name and not as something `chargen.meets` can answer,
+# which is why both rows below carry a dealability marker.
+#
+# **The moment is not the problem, and this comment used to say it was.**
+# It ended "so the feature is reachable as a name and not as a moment",
+# which read as though neither benefit could be written. Both are: each
+# of the two inline virtues pays out through exactly one verb inside its
+# own branch, so the event that verb emits carries `power ==
+# "cf:bard-f1"` and names that branch exactly. See each row.
 
 
 @power("f469", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_feature_power()",))
+       reach=PERSONAL, target=SELF, dropped=("cf:bard-f1s0",))
 def f469(c: Cast) -> None:
-    """Rides on the virtue that slides an ally. That slide is one
-    `c.slide` among many inside `cf:bard-f1`'s `Miss` handler, and
-    `Forced` names who moved and not which row moved them, so there is
-    no moment to answer."""
+    """Rides on the virtue that slides an ally.
+
+    **Written, and the premise the old marker rested on was false.** It
+    said *"`Forced` names who moved and not which row moved them, so
+    there is no moment to answer"*, and asked for
+    `c.on_feature_power()`. `ForcedMove` carries `power` -- its own
+    docstring: *"the row doing the shoving"* -- and `c.slide` passes
+    `power=self.ref`, so the row is named. `features/leaders_sb.py`'s
+    `bard_virtue` holds **exactly one** `c.slide`, inside its `f1s0`
+    branch, which then returns; a `ForcedMove` carrying
+    `power == "cf:bard-f1"` and `how is Forced.SLIDE` is therefore that
+    virtue exactly rather than merely nearly. That is the same argument
+    `f470` beside this banks for `TempHP`, and it stops being exact the
+    day the feature slides anybody on a second leg.
+
+    **Two watches, because the printed sentence spans the move.** The
+    space is the one *"the ally vacated"* and the enemy is one that *"was
+    adjacent to that ally"* -- both read before the slide, both gone
+    after it. `ForcedMove` is announced before the steps and its `settle`
+    callback only negotiates the distance, so the `Window.AFTER` listener
+    still sees the ally standing where it started; `Moved` then says it
+    actually left, and `from_` is the square to slide the enemy into.
+    Reading the destination off `ForcedMove` instead would be wrong: a
+    shove *stops dead* at the first square it cannot enter, so a refused
+    slide would still have paid out.
+
+    `ev.source != me` is checked for `f470`'s reason -- the card says
+    *"when **you** slide"*, and a second bard's virtue sliding this
+    character's ally is not this feat. No `ev.target != me` beside it:
+    the virtue's own handler returns on `who == me`, so that guard could
+    never be false and would read as a condition somebody had tested.
+
+    `c.slide(1, ...)` with `to=` and not a free slide: the enemy was
+    adjacent to the ally, so the vacated square is one step away, and the
+    card names the square rather than a distance. One square is the whole
+    of it.
+
+    **Dropped: the feat still cannot be dealt**, which is not a clause
+    here. Its printed prerequisite is `cf:bard-f1s0` and that ref is not
+    declared -- `cf:bard-f1` writes the virtue inline, forking on the
+    derived leg -- so `chargen.meets` can never answer it. `dropped=`
+    rather than `todo=` because the row plays the moment it is held, and
+    `legal_feats` refuses a `todo=` row outright. A separate symbol from
+    `f470`'s `cf:bard-f1s2`: they are two different undeclared
+    sub-options and one marker names one gap.
+    """
+    me = c.me
+    pending: dict[str, Any] = {}
+
+    def shoved(ev: ForcedMove) -> None:
+        if (
+            ev.power != "cf:bard-f1"
+            or ev.how is not Forced.SLIDE
+            or ev.source != me
+        ):
+            return
+        here = c.world.get(ev.target, Position)
+        if here is None:
+            return
+        pending.clear()
+        pending["ally"] = ev.target
+        pending["square"] = here.square
+        pending["foes"] = sorted(
+            foe for foe in c.enemies() if adjacent(c.world, foe, ev.target)
+        )
+
+    def arrived(ev: Moved) -> None:
+        # **`kind_` as well as the pair**, because a shove *stops dead* at
+        # the first square it cannot enter: a refused slide leaves
+        # `pending` standing, and without this the ally's next ordinary
+        # step out of that square would pay the feat out.
+        if (
+            ev.actor != pending.get("ally")
+            or ev.from_ != pending.get("square")
+            or ev.kind_ != Forced.SLIDE.value
+        ):
+            return
+        vacated = pending["square"]
+        foes = pending["foes"]
+        pending.clear()
+        if not foes or not c.may("slide an enemy after the ally", who=me):
+            return
+        foe = c.choose(foes, f"{c.ref}: which enemy follows the ally")
+        if foe is not None:
+            c.slide(1, on=foe, to=vacated)
+
+    c.watch(ForcedMove, shoved, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(Moved, arrived, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f470", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -57,6 +57,7 @@ from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.monsters.level_11.skirmishers_sc import _through_them
 from combat_engine.content.powers.avenger.oath import oath_target
 from combat_engine.content.powers.druid.forms import in_beast_form
+from combat_engine.dc import dc
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -162,6 +163,19 @@ def _defences(c: Cast, value: int, **kw: Any) -> None:
     the set, and writing one would not be read by `query.defence`."""
     for d in _ALL_DEFENCES:
         c.bonus(d, value, **kw)
+
+
+def _item_dc(ref: str, band: str = "hard") -> int:
+    """What a card means by "a hard DC of the item's level".
+
+    The level is read off the declared row rather than written again here,
+    so the number cannot drift from the header; `combat_engine.dc` is the
+    printed table, read out of `rules_dc` and never derived. Level 1 for a
+    ref that is somehow not declared, which is the gentlest DC the table
+    holds rather than a refusal.
+    """
+    declared = get(ref)
+    return dc(declared.level if declared is not None else 1, band)
 
 
 def _shift_through(c: Cast, squares_: int) -> None:
@@ -4299,8 +4313,7 @@ def i3043p1(c: Cast) -> None:
 
 @power("i3484x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.condition(ends_with_check=)",
-                "Effect.drop_cost(by=)"))
+       dropped=("c.endable(by_any=)",))
 def i3484x1(c: Cast) -> None:
     """Both senses, at a range equal to the armour's enhancement -- so the
     radius is read off the item rather than printed as a number. The
@@ -4316,35 +4329,44 @@ def i3484x1(c: Cast) -> None:
     suffocation is not a rule here, and encumbrance is not modelled, so
     the Strength line reduces to nothing.
 
-    Dropped: the one clause that is a gap -- the malfunction ends on a
-    standard action and an Athletics check against a hard DC, made by the
-    wearer *or an adjacent ally*. That is **two** things missing and the
-    marker now names both, because they close separately and the row needs
-    each:
+    **The way out is written now, and the note that said it could not be
+    predates the parameter that says it.** The old marker named
+    `c.condition(ends_with_check=)` and argued that "a drop cannot be
+    *refused*, and `then` runs after the effect is already off" -- which
+    is exactly what `c.endable(on_check=)` was built for: it is a test the
+    ending has to pass, `actions.perform` charges the action **before**
+    calling it, and a failure emits a Note and leaves the hold standing.
+    So a standard action and an Athletics check against a hard DC is the
+    printed sentence, said in the printed order. `p13878` is the
+    precedent.
 
-    * The **check**. `c.endable` sets `Effect.drop_cost`, so "a standard
-      action to end this effect" exists and `then=` is what the drop buys
-      -- but a drop cannot be *refused*, and `then` runs after the effect
-      is already off. So setting a bare `drop_cost` here would hand the
-      wearer an automatic escape for a standard action where the card
-      charges a hard DC for it, which is stronger than print. Left
-      unwritten for that reason rather than half-written generous.
-    * **Who may roll it.** `actions._dropping` offers a droppable effect to
-      whoever it sits **on**, which is the wearer -- right for half the
-      sentence and silent about the adjacent ally. `p13861` and `m6109a3`
-      name that gap in the same words, so the symbol is already in the
-      tree.
+    The DC is the printed table's `hard` at the item's level, read through
+    `_item_dc` rather than written here as a number.
 
-    The restraint therefore stands to the end of the encounter, which is
-    the clause being short rather than the watcher being wrong."""
+    **What remains is who may roll it, narrowed.** `c.endable` takes `by=`
+    and `also=` now -- so the old `Effect.drop_cost(by=)` has landed and
+    that marker was stale -- but each of them is a **single** eid, and the
+    card says "you **or an adjacent ally**": any one creature of a set
+    that changes as people walk. The wearer's half is written, because the
+    hold sits on the wearer; the ally's half wants a dropper named by a
+    test rather than by an id, which is `c.endable(by_any=)`."""
     me = c.me
     reach = c.enhancement or 1
     c.blindsight(reach)
     c.tremorsense(reach)
+    hard = _item_dc(c.ref)
+
+    def shakes_free(world: Any, ender: int) -> bool:
+        """The check the ending has to pass. Charged either way."""
+        del world
+        return bool(c.check("athletics", hard, who=ender))
 
     def fumble(ev: AttackRolled) -> None:
         if ev.attacker == me and ev.natural == 1:
-            c.condition(Condition.RESTRAINED, on=me, until=When.ENCOUNTER)
+            held = c.condition(
+                Condition.RESTRAINED, on=me, until=When.ENCOUNTER
+            )
+            c.endable(held, STANDARD, on_check=shakes_free)
 
     c.watch(AttackRolled, fumble, until=When.ENCOUNTER)
 

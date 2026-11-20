@@ -1,4 +1,4 @@
-"""Barbarian feats, the second batch. 19 rows, 3 of them still waiting.
+"""Barbarian feats, the second batch. 19 rows, 2 of them still waiting.
 
 **This docstring described a state the file left, and said so in its own
 first sentence.** It opened *"`Keyword.RAGE` does not exist, so 'while
@@ -17,9 +17,13 @@ What is actually left, by marker, one row each:
   offers a thrown branch is decided by `thrown_by_hand`, a **header field on
   the power**. The two notes further down say this per row.
 * `chargen.IMPROVISED` -- a chair leg swung as a weapon.
-* `dsl.use(attacks_before_damage)`
 
-The other sixteen play. `Defences.immune_keywords` used to be a fourth
+`dsl.use(attacks_before_damage)` was a third until `f1858` was written: that
+re-point was wrong for the card, which is **per-target** by print, and the
+reasoning is in the row. The symbol lives on for `f1123` and `f715`, which
+do need it. `#1394`.
+
+The other seventeen play. `Defences.immune_keywords` used to be a fourth
 marker, on `f2884`, and the field it named had existed since #560 -- the
 *asking* side was never the gap, `query.immune_to` answers a `Keyword`
 beside a `Condition`, and three feats elsewhere already call it. #1224.
@@ -43,6 +47,7 @@ from combat_engine.engine import (
     Bloodied,
     Cast,
     DamageApplied,
+    DamageRolled,
     DamageType,
     Hit,
     Keyword,
@@ -56,7 +61,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Health
-from combat_engine.engine.dsl import get
+from combat_engine.engine.dsl import get, keywords_of
 from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.query import distance_between, immune_to, team
 
@@ -242,39 +247,73 @@ def f1831(c: Cast) -> None:
         c.bonus("attack", 2, on=c.me, until=When.EONT)
 
 
-@power("f1858", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("dsl.use(attacks_before_damage)",))
-def f1858(c: Cast) -> None:
-    """Trade a die of weapon damage for ongoing damage, on a hit with
-    "any rage power". Which rows those are is the same gap: nothing
-    marks a row as one.
+def _rage_power_damage(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """A rage power's damage, rolled by this barbarian and not yet dealt.
 
-    **Re-pointed: `Keyword.RAGE` exists now (#503).** "Any rage power" is
-    askable. What is left is the printed *option* -- reducing the damage
-    by 1[W] **before you roll it** -- which is a choice put to the holder
-    at a moment nothing currently offers one.
-    
-
-    **Re-pointed to `dsl.use(attacks_before_damage)`, 2026-11-19: three
-    feats, one cause.** `dsl.use` sets `cast.target` and calls the body
-    **once per target**, so a body that strikes and then damages does both
-    for target one before target two is touched. The printed rules resolve
-    an area power the other way -- every attack roll, then damage -- and
-    each of these three sentences is only expressible in that order:
-
-    * `f1123` *"+2 to **that power's** damage rolls"* on hitting two or
-      more: the first target's damage is already paid when the second hit
-      becomes known;
-    * `f1858` *"reducing the damage ... **before you roll damage**"*: the
-      choice sits between the attack and the damage roll;
-    * `f715` *"reroll the attack rolls ... against **every** target"*: the
-      others are resolved by the time the reroll happens.
-
-    **`f1138` is the control and it needs none of this.** It prints nearly
-    `f1123`'s sentence with the bonus on *later* attacks, is written, and
-    carries no marker -- so counting hits across a use was never the gap.
-    `f1123` differs from it by the words "that power's". `#1394`.
+    `c.damage` stamps the row's own ref onto `DamageRolled.detail`, which
+    is the only place the power that dealt a blow arrives -- `PowerUsed`
+    fires above the body and names no victim. `dsl.keywords_of` rather
+    than the header tuple, because a feat may grant a row the keyword for
+    one character only.
     """
+    if ev.source != me or ev.amount <= 0:
+        return False
+    p = get(ev.detail)
+    return p is not None and Keyword.RAGE in keywords_of(world, me, p)
+
+
+@power("f1858", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="your encounter or daily rage power rolls damage on a target",
+       on=Trigger(DamageRolled, _rage_power_damage, "a rage power's damage"))
+def f1858(c: Cast) -> None:
+    """Trade a die of weapon damage for ongoing damage, on a hit with any
+    rage power.
+
+    **This card's shape is already shipped**, as
+    `feats/general_r._power_strike_rider`: declared on `DamageRolled`,
+    charges its printed "reduced by 1[W]" with `c.reduce(c.roll(c.w()),
+    ev)`, then pays its rider. The reason that works is the event's own:
+    the blow's total rides on `DamageRolled`, it is mutable, and
+    `resolve.deal_damage` reads it back after the bus has finished. So the
+    price comes off the rolled number rather than off a die struck out of
+    the power's expression -- the dice are gone by the time the ref
+    arrives on the event, and only the total is left. That is the one
+    approximation here and it is the sibling's too.
+
+    **It was re-pointed onto `dsl.use(attacks_before_damage)` on
+    2026-11-19 and that re-point is wrong for this card.** The ordering
+    gap is real for its two cited siblings -- `f1123` reads *"+2 to that
+    power's damage rolls"* once two targets are hit, and `f715` rerolls
+    *"the attack rolls against every target"* -- both of which need every
+    attack resolved before any damage is. This sentence says *"reducing
+    the damage **to that target**"*, so it is per-target by print and the
+    per-target loop is the order it wants. `#1394` keeps the other two.
+
+    `usage=AT_WILL` and not `ENCOUNTER`: a declared trigger is skipped by
+    `turns.arm_traits`, so an encounter usage would spend on the first
+    offer and the card prints no limit.
+
+    **The words "encounter or daily" in `trigger=` are load-bearing to the
+    harness and must not be reflowed away.** Every one of the 37 rows
+    carrying `Keyword.RAGE` is a **daily**, and `audit._provoke`'s class
+    pass offers at-will attacks only unless the row's `trigger=` text
+    names a bigger usage -- `_WANTS_A_BIG_SWING`. Without them the board
+    never rolls a rage power's damage and the row reads UNUSED; with them
+    it fires. The gate itself reads the keyword and not the usage, so the
+    prose describes the corpus rather than narrowing the predicate.
+
+    The 11th- and 21st-level steps are paragon and epic; the heroic
+    option is the whole of it, which also makes the printed dice cap
+    ("you can't take away more damage dice than the power has") vacuous
+    -- one die is never more than a weapon row has.
+    """
+    ev = c.trigger
+    if not c.may("trade a die of the damage for ongoing 5"):
+        return
+    if c.reduce(c.roll(c.w()), ev) <= 0:
+        return
+    c.ongoing(5, on=ev.target, until=When.SAVE_ENDS)
 
 
 @power("f1991", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

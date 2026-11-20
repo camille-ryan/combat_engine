@@ -99,7 +99,7 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
-from combat_engine.engine.query import bloodied, enemies
+from combat_engine.engine.query import bloodied, enemies, my_hits_this_turn
 
 if TYPE_CHECKING:
     from combat_engine.engine import Square, World
@@ -1035,10 +1035,65 @@ def p6189(c: Cast) -> None:
     ev = c.trigger
     hit_with = get(ev.power)
     weapon = hit_with is not None and Keyword.WEAPON in hit_with.keywords
-    c.damage(c.w() if weapon else "1d8", on=ev.target)
+    extra = c.w() if weapon else "1d8"
+    c.damage(extra, on=ev.target)
     # After the damage, because f3161's lent clause reads the type this
     # dealt -- "the same damage type as the attack that triggered this".
     lent(c)
+    # `#550`'s convention: f1652's sibling clause, written into the power
+    # it names. Credited to the feat, because every target past the first
+    # is the feat's doing and not this row's.
+    if c.feat("f1114"):
+        with c.credit("f1114"):
+            _spread_extra(c, ev, extra)
+
+
+def _spread_extra(c: Cast, ev: Any, extra: str) -> None:
+    """f1114: `p6189`'s extra damage pays **every** target an area or close
+    arcane power hit, not only the one it triggered on.
+
+    `AREA_KINDS` is the engine's own set and is read rather than re-spelled
+    -- *"an area or close power"* is `close_burst`, `close_blast`,
+    `area_burst` and `wall`, and four content files had each written their
+    own tuple of three of those.
+
+    **Both directions, because the trigger does not fire on a fixed blow.**
+    `p6189` answers a `Hit`, and an area power rolls per target in
+    sequence, so whichever hit the free action was taken on has blows
+    resolved on either side of it. `query.my_hits_this_turn` is the
+    backward half -- a recorded walk, so earlier targets of the same ref
+    are reachable -- and the watch is the forward half. `paid` is shared
+    between them so a target cannot be paid twice.
+
+    Judgement: the die is rolled **per target** rather than once and
+    copied. The card says the attack "deals the extra damage to all
+    targets", and `p6189`'s own line is an expression and not a number --
+    nothing on the page settles it, and a roll each is what a second deal
+    of the same line means everywhere else in the tree.
+    """
+    from combat_engine.engine.dsl import AREA_KINDS
+
+    row = get(ev.power)
+    if (
+        row is None
+        or Keyword.ARCANE not in row.keywords
+        or row.reach.kind not in AREA_KINDS
+    ):
+        return
+    me, ref = c.me, ev.power
+    paid = [ev.target]
+
+    for past in my_hits_this_turn(c.world, me):
+        if past.power == ref and past.target not in paid:
+            paid.append(past.target)
+            c.damage(extra, on=past.target)
+
+    def also(hit: Hit) -> None:
+        if hit.attacker == me and hit.power == ref and hit.target not in paid:
+            paid.append(hit.target)
+            c.damage(extra, on=hit.target)
+
+    c.watch(Hit, also, until=When.EONT, on=me, label=c.ref)
 
 
 @power(
@@ -1210,8 +1265,34 @@ def p7443(c: Cast) -> None:
             c.teleport(far)
     else:
         c.shift(far)
+    # **`f2994`: *"the extra damage you deal from this power is radiant.
+    # This power also gains the radiant keyword."*** The feat names three
+    # racial powers and this is the clause for this one, so it is written
+    # here rather than registered as a rider -- `#550`'s convention, the
+    # same one the teleport above follows.
+    #
+    # Two printed sentences and they are two different mechanisms, which
+    # is why this is not one call:
+    #
+    # * the **damage type** is a property of the rider below, so it is the
+    #   `dtype=` of that same bonus rather than a second one. Laying a
+    #   second radiant bonus would pay the die twice;
+    # * the **keyword** is a property of the row, read through
+    #   `dsl.keywords_of`, and `c.counts_as_keyword` is per-character --
+    #   which is the only way to add one without editing a header every
+    #   holder of the card shares.
+    #
+    # Only the keyword grant is credited to the feat. The rider itself is
+    # the power's and is laid with or without `f2994`; crediting it would
+    # hand the whole of the extra damage to the feat, where print gives it
+    # a type and nothing more.
+    radiant = c.feat("f2994")
+    if radiant:
+        with c.credit("f2994"):
+            c.counts_as_keyword("p7443", Keyword.RADIANT)
     c.bonus(
         "damage", 0, dice="1d6", until=When.EONT, on=c.me,
+        dtype=DamageType.RADIANT if radiant else None,
         when=lambda ctx: ctx["target"] == foe,
     )
     c.ignore_cover(on=c.me, until=When.EONT)
@@ -1235,11 +1316,30 @@ def p7443(c: Cast) -> None:
 def p8278(c: Cast) -> None:
     """"One creature of your choice that you hit" is the *next* one, which
     is `once=True`. The extra is necrotic and carries that type, which is
-    what the three feats riding on this power read off it."""
+    what the three feats riding on this power read off it.
+
+    **f1652's +2 is a second one-shot mod rather than a bigger number
+    here**, and both halves of that matter. It is a *feat* bonus, so it
+    buckets apart from this row's untyped one in `Mods.total` and the two
+    add -- folded into the amount above it would have been the same
+    arithmetic today and wrong the moment anything else laid a feat bonus
+    to damage. And `c.credit` only stamps what is laid inside its block, so
+    a separate call is what makes the +2 the feat's doing rather than this
+    row's. Both are spent by the same `DamageRolled`: `cast.spend_damage`
+    ends each hold on the blow its own `mod.applies` matches, and neither
+    carries a gate, so they travel together."""
     c.bonus(
         "damage", max(c.con_mod, c.cha_mod), dice="1d8",
         until=When.EONT, on=c.me, once=True, dtype=DamageType.NECROTIC,
     )
+    # `#550`'s convention: the clause of a feat that names one power, written
+    # into that power. Heroic tier, so 2 -- 11 and 21 are paragon.
+    if c.feat("f1652"):
+        with c.credit("f1652"):
+            c.bonus(
+                "damage", 2, until=When.EONT, on=c.me, once=True,
+                kind="feat", dtype=DamageType.NECROTIC,
+            )
 
 
 # -- r49 --------------------------------------------------------------------

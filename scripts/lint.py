@@ -36,6 +36,7 @@ import json
 import re
 import subprocess
 import sys
+import tokenize
 from collections import Counter
 from functools import cache
 from pathlib import Path
@@ -46,6 +47,29 @@ ROOT = Path(__file__).resolve().parent.parent
 #: rather than in `argv` because `_dead_triggers` clears `argv` before importing
 #: `combat_engine.content`, so an argument left there would not survive.
 _ONLY: tuple[Path, ...] = ()
+
+#: What `inspect.getsource` can raise on a row whose file has moved since it
+#: was imported, and which a source-reading walk must skip rather than die on.
+#:
+#: **`tokenize.TokenError` was the missing one and it cost a whole fan-out.**
+#: `getsource` reads the file from disk, so a file edited after import makes
+#: `getblock` tokenise from the wrong offset and raise `TokenError` -- which
+#: is not an `OSError` and not a `TypeError`, so it escaped the two sites
+#: that read a row's body and killed the run before its last three passes.
+#:
+#: That is not a hypothetical: the root `CLAUDE.md` already records the same
+#: mechanism producing a spurious *raise* in `audit.py` during a sweep. Here
+#: it is worse in one way, because the instrument is the one a content agent
+#: is told to run on its own file: **three agents in a single wave hit it**,
+#: each on a different module, and one was piping the traceback through a
+#: `grep -v` filter and reading the truncated output as a pass.
+#:
+#: Skipping is the right answer rather than reporting. A file mid-write is
+#: not a fault in the row, and the pass that matters -- the per-file lint an
+#: agent is told to run -- completes either way. `SyntaxError` is in here for
+#: the same reason and is what a half-written file raises when the tokenizer
+#: gets further.
+_UNREADABLE = (OSError, TypeError, SyntaxError, tokenize.TokenError)
 
 
 
@@ -2934,7 +2958,7 @@ def _lends_nobody_asks_for() -> list[tuple[str, str, str]]:
     for ref, row in sorted(REGISTRY.items()):
         try:
             lender = inspect.getsource(row.body)
-        except (OSError, TypeError):
+        except _UNREADABLE:
             continue
         for host, wide in _lend_calls(lender):
             if wide:
@@ -2960,7 +2984,7 @@ def _lends_nobody_asks_for() -> list[tuple[str, str, str]]:
                 continue
             try:
                 asked = inspect.getsource(target.body)
-            except (OSError, TypeError):
+            except _UNREADABLE:
                 continue
             # The call, not the import: `general_o.py` imports `lent` once
             # for a module of rows and all but one of them never call it.

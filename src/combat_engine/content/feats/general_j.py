@@ -1264,46 +1264,35 @@ def f1545(c: Cast) -> None:
 
 
 @power("f1552", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.borrow_row(source=)",))
+       reach=PERSONAL, target=SELF)
 def f1552(c: Cast) -> None:
     """Swaps between a chosen at-will of another class and the one the
     r6 racial feature already granted.
 
-    **Re-marked, and the previous two markers were both wrong.** The
-    exclusivity half is written below and is correct; what does not work is
-    the half every earlier note called finished.
+    **The pool is built here, and `c.borrow_row(source=)` was a marker on
+    data that exists.** The old note had the fault exactly right -- the
+    call passed no `cls`, so the verb's own filter demanded `p.cls == ""`
+    and the pool was empty on every board -- and then asked for a new
+    parameter on the premise that no power-source data existed anywhere.
+    `chargen.power_source` is that data (`#1094`, closed): off the
+    compendium's `Class.Power`, not `class.source`, which is the book
+    citation and the collision that made it look absent.
 
-    `c.race_option()` was the marker, on the premise that the trait's pick
-    "nothing records" so the pair could not be made exclusive. #914
-    falsified that -- `rt:r6-t3` borrows a card and `c.borrow_row` records
-    it, so `c.stored_row` answers. Before that it said `spec.power_ref()`,
-    as though the other power were a name the ETL failed to resolve. Both
-    named the wrong half.
+    So `among=` takes the set, which is what the two written precedents do
+    -- `features/racial.py`'s `rt:r6-t3` and `general_l.py`'s arcane
+    sibling both assemble the refs rather than name one class. Measured
+    here: `divine` is exactly five classes and the 1st-level at-will attack
+    pool under them is exactly the 64 rows the card is about.
 
-    **The half that does not work is the borrow, and this docstring used to
-    assert it did** -- *"the chosen half plays"*. Measured: the pool it asks
-    for is **empty, on every board**. `c.borrow_row`'s filter is
-    `p.cls == cls`, this call passes no `cls`, so it demands `p.cls == ""`
-    and no class power has that. The 64 rows the card is about live under
-    five classes:
+    *"Other than your own"* is `_my_class`, off `Ident.ref`, which
+    `chargen` writes as `c:<cls>`. It is empty for anything that is not a
+    built character, and the set is then every divine class -- which is
+    the right answer for a creature with no class to exclude.
 
-        avenger 8   cleric 30   invoker 9   paladin 13   runepriest 4
-
-    So the verb cannot say *"a divine class other than your own"*: it takes
-    one `cls`, and the card names a **power source** minus the character's
-    own class. `among=` would take the 64 refs, but assembling them needs to
-    know which classes are divine -- and no power-source data exists
-    anywhere (no column on `power`, no field on `ClassLine`), which is the
-    same gap as #1094. So this is `c.borrow_row(source=)` and is blocked
-    behind that data rather than behind a racial choice.
-
-    `todo=` and not `dropped=`: with an empty pool the row grants nothing
-    and lays nothing, so there is no clause that plays.
-
-    **The clause that was missing is the parenthesis**, which is the whole
-    of what this feat adds over the two powers existing: *"but you can't
-    use both in the same encounter"*. So using either one bars the other
-    for the rest of the fight, in whichever order they are reached.
+    **The clause this feat adds over the two powers existing is the
+    parenthesis**: *"but you can't use both in the same encounter"*. So
+    using either one bars the other for the rest of the fight, in
+    whichever order they are reached.
 
     `_borrowed` rather than a bare `c.stored_row`, for the arming-order
     reason its own docstring records: a feat can arm before the trait, and
@@ -1312,8 +1301,22 @@ def f1552(c: Cast) -> None:
     `once=True` on the watch is load-bearing and is not "fire once". It
     reads whether the handler *did* anything, so an unrelated power being
     used leaves the hold up and only the pair spends it."""
-    mine = c.borrow_row(keyword=Keyword.DIVINE, level=1, usage=AT_WILL,
-                        uses=1)
+    from combat_engine.chargen import power_source
+    from combat_engine.content.features.racial import _my_class
+    from combat_engine.engine.dsl import REGISTRY
+
+    own = _my_class(c)
+    divine = [
+        ref
+        for ref, p in REGISTRY.items()
+        if p.cls and p.cls != own
+        and power_source(p.cls) == "divine"
+        and p.level == 1
+        and p.usage is AT_WILL
+        and p.attack is not None
+        and not ref.startswith("cf:")
+    ]
+    mine = c.borrow_row(among=divine, uses=1)
 
     def pair(theirs: str) -> None:
         # Nothing to be exclusive against if the trait took the same card,
@@ -1740,23 +1743,27 @@ def f1646(c: Cast) -> None:
 
 
 @power("f1652", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.raise_rider(ref, by)",))
+       reach=PERSONAL, target=SELF, implemented_in=("p8278",))
 def f1652(c: Cast) -> None:
-    """**Unwritten, and it was silently false.** It laid a damage bonus
-    gated on `ctx["power"] == "p8278"`, and the damage context's `power`
-    is the ref of the row whose blow is being rolled. `p8278` never
-    rolls one -- it lays a rider on the next blow the character lands --
-    so the gate was false in every fight and the bonus was never read.
+    """**Written in `p8278`, which is #550's convention** -- the card names
+    one power, so the clause lives in that power's body gated on `c.feat`,
+    and this row is the pointer.
 
-    "+2 to the damage dealt by `p8278`" means +2 **on that rider**, and
-    that is why this row is the one of the four that is still marked.
+    **It was silently false before that**, and the old note diagnosed it
+    exactly: the row laid a damage bonus gated on `ctx["power"] ==
+    "p8278"`, and the damage context's `power` is the ref of the row whose
+    blow is being rolled. `p8278` never rolls one -- it lays a rider on the
+    next blow the character lands -- so the gate was false in every fight.
 
-    **Re-pointed.** `c.part_of` landed and gave its three siblings the
-    typed split off the event, so they read how much of a blow is
-    necrotic. That is a *read*. This card has to raise another row's
-    modifier before it pays, which is a write against a `Mod` the laying
-    row owns -- a different mechanism, and the one gap left of the four.
-    `c.raise_rider(ref, by)` names it."""
+    **`c.raise_rider(ref, by)` was the wrong conclusion from a right
+    premise.** "+2 to the damage dealt by `p8278`" is indeed +2 on that
+    rider, and reaching in from here to raise another row's `Mod` was never
+    the only route to it: written from *inside* `p8278`, it is a second
+    one-shot mod laid beside the first, which the printed *feat* bonus type
+    wants anyway -- the two bucket apart in `Mods.total` and add. So no
+    write against somebody else's `Mod` is owed, and the sibling reads
+    `c.part_of` already serves are a different mechanism as the old note
+    said."""
 
 
 @power("f1656", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
