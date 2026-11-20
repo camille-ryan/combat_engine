@@ -149,13 +149,30 @@ def _item_dailies(c: Cast, who: int) -> list[str]:
 
 
 def _enchants_gear(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """Did the caster just use a class power whose Target line names gear?
+
+    **This read `p.target.holding` and was False for every event in the
+    game.** Measured over the whole registry: **exactly 1 row of 23,883
+    populates `Target.holding`**, and it is `m3064a2` -- a monster ability,
+    `cls=""`. So `bool(p.target.holding) and p.cls == "artificer"` could not
+    both be true of anything, and `f1370` never fired once.
+
+    The signal that does exist is the printed **Target line**, which four
+    class rows carry -- `p7639`, `p7649`, `p7656`, `p7659`, reading "one
+    weapon" or "one weapon or implement". That is what the card means by
+    *"a power that targets a weapon or an implement"*.
+
+    Matched on the label rather than on structure because there is no
+    structure to match: `Target.holding` is populated by nothing the ETL
+    builds, so it is a field waiting for a writer rather than a reader. Said
+    here so the next person to find it does not take its emptiness for a
+    content gap. #1412.
+    """
     p = get(ev.power)
-    return (
-        ev.actor == me
-        and p is not None
-        and p.cls == "artificer"
-        and bool(p.target.holding)
-    )
+    if p is None or ev.actor != me or p.cls != "artificer":
+        return False
+    label = (getattr(p.target, "label", "") or "").lower()
+    return "weapon" in label or "implement" in label
 
 
 @power("f1370", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

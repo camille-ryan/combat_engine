@@ -935,8 +935,25 @@ def _close_arcane_staff(world: Any, me: int, ev: Any) -> bool:
 def f3502(c: Cast) -> None:
     """"Before making the attack" is `PowerUsed`, which is announced above
     the body. The slide is anchored on the caster's own square so the
-    creature stays beside it, which is the printed destination."""
-    beside = c.within(1, side="any")
+    creature stays beside it, which is the printed destination.
+
+    **The caster is excluded, and was not.** `_side["any"]` is
+    `query.creatures(world)`, which includes the caster -- so `c.choose`
+    could hand back `c.me` and the row slid the character the feat belongs
+    to. `show.py` emitted `ForcedMove(source=1, target=1)` for exactly that.
+    `side="any"` minus the caster is right where `side="enemy"` would be too
+    narrow: the card says "one adjacent creature", not one adjacent enemy.
+
+    **A second defect in this row is NOT fixed here**, and is worth not
+    forgetting: the trigger tests `"staff" in _groups(world, me)`, which
+    reads weapon groups. The card says "a staff **implement**", and
+    `_holding_ref`'s docstring a few lines below `_groups` records why that
+    cannot work -- all eight implements share `group="implement"`. Measured:
+    the `weapon` table has **no** implements at all and exactly one row with
+    `grp="staff"`, a quarterstaff. So the trigger fires for a weapon and can
+    never fire for the implement the card names. Fixing it needs the staff
+    implement's ref, which is not in that table. #1412."""
+    beside = [w for w in c.within(1, side="any") if w != c.me]
     if not beside:
         return
     who = c.choose(beside, "slide one adjacent creature")
