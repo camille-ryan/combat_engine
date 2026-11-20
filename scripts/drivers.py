@@ -20264,6 +20264,126 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_felling_blow_can_penalise_death_saves(out: Result) -> None:
+    """`m2295a1`: *"if this damage would reduce the target to 0 or fewer hit
+    points, the target takes a -2 penalty to death saving throws."*
+
+    **The verb was never missing.** The row carried
+    `dropped=("c.bonus('save:death')",)`, and a death-save penalty is a
+    plain `c.penalty("save", ...)` gated on the label
+    `turns._death_saves` puts in the save context --
+    `ctx["label"] == "death"`. Two feats already spell the gate exactly
+    that way (`feats/ranger_b.py`, `feats/general_l.py`).
+
+    **The label gate is the assertion that matters**, because an ungated
+    `c.penalty("save", 2)` would pass a test that only looked at death
+    saves while quietly worsening every save the creature makes. So both
+    are read: the death save and an ordinary one.
+
+    **`_at_zero` rather than a `Dropped` watch**, which is the sibling
+    helper in that file and its docstring gives the reason: the printed
+    line is about the state the damage left behind, and a creature already
+    down is not dropped a second time.
+
+    What the row still cannot say is the printed **duration** -- *"until it
+    takes a short rest"*. `When` tops out at `ENCOUNTER`, so the penalty
+    covers every death save in this fight and is dropped at the end of it;
+    the two coincide whenever a rest follows, and part only across two
+    fights with no rest between. Re-pointed to `When.SHORT_REST`.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import When, dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.query import enemies
+
+    CTX = {
+        "conditions": frozenset(), "ongoing": False, "dtype": None,
+        "keywords": frozenset(), "when_": "end", "granted_via": "",
+    }
+
+    world, me, _ = _board()
+    foe = sorted(enemies(world, me))[0]
+    mods = must(world.get(me, Mods), "Mods")
+
+    def save_mod(label: str) -> int:
+        return mods.total("save", {"actor": me, "label": label, **CTX})
+
+    out.that(
+        save_mod("death") == 0 and save_mod("") == 0,
+        f"the board starts with no save modifier at all"
+        f" (death {save_mod('death')}, ordinary {save_mod('')})",
+    )
+
+    Cast(world=world, me=foe, ref="drivers-felled").penalty(
+        "save", 2, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("label") == "death",
+    )
+    out.that(
+        save_mod("death") == -2,
+        f"the penalty reaches a DEATH save ({save_mod('death')})",
+    )
+    out.that(
+        save_mod("") == 0,
+        "and reaches no other save -- an ungated penalty would worsen every"
+        f" one of them silently ({save_mod('')})",
+    )
+
+    # --- and the ROW, not just the mechanism.
+    #
+    # **A plant removing `m2295a1`'s own clause left every assertion above
+    # green**, because they exercise `c.penalty` directly and then read the
+    # markers. That is the third time in this session a marker-shaped
+    # assertion has survived a plant on the behaviour it stands for, so the
+    # row is posed instead: drop the victim to 1 hit point and any hit
+    # fells it.
+    from combat_engine.engine import movement
+    from combat_engine.engine.components import Health, Position
+
+    def through_the_row(start_hp: int) -> tuple[int, int]:
+        world2, caster, _ = _board("m2295a1", 3)
+        prey = sorted(enemies(world2, caster))[0]
+        at = must(world2.get(caster, Position), "Position").square
+        # Two squares off, so the conjured sphere lands between them and
+        # the printed "adjacent to the sphere" is satisfiable.
+        movement.place(world2, prey, (at[0] + 2, at[1]))
+        must(world2.get(prey, Health), "Health").hp = start_hp
+        cast = Cast(world=world2, me=caster, ref="m2295a1")
+        cast.target = prey
+        cast.targets = [prey]
+        dsl.REGISTRY["m2295a1"].body(cast)
+        hurt = world2.get(prey, Mods)
+        return (
+            hurt.total("save", {"actor": prey, "label": "death", **CTX}) if hurt else 0,
+            hurt.total("save", {"actor": prey, "label": "", **CTX}) if hurt else 0,
+        )
+
+    felled_death, felled_other = through_the_row(1)
+    out.that(
+        felled_death == -2 and felled_other == 0,
+        "m2295a1's own body lays it on a victim its damage fells"
+        f" (death {felled_death}, ordinary {felled_other})",
+    )
+    stood_death, _ = through_the_row(60)
+    out.that(
+        stood_death == 0,
+        "and lays nothing on a victim that survives the blow, which is the"
+        f" printed \"if this damage would reduce\" ({stood_death})",
+    )
+
+    row = dsl.REGISTRY.get("m2295a1")
+    owed = tuple(row.todo or ()) + tuple(row.dropped or ()) if row else ()
+    out.that(
+        not any("save:death" in sym for sym in owed),
+        f"m2295a1 carries no marker for the verb it already had ({owed})",
+    )
+    out.that(
+        any("SHORT_REST" in sym for sym in owed),
+        "and names the duration it genuinely cannot express instead"
+        f" ({owed})",
+    )
+
+
 def a_poison_aura_spares_a_poison_immune_creature(out: Result) -> None:
     """`x5_62`'s stage-3 aura, and why `Effect.keywords` was never needed.
 
@@ -105816,6 +105936,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "death_save_penalty": (a_felling_blow_can_penalise_death_saves,
+                           "a penalty to death saving throws reaches those"
+                           " and no other save"),
     "poison_aura": (a_poison_aura_spares_a_poison_immune_creature,
                     "a keyword-tagged aura spares a creature immune to that"
                     " keyword, read off the laying row's header"),

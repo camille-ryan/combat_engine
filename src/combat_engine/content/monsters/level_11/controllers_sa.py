@@ -1489,7 +1489,20 @@ def m2295a0(c: Cast) -> None:
     attack=Attack(vs=REF, printed=15),
     damage=Damage("2d6", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
     dropped=(
-        "c.bonus('save:death')",
+        # **The death-save penalty is written.** `c.bonus('save:death')`
+        # named a verb and the verb was never missing: the penalty is a
+        # plain `c.penalty("save", ...)` gated on the label
+        # `turns._death_saves` supplies, which two feats already do.
+        #
+        # What this row cannot say is the printed **duration** -- "until it
+        # takes a short rest". `When` tops out at `ENCOUNTER`, so the
+        # penalty is exact for every death save made in this fight and is
+        # dropped at the end of it. The two coincide whenever a short rest
+        # follows the encounter, which is the ordinary sequence; they part
+        # only across two fights with no rest between. `ShortRested` is an
+        # event, so the ending is expressible -- an effect that outlives an
+        # encounter is not.
+        "When.SHORT_REST",
         # A conjured sphere, not a zone -- `c.move_zone` takes a `Zone`, so
         # there is nothing for a granted move to pick up. `m958a3`'s gap,
         # not the one the five written rows had. #583
@@ -1548,6 +1561,22 @@ def m2295a1(c: Cast) -> None:
     if c.strike(on=victim, from_=sphere):
         c.hit(on=victim)
         c.slide(1, on=victim)
+        # *"If this damage would reduce the target to 0 or fewer hit
+        # points, the target takes a -2 penalty to death saving throws."*
+        #
+        # `_at_zero` and not a `Dropped` watch, for the reason that
+        # helper's own docstring gives: the printed line is about the state
+        # the damage left behind, and a creature already down is not
+        # dropped a second time.
+        #
+        # The gate is `ctx["label"] == "death"`, which is what
+        # `turns._death_saves` puts in the save context -- the shape
+        # `feats/ranger_b.py` and `feats/general_l.py` both already use.
+        if _at_zero(c, victim):
+            c.penalty(
+                "save", 2, on=victim, until=When.ENCOUNTER,
+                when=lambda ctx: ctx.get("label") == "death",
+            )
 
 
 @power(
