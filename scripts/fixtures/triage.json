@@ -6415,13 +6415,12 @@
     "why": "p8240:augment1 is ALREADY WRITTEN at psion/level_7.py:393-399 (held = c.resistances().get(PSYCHIC, 0) then c.resist(-held, PSYCHIC, on=c.target, until=EONT)), and the row's docstring records the correction. c.resistances is the reader and c.ignore_resistance's docstring names c.resist(-n, on=foe) as this exact sentence. The docs/blocked.json entry wanting c.strip_resistance is stale."
   },
   "c.resist(once=)": {
-    "at": "2026-10-12",
-    "by": "slice4",
-    "found": "c.resist's own gated path, which already delegates to c.bonus(once=)",
-    "refused_rows": 1,
-    "rows": 3,
-    "verdict": "mis-marked",
-    "why": "When when= is passed, c.resist returns self.bonus(what, amount, kind=f\"{ref} resist\", when=when) -- and c.bonus already takes once=, documented as 'the bonus ends after the first attack that could use it', spent by watching the roll. 'Against a single attack' is that kwarg forwarded one level; c.conceal and c.ignore_cover already forward it the same way."
+    "at": "2026-11-19",
+    "by": "plan-step-5",
+    "found": "nothing -- c.bonus(once=) forwarded one level RAISES",
+    "rows": 1,
+    "verdict": "real",
+    "why": "Re-judged from `mis-marked`. The verdict said *'When when= is passed, c.resist returns self.bonus(what, amount, kind=..., when=when)' and c.bonus already takes once=*, so the kwarg was one forward away. Measured: forwarding it raises. c.resist's gated path lays a mod keyed 'resist <type>', and c.bonus(once=) refuses any key with no registered spend moment -- 'For \"resist fire\" there is no event to end the hold on, so it would be spent by the next attack roll instead, which is the bug this refusal replaces.' f3530's own docstring says exactly this and is correct. Adding the branch was attempted and reverted: the spend moment is damage application, but `DamageApplied.resisted` is the TOTAL resistance from any source, so gating on it spends the hold on a packet of the wrong type (measured: cold, cold, fire spent it on the second cold). Gating on the type alone did not help either, because c.bonus's own read-count spends the mod on whatever reads it and the gate decides what reads it. A correct spend wants the machinery to know this mod was the one consulted, which is a change to once=, not a kwarg."
   },
   "c.resist_from()": {
     "at": "2026-10-12",
@@ -7793,13 +7792,12 @@
     "why": "nothing filters target legality by the attacker's power; the only cannot-be-targeted is Condition.REMOVED, which takes the creature off the board"
   },
   "c.use_power(origin=)": {
-    "at": "2026-10-12",
-    "by": "slice3",
-    "found": "dsl.use(origin=Square), c.use_power",
-    "refused_rows": 1,
+    "at": "2026-11-19",
+    "by": "plan-step-5",
+    "found": "the kwarg is genuinely missing, and is NOT what blocks f1709b",
     "rows": 1,
-    "verdict": "mis-marked",
-    "why": "The engine's only entry point for one row using another already takes an origin square, and c.use_power simply does not pass one through. A pass-through kwarg, which is the thinnest door in this slice."
+    "verdict": "real",
+    "why": "Re-judged from `mis-marked`. The verdict is right that dsl.use takes origin: Square and c.use_power does not forward it -- that asymmetry is real and the forward is one line. It is not the blocker. f1709b prints 'you use cf:artificer-f2, but your familiar is the origin square'. cf:artificer-f2 is the PARENT feature ('you can create healing infusions for later use') and is declared reach=Personal, target=None -- a build-option gate with no area, so an origin means nothing to it. The usable infusions are cf:artificer-f2c0/c1/c2, each Close burst 5, and NONE of the three is declared in content. So the blocker is that the thing f1709b borrows is unwritten. The forward was built and reverted rather than landed with no caller -- the precedent being c.counts_as_nearest and Target.nearest landing together, because 'a permission nothing consults is this component's commonest bug', and has_combat_advantage(without=) being built and removed when no plant could red it."
   },
   "c.uses_this_turn(ref=)": {
     "at": "2026-10-12",

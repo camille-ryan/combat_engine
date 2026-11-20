@@ -380,7 +380,22 @@ def f1709b(c: Cast) -> None:
     declare the parameter, so there is no surface to say this with.
     `Range.from_ == "companion"` is the other route the engine has and it
     is header data on the row being *borrowed*, which a feat cannot
-    reach. One forwarded kwarg closes it."""
+    reach. One forwarded kwarg closes it.
+
+    **Re-measured 2026-11-19, and the kwarg is not the blocker.** It is
+    genuinely missing and the forward is one line -- but the row it would
+    be forwarded for has no area to move. `cf:artificer-f2` is the
+    **parent** feature (*"you can create healing infusions for later
+    use"*) and is declared `reach=Personal, target=None`: a build-option
+    gate. The usable infusions are `cf:artificer-f2c0`, `c1` and `c2`,
+    each **Close burst 5**, and **none of the three is declared in
+    content**.
+
+    So what blocks this row is that the thing it borrows is unwritten. The
+    forward was built, found to have no caller, and reverted -- the
+    precedent being `c.counts_as_nearest` and `Target.nearest` landing
+    together because *"a permission nothing consults is this component's
+    commonest bug"*."""
 
 
 @power("f1710", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
