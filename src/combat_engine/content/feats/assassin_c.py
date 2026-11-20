@@ -125,11 +125,28 @@ def _per_shroud(c: Cast, foe: int, until: When) -> None:
 
 
 @power("f2823", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.shift_becomes_teleport()",),
+       reach=PERSONAL, target=SELF,
        trigger="you use p7443",
        on=Trigger(PowerUsed, _used("p7443"), "you use that power"))
 def f2823(c: Cast) -> None:
-    """The damage half is ordinary; the movement half is dropped.
+    """The damage half is ordinary; the movement half is written now, in
+    `p7443`.
+
+    **"You teleport instead of shift" is a replacement**, and this note was
+    right that *"laying a teleport of my own here would be a second move
+    rather than a replacement"*. So it is not laid here at all: `p7443`'s
+    own body branches on `c.feat("f2823")` and teleports in place of its
+    shift, which is `#550`'s convention -- a feat naming one power writes
+    into that power.
+
+    `triage.json` pointed at `c.pre_empt(ref, "shift", clause)` and named
+    the working precedent, `feats/battlemind_b._f3286_teleport` for
+    `p10439`. That is the **older** rider shape, which
+    `content/CLAUDE.md` records the tree as still holding in places, and
+    `c.pre_empt` is for a feat naming a *class* of powers. This one names
+    exactly one.
+
+    The old note:
 
     "You teleport instead of shift" rewrites what another row's own move
     is, and a shift is spent inside that row's body from its own header.

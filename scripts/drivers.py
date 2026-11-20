@@ -20264,6 +20264,79 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def f2823_teleports_instead_of_shifting(out: Result) -> None:
+    """*"You teleport instead of shift when using p7443."*
+
+    **A replacement, not an addition**, which is what the row's old note
+    got right: *"laying a teleport of my own here would be a second move
+    rather than a replacement"*. So the clause is not in the feat at all --
+    `p7443`'s own body branches on `c.feat("f2823")` and teleports in place
+    of its shift, which is `#550`'s convention for a feat naming one power.
+
+    `triage.json` pointed at `c.pre_empt(ref, "shift", clause)` and named a
+    working precedent -- `feats/battlemind_b._f3286_teleport` for `p10439`.
+    That is the **older** rider shape, which `content/CLAUDE.md` records
+    the tree as still holding in places, and `c.pre_empt` is for a feat
+    naming a *class* of powers.
+
+    **Counting the moves is what proves it is a replacement**: one
+    `MoveEnd` either way, and only its kind changes. A second move would
+    show as two.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.events import MoveEnd
+    from combat_engine.engine.query import enemies
+
+    def moves(feat: str | None) -> list[str]:
+        world, me, _ = _board("p7443", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return []
+        if feat:
+            held = must(world.get(me, Powers), "Powers")
+            if feat not in (held.known or []):
+                held.known.append(feat)
+        made: list[str] = []
+        world.bus.on(
+            MoveEnd,
+            lambda ev: made.append(getattr(ev, "kind_", "?"))
+            if ev.actor == me else None,
+        )
+        cast = Cast(world=world, me=me, ref="p7443")
+        cast.target = foes[0]
+        cast.targets = [foes[0]]
+        # The row reads `c.trigger.actor` for the foe its damage rider
+        # names; the move half does not depend on it.
+        cast.trigger = type("T", (), {"actor": foes[0]})()
+        dsl.REGISTRY["p7443"].body(cast)
+        return made
+
+    plain = moves(None)
+    out.that(
+        plain == ["shift"],
+        f"p7443 shifts as printed with no feat ({plain})",
+    )
+    with_feat = moves("f2823")
+    out.that(
+        with_feat == ["teleport"],
+        f"and teleports with f2823 ({with_feat})",
+    )
+    out.that(
+        len(with_feat) == len(plain) == 1,
+        "one move either way -- the teleport REPLACES the shift rather"
+        f" than joining it ({plain} vs {with_feat})",
+    )
+
+    row = dsl.REGISTRY.get("f2823")
+    out.that(
+        row is not None and not row.unfinished,
+        "f2823 carries no marker",
+    )
+
+
 def m5870a2_may_enter_other_creatures_spaces(out: Result) -> None:
     """*"It can also enter other creatures' spaces and end its turn there."*
 
@@ -106394,6 +106467,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "teleport_instead": (f2823_teleports_instead_of_shifting,
+                         "f2823 replaces p7443's shift with a teleport,"
+                         " one move rather than two"),
     "may_enter_spaces": (m5870a2_may_enter_other_creatures_spaces,
                          "m5870a2 may enter another creature's space, which"
                          " c.may_enter grants and shares_space does not"),

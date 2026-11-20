@@ -1194,7 +1194,22 @@ def p7443(c: Cast) -> None:
     and by `MoveEnd` the enemy is somewhere else."""
     foe = c.trigger.actor
     # Read rather than written in, so a feat can lengthen it. #502.
-    c.shift(c.squares_for(c.ref, 3))
+    far = c.squares_for(c.ref, 3)
+    # **`f2823`: *"you teleport instead of shift when using p7443."*** The
+    # feat names one power, so the clause is written into that power --
+    # `#550`'s convention -- rather than registered as a `c.pre_empt`
+    # rider. `f3286`/`p10439` is the sibling that does the same printed
+    # thing the older way, and `content/CLAUDE.md` says the tree still
+    # holds that shape in places.
+    #
+    # `instead of`, so this is a replacement and not a second move: the
+    # shift does not happen when the teleport does. Credited to the feat,
+    # because the movement on that use is its doing.
+    if c.feat("f2823"):
+        with c.credit("f2823"):
+            c.teleport(far)
+    else:
+        c.shift(far)
     c.bonus(
         "damage", 0, dice="1d6", until=When.EONT, on=c.me,
         when=lambda ctx: ctx["target"] == foe,
