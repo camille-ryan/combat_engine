@@ -456,10 +456,33 @@ went vacuous while still printing `ok`. Nothing about the red named a feat.
 And **do not trust a comment about what these readers skip.** `p1758`'s said
 `_does_more_than_damage` "skips clauses gated on `c.feat`"; it does not, and
 it is backwards — a `c.feat` gate pushes a body *into* the rider bucket.
-#1092. The reader has worse faults than that, measured on #1093: it splits
-on the substring `"c."` over the whole source including the docstring, so
-the word *"etc."* in a docstring flips the verdict, and **460 of 23,068
-bodies** are classified wrongly today.
+#1092.
+
+**The reader *had* worse faults than that and they are fixed, which is the
+opposite of what this paragraph used to say.** It read: *"measured on #1093:
+it splits on the substring `"c."` over the whole source including the
+docstring, so the word 'etc.' in a docstring flips the verdict, and 460 of
+23,068 bodies are classified wrongly today."* All of that was true when
+`#1093` was filed and none of it is true now — `#1093` is what fixed it.
+`_does_more_than_damage` walks an `ast`, and its own docstring says why that
+kills all three bugs at once: *"a docstring is a `Constant` and not an
+`Attribute`, every `c.<name>` is found wherever it sits, and line breaks do
+not survive a parse."*
+
+So **prose does not decide the draw**, and the two older faults are gone with
+it: `split("c.", 1)` taking only the first verb on a line, and a call split
+across lines never matching.
+
+Said at this length because the stale version cost real time on 2026-11-20. A
+batch had written `c.slide`, `c.within` and `c.me` into several docstrings,
+a class feature went silent in the next wide sweep, and this paragraph made
+"my comments moved the chargen draw" the leading hypothesis. It was refuted
+by reading the function. The real cause was a row whose own first line
+returns unless the draw picked its fork — `cf:warlord-marshal-f3`, measured
+alternating across five consecutive sweeps.
+
+The lesson the paragraph above still gets right: do not trust a comment about
+what these readers skip. It now applies to this file as well as to `p1758`.
 
 **The exception is a feat naming a class of powers** — "any implement
 attack". There is no finite list of bodies to edit, so those keep
