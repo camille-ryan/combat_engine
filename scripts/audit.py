@@ -1801,6 +1801,10 @@ DID_SOMETHING = {
     # that emits. Measured against the committed baseline:
     # give 6, prepare 5, grant_action_point 4+1 never.
     "OneShotGiven", "RowPrepared", "ActionPointGranted",
+    # `Doused` was declared, carries `by` and `what`, and was never
+    # admitted -- so a row whose whole printed Effect is putting a fire
+    # out reported inert. 5 rows call `c.douse`, 2 of them blocked.
+    "Doused",
     # `UsesRaised` and `RollsTwice` on `UseRestored`'s own argument: a row
     # whose entire effect is raising an allowance, or granting a second
     # d20 on a check, is silent without one. #642.
@@ -3901,6 +3905,29 @@ def _board(ref: str, seed: int, pose: bool = False,
     # anything to save against made every one of them look silent.
     setup.target = ally
     setup.condition(Condition.DAZED, on=ally, until=When.SAVE_ENDS)
+    # **And the condition this row actually asks about, if it names one.**
+    # `DAZED` above is the only save-ends condition on the board, so
+    # `c.save(against="dazed")` is the one word of six that could ever be
+    # satisfied -- a row asking about `blinded` or `immobilized` found
+    # nothing and reported itself silent while being correct.
+    #
+    # Gated on the row's own `against="<word>"`, so it poses what the card
+    # names and nothing else: 5 rows pass a condition word, 23,878 pay
+    # nothing and keep exactly the board they had. Laid on the **caster** as
+    # well as the ally, because these rows read `c.save()` with no `on=` as
+    # often as with one.
+    #
+    # Measured before building: posing the named condition by hand takes
+    # `i898p1` and `i2958p1` from nothing to
+    # `SavingThrow, PowerUsed, PowerResolved`. `i803p1` stays silent and is
+    # not this pose's business -- it wants a fear-**keyword** effect, and a
+    # condition hold carries no keywords. #1408, #1411.
+    for _word in _saves_against(ref):
+        _named = next((c for c in Condition if c.value == _word), None)
+        if _named is not None and _named is not Condition.DAZED:
+            for _who in (ally, caster):
+                setup.target = _who
+                setup.condition(_named, on=_who, until=When.SAVE_ENDS)
 
     # And one on the caster, because "Effect: make a saving throw" is a whole
     # shape of utility power and the caster had nothing to save against --
@@ -10113,6 +10140,35 @@ def _wanted_by_declaration(ref: str) -> tuple[str, ...]:
         if getattr(weapon, "ranged", None) and weapon.group in _PROJECTILE_GROUPS:
             return (other,)
     return ()
+
+
+def _saves_against(ref: str) -> tuple[str, ...]:
+    """The condition words this row passes to `c.save(against=)`.
+
+    The board lays exactly one save-ends condition -- `DAZED` on the ally --
+    so of the six condition words rows pass, five could never be satisfied.
+    Measured: **5 rows** pass a condition word and 3 of them are blocked.
+
+    A quoted `against="<word>"` only, matched against `Condition`'s own
+    values, so prose cannot dress a board -- the discipline `_wants_terrain`
+    and `_wants_armour` both needed. `DAZED` is excluded by the caller
+    because the board already has one.
+
+    Keyword words (`fire`, `poison`, `fear`, `charm`) are deliberately not
+    here: they want an effect carrying that keyword, which is a different
+    pose, and a condition hold carries no keywords. #1408.
+    """
+    from combat_engine.engine.types import Condition as _C
+
+    row = get(ref)
+    body = _source_of(getattr(row, "body", None), ref)
+    if not body:
+        return ()
+    words = {c.value for c in _C}
+    return tuple(sorted({
+        w for w in re.findall(r'against\s*=\s*["\']([a-z]+)["\']', body)
+        if w in words
+    }))
 
 
 def _wants_terrain(ref: str) -> tuple[str, ...]:
