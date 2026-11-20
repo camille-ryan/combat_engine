@@ -4205,6 +4205,10 @@ _WANTS_A_KILL = re.compile(r"dropped (?:a|an) (?:real )?enemy", re.I)
 #: Two more Requirements about where the caster stands or what it is in.
 _WANTS_FLANK = re.compile(r"flank", re.I)
 _WANTS_RAGE = re.compile(r"\braging\b", re.I)
+#: The same question asked of the **body** instead of the printed text,
+#: because no row carries the word in `requires_text` or `trigger` and 21
+#: ask in code. See `_pose_rage`, which measured it.
+_ASKS_IN_RAGE = re.compile(r"\b(?:in_rage|raging)\s*\(")
 
 
 #: **The caster's OWN square in shadow**, which is the other side of
@@ -4612,8 +4616,31 @@ def _pose_rage(world, caster: int, declared) -> None:  # noqa: ANN001
     `content.powers.barbarian.rage.RAGE` is the word the stance label
     carries and `raging()` is one `stance_of` read away, so this is the
     board using the class's own vocabulary rather than inventing a flag.
+
+    **This was dead code, and the obvious repair is vacuous.** It gated on
+    `requires_text` alone. Measured over the whole registry: **21 rows call
+    `in_rage()`/`raging()` and 0 of them carry the word in `requires_text`**
+    -- and the only 2 rows that do carry it never call either verb. So the
+    pose fired exclusively for rows that did not want it.
+
+    The obvious fix is to read `trigger` as well, which is what
+    `_pose_own_history` does fifteen lines below and what the diagnostic
+    sweep recommended. **It moves nothing**: the word is in neither field
+    for all 21 rows -- measured, `requires_text` 0, `trigger` 0, neither 21.
+    These rows do not *declare* a rage requirement at all; they ask in the
+    body, as `in_rage(c)`.
+
+    So the needle is the **body**, read through `_source_of` for the reason
+    its own docstring gives. `requires_text` stays in the test because the
+    2 rows that spell it out are entitled to the pose, and `_NEGATED` still
+    guards a Requirement phrased the other way -- a body that merely *reads*
+    `in_rage` has no negation to find, which is why that guard is left on
+    the declared text only. #1411.
     """
-    if not _WANTS_RAGE.search(getattr(declared, "requires_text", "") or ""):
+    asked = _WANTS_RAGE.search(getattr(declared, "requires_text", "") or "")
+    body = _source_of(getattr(declared, "body", None),
+                      getattr(declared, "ref", ""))
+    if not asked and not _ASKS_IN_RAGE.search(body):
         return
     if _NEGATED.search(getattr(declared, "requires_text", "") or ""):
         return
