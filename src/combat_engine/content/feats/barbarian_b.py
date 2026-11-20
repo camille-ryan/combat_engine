@@ -17,7 +17,7 @@ What is actually left, by marker, one row each:
   offers a thrown branch is decided by `thrown_by_hand`, a **header field on
   the power**. The two notes further down say this per row.
 * `chargen.IMPROVISED` -- a chair leg swung as a weapon.
-* `c.choose(before_damage=)`
+* `dsl.use(attacks_before_damage)`
 
 The other sixteen play. `Defences.immune_keywords` used to be a fourth
 marker, on `f2884`, and the field it named had existed since #560 -- the
@@ -243,7 +243,7 @@ def f1831(c: Cast) -> None:
 
 
 @power("f1858", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.choose(before_damage=)",))
+       reach=PERSONAL, target=SELF, todo=("dsl.use(attacks_before_damage)",))
 def f1858(c: Cast) -> None:
     """Trade a die of weapon damage for ongoing damage, on a hit with
     "any rage power". Which rows those are is the same gap: nothing
@@ -253,6 +253,27 @@ def f1858(c: Cast) -> None:
     askable. What is left is the printed *option* -- reducing the damage
     by 1[W] **before you roll it** -- which is a choice put to the holder
     at a moment nothing currently offers one.
+    
+
+    **Re-pointed to `dsl.use(attacks_before_damage)`, 2026-11-19: three
+    feats, one cause.** `dsl.use` sets `cast.target` and calls the body
+    **once per target**, so a body that strikes and then damages does both
+    for target one before target two is touched. The printed rules resolve
+    an area power the other way -- every attack roll, then damage -- and
+    each of these three sentences is only expressible in that order:
+
+    * `f1123` *"+2 to **that power's** damage rolls"* on hitting two or
+      more: the first target's damage is already paid when the second hit
+      becomes known;
+    * `f1858` *"reducing the damage ... **before you roll damage**"*: the
+      choice sits between the attack and the damage roll;
+    * `f715` *"reroll the attack rolls ... against **every** target"*: the
+      others are resolved by the time the reroll happens.
+
+    **`f1138` is the control and it needs none of this.** It prints nearly
+    `f1123`'s sentence with the bonus on *later* attacks, is written, and
+    carries no marker -- so counting hits across a use was never the gap.
+    `f1123` differs from it by the words "that power's". `#1394`.
     """
 
 

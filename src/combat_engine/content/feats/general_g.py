@@ -1374,7 +1374,7 @@ def f633(c: Cast) -> None:
 
 @power("f715", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.reroll_attack(all_targets=)",))
+       todo=("dsl.use(attacks_before_damage)",))
 def f715(c: Cast) -> None:
     """**Re-pointed: this was never the announcement gap (#496).**
 
@@ -1383,6 +1383,27 @@ def f715(c: Cast) -> None:
     touches, and this feat says the one reroll applies to all of them. There
     is no second roll to find: the others have already been resolved and
     their results are not on the triggering event.
+    
+
+    **Re-pointed to `dsl.use(attacks_before_damage)`, 2026-11-19: three
+    feats, one cause.** `dsl.use` sets `cast.target` and calls the body
+    **once per target**, so a body that strikes and then damages does both
+    for target one before target two is touched. The printed rules resolve
+    an area power the other way -- every attack roll, then damage -- and
+    each of these three sentences is only expressible in that order:
+
+    * `f1123` *"+2 to **that power's** damage rolls"* on hitting two or
+      more: the first target's damage is already paid when the second hit
+      becomes known;
+    * `f1858` *"reducing the damage ... **before you roll damage**"*: the
+      choice sits between the attack and the damage roll;
+    * `f715` *"reroll the attack rolls ... against **every** target"*: the
+      others are resolved by the time the reroll happens.
+
+    **`f1138` is the control and it needs none of this.** It prints nearly
+    `f1123`'s sentence with the bonus on *later* attacks, is written, and
+    carries no marker -- so counting hits across a use was never the gap.
+    `f1123` differs from it by the words "that power's". `#1394`.
     """
 
 
