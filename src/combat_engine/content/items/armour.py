@@ -206,9 +206,19 @@ def _foe(c: Cast) -> int | None:
     is the wrong creature for half the shapes in this slot -- a row
     answering your own `Dropped` has no attacker at all. Reading the event
     is the only thing that is right every time.
+
+    **`target` is last in the walk and used not to be.** On a `Hit` of the
+    wearer's own the attacker *is* the wearer and is skipped, `Hit` carries
+    neither `source` nor `actor`, and `c.target` is `None` on a `NO_TARGET`
+    row -- so the clause acted on nobody. Attacker stays first, so a row
+    answering a blow aimed *at* the wearer still names the striker, and the
+    `who != c.me` guard is what makes appending this safe. This file has
+    **24 call sites**, the most of the six copies. Proven on the `arms.py`
+    copy, where seven rows went from emitting only `ItemPowerUsed` to
+    landing their printed clause. #1407.
     """
     ev = c.trigger
-    for name in ("attacker", "source", "actor"):
+    for name in ("attacker", "source", "actor", "target"):
         who = getattr(ev, name, None)
         if who is not None and who != c.me:
             return who

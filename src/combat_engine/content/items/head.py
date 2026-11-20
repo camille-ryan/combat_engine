@@ -263,9 +263,18 @@ def _granted_swing(world: World, me: int, ev: PowerUsed) -> bool:
 
 
 def _foe(c: Cast) -> int | None:
-    """The other creature in whatever event this row is answering."""
+    """The other creature in whatever event this row is answering.
+
+    **`target` is last in the walk and used not to be.** On a `Hit` of the
+    wearer's own the attacker *is* the wearer and is skipped, `Hit` carries
+    neither `source` nor `actor`, and `c.target` is `None` on a `NO_TARGET`
+    row -- so the clause acted on nobody. Attacker stays first, so a row
+    answering a blow aimed *at* the wearer still names the striker, and the
+    `who != c.me` guard is what makes appending this safe. Proven on the
+    `arms.py` copy of this helper. #1407.
+    """
     ev = c.trigger
-    for name in ("attacker", "source", "actor"):
+    for name in ("attacker", "source", "actor", "target"):
         who = getattr(ev, name, None)
         if who is not None and who != c.me:
             return who

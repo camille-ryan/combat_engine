@@ -154,9 +154,18 @@ def _foe(c: Cast) -> int | None:
     wrong for half the shapes here -- a row answering a `Dropped` or a
     `SavingThrow` has no attacker at all. Reading the event is the only
     thing that is right every time.
+
+    **`target` is last in the walk and used not to be.** On a `Hit` of the
+    bearer's own the attacker *is* the bearer and is skipped, `Hit` carries
+    neither `source` nor `actor`, and `c.target` is `None` on a `NO_TARGET`
+    row -- so the clause acted on nobody. Attacker stays first, so a row
+    answering a blow aimed *at* the bearer still names the striker, and the
+    `who != c.me` guard is what makes appending this safe. Proven on the
+    `arms.py` copy of this helper, where seven rows went from emitting only
+    `ItemPowerUsed` to landing their printed clause. #1407.
     """
     ev = c.trigger
-    for name in ("attacker", "source", "actor"):
+    for name in ("attacker", "source", "actor", "target"):
         who = getattr(ev, name, None)
         if who is not None and who != c.me:
             return who

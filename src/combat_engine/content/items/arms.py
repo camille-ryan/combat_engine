@@ -121,9 +121,23 @@ def _foe(c: Cast) -> int | None:
     `Triggers._at` aims a single-target enemy row at `ev.attacker`, which is
     the wrong creature for half the shapes in this slot. Reading the event
     is the only thing that is right every time.
+
+    **`target` is last in the walk and used not to be, which made every row
+    here answering "when *you* hit" act on nobody.** On a `Hit` of the
+    bearer's own the attacker *is* the bearer and is skipped by design,
+    `Hit` declares neither `source` nor `actor`, and the fallback `c.target`
+    is `None` on a `NO_TARGET` row -- so the helper returned `None` and the
+    clause landed on no creature at all. Measured on `i606p1`: 30 of 30
+    calls returned `None` with `ev.target` holding the victim every time.
+
+    Seven rows in this file went from emitting only `ItemPowerUsed` to
+    landing their printed clause. Attacker still comes first, so a row
+    answering a blow aimed *at* the bearer names the striker as before, and
+    the `who != c.me` guard is what makes appending this safe. `hands.py`
+    had already fixed its own copy; this is that fix. #1407.
     """
     ev = c.trigger
-    for name in ("attacker", "source", "actor"):
+    for name in ("attacker", "source", "actor", "target"):
         who = getattr(ev, name, None)
         if who is not None and who != c.me:
             return who
