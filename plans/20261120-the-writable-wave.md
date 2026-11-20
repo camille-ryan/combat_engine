@@ -222,3 +222,127 @@ forced movement and consults neither gate.
 So: **a rule whose assertions all stay green under the wrong
 implementation is not a weak plant, it is a rule that does not yet test the
 clause it names.**
+
+---
+
+# Closed out, 2026-11-20. What landed and what is left
+
+## Pushed
+
+```
+14d0f927  44 marked rows written, and the markers were wrong about where the gap was
+4cc164a7  A dead row-minting helper the wide run found, and a reference to an
+          issue that did not exist yet
+4f4f3f09  Move the audit watermark to 14d0f927b: 34 rows leave the refused bucket
+```
+
+`origin/master` and `master` agree; the tree is clean.
+
+**The landmine fired and was handled.** `#1397` went `OPEN -> CLOSED` on the
+push, exactly as the previous handoff predicted, because two older commits
+carry the text `Closes #1397 is NOT claimed` and GitHub ignores the
+negation. Reopened immediately, with a comment recording the measurement so
+the thread does not read as resolved, and restating that **30 power rows
+citing a colliding ref are still unread**. No other issue was closed by the
+push -- checked, all 8 filed this session are OPEN.
+
+## The wide sweep
+
+One sweep for 44 rows, which is the cadence. Launched on a clean tree so
+the verdict names a sha.
+
+```
+audit        1922s   watermark written at 14d0f927b
+drivers      1011s   8,669 assertions hold, 0 do not
+replay         22s   8 of 8 identical
+leaks / cited / specs / seams / cards / keywords / targets / legs   clean
+```
+
+Three red, and none of it this batch's doing:
+
+* **`questions`** -- two rulings arrived during the session. Both are now
+  acted on and the instrument is clean: 3 parked, 0 answered, 0 without a
+  plain-language version.
+* **`bonuses`** -- `#1405`. It reads the **enclosing row's** card for a
+  `#550` clause, so a feat-kinded bonus written into a power reports the
+  power as wrong. Both findings are rows that are right; one of the two is
+  pre-existing. The fix is available for free: attribute the `kind=` to the
+  ref the clause is credited to.
+* **`types`** -- drift that already landed, which the run says itself.
+
+## The two rulings
+
+**`#1389` -- answered, acted on, tag dropped.** Camille: *"yes. characters
+should be able to die out of combat. [...] Ensure that disease removal is
+available though. Remove disease ritual, endurance checks, and heal
+checks."* The ruling unblocks the four `affliction.tick(dies=)` rows **and
+puts a precondition in front of them**, measured:
+
+```
+endurance checks       EXIST   affliction.tick rolls the disease's own
+                               printed check at every extended rest
+heal checks            ABSENT  the only Heal check in story/ stabilises a
+                               dying ally
+remove disease ritual  ABSENT  no reader anywhere; game.db holds 360
+                               ritual rows and none is read for this
+```
+
+One of three. **The kill waits on the other two**, by the ruling's own
+wording. The skill-challenge widening wants its own issue -- story scope,
+names no row.
+
+**`#1395` -- re-asked, not acted on, and that is the right state.** Camille
+did not pick an option: *"Explain why each candidate defect is actually a
+defect."* Done, per row, against each ref's stored spec rather than against
+the row's docstring, because the docstring is the thing making the claim:
+
+```
+3 real      m1107a0  a pull with no distance
+            m4004a3  a vulnerability with no amount
+            m5581a6  removes two traits the page never grants -- checked
+                     every ability and the creature's own columns
+4 not       m2245a0  the page prints a complete effect and no roll
+            m2783a3  same
+            m815a3   same
+            i1431p1  OUR importer drops a number the page prints (#1401)
+1 judgement m3617a3  an unspecified granted attack, not an absent fact
+```
+
+**The earlier pick is withdrawn.** The case for a seventh marker is three
+rows, not eight, and two of those three are one sentence on a monster that
+otherwise plays -- which is what *"only when nothing survives"* is about.
+Camille's signal held: the three real ones are all magazine-sourced.
+
+And one correction posted on the thread: I had grouped `m815a3` as a
+different kind of thing, reasoning it was a rider needing no attack line.
+Read raw, it is a power of its own with its own action and usage, so it is
+the **same** pattern as the other two -- three rows showing one thing, not
+two patterns agreeing. The verdict held and the reasoning did not, which is
+the third time that happened this session.
+
+## Issues filed: 8
+
+```
+#1399  engine       Cast.surrender's "skill:intimidate" prefix loses the ability
+                    modifier, the trained +5, and every bonus content lays
+#1400  engine       c.bonus(once=) on a skill key ignores the when= gate. LATENT
+#1401  etl          item_block.usage drops "N Charges/Day" (3 of 3,752)
+#1402  instruments  the trap pose is unreachable for a row that already fires
+#1403  engine       Trap.sprung is set only by the walked-onto handler
+#1404  engine       a target=SELF row's bare c.basic() attacks its own bearer
+#1405  instruments  bonuses.py reads the enclosing card for a #550 clause
+#1406  instruments  the credit census cannot read a parametrised c.credit block
+```
+
+## What the next session should pick up
+
+1. **`#1389`'s two missing cure paths**, then `dies=` on the four rows.
+   The ruling is recorded as a quote and the precondition is measured.
+2. **`#1405`**, which is small and keeps a default-run gate green.
+3. **The 42 `WRONG_LAYER` markers.** The highest-value unasked question in
+   the tree: "does it exist" has now been asked of the whole high-yield
+   slice; "is it where the marker says" has not, and getting that wrong
+   costs an engine change that leaves the row unwritable.
+4. **The 22 close candidates** in `logs/20261119-2250-agent-fanout-results.md`,
+   each with the one thing somebody must verify first. None was closed --
+   closing carries a required measurement.
