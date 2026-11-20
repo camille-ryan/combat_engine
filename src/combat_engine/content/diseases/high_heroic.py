@@ -38,6 +38,7 @@ from combat_engine.engine import (
     DamageType,
     Healed,
     Hit,
+    Keyword,
     Melee,
     SurgeSpent,
     TurnEnd,
@@ -45,7 +46,7 @@ from combat_engine.engine import (
     Window,
     power,
 )
-from combat_engine.engine.query import taking_ongoing
+from combat_engine.engine.query import immune_to_power, taking_ongoing
 
 #: The one type every burn in this file deals, as `query.taking_ongoing`
 #: wants it.
@@ -216,7 +217,8 @@ def x5_22(c: Cast) -> None:
 
 @power("x5_62", cls="disease", level=10, usage=AT_WILL,
        action=ActionType.NONE, target=NO_TARGET, reach=Melee(0),
-       dropped=("c.hp_ceiling()", "Effect.keywords"))
+       keywords=[Keyword.POISON],
+       dropped=("c.hp_ceiling()",))
 def x5_62(c: Cast) -> None:
     """The one disease here whose page stacks its stages: stage 3 says it
     suffers the effects of stage 2, and stage 2 reprints stage 1's penalty,
@@ -233,9 +235,22 @@ def x5_62(c: Cast) -> None:
     Two clauses dropped. A ceiling on the hit point total is not a smaller
     maximum -- the bloodied line would move with it -- and nothing holds one
     down, so clamping only the heals would leave a character walking in at
-    full after a rest and quietly above the cap. And the aura is printed with
-    a keyword, which an effect cannot carry, so a creature that should ignore
-    it for being immune to that keyword pays anyway.
+    full after a rest and quietly above the cap. **The aura's keyword is
+    written now, and an effect never needed to carry
+    one.** This note said *"the aura is printed with a keyword, which an
+    effect cannot carry, so a creature that should ignore it for being
+    immune to that keyword pays anyway"* -- and the first clause is true
+    while the conclusion was not. `query.immune_to_power` turns a row's own
+    **ref** into the keywords its header declares and answers which the
+    creature's printed immunity covers, so the keyword belongs on the row,
+    where the page prints it. It landed on `#1224` and 744 creatures carry
+    a token that is also a `Keyword`.
+
+    So the header declares `Keyword.POISON` -- *"an aura 2 (poison)"* --
+    and the surge loss is gated on that reader. `Effect.keywords` is
+    dropped as a symbol: it would have meant every site that lays an
+    effect passing keywords down, for a question the laying row's ref
+    already answers.
     """
     if c.stage >= 1:
         c.penalty(FORT, 2, on=c.me, until=When.ENCOUNTER)
@@ -265,6 +280,14 @@ def x5_62(c: Cast) -> None:
 
         def pays_at_the_end(ev: TurnEnd) -> None:
             if ev.actor == c.me or not c.in_my_aura(ev.actor, label=c.ref):
+                return
+            # *"An aura 2 (**poison**)"*, and a creature immune to poison
+            # ignores it. `immune_to_power` turns this row's own ref into
+            # the keywords its header declares and answers which of them
+            # the creature's printed immunity covers -- so the keyword
+            # lives on the row, where it is printed, and nothing has to be
+            # carried on the effect.
+            if immune_to_power(c.world, ev.actor, c.ref) is not None:
                 return
             c.spend_surge(on=ev.actor)
 

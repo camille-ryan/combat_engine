@@ -20264,6 +20264,94 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def a_poison_aura_spares_a_poison_immune_creature(out: Result) -> None:
+    """`x5_62`'s stage-3 aura, and why `Effect.keywords` was never needed.
+
+    The card: *"has an aura 2 (**poison**) that cannot be deactivated. Any
+    creature that ends its turn in the aura loses a healing surge."*
+
+    The row's note had the observation right and the conclusion wrong. It
+    said *"the aura is printed with a keyword, which an effect cannot
+    carry, so a creature that should ignore it for being immune to that
+    keyword pays anyway"* -- and an `Effect` indeed carries no keywords,
+    but it does not have to. `query.immune_to_power` turns a row's own
+    **ref** into the keywords its header declares and answers which the
+    creature's printed immunity covers. It landed on `#1224`, and 744
+    creatures carry a token that is also a `Keyword`.
+
+    So the fix was a header: `keywords=[Keyword.POISON]`, where the page
+    prints it. `Effect.keywords` would have meant every site that lays an
+    effect passing keywords down, for a question the laying row already
+    answers.
+
+    **The load-bearing plant is removing that keyword**, not removing the
+    gate. Both red, but only the first shows the declaration is what the
+    immunity reads -- a gate against a row that declares nothing is a gate
+    that can never fire.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import (
+        Afflictions,
+        Defences,
+        Health,
+        Position,
+    )
+    from combat_engine.engine.events import TurnEnd
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Keyword
+
+    def surges_lost(*, immune: bool) -> int:
+        world, me, _ = _board()
+        foe = sorted(enemies(world, me))[0]
+        here = must(world.get(me, Position), "Position").square
+        # Inside an aura 2, which `c.in_my_aura` is the gate on.
+        movement.place(world, foe, (here[0] + 1, here[1]))
+        if immune:
+            shield = world.get(foe, Defences)
+            if shield is not None:
+                shield.immune_keywords = {
+                    *getattr(shield, "immune_keywords", set()),
+                    Keyword.POISON,
+                }
+        # **Stage 3 posed through `Afflictions.contracted`**, which is what
+        # `Cast.stage` reads -- it is a property with no setter, because a
+        # disease's ref is the row's own ref.
+        if world.get(me, Afflictions) is None:
+            world.add(me, Afflictions())
+        must(world.get(me, Afflictions), "Afflictions").contracted["x5_62"] = 3
+        cast = Cast(world=world, me=me, ref="x5_62")
+        dsl.REGISTRY["x5_62"].body(cast)
+        before = must(world.get(foe, Health), "Health").surges
+        world.bus.emit(TurnEnd(actor=foe, round=world.round))
+        return before - must(world.get(foe, Health), "Health").surges
+
+    ordinary = surges_lost(immune=False)
+    out.that(
+        ordinary == 1,
+        "a creature ending its turn in the aura loses a healing surge"
+        f" (lost {ordinary})",
+    )
+    spared = surges_lost(immune=True)
+    out.that(
+        spared == 0,
+        "and one immune to poison loses none -- the keyword is read off the"
+        f" row's own header, not off the effect (lost {spared})",
+    )
+
+    row = dsl.REGISTRY.get("x5_62")
+    out.that(
+        row is not None and Keyword.POISON in (row.keywords or ()),
+        f"x5_62 declares the printed keyword ({row.keywords if row else ()})",
+    )
+    owed = tuple(row.todo or ()) + tuple(row.dropped or ()) if row else ()
+    out.that(
+        not any("Effect.keywords" in sym for sym in owed),
+        f"and carries no marker for Effect.keywords ({owed})",
+    )
+
+
 def two_feats_decline_the_counter_p653_arms(out: Result) -> None:
     """*"Instead of taking the immediate interrupt attack this exploit
     grants."*
@@ -105728,6 +105816,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "poison_aura": (a_poison_aura_spares_a_poison_immune_creature,
+                    "a keyword-tagged aura spares a creature immune to that"
+                    " keyword, read off the laying row's header"),
     "decline_counter": (two_feats_decline_the_counter_p653_arms,
                         "two feats replace the counter-attack p653 arms,"
                         " offered from inside the closure that takes it"),
