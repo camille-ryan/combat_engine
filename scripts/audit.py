@@ -3693,17 +3693,40 @@ def _board(ref: str, seed: int, pose: bool = False,
     # rather than the content. Placed two squares off so "adjacent to your
     # companion" and "not adjacent" are both reachable.
     #
-    # **`cls`, not `declared.cls`, and that one word is why the paragraph
-    # above never came true for a feat.** `declared.cls` is the *row's*
-    # declared class and it is `""` on all 2,536 feats -- so the knob written
-    # for "roughly sixty rows across shaman and ranger" skipped every feat
-    # that reads "your beast" or "your spirit companion", which is most of
-    # them. `cls` is the class the caster is actually *dealt*. Measured:
-    # 185 rows tree-wide read a companion (`c.companion(` 127, `c.mount(` 37,
-    # `c.familiar(` 21) and `c.companion()` returned `None` on every seed of
-    # every board. Monster abilities are untouched -- `cls` is `""` for all
-    # 13,454 of them, exactly as `declared.cls` was. #1411.
-    if cls:
+    # **`declared.cls`, and widening it to the derived `cls` is a NET LOSS of
+    # the same shape as the prone clear below.** `declared.cls` is the *row's*
+    # declared class and it is `""` on all 2,536 feats, so this knob has never
+    # once fired for a feat -- which is why "roughly sixty rows" above was
+    # never true of the feats that read "your beast" or "your spirit
+    # companion". Measured: **185 rows tree-wide read a companion**
+    # (`c.companion(` 127, `c.mount(` 37, `c.familiar(` 21) and
+    # `c.companion()` returns `None` on every seed of every board.
+    #
+    # Widening it was tried and swept at corpus scale: **+11 rows and -4**.
+    # The four are `f1425b`, `f1491`, `f2150`, `f3236`, each measured from
+    # *firing* to UNUSED and each firing again the moment this is put back.
+    #
+    # The mechanism is why a row-blind pose cannot work here: all four are
+    # **triggered** rows, and two of them trigger on a companion being
+    # *called* -- `f3236` on `p6515` resolving, `f1491` on its covenant card.
+    # Pre-fielding a companion makes that call refuse or no-op, so the
+    # `PowerResolved` their trigger waits for never happens. A row that
+    # *reads* a companion wants one standing; a row that is *about the call*
+    # must not have one already there, and `_source_of(body)` cannot tell
+    # those apart because both mention a companion.
+    #
+    # So this wants gating on the row's **trigger**, not on its class and not
+    # on its body -- the same conclusion the prone clear reached, and the
+    # reason both are left alone rather than half-fixed. A pose that makes the
+    # board richer is not automatically safe: **156 `drivers` rules call
+    # `audit.board` directly** too.
+    #
+    # And it is worth knowing that the sweep's own summary did **not** report
+    # these four. `audit` prints a `silent_refs` departure and says nothing
+    # when a row joins `never_refs`, so all four were invisible in a run that
+    # read `0 raise, 2 newly silent` and only the per-ref diff of
+    # `audited.json` found them. #1411.
+    if declared.cls:
         pet = Cast(world=world, me=caster, ref="audit:setup")
         companion = pet.call_companion(at=(5, 9))
         # And something for it to shake off, for the same reason the caster
