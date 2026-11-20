@@ -218,3 +218,223 @@ Two habits earned their keep in the power round:
 AI policy weights, `scorecard`, `winrate`. Lifting `etl.MAX_POWER_LEVEL`
 (which is what the 8 class-feature markers wait on). `#467`, deferred by
 Camille until the first distribution.
+
+---
+
+# Handoff, 2026-11-19 late. Read this first
+
+Written because the session ends here and the next one starts with no
+memory of it. Everything below is measured in this session unless it says
+otherwise.
+
+## What landed
+
+Five rows, in five commits, each with a `drivers` rule and plants:
+
+| row | what | shape |
+|---|---|---|
+| `f2823` | teleports instead of shifting | written into `p7443` |
+| `f1027` | moves `p3773`'s second helping | written into `p3773` |
+| `f3209` | marks on a theme attack | its own body |
+| `i553p1` | takes one of five printed shapes | `c.as_weapon(base=)` |
+| `i1153p1` | becomes any melee weapon | `c.as_weapon(base=)` |
+
+Plus the facility the last two needed: `combat_engine/weapons.py` (the
+printed weapon table, below every component), `components.weapon_from_printed`
+(the one mapper), `Cast.as_weapon(base=)`, and a third module on
+`.importlinter`'s printed-tables contract. Same `#852` argument as
+`armour.py`: the reader existed in `chargen` and `engine -> chargen` is
+contractually zero.
+
+**Terrain is finished** -- 24 rows, 0 markers. That was step 3's larger
+half.
+
+Two issues filed, both real and neither fixed:
+
+* **`#1397`** -- `build._swap_sub_options` keys its map on the printed
+  **name**, so a label claimed by two refs silently keeps one. 15 labels
+  are claimed across kinds, 53 specs cite one. This is what made `f3209`
+  unwritable for two referrals.
+* **`#1398`** -- `types.json` holds `scripts/drivers.py: 0` and the file
+  reports **166**. Measured both ways by swapping `HEAD`'s copy in: none
+  belong to the change in hand. So `types` reds on every commit that
+  touches `drivers.py`, which is most of them.
+
+## Three standing qualifications on "powers are finished"
+
+The claim above -- 6 markers of 4,398 -- still holds as stated. These do
+not contradict it and do bound it:
+
+1. **`#1357`: 26 power rows the audit board cannot reach.** Their green
+   verdict means nothing, because "it fires and does something" was never
+   tested on them. Open, unworked.
+2. **30 power rows cite a colliding ref (`#1397`).** Measured:
+
+   ```
+   cf:druid-f1s0            p2669 p2790 p5041 p5054 p9652 p9663 p12835 p15858
+   cf:sorcerer-f0s3         p3162 p3163 p3782 p5260 p5262 p5264 p5271 p5278 p5279 p5511
+   cf:warlord-marshal-f4s2  p1064 p1065 p1076 p2444 p4551 p4564 p4569 p10129
+   cf:warlock-f1s4          p12887 p12888 p12891 p12894
+   ```
+
+   The three **feat** citations were read: two correct, one (`f3209`)
+   wrong. **None of the 30 power rows has been read.** A row written off
+   the wrong ref audits green -- it fires, it does something, and it is
+   about the wrong thing. Mostly these will be the legitimate case (a
+   druid power naming a druid sub-option), so this is a reading job, and
+   nothing measures it today.
+3. **`blocked.py --prose` is a keyword scan** and this tree's docstrings
+   argue. Its 154 is not 154 jobs. Sample before costing it.
+
+## The wide sweep: owed, and the cadence was got wrong
+
+**22 commits since the last full sweep (`d6c7b10bf`).** A `check.py --all`
+is owed before any push.
+
+A sweep was launched on **5 rows** in this session and Camille stopped it:
+
+> *"I was expecting something like 50 rows per wide sweep, and if I'm not
+> mistaken you've done 5 or so?"*
+
+Correct, and it is this plan's own cadence written two sections up. **~50
+rows per wide sweep.** Killed cleanly (`pkill -TERM -f scripts/check.py`
+takes the workers with it; the tree was clean and nothing was lost). Do
+not launch another until the batch is that size.
+
+What is clean right now, so the next sweep is confirming rather than
+discovering: `drivers --tries 40` 8,158 hold / 0 fail, `replay` 8 of 8,
+`seams` 7 contracts kept, `ruff`, `lint`, `leaks --cited`, `todo`.
+
+## The queue, re-measured. Do not use the old numbers
+
+```
+198 marked feat rows      147 marked item rows      477 symbols
+130 row-claims sit in symbols with 2+ feat/item rows
+```
+
+Biggest multi-row symbols, measured fresh:
+
+```
+6  spec.power_ref()                i1690x1 i2801p1 i694x1 + 3 monsters
+4  chargen.multiclass_powers()     f1120 f2697 f2698 f2732
+4  c.alignment()                   f1351 i2195p1 i3142x1 i3282p1
+4  chargen.retrain_on_rest()       f2441 f2443 f2445 f2446
+4  chargen.power_choice()          f3582 f3588 f3616 f3646
+4  c.item_set()                    i1492p1 i2176x1 i2358p1 i2777x1
+```
+
+**`chargen.multiclass_powers()` is already fully designed in `#1161`** --
+`Character.multiclass: str = ""`, on `#1029`'s `race2` precedent, with the
+reasoning for why all four rows are one gap. Do not re-derive it. Note
+`f2698`/`f2732` need a second thing as well: `power_swap` filters both
+halves of a trade through **one** `trade.usage`, and those cards take an
+encounter power out and bring an at-will in.
+
+## `triage.json` is stale. Run `--drift` before trusting it
+
+Three verdicts were wrong in one session:
+
+```
+dsl.powers_of(cls)         said 2 rows, is 1
+chargen.power_swap(pool=)  said 4 rows, is 1
+c.place_scenery(kind=)     verdict already self-corrected to STALE
+```
+
+883 verdicts and nothing reconciles them. `--drift`'s *"live and
+unapplied"* bucket is a queue nothing else surfaces. **This is step 0 of
+anything that reads the queue**, and it was skipped in this session.
+
+Verdicts read but not worked: `c.surprise_round()` (`i2656x1` -- the real
+residual is that `c.waive` refuses `cannot_act` by design, which wants its
+own symbol), `falling.drop(check=)` (`i802x1`, a shape question),
+`query.knocked_prone()` (`f3507` -- the verdict concedes
+`ConditionApplied` does not say whether an *attack* caused it),
+`chargen.power_swap(pool=)` (`f2580`), `c.place_scenery(kind=)` (`f3015b`,
+leave alone; the live lead is its other symbol `query.wearer_of()`).
+
+## Diseases: 10 marked, and 4 of the symbols are parked on Camille
+
+```
+affliction.tick(dies=)            x5_18 x5_66 x5_81 x5_91
+c.must_attack(on=, against=)      x5_18 x5_25 x5_34
+story.npc_takeover()              x5_51 x5_93
+affliction.tick(no_improve=)      x5_65 x5_91
+c.hp_ceiling() c.on_points_spent() c.treats_allies_as_enemies()
+story.site_radius() affliction.tick(rest_choice= rest_damage= contagious=)
+```
+
+`questions.py`: **4 tagged `question`, all 4 parked on Camille with a
+plain-language ask, 0 answered and waiting on us.** So the `dies=` family
+and `c.must_attack` are genuinely blocked, not neglected. Check
+`questions.py` first -- if any now reads **ANSWERED**, that is the cheapest
+work on this page.
+
+## The agent fan-out, which is what the next session is for
+
+Camille, this session:
+
+> *"I think we saw that a number of rows are marked as requiring
+> functionality that exists now. I was wondering if agents might be a good
+> approach to uncover this for the remaining work"*
+
+Yes, and it is the one job here that parallelises cleanly. The 200-agent
+session cap is why the session was cleared.
+
+**Why it is the right job.** The highest-yield move of the power round,
+repeatedly, was *read the verb the marker nearly names before reading the
+row* -- the power queue went 19 markers to 6 and most of the movement was
+stale markers, not built facilities. It happened **four more times in this
+session**: `c.reshape_weapon()` was a synonym for `c.as_weapon(base=)`;
+`f3209`'s marker named a filter that had existed for months; `i1153p1`'s
+marker named two gaps and one was not a gap; `f1027`'s marker argued
+correctly for a conclusion it then got wrong.
+
+```
+me      triage.py --drift          what is already known, and what is stale
+me      partition the remainder BY FILE
+agents  N read-only agents, one partition each
+          per row: the symbol, a verdict, the evidence, the near-miss name
+me      pick the confirmed ones
+agents  write them -- one file per agent
+me      full drivers, replay re-record, ONE wide sweep at ~50 rows, push
+```
+
+**Rules for the agents, each from a real cost in this repo:**
+
+* An agent lints **only its own file** (`lint.py <path>`) and audits only
+  its own refs. A tree-wide `ruff --fix` has destroyed another agent's
+  work.
+* **An agent never touches git.** Merge, sweep, baselines and push have one
+  owner.
+* **Engine, ETL and instrument work is not delegated.** Verification is
+  global, so handing it out buys no parallelism and costs a collision.
+* An agent is shown **name beside ref** via `scripts/spec.py` and writes
+  only refs.
+* **"It exists" from an agent is a candidate, not a verdict.** The
+  automated ranker's top candidate was wrong 7 times in 10. Every
+  un-marking still owes `audit.py <ref>` and a `drivers` rule with a
+  plant.
+
+**Two costs land on the controller and must not be delegated:**
+
+* **Un-refusing a feat re-rolls every chargen draw**, so a wave of
+  un-markings owes a `replay` re-record -- a baseline write, its own
+  commit, every diff proved an insertion rather than behaviour moving.
+* **`drivers` rules pin marker tuples.** `retarget_split` went red in this
+  session because it still expected `f1027` to carry a marker that had
+  been correctly removed two commits earlier -- the full suite had not run
+  in between. A wave will red several of these. The call each time is
+  *which is wrong, the code or the check* -- there it was the check, and it
+  was corrected to an exact empty tuple rather than relaxed to
+  `not unfinished`, so a marker returning under any name still reds.
+
+## One thing to avoid repeating
+
+A plant **passed** in this session and that was the finding, not a pass.
+`drivers.weapon_shape` compared `chargen.PRINTED` against
+`weapon_from_printed` to show the table move changed no field -- and
+`chargen.PRINTED` *is* that mapper's output now, so breaking the mapper
+broke both sides identically and the plant went green with 19 of 19
+assertions. It compares against `weapons.Printed` column by column
+instead: 10 columns over all 117 rows, independent of the mapper, and the
+same plant now names 102 rows.
