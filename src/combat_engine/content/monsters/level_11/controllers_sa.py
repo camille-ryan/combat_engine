@@ -1507,19 +1507,38 @@ def m2295a0(c: Cast) -> None:
         # there is nothing for a granted move to pick up. `m958a3`'s gap,
         # not the one the five written rows had. #583
         "c.move_zone(conjuration=)",
-        "c.grant_action(standard)",
+        # **Re-pointed to match `m1105a6`, which prints the same ask.**
+        # `c.grant_action(standard)` named the *cost*; the gap is the
+        # **subject**. `actions.GRANTABLE` holds 17 words and its
+        # `"command"` branch iterates `Companion` entities, where a
+        # conjuration carries `Conjuration`, `Movement` and `Position` and
+        # no `Companion` -- so no granted action reaches one. Same gap as
+        # `c.move_zone(conjuration=)` above, from the attack side rather
+        # than the move side. #1396.
+        "c.grant_action(conjuration_attack)",
     ),
 )
 def m2295a1(c: Cast) -> None:
     """A sphere that swings, is sustained, and cannot be walked.
 
     `sustain=MINOR` with `until=SUSTAIN` is the printed minor and works. The
-    other two printed actions do not. `conjure(speed=3)` records the distance
-    on the sphere's own `Movement` and `c.move_zone` would carry it, but
-    `actions.legal` never offers a move action spent on a conjuration -- the
-    speed sits there unread. And `actions._granted` is only ever consulted for
-    five words, so a standard action that makes the sphere attack again is
-    carried and does nothing.
+    other two printed actions do not, and they are **one** gap rather than
+    two. `conjure(speed=3)` records the distance on the sphere's own
+    `Movement` and nothing reads it; `c.move_zone` takes a `Zone` and a
+    conjuration is not one.
+
+    **The count in this note was stale and the diagnosis slightly off.** It
+    said `actions._granted` *"is only ever consulted for five words"* --
+    `actions.GRANTABLE` holds **17**. The word that would serve here is
+    `"command"`, and its branch iterates `world.having(Companion)`: a
+    conjuration carries `Conjuration`, `Movement` and `Position` and no
+    `Companion`, so no granted action reaches one from either side.
+
+    So the marker for the attack half was re-pointed from
+    `c.grant_action(standard)` -- which named the *cost* -- to
+    `c.grant_action(conjuration_attack)`, which is what `m1105a6` already
+    calls the same ask. `#1396` holds the family: five rows, two symbols,
+    one gap in `actions.py`.
 
     "Adjacent to the sphere" is the sphere's own aura, which follows it when
     it moves and comes down with it. The toll is written out rather than
