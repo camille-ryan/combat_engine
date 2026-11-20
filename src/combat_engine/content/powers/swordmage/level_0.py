@@ -133,6 +133,29 @@ def p3323(c: Cast) -> None:
             return
         last["round"] = c.world.round
         c.reduce(step + c.con_mod, ev)
+        # **`f619`: *"+2 bonus to the next attack roll made before the end
+        # of your next turn against the foe that triggered the p3323
+        # immediate interrupt."*** This closure **is** that interrupt
+        # firing, and `ev.source` is the foe -- so the clause goes here,
+        # which is `#550`'s convention and the only place the triggering
+        # foe is known.
+        #
+        # The marker read `c.triggering_attacker()` and that verb exists;
+        # the row's own note then concluded the clause was unwritable
+        # because *"PowerUsed for p3323 is announced when the aegis is
+        # placed, hours before anything triggers it"*. True, and beside
+        # the point: a feat watching from outside would need an event this
+        # firing does not emit, and a clause written inside needs none.
+        #
+        # `once=True` so it is spent by the next roll, which is the printed
+        # "the next attack roll".
+        if c.feat("f619"):
+            with c.credit("f619"):
+                struck = ev.source
+                c.bonus(
+                    "attack", 2, on=me, until=When.EONT, once=True,
+                    when=lambda ctx: ctx.get("target") == struck,
+                )
 
     c.watch(DamageRolled, soften, until=When.ENCOUNTER, on=me, label=f"{c.ref} answer")
 

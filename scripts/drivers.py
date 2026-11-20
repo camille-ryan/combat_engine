@@ -20264,6 +20264,101 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def f619_rides_the_aegis_interrupt_it_cannot_observe(out: Result) -> None:
+    """*"+2 bonus to the next attack roll ... against the foe that triggered
+    the p3323 immediate interrupt."*
+
+    `p3323` is an aegis: it marks a foe and arms a `DamageRolled` watch
+    that blunts the blow when that foe hits somebody else. That watch
+    firing **is** the printed immediate interrupt, and it emits nothing --
+    which is what both the row's note and `triage.json` concluded made
+    `f619` unwritable:
+
+    > *"PowerUsed for p3323 is announced when the aegis is placed, hours
+    > before anything triggers it"* -- the row
+
+    > *"f619 still cannot be written ... p3323 arms a watcher whose firing
+    > emits nothing"* -- the verdict
+
+    **Both are true of a feat watching from outside, and beside the point.**
+    `#550`'s convention writes a feat naming one power into that power, and
+    inside the closure the triggering foe is simply `ev.source`. No event
+    is needed because nothing has to observe anything. Same resolution as
+    `f985`, `f988`, `f1308` and `f1305` the same day: the clause goes where
+    the latch is.
+
+    **The bonus is asserted against two creatures**, because an ungated
+    `c.bonus("attack", 2)` would pass a test that only looked at the
+    triggering foe while sharpening every swing the caster makes.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Position, Powers
+    from combat_engine.engine.query import allies, enemies
+
+    def bonuses(feat: str | None) -> tuple[int, int] | None:
+        world, me, _ = _board("p3323", 1)
+        foes = sorted(enemies(world, me))
+        mates = sorted(allies(world, me))
+        if not foes or not mates:
+            return None
+        foe, mate = foes[0], mates[0]
+        here = must(world.get(me, Position), "Position").square
+        movement.place(world, foe, (here[0] + 1, here[1]))
+        movement.place(world, mate, (here[0], here[1] + 1))
+        if feat:
+            held = must(world.get(me, Powers), "Powers")
+            if feat not in (held.known or []):
+                held.known.append(feat)
+        cast = Cast(world=world, me=me, ref="p3323")
+        cast.target = foe
+        cast.targets = [foe]
+        dsl.REGISTRY["p3323"].body(cast)
+        # **Damage, not an attack roll.** The watch is on `DamageRolled`,
+        # and `c.attack` rolls to hit without dealing anything -- a probe
+        # that only swung saw no interrupt at all and read as a dead
+        # clause.
+        hurt = Cast(world=world, me=foe, ref="drivers-probe")
+        hurt.target = mate
+        hurt.damage("2d6", on=mate)
+        mods = world.get(me, Mods)
+        return (
+            mods.total("attack", {"attacker": me, "target": foe}) if mods else 0,
+            mods.total("attack", {"attacker": me, "target": mate}) if mods else 0,
+        )
+
+    plain = bonuses(None)
+    out.that(plain is not None, "the board fields a foe and an ally")
+    if plain is None:
+        return
+    out.that(
+        plain == (0, 0),
+        f"without f619 the aegis answering buys no attack bonus ({plain})",
+    )
+    with_feat = bonuses("f619")
+    if with_feat is None:
+        return
+    out.that(
+        with_feat[0] == 2,
+        "with f619 the next swing at the foe that triggered the interrupt"
+        f" gains +2 ({with_feat[0]})",
+    )
+    out.that(
+        with_feat[1] == 0,
+        "and no swing at anybody else does -- an ungated bonus would"
+        f" sharpen every one of them ({with_feat[1]})",
+    )
+
+    row = dsl.REGISTRY.get("f619")
+    out.that(
+        row is not None and not row.unfinished
+        and "p3323" in (row.implemented_in or ()),
+        f"f619 names p3323 as where its clause lives"
+        f" ({getattr(row, 'implemented_in', None)})",
+    )
+
+
 def f1305_exempts_a_designated_ally_from_its_own_cloud(out: Result) -> None:
     """*"The ally you designate is immune to the effect of your p2473 for
     its duration."*
@@ -106166,6 +106261,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "aegis_rider": (f619_rides_the_aegis_interrupt_it_cannot_observe,
+                    "f619 rides p3323's aegis interrupt from inside it,"
+                    " which needs no event"),
     "cloud_exempt": (f1305_exempts_a_designated_ally_from_its_own_cloud,
                      "f1305 exempts a designated ally from the caster's own"
                      " cloud, and lifts what it already laid"),

@@ -565,7 +565,7 @@ def f603(c: Cast) -> None:
 
 
 @power("f619", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, todo=("c.triggering_attacker()",))
+    reach=PERSONAL, target=SELF, implemented_in=("p3323",))
 def f619(c: Cast) -> None:
     """**Re-aimed.** This was never about a granted attack -- `f603`'s
     half of the same feature was, and that one is written now.
