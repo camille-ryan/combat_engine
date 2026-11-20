@@ -20264,6 +20264,109 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def f1308_widens_who_the_riposte_answers_for(out: Result) -> None:
+    """*"You can riposte if the target attacks you **or any ally adjacent to
+    you**."*
+
+    `p653` prints the riposte on *"the target attacks you"*, and `f1308`
+    extends it to an adjacent ally. So the feat changes exactly one thing
+    -- the test on who was swung at -- and it is written into `p653`'s own
+    closure for the reason `f985` and `f988` are: the latch lives there and
+    nothing reaches it from outside.
+
+    The symbol was `p653.riposte_hook`, and `feats/general_s.py` records
+    why a marker like that cannot clear itself: *"no content-side symbol
+    resolves through `blocked._one`, which indexes `engine/`, `chargen/`,
+    `etl/` and `spec` and nothing else, so this reports blocked until
+    somebody clears it by hand."*
+
+    **`c.adjacent` measures from the caster**, which is what *"adjacent to
+    you"* asks -- not adjacency between the attacker and the ally it
+    struck. Getting that backwards would answer a different sentence on
+    most boards and the same one on a few, which is the quietest kind of
+    wrong.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.events import AttackDeclared
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Defense
+
+    def swings_when_the_ally_is_hit(
+        feat: str | None, *, ally_adjacent: bool = True
+    ) -> int | None:
+        world, me, _ = _board("p653", 1)
+        foes = sorted(enemies(world, me))
+        mates = sorted(allies(world, me))
+        if not foes or not mates:
+            return None
+        foe, mate = foes[0], mates[0]
+        here = must(world.get(me, Position), "Position").square
+        # The foe beside the caster -- `c.adjacent(victim)` is one of the
+        # closure's guards -- and the ally beside the caster too, which is
+        # the adjacency the feat's sentence is about.
+        movement.place(world, foe, (here[0] + 1, here[1]))
+        movement.place(
+            world, mate,
+            (here[0], here[1] + 1) if ally_adjacent else (here[0] + 6, here[1] + 6),
+        )
+        if feat:
+            held = must(world.get(me, Powers), "Powers")
+            if feat not in (held.known or []):
+                held.known.append(feat)
+        mine: list[int] = []
+        world.bus.on(AttackDeclared, lambda ev: mine.append(ev.attacker))
+        cast = Cast(world=world, me=me, ref="p653")
+        cast.target = foe
+        cast.targets = [foe]
+        dsl.REGISTRY["p653"].body(cast)
+        # **The foe swings at the ALLY, not at the caster** -- which is the
+        # whole case, and is what `p653` alone does not answer.
+        back = Cast(world=world, me=foe, ref="drivers-probe")
+        back.target = mate
+        back.attack(back.str_, Defense.AC, on=mate)
+        return sum(1 for a in mine if a == me)
+
+    plain = swings_when_the_ally_is_hit(None)
+    out.that(
+        plain is not None,
+        "the board fields an ally for the foe to swing at",
+    )
+    if plain is None:
+        return
+    out.that(
+        plain == 1,
+        "without f1308 an attack on an adjacent ally provokes no riposte --"
+        f" only the opening strike happened ({plain} attack(s))",
+    )
+    with_feat = swings_when_the_ally_is_hit("f1308")
+    out.that(
+        with_feat == 2,
+        "with f1308 it does: the strike and then the riposte"
+        f" ({with_feat} attack(s))",
+    )
+
+    # **The adjacency requirement needs an ally that is NOT adjacent**, or
+    # it is untested: a plant deleting `c.adjacent(struck)` passed, because
+    # the arms above place the ally beside the caster and "any ally" and
+    # "any adjacent ally" then give the same answer.
+    far = swings_when_the_ally_is_hit("f1308", ally_adjacent=False)
+    out.that(
+        far == 1,
+        "and it does NOT riposte for an ally six squares away -- the card"
+        f" says \"any ally **adjacent to you**\" ({far} attack(s))",
+    )
+
+    row = dsl.REGISTRY.get("f1308")
+    out.that(
+        row is not None and not row.unfinished,
+        "f1308 carries no marker, which a content-side symbol can only ever"
+        " have cleared by hand",
+    )
+
+
 def a_felling_blow_can_penalise_death_saves(out: Result) -> None:
     """`m2295a1`: *"if this damage would reduce the target to 0 or fewer hit
     points, the target takes a -2 penalty to death saving throws."*
@@ -105936,6 +106039,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "riposte_widens": (f1308_widens_who_the_riposte_answers_for,
+                       "f1308 lets p653's riposte answer an attack on an"
+                       " adjacent ally, not only on the caster"),
     "death_save_penalty": (a_felling_blow_can_penalise_death_saves,
                            "a penalty to death saving throws reaches those"
                            " and no other save"),

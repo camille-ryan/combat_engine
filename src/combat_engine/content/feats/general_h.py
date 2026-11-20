@@ -2160,7 +2160,7 @@ def f1307(c: Cast) -> None:
     c.watch(Hit, swung, until=When.ENCOUNTER, on=me, label=f"{c.ref} riders")
 
 
-@_trait("f1308", dropped=("p653.riposte_hook",))
+@_trait("f1308")
 def f1308(c: Cast) -> None:
     """Written by hand rather than through `_riders`: p4368's clause needs
     a memory of what happened on somebody else's turn, which a table of

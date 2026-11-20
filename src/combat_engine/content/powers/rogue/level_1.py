@@ -14,6 +14,8 @@ base line only.
 
 from __future__ import annotations
 
+from contextlib import ExitStack
+
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -312,7 +314,24 @@ def p653(c: Cast) -> None:
     spent: list[bool] = []
 
     def riposte(ev: AttackDeclared) -> None:
-        if spent or ev.target != c.me or not c.adjacent(victim):
+        if spent or not c.adjacent(victim):
+            return
+        # **`f1308` widens who has to be swung at.** The card prints the
+        # riposte on *"the target attacks you"*; that feat extends it to
+        # *"you **or any ally adjacent to you**"*, so the test is the only
+        # thing it changes. Written here rather than as a hook for the
+        # reason `f985` and `f988` are: the latch lives in this closure and
+        # nothing reaches it from outside.
+        #
+        # `c.adjacent` measures from the caster, which is what "adjacent to
+        # you" asks -- not adjacency to the ally being struck.
+        struck = getattr(ev, "target", None)
+        widened = struck != c.me
+        if widened and not (
+            c.feat("f1308")
+            and struck in c.allies()
+            and c.adjacent(struck)
+        ):
             return
         spent.append(True)
         if kinds:
@@ -362,9 +381,21 @@ def p653(c: Cast) -> None:
         # `as_="riposte"` so the counter can be told from the opening blow:
         # both carry this row's `power`, and two feats print a clause about
         # the counter alone.
-        if not c.attack(c.str_, AC, on=victim, as_="riposte"):
-            return
-        c.damage(c.w(1), c.str_mod, on=victim)
+        # **Credited to `f1308` when that feat is why this fired at all.**
+        # A swing at an ally does not provoke `p653`'s riposte on its own,
+        # so on those occasions the counter is the feat's doing and its
+        # label and `by` must say so -- `#1177`, and
+        # `drivers.every_held_gate_is_credited` reds a held gate with no
+        # block. `ExitStack` because the credit is conditional, and the
+        # block is **inside the handler**: a `c.credit` wrapped round the
+        # `c.watch` registration has already popped by the time a deferred
+        # callback runs, which is `f982`'s recorded shape.
+        with ExitStack() as owed:
+            if widened:
+                owed.enter_context(c.credit("f1308"))
+            if not c.attack(c.str_, AC, on=victim, as_="riposte"):
+                return
+            c.damage(c.w(1), c.str_mod, on=victim)
         if kinds:
             with c.credit("f1298"):
                 c.flat(c.int_mod, on=victim)
