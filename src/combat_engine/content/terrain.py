@@ -358,7 +358,19 @@ def put(world: World, square: Square, *, kind: str = "object",
         # **The printed defences, so the thing can be attacked at
         # all.** Five rows carried `Scenery.defences` and each said
         # the same: aiming at an object was written and there was
-        # nothing to roll against. DMG page 65, by size. #1233.
+        # nothing to roll against. DMG page 65, by size.
+        #
+        # **Size-derived, which is right for a crate and wrong for a card
+        # that prints a number.** `x2_117` states *"(AC 5)"* and `x2_156`
+        # *"all defenses 10"*, and neither is a size default -- so those
+        # rows are still blocked, and on the region interface rather than
+        # on this call: a printed region is laid with a set of squares and
+        # nothing else. `#1393` holds the six markers that come to.
+        #
+        # The issue number here used to read `#1233`, which is an issue
+        # about magic consumables being dealt to nobody. Corrected rather
+        # than removed, because a wrong pointer reads exactly like a right
+        # one -- which is the fault the root `CLAUDE.md` opens with.
         object_defences(size),
     ]
     if hp > 0:
