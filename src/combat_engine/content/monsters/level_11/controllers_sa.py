@@ -3402,20 +3402,48 @@ def m5870a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.move_through()",),
+    dropped=("movement._can_stop(may_end_on=)", "grid.aperture"),
 )
 def m5870a2(c: Cast) -> None:
-    """Both clauses are about where this creature may go, and the engine only
-    says the opposite: `c.shares_space` lets everybody into *its* square,
-    which is a different sentence, and `c.phasing` crosses solid rock, which
-    is a larger one. Nothing lets one creature stand in another's space.
+    """*"Can move through openings of any size. It can also enter other
+    creatures' spaces and end its turn there."*
 
-    **Re-pointed.** `movement.overrun` is not it either, which is the near
-    miss worth recording: overrun is a *move that tramples*, resolved once
-    per creature entered and against their will, where this is a standing
-    permission to be there and to stop there. Writing it as an overrun would
-    make a trait that does nothing on its own into an attack. The aperture
-    half -- openings of any size -- is a grid question and a second symbol."""
+    **Half of this is written now, and the old note was wrong about the
+    engine.** It said *"nothing lets one creature stand in another's
+    space"*, and the mover-side permission exists: `c.may_enter()`, whose
+    own docstring is explicit that it is *"the mover's permission, which is
+    **not** `c.shares_space`"*, with "empty means every creature". So the
+    entering half is one call.
+
+    The old note was right to reject the other two candidates, and both
+    rejections are worth keeping:
+
+    * `c.shares_space` is the **mirror** -- *"anyone may stand in this
+      creature's square"*, on the occupant. `m6654a1` measured what using
+      it instead does: the holder's own square opens to the whole board
+      and it still cannot step through anybody, *"a row both weaker and
+      stronger than its card"*.
+    * `movement.overrun` is a move that **tramples**, resolved per creature
+      entered and against their will, and *"the mover must end somewhere
+      free"* -- which is the precise opposite of ending its turn there.
+
+    **What is left is narrower than either, and deliberate in the
+    engine.** `movement.shift`'s own note: *"`share` applies to the last
+    square only. Along the way, entering an occupied square is governed by
+    `may_enter` ... on the final square it means something else -- ending
+    on top of somebody, which only a melding power may do."* So
+    `_can_stop` consults `shares_space` and the per-move `share` flag and
+    **not** `may_enter`; a standing permission to *end* in an occupied
+    square has no writer. That is the first marker.
+
+    The second is the other printed clause: *"openings of any size"* is a
+    question about apertures in the grid, which the sibling verdict for
+    `m5431a1` already separates as *"a grid gap and a different symbol"*.
+    One marker named both halves before; two name them now.
+    """
+    # The entering half, with no narrowing -- the card names no size and no
+    # side, and `c.may_enter`'s empty arguments are every creature.
+    c.may_enter(on=c.me, until=When.ENCOUNTER)
 
 
 @power(

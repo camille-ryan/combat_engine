@@ -20264,6 +20264,64 @@ def a_recharge_roll_can_be_moved(out: Result) -> None:
                  f"{row.unfinished if row else 'absent'}")
 
 
+def m5870a2_may_enter_other_creatures_spaces(out: Result) -> None:
+    """*"It can also enter other creatures' spaces and end its turn there."*
+
+    The entering half, which the row's old note said the engine could not
+    do. `c.may_enter` is *"the mover's permission, which is **not**
+    `c.shares_space`"*, and with no `sizes=`/`side=` it means every
+    creature -- which is what this card prints.
+
+    **Measured on a board built for another row**, deliberately. This
+    trait is `action=NONE`, so `Encounter.start` arms it on its own board
+    and the permission reads True before the body is called -- the same
+    pre-set that made `drag_bonus`'s first draft read 10 instead of 5.
+
+    The **ending** half is not asserted and is still marked. `movement`'s
+    own note draws the line: *"`share` applies to the last square only ...
+    on the final square it means something else -- ending on top of
+    somebody, which only a melding power may do"*, and `_can_stop`
+    consults `shares_space` and the per-move `share` flag and not
+    `may_enter`. `#1396`'s sibling gap, marked
+    `movement._can_stop(may_end_on=)`.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.query import enemies
+
+    def permitted(armed: bool) -> bool | None:
+        world, me, _ = _board("m145a0", 1)
+        foes = sorted(enemies(world, me))
+        if not foes:
+            return None
+        foe = foes[0]
+        at = must(world.get(me, Position), "Position").square
+        movement.place(world, foe, (at[0] + 1, at[1]))
+        if armed:
+            dsl.REGISTRY["m5870a2"].body(Cast(world=world, me=me, ref="m5870a2"))
+        return movement.may_enter(world, me, foe)
+
+    out.that(permitted(False) is False,
+             "an ordinary creature may not enter another's space"
+             f" ({permitted(False)})")
+    out.that(permitted(True) is True,
+             "and m5870a2's trait grants it, which its own note said the"
+             f" engine could not do ({permitted(True)})")
+
+    row = dsl.REGISTRY.get("m5870a2")
+    owed = tuple(row.todo or ()) + tuple(row.dropped or ()) if row else ()
+    out.that(
+        not any("move_through" in sym for sym in owed),
+        f"the marker no longer names a verb that was never the gap ({owed})",
+    )
+    out.that(
+        any("_can_stop" in sym for sym in owed),
+        f"and names the ending half, which is genuinely absent ({owed})",
+    )
+
+
 def m4388a3_sharpens_only_the_drag_of_a_small_enough_creature(out: Result) -> None:
     """*"When a m4388 moves a grabbed target of Medium size or smaller, it
     gains a +5 bonus to the Strength attack."*
@@ -106336,6 +106394,9 @@ DRIVERS = {
     "recharge_moved": (a_recharge_roll_can_be_moved,
                        "a recharge roll takes a bonus, a disadvantage or a"
                        " refusal, and the die is still thrown"),
+    "may_enter_spaces": (m5870a2_may_enter_other_creatures_spaces,
+                         "m5870a2 may enter another creature's space, which"
+                         " c.may_enter grants and shares_space does not"),
     "drag_bonus": (m4388a3_sharpens_only_the_drag_of_a_small_enough_creature,
                    "a +5 reaches the drag of a Medium-or-smaller grabbed"
                    " creature and no other roll"),
