@@ -758,12 +758,30 @@ def f2299(c: Cast) -> None:
     """`Moved` is the only one of the three movement events that carries
     `from_`, and "an ally adjacent to your **starting** square" is asked
     of nothing else. `MoveEnd` knows where you arrived and not where you
-    left."""
+    left.
+
+    **It stops on a slide that HAPPENED, not on an ally it merely found.**
+    This read `c.slide(1, on=friend); return`, which gave up on the first
+    adjacent ally whether or not it moved -- so one ally with nowhere to go
+    hid every other ally the card offers. `c.slide` answers how many squares
+    it moved, so the loop can tell the two apart.
+
+    **This is a robustness fix and it is NOT why the row reads SILENT on the
+    audit board**, which is worth saying because the two arrived together and
+    the obvious inference is wrong. Measured on its own board: the harness's
+    shift starts from a square with **no ally beside it** --
+    `_adjacent_square` is asked about both allies against the starting square
+    and answers False for both -- so the row correctly does nothing. There is
+    no companion on this board either; the first guess was that there was.
+
+    So its silence is the board's arrangement, not this clause, and it is the
+    draw-dependent case `scripts/CLAUDE.md` warns a two-state baseline cannot
+    express. #1411."""
     start = c.trigger.from_
     me = c.me
     for friend in allies(c.world, me):
-        if friend != me and _adjacent_square(c, friend, start):
-            c.slide(1, on=friend)
+        if friend != me and _adjacent_square(c, friend, start) \
+                and c.slide(1, on=friend):
             return
 
 
