@@ -6314,6 +6314,27 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     shove.prone(on=caster)
     if probe():
         return True
+    # **And stand the caster back up, because prone was sticky and every
+    # pass below inherited it.** The pose above is deliberate and stays --
+    # "when an enemy knocks you prone" is a printed trigger. What was wrong
+    # is that nothing cleared it, so a row whose printed answer to being
+    # hurt is a shift or a move met a prone caster and returned False.
+    # **38 rows are damage-triggered and answer with movement.** Measured on
+    # `i3441p1`: `c.shift(3)` returned False 48 of 48 with 45-48 routes
+    # available and `Conditions == {prone}` on all 48.
+    #
+    # The condition is popped rather than stood up with a verb, which is
+    # `_revive_everyone`'s own technique one creature over. A `Cast` call
+    # here would put `Moved` and friends in the log the probe reads, and the
+    # row under test would be credited with the harness standing its caster
+    # up -- the mistake `#1149` and the `_provoke` credit fix were both
+    # about. Popping a dict emits nothing. #1411.
+    from combat_engine.engine import Conditions
+    from combat_engine.engine.types import Condition as _Cond
+
+    stood = world.get(caster, Conditions)
+    if stood is not None:
+        stood.counts.pop(_Cond.PRONE, None)
 
     # A point of damage of each printed type, dealt by an enemy. "When you
     # take cold damage", "the first time you take fire damage each round"
@@ -6347,9 +6368,31 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     #
     # Both directions, because five of the thirty-eight are monsters printing
     # "is hit by a cold attack" rather than "you hit with one".
+    # **Everybody back on their feet first, and the guard reads both
+    # creatures.** By this point the class-swing pass above has killed
+    # `foes[0]`, and this loop guarded only `at` -- the *target*. So the
+    # caster-side arm was skipped (its target was the corpse) and the
+    # surviving arm swung **from** the corpse, which means the pass did
+    # nothing for every row it exists for.
+    #
+    # Measured: inserting the revive turns `i2694p1`, `i1861p1` and
+    # `i1510p1` from NEVER to firing with real events, and 6 of 8 more
+    # sampled from the same family fire too. Population: 34 NEVER rows whose
+    # trigger names a damage type, 30 of them heroic feat or item.
+    #
+    # The repair is the one 100 lines above, which does the same revive plus
+    # the same manual caster restore and carries a comment about this same
+    # bug; four other sites in this function already reach for it.
+    # `_revive_everyone` will not touch the caster, by construction, so the
+    # caster's own hit points are put back the way that pass puts them back.
+    # #1411.
+    if _typed_wanted(ref):
+        _revive_everyone(world, caster)
+        if caster_health is not None and caster_health.hp <= 0:
+            caster_health.hp = was
     for kw in _typed_wanted(ref):
         for who, at in ((caster, foes[0]), (foes[0], caster)):
-            if not alive(world, at):
+            if not alive(world, at) or not alive(world, who):
                 continue
             for other in _typed_rows(world, who, ref, kw):
                 known = world.get(who, Powers)
