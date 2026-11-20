@@ -3352,7 +3352,14 @@ def i553p1(c: Cast) -> None:
 
     `c.counts_as` is the other near miss and is a different sentence: it
     lets a power written for one group accept another, and changes no
-    dice."""
+    dice.
+
+    **`i1153p1` carries this symbol too**, re-pointed off
+    `c.reshape_weapon()`: it becomes any weapon from any melee category
+    until the encounter ends, where this one becomes one of five named
+    shapes. Two cards, one mechanism, and the synonym was holding them
+    apart -- the same fault `f1237` records checking for and not finding
+    on `c.split_weapon()`. Whichever lands should land for both."""
 
 
 @power(

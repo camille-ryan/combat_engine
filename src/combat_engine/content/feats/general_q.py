@@ -1182,9 +1182,12 @@ def f3209(c: Cast) -> None:
 
     The page says neither. Its prerequisite is a **theme**, and the
     sentence is *"when you hit an enemy with one of your <theme>
-    attacks"*. The extraction replaced the theme's printed name with the
-    ref of an unrelated class feature, so the `cf:` ref was never the
-    card's and the emptiness was an artefact of the mangling.
+    attacks"*. The theme's label and `cf:druid-f1s0`'s are the **same
+    printed words**, and `build._swap_sub_options` keys its map on the
+    name -- so one claimant wins and nothing records that there were two.
+    `#1397` has the census: 15 sub-option labels are claimed across kinds
+    and this is the one confirmed wrong citation. The `cf:` ref was never
+    the card's, and the emptiness was an artefact of the collision.
 
     So the set is nameable and non-empty: `x7_661` is the theme's `cls`
     and four of its eleven rows carry an attack. `dsl.powers_of(cls)` was
