@@ -4568,6 +4568,12 @@ class Cast:
         if held.on != who:
             held.on, held.count = who, 0
         held.count = min(cap, held.count + 1)
+        # **Say so.** This wrote the component and emitted nothing at all --
+        # not even a `Note` -- so eight rows whose only state-changing verb
+        # it is could not be seen, seven of them on `silent_refs`. #1410.
+        from .events import ShroudLaid
+        self.world.bus.emit(
+            ShroudLaid(who=self.me, on=who, count=held.count, by=self.ref))
         return held.count
 
     def shrouds(self, on: int | None = None, *, of: int | None = None) -> int:
@@ -20051,9 +20057,19 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         if who is None or health is None or count <= 0:
             return 0
         health.surges += count
+        # **A real event as well as the note, and the docstring above is why.**
+        # It says a row handing a surge back "announces nothing and audits as
+        # a row that did nothing at all" -- and then this verb announced a
+        # `Note`, which `audit.DID_SOMETHING` refuses because a `Note` carries
+        # no `by` and cannot be attributed to the row that paid. `SurgeSpent`
+        # was admitted all along; only this direction had no event. The note
+        # stays, because it is what the log panel prints. #1410.
+        from .events import SurgeRegained
         self.world.bus.emit(
             Note(text=f"{who} regains {count} healing surge(s): {health.surges} left")
         )
+        self.world.bus.emit(SurgeRegained(
+            who=who, count=count, left=health.surges, by=self.ref))
         return health.surges
 
     # -- borrowing somebody else's attack ------------------------------------

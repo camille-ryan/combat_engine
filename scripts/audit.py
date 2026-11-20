@@ -1727,6 +1727,16 @@ DID_SOMETHING = {
     # `c.as_implement` and nothing else. #1164 and `UseRestored`'s own
     # argument, #899.
     "InitiativeChanged", "WeaponIsImplement",
+    # **Two more of the same family, and the first of them was named by its
+    # own verb's docstring.** `c.regain_surge` says a row handing a surge
+    # back "announces nothing and audits as a row that did nothing at all",
+    # and then emitted a `Note` -- which this set refuses, because a `Note`
+    # carries no `by` and cannot be attributed to the row that paid.
+    # `SurgeSpent` above has been admitted all along; only the giving-back
+    # direction had no event. `c.shroud` was worse: it emitted nothing at
+    # all, so eight rows whose only state-changing verb it is could not be
+    # seen, seven of them on `silent_refs`. #1410.
+    "SurgeRegained", "ShroudLaid",
     # `UsesRaised` and `RollsTwice` on `UseRestored`'s own argument: a row
     # whose entire effect is raising an allowance, or granting a second
     # d20 on a check, is silent without one. #642.

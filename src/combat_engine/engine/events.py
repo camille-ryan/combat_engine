@@ -1684,6 +1684,58 @@ class PointsRegained(Event):
 
 
 @dataclass
+class SurgeRegained(Event):
+    """A healing surge was handed back.
+
+    The third of this shape, declared for the reason `UseRestored` and
+    `PointsRegained` above both give: `c.regain_surge` announced itself as a
+    `Note`, which `audit.DID_SOMETHING` refuses because a `Note` carries no
+    `by` and cannot be attributed to the row that paid. So a row whose whole
+    printed Effect is *"the target regains a healing surge"* fired, worked,
+    and audited as a row that did nothing.
+
+    **`c.regain_surge`'s own docstring already named this fault** -- it says
+    a row handing one back had only `Health.surges += 1` to reach for, which
+    "announces nothing and audits as a row that did nothing at all" -- and
+    then the verb itself announced a `Note`. `SurgeSpent` has been admitted
+    all along; only the giving-back direction had no event.
+
+    `who` is whose pool grew, `count` how many went in, `left` what they hold
+    afterwards, and `by` the ref that gave them -- which need not be the
+    holder, since every printed line of this shape hands them to allies.
+    """
+
+    who: int
+    count: int
+    left: int
+    by: str
+
+
+@dataclass
+class ShroudLaid(Event):
+    """An assassin's shroud was laid, and how many that victim now carries.
+
+    `c.shroud` wrote the `Shrouds` component and emitted **nothing at all** --
+    not even a `Note` -- so eight rows whose only state-changing verb it is
+    could not be seen, seven of them sitting on `silent_refs`.
+
+    `count` is the total after this one rather than the delta, because the
+    printed rules pay out on the number carried and because the verb caps it:
+    a row laying a fourth shroud on a victim already at the cap is correct and
+    has changed nothing, and only the total can say so.
+
+    `on` is the victim and `who` the holder, which are never the same creature
+    -- shrouds follow one victim at a time, so naming a new one drops what the
+    last was carrying, and that reset is visible as a `count` of 1.
+    """
+
+    who: int
+    on: int
+    count: int
+    by: str
+
+
+@dataclass
 class InitiativeChanged(Event):
     """A creature's place in the order moved without a reroll.
 
