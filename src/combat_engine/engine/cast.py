@@ -11977,13 +11977,31 @@ class Cast:
 
         Returns how much was actually taken off, which is less than asked
         when the blow was smaller than the reduction.
+
+        **Announces `DamageSpared`, which it did not until #1410.** This and
+        `spare_damage` twenty lines up do the identical mutation -- shave a
+        number off `ev.amount` and leave the rest to land -- and only one of
+        them said so. `#1281` added the event for `spare_damage`'s seven
+        rows and left the **35** rows calling `reduce` writing a smaller
+        number in silence, so a row whose whole printed Effect is *"reduce
+        the damage by 5"* fired, worked, and audited as inert. `c.halve`
+        delegates here, so it is covered by the same emit.
         """
+        from .events import DamageSpared
+
         ev = ev if ev is not None else self.trigger
         was = max(0, getattr(ev, "amount", 0)) if ev is not None else 0
         if was <= 0 or amount <= 0:
             return 0
         ev.amount = max(0, was - amount)
-        return was - ev.amount
+        spared = was - ev.amount
+        self.world.bus.emit(
+            DamageSpared(actor=self.me, by=self.ref,
+                         target=getattr(ev, "target", self.me),
+                         amount=spared, left=ev.amount,
+                         all_of_it=ev.amount == 0)
+        )
+        return spared
 
     def halve(self, ev: Any = None) -> int:
         """"The target takes half damage" from an interrupt answering the blow."""
@@ -12455,6 +12473,14 @@ class Cast:
         self.world.add(
             made, Companion(owner=self.me, ref=ref, kind=kind, damage=damage)
         )
+        # **Say so.** This verb builds a creature, places it, gives it a side
+        # and a sheet, and announced nothing -- so a row whose whole printed
+        # Effect is "your spirit companion appears" fired, worked, and
+        # audited as a row that did nothing. `Summoned` already exists, is
+        # already in `audit.DID_SOMETHING`, and is emitted at three other
+        # sites in this file; it was simply never emitted from here. #1410.
+        from .events import Summoned
+        self.world.bus.emit(Summoned(actor=self.me, summon=made, ref=self.ref))
         return made
 
     def summon_inline(self, spec: Any, at: Square | None = None) -> int:
