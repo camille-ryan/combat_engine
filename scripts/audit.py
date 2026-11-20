@@ -1425,11 +1425,19 @@ KNOWN_SILENT = {
     # assigning a field or rolling a number, and emits nothing for a log-based
     # check to see: a second initiative, an extra turn, a change of form. The rows
     # work; the audit cannot watch them. Same cause as the aura resize above.
+    # **Three of this family's entries are GONE, and they are the ones that
+    # named a second initiative.** `m6282a0`, `m5671a0` and `m790a5` all call
+    # `c.initiative`, which emits `InitiativeChanged` since `#1410` -- so the
+    # excuse's own sentence stopped being true of them and `audit` reported
+    # all three `OUTGROWN` on the first wide sweep after it. Deleted rather
+    # than kept, which is the direction this baseline is allowed to move.
+    #
+    # The four below are the control and they still hold: same excuse, same
+    # family, no `c.initiative` between them, and all four still silent in
+    # the same run. An excuse that stops being needed for three of seven rows
+    # is evidence the excuse was accurate, not evidence the gate went blind.
     "m5875a0": "changes state without emitting anything for the audit to see (#375)",
-    "m6282a0": "changes state without emitting anything for the audit to see (#375)",
     "m953a2": "changes state without emitting anything for the audit to see (#375)",
-    "m5671a0": "changes state without emitting anything for the audit to see (#375)",
-    "m790a5": "changes state without emitting anything for the audit to see (#375)",
     "m4325a5": "changes state without emitting anything for the audit to see (#375)",
     "m5596a7": "changes state without emitting anything for the audit to see (#375)",
     # **`m5709a2`'s excuse is gone**, and it read: needs an effect a
@@ -3710,14 +3718,34 @@ def _board(ref: str, seed: int, pose: bool = False,
     # level-0 rows that later rows read. Three bard rows reported SILENT
     # because the aura their card hangs an effect on had never been raised.
     #
-    # **`cls` here too, for the reason above.** This one is self-limiting, so
-    # widening it cannot deal anybody a feature they were not given:
-    # `_use_class_features` fires the level-0 rows the caster *already knows*
-    # (`known.all`, filtered to `level == 0`), so a row whose `features` list
-    # came out empty still gets nothing. What it buys is the feat case --
-    # a feat gated on its own class's curse, quarry or mark had the thing
-    # that does the cursing withheld from it.
-    if cls:
+    # **`declared.cls` here, NOT the derived `cls`, and the asymmetry with the
+    # companion above is measured rather than tidy.** Widening this one looks
+    # like the same one-word fix and is not: it buys the feat case -- a feat
+    # gated on its own class's curse, quarry or mark had the thing that does
+    # the cursing withheld from it -- and it **breaks three `drivers` rules,
+    # seven assertions**:
+    #
+    #     holding_your_breath_costs_a_surge_in_a_round_you_are_hurt
+    #     a_trait_given_up_for_a_turn_comes_back
+    #     a_feat_granted_remnant_offers_pays_and_augments
+    #
+    # Each builds its board through `audit.board`, and `_use_class_features`
+    # fires the caster's level-0 rows -- a curse, a mark, an aura, a heal --
+    # so the hit points, the timers and the relations those rules assert on
+    # all move. `a_feat_granted_remnant` asserts *which* cursed creature a
+    # boon slid, and there is now another creature to slide.
+    #
+    # Bisected one guard at a time: with this one widened all three fail and
+    # with it left alone all three pass, while the companion guard above is
+    # widened in both arms and costs nothing. **156 `drivers` rules call
+    # `audit.board` directly**, so a board change is a change to a sixth of
+    # that suite -- which is the general lesson and the reason this is left
+    # as it was rather than "fixed" to match its neighbour.
+    #
+    # The self-limiting argument for widening it still holds and was not the
+    # problem: `_use_class_features` only fires rows the caster *already
+    # knows*. Firing them is itself the perturbation. #1411.
+    if declared.cls:
         foes_now = sorted(_foes(world, caster))
         if foes_now:
             _use_class_features(world, caster, foes_now[0], skip=ref)
@@ -6341,27 +6369,25 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     shove.prone(on=caster)
     if probe():
         return True
-    # **And stand the caster back up, because prone was sticky and every
-    # pass below inherited it.** The pose above is deliberate and stays --
-    # "when an enemy knocks you prone" is a printed trigger. What was wrong
-    # is that nothing cleared it, so a row whose printed answer to being
-    # hurt is a shift or a move met a prone caster and returned False.
-    # **38 rows are damage-triggered and answer with movement.** Measured on
-    # `i3441p1`: `c.shift(3)` returned False 48 of 48 with 45-48 routes
-    # available and `Conditions == {prone}` on all 48.
+    # **The prone pose is sticky, and clearing it here is a NET LOSS.** Every
+    # pass below inherits it, so a row whose printed answer to being hurt is
+    # a shift or a move meets a prone caster and returns False -- measured on
+    # `i3441p1`, `c.shift(3)` False 48 of 48 with 45-48 routes available and
+    # `Conditions == {prone}` on all 48, and popping the condition here turns
+    # that row green.
     #
-    # The condition is popped rather than stood up with a verb, which is
-    # `_revive_everyone`'s own technique one creature over. A `Cast` call
-    # here would put `Moved` and friends in the log the probe reads, and the
-    # row under test would be credited with the harness standing its caster
-    # up -- the mistake `#1149` and the `_provoke` credit fix were both
-    # about. Popping a dict emits nothing. #1411.
-    from combat_engine.engine import Conditions
-    from combat_engine.engine.types import Condition as _Cond
-
-    stood = world.get(caster, Conditions)
-    if stood is not None:
-        stood.counts.pop(_Cond.PRONE, None)
+    # It was tried, swept at corpus scale, and reverted: **it heals that one
+    # row and breaks three** -- `m2890a3`, `m2908a3` and `m5332a6`, each
+    # bisected to this change and each firing again the moment it is taken
+    # out. The reason is that prone is not only a condition to answer, it
+    # **grants combat advantage**, so "hit by an enemy that has combat
+    # advantage against it" and "attacks it while flanking" are printed
+    # triggers the pose is quietly satisfying for somebody else.
+    #
+    # So a clear here has to be **gated on the row**, the way the poses above
+    # are gated on their own printed text, rather than applied to every row.
+    # Until then the pose stands, which is the arrangement 1 row prefers and
+    # 3 rows require. #1411.
 
     # A point of damage of each printed type, dealt by an enemy. "When you
     # take cold damage", "the first time you take fire damage each round"

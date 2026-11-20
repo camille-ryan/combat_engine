@@ -65282,12 +65282,22 @@ def the_thief_shares_the_scoundrels_latch_and_none_of_its_rows(
              "the number is for",
              f"rolled {was_rolled}->{now.rolled}, slot {was_slot}->"
              f"{list(world.encounter.order).index(me)}")
-    out.that(len(world.bus.log) == emitted,
-             "and it emits NOTHING, which is why `audit` calls the row "
-             "SILENT. Asserted so the day somebody adds an event this rule "
-             "reds and the known-silence in `audited.json` gets revisited "
-             "rather than quietly outliving its reason",
-             f"{len(world.bus.log) - emitted} event(s)")
+    # **This assertion used to read the other way round -- that the row emits
+    # NOTHING -- and it reddened the day an event was added, which is exactly
+    # what it asked to happen.** Its old note: *"Asserted so the day somebody
+    # adds an event this rule reds and the known-silence in `audited.json`
+    # gets revisited rather than quietly outliving its reason."* `c.initiative`
+    # now emits `InitiativeChanged`, the row came off `silent_refs` in the
+    # same sweep, and three `KNOWN_SILENT` excuses reading "changes state
+    # without emitting anything for the audit to see" went with it. So the
+    # handshake completed and the assertion is turned over rather than
+    # deleted. #1410.
+    fresh = [type(e).__name__ for e in world.bus.log[emitted:]]
+    out.that("InitiativeChanged" in fresh,
+             "and it ANNOUNCES the change rather than moving the order in "
+             "silence, so `audit` can see the row at all -- this is the half "
+             "that was asserted inverted until the event existed",
+             f"{fresh}")
 
     # -- f3 and f5: the four printed arms, and one that is not ----------
     #
