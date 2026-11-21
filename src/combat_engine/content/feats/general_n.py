@@ -111,6 +111,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.basic import MELEE, RANGED
+from combat_engine.engine.dsl import reach_of
 from combat_engine.engine.query import (
     allies,
     concealment_of,
@@ -1111,8 +1112,7 @@ _granted("f2152", "f2152b", swap=Swap(6, utility=True))
        on=Trigger(PowerResolved, lambda w, me, ev: (
            ev.actor == me and _reach_kind(ev.power) in _AREA
            and any(r.hit for r in ev.rolls)
-       ), "you hit with an area or close attack power"),
-       dropped=("PowerResolved.origin",))
+       ), "you hit with an area or close attack power"))
 def f2152b(c: Cast) -> None:
     """Everybody the attack touched is pushed. What is dropped is the
     square they are pushed *from*: the printed line measures from the
@@ -1149,9 +1149,46 @@ def f2152b(c: Cast) -> None:
     Worth saying plainly because of the direction: a flat five squares
     measured from the caster is **stronger than the page** twice over, in
     the distance and in the anchor. It is what plays until the square
-    arrives, and it is not what the card says."""
-    for who in c.trigger.targets:
-        c.push(5, on=who)
+    arrives, and it is not what the card says.
+
+    **Both halves are written now, off one field.** `#1426` puts the
+    attack's origin squares on `PowerResolved`, and the note above was
+    right that the cap falls out with it: the area is the origin plus the
+    row's own reach, and `dsl.reach_of` gives that as
+    `Range(kind='area_burst', size=1, ...)`.
+
+    **The anchor.** `origin` is a tuple because an origin can be several
+    squares -- a close blast's is the caster's own footprint -- so the
+    printed *"the attack's origin square"* is used when there is exactly
+    one, which is the area case the card is about. For a close power the
+    fallback is `anchor=None`, and `c.push` then measures from the pusher,
+    which **is** the origin there. Right for both without a branch on the
+    kind.
+
+    **The cap, and the reading taken.** *"This forced move ends when a
+    creature is no longer within the blast or burst"* -- so a creature at
+    distance `d` from the origin of a burst `N` takes the step that
+    carries it out and stops, which is `N - d + 1` squares. Capped at the
+    printed 5 and floored at 1: a creature already at the edge still
+    moves, because the card gives a push and the sentence ends it rather
+    than refusing it.
+
+    Said plainly because the old behaviour was **stronger than the page
+    twice over** -- five squares, measured from the caster -- and both
+    errors pointed the same way."""
+    ev = c.trigger
+    origin = getattr(ev, "origin", ()) or ()
+    anchor = origin[0] if len(origin) == 1 else None
+    row = get(ev.power)
+    size = int(getattr(reach_of(c.world, c.me, row), "size", 0) or 0) if row else 0
+    for who in ev.targets:
+        far = 5
+        if anchor is not None and size:
+            here = squares(c.world, who)
+            if here:
+                away = min(distance(anchor, sq) for sq in here)
+                far = min(5, max(1, size - away + 1))
+        c.push(far, on=who, anchor=anchor)
 
 
 _granted("f2153", "f2153b", swap=Swap(6, utility=True))

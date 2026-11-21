@@ -2884,7 +2884,6 @@ def i1831p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("Hit.origin",),
 )
 def i1832x1(c: Cast) -> None:
     """The ref is given now; the origin square is not, and the earlier
@@ -2914,7 +2913,38 @@ def i1832x1(c: Cast) -> None:
     announcement, which fires once for the whole use rather than per
     target, and `resolve.ctx(origin=)` (`p16653`) needs it in the modifier
     context. Three events, three symbols, which is the one-gap-one-symbol
-    rule rather than three names for one thing."""
+    rule rather than three names for one thing.
+
+    **Written now that `Hit` carries it** -- `#1426` puts the attack's
+    origin squares on the announcement, as a plain attribute for `#703`'s
+    reason: `Cast._origin_squares` falls back to the swinger's own square,
+    so an origin is set on essentially every attack and a declared field
+    would have printed on all 487 `Hit`/`Miss` lines in the fixtures.
+
+    `query.squares` for the target rather than its `Position.square`,
+    because a Large creature occupies several and the card says
+    *"occupying the origin square"* -- any of its squares being the origin
+    is occupying it. The same reason `_origin_squares` returns a set.
+
+    `getattr` with a default, deliberately: this reads a **plain
+    attribute**, so a `Hit` raised by a path that sets none must leave the
+    rider unpaid rather than raise. That is the honest cost of the
+    attribute choice above, and it is stated rather than hidden.
+    """
+    me = c.me
+
+    def in_the_origin(ev: Any) -> None:
+        if ev.attacker != me or ev.power != "p1166":
+            return
+        origin = getattr(ev, "origin", ()) or ()
+        if not origin:
+            return
+        from combat_engine.engine.query import squares as _squares
+
+        if _squares(c.world, ev.target) & set(origin):
+            c.damage("1d6", DamageType.FIRE, on=ev.target)
+
+    c.watch(Hit, in_the_origin, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

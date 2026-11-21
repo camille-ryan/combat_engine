@@ -797,6 +797,33 @@ def attack(
             if result.hit
             else Miss(attacker=attacker, target=target, power=power)
         )
+        # **Where the swing came FROM, which `attacker` does not answer.**
+        # Ten rows across six symbols want this and six of them want to
+        # *read* it: `i1832x1` and two monster abilities print "pushed away
+        # from the attack's origin", `i1531p1` and `x2_117` want the origin
+        # of the burst they are standing in, and `f2152b` pushes everybody
+        # the blast touched away from where it was aimed. The attack
+        # context has carried `origin` all along (`p16653`'s "attacks that
+        # originate outside the zone") and the announcement did not.
+        #
+        # **A plain attribute, not a declared field, and the cost is
+        # measured rather than assumed.** `_origin_squares` falls back to
+        # the swinger's own squares, so this is non-empty on essentially
+        # every attack -- a declared field would print on all **487**
+        # `Hit`/`Miss` lines across the eight fixtures. `AttackResult`
+        # rides here the same way and for the same reason, `#703`.
+        #
+        # That is the opposite call from `#1391`'s `purpose`, which **was**
+        # declared: there the field was empty for every caller but one, so
+        # it cost two fixture lines. The rule is to weigh the wire cost,
+        # not to always declare.
+        #
+        # **A sorted tuple, never the frozenset**, which is `#1120`: a
+        # frozenset is not JSON-serialisable and `wire()` is `asdict`, so
+        # the day anybody does put this on the envelope it must not take
+        # the log panel out. Sorted because `Square` ordering is otherwise
+        # arbitrary across processes.
+        landed.origin = tuple(sorted(origin))
         landed.result = result
         landed.among = among or (target,)
         landed.branch = branch
@@ -848,6 +875,11 @@ def attack(
                 if result.hit
                 else Miss(attacker=attacker, target=target, power=power)
             )
+            # The second announcement site, and it needs the same -- see
+            # the note above. A reader that found `origin` on one path and
+            # not the other is the silent half of this component's
+            # commonest bug.
+            ev.origin = tuple(sorted(origin))
             ev.result = result
             ev.among = among or (target,)
             ev.branch = branch

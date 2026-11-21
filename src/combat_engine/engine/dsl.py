@@ -5736,13 +5736,27 @@ def use(
             # it -- and the emit is the same shape as the one at the
             # bottom of this function, deliberately, so a reader diffing
             # the two finds only `rolls`.
-            world.bus.emit(
-                PowerResolved(
-                    actor=actor, power=ref, targets=list(chosen), rolls=[],
-                    trigger=trigger,
-                    granted_by=granted_by, granted_via=granted_via,
-                )
+            # **Where this use was aimed**, a plain attribute for the
+            # reason `Hit.origin` is one -- see `resolve.attack`. `f2152b`
+            # pushes everybody the blast touched away from the origin
+            # square and had nothing to read: this event carries `actor`,
+            # `power`, `targets`, `rolls`, `trigger`, `granted_by` and
+            # `granted_via`, and an area's aim is settled by
+            # `_auto_targets` before any body runs.
+            #
+            # Set on **both** emits in this function, which its own note
+            # above asks for: *"the emit is the same shape as the one at
+            # the bottom of this function, deliberately, so a reader
+            # diffing the two finds only `rolls`."* A reader finding the
+            # origin on one path and not the other is this component's
+            # commonest bug. #1426.
+            _done = PowerResolved(
+                actor=actor, power=ref, targets=list(chosen), rolls=[],
+                trigger=trigger,
+                granted_by=granted_by, granted_via=granted_via,
             )
+            _done.origin = tuple(sorted(cast._origin_squares(actor)))
+            world.bus.emit(_done)
             return True
 
     fresh = (actor, ref) not in _IN_FLIGHT
@@ -5846,13 +5860,15 @@ def use(
     if fresh:
         _IN_FLIGHT.add((actor, ref))
     try:
-        world.bus.emit(
-            PowerResolved(
-                actor=actor, power=ref, targets=list(chosen), rolls=rolls,
-                trigger=trigger,
-                granted_by=granted_by, granted_via=granted_via,
-            )
+        # The same attribute as the early emit above, and for the reason
+        # that note gives: both paths or neither.
+        _done = PowerResolved(
+            actor=actor, power=ref, targets=list(chosen), rolls=rolls,
+            trigger=trigger,
+            granted_by=granted_by, granted_via=granted_via,
         )
+        _done.origin = tuple(sorted(cast._origin_squares(actor)))
+        world.bus.emit(_done)
     finally:
         if fresh:
             _IN_FLIGHT.discard((actor, ref))
