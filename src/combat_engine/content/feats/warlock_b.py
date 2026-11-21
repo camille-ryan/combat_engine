@@ -916,7 +916,7 @@ def f1358(c: Cast) -> None:
 
 
 @power("f2759", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("warlock.pay_boon()",))
+       reach=PERSONAL, target=SELF, todo=("warlock.boon_for_a_hexblade()",))
 def f2759(c: Cast) -> None:
     """Takes the boon early, when a cursed enemy is first bloodied,
     and pays for it with the curse.
@@ -950,6 +950,22 @@ def f2759(c: Cast) -> None:
 
     `i698x1` is the same gap and carries the same symbol. `i2305p1` is a
     third thing again and carries `c.decline_boon()`. #641.
+    
+    **The payout is callable now and this row is still marked, which is a
+    narrowing rather than a delay.** `features.warlock.pay_boon` exists:
+    the payout `cf:warlock-f1` kept in a closure inside its own watcher is
+    one function, it offers `BOON` so a trade still works, and it
+    dispatches to the later pacts whose boon is a row of its own. That is
+    what both notes asked for.
+
+    What is left is what *this card's* ref means. It names
+    `cf:warlock-hexblade-f1`, whose printed text is "you gain a power
+    associated with your pact" -- so on that chassis the boon is a **power
+    gained**, where on the first book's three pacts it is a payout.
+    `pay_boon`, `c.restore_use` and `c.grant_row` are each right for one
+    reading and the card names one ref for all of them. Not guessed: one
+    chassis's reading of one ref, which is a smaller thing than the
+    missing payout was.
     """
 
 

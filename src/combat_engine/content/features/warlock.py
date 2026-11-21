@@ -170,6 +170,58 @@ BOONS = (
 _A_CURSED_ENEMY_FALLS = "an enemy under your curse drops to 0 hit points"
 
 
+def pay_boon(c: Cast) -> bool:
+    """Pay this warlock's pact boon **now**, from any trigger. Did it pay?
+
+    The boon's payout, made callable. Two cards ask for it to fire from an
+    event of their own rather than from the drop that normally causes it --
+    `f2759` takes it early when a cursed enemy is first bloodied, `i698x1`
+    adds that moment as a second trigger -- and both sat refused in play
+    because there was nothing to call.
+
+    **Why `c.use_power("cf:warlock-f1")` is not the answer**, which is the
+    whole reason this exists: that row pays its three legs *inline, inside
+    the watcher it installs*, so using it again installs a second watcher
+    and pays nothing. Both markers had measured that. Four of the five
+    refs in `BOONS` are rows and `c.use_power` does reach those; this
+    covers the one that is not, and dispatches to the rows for the rest so
+    that one call is true for every pact.
+
+    **The `BOON` clause is offered here**, so a card trading the boon away
+    gets its substitution whatever caused the payout. That offer used to
+    live in `features/strikers.py` beside the inline payout; it moved with
+    the payout rather than being duplicated, which is what keeps `f3444`'s
+    trade working from the new triggers too.
+
+    `instead_of_now` and not `instead_of`, for the reason the old site
+    gave: this runs inside a watcher, so there is no menu entry and
+    `Cast.variant` is 0 for ever.
+    """
+    from combat_engine.content.powers.warlock.pacts import raise_tally
+
+    me = c.me
+    infernal, dark, fey = c.build("infernal"), c.build("dark"), c.build("fey")
+
+    def payout() -> None:
+        if infernal:
+            c.temp_hp(c.level, on=me)
+        elif dark:
+            raise_tally(c)
+        else:
+            c.teleport(3, who=me)
+
+    if infernal or dark or fey:
+        c.instead_of_now(BOON, payout, on=me)
+        return True
+    # The later pacts' boons are rows of their own, so the row is the
+    # payout and offers `BOON` itself. `cf:warlock-f1` is skipped: it is
+    # the one whose payout is the closure above.
+    for ref in BOONS:
+        if ref != "cf:warlock-f1" and c.knows(ref) is not None:
+            return c.use_power(ref, who=me)
+    return False
+
+
 # -- the pacts ----------------------------------------------------------
 
 

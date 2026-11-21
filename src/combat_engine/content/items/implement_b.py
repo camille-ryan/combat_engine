@@ -4313,7 +4313,7 @@ def i630p2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("warlock.pay_boon()",),
+    todo=("warlock.boon_for_a_hexblade()",),
 )
 def i698x1(c: Cast) -> None:
     """Adds a second trigger to a class feature that is fully modelled.
@@ -4338,6 +4338,22 @@ def i698x1(c: Cast) -> None:
     `f2759` is the same gap and carries the same symbol -- it takes the
     boon early off `Bloodied` where this one adds `Bloodied` as a second
     trigger. #641.
+    
+    **The payout is callable now and this row is still marked, which is a
+    narrowing rather than a delay.** `features.warlock.pay_boon` exists:
+    the payout `cf:warlock-f1` kept in a closure inside its own watcher is
+    one function, it offers `BOON` so a trade still works, and it
+    dispatches to the later pacts whose boon is a row of its own. That is
+    what both notes asked for.
+
+    What is left is what *this card's* ref means. It names
+    `cf:warlock-hexblade-f1`, whose printed text is "you gain a power
+    associated with your pact" -- so on that chassis the boon is a **power
+    gained**, where on the first book's three pacts it is a payout.
+    `pay_boon`, `c.restore_use` and `c.grant_row` are each right for one
+    reading and the card names one ref for all of them. Not guessed: one
+    chassis's reading of one ref, which is a smaller thing than the
+    missing payout was.
     """
 
 

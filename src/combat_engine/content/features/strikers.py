@@ -916,8 +916,6 @@ def warlock_pact(c: Cast) -> None:
     rather than through `query.enemies`, which filters out the dead -- and
     the creature this is about has just died.
     """
-    from combat_engine.content.powers.warlock.pacts import raise_tally
-
     me = c.me
     infernal = c.build("infernal")
     dark = c.build("dark")
@@ -930,29 +928,20 @@ def warlock_pact(c: Cast) -> None:
         if not c.cursed(on=ev.actor):
             return
 
-        def payout() -> None:
-            if infernal:
-                c.temp_hp(c.level, on=me)
-            elif dark:
-                raise_tally(c)
-            else:
-                c.teleport(3, who=me)
-
-        # **The whole payout is offered under `BOON`**, because four cards
-        # trade the boon away and name no pact -- so the offer belongs to
-        # the payout rather than to any one leg, and one call covers all
-        # three legs here.
+        # **The payout moved to `features.warlock.pay_boon`**, which is
+        # the one definition of it now. Two cards ask for this boon to
+        # fire from a trigger of their own -- `f2759` early on a bloodied
+        # cursed enemy, `i698x1` as a second trigger -- and neither could
+        # call a closure installed inside this watcher. Both were refused
+        # in play for it.
         #
-        # `instead_of_now` and **not** `instead_of`: this fires inside the
-        # watcher this row installed, so there was never a menu entry and
-        # `Cast.variant` is 0 for ever -- `instead_of`'s fast path returns
-        # the default on a falsy variant without ever asking. That is the
-        # distinction `instead_of_now`'s docstring draws, and the opposite
-        # of `cf:warlock-f1c10`, which carries a declared trigger and so
-        # uses the plain reader. #641.
-        from combat_engine.content.features.warlock import BOON
+        # The `BOON` offer went with it rather than being duplicated:
+        # four cards trade the boon away and name no pact, so the offer
+        # belongs to the payout, and keeping it in one place is what makes
+        # `f3444`'s trade work from the new triggers as well as this one.
+        from combat_engine.content.features.warlock import pay_boon
 
-        c.instead_of_now(BOON, payout, on=me)
+        pay_boon(c)
 
     c.watch(Dropped, on_drop, until=When.ENCOUNTER, on=me, label="cf:warlock-f1")
 
