@@ -69,6 +69,8 @@ Things a creature spends, and the budget it spends them from.
   - *"The target cannot recharge its powers as long as it is marked
 - `c.charge_left(self, key: 'str', limit: 'int' = 1) -> 'int'`
   - How much of a per-encounter charge is left, for this creature.
+- `c.grant_left(self, ref: 'str', *, on: 'int | None' = None) -> 'int'`
+  - How many of a counted grant's uses are left. 0 if there is none.
 - `c.milestone(self) -> 'int'`
   - How many milestones the party has reached today. `c.milestone()`.
 - `c.more_uses(self, ref: 'str', extra: 'int' = 1, *, on: 'int | None' = None) -> 'int'`

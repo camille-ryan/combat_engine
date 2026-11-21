@@ -755,6 +755,14 @@ CATEGORIES: dict[str, dict] = {
                 # on one returns a bigger number and changes nothing --
                 # measured, and `drivers.raised_grant_allowance` holds it.
                 "raise_grant",
+                # The read beside those two writers. It answers only about
+                # a **grant's** allowance -- `dsl.usable` is what says
+                # whether a row may be used at all -- and it exists
+                # because a card naming a grant's use as a *price* has to
+                # know the price is payable before it charges anything
+                # else. `f3045` pays two costs and would otherwise spend
+                # a day for nothing.
+                "grant_left",
             ]),
             # `c.once_per_board` is here beside `payment_window` because it
             # answers the same kind of question -- how often may this pay --

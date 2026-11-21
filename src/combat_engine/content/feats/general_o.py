@@ -990,18 +990,72 @@ def f3022(c: Cast) -> None:
 # feature is no longer what any of them is waiting for.
 
 
+#: `cf:artificer-f2`'s three cards, which is what this feature deals and
+#: what `f3045` buys an extra use of. Written out rather than read off the
+#: feature's body: the card names the feature and the player picks one of
+#: its powers, so the set is the printed list and not whatever that body
+#: happens to grant today.
+_ARTIFICER_F2 = ("p4128", "p7635", "p10187")
+
+
 @power("f3045", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.race_option()",))
+       reach=PERSONAL, target=SELF)
 def f3045(c: Cast) -> None:
     """Spends a racial power to buy an extra use of a feature's power.
 
-    Re-aimed. `cf:artificer-f2`'s three cards are `p4128`, `p7635` and
-    `p10187` and `c.restore_use` hands one of them back; `c.expend_row`
-    now charges a price. What is left is *which* row to charge: the
-    racial power is whatever the character's dilettante choice took,
-    and a build decision with nowhere to write it down is the same hold
-    nineteen other rows name."""
+    **Written, and the marker was stale in the same way `f2442`'s was.**
+    It read *"what is left is which row to charge: the racial power is
+    whatever the character's dilettante choice took, and a build decision
+    with nowhere to write it down"*. It has somewhere:
+    `c.borrow_row` stores the pick and `c.stored_row(of="rt:r6-t3")` reads
+    it back. Measured -- it returns the borrowed ref on a posed board.
+
+    **What was genuinely missing was the price, and it was not a choice
+    problem at all.** `c.expend_row` refuses an **at-will** outright, and
+    `rt:r6-t3` borrows a 1st-level at-will and lays the printed *"as an
+    encounter power"* over it with `grant_row(uses=1)`. So the row's own
+    `usage` is at-will, its allowance is the *grant's*, and `expend_row`
+    was refusing on the header: it returned False every time and this feat
+    could not pay for anything. It spends the grant's use now, and `0 ->
+    1` against a cap of 1 leaves the borrowed row refused as spent.
+
+    **Two costs, so the payable one is checked first.** `c.grant_left`
+    reads the grant's remaining uses without spending them, which is why
+    it exists: charging the day's use and then finding the racial power
+    already gone would cost a day for nothing.
+
+    **On the caster's first turn rather than at arming.** This row is
+    `action=NONE` with no printed trigger, so `turns.arm_traits` runs its
+    body at the start of the fight -- and the pick it reads is made by
+    *another* trait's body in the same pass. `Powers.all`'s order decides
+    which goes first, so reading it at arming is a race. A `TurnStart`
+    watch runs after every trait is armed, and it is also where a free
+    action belongs.
+
+    `once=True` on the watch reads the log for whether the handler *did*
+    anything, so a player who declines is offered it again next turn
+    rather than losing it, and `c.may` is what makes the decline real --
+    the card says *can*."""
+    me = c.me
+
+    def offer(ev: Any) -> None:
+        pick = c.stored_row(of="rt:r6-t3", on=me)
+        mine = [ref for ref in _ARTIFICER_F2 if c.knows(ref) == me]
+        if not pick or not mine or c.grant_left(pick, on=me) < 1:
+            return
+        if not c.may("expend your racial power for an extra use", who=me):
+            return
+        if not c.spend_per_day(c.ref, 1, on=me):
+            return
+        if not c.expend_row(pick, on=me):
+            return
+        chosen = c.choose(sorted(mine), "which power to use again", who=me)
+        if chosen:
+            with c.credit(c.ref):
+                c.more_uses(chosen, 1, on=me)
+
+    c.watch(TurnStart, offer, until=When.ENCOUNTER, on=me, once=True,
+            label=c.ref)
 
 
 @power("f3046", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

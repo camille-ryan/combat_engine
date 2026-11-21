@@ -6591,6 +6591,37 @@ class Cast:
         powers = self.world.get(who, _Powers)
         if powers is None or ref not in powers.all:
             return False
+        # **A row held through a counted grant spends the GRANT's use**,
+        # and this is checked before the at-will refusal below because the
+        # two collide on exactly the case that matters. `rt:r6-t3` borrows
+        # a 1st-level **at-will** and lays the printed *"as an encounter
+        # power"* over it with `grant_row(uses=1)`, so the row's own
+        # `usage` is at-will and its allowance is the grant's. `f3045`
+        # names that allowance as a price -- *"expend your rt:r6-t3
+        # power"* -- and without this it was refused on the header,
+        # returning False every time and leaving the feat unable to pay
+        # for anything.
+        #
+        # `until=ENCOUNTER` on the refusal the charge may lay: every grant
+        # in the tree is that long or shorter, and a refusal outliving its
+        # grant is inert anyway, because the grant's own `on_end` takes
+        # the ref out of `known`.
+        #
+        # **It cannot double-charge, and that is worth saying because it
+        # is the first thing a reader will ask.** This branch leaves
+        # `Powers.used` alone, so the obvious worry is a row spending one
+        # use off each counter. It cannot be in `granted_uses` and also
+        # natively known: `grant_row` returns None for a ref already in
+        # `known.known`, so a ref with a counted grant is one the creature
+        # holds *only* through that grant, and the grant's allowance is
+        # the single limiter.
+        if ref in powers.granted_uses:
+            if not self._charge_grant(who, ref, When.ENCOUNTER):
+                return False
+            from .events import UseSpent as _UseSpent
+
+            self.world.bus.emit(_UseSpent(who=who, power=ref, by=self.ref))
+            return True
         p = _get(ref)
         if p is not None and p.usage is _Usage.AT_WILL:
             return False
@@ -8919,15 +8950,66 @@ class Cast:
             def count(ev: Any) -> None:
                 if getattr(ev, "actor", None) != who or getattr(ev, "power", "") != ref:
                     return
-                known.granted_spent[ref] = known.granted_spent.get(ref, 0) + 1
-                if known.granted_spent[ref] >= known.granted_uses.get(ref, uses):
-                    # `ran_out=True`: this is the grant's allowance going,
-                    # not a prohibition, and `reentrant` is promised a way
-                    # past it. #820.
-                    self.forbid(ref, on=who, until=until, ran_out=True)
+                self._charge_grant(who, ref, until)
 
             self.watch(PowerUsed, count, until=until, on=who)
         return effect
+
+    def grant_left(self, ref: str, *, on: int | None = None) -> int:
+        """How many of a counted grant's uses are left. 0 if there is none.
+
+        The read that goes with `c.raise_grant` and with `c.expend_row`'s
+        grant branch, and it exists because a card that names a grant's
+        use as a **price** has to know the price is payable before it
+        spends anything else. `f3045` is the row: *"once per day, you can
+        expend your rt:r6-t3 power to use a cf:artificer-f2 power one
+        extra time"* -- two costs, and spending the daily one first and
+        then finding the racial power already gone would charge a day for
+        nothing.
+
+        Zero for a row held with no counted grant, which is the same
+        answer `c.raise_grant` gives and for the same reason: `uses=0`
+        leaves the row its own printed cadence, so there is no allowance
+        to read. Ask `dsl.usable` for whether it may be used at all --
+        this answers only about the grant.
+        """
+        from .components import Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, Powers)
+        if known is None or ref not in known.granted_uses:
+            return 0
+        return max(0, known.granted_uses[ref]
+                   - known.granted_spent.get(ref, 0))
+
+    def _charge_grant(self, who: int, ref: str, until: When) -> bool:
+        """Spend one of a counted grant's uses. False if there are none.
+
+        **One place, because two callers charge it.** `grant_row`'s own
+        `PowerUsed` counter charges it when the row is *used*, and
+        `expend_row` charges it when a card names it as a **price** --
+        *"expend your rt:r6-t3 power to ..."*. Writing the cap test and
+        the refusal out twice is how two implementations of one rule
+        drift, which this file has a worked example of a few hundred lines
+        up.
+
+        Lays `forbid(ran_out=True)` at the cap: the allowance is gone
+        rather than the row prohibited, which is the distinction
+        `grant_attack(reentrant=True)` reads. #820.
+        """
+        from .components import Powers
+
+        known = self.world.get(who, Powers)
+        if known is None or ref not in known.granted_uses:
+            return False
+        spent = known.granted_spent.get(ref, 0)
+        cap = known.granted_uses[ref]
+        if spent >= cap:
+            return False
+        known.granted_spent[ref] = spent + 1
+        if known.granted_spent[ref] >= cap:
+            self.forbid(ref, on=who, until=until, ran_out=True)
+        return True
 
     def _unblock_grants(self, who: int, ref: str) -> None:
         """Let `ref`'s grants work for `who` again.

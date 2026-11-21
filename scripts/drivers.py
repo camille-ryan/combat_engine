@@ -84387,6 +84387,134 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_racial_power_buys_an_extra_use(out: Result) -> None:
+    """"Expend your rt:r6-t3 power to use a cf:artificer-f2 power again."
+
+    `f3045` was `todo=("c.race_option()",)` on the premise that the
+    dilettante's choice had nowhere to be recorded. It has:
+    `c.borrow_row` stores the pick and `c.stored_row(of="rt:r6-t3")` reads
+    it back -- the same staleness `f2442`'s marker carried.
+
+    **What was genuinely missing was the price.** `c.expend_row` refuses
+    an at-will outright, and `rt:r6-t3` borrows a 1st-level at-will and
+    lays the printed *"as an encounter power"* over it with
+    `grant_row(uses=1)`. So the row's `usage` is at-will, its allowance is
+    the grant's, and `expend_row` refused on the header -- returning False
+    every time, leaving this feat unable to pay for anything. It spends
+    the grant's use now.
+
+    **The row has already fired by the time a rule looks**, and that is
+    the measurement rather than an obstacle: `audit.board` arms traits and
+    then runs a turn, so the posed board is the row having paid both costs
+    and bought its extra use. Every premise it rests on is asserted
+    beside it, because an end state read without them is a story.
+
+    Two negatives, each re-arming a fresh watch over a changed board:
+    with none of the three cards held nothing is bought, and with the
+    grant's allowance already gone nothing is bought **and no day is
+    spent** -- which is the ordering `c.grant_left` exists for. Both reset
+    board state deliberately and say so; a negative control is the one
+    place that is safe, because the claim is that nothing happens.
+    """
+    from audit import board as posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import TurnStart
+
+    ART = ("p4128", "p7635", "p10187")
+
+    world, me, _start = posed("f3045", 1)
+    known = world.get(me, Powers)
+    reader = Cast(world=world, me=me, ref="drivers", target=me)
+    pick = reader.stored_row(of="rt:r6-t3", on=me)
+
+    # -- the premises, without which the end state below says nothing ----
+    out.that(bool(pick),
+             "the dilettante's pick is recorded and readable -- the thing"
+             " this row's marker said had nowhere to be written",
+             f"stored_row(of=rt:r6-t3) = {pick!r}")
+    held = [ref for ref in ART if ref in known.known]
+    out.that(len(held) == 3,
+             "and the posed artificer holds all three of the feature's"
+             " cards, so the pick below is a real choice among them",
+             f"{held}")
+
+    # -- what the board already paid and bought ---------------------------
+    bought = {ref: known.extra_uses.get(ref, 0) for ref in ART}
+    out.that(sum(bought.values()) == 1,
+             "exactly ONE of the three gained an extra use -- the printed"
+             " 'a cf:artificer-f2 power', one of them and not all",
+             f"{bought}")
+    out.that(known.per_day.get("f3045", 0) == 1,
+             "the day's use is spent -- 'once per day', counted in"
+             " `Powers.per_day`, which an extended rest clears",
+             f"per_day={dict(known.per_day)}")
+    out.that(reader.grant_left(pick, on=me) == 0,
+             "and the racial power's one granted use is gone, which is the"
+             " price the card names. This is the half that could not be"
+             " paid before: `expend_row` refused the borrowed at-will on"
+             " its header",
+             f"grant_left({pick})={reader.grant_left(pick, on=me)}")
+    out.that(pick in known.spent_out,
+             "recorded as SPENT rather than prohibited, so"
+             " `grant_attack(reentrant=True)` can still stand aside for it",
+             f"spent_out={pick in known.spent_out}")
+
+    # -- once per day, not once per turn ---------------------------------
+    for turn in (2, 3):
+        world.bus.emit(TurnStart(actor=me, round=turn))
+    after = {ref: known.extra_uses.get(ref, 0) for ref in ART}
+    out.that(after == bought,
+             "two more turns buy nothing more -- the limit is a day and"
+             " the watch is re-offered rather than re-paid",
+             f"{bought} -> {after}")
+
+    # -- negative: none of the three held --------------------------------
+    world2, me2, _s2 = posed("f3045", 1)
+    known2 = world2.get(me2, Powers)
+    for ref in ART:
+        while ref in known2.known:
+            known2.known.remove(ref)
+    known2.extra_uses.clear()
+    known2.per_day.pop("f3045", None)
+    REGISTRY["f3045"].body(
+        Cast(world=world2, me=me2, ref="f3045", target=me2))
+    world2.bus.emit(TurnStart(actor=me2, round=2))
+    out.that(not known2.extra_uses and "f3045" not in known2.per_day,
+             "an artificer holding none of the three buys nothing and"
+             " spends no day -- the row does not pay for a card it cannot"
+             " name",
+             f"extra_uses={dict(known2.extra_uses)}"
+             f" per_day={dict(known2.per_day)}")
+
+    # -- negative: the racial power is already gone -----------------------
+    world3, me3, _s3 = posed("f3045", 1)
+    known3 = world3.get(me3, Powers)
+    pick3 = Cast(world=world3, me=me3, ref="drivers", target=me3).stored_row(
+        of="rt:r6-t3", on=me3)
+    known3.extra_uses.clear()
+    known3.per_day.pop("f3045", None)
+    out.that(bool(pick3) and known3.granted_spent.get(pick3, 0) >= 1,
+             "the board has already spent the racial power, which is what"
+             " makes the next assertion a real case rather than a"
+             " contrived one",
+             f"granted_spent={known3.granted_spent.get(pick3)}")
+    REGISTRY["f3045"].body(
+        Cast(world=world3, me=me3, ref="f3045", target=me3))
+    world3.bus.emit(TurnStart(actor=me3, round=2))
+    out.that(not known3.extra_uses,
+             "with the racial power already expended the feat buys"
+             " nothing",
+             f"extra_uses={dict(known3.extra_uses)}")
+    out.that("f3045" not in known3.per_day,
+             "and spends NO day for it -- `c.grant_left` is read before"
+             " anything is charged, so an unpayable price costs nothing."
+             " Ordering the two the other way round is the bug this"
+             " assertion exists for",
+             f"per_day={dict(known3.per_day)}")
+
+
 def borrowed_without_its_powers(out: Result) -> None:
     """"If the feature grants powers, this feat does not grant them."
 
@@ -118406,6 +118534,8 @@ DRIVERS = {
                             "a widened target line reaches the menu"),
     "borrowed_without_its_powers": (borrowed_without_its_powers,
                                     "a borrowed feature without its cards"),
+    "a_racial_power_buys_an_extra_use": (a_racial_power_buys_an_extra_use,
+                                         "a racial power bought a use"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,
