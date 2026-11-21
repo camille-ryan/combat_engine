@@ -141,6 +141,24 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **An item row that banks power points, on a board with no pool to
+    # bank from.** `i1980p1`'s whole Effect is moving 1 or 2 points out of
+    # the character's pool into the orb, and `PowerPoints.spend` on an
+    # empty pool moves nothing, so it fires 48 times and does nothing.
+    #
+    # The pool is empty because the row is an **item block**: the board
+    # fields a fallback class for one, and it is not a psionic class, so
+    # the creature has no `PowerPoints` at all. The sibling class rows
+    # that move points -- `p2638`, `p11118` -- are dealt to psionic
+    # characters and fire here normally, which is what tells this apart
+    # from a broken row.
+    #
+    # `drivers.points_banked` is the proof: it stocks a pool, runs this
+    # row's own body, and asserts the points leave the pool, the store is
+    # announced attributably, it survives `refresh` and it ends with
+    # `turns.extended_rest`. A statement about the board, not the row.
+    "i1980p1": "an item row banking power points; the board's fallback "
+               "class has no pool -- see `drivers.points_banked`",
     # **The board never poses a trap for a row that already fires, so no
     # row about disarming one can do anything here.** `#1402`.
     #
@@ -1840,6 +1858,14 @@ DID_SOMETHING = {
     "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
     "ItemConsumed", "ItemDestroyed", "ItemRestored",
     "CompanionDestroyed", "RowStored", "DamageSpared", "PointsRegained",
+    # **The other two directions a power point can move**, and both were
+    # omitted by the commits that added them -- which is this set's own
+    # standing lesson arriving twice in one day. `PointsSpent` replaced
+    # the `Note` `c.spend_points` used to emit, and `PointsStored` is
+    # `c.store_points`' only announcement, so a row whose whole Effect is
+    # banking points in an item was silent by construction the moment it
+    # was written. A new event is not observable until it is named here.
+    "PointsSpent", "PointsStored",
 }  # fmt: skip
 # `PointsRegained` is the nineteenth, and it is `UseRestored`'s argument
 # again -- a resource's inverse. `c.spend_points` announces a `Note`, and

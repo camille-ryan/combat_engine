@@ -27119,6 +27119,68 @@ def pool_emptied(out: Result) -> None:
              f" second emptying ({moves() - before} against {paid})")
 
 
+def points_banked(out: Result) -> None:
+    """"Expend 1 or 2 power points and place them in the orb. They remain
+    there until you use them or until you take an extended rest." `i1980p1`.
+
+    **A third store, and the duration is why it is not the second one.**
+    `points` comes back every encounter and `temporary` lapses on a clock;
+    these survive the fight and end with the day. `PowerPoints.refresh`
+    deliberately leaves them alone and `turns.extended_rest` empties them,
+    so both halves of the printed sentence are asserted here -- the
+    surviving half is the one a reader would assume wrong.
+
+    This rule exists because **the audit board cannot pose the row**: it
+    is an item block, so the board fields a fallback class with no
+    `PowerPoints` at all, and `pool.spend` on an empty pool banks nothing.
+    `i1980p1` carries a `KNOWN_SILENT` entry pointing here, which is the
+    convention for a row the board cannot stage rather than one that does
+    not work.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import turns
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import PowerPoints
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import PointsStored
+
+    world, me, _ = _board(seed=7)
+    pool = world.get(me, PowerPoints) or world.add(me, PowerPoints())
+    pool.maximum, pool.points, pool.temporary = 4, 4, 0
+    pool.stored.clear()
+
+    said: list[PointsStored] = []
+    world.bus.on(PointsStored, lambda ev: said.append(ev))
+
+    REGISTRY["i1980p1"].body(Cast(world=world, me=me, ref="i1980p1"))
+    out.that(sum(pool.stored.values()) > 0,
+             f"the row banks points into the item ({pool.stored})")
+    out.that(bool(said) and said[-1].into and said[-1].by == "i1980p1",
+             "and announces it attributably -- a row whose whole Effect is"
+             " this line would otherwise be silent by construction")
+    banked = sum(pool.stored.values())
+    out.that(pool.points == pool.maximum - banked,
+             f"the points came OUT of the pool ({pool.points} of"
+             f" {pool.maximum}, {banked} banked)")
+
+    c = Cast(world=world, me=me, ref="drivers:bank")
+    out.that(c.stored_points("i1980") == banked,
+             "and `c.stored_points` is the Requirement read -- 'you must"
+             f" have at least 1 power point stored' ({c.stored_points('i1980')})")
+
+    # **Survives the encounter**, which is the half of the sentence a
+    # reader would most likely get wrong.
+    pool.refresh()
+    out.that(sum(pool.stored.values()) == banked,
+             f"a new encounter leaves the store alone ({pool.stored})")
+    out.that(pool.temporary == 0 and pool.points == pool.maximum,
+             "while the pool refills and expiring points do not survive")
+
+    turns.extended_rest(world)
+    out.that(sum(pool.stored.values()) == 0,
+             f"and the extended rest empties it ({pool.stored})")
+
+
 def boon_traded(out: Result) -> None:
     """A feat replaces the pact boon's regain with a power point.
 
@@ -114632,6 +114694,9 @@ DRIVERS = {
     "round_handed_back": (round_handed_back,
                           "a second use of a once-per-round power in one "
                           "turn, and the spent use it must not refund"),
+    "points_banked": (points_banked,
+                      "power points banked inside an item, surviving the "
+                      "encounter and ending with the day"),
     "points_regained": (points_regained,
                         "a power point put back, and the cap that refuses one"),
     "boon_traded": (boon_traded,

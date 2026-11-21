@@ -1035,7 +1035,7 @@ def extended_rest(world: World) -> None:
     action-point economy that was never modelled because nothing could
     ever end a day.
     """
-    from .components import ActionPoints, Health
+    from .components import ActionPoints, Health, PowerPoints
 
     for _, powers in world.each(Powers):
         powers.used.clear()
@@ -1057,6 +1057,13 @@ def extended_rest(world: World) -> None:
         # whole distinction the `charges` comment above draws, and a day
         # allowance a short rest refilled would be a per-encounter one.
         powers.per_day.clear()
+    # **Points banked in an item end with the day and not with the
+    # fight.** `PowerPoints.refresh` deliberately leaves `stored` alone --
+    # "they remain there until you use them or until you take an extended
+    # rest" is the printed sentence, and the first half of it is what makes
+    # the store worth having -- so this is the one place that empties it.
+    for _, pool in world.each(PowerPoints):
+        pool.stored.clear()
     for _, health in world.each(Health):
         health.hp = health.max_hp
         health.temp = 0

@@ -4471,11 +4471,33 @@ def i1650x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.augment_free()",),
+    todo=("dsl.use(augment_paid_from)",),
 )
 def i1966p1(c: Cast) -> None:
-    """Paying for an augment with something other than power points has no
-    door: `c.spend_points` is the only way a row is augmented."""
+    """"You lose a healing surge instead of spending power points to
+    augment the power. The augmentation can cost no more than 2 power
+    points."
+
+    **Re-pointed, and the old premise was nearly right but named the
+    wrong door.** It said `c.spend_points` "is the only way a row is
+    augmented", and it is not: a row declaring `augments=` in its header
+    is paid inside `dsl.use`, by `pool.spend(augment)`, and the body never
+    sees the transaction. `c.spend_points` is the *body-chosen* path only.
+
+    **What blocks this is the ordering, and `dsl.use`'s own comment says
+    it: "the points go before the targets are chosen."** The augment is
+    settled at the top of `use`, because an augmented form can widen the
+    target line -- so by the time this row's printed Trigger fires ("you
+    use a psionic power through this orb") the cost is already paid at 0
+    and the targets are already picked. A free action reacting to that
+    cannot retroactively buy an augment, and a `c.augment_free()` verb on
+    `Cast` could not either: there would be nothing left to pay for.
+
+    So the gap is an **alternative payer consulted where the augment is
+    settled** -- `dsl.use(augment_paid_from)` -- and `i1980p2` wants the
+    identical thing with an item's store in place of the surge. One
+    symbol, two rows, named for the place it has to live rather than for
+    a verb that cannot reach it."""
 
 
 @power(
@@ -4504,11 +4526,30 @@ def i1978p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.store_points()",),
 )
 def i1980p1(c: Cast) -> None:
-    """An item that holds power points is a pool the engine does not have;
-    `c.points` is the creature's and there is nowhere else to put any."""
+    """"Expend 1 or 2 power points and place them in the orb. They remain
+    there until you use them or until you take an extended rest."
+
+    **Written on `c.store_points`.** The marker was right that there was
+    nowhere to put them -- `c.points` is the creature's pool and nothing
+    else held any -- so `PowerPoints.stored` is a second store, keyed by
+    the item's ref because a character may carry two things that bank
+    points.
+
+    The duration is the whole reason it is a separate store rather than
+    more of `temporary`: `PowerPoints.refresh` empties the pool every
+    encounter and deliberately leaves this alone, and
+    `turns.extended_rest` is what clears it. That is the printed sentence
+    read exactly -- "until you use them **or** until you take an extended
+    rest".
+
+    "1 or 2" is offered rather than assumed: a character with one point
+    left cannot bank two, and `c.store_points` clamps at the pool anyway,
+    so the return value is what actually moved.
+    """
+    picked = c.choose([2, 1], "power points into the orb")
+    c.store_points(picked or 1, into="i1980")
 
 
 @power(
@@ -4519,7 +4560,7 @@ def i1980p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.store_points()", "c.augment_free()"),
+    todo=("dsl.use(augment_paid_from)",),
 )
 def i1980p2(c: Cast) -> None:
     """Spends out of the store the item cannot hold.
@@ -4539,7 +4580,20 @@ def i1980p2(c: Cast) -> None:
     arrived: on one symbol this row would have been called writable the day
     a store landed, and whoever picked it up would have found the second
     half missing. That is the `c.ability_for(ref)` failure
-    `content/CLAUDE.md` records, in miniature."""
+    `content/CLAUDE.md` records, in miniature.
+
+    **The store has landed and this row is still blocked, which is that
+    reasoning coming out exactly right.** `c.store_points` exists and
+    `i1980p1` banks into it; `c.stored_points` is the Requirement read.
+    What is left is the half the note predicted -- paying the augment from
+    somewhere other than the pool -- and it is **not** a `Cast` verb.
+    `dsl.use` settles the augment at the top, above targeting, with its
+    own comment saying "the points go before the targets are chosen", so
+    a free action triggered by an attack already declared has nothing left
+    to buy. Both symbols are therefore one: `dsl.use(augment_paid_from)`,
+    an alternative payer consulted where the cost is actually taken.
+    `i1966p1` is the same gap with a healing surge in place of the
+    store."""
 
 
 @power(

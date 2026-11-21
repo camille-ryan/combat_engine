@@ -2215,6 +2215,15 @@ class PowerPoints:
     #: be told apart to be taken away again when the clock runs out, which
     #: a single total cannot do.
     temporary: int = 0
+    #: Points banked **inside an item**, keyed by its ref. "Expend 1 or 2
+    #: power points and place them in the orb. They remain there until you
+    #: use them or until you take an extended rest."
+    #:
+    #: Deliberately **not** cleared by `refresh`, which is the whole
+    #: printed difference from `points` and `temporary`: those come back
+    #: every encounter and these survive until the day ends.
+    #: `turns.extended_rest` is what empties them.
+    stored: dict[str, int] = field(default_factory=dict)
 
     def refresh(self) -> None:
         self.points = self.maximum

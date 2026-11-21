@@ -1712,6 +1712,29 @@ class PointsSpent(Event):
 
 
 @dataclass
+class PointsStored(Event):
+    """Power points were moved out of a pool and banked inside an item.
+
+    Not a spend and not a loss: they are still the character's, and
+    `PointsSpent` would say the wrong thing twice -- nothing was
+    augmented, and the pool total is not what is left to pay with.
+
+    Declared for the reason the two above were: a row whose entire
+    printed Effect is *"expend 1 or 2 power points and place them in the
+    orb"* has nothing else to announce, and a `Note` carries no `by`, so
+    it would have been silent by construction. `i1980p1` is the row.
+
+    `into` is the item's ref, which is what `PowerPoints.stored` is keyed
+    by -- a character may carry two things that bank points.
+    """
+
+    who: int
+    amount: int
+    into: str
+    by: str
+
+
+@dataclass
 class OneShotGiven(Event):
     """A one-shot was put in somebody's hands for them to spend later.
 

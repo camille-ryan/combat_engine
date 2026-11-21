@@ -21469,6 +21469,48 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             )
         return got
 
+    def store_points(self, n: int, *, into: str = "", who: int | None = None,
+                     ) -> int:
+        """"Expend 1 or 2 power points and place them in the orb."
+
+        Moves them out of the pool into `PowerPoints.stored[into]`, which
+        survives the encounter -- the printed sentence is "they remain
+        there until you use them or until you take an extended rest", and
+        `turns.extended_rest` is what empties it. Returns how many
+        actually moved, which is clamped at what the pool holds.
+
+        `into` defaults to this row's own ref, because the item banking
+        them is the row's own item in every printed case. It is keyed
+        rather than a single number so a character carrying two such
+        items has two stores.
+
+        **Not `c.spend_points`**, which records an augment: nothing is
+        augmented here and the points are still the character's. It
+        announces `PointsStored` for the same reason -- a row whose whole
+        Effect is this line would otherwise be silent by construction.
+        """
+        holder = self.me if who is None else who
+        pool = self._pool(holder)
+        gone = pool.spend(n)
+        if gone:
+            key = into or self.ref
+            pool.stored[key] = pool.stored.get(key, 0) + gone
+            from .events import PointsStored
+
+            self.world.bus.emit(PointsStored(
+                who=holder, amount=gone, into=key, by=self.ref,
+            ))
+        return gone
+
+    def stored_points(self, into: str = "", *, of: int | None = None) -> int:
+        """How many power points are banked in that item. 0 if none are.
+
+        The Requirement half of the cards that spend them -- *"you must
+        have at least 1 power point stored inside the orb"*.
+        """
+        pool = self._pool(self.me if of is None else of)
+        return pool.stored.get(into or self.ref, 0)
+
     def points_spent(self, ref: str, *, of: int | None = None) -> int:
         """How many points augmented that row this encounter."""
         return self._pool(self.me if of is None else of).augmented.get(ref, 0)
