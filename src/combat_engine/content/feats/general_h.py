@@ -91,6 +91,7 @@ three and shares one predicate across them.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from combat_engine.content.feats.exotic import _swap
@@ -120,6 +121,7 @@ from combat_engine.engine import (
     Condition,
     ConditionApplied,
     ConditionEnded,
+    DamageRolled,
     DamageType,
     Effect,
     Fell,
@@ -155,6 +157,7 @@ from combat_engine.engine.query import (
     has_combat_advantage,
     since_turn_began,
 )
+from combat_engine.engine.triggers import Window
 
 #: The class feature f1225 hands over, and the label its extra damage is
 #: filed under -- `features/strikers.py:extra_damage` stamps it as the
@@ -1136,9 +1139,52 @@ def _at_will_attack(c: Cast, *, melee: bool = True, ranged: bool = True) -> str:
     return c.choose(options, "which at-will attack to use") or options[0]
 
 
+def _extra_dice_of(c: Cast, chosen: str, how_many: int) -> None:
+    """*"+N dice of damage"* -- N more of the dice the BORROWED row rolls.
+
+    Three cards print this beside a `[W]` alternative and it was held for
+    years on `c.damage_of(ref)`, on the ground that a row's damage
+    expression cannot be read from outside it. **The first half of that is
+    still true and the conclusion was wrong.** `REGISTRY[chosen].damage_of(0)`
+    really is `None` for all 362 rows these cards can choose -- header
+    damage is the monster convention and a class power rolls in its body --
+    but the roll is readable *as it happens*: `resolve.deal_damage` hangs
+    the `Roll` on the announcement as a plain attribute, carrying
+    `expr='2d8'` and the faces it came up with.
+
+    The old note enumerated `DamageRolled`'s **declared fields** --
+    `amount`, `dtype`, `detail`, `dtypes` -- and concluded nothing could
+    read the face. `roll` and `ctx` and `credit` are attributes rather than
+    fields, deliberately (`#703`: a field would reach `wire()` and move 290
+    fixture lines), so a list of fields is not a list of what an event
+    carries. That is the same trap `SavingThrow`'s twelve-field list set.
+
+    `Window.BEFORE`, so the addition lands before the total is read, and
+    `once=True` because the card gives it to one attack. Scoped to
+    `detail == chosen`: the borrowed row's own blow and not a rider some
+    other feat pays on the same turn.
+    """
+    me = c.me
+
+    def one_more(ev: Any) -> None:
+        if ev.source != me or ev.detail != chosen:
+            return
+        roll = getattr(ev, "roll", None)
+        faces = re.search(r"d(\d+)", getattr(roll, "expr", "") or "")
+        if faces is None:
+            # A power that rolled no dice at all -- a flat payout -- has no
+            # die to add one of. Nothing rather than a guessed figure, which
+            # is what `f1287b`'s invented `2d6` was.
+            return
+        ev.amount += c.world.rng.roll(
+            f"{how_many}d{faces.group(1)}").total
+
+    c.watch(DamageRolled, one_more, until=When.EOT, on=me,
+            window=Window.BEFORE, once=True, label=c.ref)
+
+
 @power("f1281b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
-       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.RATTLING],
-       dropped=("c.damage_of(ref)",))
+       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.RATTLING])
 def f1281b(c: Cast) -> None:
     """"Use a melee or ranged at-will attack power on the target" is
     `c.use_power` over a row the character already has;
@@ -1149,27 +1195,24 @@ def f1281b(c: Cast) -> None:
     the first damage roll, so it needs no answer to "did it hit" -- if
     the attack missed there is no roll to spend it on.
 
-    Dropped: "+1 die of damage if it is a nonweapon attack". That die is
-    the chosen row's own, and a row's damage expression cannot be read
-    from outside it.
-
-    **This is the one place `c.damage_of(ref)` is argued, for all three
-    rows that carry it** -- f1281b, f1283b and f1287b. The markers are
-    deliberately identical so the group goes green together, and the
-    measurement is this, re-counted today over the set these rows actually
-    choose from (`c.borrowed_rows`: a class row, at-will, standard action,
-    carrying an attack):
-
-        362 rows qualify.   0 of them carry header damage.
-
-    Header damage is the **monster** convention. A class power rolls its
-    dice in its own body -- `c.damage("1d8")` -- so
+    **"+1 die of damage if it is a nonweapon attack" is written now, and
+    the old hold was half right.** Its measurement stands and is worth
+    keeping: over the 362 rows these cards can choose from -- `c.borrowed_rows`:
+    a class row, at-will, standard action, carrying an attack -- **0 carry
+    header damage**, because header damage is the monster convention and a
+    class power rolls its dice in its own body. So
     `REGISTRY[chosen].damage_of(0)` is `None` for every row that could be
-    picked, and the before-the-roll route is closed. So is the one during
-    it: `DamageRolled` carries `amount`, `dtype`, `detail` and `dtypes`
-    and **no dice expression**, so nothing can read the face at any
-    moment. That is the whole of the hold, and it is one gap rather than
-    three.
+    picked and the before-the-roll route really is closed.
+
+    **Where it went wrong was the second half.** It said `DamageRolled`
+    "carries `amount`, `dtype`, `detail` and `dtypes` and no dice
+    expression, so nothing can read the face at any moment" -- a list of
+    the event's **declared fields**. `resolve.deal_damage` hangs the `Roll`
+    on the announcement as a plain *attribute*, carrying `expr` and the
+    faces, precisely so it does **not** reach `wire()` (`#703`). So the
+    face is readable during the roll, which is what `_extra_dice_of` above
+    does. A field list is not a list of what an event carries -- the same
+    trap `SavingThrow`'s twelve named fields set.
 
     `f2408` used to be cited here as the same hold and is not any more:
     `c.as_though_hit_by` was written for it, and that verb runs the named
@@ -1179,7 +1222,13 @@ def f1281b(c: Cast) -> None:
     chosen = _at_will_attack(c)
     if not chosen:
         return
-    c.bonus("damage", 0, dice=c.w(), on=c.me, until=When.EOT, once=True)
+    # **The card's "or", read off the borrowed row.** `1[W]` when it is a
+    # weapon attack and one more of its own dice when it is not -- two
+    # branches of one printed sentence, so exactly one is laid.
+    if Keyword.WEAPON in get(chosen).keywords:
+        c.bonus("damage", 0, dice=c.w(), on=c.me, until=When.EOT, once=True)
+    else:
+        _extra_dice_of(c, chosen, 1)
     c.use_power(chosen, on=c.target)
 
 
@@ -1294,8 +1343,7 @@ _swap("f1283", "f1283b")
 
 
 @power("f1283b", level=1, cls="", usage=DAILY, action=STANDARD,
-       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.RELIABLE],
-       dropped=("c.damage_of(ref)",))
+       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.RELIABLE])
 def f1283b(c: Cast) -> None:
     """Same shape as f1281b, one tier up, plus a daze on a hit.
 
@@ -1306,7 +1354,10 @@ def f1283b(c: Cast) -> None:
     chosen = _at_will_attack(c)
     if not chosen:
         return
-    c.bonus("damage", 0, dice=c.w(2), on=c.me, until=When.EOT, once=True)
+    if Keyword.WEAPON in get(chosen).keywords:
+        c.bonus("damage", 0, dice=c.w(2), on=c.me, until=When.EOT, once=True)
+    else:
+        _extra_dice_of(c, chosen, 2)
     c.use_power(chosen, on=c.target)
     if c.landed:
         c.dazed(until=When.SAVE_ENDS)
@@ -1365,31 +1416,29 @@ _swap("f1287", "f1287b")
 
 
 @power("f1287b", level=1, cls="", usage=DAILY, action=STANDARD,
-       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.RELIABLE],
-       dropped=("c.damage_of(ref)",))
+       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.RELIABLE])
 def f1287b(c: Cast) -> None:
     """Same shape as f1281b, against a creature that cannot sense you --
     which is `c.is_hidden(from_=...)`, the engine's only reading of "does
     not know where you are".
 
-    **The die below is a stand-in and the page does not print it.** This
-    card has no weapon branch at all -- it says "2 extra dice of damage"
-    and nothing else -- so, unlike f1281b and f1283b, there is no `[W]`
-    half that can be written correctly and a hold on the other. Two dice
-    *of what* is the chosen row's own damage expression, which is the
-    `c.damage_of(ref)` hold this row shares with those two, so `2d6` has
-    no printed authority: it is the commonest die in the tree used to keep
-    a daily from paying nothing. Said out loud because the old note read
-    "the rider is two dice rather than one [W], because the card prints
-    dice here and not weapons", which sounds like the number came off the
-    page. It did not, and whoever lands `c.damage_of` should replace it
-    rather than check it."""
+    **The invented die is gone.** This row used to lay a flat `2d6`, and
+    its own note said so at length: the card has no weapon branch at all --
+    *"you deal 2 extra dice of damage"* and nothing else -- so `2d6` had no
+    printed authority and was there to keep a daily from paying nothing.
+    That note asked whoever landed the facility to replace it rather than
+    check it, and this is that: two dice of **the borrowed row's own**
+    size, read off the roll by `_extra_dice_of`.
+
+    No weapon branch here, unlike `f1281b` and `f1283b`, because the card
+    prints no alternative -- so the dice are the chosen row's whether it
+    swings a weapon or not."""
     if not c.is_hidden(from_=c.target):
         return
     chosen = _at_will_attack(c)
     if not chosen:
         return
-    c.bonus("damage", 0, dice="2d6", on=c.me, until=When.EOT, once=True)
+    _extra_dice_of(c, chosen, 2)
     c.use_power(chosen, on=c.target)
 
 
