@@ -696,7 +696,7 @@ def f1270(c: Cast) -> None:
 # opposite; see the module docstring for the measurement.
 
 
-@_trait("f1252", todo=("Weapon.double",),
+@_trait("f1252", todo=("etl.weapon_secondary_end",),
         proficiency=("w3623",))
 def f1252(c: Cast) -> None:
     """The proficiency lands: the weapon table carries this one and

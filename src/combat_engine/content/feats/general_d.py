@@ -425,7 +425,7 @@ def f950(c: Cast) -> None:
 
 
 @power("f951", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Weapon.double",))
+       reach=PERSONAL, target=SELF, todo=("etl.weapon_secondary_end",))
 def f951(c: Cast) -> None:
     """Makes one printed weapon a double weapon -- two ends, each with its
     own die and properties. `Weapon` is one set of numbers."""
