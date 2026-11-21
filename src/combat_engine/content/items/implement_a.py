@@ -3209,7 +3209,16 @@ def i1964x1(c: Cast) -> None:
     `c.bonus(WILL, c.enhancement, when=...)` narrowed to a dispel would be
     a gate that can never be true, which this file's rules forbid outright.
     Written as always-on it would be a standing +1 to Will, which is a
-    different item."""
+    different item.
+
+    **Counted, because I doubted this note and was wrong.** Parsed off the
+    bodies rather than grepped, which is `#1093`'s lesson: **33** rows
+    call `c.dispel` and **6** of them read `c.made_by` and dispel what
+    somebody else made -- `i1097x1`, `i1299p1`, `i3178p1`, `p16036`,
+    `p3056`, `p3782`. So a hostile dispel exists and this card's condition
+    can occur; what none of the six does is **roll**, which is the whole
+    of the gap and is exactly what `c.dispel(vs=)` names. `#1435` is the
+    issue I filed against this note and closed as wrong."""
 
 
 @power(
