@@ -77,6 +77,8 @@ def _spread(races: bool) -> list[tuple[str, int, str, str, str]]:
 
 def _offered(spread: list[tuple[str, int, str, str, str]]) -> set[str]:
     """The union of every legal feat pool across the spread."""
+    from random import Random
+
     from combat_engine import chargen
     from combat_engine.chargen import choices
 
@@ -93,8 +95,27 @@ def _offered(spread: list[tuple[str, int, str, str, str]]) -> set[str]:
             powers = list(chargen.loadout(cls, level, build) or [])
         except Exception:
             powers = []
+        # **The forks the hand implies, as `spawn` now passes them.**
+        # `#1427`: 166 heroic feats print a prerequisite naming a
+        # sub-option of a class feature, and `loadout` returns no `cf:…s<N>`
+        # ref at all -- a fork is recorded under `option:` rather than put
+        # in the hand. So this census asked about a character whose forks
+        # did not exist and reported every one of those feats unreachable.
+        #
+        # Mirrors the dealer rather than guessing: the same
+        # `_build_options` call on the same stream, and the fork recovered
+        # the same way (`c[c.rindex(":cf:") + 1:]`, cut at the LAST `:cf:`
+        # because both halves of `option:{parent}:{value}` carry colons).
+        forks: list[str] = []
         try:
-            seen |= set(choices.legal_feats(cls, level, build, race, taken=powers))
+            opts = chargen._build_options(
+                list(powers), Random(f"{cls}:build-option"), getattr(build, "name", ""))
+            forks = [c[c.rindex(":cf:") + 1:] for c in opts if ":cf:" in c]
+        except Exception:
+            forks = []
+        try:
+            seen |= set(choices.legal_feats(cls, level, build, race,
+                                            taken=[*powers, *forks]))
         except Exception:
             continue
     return seen

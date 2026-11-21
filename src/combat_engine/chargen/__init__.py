@@ -4204,6 +4204,149 @@ def narrowed_line(line: ClassLine, took_options: Iterable[str]) -> ClassLine:
 
 
 BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
+    # **The 21 class features whose sub-options nothing offered**, added for
+    # `#1427`. Each is a fork a character really takes -- the rows are
+    # declared and unmarked -- and 166 written, unmarked heroic feats print
+    # a prerequisite naming one. With no entry here no `option:` was ever
+    # drawn for them, so every one of those feats was refused by
+    # `choices.legal_feats` and reported finished by every other gate.
+    #
+    # Only sub-options that are **declared and unmarked** are listed: a
+    # further 29 feats name a fork with no row at all (`cf:sorcerer-f0s3`,
+    # `cf:rogue-scoundrel-f1s1`), which is a content gap rather than this
+    # one and is not papered over by naming a ref nothing registers.
+    #: 2 feat(s) print a prerequisite naming one of these.
+    "cf:ardent-f0": (
+        "cf:ardent-f0s1",
+        "cf:ardent-f0s2",
+    ),
+    #: 5 feat(s) print a prerequisite naming one of these.
+    "cf:artificer-f0": (
+        "cf:artificer-f0s0",
+        "cf:artificer-f0s1",
+    ),
+    #: 3 feat(s) print a prerequisite naming one of these.
+    "cf:avenger-f1": (
+        "cf:avenger-f1s2",
+    ),
+    #: 7 feat(s) print a prerequisite naming one of these.
+    "cf:barbarian-f1": (
+        "cf:barbarian-f1s1",
+        "cf:barbarian-f1s2",
+        "cf:barbarian-f1s3",
+    ),
+    #: 3 feat(s) print a prerequisite naming one of these.
+    "cf:bard-f1": (
+        "cf:bard-f1s1",
+    ),
+    #: 2 feat(s) print a prerequisite naming one of these.
+    "cf:battlemind-f2": (
+        "cf:battlemind-f2s0",
+        "cf:battlemind-f2s1",
+        "cf:battlemind-f2s2",
+        "cf:battlemind-f2s3",
+    ),
+    #: 1 feat(s) print a prerequisite naming one of these.
+    "cf:druid-f1": (
+        "cf:druid-f1s2",
+        "cf:druid-f1s3",
+    ),
+    #: 8 feat(s) print a prerequisite naming one of these.
+    "cf:fighter-weaponmaster-f3": (
+        "cf:fighter-weaponmaster-f3s0",
+        "cf:fighter-weaponmaster-f3s1",
+        "cf:fighter-weaponmaster-f3s2",
+        "cf:fighter-weaponmaster-f3s4",
+    ),
+    #: 12 feat(s) print a prerequisite naming one of these.
+    "cf:invoker-f1": (
+        "cf:invoker-f1s0",
+        "cf:invoker-f1s2",
+    ),
+    #: 2 feat(s) print a prerequisite naming one of these.
+    "cf:monk-f0": (
+        "cf:monk-f0s0",
+        "cf:monk-f0s1",
+        "cf:monk-f0s2",
+        "cf:monk-f0s3",
+        "cf:monk-f0s4",
+    ),
+    #: 1 feat(s) print a prerequisite naming one of these.
+    "cf:psion-f0": (
+        "cf:psion-f0s0",
+        "cf:psion-f0s1",
+        "cf:psion-f0s2",
+    ),
+    #: 26 feat(s) print a prerequisite naming one of these.
+    "cf:ranger-f0": (
+        "cf:ranger-f0s0",
+        "cf:ranger-f0s1",
+        "cf:ranger-f0s3",
+        "cf:ranger-f0s4",
+    ),
+    #: 4 feat(s) print a prerequisite naming one of these.
+    "cf:rogue-scoundrel-f1": (
+        "cf:rogue-scoundrel-f1s2",
+        "cf:rogue-scoundrel-f1s3",
+    ),
+    #: 1 feat(s) print a prerequisite naming one of these.
+    "cf:seeker-f1": (
+        "cf:seeker-f1s1",
+    ),
+    #: 12 feat(s) print a prerequisite naming one of these.
+    "cf:shaman-f0": (
+        "cf:shaman-f0s0",
+        "cf:shaman-f0s1",
+        "cf:shaman-f0s2",
+        "cf:shaman-f0s3",
+        "cf:shaman-f0s4",
+    ),
+    #: 5 feat(s) print a prerequisite naming one of these.
+    "cf:sorcerer-f0": (
+        "cf:sorcerer-f0s0",
+        "cf:sorcerer-f0s2",
+    ),
+    #: 1 feat(s) print a prerequisite naming one of these.
+    "cf:swordmage-f1": (
+        "cf:swordmage-f1s0",
+        "cf:swordmage-f1s1",
+        "cf:swordmage-f1s2",
+    ),
+    #: 8 feat(s) print a prerequisite naming one of these.
+    "cf:warden-f1": (
+        "cf:warden-f1s0",
+        "cf:warden-f1s1",
+        "cf:warden-f1s2",
+        "cf:warden-f1s3",
+    ),
+    #: 35 feat(s) print a prerequisite naming one of these.
+    "cf:warlock-f1": (
+        "cf:warlock-f1s0",
+        "cf:warlock-f1s1",
+        "cf:warlock-f1s2",
+        "cf:warlock-f1s3",
+        "cf:warlock-f1s4",
+        "cf:warlock-f1s5",
+        "cf:warlock-f1s6",
+    ),
+    #: 26 feat(s) print a prerequisite naming one of these.
+    "cf:warlord-marshal-f4": (
+        "cf:warlord-marshal-f4s0",
+        "cf:warlord-marshal-f4s1",
+        "cf:warlord-marshal-f4s2",
+        "cf:warlord-marshal-f4s3",
+        "cf:warlord-marshal-f4s4",
+        "cf:warlord-marshal-f4s5",
+    ),
+    #: 2 feat(s) print a prerequisite naming one of these.
+    "cf:wizard-arcanist-f0": (
+        "cf:wizard-arcanist-f0s0",
+        "cf:wizard-arcanist-f0s1",
+        "cf:wizard-arcanist-f0s2",
+        "cf:wizard-arcanist-f0s3",
+        "cf:wizard-arcanist-f0s4",
+        "cf:wizard-arcanist-f0s5",
+    ),
     # **The marshal's two independent choices, on Camille's ruling.** Asked
     # on `#1296` -- three options, of which A was "two separate choices: one
     # leader feature, plus archer yes or no" -- and answered:
@@ -7477,10 +7620,37 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
         world.rng.seed, who.cls, who.level, build, who_chassis=who.chassis,
         race=who.race, trained=before_feats,
     )
+    # **The options the HAND implies, drawn before the feats and handed to
+    # them.** 166 written, unmarked heroic feats print a prerequisite naming
+    # a sub-option of a class feature -- `cf:warlock-f1s3` -- and not one
+    # could ever be offered: `took_options` is drawn a hundred lines below
+    # this, so `feats_for` asked `choices.legal_feats` about a character
+    # whose forks did not exist yet. Every one of them reported finished by
+    # `audit`, `lint` and `blocked.py` and was never dealt. #1427.
+    #
+    # **The hand only, which is what keeps this out of the cycle.**
+    # `_build_options` is handed `[*feats, *powers]` below because a *feat*
+    # can ask an option too -- so options genuinely depend on feats and
+    # feats cannot simply be moved after them. The forks these 166 want are
+    # sub-options of `cf:` rows in the hand, which is settled four lines
+    # up, so this pass needs no feat and the full pass below is unchanged.
+    #
+    # **The same stream as the full pass**, so a fork drawn here and drawn
+    # again there is the same fork rather than two rolls of one choice.
+    from_hand = _build_options(
+        list(powers),
+        Random(f"{world.rng.seed}:{who.cls}:build-option"),
+        build.name,
+    )
+    # The ref each option settled on, which is the shape a prerequisite
+    # names. `_trained_skills` already recovers them this way -- cut at the
+    # LAST `:cf:`, because `option:{parent}:{value}` carries colons in both
+    # halves and `rsplit(":", 1)` yields a ref nothing registers.
+    forks = [c[c.rindex(":cf:") + 1:] for c in from_hand if ":cf:" in c]
     feats = who.feats or feats_for(
         who.cls, who.level, build,
         Random(f"{world.rng.seed}:{who.cls}:{build.name}:feats"),
-        list(powers), who.race,
+        [*powers, *forks], who.race,
         # **The pin when there is one, and the fresh draw otherwise.**
         # `#1113` answered this off a pinned set only, so a character dealt
         # from scratch passed nothing and 67 skill-gated feats could never
