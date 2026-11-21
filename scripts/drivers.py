@@ -84387,6 +84387,148 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_multiclass_swap_limits_both_halves(out: Result) -> None:
+    """Three cards trade across classes, and each half is its own filter.
+
+    `f2697`, `f2698` and `f2732` all swap a power for one *"from the class
+    you multiclassed into"*, and all three carried
+    `dropped=("dsl.Swap.limits_the_incoming_power",)` on three claims that
+    have each since been closed: that `Character` had no field for the
+    class multiclassed into, that `power_swap` read augmentability off a
+    **header** and so saw 20 of 78 rows, and that one `trade.usage` could
+    not be two values. `Character.multiclass` (`#1161`),
+    `dsl.augmentable`'s `ast` walk and `Swap.incoming_usage` /
+    `incoming_augmentable` are the three answers.
+
+    Each row had a *"**Written.**"* paragraph saying so, directly under
+    the stale account, and the marker outlived both. This rule is what
+    keeps the symbol from coming back.
+
+    **One pose cannot serve the three, and that is the finding worth
+    keeping.** Psionic classes print **no encounter attack powers at
+    all** -- the whole psionic mechanic is points augmenting at-wills --
+    so pairing two psionic classes leaves `f2698` with no outgoing
+    candidate and `f2732` with no incoming one. Measured that way first:
+    `f2698` reported *"no outgoing candidate"* and `f2732` drew nothing
+    and correctly put its card back, and a rule reading only "a trade
+    happened" would have called both arms green on an empty pool. So each
+    case names its own pair and the pools are asserted non-empty.
+
+    **Two of the three filters are planted and the third cannot be, which
+    is said here rather than left to look proven.** Breaking
+    `incoming_usage` reds 3 assertions and breaking the `"multiclass"`
+    pool reds 6. Breaking `incoming_augmentable` reds **nothing** -- and
+    that is a fact about the corpus rather than a weak assertion: scanned
+    over every (class, class) pair there is no pose where dropping that
+    filter changes the pick, because each class's augmentable at-wills
+    outrank its non-augmentable ones under `ratings.score`. The filter is
+    declared, correct and currently inert; the day a rating or a card
+    moves it starts mattering, and nothing here would notice.
+    """
+    # `content` for its side effect: `dsl.REGISTRY` is populated by the
+    # row modules importing, and every other rule here gets that for free
+    # by importing `audit`. This one builds no board -- the whole trade is
+    # `chargen` -- so it has to say so itself, or `REGISTRY["f2697"]`
+    # raises `KeyError` on an empty registry.
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY, augmentable
+
+    # mine -> multiclassed into, chosen per card rather than shared
+    CASES = (
+        ("f2697", "ardent", "psion"),
+        ("f2698", "fighter", "psion"),
+        ("f2732", "ardent", "fighter"),
+    )
+
+    def pool(cls: str, usage, aug: bool) -> list[str]:  # noqa: ANN001
+        return sorted(
+            ref for ref, p in REGISTRY.items()
+            if p.cls == cls and p.attack is not None and p.usage is usage
+            and p.level is not None and 0 < p.level <= 10
+            and (not aug or augmentable(ref))
+        )
+
+    for feat, mine, other in CASES:
+        trade = REGISTRY[feat].swap
+        out.that(trade is not None and trade.pool == "multiclass",
+                 f"{feat} declares a multiclass pool -- the header is the"
+                 " card and this reads it rather than naming a class",
+                 f"{trade}")
+        if trade is None:
+            continue
+        want_usage = trade.incoming_usage or trade.usage
+        giving = pool(mine, trade.usage, trade.augmentable)
+        taking = pool(other, want_usage, trade.incoming_augmentable)
+        out.that(bool(giving) and bool(taking),
+                 f"{feat}: {mine} really has a {trade.usage.value} card to"
+                 f" give and {other} a {want_usage.value} one to take --"
+                 " the premise, and the half that was silently empty when"
+                 " one class pair was used for all three",
+                 f"{len(giving)} out, {len(taking)} in")
+        if not giving or not taking:
+            continue
+
+        hand = giving[:1]
+        recorded: set[str] = set()
+        after = chargen.power_swap(list(hand), [feat], cls=mine, level=10,
+                                   multiclass=other, record=recorded)
+        out.that(hand[0] not in after,
+                 f"{feat}: the outgoing card leaves the hand",
+                 f"{hand} -> {sorted(after)}")
+        got = sorted(recorded)
+        out.that(len(got) == 1,
+                 f"{feat}: and exactly one incoming card is recorded,"
+                 " which `c.chosen_options` is what the body reads",
+                 f"{got}")
+        if not got:
+            continue
+        incoming = got[0].split(":")[-1]
+        row = REGISTRY.get(incoming)
+        out.that(row is not None and row.cls == other,
+                 f"{feat}: drawn from the class multiclassed INTO, not"
+                 " from this character's own -- which is what"
+                 " `Character.multiclass` made askable",
+                 f"{incoming} is {row.cls if row else None!r}, wanted"
+                 f" {other!r}")
+        out.that(row is not None and row.usage is want_usage,
+                 f"{feat}: at the INCOMING usage"
+                 f" ({want_usage.value}), which differs from the outgoing"
+                 f" one ({trade.usage.value}) on two of these three --"
+                 " one `trade.usage` could not say both",
+                 f"{incoming} is {row.usage.value if row else None}")
+        # **This one is NOT load-bearing today and the docstring says so
+        # rather than letting a green stand for proof.** Breaking the
+        # `incoming_augmentable` filter leaves every assertion here green,
+        # and that is a fact about the corpus rather than a weak
+        # assertion: scanned over every (class, class) pair, there is **no
+        # pose** where dropping the filter changes the pick, because each
+        # class's augmentable at-wills outrank its non-augmentable ones
+        # under `ratings.score`. The filter is declared, correct, and
+        # currently inert.
+        out.that(not trade.incoming_augmentable or augmentable(incoming),
+                 f"{feat}: and augmentable when the card says so, read by"
+                 " an `ast` walk over the body -- 56 of the 78 rows that"
+                 " are augmentable declare it nowhere a header can see."
+                 " Weak by construction: see the comment above, no pose"
+                 " in the corpus makes this filter change the pick",
+                 f"augmentable({incoming})={augmentable(incoming)},"
+                 f" wanted={trade.incoming_augmentable}")
+
+    # -- and the markers are down to what is really owed ------------------
+    out.that(not (getattr(REGISTRY["f2697"], "dropped", ()) or ()),
+             "f2697 carries NO marker: the incoming-side filters were its"
+             " only gap",
+             f"{getattr(REGISTRY['f2697'], 'dropped', ())}")
+    for feat in ("f2698", "f2732"):
+        left = tuple(getattr(REGISTRY[feat], "dropped", ()) or ())
+        out.that(left == ("chargen.power_points_for_swap()",),
+                 f"{feat} is down to the points alone -- the trade is"
+                 " written and the power points are a separate half, so"
+                 " the marker names one gap rather than two",
+                 f"{left}")
+
+
 def a_use_traded_for_a_chosen_power(out: Result) -> None:
     """"You lose one use of X. In exchange, you gain a power of your choice."
 
@@ -118658,6 +118800,9 @@ DRIVERS = {
                                          "a racial power bought a use"),
     "a_use_traded_for_a_chosen_power": (a_use_traded_for_a_chosen_power,
                                         "a use traded for a chosen power"),
+    "a_multiclass_swap_limits_both_halves": (
+        a_multiclass_swap_limits_both_halves,
+        "a cross-class swap filters both halves"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

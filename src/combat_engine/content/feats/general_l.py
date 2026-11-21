@@ -733,41 +733,30 @@ def f2859(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        swap=Swap(1, Usage.AT_WILL, pool="multiclass",
                  augmentable=True, incoming_augmentable=True,
-                 ceiling=True),
-       dropped=("dsl.Swap.limits_the_incoming_power",))
+                 ceiling=True))
 def f2697(c: Cast) -> None:
     """Swaps one augmentable at-will for another class's.
 
-    **Re-pointed from `chargen.power_swap(pool=)`, because the swap is
-    built and the marker was naming the wrong layer.** `power_swap` does
-    the whole job for `Swap.pool == "class"` -- removes the lowest
-    qualifying row, draws the incoming card at the same level and usage,
-    scores it, and puts the outgoing one back when nothing is drawable --
-    and four rows elsewhere use it today. What it cannot do is draw from a
-    class the character is *not*: `"class"` resolves as
-    `getattr(row, "cls", "") == cls`, this character's own class, and
-    `Character` has **no** field saying which class was multiclassed into.
-    Giving `Swap.pool` a second value cannot help until something records
-    what that value would point at, so this row and `feats/bard_b.f1120`
-    are one missing fact and now share one symbol.
+    **Three paragraphs of open gaps used to stand here and every one of
+    them had been closed.** They said `Character` had no field for the
+    class multiclassed into, that `power_swap` filtered augmentability off
+    a header and so saw 20 of 78, and that one `trade.usage` could not be
+    two values. All three were true when written; the marker they
+    justified -- `dsl.Swap.limits_the_incoming_power` -- outlived them,
+    and the row sat refused in play with a *"**Written.**"* paragraph
+    directly underneath saying so. Deleted rather than left above the
+    correction, which is the shape this tree has been caught by before: a
+    reader takes the first account and stops.
 
-    **And the fact alone will not finish it, which is said here so the
-    symbol landing is not read as the row landing.** Two further things
-    are missing and neither is a pool name:
+    Measured, all three descriptors and each in its own direction, since
+    one pose cannot serve them -- psionic classes print **no** encounter
+    attack powers at all, which is the whole psionic mechanic and is why
+    a single class pair silently proved nothing:
 
-    *"Augmentable" is not a header question.* Measured over the declared
-    corpus: **78** at-will attack rows are augmentable and only **20** of
-    them say so in `augments=`. The other 58 say it inside the body, by
-    calling `powers/augment.augment`, because an augment that only changes
-    a die can be written there. `power_swap` filters a pool off `REGISTRY`
-    headers, so it can see 20 of 78 -- a filter that would quietly deal the
-    wrong card rather than refuse.
+        f2697  ardent at-will  -> psion at-will, augmentable both ends
+        f2698  fighter encounter -> psion at-will augmentable
+        f2732  ardent at-will  -> fighter encounter
 
-    *The two halves of this trade are the same usage and the card's
-    siblings' are not*, which `Swap` cannot express -- see `f2698` below,
-    where the one `trade.usage` field has to be two different values.
-
-    Nothing here mis-plays. The row is refused in play and says why.
     **Written.** `Character.multiclass` records the class (`#1161`),
     `Swap.pool == "multiclass"` draws the incoming card from it, and
     `dsl.augmentable` answers the half no header could -- 78 at-will
@@ -795,31 +784,33 @@ def f2697(c: Cast) -> None:
        swap=Swap(1, Usage.ENCOUNTER, pool="multiclass",
                  incoming_usage=Usage.AT_WILL,
                  incoming_augmentable=True, ceiling=True),
-       dropped=("dsl.Swap.limits_the_incoming_power",
-                "chargen.power_points_for_swap()"))
+       dropped=("chargen.power_points_for_swap()",))
 def f2698(c: Cast) -> None:
     """Trades an encounter attack power for an augmentable at-will, and
     hands out points by level band.
 
-    Same missing fact as `f2697` and the same re-pointed symbol: the pool
-    is a class the character is not, and nothing records which one.
+    **The trade is written. The points are the one half still owed**, and
+    the marker is down to that alone.
 
-    **This row also shows why `Swap` could not describe the trade even
-    then**, which is worth writing down once rather than guessing at
-    three times. `power_swap` filters both halves through the *same*
-    descriptor: the outgoing pool tests
-    `trade.usage is None or row.usage is trade.usage`, and the incoming
-    offer tests the identical expression. One field, both sides. This card
-    takes an **encounter** power out and brings an **at-will** in, so there
-    is no single value of `trade.usage` that is right -- and it is the same
-    for `trade.utility` on `f2580`. So whatever closes the multiclass fact
-    also owes `Swap` a second, incoming-side filter, or this row stays
-    blocked with a fact in hand.
+    What used to stand here described `Swap` filtering both halves through
+    one `trade.usage` -- *"one field, both sides"* -- and this card takes
+    an **encounter** power out and brings an **at-will** in, so no single
+    value was right. `incoming_usage` and `incoming_augmentable` are those
+    second fields and `power_swap` tests them, measured on this row's own
+    descriptor: a fighter's encounter attack out, a psion's augmentable
+    at-will in. Deleted rather than left standing above the correction.
 
-    The points are a separate half and are not claimed either: the bands
-    are printed, so no number here is derived, but `PowerPoints` is granted
-    at build time and `power_swap` returns a list of refs with nowhere to
-    put them.
+    **The pose is the part worth keeping.** The outgoing half has to come
+    from a class that *has* encounter attacks, because psionic classes
+    print **none** -- that is the psionic mechanic, points augmenting
+    at-wills instead -- so a probe that paired two psionic classes found
+    no outgoing candidate and proved nothing about the filter.
+
+    Still owed: the points. The bands are printed, so no number here is
+    derived, but `PowerPoints` is granted at build time and
+    `power_swap` returns refs with nowhere to put them --
+    `chargen.power_points_for_swap()`, which `f2732` shares.
+
     **Written.** `Character.multiclass` records the class (`#1161`),
     `Swap.pool == "multiclass"` draws the incoming card from it, and
     `dsl.augmentable` answers the half no header could -- 78 at-will
@@ -852,10 +843,13 @@ def f2732(c: Cast) -> None:
     """The same trade as `f2698` in the other direction, and it spends
     points rather than granting them.
 
-    Same missing fact, same symbol, and both of `f2697`'s extra gaps apply
-    at once: the outgoing half is "augmentable", which only 20 of 78 rows
-    declare in a header, and the incoming half is a different usage from
-    the outgoing one, which one `trade.usage` cannot say.
+    The trade is written and the points are what is owed, the same split
+    `f2698` has. A paragraph here used to say both of `f2697`'s extra gaps
+    applied at once -- augmentability off a header, and one `trade.usage`
+    for two halves -- and both are fields now. Measured on this row's own
+    descriptor, in its own direction: an ardent's augmentable at-will out,
+    a fighter's encounter attack in.
+
     **Written.** `Character.multiclass` records the class (`#1161`),
     `Swap.pool == "multiclass"` draws the incoming card from it, and
     `dsl.augmentable` answers the half no header could -- 78 at-will
