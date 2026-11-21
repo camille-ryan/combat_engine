@@ -87,6 +87,10 @@ CREATE TABLE monster (
   resist TEXT, vulnerable TEXT, immune TEXT, senses TEXT,
   book TEXT, rank TEXT,
   dialect TEXT, score REAL, conjuration INTEGER,
+  -- The printed alignment word, or '' where the entry prints none. Stored as
+  -- the word rather than a flag because `i2195p1` distinguishes `evil` from
+  -- `chaotic evil`; see `etl.monster.Monster.alignment`. #1421.
+  alignment TEXT,
   -- What turns a printed `Regeneration N` off. Stored beside the amount for
   -- the reason `resist`/`vulnerable`/`immune` are: it is a property of the
   -- creature, not a thing a row does. Camille's call, #602.
@@ -1746,7 +1750,7 @@ def _write_monster(
         report.blank_stats.append(m.ref_id)
     out.execute(
         "INSERT INTO monster VALUES "
-        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             m.ref_id, m.id, m.level, m.role,
             int(m.minion), int(m.leader), int(m.elite), int(m.solo),
@@ -1755,7 +1759,7 @@ def _write_monster(
             m.initiative, m.speed, json.dumps(m.modes), json.dumps(m.scores),
             json.dumps(m.resist), json.dumps(m.vulnerable), json.dumps(m.immune),
             m.senses, m.book, m.rank, m.dialect, m.score,
-            int(m.conjuration),
+            int(m.conjuration), m.alignment,
             json.dumps(list(m.regen_unless_damaged_by)),
             m.regen_unless_struck_by,
             _malformed_attack(m),

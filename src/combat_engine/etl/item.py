@@ -213,6 +213,52 @@ _TRAIT_LABEL = re.compile(
 )
 
 
+#: Labels that open a line of a **power** rather than a racial trait.
+#:
+#: **Defence in depth, and the plant that removes it stays green**, which is
+#: recorded here rather than left looking load-bearing. With the
+#: `In addition` test in place this set catches nothing: the power
+#: continuations in this corpus read *"Increase extra damage to +2d6 at 11th
+#: level"* and *"Increase to 2[W] + Strength modifier damage"*, so the
+#: connective test already refuses them and deleting this set leaves the
+#: census at 1.
+#:
+#: Kept because the two refusals answer different questions and only one of
+#: them is about *this* corpus. A power line that one day continues with
+#: "In addition" would walk straight into a trait row, and that is a silent
+#: wrong answer rather than a missing one.
+_POWER_LINES = frozenset({
+    "effect", "hit", "miss", "trigger", "special", "requirement", "attack",
+    "target", "targets", "prerequisite", "benefit", "benefits", "sustain",
+    "aftereffect", "level",
+})
+
+
+def _continuation(spec: str, after: int, label: str) -> list[str]:
+    """The indented `In addition,` lines continuing one trait. See #1420.
+
+    Stops at a blank line, at the first unindented line, at anything that is
+    itself a `Label :` line, and at the first line **not** opening with the
+    page's connective -- the four ways the trait is over. That last one is
+    the load-bearing test, measured: without it the census goes 1 -> 3 and
+    collects flavour prose. Returns `[]` for a power-line label, which is
+    defence in depth and catches nothing today; see `_POWER_LINES`.
+    """
+    if label.lower() in _POWER_LINES:
+        return []
+    out: list[str] = []
+    for line in (spec or "")[after:].splitlines()[1:]:
+        if not line.strip() or not line[:1].isspace():
+            break
+        if _TRAIT_LABEL.match(line.strip()):
+            break
+        text = " ".join(line.split())
+        if not text.startswith("In addition"):
+            break
+        out.append(text)
+    return out
+
+
 def _trait_lines(spec: str, skip: dict[str, str]) -> list[tuple[str, str]]:
     """`[(printed label, its rules text)]` for one race, in page order.
 
@@ -246,11 +292,37 @@ def _trait_lines(spec: str, skip: dict[str, str]) -> list[tuple[str, str]]:
     So a chassis label that is `benefits` is **appended to the previous
     trait** instead of skipped. The other chassis labels are genuinely the
     race's own furniture (size, speed, languages) and still go.
+
+    **An indented `In addition,` line belongs to the trait above it too, and
+    was being thrown away by the same line anchor.** `rt:r2-t4` printed two
+    sentences and the database held one: the page separates them with a run
+    of four `&nbsp;` entities, which lands as an indented continuation line,
+    and `(.+)$` stops at the first. The clause lost was a saving throw, and
+    it blocked that trait's second half plus `f3507`, a feat about exactly
+    that throw. #1420.
+
+    **Narrowed to the printed connective, because the general rule is worse
+    than the bug.** Taking *any* indented continuation recovers 16 lines
+    across 8 races and most are not traits at all -- `Effect` and `Hit`
+    lines out of the **racial power** block, and two paragraphs of flavour
+    about life span -- so a blanket reading would move a power's text and a
+    page of prose into trait rows. `In addition` is the idiom the page uses
+    to continue a rule, and it is the test **doing the work**: dropping it
+    takes the census from 1 to 3, pulling in two paragraphs of flavour.
+    `_POWER_LINES` refuses a power label as well, and its own note records
+    that the plant removing it stays green.
+
+    Measured two independent ways, which is what makes one the right number
+    rather than a hopeful one: walking the source for such continuations
+    finds **1**, and comparing every built spec's head back against the
+    source text and reading what follows it also finds **1**. Both name
+    `rt:r2-t4` and nothing else.
     """
     out: list[tuple[str, str]] = []
     for found in _TRAIT_LABEL.finditer(spec or ""):
         label = " ".join(found.group(1).split())
         rules = found.group(2).strip()
+        rules = " ".join([rules, *_continuation(spec, found.end(), label)])
         if label.lower() in ("benefits", "benefit"):
             if out:
                 # Joined with a space, so the flavour sentence and the rule

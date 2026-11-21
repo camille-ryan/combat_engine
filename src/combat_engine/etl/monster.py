@@ -133,6 +133,14 @@ class Monster:
     vulnerable: dict[str, int] = field(default_factory=dict)
     immune: tuple[str, ...] = ()
     senses: str = ""
+    #: The printed alignment word, or `""` for an entry that prints none.
+    #:
+    #: **The word and not a boolean**, because one card needs the
+    #: distinction: `i2195p1` prints *"if the target is evil or chaotic
+    #: evil"*, so a reader answering only "is it evil" collapses the thing
+    #: that row is about. Four heroic rows want this and each asks a
+    #: slightly different question of it. #1421.
+    alignment: str = ""
     abilities: list[Ability] = field(default_factory=list)
     dialect: str = ""
     #: Which of the Monster Manuals this row was printed in: MM1, MM2, MM3,
@@ -715,6 +723,34 @@ def _numbers(m: Monster, blob: str) -> None:
     senses = re.search(r"\bSenses\b\s*(.+)", flat, re.I)
     if senses:
         m.senses = senses.group(1).split("\n")[0].strip()
+    # **One of the six printed words, not "the rest of the line".** The
+    # stat block runs `Alignment evil Languages Common` together, so taking
+    # the tail the way `Senses` above does would store the languages too --
+    # which is what the first draft of this did.
+    #
+    # **`any` is the sixth and was missed, which is how the coverage claim
+    # came out wrong.** 60 entries print `Alignment Any`, and leaving it out
+    # stored `""` for all 60 -- conflating "its alignment is not fixed" with
+    # "the page prints none", which is exactly the distinction a reader
+    # asking *"is this creature evil"* has to get right. With it the parse
+    # covers 5,326 of 5,326.
+    #
+    # **The alternation order is NOT load-bearing, and the plant proving
+    # that is worth more than the comment it replaces.** The first draft
+    # said the longest-first ordering "is the whole correctness of this
+    # pattern", on the reasoning that `evil` is a suffix of `chaotic evil`.
+    # Moving `evil` and `good` to the front changes nothing: the
+    # alternation is anchored immediately after the label, so at that one
+    # position `evil` simply fails against the text `chaotic evil` and the
+    # longer branch is tried. A suffix cannot shadow its longer form here;
+    # only a **prefix** could, and none of the six is a prefix of another.
+    aligned = re.search(
+        r"\bAlignment\b\s*:?\s*"
+        r"(lawful good|chaotic evil|unaligned|good|evil|any)\b",
+        flat, re.I,
+    )
+    if aligned:
+        m.alignment = aligned.group(1).lower()
 
 
 
