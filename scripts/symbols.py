@@ -1204,6 +1204,11 @@ READERS: dict[str, list[str]] = {
     # and nothing else. #1209.
     "seeing and being seen": [
         "blinded", "can_hear", "concealment_of", "cover_between",
+        # **Two readers about a CHANGE rather than a state**, which is what
+        # `f1296`'s printed clause turns on -- "if you move into an
+        # obscured space or gain cover". Each reads the state function
+        # beside it twice, through its `target_at=` override.
+        "cover_gained_in_move", "obscurity_gained_in_move",
         "cover_granters",
         # `query.nearest_enemy` here beside `cover_between` because it is
         # the same kind of question -- what an attacker may pick -- and

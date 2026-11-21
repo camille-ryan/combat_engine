@@ -143,8 +143,10 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - How much **concealment** this pairing does not count. #771.
 - `query.counts_as_nearest(eid: 'int') -> 'str'`
   - The effect label that makes `eid` count among somebody's nearest.
-- `query.cover_between(world: 'World', attacker: 'int', target: 'int', *, ranged: 'bool' = False, ctx: 'dict | None' = None) -> 'Cover'`
+- `query.cover_between(world: 'World', attacker: 'int', target: 'int', *, ranged: 'bool' = False, ctx: 'dict | None' = None, target_at: 'Square | None' = None) -> 'Cover'`
   - The worst cover the target has, measured from the attacker's best square.
+- `query.cover_gained_in_move(world: 'World', eid: 'int', against: 'int') -> 'bool'`
+  - Did this creature gain cover from `against` during its own turn?
 - `query.cover_granters(world: 'World', attacker: 'int', target: 'int') -> 'list[int]'`
   - Which of `target`'s allies are the ones sheltering it from `attacker`.
 - `query.cover_waived(world: 'World', attacker: 'int', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`
@@ -159,12 +161,14 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - The printed DC to learn that much about that creature.
 - `query.knowledge_skill(world: 'World', eid: 'int') -> 'str'`
   - Which knowledge skill identifies that creature, or "".
-- `query.light_concealment(world: 'World', attacker: 'int', target: 'int') -> 'Cover'`
+- `query.light_concealment(world: 'World', attacker: 'int', target: 'int', *, target_at: 'Square | None' = None) -> 'Cover'`
   - The concealment the target gets from standing somewhere badly lit.
 - `query.light_level(world: 'World', square: 'Square', dark_zones: 'list[Any] | None' = None) -> 'Light'`
   - How well lit this square is.
 - `query.nearest_enemy(world: 'World', of: 'int') -> 'list[int]'`
   - Which enemies count as nearest to that creature.
+- `query.obscurity_gained_in_move(world: 'World', eid: 'int', against: 'int') -> 'bool'`
+  - Did this creature move into a worse-lit square during its turn?
 - `query.printed_kind(ref: 'str') -> 'str'`
   - The word at the top of that card, lowercased, or "".
 - `query.revealed(world: 'World', who: 'int') -> 'bool'`

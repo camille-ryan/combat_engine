@@ -3661,7 +3661,10 @@ def has_sense(world: World, eid: int, sense: str) -> bool:
     return mods.total(sense, {}) > 0
 
 
-def light_concealment(world: World, attacker: int, target: int) -> Cover:
+def light_concealment(
+    world: World, attacker: int, target: int, *,
+    target_at: Square | None = None,
+) -> Cover:
     """The concealment the target gets from standing somewhere badly lit.
 
     **Kept apart from `concealment_of` on purpose.** That one answers "what
@@ -3712,8 +3715,14 @@ def light_concealment(world: World, attacker: int, target: int) -> Cover:
     # the same reason the side-filtered zone scan above lives here.
     if sees_in(world, attacker, Light.DARK, far, against=target):
         return Cover.NONE
+    # **`target_at` reads the same question about a square the target has
+    # left**, the `cover_between(target_at=)` trick and for the same
+    # reason: `obscurity_gained_in_move` compares two readings and a
+    # second implementation would drift from this one. Everything above --
+    # the fast path, the side-filtered zones, the sense range -- is shared.
     worst = Light.BRIGHT
-    for square in squares(world, target):
+    for square in ([target_at] if target_at is not None
+                   else squares(world, target)):
         level = light_level(world, square, dark_zones)
         if _DARKER[level] > _DARKER[worst]:
             worst = level
@@ -3856,7 +3865,7 @@ def kind_waived(
 
 def cover_between(
     world: World, attacker: int, target: int, *, ranged: bool = False,
-    ctx: dict | None = None,
+    ctx: dict | None = None, target_at: Square | None = None,
 ) -> Cover:
     """The worst cover the target has, measured from the attacker's best square.
 
@@ -3887,7 +3896,12 @@ def cover_between(
     `actions.py`'s hide check -- the alternative is sheltering a creature
     from a sword because a gate it could not evaluate defaulted open.
     """
-    theirs = squares(world, target)
+    # **`target_at` asks the same question about a square the target is
+    # not standing on any more**, which is what "did you *gain* cover"
+    # needs: the comparison is two readings of this one function, so the
+    # tracing, the blockers and the carried cover cannot drift between
+    # them. `cover_gained_in_move` is the caller.
+    theirs = [target_at] if target_at is not None else squares(world, target)
     mine = squares(world, attacker)
     if not theirs or not mine:
         return Cover.NONE
@@ -3913,6 +3927,95 @@ def cover_between(
         for dst in theirs:
             best = min(best, world.grid.cover(src, dst, blockers=bodies))
     return max(best, _carried_cover(world, target, ctx))
+
+
+def cover_gained_in_move(world: World, eid: int, against: int) -> bool:
+    """Did this creature gain cover from `against` during its own turn?
+
+    *"If you move into an obscured space or gain cover before making a
+    ranged attack with this exploit"* -- `f1296` on `p971`, and the clause
+    sat `dropped` with the note *"nobody has written it, which is a
+    reader-shaped gap"*. Its recipe is followed exactly:
+
+    * `since_turn_began` gives this creature's turn so far;
+    * `Moved` carries **both ends** of each step, so `from_` on the first
+      one is the square the turn's movement began in;
+    * `cover_between` read twice -- from there and from here -- is the
+      comparison.
+
+    **A change, not a state, which is the whole point of the symbol.** The
+    state reading is the wrong rule: a ranger standing permanently behind
+    a pillar would collect this every turn without moving, which is
+    strictly stronger than the card. So this is False for a creature that
+    has not moved, however much cover it has.
+
+    **Graded, not a flag.** `resolve.attack` takes
+    `int(cover_between(...))` and subtracts it, so ordinary and superior
+    are different numbers -- and "gained cover" means the number went
+    **up**, which includes none-to-ordinary and ordinary-to-superior.
+
+    **One function read twice, never two computations.** `cover_between`
+    traces corner to corner, folds in creature blockers and takes
+    `max(..., _carried_cover)`; reimplementing the "before" half here
+    would be a second answer to drift from the first. `target_at` is the
+    override that makes one function serve both.
+
+    The honest limit: the blockers are read off the board as it is **now**,
+    so a creature that also moved is counted where it currently stands.
+    The alternative is replaying the whole board's movement, and the card
+    is about the mover's own change of square.
+    """
+    began = _turn_began_at(world, eid)
+    if began is None:
+        return False
+    now = cover_between(world, against, eid)
+    was = cover_between(world, against, eid, target_at=began)
+    return int(now) > int(was)
+
+
+def _turn_began_at(world: World, eid: int) -> Square | None:
+    """The square this creature's turn's movement started from.
+
+    `None` when it has not moved, which is what makes both readers below
+    answer False for a creature that is merely standing somewhere good --
+    the printed clauses pay for a *change*.
+
+    `Moved` carries both ends of each step, so the first one's `from_` is
+    the answer and no separate record is needed.
+    """
+    from .events import Moved
+
+    steps = [e for e in since_turn_began(world, eid)
+             if isinstance(e, Moved) and e.actor == eid]
+    return steps[0].from_ if steps else None
+
+
+def obscurity_gained_in_move(world: World, eid: int, against: int) -> bool:
+    """Did this creature move into a worse-lit square during its turn?
+
+    *"If you move into an obscured space or gain cover"* -- `f1296` on
+    `p971` prints both halves, and this is the first. A sibling of
+    `cover_gained_in_move` on purpose rather than a widening of it: that
+    one's name says cover, and one function answering two printed
+    conditions is the overloading this tree keeps paying for.
+
+    Graded through `light_concealment`, which turns a `Light` into the
+    same `Cover` scale the attack path subtracts -- so dim-to-dark counts
+    as well as bright-to-dim. `Light` is a `StrEnum` with no numeric
+    order, so comparing the levels directly would have been comparing
+    strings.
+
+    `against` is read because light is a fact about the square **and**
+    about who is looking: `light_concealment`'s own docstring makes that
+    distinction against `concealment_of`, and a creature with darkvision
+    is unobscured by darkness.
+    """
+    began = _turn_began_at(world, eid)
+    if began is None:
+        return False
+    now = light_concealment(world, against, eid)
+    was = light_concealment(world, against, eid, target_at=began)
+    return int(now) > int(was)
 
 
 def cover_granters(world: World, attacker: int, target: int) -> list[int]:

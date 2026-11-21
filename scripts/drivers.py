@@ -40710,6 +40710,137 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def cover_gained_rather_than_held(out: Result) -> None:
+    """`f1296` on `p971`: cover you MOVED into, not cover you were in.
+
+    *"If you move into an obscured space or gain cover before making a
+    ranged attack with this exploit, you can make a Stealth check against
+    your target's passive Perception as a free action to gain combat
+    advantage against your target."*
+
+    **The state reading is the wrong rule, and that is the whole reason
+    the clause sat `dropped`.** A rogue standing permanently behind a
+    pillar would collect this every turn without moving, which is
+    strictly stronger than the card. So the two readers compare two
+    readings of one function -- `cover_between` and `light_concealment`,
+    each with a `target_at=` square override -- and both answer False for
+    a creature that has not moved.
+
+    Three cases, and the middle one is the one no state reader can tell
+    from the first: standing still behind cover, moving into cover, and
+    moving out of it.
+    """
+    from combat_engine import story
+    from combat_engine.content import (
+        dummy,
+        loader,  # noqa: F401
+    )
+    from combat_engine.engine import query
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.events import Moved, TurnStart
+    from combat_engine.engine.query import (
+        cover_between,
+        cover_gained_in_move,
+        obscurity_gained_in_move,
+    )
+    from combat_engine.engine.types import Light
+
+    def board() -> tuple[World, int, int]:
+        """Me, a foe 6 squares off, and a wall I can step behind."""
+        got = story.field_encounter(seed=7, level=3)
+        w = got.world
+        me = next(e for e in sorted(w.entities)
+                  if not query.stat_block(w, e))
+        for stray in [e for e in sorted(w.entities)
+                      if query.stat_block(w, e)]:
+            spot = (w.need(me, Position).square[0],
+                    w.need(me, Position).square[1] + 30)
+            w.grid.lift(stray)
+            w.need(stray, Position).square = spot
+            w.grid.place(stray, frozenset({spot}))
+        here = w.need(me, Position).square
+        foe = dummy.spawn(w, level=3, square=(here[0] + 6, here[1]))
+        return w, me, foe
+
+    def step(w: World, who: int, to: tuple[int, int]) -> None:
+        """Move, and announce it the way a real move does.
+
+        `Moved` is what both readers walk for -- `from_` on the first one
+        of the turn -- so a probe that only writes `Position` would make
+        them answer False for the harness's reason rather than the row's.
+        """
+        was = w.need(who, Position).square
+        w.grid.lift(who)
+        w.need(who, Position).square = to
+        w.grid.place(who, frozenset({to}))
+        w.bus.emit(Moved(actor=who, from_=was, to=to, kind_="walk"))
+
+    # -- the premise: a wall that really gives cover ----------------------
+    w, me, foe = board()
+    here = w.need(me, Position).square
+    behind = (here[0] + 1, here[1] + 1)
+    w.grid.blocking.add((here[0] + 2, here[1] + 1))
+    w.bus.emit(TurnStart(actor=me, round=2, ghost=False))
+    plain = int(cover_between(w, foe, me))
+    step(w, me, behind)
+    hidden = int(cover_between(w, foe, me))
+    out.that(hidden > plain,
+             "the premise: stepping behind the wall really gains cover, or"
+             f" every reading below is about an empty board ({plain} ->"
+             f" {hidden})")
+    out.that(cover_gained_in_move(w, me, foe),
+             "and the reader says so -- cover GAINED during this turn")
+
+    # -- THE CONTROL that no state reader can give ------------------------
+    w2, me2, foe2 = board()
+    here2 = w2.need(me2, Position).square
+    w2.grid.blocking.add((here2[0] + 2, here2[1] + 1))
+    step(w2, me2, (here2[0] + 1, here2[1] + 1))
+    w2.bus.emit(TurnStart(actor=me2, round=3, ghost=False))
+    out.that(int(cover_between(w2, foe2, me2)) > plain,
+             "the premise: it is standing in cover on the new turn")
+    out.that(not cover_gained_in_move(w2, me2, foe2),
+             "THE CONTROL: and a creature that is merely STANDING in cover"
+             " -- it moved last turn, not this one -- gained none. This is"
+             " the case a state reader cannot tell from the first, and the"
+             " reason the clause waited for a reader rather than using"
+             " `cover_between`")
+
+    # -- and moving OUT of cover is not gaining it ------------------------
+    w3, me3, foe3 = board()
+    here3 = w3.need(me3, Position).square
+    w3.grid.blocking.add((here3[0] + 2, here3[1] + 1))
+    start = (here3[0] + 1, here3[1] + 1)
+    w3.grid.lift(me3)
+    w3.need(me3, Position).square = start
+    w3.grid.place(me3, frozenset({start}))
+    w3.bus.emit(TurnStart(actor=me3, round=2, ghost=False))
+    out.that(int(cover_between(w3, foe3, me3)) > plain,
+             "the premise: it starts the turn in cover")
+    step(w3, me3, here3)
+    out.that(not cover_gained_in_move(w3, me3, foe3),
+             "and stepping OUT of cover gains none -- the comparison is"
+             " signed, where an `!=` would read a loss as a gain")
+
+    # -- the obscurity half, which is the card's other word ---------------
+    w4, me4, foe4 = board()
+    here4 = w4.need(me4, Position).square
+    dark = (here4[0] + 1, here4[1])
+    w4.grid.light[dark] = Light.DARK
+    w4.bus.emit(TurnStart(actor=me4, round=2, ghost=False))
+    out.that(not obscurity_gained_in_move(w4, me4, foe4),
+             "the premise: standing in the light, no obscurity gained")
+    step(w4, me4, dark)
+    out.that(obscurity_gained_in_move(w4, me4, foe4),
+             "and stepping into a DARK square gains obscurity -- the"
+             " printed 'move into an obscured space', graded through"
+             " `light_concealment` because `Light` has no numeric order")
+    out.that(not cover_gained_in_move(w4, me4, foe4),
+             "THE CONTROL: and that is not cover. Two printed conditions,"
+             " two readers -- one function answering both is the"
+             " overloading this tree keeps paying for")
+
+
 def a_power_that_moves_its_user_is_askable(out: Result) -> None:
     """`query.power_moves`, and `f2791` gated on it.
 
@@ -116156,6 +116287,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "cover_gained": (cover_gained_rather_than_held,
+                     "cover and obscurity you MOVED into, not what you "
+                     "were already standing in"),
     "power_moves": (a_power_that_moves_its_user_is_askable,
                     "whether a row moves its user is askable, and f2791 "
                     "is gated on it"),

@@ -1758,10 +1758,11 @@ def f1237(c: Cast) -> None:
     armed, which is `todo=` and not `dropped=`."""
 
 
-@_trait("f1296", implemented_in=("p87",),
-        dropped=("query.cover_gained_in_move()",))
+@_trait("f1296", implemented_in=("p87", "p971"))
 def f1296(c: Cast) -> None:
-    """One clause written, one still waiting on a reader.
+    """Both clauses written. The note below is the diagnosis the second
+    one was written from, kept because every step of it held; what landed
+    is at the end.
 
     **`p87`'s clause is written into `p87`'s body** (#550) and
     `c.forgo_attack()` is retired with it. That symbol said "nothing
@@ -1815,6 +1816,33 @@ def f1296(c: Cast) -> None:
     boolean flip, and why no existing reader answers it. The one place
     cover is all-or-none is the **waiver**, `from_cover <=
     cover_waived(...)`, which is a different question from this card's.
+
+    ## What landed
+
+    `query.cover_gained_in_move(world, eid, against)`, following the
+    recipe above exactly: `since_turn_began`, the first `Moved`'s `from_`,
+    and `cover_between` read twice. **One function read twice, never two
+    computations** -- `cover_between` gained a `target_at=` square
+    override, so the tracing, the creature blockers and the carried cover
+    cannot drift between the two readings. A second implementation of the
+    "before" half is the obvious way to write this and the wrong one.
+
+    **And the printed clause has two halves, so there are two readers.**
+    *"If you move into an obscured space **or** gain cover"* --
+    `obscurity_gained_in_move` is the first, a sibling rather than a
+    widening, graded through `light_concealment` (which gained the same
+    `target_at=`) because `Light` is a `StrEnum` with no numeric order.
+    One function answering two printed conditions is the overloading this
+    tree keeps paying for.
+
+    Per #550 the clause is **in `p971`**, after the walk and before the
+    swing -- the only place it can read what the walk changed -- and
+    gated on `c.feat` rather than the `c.declare` chain, because
+    `feat.category` for `f1296` is `''`. Read off the column, not
+    assumed: unbracketed means "any number apply", so it stacks with
+    whichever Arena Fighting feat paid.
+
+    `implemented_in=` names both powers now.
     """
 
 

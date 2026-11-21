@@ -38,6 +38,10 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import AttackDeclared, Hit
+from combat_engine.engine.query import (
+    cover_gained_in_move,
+    obscurity_gained_in_move,
+)
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 
@@ -522,6 +526,36 @@ def p971(c: Cast) -> None:
                 )
         c.instead_of("move", lambda: c.move(c.squares_for(c.ref, 2)))
         walking.clear()
+        # **`f1296`'s clause, and it has to be here**: the card asks what
+        # the walk above changed, so it can only be read after that line
+        # and before the swing.
+        #
+        # *"If you move into an obscured space or gain cover before making
+        # a ranged attack with this exploit, you can make a Stealth check
+        # against your target's passive Perception as a free action to gain
+        # combat advantage against your target until the start of your next
+        # turn."*
+        #
+        # `c.feat` and **not** the `c.declare` chain above, because
+        # `feat.category` for `f1296` is `''` -- unbracketed, so the printed
+        # rule is "any number apply" and it stacks with whichever Arena
+        # Fighting feat paid. Read off the column rather than assumed.
+        #
+        # Both printed halves, through the two sibling readers: cover
+        # gained, or obscurity gained. Each is a **change** and not a
+        # state, which is the rule the row's own note insisted on -- a
+        # rogue standing permanently behind a pillar collects nothing.
+        if c.feat("f1296") and c.ranged and c.target is not None:
+            victim = c.target
+            moved_well = (
+                cover_gained_in_move(c.world, c.me, victim)
+                or obscurity_gained_in_move(c.world, c.me, victim)
+            )
+            if moved_well and c.check(
+                "stealth", c.passive("perception", of=victim)
+            ):
+                with c.credit("f1296"):
+                    c.grants_advantage(on=victim, to=c.me, until=When.SONT)
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
         # "If you score a critical hit with this exploit, you can shift 1
