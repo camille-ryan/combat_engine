@@ -1498,7 +1498,7 @@ def i446p1(c: Cast) -> None:
 
 @power("i469p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=SELF,
-       dropped=("c.gains_property(ammunition=)",))
+       dropped=("ammunition.nock(group_identity)",))
 def i469p1(c: Cast) -> None:
     """**Written, and the old marker's premise was false in both halves.**
 
@@ -1533,15 +1533,35 @@ def i469p1(c: Cast) -> None:
     with A is one of the printed readings, where answering it with a
     blanket is an approximation of neither.
 
-    So the marker is `dropped=`, and the gap moves one layer: **a piece of
-    ammunition cannot carry a weapon property.** `Ammo` has four fields --
-    `ref`, `kind`, `plus`, `count` -- and no `properties`, and the readers
-    are the wrong side of it too: `c.weapon_prop` goes through
-    `c.weapon_of`, which returns the launcher's `Weapon`, never the piece
-    that was loosed. All five of `c.gains_property`'s selectors name
-    weapons (`group`, `ref`, `every`, `held`, `mine`), so a sixth naming
-    the quiver is the shape of the fix and `c.gains_property(ammunition=)`
-    is the symbol.
+    So the marker is `dropped=`, and the gap moves one layer -- **twice,
+    and the second time is why the symbol changed.**
+
+    The first reading was *"a piece of ammunition cannot carry a weapon
+    property"*: `Ammo` has four fields (`ref`, `kind`, `plus`, `count`)
+    and no `properties`, and the reader is on the wrong side of it too --
+    `struck_by_property` resolves through `c.weapon_of`, which returns the
+    launcher, never the piece that was loosed. All of
+    `c.gains_property`'s selectors name weapons, so a sixth naming the
+    quiver looked like the fix and `c.gains_property(ammunition=)` was the
+    symbol.
+
+    **That field would be unreadable, which is the finding.** A shot
+    identifies its piece by ref: `ammunition.nock` returns `piece.ref` and
+    `resolve` stamps it as `ev.ammo`, which `ammunition.fired_with` then
+    matches. **Mundane ammunition has `ref=""`** --
+    `chargen._stock_quiver` builds `Ammo(ref="", kind=kind,
+    count=MUNDANE)` -- so `ev.ammo` is empty for every shot from the very
+    stack this oil is applied to, and `fired_with` opens with
+    `bool(item)`. A property laid on that stack could never be matched to
+    a shot.
+
+    And `kind` is not the missing key either, which is what makes this a
+    design question rather than a line: the card treats **one group** --
+    30 arrows out of the 50 a character carries -- so oiling a group must
+    not silver the rest. What is wanted is an identity for a *stack*, so
+    a split group can be loosed and recognised. `#1437` holds it, and
+    the marker names that rather than the field, because a `properties`
+    field landing first would read as unblocking this row and would not.
 
     No clock, for the reason the three siblings lay it with none: the
     write goes onto the per-character `Gear.weapons` copy and the world is
