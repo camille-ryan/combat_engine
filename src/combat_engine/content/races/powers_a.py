@@ -412,7 +412,55 @@ def p1770(c: Cast) -> None:
     keywords=[Keyword.TELEPORTATION],
 )
 def p1449(c: Cast) -> None:
-    c.teleport(5)
+    """A five-square teleport, and the distance is now READ rather than
+    hard-coded.
+
+    `c.squares_for` is what makes `c.extend_move` reach this row at all:
+    that verb's own docstring says "a row must read it to be changed ...
+    an `extend_move` on a row whose body still hard-codes its distance is
+    a modifier nothing consults, which is this component's commonest
+    bug", and this body was `c.teleport(5)`.
+
+    **`f1807` is written here**, which is `#550`'s arrangement: the feat
+    names this power, so its clause lives in this body gated on the
+    holder. *"You can increase the distance of your p1449 racial power by
+    5 squares if your destination space is adjacent to your p9400
+    target."*
+
+    **The ordering the feat's marker called an obstacle is answered with
+    `into=` rather than a new verb.** Its note was right that "the
+    distance is chosen before the destination is", so a gate on where the
+    move ends cannot be asked when the distance is read -- but it does
+    not have to be. The longer distance is offered and the destinations
+    beyond the base five are **filtered**: `c.teleport(base + 5,
+    into=...)` allows any square within the base, plus a far one only if
+    it is beside a shrouded enemy. That is the card exactly, where
+    extending the distance alone would have been five free squares in
+    every direction.
+    """
+    base = c.squares_for(c.ref, 5)
+    if not c.feat("f1807"):
+        c.teleport(base)
+        return
+    with c.credit("f1807"):
+        me = c.me
+        beside = {
+            sq
+            for foe in c.enemies()
+            if c.shrouds(on=foe)
+            for sq in squares_of(c.world, foe)
+        }
+
+        def allowed(sq: Any) -> bool:
+            # Within the printed five, anywhere. Past it, only a square
+            # adjacent to a shrouded enemy -- `squares_of` gives the
+            # creature's own squares, so adjacency is one step off them.
+            if distance(c.here, sq) <= base:
+                return True
+            return any(distance(sq, theirs) <= 1 for theirs in beside)
+
+        if not c.teleport(base + 5, who=me, into=allowed):
+            c.teleport(base, who=me)
 
 
 @power(

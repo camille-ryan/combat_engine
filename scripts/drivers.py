@@ -34394,6 +34394,93 @@ def a_bequeathed_symbol_widens_who_it_smites(out: Result) -> None:
              " above never disagree with a gate that always passes")
 
 
+def five_more_squares_only_beside_a_shroud(out: Result) -> None:
+    """"Increase the distance of your p1449 racial power by 5 squares if
+    your destination space is adjacent to your p9400 target." `f1807`.
+
+    Two claims, and the second is deliberately narrower than the card.
+
+    **The row reads its distance and filters its destination.** `p1449`
+    was `c.teleport(5)` -- a hard-coded number, which is what
+    `c.extend_move`'s own docstring calls "a modifier nothing consults,
+    this component's commonest bug" -- and now reads `c.squares_for` and
+    carries `f1807`'s clause under `c.feat`, offering `base + 5` with an
+    `into=` filter.
+
+    **And `into=` really does filter**, which is the mechanism the row
+    rests on: a permissive predicate reaches a far square and a
+    restrictive one does not.
+
+    **What this does NOT drive is the landing, and that is said rather
+    than faked.** Three attempts tried it and each was defeated by the
+    board rather than by the row: the default decider takes the *first*
+    option and `c.teleport` orders them nearest-first, so every arm
+    hopped one square; pinning the decider to the farthest gave five in
+    every arm, because the board's foes start inside the printed five, so
+    no square beside one lies beyond it; and moving a foe out produced
+    zero-square hops. A rule that asserts what the board happened to
+    allow is worth nothing, so the end-to-end landing is left to the wide
+    sweep and the claim here is the mechanism.
+    """
+    # **Parsed, not grepped**, which this rule learnt the hard way: the
+    # first version asked `"into=" in src` and a plant that deleted the
+    # filter stayed green, because the row's own docstring says `into=`.
+    # That is `#1093` exactly -- a docstring is a `Constant` and never an
+    # `Attribute` or a keyword, so an `ast` walk cannot be fooled by
+    # prose about the code.
+    import ast
+    import inspect
+    import textwrap
+
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.grid import distance
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(REGISTRY["p1449"].body)))
+    verbs = {n.func.attr for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+    kwargs = {k.arg for n in ast.walk(tree)
+              if isinstance(n, ast.Call) for k in n.keywords if k.arg}
+    feats = {a.value for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+             and n.func.attr == "feat"
+             for a in n.args if isinstance(a, ast.Constant)}
+
+    out.that("squares_for" in verbs,
+             f"the row reads its distance rather than hard-coding it --"
+             f" `c.extend_move` cannot reach a row that does not ({'squares_for' in verbs})")
+    out.that("f1807" in feats and "into" in kwargs,
+             "and the feat's clause filters where the longer hop may end"
+             f" (gates on {sorted(feats)}, passes {sorted(kwargs & {'into'})})")
+
+    # `into=` as the row uses it: offered a long distance, a restrictive
+    # predicate must keep the caster near.
+    for permissive in (True, False):
+        world, me, _ = _board(seed=11)
+        c = Cast(world=world, me=me, ref="drivers:tp")
+        start = c.here
+        world.decider = lambda _a, _k, opts, _p: opts[-1]
+        # `start` bound as a default, not closed over: the loop rebinds
+        # it and a late-bound closure would read the next pass's value.
+        c.teleport(
+            10, who=me,
+            into=((lambda sq: True) if permissive
+                  else (lambda sq, _s=start: sq == _s)),
+        )
+        pos = world.get(me, Position)
+        moved = distance(start, pos.square) if pos else -1
+        if permissive:
+            out.that(moved > 2,
+                     f"a permissive `into=` reaches a far square ({moved})")
+        else:
+            out.that(moved == 0,
+                     "THE CONTROL: a predicate allowing only the starting"
+                     f" square keeps the caster there ({moved}) -- so the"
+                     " filter is what decides, not the distance")
+
+
 def a_mark_that_lapses(out: Result) -> None:
     """"The mark ends if you do not attack it", and the row that forbids it.
 
@@ -114665,6 +114752,9 @@ DRIVERS = {
     "bequeathed_smite": (a_bequeathed_symbol_widens_who_it_smites,
                          "an item widening which kind a smite may be "
                          "aimed at, written into the power it names"),
+    "shroud_hop": (five_more_squares_only_beside_a_shroud,
+                   "five more squares of teleport, and only to a square "
+                   "beside a shrouded enemy"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
     "racial_power_riders": (racial_power_riders,

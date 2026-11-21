@@ -730,12 +730,24 @@ def f1803(c: Cast) -> None:
 
 @power("f1807", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.extend_move(destination=)",))
+       implemented_in=("p1449",))
 def f1807(c: Cast) -> None:
-    """Five squares further on `p1449`, if it ends beside a shrouded
-    enemy. The power is a ref and `c.shrouds` answers the condition;
-    nothing adds to the distance a *particular* row moves, which is the
-    symbol `avenger_b`'s f1527 and the ranger's f786 both named."""
+    """**Written into `p1449`**, which is `#550`'s arrangement: the feat
+    names one power, so the clause lives in that power's body gated on
+    `c.feat("f1807")`.
+
+    Five squares further, if it ends beside a shrouded enemy. The marker
+    was right that nothing adds to the distance a *particular* row moves
+    while that row hard-codes it -- `p1449` was `c.teleport(5)`, so
+    `c.extend_move` had nothing to change and `c.squares_for` is the fix.
+
+    **And the ordering it called an obstacle needed no verb.** The note
+    said "the distance is chosen before the destination is", which is
+    true and not in the way: the longer distance is offered and the
+    squares beyond the base five are filtered with `c.teleport(into=)`.
+    Extending the distance alone would have been five free squares in
+    every direction, which is the stronger card the marker was guarding
+    against."""
 
 
 @power("f2812", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
