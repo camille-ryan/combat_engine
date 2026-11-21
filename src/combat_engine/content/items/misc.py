@@ -3614,8 +3614,7 @@ def i3400p1(c: Cast) -> None:
 
 
 @power("i3455x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("SavingThrow.dtypes",))
+       reach=PERSONAL, target=SELF)
 def i3455x1(c: Cast) -> None:
     """**The vision half is written, and "neither half can be said" was
     wrong about it.** This row was refused in play on the ground that
@@ -3649,10 +3648,35 @@ def i3455x1(c: Cast) -> None:
     `DamageRolled.dtypes` is the same sorted serialisable tuple, and
     `SavingThrow.keywords` was added the same way for `#1120`.
 
-    Without the narrowing the row would reroll **every** failed save,
-    which is far stronger than the card, so the clause waits rather than
-    being approximated."""
+    **Both halves are written now**, and the note above was right about
+    where the gap was: `SavingThrow.dtypes` landed in `#1391`, mirroring
+    the `ctx["dtypes"]` that `durations.save` had built all along, so the
+    narrowing the clause needed is one membership test.
+
+    A `c.watch` and not a declared trigger, because the row has a standing
+    job too -- `on=` would mean the body runs only when a save happens and
+    the low-light half would never be laid. That is the same reason `f2246`
+    is written this way.
+
+    `keep="best"` is the printed *"use either result"*, as against
+    `"new"`, which is the other printed shape (*"even if it is worse"*).
+    And the guard is `ev.actor == me`: `c.watch`'s `on=` names who holds
+    the watch, not whose throws it hears, so without it the item would
+    reroll an ally's burn saves as well."""
+    me = c.me
     c.low_light(until=When.ENCOUNTER)
+
+    def burned(ev: SavingThrow) -> None:
+        # A non-empty `dtypes` **is** the "ongoing damage effect" half of
+        # the sentence -- `durations` builds it from `eff.ongoing_types` or
+        # the single `eff.ongoing` type and leaves it empty for an effect
+        # that deals no ongoing damage -- so one test answers both halves.
+        if ev.actor != me:
+            return
+        if {DamageType.FIRE, DamageType.RADIANT} & set(ev.dtypes):
+            c.reroll_save(keep="best", ev=ev)
+
+    c.watch(SavingThrow, burned, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("i3455p1", level=9, cls=ITEM, usage=DAILY, action=FREE,

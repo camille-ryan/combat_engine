@@ -342,22 +342,42 @@ def rt_r2_t3(c: Cast) -> None:
 
 
 @power("rt:r2-t4", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF)
+       action=ActionType.NONE, reach=PERSONAL, target=SELF,
+       dropped=("etl.racial_trait.second_sentence()",))
 def rt_r2_t4(c: Cast) -> None:
     """One square less of any forced move is exactly `c.resist_forced`, and
-    it is the whole of this trait's spec.
+    it is the whole of this trait's spec **as the database carries it**.
 
-    **The dropped prone half is not in this row's spec.** The marker named
-    `query.knocked_prone()` for a save against being knocked prone by an
-    attack, and `racial_trait.spec` for this ref carries no such sentence --
-    it is the forced-move clause and nothing else. (`r2` is also missing a
-    `t1` row entirely, so something of the race did not survive extraction.)
-    A marker for a clause the spec does not carry can never go from absent
-    to present, which is the one thing a marker has to be able to do, so it
-    is referred up instead of kept. If the compendium does print that save
-    on *this* trait, the symbol belongs back here and narrower than it was:
-    `ConditionApplied` says who applied the condition, never whether an
-    *attack* did.
+    **This row's own conditional has been answered, and the answer is yes.**
+    It used to end: *"If the compendium does print that save on this trait,
+    the symbol belongs back here."* Read out of `compendium.sqlite`'s
+    `Race.PlainTxt` on 2026-11-20, the trait carries a second sentence --
+    an attack that would knock you prone allows a saving throw to avoid it
+    -- inside the same `<name> :` block, immediately after the sentence
+    that did survive, separated from it by a run of four `&nbsp;` entities.
+    So the clause **is** printed on this trait and `racial_trait.spec`
+    truncates before it. #1420.
+
+    That makes the marker legitimate again and points it at the right
+    layer. The old one said `query.knocked_prone()`, which was a reader; the
+    blocker is the missing sentence, and no reader can be written from a
+    spec that does not contain the clause.
+
+    **One correction to the note this replaces.** It offered `r2`'s absent
+    `t1` row as evidence that *"something of the race did not survive
+    extraction"*. That is not evidence of anything: `t1` is a trait whose
+    whole printed text is "you have the \<racial power\> power", which the
+    racial-power path handles rather than the trait path, so its ordinal is
+    skipped by design. 25 of 52 races have such a gap. Counting them as
+    losses would have made `#1420` an order of magnitude bigger than the
+    single row it really is.
+
+    When the sentence arrives, the clause needs no new facility either:
+    `monsters/level_10/soldiers_sa._saves_off_prone` already answers
+    "an attack would knock you prone" off `EffectApplied` plus
+    `ev.source != who` -- which is the narrowing the old symbol was
+    reaching for, and it exists. `c.save(avoiding=(Condition.PRONE,))`
+    makes the throw knowable to `f3507` and to `f3318`.
     """
     c.resist_forced(1, on=c.me, until=_HOLDS)
 

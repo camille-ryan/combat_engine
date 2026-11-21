@@ -3875,9 +3875,8 @@ def f2845(c: Cast) -> None:
     c.watch(SavingThrow, splash, until=When.ENCOUNTER)
 
 
-@power("f2858", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("SavingThrow.granted_by",))
+@power("f2858", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2858(c: Cast) -> None:
     """Your own half plays, read off the type the effect carries.
 
@@ -3913,11 +3912,49 @@ def f2858(c: Cast) -> None:
     me = c.me
 
     def burning(ctx: dict[str, Any]) -> bool:
-        return str(
-            getattr(ctx.get("dtype"), "value", ctx.get("dtype") or "")
-        ) in ("fire", "necrotic")
+        # **Reads `dtypes` and keeps `dtype` as the fallback**, which is a
+        # correction to this clause rather than only a widening for the new
+        # one. `ctx["dtype"]` is `eff.ongoing[1]`, a *single* type, so a
+        # burn that deals fire **and** cold read False here whenever cold
+        # was the one in that slot -- the row quietly narrower than its card
+        # and nothing to say so. The plural key is built beside it by
+        # `durations.save` for exactly this reason and its own comment warns
+        # of this trap. The fallback stays because the three other save
+        # contexts carry `dtype` too and one of them could be the caller.
+        kinds = {
+            str(getattr(d, "value", d)) for d in (ctx.get("dtypes") or ())
+        }
+        if not kinds:
+            kinds = {str(getattr(ctx.get("dtype"), "value",
+                                 ctx.get("dtype") or ""))}
+        return bool(kinds & {"fire", "necrotic"})
 
     c.bonus("save", 4, on=me, until=When.ENCOUNTER, kind="feat", when=burning)
+
+    # *"Whenever you grant an ally a saving throw against ongoing fire
+    # damage or ongoing necrotic damage, your ally makes the saving throw
+    # with a +4 power bonus."*
+    #
+    # **`granted_by` and not `granted_via`, which is the whole of what was
+    # missing.** The ref cannot say whose grant it was -- an ally holding
+    # its own copy of the granting row produces an identical
+    # `granted_via`, so the +4 would be paid for a throw this character had
+    # nothing to do with. `PowerUsed` has carried this pair for the same
+    # reason since `#672` and the saving throw carried only half of it.
+    #
+    # `kind="power"` and not `"feat"`: the card prints two different bonus
+    # words in two sentences, and they stack with each other.
+    #
+    # The gate asks at save time rather than at arming, the shape the
+    # `f651` clause below already has -- the bonus sits on the ally all
+    # fight and pays only on a throw this character handed over.
+    def granted_by_me(ctx: dict[str, Any]) -> bool:
+        return burning(ctx) and ctx["granted_by"] == me
+
+    for ally in c.allies():
+        c.bonus("save", 4, on=ally, until=When.ENCOUNTER, kind="power",
+                when=granted_by_me)
+
     if not c.feat(PLAGUE_FEAT):
         return
 

@@ -1008,14 +1008,31 @@ def f3504(c: Cast) -> None:
 
 @power("f3507", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("query.knocked_prone()",))
+       todo=("etl.racial_trait.second_sentence()",))
 def f3507(c: Cast) -> None:
-    """The racial row is `rt:r2-t4`, a declared ref, and
-    `c.reroll_save` is the printed "twice, and use the better" -- neither
-    is the hold. The hold is that the trait's prone half is itself
-    dropped on the same symbol: `ConditionApplied` says who applied a
-    condition and not whether an *attack* did, so no saving throw against
-    falling prone is ever rolled and there is none to roll twice.
+    """The racial row is `rt:r2-t4`, a declared ref, and `c.reroll_save` is
+    the printed "twice, and use the better" -- neither is the hold.
+
+    **Re-pointed, and the premise it used to argue from was stale twice
+    over.** It said the hold was that the trait's prone half "is itself
+    dropped on the same symbol": `rt:r2-t4` carries **no marker at all**
+    today, so that sentence described a state of the tree that had already
+    gone. And it blamed `ConditionApplied` for not saying whether an
+    *attack* knocked you prone, which is answerable and answered --
+    `monsters/level_10/soldiers_sa._saves_off_prone` does it off
+    `EffectApplied` plus `ev.source != who`.
+
+    **The real blocker is one layer down and is a missing sentence.**
+    `racial_trait.spec` truncates `rt:r2-t4` before the clause this feat is
+    about, so the trait an author is handed does not contain the saving
+    throw there is none of to roll twice. Confirmed against
+    `compendium.sqlite`, which prints it on that trait. #1420.
+
+    So both rows wait on the same gap and carry the same symbol, which is
+    what the one-gap-one-marker rule wants. Once the spec carries the
+    sentence this row is small: the save becomes knowable through
+    `SavingThrow.conditions` and `c.save(avoiding=(Condition.PRONE,))`
+    (#1391), and `f3318` two files over is the worked example of reading it.
 
     The Special is a treaty and carries nothing."""
 

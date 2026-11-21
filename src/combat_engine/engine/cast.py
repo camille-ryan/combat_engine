@@ -2039,14 +2039,30 @@ class Cast:
             # so there is usually nothing to read conditions off; when the
             # label does find an effect, both sources are taken.
             shunned = set(avoiding) | set(held.conditions if held else ())
+            # **`dtypes` was absent from this context entirely, not empty.**
+            # `durations.save` builds it and this branch did not, so a gate
+            # reading `ctx["dtypes"]` raised here where it read False there
+            # -- the two spellings of the same question disagreeing by
+            # branch. A bare save is never against a burn, so `()` is both
+            # the honest value and the one that makes the key safe to read.
             plus = bonus + self.total(
                 "save", who, {"actor": who, "label": label,
                               "conditions": frozenset(shunned),
                               "ongoing": False,
                               "dtype": None,
+                              "dtypes": (),
                               "keywords": words,
                               "when_": when_,
-                              "granted_via": self.ref}
+                              "granted_via": self.ref,
+                              "granted_by": self.me,
+                              # `None`: a bare save is against no effect,
+                              # which is the whole of what makes it bare.
+                              # Present rather than absent, so the four
+                              # save contexts now carry one key set --
+                              # `durations`, here, `falling` and the death
+                              # save -- and a gate cannot read False in one
+                              # branch and raise in another. #1391.
+                              "effect": held}
             )
             ev = self.world.bus.emit(
                 SavingThrow(
@@ -2055,6 +2071,7 @@ class Cast:
                     when_=when_, granted_via=self.ref,
                     keywords=tuple(sorted(set(words))),
                     conditions=tuple(sorted(shunned)),
+                    granted_by=self.me,
                 )
             )
             return ev.saved
@@ -2101,7 +2118,14 @@ class Cast:
             if effect.when is When.SAVE_ENDS:
                 effect.save_mod += bonus
                 self.world.effects.save(
-                    effect, when_=when_, granted_via=self.ref
+                    # **`self.me` and not `who`.** The granter is whoever
+                    # handed the throw over, which is this row's caster; the
+                    # saver is `who`. On a self-grant they are the same
+                    # entity and passing `who` would have looked correct in
+                    # every test -- `f2858` grants to an *ally*, which is
+                    # the case that tells them apart.
+                    effect, when_=when_, granted_via=self.ref,
+                    granted_by=self.me,
                 )
                 return effect.ended
         return False

@@ -1342,6 +1342,7 @@ class Effects:
 
     def save(
         self, eff: Effect, *, when_: str = "end", granted_via: str = "",
+        granted_by: int = -1,
     ) -> None:
         """Roll a saving throw against one effect now.
 
@@ -1398,6 +1399,10 @@ class Effects:
             # the context carried nothing about the throw at all.
             "when_": when_,
             "granted_via": granted_via,
+            # The other half, for the same reason it is on the event: a
+            # standing `c.bonus("save", ..., when=)` on an ally is how
+            # `f2858` pays, and a ref cannot say whose grant it was.
+            "granted_by": granted_by,
         }
         bonus = eff.save_mod + (holder.total("save", ctx) if holder else 0)
         roll = self.world.rng.d20()
@@ -1439,6 +1444,16 @@ class Effects:
                 when_=when_,
                 granted_via=granted_via,
                 keywords=tuple(sorted(set(ctx["keywords"]))),
+                # **`granted_by` beside `granted_via`, and neither implies
+                # the other.** The ref cannot say *whose* doing it was --
+                # two creatures hold the same row -- so `f2858`'s "whenever
+                # you grant an ally a saving throw" would pay for an ally's
+                # own copy as well. `PowerUsed` carries this pair already.
+                granted_by=granted_by,
+                # Already in `ctx` eleven lines above and not on the event,
+                # so a *modifier* could narrow to a fire burn and a
+                # **trigger** could not. `i3455x1` is the trigger. #1391.
+                dtypes=tuple(sorted(set(ctx["dtypes"]))),
                 # The same datum one field over, and the argument above is
                 # its argument too: `f3318` triggers on "a saving throw to
                 # avoid being knocked prone" and `against=str(eff)` is a

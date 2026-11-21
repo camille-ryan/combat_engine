@@ -811,9 +811,20 @@ class Encounter:
         mods = self.world.get(ev.actor, Mods)
         bonus = mods.total(
             "save",
+            # **`when_` is `"end"` here because the EVENT already says so**,
+            # and the two disagreeing about one throw is the bug this
+            # closes. `SavingThrow.when_` defaults to `"end"`, so a watcher
+            # has always seen a death save as an end-of-turn throw -- which
+            # is right, print makes it one -- while this context omitted the
+            # key, so a *modifier* gated on "a saving throw made at the end
+            # of your turn" read False on the same throw a trigger read
+            # True. `granted_via`/`granted_by`/`effect` are the honest
+            # nothings: a death save is nobody's grant and against no
+            # effect. #1391.
             {"actor": ev.actor, "label": "death", "conditions": frozenset(),
              "ongoing": False, "dtype": None, "dtypes": (),
-             "keywords": frozenset()},
+             "keywords": frozenset(), "effect": None, "when_": "end",
+             "granted_via": "", "granted_by": -1},
         ) if mods is not None and mods.items else 0
         saved = roll.total + bonus >= 10
         rolled = self.world.bus.emit(

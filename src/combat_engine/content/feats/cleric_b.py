@@ -366,13 +366,40 @@ def f2912(c: Cast) -> None:
             label=c.ref)
 
 
-@power("f1553", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SavingThrow.power",))
+@power("f1553", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f1553(c: Cast) -> None:
-    """A bonus to a saving throw **your power granted**. `SavingThrow`
-    announces an actor, what is being shaken off and the roll, and
-    nothing about who asked for it -- so a standing +1 would pay on
-    every save an ally ever makes."""
+    """*"When you use a power that allows an ally to make a saving throw,
+    the ally gains a +1 bonus to the saving throw."*
+
+    **The marker named `SavingThrow.power` and the field it wanted was the
+    granter.** That is one layer off, the same mistake `f3318`'s
+    `c.on_save()` made, and worth recording because the old note's
+    *reasoning* was already stale when it was written: it said the event
+    says "nothing about who asked for it", and `#672` had put
+    `granted_via` on it -- the **ref** of the row that handed the throw
+    over. So the power *was* nameable.
+
+    What `granted_via` cannot say is **whose**, and that is what this card
+    turns on: two creatures can hold the same row, so a gate on the ref
+    alone pays when an ally grants a throw with its own copy. `#1391`
+    added `granted_by` beside it -- the pair `PowerUsed` has carried all
+    along, whose docstring says *"neither implies the other"* -- and
+    `f2858` was waiting on the same int.
+
+    A non-empty `granted_via` is the "a power allowed it" half: an ordinary
+    end-of-turn throw carries `""`, so the two tests together are the
+    printed sentence. The bonus is untyped, as the card prints no word
+    before "bonus", and it sits on each ally all fight rather than being
+    laid at the moment of granting -- there is nothing to hang that moment
+    on, and the gate answers it exactly."""
+    me = c.me
+
+    def my_grant(ctx: dict[str, Any]) -> bool:
+        return bool(ctx["granted_via"]) and ctx["granted_by"] == me
+
+    for ally in c.allies():
+        c.bonus("save", 1, on=ally, until=When.ENCOUNTER, when=my_grant)
 
 
 # -- divine fortune, which is p1589 ----------------------------------------

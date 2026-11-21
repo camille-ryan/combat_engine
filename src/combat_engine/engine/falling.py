@@ -182,9 +182,18 @@ def catches_itself(
     natural = world.rng.roll("1d20").total
     plus = bonus + _mods(
         world, eid, "save",
+        # **Three keys this context lacked while `durations.save` had
+        # them**, which is worse than a wrong value: a gate *subscripting*
+        # an absent key raises, and `items/alchemical.py` does exactly that
+        # -- `ctx["ongoing"] and d in ctx["dtypes"]`. So an alchemical save
+        # penalty standing when somebody went over an edge was a latent
+        # `KeyError` in the kernel, invisible because a falling save is rare
+        # enough that no fixture rolls one. `()`/`-1`/`None` are also the
+        # honest values: a falling save is against no effect. #1391.
         {"actor": eid, "label": "falling", "conditions": frozenset(),
-         "ongoing": False, "dtype": None, "keywords": frozenset(),
-         "when_": "edge", "granted_via": power},
+         "ongoing": False, "dtype": None, "dtypes": (),
+         "keywords": frozenset(), "effect": None,
+         "when_": "edge", "granted_via": power, "granted_by": -1},
     )
     return world.bus.emit(
         SavingThrow(

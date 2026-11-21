@@ -2288,6 +2288,41 @@ class SavingThrow(Decision):
     #: reader wants (`Condition.PRONE in ev.conditions`), which a tuple
     #: answers. #1391.
     conditions: tuple[Condition, ...] = ()
+    #: **Whose doing the throw was**, `-1` for the ordinary end-of-turn one
+    #: nobody granted. The other half of `granted_via` beside it, and
+    #: `PowerUsed` carries exactly this pair for exactly this reason --
+    #: *"both are needed and neither implies the other"*.
+    #:
+    #: `granted_via` is a **ref**, and two creatures can hold the same row,
+    #: so a gate on it alone cannot tell a throw this character granted from
+    #: the identical throw an ally granted with its own copy. `f2858` pays
+    #: *"whenever you grant an ally a saving throw"* and would have paid for
+    #: both. On the event and in the modifier context, because that row
+    #: modifies the roll while a watcher wants the moment.
+    #:
+    #: `-1` and not `0`, copied from `PowerUsed.granted_by`: entity ids
+    #: start at 1 here, so `0` is falsy *and* almost a valid id, and a gate
+    #: written `if ev.granted_by:` would then read "nobody" correctly by
+    #: accident and break the day ids changed. #1391.
+    granted_by: int = -1
+    #: **Every damage type the burn being saved against deals**, empty when
+    #: the effect deals no ongoing damage at all -- so a non-empty tuple
+    #: *is* the "this is an ongoing damage effect" flag and its members are
+    #: the type test. The exact field `durations.save` has built into its
+    #: modifier context all along and the event did not carry, so a
+    #: *modifier* could be narrowed to a fire burn and a **trigger** could
+    #: not.
+    #:
+    #: `i3455x1` is the row -- *"when you roll a saving throw against an
+    #: ongoing damage effect that deals fire damage or radiant damage, roll
+    #: twice"* -- and `keywords` is not a substitute: those are the laying
+    #: row's keywords, not the burn's types.
+    #:
+    #: A tuple and not one type, because a burn can be more than one: a
+    #: gate meaning "against ongoing fire damage" must not read False on a
+    #: fire-and-radiant burn, which is the trap `ctx["dtype"]` singular
+    #: already documents. Sorted, for `conditions`' reason. #1391.
+    dtypes: tuple[DamageType, ...] = ()
 
 
 @dataclass
