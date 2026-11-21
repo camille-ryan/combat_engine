@@ -42092,6 +42092,17 @@ def at_most_one_applies(out: Result) -> None:
 ANY_CREDIT = "<computed>"
 
 UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
+    # **`f3636` REFUSES a spend; refusing is not an effect.** `p9400`'s
+    # `invoke` closure ends in `c.spend_shrouds()`, and f3636's clause
+    # (written there per #550, 2026-11-20) gates a `return` in front of it so
+    # the shrouds stay on the target after a critical hit with a shadow
+    # power. Nothing is laid -- the whole clause is the *absence* of a spend
+    # -- so a `c.credit` block would wrap an empty stack, which is the shape
+    # `f1303` below is listed for and the one this dict exists to allow.
+    #
+    # The payout above it is deliberately NOT inside the gate: the damage is
+    # `p9400`'s own and the feat only changes whether the count survives it.
+    "p9400": ("f3636",),
     # **`f1303` picks which pool, and the branch lays nothing at all.**
     # `p620` reads `c.feat("f1303")` to choose between two candidate sets
     # -- `c.within(2, side="ally")` against `_beside(c, c.target)` -- and
