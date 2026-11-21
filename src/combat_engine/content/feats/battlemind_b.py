@@ -479,7 +479,7 @@ _ASPECTS = {
 
 
 @power("f3304", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("actions.aim_per_creature()",))
+       reach=PERSONAL, target=SELF)
 def f3304(c: Cast) -> None:
     """A rider per aspect, on the row that aspect sharpens.
 
@@ -489,33 +489,36 @@ def f3304(c: Cast) -> None:
     `c.race_option()` was already stale -- the choice *is* recorded, as one of
     the three in `Powers.known`.
 
-    Two of the three clauses are here. The third -- `p10438` gaining one
-    more target in the burst -- is still out, and **re-pointed, because the
-    verb it named now exists and does not reach this card.**
+    **All three clauses are here now.** The third -- `p10438` gaining one
+    more creature in its burst -- was held by the offer path and not by
+    the verb.
 
-    `c.extra_target(ref=)` was built for `p7462` and does the widening
-    properly: it lays an effect carrying the row's own printed target line
-    with the count raised, which `dsl.target_of` applies. Measured here,
-    `p10438`'s per-creature door goes **1 -> 2** on the call.
+    `c.extra_target(ref=)` does the widening properly: it lays an effect
+    carrying the row's own printed target line with the count raised,
+    which `dsl.target_of` applies. That was already true and already
+    measured here -- `p10438`'s per-creature door goes **1 -> 2** on the
+    call -- and it was not enough, because `p10438` is a minor action and
+    so is *offered*. Both readers on that path took `Power.target_of`, the
+    printed line, so the door said two and the menu offered one. Landing
+    the clause then would have been an effect nobody consults.
 
-    What that does not move is the **offer**. `p10438` is a minor action, so
-    it reaches the board through `actions.legal`, and that path reads
-    `Power.target_of` -- the printed line. `dsl.target_of`'s own note says
-    it is *"read in `_auto_targets` and nowhere else, deliberately"* and
-    calls pointing the offer path at it *"a fair next step"*. Until that
-    lands, this clause would be an effect nobody consults: the door says
-    two and the menu still offers one.
+    They read the per-creature door now. `#1369` is where that was worked
+    out and it carries the measurement; `drivers.offer_reads_the_door`
+    holds it, on `f3793` -- the sibling that waited on the same thing --
+    and on a plain basic attack for the engine half.
 
-    So the symbol is `actions.aim_per_creature()` -- the offer path reading
-    the per-creature door -- and not the verb, which is here. **Not spelled
-    `actions.target_of()`**, which is the obvious name and reports ARRIVED:
-    `blocked._one` falls back to matching the last component anywhere in
-    `engine/`, deliberately, so it finds `dsl.target_of` and calls the gap
-    filled. The old note was
-    right that targets are settled before a rider is reached and wrong that
-    this therefore needs a rider; it needs the settling itself to read one
-    more field. `#1369`, which is the live issue -- `#712` carries the
-    reasoning and is closed.
+    A standing widening rather than a watch, which is why it sits outside
+    the two handlers: the card gives the aspect an extra target for the
+    fight, not on a trigger. Gated on `c.knows("p7443")` the same way the
+    other two gate on their own aspects, so a battlemind that chose
+    another one gets nothing.
+
+    One piece of the old note is worth keeping because it is still a trap:
+    the symbol was spelled `actions.aim_per_creature()` and **not**
+    `actions.target_of()`, which reports ARRIVED -- `blocked._one` falls
+    back to matching a want's last component anywhere under `engine/`,
+    deliberately, so the obvious name finds `dsl.target_of` and calls the
+    gap filled.
     """
     me = c.me
 
@@ -535,6 +538,14 @@ def f3304(c: Cast) -> None:
     c.watch(PowerResolved, sharpened, until=When.ENCOUNTER, on=me,
             label=f"{c.ref} aspect")
     c.watch(Hit, bites, until=When.ENCOUNTER, on=me, label=f"{c.ref} spike")
+    # The third aspect, which is a standing widening rather than a watch:
+    # `p10438` gains one more creature in its burst. `until=ENCOUNTER`
+    # because this trait is armed once by `turns.arm_traits` and the card
+    # says nothing about a single use.
+    if c.knows("p7443") == me:
+        with c.credit(c.ref):
+            c.extra_target(1, ref=_ASPECTS["p7443"], on=me,
+                           until=When.ENCOUNTER)
 
 
 @power("f3322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

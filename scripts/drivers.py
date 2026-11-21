@@ -84387,6 +84387,141 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def offer_reads_the_door(out: Result) -> None:
+    """A widened target line reaches the power the player is OFFERED.
+
+    `c.extra_target(ref=)` lays an effect `dsl.target_of` applies -- the
+    per-creature door -- and that door was *"read in `_auto_targets` and
+    nowhere else, deliberately"*. Both readers on the offer path,
+    `actions._aiming_branch` and `dsl.candidates`, took
+    `Power.target_of`: the printed line. So a widened row's door said two
+    and the menu went on offering one, and two feats sat `dropped=` on it
+    -- `f3793` and `f3304`'s third clause. #1369.
+
+    Three halves, because a rule proving only one of them would be
+    satisfied by the wrong fix:
+
+    * the **engine** half, on a plain basic attack this family does not
+      touch, so it cannot pass on a content change;
+    * `f3793`, whose clause was written and correct the whole time and
+      whose only gap was the thing reading it;
+    * `f3304`'s third clause, which is new here and is gated on its own
+      aspect -- the other two aspects must buy nothing.
+
+    **The second ally is moved into reach on purpose.** `p16660` is Melee
+    1 and `audit.board` stands the party's second ally two squares out, so
+    the board offers exactly one candidate and the widening has nothing to
+    widen *onto*: measured before moving it, both arms read one offer of
+    one target and the rule passed while proving nothing. Asserted, so an
+    unposed board is a finding.
+
+    What is asserted is the **largest** number of targets an offer carries,
+    not the offer count. Both change, but the offer count depends on how
+    many origins a row has and on the `count == 1` branch enumerating
+    where the wider branch slices -- `mba` goes from five offers of one to
+    two offers sized 1 and 2 -- so the target count is the claim and the
+    offer count is an implementation detail.
+    """
+    import audit as A
+    from audit import board as posed
+    from combat_engine.engine import actions
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, candidates, target_of
+
+    def widest(world, me: int, ref: str) -> tuple[int, int]:  # noqa: ANN001
+        """The offer count and the largest target count the menu shows."""
+        A._revive_everyone(world, except_=())
+        budget = world.get(me, Budget)
+        if budget is not None:
+            budget.refresh()
+        mine = [a for a in actions.legal(world, world.encounter, me)
+                if a.ref == ref]
+        return len(mine), max((len(a.targets) for a in mine), default=0)
+
+    # -- the engine half, on a row no feat here touches -------------------
+    world, me, _start = posed("p10469", 1)
+    before_n, before_max = widest(world, me, "mba")
+    out.that(before_max == 1 and before_n > 1,
+             "a plain basic attack is offered once per candidate, each"
+             " carrying one target -- the premise, and the `count == 1`"
+             " branch enumerating rather than slicing",
+             f"{before_n} offer(s), widest {before_max}")
+    Cast(world=world, me=me, ref="drivers:widen").extra_target(1, ref="mba")
+    out.that(target_of(world, me, REGISTRY["mba"]).count == 2,
+             "and the per-creature door moves to 2 -- `c.extra_target`"
+             " was never the broken half",
+             f"door={target_of(world, me, REGISTRY['mba']).count}")
+    after_n, after_max = widest(world, me, "mba")
+    out.that(after_max == 2,
+             "the MENU now offers two targets, which is the change: both"
+             " readers on the offer path take the per-creature door"
+             " instead of the printed line",
+             f"{after_n} offer(s), widest {after_max}")
+
+    # -- f3793, whose clause was written and unread -----------------------
+    def p16660_board(*, feat: bool) -> tuple[int, int, int, list[int]]:
+        world, me, _s = posed("p16660", 1)
+        # Bring the second ally into Melee 1, or there is only ever one
+        # candidate and the widening has nothing to land on.
+        here = world.need(me, Position).square
+        beside = (here[0], here[1] - 1)
+        world.grid.lift(8)
+        world.need(8, Position).square = beside
+        world.grid.place(8, frozenset({beside}))
+        known = world.get(me, Powers)
+        if "p16660" not in known.known:
+            known.known.append("p16660")
+        if feat:
+            known.known.append("f3793")
+            REGISTRY["f3793"].body(
+                Cast(world=world, me=me, ref="f3793", target=me))
+        pool = sorted(candidates(world, me, REGISTRY["p16660"]))
+        n, widest_ = widest(world, me, "p16660")
+        return n, widest_, target_of(world, me, REGISTRY["p16660"]).count, pool
+
+    bare_n, bare_max, bare_door, pool = p16660_board(feat=False)
+    out.that(len(pool) >= 2,
+             "p16660 has at least two candidates once the second ally is"
+             " in its Melee 1 reach -- without this the arms below are"
+             " identical and prove nothing",
+             f"candidates {pool}")
+    out.that(bare_door == 1 and bare_max == 1,
+             "without `f3793` the door is 1 and the menu offers one ally",
+             f"door={bare_door}, widest {bare_max} over {bare_n} offer(s)")
+    held_n, held_max, held_door, _p = p16660_board(feat=True)
+    out.that(held_door == 2 and held_max == 2,
+             "with `f3793` held the door is 2 and the menu offers an offer"
+             " carrying TWO -- the printed 'one additional ally', reaching"
+             " the player for the first time",
+             f"door={held_door}, widest {held_max} over {held_n} offer(s)")
+
+    # -- f3304's third clause, gated on its own aspect --------------------
+    doors = {}
+    for aspect in (None, "p7441", "p7443"):
+        world, me, _s = posed("p10438", 1)
+        known = world.get(me, Powers)
+        for other in ("p7441", "p7442", "p7443"):
+            while other in known.known:
+                known.known.remove(other)
+        if aspect:
+            known.known.append(aspect)
+        known.known.append("f3304")
+        REGISTRY["f3304"].body(
+            Cast(world=world, me=me, ref="f3304", target=me))
+        doors[aspect] = target_of(world, me, REGISTRY["p10438"]).count
+    out.that(doors["p7443"] == 2,
+             "f3304's third clause widens `p10438` for the aspect it"
+             " belongs to",
+             f"{doors}")
+    out.that(doors[None] == 1 and doors["p7441"] == 1,
+             "and for no other -- a battlemind that chose another aspect,"
+             " or none, gets nothing. Both negatives, because one of them"
+             " alone would pass on a clause gated merely on holding the"
+             " feat",
+             f"{doors}")
+
+
 def reroll_ignores_cover(out: Result) -> None:
     """"The rerolled attack roll ignores cover and concealment."
 
@@ -111140,15 +111275,25 @@ def an_extra_target_for_one_named_racial_row(out: Result) -> None:
                  " single-target row in the hand a free second creature",
                  f"{other}: {door}")
 
+    # **This pinned `f3793`'s marker as a tuple, and the marker is gone.**
+    # It read `dropped == ("actions.aim_per_creature()",)` -- the
+    # offer-path symbol, *"the half that is genuinely missing"*. That half
+    # landed: `actions._aiming_branch` reads the per-creature door now, so
+    # the row is finished and carries nothing. #1369,
+    # `drivers.offer_reads_the_door`.
+    #
+    # Kept as an assertion rather than deleted, pointed the other way: a
+    # finished row growing a marker again is as much a finding as a
+    # renamed one was, and this is the only rule watching this row's
+    # header.
     feat = REGISTRY["f3793"]
-    out.that(tuple(getattr(feat, "dropped", ()) or ())
-             == ("actions.aim_per_creature()",),
-             "f3793's one marker is exactly the offer-path symbol and nothing"
-             " else -- the half that is genuinely missing, pinned as a tuple"
-             " so a second marker or a renamed one reds this",
+    out.that(tuple(getattr(feat, "dropped", ()) or ()) == (),
+             "f3793 carries NO marker -- its one gap was the offer path"
+             " reading the printed target line, and that is the change"
+             " `offer_reads_the_door` holds",
              f"{getattr(feat, 'dropped', ())}")
     out.that((getattr(feat, "todo", ()) or ()) == (),
-             "and it carries no `todo=` beside it: the row plays",
+             "and no `todo=` either: the row plays and is complete",
              f"{getattr(feat, 'todo', ())}")
 
 
@@ -118072,6 +118217,8 @@ DRIVERS = {
                                "a feat adds a use to a granted row"),
     "reroll_ignores_cover": (reroll_ignores_cover,
                              "a rerolled roll ignores cover"),
+    "offer_reads_the_door": (offer_reads_the_door,
+                            "a widened target line reaches the menu"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

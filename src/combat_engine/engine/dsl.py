@@ -4336,6 +4336,20 @@ def candidates(
     centred twenty squares away and still hit, which is a rule the printed
     range line states outright.
     """
+    # **The printed line, deliberately, and `#1369` asked the question
+    # this answers.** `_aiming_branch` was re-pointed at the per-creature
+    # door and this was the other printed-line reader on the offer path --
+    # and pointing it as well is a change no plant can redden today.
+    # `retarget` has exactly two writers: `Cast.becomes_burst` lays
+    # `EACH_ENEMY` and `Cast.extra_target` lays `replace(printed,
+    # count=...)`. This function reads `side`, `count`, `objects` and
+    # `loose`; `count` only in the `self`-with-no-target guard below. So
+    # the widening changes nothing it looks at, and `becomes_burst`
+    # applies to a basic attack whose `side` is already `enemy`.
+    #
+    # Reverting it rather than shipping it unexercised: the day a
+    # `retarget` moves `side` or `objects`, this is the line to change,
+    # and a rule that reddens for it is what should carry it in.
     aim = p.target_of(augment)
     if aim.side == "self" and aim.count == 0:
         return []

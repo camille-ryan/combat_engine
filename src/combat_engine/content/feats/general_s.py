@@ -2946,8 +2946,7 @@ def f3792(c: Cast) -> None:
 
 
 @power("f3793", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("actions.aim_per_creature()",))
+       reach=PERSONAL, target=SELF)
 def f3793(c: Cast) -> None:
     """The first clause has nothing to cancel. `rt:r69-t1` is
     declared and declared deliberately inert -- the checks it covers are
@@ -2973,23 +2972,28 @@ def f3793(c: Cast) -> None:
     is the written precedent -- the same verb against
     `monk.level_0.FLURRIES` -- and `drivers.extra_target` drives it.
 
-    **Dropped: the offer path, which is `f3304`'s gap and now this row's
-    too.** Measured here, `p16660`'s per-creature door goes **1 -> 2** on
-    the call and `dsl._auto_targets` lands on two allies instead of one.
-    What does not move is the **menu**: `p16660` is a standard action, so
-    it reaches the board through `actions.legal`, and that path reads
-    `Power.target_of` -- the printed line. Measured both ways on a board
-    with two adjacent allies: the door says 2 and `legal` still enumerates
-    one target per offer. `dsl.target_of`'s own note says it is *"read in
-    `_auto_targets` and nowhere else, deliberately"* and calls pointing the
-    offer path at it a fair next step; `#1369` is the live issue.
+    **The row's last gap was the offer path, and it has landed.** The
+    clause always moved `p16660`'s per-creature door from 1 to 2 and
+    `dsl._auto_targets` always landed on two allies; what did not move was
+    the **menu**. `p16660` is a standard action, so it is offered through
+    `actions.legal`, and both of that path's readers -- `_aiming_branch`
+    and `dsl.candidates` -- read `Power.target_of`, the printed line. The
+    door said two and the menu offered one.
 
-    Spelled `actions.aim_per_creature()` and not `actions.target_of()`,
-    which is `f3304`'s reasoning and worth keeping in step: `blocked._one`
-    falls back to matching a last component anywhere under `engine/`, so
-    the obvious name finds `dsl.target_of` and reports the gap filled. The
-    old symbol here -- `p16660.extra_target()` -- named a content hook that
-    was never the gap, and could not resolve either way."""
+    They read `dsl.target_of` now, the per-creature door, which
+    `dsl.target_of`'s own note had called *"a fair next step"*. Measured
+    on this row, with the second ally brought into its Melee 1 reach so
+    that two candidates exist at all:
+
+        without the feat   door 1, two candidates, TWO offers of one ally
+        with it            door 2, two candidates, ONE offer of two
+
+    which is the printed sentence. `drivers.offer_reads_the_door` holds
+    it, and the engine half is proven on a row this feat does not touch.
+
+    Said at this length because the measurement is the whole argument:
+    the clause had been written and correct for some time, and only the
+    thing reading it was missing. #1369."""
     # `until=When.ENCOUNTER` and not a use-scoped hold: the card says
     # "whenever you use it", and this row is armed once at the start of the
     # fight by `turns.arm_traits`.

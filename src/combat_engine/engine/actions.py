@@ -26,6 +26,7 @@ from .components import (
     Powers,
 )
 from .dsl import affordable, aim_points, candidates, get, pick_targets, usable
+from .dsl import target_of as _target_of
 from .durations import When
 from .grid import Square, distance, spread
 from .query import alive, can_act, distance_between, enemies, is_
@@ -1290,7 +1291,18 @@ def _aimings(world: World, actor: int, ref: str, *, cost: ActionType | None = No
 def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: ActionType | None = None, augment: int = 0, variant: int = 0) -> list[Action]:  # noqa: ANN001, E501
     cost = cost or p.action_of(branch)
     reach = p.reach_of(branch, augment)
-    aim_at = p.target_of(augment)
+    # **The per-creature door, not the printed line.** `dsl.target_of`
+    # applies a `retarget` effect -- `c.becomes_burst` and
+    # `c.extra_target(ref=)` are what lay one -- and it used to be read in
+    # `_auto_targets` and nowhere else, so a widened target line was
+    # invisible to any power the player is *offered*. `f3304` and `f3793`
+    # each widen an offered row by one creature, the effect landed, the
+    # door moved from 1 to 2, and the menu went on showing one. #1369.
+    #
+    # Safe in the direction it matters: a widened line is strictly more
+    # permissive -- a bigger `count`, or `everyone` -- so this offers what
+    # the card offers where the print offered less, and never the reverse.
+    aim_at = _target_of(world, actor, p, augment)
 
     def act(**kw) -> Action:  # noqa: ANN003
         return Action(
