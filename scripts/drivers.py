@@ -11344,6 +11344,53 @@ def extend_move(out: Result) -> None:
              "and the store holds the other two entries, not a stale third")
     _ = second
 
+    # -- `one_target=`, which is spent on ONE read ------------------------
+    #
+    # `f3754` prints *"one target of the power can shift up to 2 extra
+    # squares"*, and a `when=` gate cannot say it: `p2479` reads
+    # `c.squares_for(c.ref, 1)` and passes **no context**, and
+    # `squares_for` reads the caster's own `Powers` -- so an entry laid on
+    # one ally would be read for nobody and a gate would be called with
+    # `{}`. The read site is the only thing that knows a target is being
+    # asked about, because the body runs once per target.
+    lone, solo, _ = _board()
+    one = Cast(world=lone, me=solo, ref="drivers:one")
+    kept = lone.need(solo, Powers)
+
+    out.that(one.squares_for("p7777", 1) == 1,
+             "the premise: nothing is changing this row yet")
+    one.extend_move("p7777", 2, one_target=True)
+
+    # **Each read is captured once, because a read SPENDS the entry.**
+    # Written inline, the f-string in a message called `squares_for` again
+    # and consumed a read of its own -- so the first message printed `1`
+    # beside the words "pays the FIRST read", and the second assertion was
+    # testing the *third* read while claiming to test the second. Both
+    # happened to pass, which is worse than failing.
+    paid = one.squares_for("p7777", 1)
+    after = one.squares_for("p7777", 1)
+    out.that(paid == 3,
+             "a one-target entry pays the FIRST read -- 1 + 2, which is the"
+             f" target that gets it ({paid})")
+    out.that(after == 1,
+             "**and nothing after it.** The body runs once per target, so"
+             " the second read is the second target -- and that is the whole"
+             " card, where the row used to lengthen the shift for every ally"
+             f" and the caster ({after})")
+    out.that(not kept.extra_squares.get("p7777"),
+             "the entry is gone from the store rather than left behind"
+             " returning zero, so nothing accumulates across a fight"
+             f" ({kept.extra_squares.get('p7777')})")
+
+    # THE CONTROL: an ordinary entry is NOT spent, which is what every
+    # other row on this verb depends on.
+    one.extend_move("p6666", 2)
+    twice = [one.squares_for("p6666", 1) for _ in range(3)]
+    out.that(twice == [3, 3, 3],
+             "THE CONTROL: an ordinary entry pays EVERY read -- without"
+             " this, making one row's clause sayable would have shortened"
+             f" every other move the verb lengthens ({twice})")
+
 
 def conceal_in(out: Result) -> None:
     """A zone that conceals whoever stands in it, which `c.conceal` cannot

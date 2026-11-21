@@ -15353,6 +15353,7 @@ class Cast:
         on: int | None = None,
         until: When = When.ENCOUNTER,
         when: Callable[[dict[str, Any]], bool] | None = None,
+        one_target: bool = False,
     ) -> Effect | None:
         """Make a named row move you further. `c.extend_move("p1449", 5)`.
 
@@ -15388,7 +15389,16 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return None
-        entry = (squares_, when)
+        # **`one_target` spends the entry on one read**, which is the only
+        # way "one target of the power" can be said. `f3754` prints it and
+        # its note worked out why a `when=` cannot: `p2479` reads its
+        # distance as `c.squares_for(c.ref, 1)` and passes **no context**,
+        # so a gate is called with `{}` and cannot be told which target is
+        # being asked about -- and `squares_for` reads the *caster's*
+        # `Powers`, so an entry laid on one ally would be read for nobody.
+        # The read site is the only thing that knows a target at all, so
+        # the verb spends the entry there.
+        entry = (squares_, when, one_target)
         effect = self.world.effects.apply(
             who, self.me, until,
             label=f"{self.ref} moves {ref} {squares_:+d}",
@@ -15513,7 +15523,7 @@ class Cast:
                 "dest": dest}
         return sum(
             n
-            for n, gate in known.extra_squares.get(MOVE_KIND + kind, ())
+            for n, gate, _once in known.extra_squares.get(MOVE_KIND + kind, ())
             if gate is None or gate(seen)
         )
 
@@ -15531,7 +15541,7 @@ class Cast:
         known = self.world.get(mover, Powers)
         if known is None:
             return 0
-        return sum(n for n, _gate
+        return sum(n for n, _gate, _once
                    in known.extra_squares.get(MOVE_KIND + kind, ()))
 
     def squares_for(
@@ -15554,12 +15564,18 @@ class Cast:
         if known is None:
             return default
         seen = ctx or {}
-        extra = sum(
-            n
-            for n, gate in known.extra_squares.get(ref or self.ref, ())
-            if gate is None or gate(seen)
-        )
-        return default + extra
+        held = known.extra_squares.get(ref or self.ref, ())
+        paid = [e for e in held
+                if e[1] is None or e[1](seen)]
+        # **The one-target entries are spent here**, because this is the
+        # only place that knows a target is being asked about at all -- the
+        # body runs once per target and the read happens inside it. Removed
+        # by identity, the reason `_drop_squares` gives: two feats may grant
+        # the same number to the same row.
+        for entry in paid:
+            if entry[2]:
+                _drop_squares(known, ref or self.ref, entry)
+        return default + sum(n for n, _gate, _once in paid)
 
     def dice_for(
         self, ref: str = "", default: str = "", ctx: dict[str, Any] | None = None

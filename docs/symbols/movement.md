@@ -74,7 +74,7 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Make ground cost double for **one creature**, nobody else.
 - `c.extend_every(self, kind: 'str', squares_: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Lengthen **every move of a kind**. `c.extend_every("shift", 1)`.
-- `c.extend_move(self, ref: 'str', squares_: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+- `c.extend_move(self, ref: 'str', squares_: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None, one_target: 'bool' = False) -> 'Effect | None'`
   - Make a named row move you further. `c.extend_move("p1449", 5)`.
 - `c.forces(self, squares_: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Lengthen every push, pull and slide this creature makes.

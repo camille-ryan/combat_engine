@@ -1852,10 +1852,15 @@ def f3753(c: Cast) -> None:
 
 
 @power("f3754", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.extend_move(one_target=)",))
+       reach=PERSONAL, target=SELF)
 def f3754(c: Cast) -> None:
-    """**The distance is written; the narrowing is not, and it is a
+    """*"When you use `p2479`, one target of the power can shift up to 2
+    extra squares."*
+
+    **Written. The note below is the diagnosis and it was exactly right
+    about why a `when=` could not do this**; what landed is at the end.
+
+    **The distance is written; the narrowing is not, and it is a
     different gap.** The old note blamed timing, which was wrong for
     `f3746`'s reason -- `c.extend_move` lays a standing modifier and the
     moved row reads it.
@@ -1883,8 +1888,30 @@ def f3754(c: Cast) -> None:
     `dropped=` rather than demoted to `todo=`, because demoting it would
     refuse a drawable feat and move every `chargen` draw -- a baseline
     write, which is not an authoring agent's call. Whoever owns the gate
-    can make it instead."""
-    c.extend_move("p2479", 2, on=c.me)
+    can make it instead.
+
+    ## What landed
+
+    `c.extend_move(..., one_target=True)`, and the note's reasoning is
+    what chose the shape. A `when=` gate is no use because `p2479` reads
+    `c.squares_for(c.ref, 1)` and passes **no context**, and
+    `squares_for` reads the *caster's* `Powers` -- so an entry laid on one
+    ally would be read for nobody and a gate would be called with `{}`.
+
+    So the entry is **spent on one read**: `squares_for` removes it after
+    it has paid, by identity, which is the same care `_drop_squares`
+    takes. The read site is the only thing that knows a target is being
+    asked about at all, because the body runs once per target and the read
+    happens inside it.
+
+    That makes the first target of the burst the one that gets the two
+    squares. The card says *"one target"* and names no way to choose,
+    and the engine has no door to offer the choice at this point -- the
+    distance is read inside the moved row's body, which the decider does
+    not reach. Taking the first is a pick, and it is a narrower one than
+    the row was making: it was giving the two squares to every ally and
+    to the caster."""
+    c.extend_move("p2479", 2, on=c.me, one_target=True)
 
 
 @power("f3755", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
