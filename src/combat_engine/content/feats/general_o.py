@@ -331,13 +331,30 @@ _granted("f2903", "f2903b")
 
 
 @power("f2903b", level=1, cls="", usage=AT_WILL, action=MOVE,
-       reach=PERSONAL, target=SELF, dropped=("c.terrain(penalty=)",))
+       reach=PERSONAL, target=SELF)
 def f2903b(c: Cast) -> None:
-    """A swim the length of your speed. The second sentence waives the
-    attack penalty for fighting underwater with the wrong weapon, and
-    `c.terrain` only answers *whether* the fight is aquatic -- there is
-    no penalty attached to it to waive."""
+    """A swim the length of your speed, and the waiver.
+
+    *"Until the end of your next turn, you take no penalties to attack
+    rolls during aquatic combat for using a weapon other than a spear or
+    crossbow."*
+
+    **Written, and the note it replaces was stale.** It read: *"`c.terrain`
+    only answers whether the fight is aquatic -- there is no penalty
+    attached to it to waive."* `#949` attached one:
+    `resolve._underwater` charges the printed DMG p.45 modifiers, the
+    weapon -2 among them, so there is something to take off now.
+
+    **No `ref=`, which is the width this card prints.** It waives the
+    penalty for *any* weapon other than a spear or crossbow, where
+    `i3050x1` waives it for one weapon and passes its own ref. One verb,
+    two widths, and the gate is open here because the sentence names no
+    weapon.
+
+    `When.EONT` because the card says *"until the end of your next
+    turn"* -- the swim is the move action and the waiver outlasts it."""
     c.move(c.speed_of(), at="swim")
+    c.no_underwater_penalty(on=c.me, until=When.EONT)
 
 
 @power("f2904", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

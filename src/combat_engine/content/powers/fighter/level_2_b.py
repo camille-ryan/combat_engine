@@ -45,6 +45,7 @@ from combat_engine.engine import (
     YOU_OR_ONE_ALLY,
     AttackRolled,
     Cast,
+    CheckDeclared,
     CloseBurst,
     Condition,
     ConditionApplied,
@@ -57,6 +58,7 @@ from combat_engine.engine import (
     Relation,
     Trigger,
     When,
+    Window,
     World,
     by_melee,
     power,
@@ -256,11 +258,57 @@ def p4318(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    out_of_combat=True,
+    narrative=("skill:athletics",),
 )
 def p10485(c: Cast) -> None:
-    """Jumping, a running start and a softer landing: all three are skill
-    checks and the engine rolls none of them."""
+    """*"Until the end of your turn, you gain a +5 power bonus to Athletics
+    checks to jump. In addition, any jump you make is considered to have a
+    running start, and you can make an Athletics check instead of an
+    Acrobatics check to reduce falling damage."*
+
+    **The third clause plays now, and the row was declared
+    `out_of_combat=True` on a premise that stopped being true.** Its note
+    read *"all three are skill checks and the engine rolls none of them"* --
+    correct when written. The falling check is rolled since
+    `engine.falling._acrobatic_softening`, which makes an Acrobatics check
+    with `purpose="fall"` and takes half its result off the damage. So one
+    of the three is a check this tree rolls, and `lint.py` is what caught
+    the stale declaration rather than a reader noticing.
+
+    `c.substitute_check` is the swap and it answers `CheckDeclared`, which
+    is announced before the d20 -- so the modifier, the training and every
+    `skill:<name>` mod follow the substitution, because all of them are
+    keyed on the skill being rolled.
+
+    **`Window.BEFORE` explicitly**, which that verb's own docstring insists
+    on: `finish` totals the bonus inside the resolve callback, between the
+    two windows, so a swap in `Window.AFTER` relabels the check and leaves
+    the number settled from the **old** skill -- *"inert while looking
+    written"*.
+
+    **A watch rather than a bare call**, because the card is a window and
+    not one check: *"until the end of your turn"* covers every fall in it,
+    where `substitute_check` on its own answers the one event that armed
+    the row.
+
+    `purpose="fall"` is the narrowing, and it is the same string
+    `_acrobatic_softening` passes. Without it this would swap every
+    Acrobatics check of the turn, which is three printed words wider than
+    the card.
+
+    The other two clauses stay `narrative=`: a jump is `c.jump(squares_)`
+    and no Athletics check is rolled for one, so a +5 to that check and a
+    running start have nothing to change. That is the marker for a clause
+    that is finished and has no combat meaning, where `out_of_combat=True`
+    claimed the whole row was inert and it is not."""
+    me = c.me
+
+    def as_athletics(ev: CheckDeclared) -> None:
+        c.substitute_check("athletics", instead_of="acrobatics",
+                           purpose="fall", ev=ev)
+
+    c.watch(CheckDeclared, as_athletics, on=me, until=When.EOT,
+            window=Window.BEFORE, label=f"{c.ref} athletic landing")
 
 
 @power(

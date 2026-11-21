@@ -1367,8 +1367,21 @@ def _inert_but_rollable() -> list[tuple[str, str, str]]:
 
     bonus = _re.compile(r"[+-]\s?\d+\s+(?:\w+\s+){0,2}bonus", _re.I)
     skills = _re.compile(r"\b(athletics|endurance)\b", _re.I)
-    words = _re.compile("|".join(_re.escape(w) for w in sorted(purposes)),
-                        _re.I)
+    # **A word boundary on the LEFT and nothing on the right**, which is
+    # the shape this comparison needs and was the one thing it had wrong.
+    #
+    # The purposes are stems a caller passes -- `fall` -- and a card says
+    # *"reduce falling damage"*, so a `\b...\b` match would miss the true
+    # positive. Open on the right catches `fall`, `falling` and `falls`.
+    #
+    # Open on the LEFT caught `snowfall`: `i3358p1` is a weather zone whose
+    # card says *"a blizzard becomes a gentle snowfall"*, and it was
+    # reported as a row whose Endurance clause had become rollable. One
+    # false positive on a check whose stated baseline is 0, which is the
+    # kind that gets a real finding ignored beside it.
+    words = _re.compile(
+        r"\b(?:" + "|".join(_re.escape(w) for w in sorted(purposes)) + ")",
+        _re.I)
     out = []
     for path in _asked_for():
         try:

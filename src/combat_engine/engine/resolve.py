@@ -221,7 +221,7 @@ def situational_attack(
         situational -= max(from_cover, from_concealment)
     situational -= _long_range(world, attacker, target, power, branch, ctx)
     situational += _mark_penalty(world, attacker, among or (target,))
-    situational += _underwater(world, attacker, target, power)
+    situational += _underwater(world, attacker, target, power, ctx)
     return situational
 
 
@@ -229,7 +229,22 @@ def situational_attack(
 _SWIMMABLE_GROUPS = frozenset({"spear", "crossbow"})
 
 
-def _underwater(world: World, attacker: int, target: int, power: str) -> int:
+#: The `Mods` key a card writes to waive the printed weapon penalty for
+#: fighting underwater. Two rows print the sentence and want it at
+#: different widths, which is why the waiver is a **gated** modifier
+#: rather than a flag: `i3050x1` says *"you take no attack penalty when
+#: using **this weapon** underwater"* and gates on `ctx["weapon"]`, where
+#: `f2903b` says *"you take no penalties ... for using a weapon other
+#: than a spear or crossbow"* and gates on nothing.
+#:
+#: Read in `_underwater` and written by `Cast.no_underwater_penalty`.
+#: Named here so the key has exactly one spelling -- a second one would be
+#: a waiver nothing consults, which is this component's commonest bug.
+UNDERWATER_WAIVED = "underwater_weapon_ok"
+
+
+def _underwater(world: World, attacker: int, target: int, power: str,
+                ctx: dict[str, Any] | None = None) -> int:
     """The printed aquatic-combat modifiers to an attack roll. #949.
 
     DMG p.45, three of the four bullets -- the fourth is about movement and
@@ -281,7 +296,16 @@ def _underwater(world: World, attacker: int, target: int, power: str) -> int:
     # "characters using weapons".
     gear = world.get(attacker, Gear)
     held = gear.main if gear is not None else None
-    if held is not None and (held.group or "") not in _SWIMMABLE_GROUPS:
+    # **The printed waiver, read with the attack's own context.** Two rows
+    # waive this sentence at different widths and the context is what lets
+    # one spelling serve both: `ctx["weapon"]` is the ref that swung, so a
+    # card naming its own weapon gates on it and a card naming none does
+    # not. `_mods` is the reader every other gated modifier goes through.
+    if (
+        held is not None
+        and (held.group or "") not in _SWIMMABLE_GROUPS
+        and _mods(world, attacker, UNDERWATER_WAIVED, ctx or {}) <= 0
+    ):
         out -= 2
     # **Aquatic against non-aquatic.** `monster.keywords` carries the word
     # for the creatures whose stat block prints it; a character has no such

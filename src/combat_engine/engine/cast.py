@@ -11053,6 +11053,49 @@ class Cast:
         """
         return self.bonus("no_hide", 1, on=on, until=until, kind=self.ref)
 
+    def no_underwater_penalty(
+        self,
+        *,
+        ref: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Waive the printed attack penalty for the wrong weapon underwater.
+
+        DMG p.45: *"characters using weapons from the spear and crossbow
+        weapon groups take no penalties to attack rolls with those weapons
+        while fighting underwater. characters using any other weapon take
+        a -2 penalty"*. `resolve._underwater` charges it (#949) and this
+        takes it off.
+
+        **`ref` is the width, and the two cards that print this want
+        different ones.** `i3050x1` says *"you take no attack penalty when
+        using **this weapon** underwater"* -- one weapon, so it passes its
+        own ref and the gate reads `ctx["weapon"]`. `f2903b` says *"you
+        take no penalties to attack rolls during aquatic combat for using
+        a weapon other than a spear or crossbow"* -- any weapon, so it
+        passes nothing and the gate is open.
+
+        A **gated modifier** rather than a flag on the creature for that
+        reason: a flag could not tell the two apart, and the attack
+        context already carries which weapon swung.
+
+        Waives the **weapon** bullet only. The fire-keyword -2 and the
+        aquatic +2 are different sentences and no card here waives either;
+        a verb that took all three off would be wider than both.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        from .resolve import UNDERWATER_WAIVED
+
+        want = ref
+        return self.bonus(
+            UNDERWATER_WAIVED, 1, on=who, until=until, kind="untyped",
+            when=(None if not want
+                  else lambda ctx: ctx.get("weapon") == want),
+        )
+
     def no_cover(
         self,
         *,

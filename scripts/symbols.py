@@ -482,6 +482,13 @@ CATEGORIES: dict[str, dict] = {
                 "no_conceal", "no_conceal_in",
                 "no_cover", "no_invisibility",
                 "no_invisibility_in", "unhide",
+                # **Not a sight waiver at all** -- it is here because it is
+                # the same shape: a printed attack-roll penalty a card
+                # takes off, read through `Mods` with the attack's own
+                # context. DMG p.45's aquatic weapon -2, and `ref=` is the
+                # width because two cards print the sentence and one of
+                # them names a single weapon.
+                "no_underwater_penalty",
             ]),
             # Not cover either: a relation between two creatures, where one
             # is answering for the other. Beside cover only because both end

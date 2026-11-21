@@ -33446,6 +33446,7 @@ def underwater_modifiers_apply_to_everyone(out: Result) -> None:
     the corpus is dry, so it would be a silent -2 on the whole game. The dry
     reading is therefore asserted first and for each arm.
     """
+    from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Gear
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.durations import When
@@ -33547,6 +33548,77 @@ def underwater_modifiers_apply_to_everyone(out: Result) -> None:
              f"one-sided {after}, both {both}")
 
     # And the whole thing goes away when the water does.
+    # -- the two cards that waive the weapon arm -------------------------
+    #
+    # Both print the same sentence at different widths, which is why the
+    # waiver is a gated modifier: `i3050x1` names **this weapon** and
+    # `f2903b` names any weapon other than a spear or crossbow. A flag on
+    # the creature could not tell them apart.
+    if held is not None:
+        was = held.group
+        held.group = "longsword"
+        charged = mod(cold)
+
+        # `f2903b` -- no `ref=`, so the gate is open.
+        REGISTRY["f2903b"].body(
+            Cast(world=world, me=me, ref="f2903b", target=me))
+        wide = mod(cold)
+        out.that(wide - charged == 2,
+                 "`f2903b` waives the weapon -2 for ANY weapon -- the"
+                 f" penalty measured above comes back off ({charged} ->"
+                 f" {wide})")
+
+        # THE CONTROL: it waives the weapon arm and nothing else. The
+        # fire-keyword -2 is a different printed sentence and no card
+        # here waives it, so the gap between a fire power and a cold one
+        # must be unchanged.
+        out.that(mod(fire) - mod(cold) == -2,
+                 "THE CONTROL: and the fire-keyword -2 still bites -- a"
+                 " waiver that took all three bullets off would be wider"
+                 f" than either card ({mod(fire)}, {mod(cold)})")
+
+        held.group = was
+
+    # `i3050x1` -- `ref=`, so only the weapon it sits on.
+    narrow, him, _ = _board("i3050x1", 8)
+    narrow.terrain.add("aquatic")
+    hers = narrow.get(him, Gear)
+    arm = hers.main if hers is not None else None
+    out.that(arm is not None,
+             "the premise: the item's holder has a weapon in hand")
+    if arm is not None:
+        keep = arm.group
+        arm.group = "longsword"
+
+        def his(power: str, weapon: str) -> int:
+            return situational_attack(
+                narrow, him, next(iter(enemies(narrow, him))), power,
+                {"weapon": weapon, "group": "longsword"})
+
+        # **No before-and-after here, and that is not laziness.**
+        # `audit.board("i3050x1", ...)` grants AND arms the row under
+        # test, so the waiver is already laid before this rule can read
+        # anything -- a "before" measured on this board is already waived,
+        # which is how the first draft got `0 -> 0` and two vacuous
+        # assertions. The discriminating question needs no before: it is
+        # the gap between the weapon the item sits on and any other.
+        mine_ref = arm.ref
+        REGISTRY["i3050x1"].body(
+            Cast(world=narrow, me=him, ref="i3050x1", target=him))
+        other_ref = "w:not-this-one"
+        out.that(his("", other_ref) == -2,
+                 "the premise: the printed weapon -2 really is charged on"
+                 " this board, for a weapon the card does not name"
+                 f" ({his('', other_ref)})")
+        out.that(his("", mine_ref) == 0,
+                 "`i3050x1` waives it for the weapon it sits on"
+                 f" ({his('', mine_ref)})")
+        out.that(his("", mine_ref) - his("", other_ref) == 2,
+                 "THE CONTROL: and NOT for a different weapon -- the gate"
+                 " reads `ctx['weapon']`, which is what makes one verb"
+                 " serve a card naming one weapon and a card naming none")
+        arm.group = keep
+
     world.terrain.discard("aquatic")
     out.that(mod(fire) == dry_fire and mod(cold) == dry_cold,
              "taking the water away restores every dry reading exactly -- the"

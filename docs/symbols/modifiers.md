@@ -132,6 +132,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "The target cannot benefit from invisibility."
 - `c.no_invisibility_in(self, zone: 'int', *, side: 'str' = 'any') -> 'None'`
   - "Creatures in the zone cannot benefit from invisibility."
+- `c.no_underwater_penalty(self, *, ref: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Waive the printed attack penalty for the wrong weapon underwater.
 - `c.spread_advantage(self, zone: 'int', *, side: 'str' = 'team', until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'list[Effect]'`
   - "When one enemy in the aura grants combat advantage to you or an
 - `c.unhide(self) -> 'None'`

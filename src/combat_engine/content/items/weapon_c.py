@@ -504,11 +504,12 @@ def i3037x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.terrain(penalty=)",),
 )
 def i3050x1(c: Cast) -> None:
-    """Waives the attack penalty for fighting underwater, and both halves
-    of that are missing a layer below this row.
+    """*"You take no attack penalty when using this weapon underwater."*
+
+    **Written. The note below is the diagnosis and its last step was
+    overtaken**; what landed is at the end.
 
     **Re-pointed: `c.underwater_penalty()` was a synonym nobody else used.**
     `f2903b` prints the same clause and already names the gap
@@ -530,7 +531,37 @@ def i3050x1(c: Cast) -> None:
     attack penalty for it**, so a waiver would have nothing to take off.
     One symbol, named by the two rows printing the sentence -- `f2903b`
     prints the same clause. Naming both was right when both were missing
-    and over-states the gap now."""
+    and over-states the gap now.
+
+    ## What landed
+
+    **The penalty exists**, and that is the step the note above got wrong
+    by being written before `#949`. `resolve._underwater` charges the DMG
+    p.45 aquatic modifiers -- the fire-keyword -2, the wrong-weapon -2 and
+    the aquatic creature's +2 -- and quotes the page for each. So there is
+    something to waive.
+
+    `c.no_underwater_penalty(ref=)` is the waiver, read by `_underwater`
+    through `_mods` with the attack's own context.
+
+    **`ref=` is the width and this card is the narrow one.** It says *"this
+    weapon"*, so it passes the weapon the item sits on and the gate reads
+    `ctx["weapon"]`; `f2903b` says *"a weapon other than a spear or
+    crossbow"* and passes nothing. A flag on the creature could not have
+    told the two apart, which is why the waiver is a gated modifier.
+
+    `c.my_weapon()` is the weapon, not `held=`: this is a **weapon** block,
+    so the clause is about the weapon the block is printed on -- the
+    distinction `c.gains_property`'s own note draws, where `held=True`
+    would lend the waiver to a second weapon in the other hand.
+
+    And it waives the **weapon** bullet only. The fire-keyword -2 and the
+    aquatic +2 are different printed sentences and this card names
+    neither."""
+    own = c.my_weapon()
+    if own is None:
+        return
+    c.no_underwater_penalty(ref=own.ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power(
