@@ -2722,19 +2722,29 @@ def i1737p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with the weapon",
     on=Trigger(Hit, by_me, "you hit with the weapon"),
-    dropped=("c.alignment()",),
 )
 def i2195p1(c: Cast) -> None:
-    """Alignment is not on a creature anywhere, so the longer daze the card
-    gives against an evil target cannot be told from the shorter one.
+    """*"The target is dazed until the end of your next turn. If the target
+    is evil or chaotic evil, the target is instead dazed (save ends)."*
 
-    Re-measured rather than inherited: `engine/` mentions the word in no
-    file, and the **only** `align%` column in `game.db` is
-    `deity.alignment` -- a fact about a deity, with no component holding it
-    and no reader asking for it. `i3142x1` and `f1351` and `i3282p1` carry
-    the same symbol for the same reason, so it stays spelled the same
-    way."""
-    c.dazed(until=When.EONT)
+    Written: `#1421` put the printed word on `monster` and `c.is_evil` reads
+    it. The old note was exactly right that nothing carried one, and right
+    to re-measure rather than inherit the claim.
+
+    **`c.is_evil` and not `c.alignment`, which corrects something I wrote on
+    `#1421`.** That issue argued this row needed the *word* rather than a
+    boolean, "because it prints evil or chaotic evil". It prints both
+    because 4e lists them as two of its five alignments, and the card gives
+    the **same** longer daze for either -- so the shade is not what this
+    sentence turns on and the boolean is the honest reading. The column
+    still holds the word, for `unaligned`, `good` and `any`; this row is
+    simply not the reason.
+
+    `instead`, so the two dazes are exclusive rather than stacked."""
+    if c.is_evil():
+        c.dazed(until=When.SAVE_ENDS)
+    else:
+        c.dazed(until=When.EONT)
 
 
 @power(
@@ -3050,7 +3060,7 @@ def i3134p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.alignment()", "c.spare_death_trait()"),
+    dropped=("c.spare_death_trait()",),
 )
 def i3142x1(c: Cast) -> None:
     """The middle clause is writable now that `c.is_minion` reads the stat
@@ -3062,14 +3072,30 @@ def i3142x1(c: Cast) -> None:
     the board underneath the attack resolving against it. A minion has one
     hit point, so a point of it is the destruction.
 
-    Alignment is not on a creature. Neither is "traits triggered by its
-    destruction are not triggered" -- `Dropped` is announced from one
-    place and nothing suppresses the rows listening to it.
+    **The first clause is written now.** *"An evil creature that uses this
+    weapon to make an attack takes radiant damage equal to 5 + this
+    weapon's level"* -- `#1421` put the printed alignment on `monster` and
+    `c.is_evil(on=c.me)` asks about the **wielder**, which is who the
+    sentence is about rather than the target.
+
+    Honest about its reach: a player character has no stat block and so no
+    printed alignment, which `query.alignment` returns as `""` rather than
+    guessing -- so this clause pays out only when an evil creature is the
+    one holding the weapon. Nothing in this engine hands player gear to a
+    monster today, so the clause is correct and currently unexercised. That
+    is a dealer question and not a gap in the row, and the row's other
+    clauses fire, so it is not a silent one.
+
+    Still dropped: "traits triggered by its destruction are not triggered"
+    -- `Dropped` is announced from one place and nothing suppresses the rows
+    listening to it.
     """
     c.bonus(
         "damage", c.enhancement, kind="power", on=c.me, until=When.ENCOUNTER,
         when=_against(c, "undead"),
     )
+    if c.is_evil(on=c.me):
+        c.damage(5 + c.level, DamageType.RADIANT, on=c.me)
 
     def crumble(ev: Any) -> None:
         foe = getattr(ev, "target", None)

@@ -1328,6 +1328,46 @@ class Cast:
 
         return stat_block(self.world, who)
 
+    def alignment(self, *, on: int | None = None) -> str:
+        """The printed alignment word of whoever this is about. #1421.
+
+        One of `unaligned`, `evil`, `chaotic evil`, `good`, `lawful good`,
+        `any`, or `""` for a creature whose page prints none -- a character,
+        a companion, a summon. See `query.alignment` for why the empty
+        string is the honest answer there rather than a default.
+
+        **Follows `c.target`**, like almost everything on this class, because
+        every printed clause is about the creature being acted on: *"if the
+        target is evil or chaotic evil"*, *"against evil creatures"*. A row
+        that means its own holder passes `on=c.me` -- `i3142x1` is the one,
+        since its clause is about whoever picked the weapon up.
+
+        **The word, so one card can read the shade.** `i2195p1` dazes an
+        evil target and dazes a chaotic evil one save ends. `c.is_evil()`
+        below is the shorter question the other three ask.
+        """
+        from .query import alignment as _alignment
+
+        who = self._who(on)
+        return "" if who is None else _alignment(self.world, who)
+
+    def is_evil(self, *, on: int | None = None) -> bool:
+        """Is this creature printed as evil, either shade of it. #1421.
+
+        *"An evil creature"* on a card means `evil` **and** `chaotic evil`,
+        so this answers both; `c.alignment` is there for the one row that
+        separates them.
+
+        False for a creature with no stat block and false for a printed
+        `any`, neither of which is a default standing in for a fact -- 44
+        creatures print `any`, meaning their alignment is not fixed, and a
+        bonus against evil creatures must not pay out against those.
+        """
+        from .query import evil_at
+
+        who = self._who(on)
+        return False if who is None else evil_at(self.world, who)
+
     def is_kind(self, word: str, on: int | None = None) -> bool:
         """Is this creature of that type? `c.is_kind("undead")`.
 

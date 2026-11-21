@@ -151,6 +151,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
 
 ## state and identity
 
+- `c.alignment(self, *, on: 'int | None' = None) -> 'str'`
+  - The printed alignment word of whoever this is about. #1421.
 - `c.appears_unbloodied(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Enemy attacks never treat you as being bloodied."
 - `c.attacked_me_since(self, who: 'int | None' = None, *, opportunity: 'bool' = False, this_turn: 'bool' = False) -> 'bool'`
@@ -191,6 +193,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Set a standing summon going on its own Instinctive Effect.
 - `c.is_(self, condition: 'Condition', on: 'int | None' = None) -> 'bool'`
   - (no docstring)
+- `c.is_evil(self, *, on: 'int | None' = None) -> 'bool'`
+  - Is this creature printed as evil, either shade of it. #1421.
 - `c.is_hidden(self, *, from_: 'int | None' = None) -> 'bool'`
   - (no docstring)
 - `c.is_kind(self, word: 'str', on: 'int | None' = None) -> 'bool'`

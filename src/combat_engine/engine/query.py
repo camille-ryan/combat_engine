@@ -1357,6 +1357,49 @@ def stat_block(world: World, eid: int) -> dict[str, Any]:
         return {}
 
 
+def alignment(world: World, eid: int) -> str:
+    """The printed alignment word, or `""` for a creature with no stat block.
+
+    One of `unaligned`, `evil`, `chaotic evil`, `good`, `lawful good`, `any`
+    -- the six the page prints, as `monster.alignment` stores them since
+    `#1421`. Four heroic rows print a clause about it and none could ask:
+    *"against an evil immortal creature"*, *"if the target is evil or
+    chaotic evil"*, *"an evil creature that uses this weapon"*, *"against
+    evil creatures"*.
+
+    **The word and not a boolean**, because `i2195p1` is about the
+    difference: it dazes an evil target and dazes a *chaotic* evil one save
+    ends, so a reader answering only "is it evil" collapses the thing that
+    row says. `evil_at` below is the common question written over this one.
+
+    **`""` for a character, a companion or a summon, and that is the honest
+    answer rather than a default.** Those are typeless -- `stat_block`
+    returns `{}` -- and the page prints no alignment for a player character.
+    Defaulting to `unaligned` would be worse than empty in the direction
+    that matters: it reads like a fact. Every caller should treat `""` as
+    "not known to be", which is what `evil_at` does.
+
+    **`any` is not `evil`.** 44 creatures in `game.db` print it, meaning
+    their alignment is not fixed, and a row paying out against evil
+    creatures must not pay against those -- the whole reason the column
+    holds six words rather than a flag.
+    """
+    return str(stat_block(world, eid).get("alignment") or "")
+
+
+def evil_at(world: World, eid: int) -> bool:
+    """Is this creature printed as evil -- either sort of evil.
+
+    The question three of the four rows actually ask. `chaotic evil` counts:
+    a card saying "an evil creature" means both printed shades, and only
+    `i2195p1` separates them, which it does by reading `alignment` itself.
+
+    False for a creature with no stat block, and false for `any` -- see
+    `alignment` above for why neither is a default standing in for a fact.
+    """
+    return alignment(world, eid) in ("evil", "chaotic evil")
+
+
 def hindering_at(world: World, square: Square) -> bool:
     """Does any live zone make this square hindering terrain?
 

@@ -2342,8 +2342,7 @@ def f1217(c: Cast) -> None:
 
 
 @power("f1351", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.alignment()",))
+       reach=PERSONAL, target=SELF)
 def f1351(c: Cast) -> None:
     """Adds whatever `p6186` put on an attack roll to the damage roll too,
     and only against an evil immortal creature.
@@ -2363,7 +2362,49 @@ def f1351(c: Cast) -> None:
     What is left is alignment, and nothing carries one: no component, no
     column, no reader. Writing the immortal half alone would *widen* the
     card, paying against every immortal rather than the evil ones, so the
-    row stays refused rather than playing wrong."""
+    row stays refused rather than playing wrong.
+
+    **Written now that `#1421` carries the printed alignment.** The old note
+    was right on both of its other points: `Mods.applied()` was off the
+    marker because `events.Boosted` is that record, and `immortal` is an
+    origin that `c.is_kind` already answers. The one missing half was the
+    alignment, and writing the immortal half alone would have *widened* the
+    card -- paying against every immortal rather than the evil ones.
+
+    `f1490` in `feats/avenger.py` is this same card with a different
+    narrowing and is the model: a `c.watch(Boosted, ...)`, with the creature
+    that was attacked read off the newest `AttackRolled` in the log, which
+    is safe because `p6186` is declared on that event. `roll_kind` is what
+    makes the read sound -- the same racial power boosts saving throws and
+    skill checks, and for one of those the newest attack roll belongs to
+    some older swing.
+
+    Both halves of the narrowing are asked of the **target**, not the
+    caster, which is what "against an evil immortal creature" says.
+    """
+    from combat_engine.engine.events import AttackRolled, Boosted
+
+    me = c.me
+
+    def paid(ev: Any) -> None:
+        if ev.actor != me or ev.by != "p6186" or ev.roll_kind != "attack":
+            return
+        shot = next(
+            (e for e in reversed(c.world.bus.log)
+             if isinstance(e, AttackRolled)),
+            None,
+        )
+        if shot is None or shot.attacker != me:
+            return
+        foe = shot.target
+        if foe is None or not c.is_evil(on=foe):
+            return
+        if not c.is_kind("immortal", foe):
+            return
+        c.bonus("damage", ev.amount, on=me, until=When.EOT, once=True,
+                when=lambda ctx: ctx.get("target") == foe)
+
+    c.watch(Boosted, paid, on=me, until=When.ENCOUNTER)
 
 
 @power("f1352", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -921,27 +921,39 @@ def i3274p1(c: Cast) -> None:
 
 
 @power("i3282p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.alignment()",))
+       reach=PERSONAL, target=SELF)
 def i3282p1(c: Cast) -> None:
-    """Nothing records an alignment, so "against evil creatures" has no
-    gate and the bonuses apply to everything.
+    """*"+1 power bonus to damage rolls against evil creatures and to all
+    defenses against evil creatures' attacks."*
 
-    **Measured, and the gap is below this component.** `game.db`'s
-    `monster` table has 34 columns and not one of them is an alignment, so
-    no `Cast` reader could be written against it today -- the symbol names
-    a verb where the hole is really in the ETL. The near-miss was checked
-    and refused: 57 of 3,142 monsters carry "evil" in `keywords`, which is
-    2% of the corpus, so gating on that would read as "almost nothing is
-    evil" rather than as the printed clause.
+    **Written, and the old note was right about where the gap was.** It
+    said the symbol named a verb where the hole was really in the ETL, and
+    that `monster` had 34 columns with no alignment among them. `#1421`
+    added the column; `c.is_evil` reads it.
 
-    Left on `c.alignment()` deliberately. `f1351`, `i2195p1` and `i3142x1`
-    wait on the same symbol and a group only means something while it moves
-    together, so re-spelling it `etl.monster.alignment` -- which is where
-    the evidence above points -- is a decision for all four rows at once
-    and not one this file takes on its own."""
-    c.bonus("damage", 1, on=c.me, kind="power", until=When.EONT)
+    It was also right to refuse the near-miss it measured -- 57 of 3,142
+    monsters carry "evil" in `keywords`, 2% of the corpus, which would have
+    read as "almost nothing is evil". The column gives 1,621 of 3,142.
+
+    **Two gates, not one, because the two sentences ask about different
+    creatures.** The damage half asks about the `target` -- who is being
+    hit -- and the defence half about the `attacker`, whose attack is
+    coming in. Both keys are in their respective modifier contexts, and
+    gating both on the same one would have been the silent half of this
+    row: a defence bonus that pays when *you* attack somebody evil."""
+    def evil_target(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("target")
+        return who is not None and c.is_evil(on=who)
+
+    def evil_attacker(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("attacker")
+        return who is not None and c.is_evil(on=who)
+
+    c.bonus("damage", 1, on=c.me, kind="power", until=When.EONT,
+            when=evil_target)
     for defence in (AC, FORT, REF, WILL):
-        c.bonus(defence, 1, on=c.me, kind="power", until=When.EONT)
+        c.bonus(defence, 1, on=c.me, kind="power", until=When.EONT,
+                when=evil_attacker)
 
 
 @power("i3283p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,

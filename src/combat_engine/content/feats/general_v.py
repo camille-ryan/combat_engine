@@ -85,6 +85,7 @@ from combat_engine.engine import (
     PowerResolved,
     PowerUsed,
     Relation,
+    SavingThrow,
     SecondWind,
     Size,
     SurgeSpent,
@@ -1006,35 +1007,50 @@ def f3504(c: Cast) -> None:
             on=c.me, until=When.EONT)
 
 
+def _my_prone_save(world: World, me: int, ev: Any) -> bool:
+    """`f3507`'s moment: this character's throw to avoid falling prone.
+
+    Reads `SavingThrow.conditions`, declared in `#1391`, and the throw is
+    raised by `rt:r2-t4` with `avoiding=(Condition.PRONE,)` -- which is what
+    makes it legible at all; `against` is a display string. A plain
+    `(world, me, ev)` predicate, which is what `triggers._answers` calls.
+    """
+    return (getattr(ev, "actor", None) == me
+            and Condition.PRONE in getattr(ev, "conditions", ()))
+
+
 @power("f3507", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("etl.racial_trait.second_sentence()",))
+       trigger="you make a saving throw to avoid falling prone",
+       on=Trigger(SavingThrow, _my_prone_save,
+                  "you save against falling prone"))
 def f3507(c: Cast) -> None:
-    """The racial row is `rt:r2-t4`, a declared ref, and `c.reroll_save` is
-    the printed "twice, and use the better" -- neither is the hold.
+    """*"Whenever you use [the racial trait] to make a saving throw to avoid
+    falling prone, you can make the saving throw twice and use the more
+    beneficial of the two results."*
 
-    **Re-pointed, and the premise it used to argue from was stale twice
-    over.** It said the hold was that the trait's prone half "is itself
-    dropped on the same symbol": `rt:r2-t4` carries **no marker at all**
-    today, so that sentence described a state of the tree that had already
-    gone. And it blamed `ConditionApplied` for not saying whether an
-    *attack* knocked you prone, which is answerable and answered --
-    `monsters/level_10/soldiers_sa._saves_off_prone` does it off
-    `EffectApplied` plus `ev.source != who`.
+    **Written, and the two premises this note used to argue from were both
+    stale.** It said the hold was that the trait's prone half was "itself
+    dropped on the same symbol" -- `rt:r2-t4` carried no marker at all by
+    then -- and it blamed `ConditionApplied` for not saying whether an
+    *attack* knocked you prone, which was answerable all along and is how
+    `monsters/level_10/soldiers_sa._saves_off_prone` does it.
 
-    **The real blocker is one layer down and is a missing sentence.**
-    `racial_trait.spec` truncates `rt:r2-t4` before the clause this feat is
-    about, so the trait an author is handed does not contain the saving
-    throw there is none of to roll twice. Confirmed against
-    `compendium.sqlite`, which prints it on that trait. #1420.
+    The real blocker was one layer below both: `racial_trait.spec` truncated
+    `rt:r2-t4` before the sentence this feat is about, so there was no
+    saving throw to roll twice. `#1420` recovered it, `rt:r2-t4` now raises
+    the throw with `avoiding=(Condition.PRONE,)`, and `#1391`'s
+    `SavingThrow.conditions` is what lets this predicate see it.
 
-    So both rows wait on the same gap and carry the same symbol, which is
-    what the one-gap-one-marker rule wants. Once the spec carries the
-    sentence this row is small: the save becomes knowable through
-    `SavingThrow.conditions` and `c.save(avoiding=(Condition.PRONE,))`
-    (#1391), and `f3318` two files over is the worked example of reading it.
+    `keep="best"` is the printed *"the more beneficial of the two"*, as
+    against `"new"`, which is the other printed shape. No gate on the trait
+    being the raiser: it is the only row in the tree that raises a save
+    against falling prone, and naming it would be a narrowing the card does
+    not print -- the card says "whenever you use" because that trait is the
+    only way a character gets such a throw.
 
     The Special is a treaty and carries nothing."""
+    c.reroll_save(keep="best")
 
 
 # -- wardens ----------------------------------------------------------------

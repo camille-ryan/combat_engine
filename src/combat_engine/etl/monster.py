@@ -273,6 +273,7 @@ def parse(
         m.dialect = "earlier"
         _earlier_stats(m, body)
     _scores(m, body)
+    _alignment(m, body)
     _abilities(m, body)
     if m.dialect == "earlier":
         # The aura trait rides in the stat-line paragraph in this dialect, so
@@ -723,34 +724,7 @@ def _numbers(m: Monster, blob: str) -> None:
     senses = re.search(r"\bSenses\b\s*(.+)", flat, re.I)
     if senses:
         m.senses = senses.group(1).split("\n")[0].strip()
-    # **One of the six printed words, not "the rest of the line".** The
-    # stat block runs `Alignment evil Languages Common` together, so taking
-    # the tail the way `Senses` above does would store the languages too --
-    # which is what the first draft of this did.
-    #
-    # **`any` is the sixth and was missed, which is how the coverage claim
-    # came out wrong.** 60 entries print `Alignment Any`, and leaving it out
-    # stored `""` for all 60 -- conflating "its alignment is not fixed" with
-    # "the page prints none", which is exactly the distinction a reader
-    # asking *"is this creature evil"* has to get right. With it the parse
-    # covers 5,326 of 5,326.
-    #
-    # **The alternation order is NOT load-bearing, and the plant proving
-    # that is worth more than the comment it replaces.** The first draft
-    # said the longest-first ordering "is the whole correctness of this
-    # pattern", on the reasoning that `evil` is a suffix of `chaotic evil`.
-    # Moving `evil` and `good` to the front changes nothing: the
-    # alternation is anchored immediately after the label, so at that one
-    # position `evil` simply fails against the text `chaotic evil` and the
-    # longer branch is tried. A suffix cannot shadow its longer form here;
-    # only a **prefix** could, and none of the six is a prefix of another.
-    aligned = re.search(
-        r"\bAlignment\b\s*:?\s*"
-        r"(lawful good|chaotic evil|unaligned|good|evil|any)\b",
-        flat, re.I,
-    )
-    if aligned:
-        m.alignment = aligned.group(1).lower()
+
 
 
 
@@ -773,6 +747,53 @@ def _earlier_stats(m: Monster, body: str) -> None:
             _numbers(m, para)
             return
     _numbers(m, body)
+
+
+#: The six words a stat block prints for alignment, longest form first.
+#:
+#: **Not matched as "the rest of the line".** The block runs
+#: `Alignment evil Languages Common` together, so the `Senses` treatment --
+#: take the tail -- would store the languages too, which is what the first
+#: draft of this did.
+#:
+#: **`any` is the sixth and was missed.** 59 entries print `Alignment Any`,
+#: and leaving it out stored `""` for all of them, conflating "its alignment
+#: is not fixed" with "the page prints none" -- the distinction a row asking
+#: *"is this creature evil"* must not lose.
+#:
+#: **The order is NOT load-bearing**, and the plant proving that is worth
+#: more than the comment it replaced. A first draft called the longest-first
+#: ordering "the whole correctness of this pattern" because `evil` is a
+#: suffix of `chaotic evil`; moving `evil` to the front changes nothing. The
+#: alternation is anchored immediately after the label, so at that one
+#: position `evil` fails against the text `chaotic evil` and the longer
+#: branch is tried. Only a **prefix** could shadow, and none of the six is
+#: one.
+_ALIGNMENT = re.compile(
+    r"\bAlignment\b\s*:?\s*"
+    r"(lawful good|chaotic evil|unaligned|good|evil|any)\b",
+    re.I,
+)
+
+
+def _alignment(m: Monster, body: str) -> None:
+    """The printed alignment word, read off the whole stat block. #1421.
+
+    **Here and not in `_numbers`, which is where it was written first and
+    where it could never have worked.** `_numbers` is handed one region --
+    the `bodytable` in the later dialect, the HP paragraph in the earlier
+    one -- and the alignment sits in neither: it shares a paragraph with
+    Languages, Skills and the ability scores. So the pattern matched
+    perfectly against the whole document in a harness and found nothing at
+    all in the pipeline, and a rebuild wrote `''` to every one of 3,142
+    rows while every narrow proof passed.
+
+    That is the lesson rather than the bug: a parser proof has to be fed the
+    text the caller really passes, not the document the text came from.
+    """
+    found = _ALIGNMENT.search(text(body))
+    if found:
+        m.alignment = found.group(1).lower()
 
 
 #: `<b>Some Aura</b> aura 1; enemies that begin their turns adjacent ...` --

@@ -11,6 +11,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 - `query.active(world: 'World', eid: 'int') -> 'list[Condition]'`
   - (no docstring)
+- `query.alignment(world: 'World', eid: 'int') -> 'str'`
+  - The printed alignment word, or `""` for a creature with no stat block.
 - `query.alive(world: 'World', eid: 'int') -> 'bool'`
   - (no docstring)
 - `query.allies(world: 'World', eid: 'int', *, companions: 'bool' = False) -> 'list[int]'`
@@ -23,6 +25,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Everything that can be targeted, flanked, covered or walked around.
 - `query.enemies(world: 'World', eid: 'int') -> 'list[int]'`
   - (no docstring)
+- `query.evil_at(world: 'World', eid: 'int') -> 'bool'`
+  - Is this creature printed as evil -- either sort of evil.
 - `query.feat_categories() -> 'dict[str, str]'`
   - Every feat's printed category, by ref, from the database.
 - `query.feats_of(world: 'World', eid: 'int', category: 'str' = '') -> 'tuple[str, ...]'`

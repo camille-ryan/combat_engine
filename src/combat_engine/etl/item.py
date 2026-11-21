@@ -237,18 +237,31 @@ _POWER_LINES = frozenset({
 def _continuation(spec: str, after: int, label: str) -> list[str]:
     """The indented `In addition,` lines continuing one trait. See #1420.
 
-    Stops at a blank line, at the first unindented line, at anything that is
-    itself a `Label :` line, and at the first line **not** opening with the
-    page's connective -- the four ways the trait is over. That last one is
-    the load-bearing test, measured: without it the census goes 1 -> 3 and
-    collects flavour prose. Returns `[]` for a power-line label, which is
-    defence in depth and catches nothing today; see `_POWER_LINES`.
+    Stops at a blank line, at anything that is itself a `Label :` line, and
+    at the first line **not** opening with the page's connective. That last
+    one is the load-bearing test, measured against the text the caller
+    really passes: without it the census goes 1 -> **10** and collects
+    flavour prose from five races. Returns `[]` for a power-line label,
+    which is defence in depth and catches nothing today; see
+    `_POWER_LINES`.
+
+    **It does NOT test for indentation, and the first draft did -- which is
+    why the first rebuild wrote the truncated spec anyway while every narrow
+    proof passed.** On the page the continuation is indented by a run of
+    four `&nbsp;` entities, and `html.text` ends with
+    `"\n".join(line.strip() ...)`: by the time this function is called every
+    line has been stripped, so `line[:1].isspace()` was False on the one
+    line it was meant to admit.
+
+    The harness that proved the first draft flattened the HTML itself and
+    never stripped, so it fed this reader text the pipeline does not
+    produce. A parser proof has to be handed what the **caller** passes.
     """
     if label.lower() in _POWER_LINES:
         return []
     out: list[str] = []
     for line in (spec or "")[after:].splitlines()[1:]:
-        if not line.strip() or not line[:1].isspace():
+        if not line.strip():
             break
         if _TRAIT_LABEL.match(line.strip()):
             break
@@ -302,13 +315,13 @@ def _trait_lines(spec: str, skip: dict[str, str]) -> list[tuple[str, str]]:
     that throw. #1420.
 
     **Narrowed to the printed connective, because the general rule is worse
-    than the bug.** Taking *any* indented continuation recovers 16 lines
-    across 8 races and most are not traits at all -- `Effect` and `Hit`
-    lines out of the **racial power** block, and two paragraphs of flavour
-    about life span -- so a blanket reading would move a power's text and a
+    than the bug.** Taking *any* continuation recovers 10 lines across 5
+    races and most are not rules at all -- flavour prose about life spans
+    and a second trait's description -- so a blanket reading would move a
     page of prose into trait rows. `In addition` is the idiom the page uses
     to continue a rule, and it is the test **doing the work**: dropping it
-    takes the census from 1 to 3, pulling in two paragraphs of flavour.
+    takes the census from 1 to **10**, pulling in flavour paragraphs from
+    four sub-races as well as a second trait's prose.
     `_POWER_LINES` refuses a power label as well, and its own note records
     that the plant removing it stays green.
 

@@ -78,6 +78,7 @@ from combat_engine.engine import (
     DamageApplied,
     DamageType,
     Dropped,
+    EffectApplied,
     Escaped,
     Gear,
     Ident,
@@ -342,8 +343,7 @@ def rt_r2_t3(c: Cast) -> None:
 
 
 @power("rt:r2-t4", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       dropped=("etl.racial_trait.second_sentence()",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r2_t4(c: Cast) -> None:
     """One square less of any forced move is exactly `c.resist_forced`, and
     it is the whole of this trait's spec **as the database carries it**.
@@ -372,14 +372,89 @@ def rt_r2_t4(c: Cast) -> None:
     losses would have made `#1420` an order of magnitude bigger than the
     single row it really is.
 
-    When the sentence arrives, the clause needs no new facility either:
-    `monsters/level_10/soldiers_sa._saves_off_prone` already answers
-    "an attack would knock you prone" off `EffectApplied` plus
-    `ev.source != who` -- which is the narrowing the old symbol was
-    reaching for, and it exists. `c.save(avoiding=(Condition.PRONE,))`
-    makes the throw knowable to `f3507` and to `f3318`.
+    **The sentence arrived and the clause is written.** `#1420` fixed the
+    truncation, so the spec carries both halves now, and the prediction this
+    note made held: no new facility was needed.
+
+    **`EffectApplied` and not `ConditionApplied`, which is the whole of the
+    timing.** `Effects.apply` installs the effect, announces it, and only
+    *then* hands its conditions over -- so this is the one window in which a
+    creature is being knocked prone and is **not yet prone**, which is what
+    "avoid falling prone" means. Answering `ConditionApplied` is always too
+    late and could only cure a condition that had already landed, a visibly
+    different sentence for a character whose allies reward a prone enemy.
+    `monsters/level_10/soldiers_sa._saves_off_prone` is the precedent and
+    carries the same reasoning at length; the technique is repeated rather
+    than imported, because that helper is private to a monster file and this
+    is a different component.
+
+    `ev.source != me` is the printed *"when an attack would"*: standing up
+    and falling over are the creature's own doing, and the card is about
+    being knocked down by somebody else.
+
+    **That guard's plant stays green, so it is recorded as unproven rather
+    than left looking load-bearing.** Removing it does not make the
+    self-inflicted case raise a throw -- something further in refuses it as
+    well, and I did not find what. Kept because it is what the card says,
+    not because anything measured depends on it, which is the same standing
+    `feats/warlock_b` gives its own `f != ev.actor`.
+
+    **And `EffectApplied.source` is not reliably an entity.** It is declared
+    `int` and arrives as the string `'DamageApplied'` when a burn lands, so
+    this comparison is int-against-str in the commonest case and is unequal
+    by type rather than by meaning. It happens to give the right answer both
+    ways here -- a string is never this creature, and genuine
+    self-infliction does arrive as the id -- but it is luck, and
+    `monsters/level_10/soldiers_sa._saves_off_prone` tests the same field
+    the same way. Filed; do not build a narrower reading on this field
+    until it is one type.
+
+    `avoiding=(Condition.PRONE,)` is what makes the throw legible to the two
+    feats that read it -- `f3507` rerolls exactly this save and `f3318` pays
+    out on it -- and it is a `bare=True` throw because it precedes the
+    effect rather than ending one. #1391, #1420.
     """
-    c.resist_forced(1, on=c.me, until=_HOLDS)
+    me = c.me
+    c.resist_forced(1, on=me, until=_HOLDS)
+
+    def knocked(ev: EffectApplied) -> None:
+        if ev.target != me or ev.source == me:
+            return
+        landing = next(
+            (
+                e
+                for e in c.world.effects.live.values()
+                if e.owner == me and not e.ended and e.label == ev.label
+            ),
+            None,
+        )
+        if landing is None or Condition.PRONE not in landing.conditions:
+            return
+        # **One throw per knockdown, however many times the trait is
+        # armed.** A trait arms at the start of every encounter, and
+        # `audit.board` arms it as well as the body running -- so an
+        # unguarded handler is installed more than once and rolls more than
+        # once for one knockdown. Measured: three identical throws for a
+        # single prone application, and because a *failed* save leaves PRONE
+        # in place, the duplicates were free retries at a clause the card
+        # gives one shot at.
+        #
+        # Keyed on the **effect**, not on the board or the round:
+        # `once_per_board` hashes `(self.ref, *key)`, so the landing effect's
+        # id makes it once per knockdown rather than once per fight, which is
+        # what the card says -- every attack that would knock you down
+        # offers a throw. `c.latch` is the wrong tool for the same reason:
+        # it is scoped to a round and two knockdowns can share one.
+        if not c.once_per_board(landing.id):
+            return
+        if not c.save(on=me, bare=True, against=f"{c.ref} prone",
+                      avoiding=(Condition.PRONE,)):
+            return
+        landing.conditions = tuple(
+            x for x in landing.conditions if x is not Condition.PRONE
+        )
+
+    c.watch(EffectApplied, knocked, until=_HOLDS, on=me, label=c.ref)
 
 
 # -- r3 ----------------------------------------------------------------
