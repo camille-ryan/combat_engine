@@ -6489,6 +6489,7 @@ def _stock_thrown(gear: Gear | None) -> None:
 
 def power_swap(powers: list[str], feats: list[str], *,
                cls: str = "", level: int = 0,
+               multiclass: str = "",
                record: set[str] | None = None,
                keep: frozenset[str] = frozenset()) -> list[str]:
     """The hand that is left after the feats that trade a card for one.
@@ -6589,7 +6590,15 @@ def power_swap(powers: list[str], feats: list[str], *,
             continue
         gone = min(pool, key=lambda p: (REGISTRY[p].level, p))
         out.remove(gone)
-        if trade.pool != "class" or not cls:
+        # **Which list the incoming power is drawn from.** `"class"` is
+        # this character's own; `"multiclass"` is the class it
+        # multiclassed into, which `Character.multiclass` records since
+        # `#1161` and which three cards name -- "an at-will attack power
+        # of the same level or lower **from the class you multiclassed
+        # into**". An unknown pool, or a character with no multiclass,
+        # puts the outgoing card back exactly as an empty offer does.
+        from_list = {"class": cls, "multiclass": multiclass}.get(trade.pool, "")
+        if not from_list:
             continue
         # **The incoming half.** Same level as the one that went, same
         # usage, this character's class, and not already in hand.
@@ -6606,7 +6615,7 @@ def power_swap(powers: list[str], feats: list[str], *,
             p
             for p, row in REGISTRY.items()
             if p not in out
-            and getattr(row, "cls", "") == cls
+            and getattr(row, "cls", "") == from_list
             # **The level-0 floor belongs to the CEILING branch only, and
             # applying it to both silently broke two working feats.**
             # `f2443` and `f2445` print *"of the same level"* and trade at
@@ -8005,7 +8014,8 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
     #: the feat's body can read what it drew. #1114.
     swapped_in: set[str] = set()
     powers = power_swap(list(powers), list(feats), cls=who.cls,
-                        level=who.level, record=swapped_in, keep=keep)
+                        level=who.level, multiclass=who.multiclass,
+                        record=swapped_in, keep=keep)
     # **The build-time options, drawn ONCE here rather than inside the
     # component list.** Two readers want them -- `BuildState.choices`,
     # and the loadout, because the hexblade's pact weapon is one of these

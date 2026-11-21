@@ -39353,6 +39353,35 @@ def multiclassed_into(out: Result) -> None:
              f"and a dealt hand really gets one: {got} of {len(CLASSES)}"
              " classes at one seed")
 
+    # -- the pool the fact unlocks ---------------------------------------
+    # **`Swap.pool` has a second value now and NO declarer yet**, so what
+    # is asserted here is the regression guard rather than the feature:
+    # the dispatch that chose `cls` for `"class"` is a lookup over two
+    # keys, and the ten rows already using `"class"` must come out
+    # unchanged. The three cards that would declare `"multiclass"`
+    # (`f2697`, `f2698`, `f2732`) are blocked a layer further on
+    # `dsl.augmentable`, so the branch is reachable and unexercised --
+    # said plainly instead of claimed as proven.
+    from combat_engine.chargen import power_swap
+    from combat_engine.engine.dsl import REGISTRY
+
+    users = [r for r, row in REGISTRY.items()
+             if getattr(row, "swap", None) and row.swap.pool == "class"]
+    out.that(len(users) >= 10,
+             f"the premise: {len(users)} rows draw from `pool='class'`")
+    declarers = [r for r, row in REGISTRY.items()
+                 if getattr(row, "swap", None) and row.swap.pool == "multiclass"]
+    out.that(not declarers,
+             f"and none declares `pool='multiclass'` yet ({declarers})")
+
+    hand = ["p1", "p2"]
+    out.that(power_swap(list(hand), [], cls="fighter", level=10) == hand,
+             "a hand with no swapping feat is returned untouched")
+    out.that(power_swap(list(hand), [], cls="fighter", level=10,
+                        multiclass="rogue") == hand,
+             "and passing a multiclass changes nothing on its own -- the"
+             " pool is read only by a row that names it")
+
 
 def lost_mode(out: Result) -> None:
     """"It loses its fly speed until the end of its next turn", and gets it back.

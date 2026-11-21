@@ -158,7 +158,21 @@ SWAP = ("chargen.power_swap(pool=)",)
 #: class -- has nothing to point a second value at. The symbol is the one
 #: `feats/bard_b.f1120` already waits on rather than a synonym, because the
 #: four rows are one missing fact and `blocked.py --group` should say so.
-MULTICLASS = ("chargen.multiclass_powers()",)
+#: **The fact has landed; what is left is the "augmentable" test.**
+#: `Character.multiclass` records the class (`#1161`) and
+#: `Swap.pool == "multiclass"` draws from it, so the pool half of these
+#: three cards is built. What is not sayable is which at-will attack
+#: powers are *augmentable*: measured over the declared corpus, **78**
+#: are and only **20** say so in `augments=` -- the other 58 call
+#: `powers/augment.augment` inside the body, where no header filter can
+#: see it.
+#:
+#: A derivation is available and is the obvious next step rather than a
+#: new field: `chargen._does_more_than_damage` already walks an `ast`
+#: for `c.<verb>` calls (`#1093`), and "does this body call `augment`"
+#: is the same walk one name over. Not built here, because it decides
+#: what 78 rows are and wants its own measurement.
+MULTICLASS = ("dsl.augmentable",)
 #: The other feat this card asks about, by ref. Asked once at arming:
 #: nobody takes a feat in the middle of a fight.
 PLAGUE_FEAT = "f651"

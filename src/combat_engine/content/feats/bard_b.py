@@ -374,6 +374,20 @@ def f1120(c: Cast) -> None:
     So the swap is one line the moment that provenance exists, and the marker
     names only the thing actually missing. Dropping the arrived symbol is not
     progress on the row and is not claimed as any.
+
+    **`#1161` landed and this row is still blocked, which is that
+    distinction arriving in practice.** `Character.multiclass` records
+    *which class* was multiclassed into and `Swap.pool == "multiclass"`
+    draws from it. Neither says *which powers* came in that way, and that
+    is what this card needs.
+
+    The mechanism that would carry it exists and is empty:
+    `chargen.power_swap`'s `record=` set writes `option:<feat>:<power>`
+    for every pool swap -- feat and power together, which is exactly this
+    provenance. Nothing populates it for a multiclass feat yet, because
+    the three rows that would (`f2697`, `f2698`, `f2732`) are blocked on
+    `dsl.augmentable`. The chain is two rows deep and this is the far end
+    of it.
     """
 
 

@@ -1669,11 +1669,19 @@ class Swap:
     #: `chargen.power_swap` draws it at the same level and usage as the
     #: power going out, which is the printed *"of the same level"*.
     #:
-    #: A string rather than a flag because two more pools are printed and
-    #: are **not** buildable yet (`#1142`): the class a character
-    #: multiclassed into, which nothing in `chargen` records at all, and
-    #: the skill-power list, which needs a prerequisite check per row.
-    #: Naming the pool leaves room for those without implying they work.
+    #: A string rather than a flag because more than one pool is printed.
+    #: Two values work:
+    #:
+    #: * `"class"` -- this character's own class list;
+    #: * `"multiclass"` -- the class it multiclassed into, which
+    #:   `Character.multiclass` records since `#1161`. The note here used
+    #:   to say that pool was "**not** buildable yet ... nothing in
+    #:   `chargen` records it at all", and that was the only thing
+    #:   stopping it.
+    #:
+    #: Still not buildable: the skill-power list, which needs a
+    #: prerequisite check per row. Naming the pool leaves room for it
+    #: without implying it works.
     pool: str = ""
     #: Is the **incoming** power drawn at the character's level or lower,
     #: rather than at the level of the one going back?
