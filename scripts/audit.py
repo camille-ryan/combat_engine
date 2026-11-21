@@ -141,6 +141,25 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **The three multiclass swap feats, on a board that deals no
+    # multiclass.** Each one's whole effect is granting the power
+    # `chargen.power_swap` drew from the class the character multiclassed
+    # into, read back with `c.chosen_options`. The audit board deals no
+    # multiclass, so nothing was recorded and there is nothing to grant.
+    #
+    # `drivers.multiclassed_into` is the proof and drives the whole chain
+    # on a stocked hand: the outgoing augmentable at-will goes back, the
+    # incoming one is recorded against the feat, it comes from the
+    # multiclass and not the character's own class, and it is augmentable
+    # -- which no header could have said, since 56 of the 78 say it in
+    # the body. Its control is the half that matters: with no multiclass
+    # nothing is drawn and the outgoing card is **put back**.
+    "f2697": "grants what the multiclass swap drew; the board deals no "
+             "multiclass -- see `drivers.multiclassed_into`",
+    "f2698": "grants what the multiclass swap drew; the board deals no "
+             "multiclass -- see `drivers.multiclassed_into`",
+    "f2732": "grants what the multiclass swap drew; the board deals no "
+             "multiclass -- see `drivers.multiclassed_into`",
     # **An item row that banks power points, on a board with no pool to
     # bank from.** `i1980p1`'s whole Effect is moving 1 or 2 points out of
     # the character's pool into the orb, and `PowerPoints.spend` on an

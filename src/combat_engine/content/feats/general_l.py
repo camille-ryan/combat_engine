@@ -90,6 +90,7 @@ from combat_engine.engine import (
     Relation,
     SavingThrow,
     Size,
+    Swap,
     TotalDefence,
     Trigger,
     Usage,
@@ -729,7 +730,11 @@ def f2859(c: Cast) -> None:
 
 
 @power("f2697", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=MULTICLASS)
+       reach=PERSONAL, target=SELF,
+       swap=Swap(1, Usage.AT_WILL, pool="multiclass",
+                 augmentable=True, incoming_augmentable=True,
+                 ceiling=True),
+       dropped=("dsl.Swap.limits_the_incoming_power",))
 def f2697(c: Cast) -> None:
     """Swaps one augmentable at-will for another class's.
 
@@ -762,11 +767,36 @@ def f2697(c: Cast) -> None:
     siblings' are not*, which `Swap` cannot express -- see `f2698` below,
     where the one `trade.usage` field has to be two different values.
 
-    Nothing here mis-plays. The row is refused in play and says why."""
+    Nothing here mis-plays. The row is refused in play and says why.
+    **Written.** `Character.multiclass` records the class (`#1161`),
+    `Swap.pool == "multiclass"` draws the incoming card from it, and
+    `dsl.augmentable` answers the half no header could -- 78 at-will
+    attack rows are augmentable and only 22 declare it, the other 56
+    calling `augment` in the body.
+
+    `chargen.power_swap` takes the outgoing card back and records the
+    incoming one as `option:<feat>:<power>`; the body grants what it drew,
+    which is `features/binder._pick`'s idiom and the same one every pool
+    row uses.
+
+    **Which half must be augmentable is per card and the header says so.**
+    A single flag would have read as "both" and been wrong on two of the
+    three in opposite directions -- silently, since a swap whose halves
+    are each individually legal reports nothing. Likewise
+    `incoming_usage`: the filter matched one usage on both halves, so an
+    encounter-for-at-will trade would have drawn an encounter power in.
+    """
+    for took in c.chosen_options(c.ref):
+        c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2698", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=MULTICLASS)
+       reach=PERSONAL, target=SELF,
+       swap=Swap(1, Usage.ENCOUNTER, pool="multiclass",
+                 incoming_usage=Usage.AT_WILL,
+                 incoming_augmentable=True, ceiling=True),
+       dropped=("dsl.Swap.limits_the_incoming_power",
+                "chargen.power_points_for_swap()"))
 def f2698(c: Cast) -> None:
     """Trades an encounter attack power for an augmentable at-will, and
     hands out points by level band.
@@ -789,11 +819,35 @@ def f2698(c: Cast) -> None:
     The points are a separate half and are not claimed either: the bands
     are printed, so no number here is derived, but `PowerPoints` is granted
     at build time and `power_swap` returns a list of refs with nowhere to
-    put them."""
+    put them.
+    **Written.** `Character.multiclass` records the class (`#1161`),
+    `Swap.pool == "multiclass"` draws the incoming card from it, and
+    `dsl.augmentable` answers the half no header could -- 78 at-will
+    attack rows are augmentable and only 22 declare it, the other 56
+    calling `augment` in the body.
+
+    `chargen.power_swap` takes the outgoing card back and records the
+    incoming one as `option:<feat>:<power>`; the body grants what it drew,
+    which is `features/binder._pick`'s idiom and the same one every pool
+    row uses.
+
+    **Which half must be augmentable is per card and the header says so.**
+    A single flag would have read as "both" and been wrong on two of the
+    three in opposite directions -- silently, since a swap whose halves
+    are each individually legal reports nothing. Likewise
+    `incoming_usage`: the filter matched one usage on both halves, so an
+    encounter-for-at-will trade would have drawn an encounter power in.
+    """
+    for took in c.chosen_options(c.ref):
+        c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2732", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=MULTICLASS)
+       reach=PERSONAL, target=SELF,
+       swap=Swap(1, Usage.AT_WILL, pool="multiclass",
+                 incoming_usage=Usage.ENCOUNTER,
+                 augmentable=True, ceiling=True),
+       dropped=("chargen.power_points_for_swap()",))
 def f2732(c: Cast) -> None:
     """The same trade as `f2698` in the other direction, and it spends
     points rather than granting them.
@@ -801,7 +855,27 @@ def f2732(c: Cast) -> None:
     Same missing fact, same symbol, and both of `f2697`'s extra gaps apply
     at once: the outgoing half is "augmentable", which only 20 of 78 rows
     declare in a header, and the incoming half is a different usage from
-    the outgoing one, which one `trade.usage` cannot say."""
+    the outgoing one, which one `trade.usage` cannot say.
+    **Written.** `Character.multiclass` records the class (`#1161`),
+    `Swap.pool == "multiclass"` draws the incoming card from it, and
+    `dsl.augmentable` answers the half no header could -- 78 at-will
+    attack rows are augmentable and only 22 declare it, the other 56
+    calling `augment` in the body.
+
+    `chargen.power_swap` takes the outgoing card back and records the
+    incoming one as `option:<feat>:<power>`; the body grants what it drew,
+    which is `features/binder._pick`'s idiom and the same one every pool
+    row uses.
+
+    **Which half must be augmentable is per card and the header says so.**
+    A single flag would have read as "both" and been wrong on two of the
+    three in opposite directions -- silently, since a swap whose halves
+    are each individually legal reports nothing. Likewise
+    `incoming_usage`: the filter matched one usage on both halves, so an
+    encounter-for-at-will trade would have drawn an encounter power in.
+    """
+    for took in c.chosen_options(c.ref):
+        c.grant_row(took, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2580", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

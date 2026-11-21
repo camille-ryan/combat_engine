@@ -39364,15 +39364,37 @@ def multiclassed_into(out: Result) -> None:
     # said plainly instead of claimed as proven.
     from combat_engine.chargen import power_swap
     from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Usage
 
     users = [r for r, row in REGISTRY.items()
              if getattr(row, "swap", None) and row.swap.pool == "class"]
     out.that(len(users) >= 10,
              f"the premise: {len(users)} rows draw from `pool='class'`")
-    declarers = [r for r, row in REGISTRY.items()
-                 if getattr(row, "swap", None) and row.swap.pool == "multiclass"]
-    out.that(not declarers,
-             f"and none declares `pool='multiclass'` yet ({declarers})")
+    declarers = {r: row.swap for r, row in REGISTRY.items()
+                 if getattr(row, "swap", None) and row.swap.pool == "multiclass"}
+    # **Each card's two halves, read off its printed sentence.** A single
+    # `augmentable` flag read as "both" and was wrong on two of the three
+    # in opposite directions; a single `usage` drew the wrong kind of
+    # power in for the two that trade across kinds. Both were caught here
+    # before shipping, so both are asserted per row rather than in the
+    # aggregate.
+    want = {
+        # out usage,        out aug, in usage,          in aug
+        "f2697": (Usage.AT_WILL, True, Usage.AT_WILL, True),
+        "f2698": (Usage.ENCOUNTER, False, Usage.AT_WILL, True),
+        "f2732": (Usage.AT_WILL, True, Usage.ENCOUNTER, False),
+    }
+    out.that(set(declarers) == set(want),
+             f"the three cards declare the multiclass pool ({sorted(declarers)})")
+    off = [r for r, (ou, oa, iu, ia) in want.items()
+           if r not in declarers
+           or (declarers[r].usage, declarers[r].augmentable,
+               declarers[r].incoming_usage or declarers[r].usage,
+               declarers[r].incoming_augmentable) != (ou, oa, iu, ia)]
+    out.that(not off,
+             "and each names the right kind on each half -- `f2698` trades"
+             " an encounter for an augmentable at-will, `f2732` the"
+             f" reverse ({off})")
 
     hand = ["p1", "p2"]
     out.that(power_swap(list(hand), [], cls="fighter", level=10) == hand,
@@ -39381,6 +39403,47 @@ def multiclassed_into(out: Result) -> None:
                         multiclass="rogue") == hand,
              "and passing a multiclass changes nothing on its own -- the"
              " pool is read only by a row that names it")
+    # -- the whole chain, end to end ------------------------------------
+    # **Asserted through `power_swap` because that is where the exchange
+    # happens**, and the three cards' bodies only grant what it recorded.
+    # The audit board deals no multiclass, so all three are SILENT there
+    # and carry a `KNOWN_SILENT` entry pointing here -- a statement about
+    # the board, not the rows.
+    from combat_engine.engine.dsl import augmentable
+    from combat_engine.engine.types import Usage
+
+    aug = [r for r, row in sorted(REGISTRY.items())
+           if row.usage is Usage.AT_WILL and row.attack is not None
+           and augmentable(r) and row.cls == "psion"]
+    out.that(len(aug) > 1,
+             f"the premise: a class with augmentable at-wills ({len(aug)})")
+    if len(aug) > 1:
+        hand = [aug[0]]
+        rec: set[str] = set()
+        left = power_swap(list(hand), ["f2697"], cls="psion", level=10,
+                          multiclass="ardent", record=rec)
+        out.that(aug[0] not in left,
+                 f"the outgoing augmentable at-will goes back ({left})")
+        out.that(len(rec) == 1 and next(iter(rec)).startswith("option:f2697:"),
+                 f"and the incoming one is recorded against the feat ({rec})")
+        drawn = next(iter(rec)).rsplit(":", 1)[1] if rec else ""
+        row = REGISTRY.get(drawn)
+        out.that(row is not None and row.cls == "ardent",
+                 f"drawn from the MULTICLASS and not the character's own"
+                 f" class ({drawn}: {getattr(row, 'cls', None)})")
+        out.that(row is not None and augmentable(drawn),
+                 f"and it is augmentable, which no header could have said"
+                 f" ({drawn})")
+
+        # THE CONTROL: no multiclass, no draw -- and the outgoing card
+        # must come back rather than vanish.
+        rec2: set[str] = set()
+        kept = power_swap(list(hand), ["f2697"], cls="psion", level=10,
+                          record=rec2)
+        out.that(not rec2 and kept == hand,
+                 "THE CONTROL: with no multiclass nothing is drawn and the"
+                 f" outgoing card is put back ({kept}, {rec2})")
+
 
 
 def lost_mode(out: Result) -> None:

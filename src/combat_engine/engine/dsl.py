@@ -17,6 +17,7 @@ import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from ._weapon_reach import BY_WEAPON, GIVES
@@ -1683,6 +1684,37 @@ class Swap:
     #: prerequisite check per row. Naming the pool leaves room for it
     #: without implying it works.
     pool: str = ""
+    #: The usage the **incoming** power is drawn at, when the card trades
+    #: across kinds. `None` means "the same as `usage`", which is every
+    #: card but two and is what the exchange has always done.
+    #:
+    #: **Two cards trade asymmetrically** and neither is sayable without
+    #: this: one swaps an *encounter* attack power for an augmentable
+    #: *at-will* from the multiclass, the other an at-will for an
+    #: encounter. The filter matched `trade.usage` on both halves, so
+    #: declaring either would have drawn the wrong kind of power in --
+    #: quietly, since both halves are individually legal.
+    incoming_usage: Usage | None = None
+    #: Must the **outgoing** card be augmentable? And the **incoming**
+    #: one? Two flags, because the three cards that ask differ on which
+    #: half -- read off the printed sentences rather than assumed:
+    #:
+    #: * `f2697` "swap one of your **augmentable at-will** attack powers
+    #:   for an **augmentable at-will** attack power" -- both;
+    #: * `f2698` "swap one of your **encounter** attack powers for an
+    #:   **augmentable at-will**" -- the incoming only;
+    #: * `f2732` "swap one of your **augmentable at-will** attack powers
+    #:   for an **encounter** attack power" -- the outgoing only.
+    #:
+    #: A single flag read as "both" and would have been wrong on two of
+    #: the three, in opposite directions and silently: a swap whose halves
+    #: are each individually legal reports nothing.
+    #:
+    #: Neither is a header question. Measured: **78** at-will attack rows
+    #: are augmentable and only 22 declare `augments=`, the other 56
+    #: calling `augment` in the body. `dsl.augmentable` is the reader.
+    augmentable: bool = False
+    incoming_augmentable: bool = False
     #: Is the **incoming** power drawn at the character's level or lower,
     #: rather than at the level of the one going back?
     #:
@@ -4515,6 +4547,63 @@ def affordable(world: World, actor: int, p: Power) -> tuple[int, ...]:
     have = (pool.points + pool.temporary) if pool is not None else 0
     return tuple(n for n in p.augment_costs if n <= have)
 
+
+
+@cache
+def augmentable(ref: str) -> bool:
+    """Can this row be augmented with power points? `#1161`.
+
+    **Not a header question, which is the whole reason this exists.**
+    Measured over the declared corpus: **78** at-will attack rows are
+    augmentable and only **22** say so in `augments=`. The other 56 say
+    it inside the body, by calling `content.powers.augment.augment` --
+    because a row whose augment only changes a number can offer the
+    choice where the number is spent rather than declaring a variant.
+
+    Three cards swap *an augmentable at-will* for another class's, so
+    neither half of the exchange can be chosen without this, and all
+    three sat refused in play naming it.
+
+    **Read off the source with an `ast` walk**, which is
+    `chargen._does_more_than_damage`'s technique and for its reasons:
+    `#1093` records what a substring split got wrong -- the docstring
+    counts as text so prose decided the answer, only the first call on a
+    line was seen, and a call split across lines was missed. A parse has
+    none of the three.
+
+    Matched on the **call** and not on an import, so a module importing
+    `augment` without using it is not counted, and matched by name rather
+    than by resolving the function, so the helper's own module does not
+    have to be imported here.
+
+    Cached, because it parses a function's source: 78 answers over a
+    corpus of 6,059 at-will attack rows, asked once per swap.
+
+    The honest limit is the one `_does_more_than_damage` states: a row
+    augmenting by calling some *other* helper that calls `augment` is
+    invisible here. None does today -- the 78 split exactly two ways.
+    """
+    p = REGISTRY.get(ref)
+    if p is None:
+        return False
+    if p.augments:
+        return True
+    if p.body is None:
+        return False
+    import ast
+    import inspect
+    import textwrap
+
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(p.body)))
+    except (OSError, SyntaxError, TypeError):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            named = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            if named == "augment":
+                return True
+    return False
 
 def keywords_of(world: Any, actor: int | None, p: Any) -> frozenset[Keyword]:
     """Every keyword a row carries **for this creature**.

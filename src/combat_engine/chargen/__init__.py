@@ -6554,7 +6554,7 @@ def power_swap(powers: list[str], feats: list[str], *,
     and keeps its marker, where an invention would look finished.
     """
     from combat_engine import ratings
-    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.dsl import REGISTRY, augmentable
 
     out = list(powers)
     # **Class features trade too, and only feats were read.** Ten class
@@ -6585,6 +6585,12 @@ def power_swap(powers: list[str], feats: list[str], *,
             # A utility is a row with nothing to attack with, which is how
             # `spellbook` tells the two apart as well.
             and (row.attack is None) is trade.utility
+            # **The card names the outgoing half too.** "Swap one of your
+            # augmentable at-will attack powers for an augmentable
+            # at-will attack power" -- both, so the filter is on both.
+            # `dsl.augmentable` is the reader; 56 of the 78 say it in the
+            # body, where no header filter could see it.
+            and (not trade.augmentable or augmentable(p))
         ]
         if not pool:
             continue
@@ -6598,7 +6604,26 @@ def power_swap(powers: list[str], feats: list[str], *,
         # into**". An unknown pool, or a character with no multiclass,
         # puts the outgoing card back exactly as an empty offer does.
         from_list = {"class": cls, "multiclass": multiclass}.get(trade.pool, "")
-        if not from_list:
+        if trade.pool and not from_list:
+            # **Put it back, exactly as an empty offer does below.** A
+            # pool that cannot resolve is the same situation as a pool
+            # with nothing in it: there is no incoming card, so losing the
+            # outgoing one would leave the character a power down for
+            # nothing.
+            #
+            # This path was unreachable in practice before `"multiclass"`
+            # existed -- `pool="class"` resolves for every dealt
+            # character, since `cls` is always set -- and it became the
+            # **common** case the moment a pool could point at a class
+            # most characters do not have. Caught by the control in
+            # `drivers.multiclassed_into`, which asserted the put-back
+            # rather than the draw.
+            out.append(gone)
+            continue
+        if not trade.pool:
+            # A row with no pool at all is the pre-`#1114` shape: the feat
+            # hands over a specific card and the removal is its price, so
+            # there is nothing to put back.
             continue
         # **The incoming half.** Same level as the one that went, same
         # usage, this character's class, and not already in hand.
@@ -6610,12 +6635,20 @@ def power_swap(powers: list[str], feats: list[str], *,
         # paragon blackguard trades its 1st-level daily for another
         # 1st-level daily, which is not what the sentence says.
         want = REGISTRY[gone].level
+        # **The incoming kind, which need not be the outgoing one.**
+        # Two cards trade across kinds -- an encounter power for an
+        # augmentable at-will, and the reverse -- and this filter
+        # matched `trade.usage` on both halves, so declaring either
+        # would have drawn the wrong sort of power in. Quietly, since
+        # both halves are individually legal.
+        incoming = trade.incoming_usage or trade.usage
         top = (level or want) if trade.ceiling else want
         offer = [
             p
             for p, row in REGISTRY.items()
             if p not in out
             and getattr(row, "cls", "") == from_list
+            and (not trade.incoming_augmentable or augmentable(p))
             # **The level-0 floor belongs to the CEILING branch only, and
             # applying it to both silently broke two working feats.**
             # `f2443` and `f2445` print *"of the same level"* and trade at
@@ -6638,7 +6671,7 @@ def power_swap(powers: list[str], feats: list[str], *,
             and (0 < row.level <= top if trade.ceiling
                  else row.level == want)
             and row.level <= (level or want)
-            and (trade.usage is None or row.usage is trade.usage)
+            and (incoming is None or row.usage is incoming)
             and (row.attack is None) is trade.utility
         ]
         if not offer:
