@@ -94324,15 +94324,32 @@ def a_feat_draws_its_swap_from_the_class_list(out: Result) -> None:
              " drawable feats inert",
              f"took {took}, best of {len(offers)} is {best}")
 
-    # -- the control: no class, no pool, today's behaviour exactly --------
+    # -- the control: no class, so nothing is drawn AND nothing is lost ---
+    #
+    # **This assertion used to read "records nothing and still trades
+    # away", and it was stale rather than wrong-when-written.** It dated
+    # from when `pool` could only be `"class"`, which resolves for every
+    # dealt character because `cls` is always set -- so "no class" was a
+    # case only a harness could reach and the put-back branch did not
+    # exist. `"multiclass"` made an unresolvable pool the common case, and
+    # `power_swap` now appends the outgoing card back for it, with its own
+    # comment saying so: *"losing the outgoing one would leave the
+    # character a power down for nothing"*.
+    #
+    # So the rule's next assertion and this one asserted opposite
+    # behaviours for the same situation, and this is the half that had to
+    # move. The claim worth keeping -- that an existing call site is
+    # unchanged -- belongs to a row with **no pool at all**, which is
+    # `f2103` below and is where it is now asserted.
     bare: set[str] = set()
     plain = _cg.power_swap(list(hand), ["f2441"], record=bare)
-    out.that(not bare and hand[0] not in plain,
-             "a caller passing no class records NOTHING and still trades"
-             " away -- so every existing call site is unchanged, and a"
-             " `pool` row reached without a class does nothing and keeps"
-             " its marker rather than inventing a draw",
-             f"recorded {sorted(bare) or 'nothing'}")
+    out.that(not bare and hand[0] in plain,
+             "a caller passing no class records NOTHING and keeps the card"
+             " it would have traded -- an unresolvable pool is the same"
+             " situation as an empty one, and ending a card down for no"
+             " incoming card is the one outcome worse than not firing",
+             f"recorded {sorted(bare) or 'nothing'}, hand {hand} ->"
+             f" {sorted(plain)}")
 
     # -- and the row that cannot be served keeps its power ---------------
     lonely: set[str] = set()
@@ -94412,6 +94429,43 @@ def a_feat_draws_its_swap_from_the_class_list(out: Result) -> None:
              " for no reason. The negative control, and the thing that"
              " keeps the pose's blast radius at exactly these four rows",
              f"{_bait('f2103', 'fighter', 10)!r}")
+
+    # **And the pre-`#1114` call site really is unchanged**, which is the
+    # claim the stale control above was making about the wrong row. A
+    # `Swap` with no pool hands over a specific card and the removal is
+    # its price, so there is nothing to put back and a caller passing no
+    # class gets exactly the old behaviour: the card goes.
+    #
+    # The row is chosen by **matching this hand's card**, not named. The
+    # first draft named `f2103`, whose `Swap` wants a level-3 *encounter*
+    # power where the hand holds a daily -- so its pool was empty, nothing
+    # was traded for a reason that had nothing to do with the claim, and
+    # the assertion failed on its own premise rather than on the contract.
+    outgoing = _REG[hand[0]]
+    eligible = sorted(
+        ref for ref, row in _REG.items()
+        if (sw := getattr(row, "swap", None)) is not None and not sw.pool
+        and outgoing.level >= sw.level
+        and (sw.usage is None or outgoing.usage is sw.usage)
+        and (outgoing.attack is None) is sw.utility
+        and not sw.augmentable
+    )
+    out.that(bool(eligible),
+             "there is a no-pool `Swap` row whose filter this hand's card"
+             " satisfies -- so the contract assertion below is about the"
+             " put-back and not about an empty pool, which is how its"
+             " first draft went red",
+             f"{len(eligible)} eligible, using {eligible[:1]}")
+    if eligible:
+        nopool: set[str] = set()
+        traded = _cg.power_swap(list(hand), [eligible[0]], record=nopool)
+        out.that(not nopool and hand[0] not in traded,
+                 f"{eligible[0]}: a no-pool `Swap` still trades away with"
+                 " no class passed -- the old contract, held by the rows"
+                 " it was written for, where a `pool` row now keeps its"
+                 " card instead",
+                 f"recorded {sorted(nopool) or 'nothing'}, hand {hand} ->"
+                 f" {sorted(traded)}")
 
     # Built in a loop rather than a comprehension: the checker cannot
     # narrow `Swap | None` across two separate subscripts of the same key,
