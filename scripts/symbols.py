@@ -1187,8 +1187,13 @@ READERS: dict[str, list[str]] = {
         # exemption itself, which is why the reader is public. #1341.
         "ignores_difficult", "kept_away_from", "leash_of", "line_of_effect",
         "line_of_sight", "sight_squares",
-        "moved_this_action", "moving_as", "on_the_ground", "prefers_range",
-        "ran_this_action", "range_profile",
+        "moved_this_action", "moving_as", "on_the_ground",
+        # **A question about a ROW, not a creature**, and it sits here
+        # because the thing it is about is movement: "does using this
+        # power let its user move". Read off the row's body as an `ast`
+        # walk, since no `Power` field says it. `f2791` is the caller.
+        "power_moves",
+        "prefers_range", "ran_this_action", "range_profile",
         "sealed", "speed", "squares", "telepathy_of", "terrain",
     ],
     # **"seeing" is the common case, not the whole section.** `can_hear` is

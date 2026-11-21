@@ -40710,6 +40710,116 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def a_power_that_moves_its_user_is_askable(out: Result) -> None:
+    """`query.power_moves`, and `f2791` gated on it.
+
+    *"When you use a fighter attack power that allows you to move"* --
+    and `Power` carries 44 declared fields, none of which says a row moves
+    its user. So it is read off the body as an `ast` walk, the technique
+    `chargen._does_more_than_damage` uses for the same kind of question.
+
+    **The row's own note argued against doing this and its premise was
+    stale**, which is the finding worth keeping: it rejected the technique
+    because that reader *"splits on the substring `"c."` and misclassifies
+    460 of 23,068 bodies (#1093)"*. `#1093` is what fixed it to an `ast`
+    walk. The objection was about an implementation that no longer exists.
+
+    Asserted on **real refs from the registry**, never invented ones: the
+    gate is a property of a row's body, so a made-up ref answers False for
+    the wrong reason.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.feats.fighter_c import (
+        _i_used_a_moving_fighter_attack,
+    )
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.query import power_moves
+
+    #: A fighter attack row that moves its user, one that does not, and a
+    #: fighter UTILITY row -- all three off `REGISTRY`.
+    MOVES, STILL = "p1000", "p997"
+
+    out.that(power_moves(MOVES) and not power_moves(STILL),
+             "the premise: the reader separates two real fighter attack"
+             f" rows -- {MOVES} moves its user, {STILL} does not")
+
+    # **A share, not a count**, so it survives the corpus growing -- and
+    # the band is wide on purpose: the claim is "discriminating", not a
+    # number. Measured at **1,914 of 23,883**, which is 8%; the first
+    # draft asserted 400-1500 off a figure counted over `p` rows alone and
+    # failed, because monster rows move far more often than powers do.
+    moving = [r for r in REGISTRY if power_moves(r)]
+    share = len(moving) / max(1, len(REGISTRY))
+    out.that(0.02 <= share <= 0.30,
+             "and it is discriminating across the corpus rather than"
+             " answering one way -- 0% would mean the walk never matches"
+             " and most would mean it matches anything"
+             f" ({len(moving)} of {len(REGISTRY)}, {share:.0%})")
+
+    # **A docstring that NAMES the verb must not count.** This is `#1093`'s
+    # own bug, and the only way to see it is a body whose prose says
+    # `c.shift` and whose code does not.
+    def _prose(c: object) -> None:
+        """This row would `c.shift(1)` if it did anything, which it does
+        not -- the word is in the prose and nowhere else."""
+
+    saved = REGISTRY[STILL].body
+    try:
+        REGISTRY[STILL].body = _prose          # ty: ignore
+        power_moves.cache_clear()
+        out.that(not power_moves(STILL),
+                 "a body whose DOCSTRING names `c.shift` and whose code"
+                 " does not answers False -- the substring version's bug,"
+                 " and the reason this is parsed")
+    finally:
+        REGISTRY[STILL].body = saved           # ty: ignore
+        power_moves.cache_clear()
+
+    # -- and `f2791`'s gate on top of it -----------------------------------
+    got = story.field_encounter(seed=7, level=3)
+    w = got.world
+    me = next(e for e in sorted(w.entities)
+              if not query.stat_block(w, e))
+
+    def used(ref: str, who: int = 0) -> PowerUsed:
+        return PowerUsed(actor=who or me, power=ref, targets=[me])
+
+    out.that(_i_used_a_moving_fighter_attack(w, me, used(MOVES)),
+             "`f2791` fires on a fighter attack power that moves its user")
+    out.that(not _i_used_a_moving_fighter_attack(w, me, used(STILL)),
+             "THE CONTROL: and not on one that moves nobody -- the clause"
+             " that was `dropped`, and the whole of what this reader buys")
+
+    util = next((r for r, p in REGISTRY.items()
+                 if p.cls == "fighter" and p.attack is None
+                 and power_moves(r)), "")
+    out.that(bool(util),
+             "the premise: a fighter UTILITY row that moves its user"
+             f" exists to test the attack-only half against ({util})")
+    out.that(not _i_used_a_moving_fighter_attack(w, me, used(util)),
+             "and not on a fighter UTILITY power, however much it moves"
+             " you -- `p.cls == 'fighter'` is true of those too, which is"
+             " the test the row never had")
+
+    other = next(e for e in sorted(w.entities) if e != me)
+    out.that(not _i_used_a_moving_fighter_attack(w, me, used(MOVES, other)),
+             "nor on somebody ELSE using it")
+
+    # The payout itself, so this is not only a predicate rule.
+    asking = Cast(world=w, me=me, ref="f2791", target=me)
+    asking.trigger = used(MOVES)               # ty: ignore
+    REGISTRY["f2791"].body(asking)
+    out.that(query.ignores_difficult(w, me)
+             if hasattr(query, "ignores_difficult")
+             else bool(w.effects.of(me)),
+             "and the body lays its waiver, so the gate is in front of a"
+             " real payout")
+
+
 def a_sustain_about_to_lapse_is_announced(out: Result) -> None:
     """`events.SustainDue`, and `i2740p1` declared against it.
 
@@ -116046,6 +116156,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "power_moves": (a_power_that_moves_its_user_is_askable,
+                    "whether a row moves its user is askable, and f2791 "
+                    "is gated on it"),
     "sustain_due": (a_sustain_about_to_lapse_is_announced,
                     "a sustainable hold's last round is announced, and the "
                     "item that answers it"),

@@ -903,6 +903,80 @@ def nearest_enemy(world: World, of: int) -> list[int]:
     return sorted(out)
 
 
+#: The three `Cast` verbs that move **the creature using the power**.
+#:
+#: Derived rather than guessed: each takes a `who=` and resolves it with
+#: `self.me if who is None else who`, so a bare call moves the caster.
+#: `c.slide`, `c.push` and `c.pull` are deliberately absent -- those are
+#: forced movement of a *target*, which is not "a power that allows you to
+#: move".
+_SELF_MOVERS = frozenset({"shift", "move", "teleport"})
+
+
+@cache
+def power_moves(ref: str) -> bool:
+    """Does using this row let its **user** move? #1093's technique.
+
+    *"When you use a fighter attack power that allows you to move"* --
+    `f2791` -- and `Power` carries 44 declared fields, not one of which
+    says a row moves its user. `reach`, `target` and `keywords` are the
+    three a reader might hope for and all three are about where the attack
+    goes.
+
+    So it is read off the body, as an `ast` walk, which is the technique
+    `chargen._does_more_than_damage` uses for the same kind of question.
+
+    **`f2791`'s own note argued against doing this and its premise was
+    stale.** It said that reader "splits on the substring `"c."` and
+    misclassifies 460 of 23,068 bodies (#1093), so it is not a thing to
+    build a printed clause on". `#1093` is what **fixed** that: the
+    function walks an `ast` now and its docstring records all three bugs
+    the substring version had. The objection was right about the old
+    implementation and is no longer about anything.
+
+    **The honest limit is the one that reader states too**: a row that
+    moves its user by calling a *helper* is invisible here, because the
+    walk sees `c.<verb>` and not what a helper does. That makes this
+    answer a floor -- it can say "this row moves you" and cannot prove the
+    negative -- which is the right direction for a card granting a
+    benefit: a missed row loses a waiver it should have had, where a false
+    positive hands one out.
+
+    A bare call is what counts. `c.shift(1)` moves the caster; a
+    `who=` naming somebody else does not, so an explicit `who=` that is
+    not `c.me` is skipped.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from .dsl import get
+
+    declared = get(ref)
+    if declared is None or declared.body is None:
+        return False
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(declared.body)))
+    except (OSError, TypeError, SyntaxError):
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if not (isinstance(fn, ast.Attribute) and fn.attr in _SELF_MOVERS):
+            continue
+        if not (isinstance(fn.value, ast.Name) and fn.value.id == "c"):
+            continue
+        who = next((k.value for k in node.keywords if k.arg == "who"), None)
+        if who is None:
+            return True
+        # `who=c.me` is the caster said out loud; anything else is not.
+        if (isinstance(who, ast.Attribute) and who.attr == "me"
+                and isinstance(who.value, ast.Name) and who.value.id == "c"):
+            return True
+    return False
+
+
 def displaced_this_action(world: World, eid: int) -> int:
     """How far this creature has ENDED UP from where its move action began.
 

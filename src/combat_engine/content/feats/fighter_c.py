@@ -75,6 +75,7 @@ from combat_engine.engine.query import (
     enemies,
     has_combat_advantage,
     moved_this_action,
+    power_moves,
 )
 from combat_engine.engine.resolve import MARK_PENALTY as MARK_KEY
 
@@ -219,11 +220,6 @@ def _i_used(ref: str):  # noqa: ANN202
         return ev.actor == me and ev.power == ref
 
     return when
-
-
-def _i_used_a_fighter_row(world, me: int, ev: Any) -> bool:  # noqa: ANN001
-    p = get(ev.power)
-    return ev.actor == me and p is not None and p.cls == "fighter"
 
 
 def _i_crit_with_a_fighter_attack(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -1276,35 +1272,70 @@ def f2475(c: Cast) -> None:
             when=other_hand)
 
 
+def _i_used_a_moving_fighter_attack(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """`f2791`'s moment: a fighter ATTACK power of mine that moves me.
+
+    Three tests where the row used to make one, and the two it was missing
+    are the two the card prints.
+
+    **"Attack power"** -- `_i_used_a_fighter_row` checks `p.cls ==
+    "fighter"` alone, and the sibling `_i_crit_with_a_fighter_attack`'s own
+    note says why that is not enough: *"`p.cls == 'fighter'` is true of the
+    utility rows too"*.
+
+    **"That allows you to move"** -- `query.power_moves`, which reads the
+    row's body as an `ast` for a bare `c.shift`, `c.move` or `c.teleport`.
+    That is the clause this row carried as `dropped`.
+    """
+    p = get(ev.power)
+    return (ev.actor == me
+            and p is not None
+            and p.cls == "fighter"
+            and p.attack is not None
+            and power_moves(ev.power))
+
+
 @power("f2791", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.power_moves()",),
-       trigger="you use a fighter attack power",
-       on=Trigger(PowerUsed, _i_used_a_fighter_row, "you use a fighter row"))
+       reach=PERSONAL, target=SELF,
+       trigger="you use a fighter attack power that allows you to move",
+       on=Trigger(PowerUsed, _i_used_a_moving_fighter_attack,
+                  "you use a fighter attack power that moves you"))
 def f2791(c: Cast) -> None:
     """`PowerUsed` fires before the body, which is what makes this
     reachable at all -- the movement the card is about happens inside
     that body, so the waiver has to be standing before it runs.
 
-    "A power that allows you to move" is the dropped half: nothing
-    records which rows move their user, so this arms on every fighter
-    attack power. It is wider than printed, and only while the turn
-    lasts.
+    **"A power that allows you to move" is written now, and the note that
+    argued against writing it was right about the tree and wrong about
+    the date.** It read: `Power` carries 44 declared fields and none says
+    a row moves its user -- still true -- and then ruled out reading the
+    body, because `chargen._does_more_than_damage` *"splits on the
+    substring `"c."` and misclassifies 460 of 23,068 bodies (#1093)"*.
 
-    **The general absence was re-measured rather than believed.** `Power`
-    carries 44 declared fields and not one of them says a row moves its
-    user -- `reach`, `target` and `keywords` are the three a reader might
-    hope for and all three are about where the attack goes -- and
-    `query.py` has no reader for it either. The only thing in the tree
-    that answers a question like this is `chargen`'s source-level
-    `_does_more_than_damage`, which splits on the substring `"c."` and
-    misclassifies 460 of 23,068 bodies (#1093), so it is not a thing to
-    build a printed clause on.
+    `#1093` is what **fixed** that reader. It walks an `ast` now, and its
+    docstring records all three bugs the substring version had. So the
+    objection was about an implementation that no longer exists, and the
+    technique it rejected is the one this clause wanted.
 
-    The over-reach is two-fold and both halves are the same symbol's: the
-    waiver covers rows that move nobody, and it covers movement later in
-    the turn that is not the power's. Narrowing the second alone would
-    leave the row no closer to the card and would need an effect ended off
-    `PowerResolved`, so it is left whole.
+    `query.power_moves` is that read: a bare `c.shift`, `c.move` or
+    `c.teleport` in the row's body, which are the three verbs defaulting
+    `who=` to the caster. **476 of 4,412 power rows** answer True, so the
+    gate is discriminating rather than decorative.
+
+    Its limit is the one the reader states: a row that moves its user
+    through a *helper* is invisible, so this is a floor. That is the right
+    direction here -- a missed row loses a waiver it should have had,
+    where a false positive hands one out.
+
+    **The other half of the over-reach is still here and is the smaller
+    one**: the waiver covers movement later in the turn that is not the
+    power's. Narrowing it needs an effect ended off `PowerResolved`, and
+    the row is no further from the card for it, so it is left whole and
+    the `until=When.EOT` says how long.
+
+    And the predicate gained the **"attack power"** test it never had:
+    `p.cls == "fighter"` is true of the utility rows too, which this
+    file's own `_i_crit_with_a_fighter_attack` says in as many words.
     """
     c.ignores_difficult(on=c.me, until=When.EOT)
 
