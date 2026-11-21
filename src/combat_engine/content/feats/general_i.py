@@ -1297,12 +1297,28 @@ def f1389(c: Cast) -> None:
 
 
 @power("f1390", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.heal_check()",))
+       reach=PERSONAL, target=SELF)
 def f1390(c: Cast) -> None:
-    """The healing-power half plays off `Healed`, whose `source` is the
-    healer. The Heal-check half is dropped: `SecondWind` says that a
-    second wind happened, but nothing says a Heal check is what allowed
-    it, and paying on every ally's own second wind is a different feat."""
+    """*"Whenever you use a healing power on an ally or use Heal to allow
+    an ally to spend his or her second wind, that ally can also make a
+    saving throw."*
+
+    The healing-power half plays off `Healed`, whose `source` is the
+    healer.
+
+    **The Heal-check half was dropped and is written now.** Its reason was
+    exact: *"`SecondWind` says that a second wind happened, but nothing
+    says a Heal check is what allowed it, and paying on every ally's own
+    second wind is a different feat."* That is still the right distinction
+    -- the card pays for **your** Heal check, not for an ally taking its
+    own second wind -- and `actions._first_aid` is what made it askable:
+    it rolls the check with `purpose="second wind"`, which `skills.check`
+    stamps on the event. So the gate is the purpose, and an ally's own
+    second wind still pays nothing because no Heal check of mine preceded
+    it.
+
+    Gated on `success` as well, since a failed check allows no second wind
+    and so allows nothing to ride on it."""
     me = c.me
 
     def on_heal(ev: Any) -> None:
@@ -1313,7 +1329,21 @@ def f1390(c: Cast) -> None:
         ):
             c.save(on=ev.target)
 
+    def on_first_aid(ev: SkillCheck) -> None:
+        if (
+            getattr(ev, "actor", None) != me
+            or getattr(ev, "skill", "") != "heal"
+            or getattr(ev, "purpose", "") != "second wind"
+            or not getattr(ev, "success", False)
+        ):
+            return
+        subject = getattr(ev, "target", None)
+        if subject is not None and subject != me:
+            c.save(on=subject)
+
     c.watch(Healed, on_heal, on=me, until=When.ENCOUNTER)
+    c.watch(SkillCheck, on_first_aid, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} first aid")
 
 
 @power("f1391", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

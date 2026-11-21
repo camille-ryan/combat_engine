@@ -40920,6 +40920,85 @@ def first_aid_beyond_stabilising(out: Result) -> None:
              f" would help every save for the rest of the fight ({plain} vs"
              f" {later[-1].bonus if later else None})")
 
+    # -- `f1390`, which rides the same check for a different payout --------
+    #
+    # *"Whenever you use a healing power on an ally or use Heal to allow an
+    # ally to spend his or her second wind, that ally can also make a
+    # saving throw."* The healing half was already written; the Heal-check
+    # half was `dropped` on the exact reason `_first_aid` has now removed
+    # -- `SecondWind` said a second wind happened and nothing said a Heal
+    # check allowed it.
+    world5, enc5, healer5, mate5 = board()
+    Cast(world=world5, me=healer5, ref="drivers:aid").dazed(
+        on=mate5, until=W.SAVE_ENDS)
+    REGISTRY["f1390"].body(
+        Cast(world=world5, me=healer5, ref="f1390", target=healer5))
+    rode: list = []
+    world5.bus.on(SavingThrow, lambda ev: rode.append(ev))
+    lends = offers(world5, enc5, healer5, "use_second_wind")
+    out.that(bool(lends),
+             "the premise: the second-wind grant is offered with `f1390`"
+             " held")
+    perform(world5, enc5, healer5, lends[0])
+    out.that(bool(rode) and all(e.actor == mate5 for e in rode),
+             "and `f1390` gets the ally a saving throw off the GRANT -- the"
+             f" half that was dropped ({len(rode)} throw(s))")
+
+    # THE CONTROL that keeps this feat from becoming a different one: an
+    # ally taking its OWN second wind is not your Heal check, and the
+    # row's own note says paying on that would be another card.
+    world6, _enc6, healer6, mate6 = board()
+    Cast(world=world6, me=healer6, ref="drivers:aid").dazed(
+        on=mate6, until=W.SAVE_ENDS)
+    REGISTRY["f1390"].body(
+        Cast(world=world6, me=healer6, ref="f1390", target=healer6))
+    alone: list = []
+    world6.bus.on(SavingThrow, lambda ev: alone.append(ev))
+    Cast(world=world6, me=mate6, ref="drivers:aid").second_wind(on=mate6)
+    out.that(not alone,
+             "THE CONTROL: and an ally taking its OWN second wind gets"
+             " none -- no Heal check of mine preceded it, which is the"
+             f" distinction the row's note insists on ({len(alone)} throw(s))")
+
+    # THE CONTROL for the purpose gate. Without it `f1390` also fires on
+    # the save-grant's own Heal check, which already produces a throw --
+    # so the tell is TWO throws where the card gives one. Nothing above
+    # could see it, because nothing above granted a save with `f1390` held.
+    world7, enc7, healer7, mate7 = board()
+    Cast(world=world7, me=healer7, ref="drivers:aid").dazed(
+        on=mate7, until=W.SAVE_ENDS)
+    REGISTRY["f1390"].body(
+        Cast(world=world7, me=healer7, ref="f1390", target=healer7))
+    twice: list = []
+    world7.bus.on(SavingThrow, lambda ev: twice.append(ev))
+    both = offers(world7, enc7, healer7, "grant_save")
+    out.that(bool(both), "the premise: the save grant is offered")
+    perform(world7, enc7, healer7, both[0])
+    out.that(len(twice) == 1,
+             "THE CONTROL: granting a SAVE with `f1390` held rolls ONE"
+             " throw, not two -- the feat rides the second-wind check and"
+             f" not every Heal check of mine ({len(twice)} throw(s))")
+
+    # THE CONTROL for the success gate: a FAILED Heal check allows no
+    # second wind, so it allows nothing to ride on it. Forced with a large
+    # negative modifier, the mirror of the +30 every board above uses.
+    world8, enc8, healer8, mate8 = board(sure=-30)
+    Cast(world=world8, me=healer8, ref="drivers:aid").dazed(
+        on=mate8, until=W.SAVE_ENDS)
+    REGISTRY["f1390"].body(
+        Cast(world=world8, me=healer8, ref="f1390", target=healer8))
+    missed: list = []
+    world8.bus.on(SavingThrow, lambda ev: missed.append(ev))
+    tried = offers(world8, enc8, healer8, "use_second_wind")
+    out.that(bool(tried), "the premise: the grant is offered either way")
+    perform(world8, enc8, healer8, tried[0])
+    out.that(not missed
+             and world8.need(mate8, Powers).times("second-wind") == 0,
+             "THE CONTROL: a FAILED Heal check grants no second wind and so"
+             " no saving throw -- the ally's second wind is still unspent,"
+             f" which is what says the check really failed ({len(missed)}"
+             " throw(s))")
+
 
 def acrobatics_softens_a_fall(out: Result) -> None:
     """Half an Acrobatics check comes off falling damage. Trained only.
