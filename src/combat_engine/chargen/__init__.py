@@ -3087,6 +3087,24 @@ class Character:
     #: Empty for every character but a revenant, and empty is what every
     #: reader already answers for.
     race2: str = ""
+    #: The class this character multiclassed **into**, or `""`. `#1161`.
+    #:
+    #: **One fact, not a model of multiclassing.** Four rows are blocked
+    #: below the symbols they name and every one needs only this: three
+    #: swap a power for one "from the class you multiclassed into", and
+    #: `f1120` rolls Charisma for "any attack power gained through a
+    #: multiclass feat". No feature ladder, no power progression, no
+    #: paragon multiclassing is implied or wanted here -- the same stated
+    #: narrow reach `race2` carries above, which is the precedent
+    #: (`#1029`: "a second race, for prerequisites and nothing else").
+    #:
+    #: **Derived from the dealt feats rather than drawn.** A character
+    #: multiclasses by taking the feat, so the fact follows from the hand:
+    #: `feat.category` reads `Multiclass <Class>` for the 105 feats that
+    #: grant one, and `multiclass_from` is the reader. Nothing is dealt
+    #: for a character whose feats include none, which is almost all of
+    #: them -- so this does not become a second class everybody has.
+    multiclass: str = ""
     #: The magic items this character arrives wearing, as `Magic` records.
     #: Empty means "deal me a kit", the same as `powers` and `feats` above
     #: and read at the same place in `spawn`.
@@ -3235,6 +3253,17 @@ class Character:
         # deal and a `Build` does.
         if self.race2:
             out.add(f"race2:{self.race2}")
+        # **The multiclass, under its own key**, for `race2`'s reason one
+        # field over: a reader asking "is this character a rogue" and one
+        # asking "which class did it multiclass into" are different
+        # questions, and `cls:` already answers the first. `#1161`.
+        #
+        # Carried at all because the fact has to reach the **board**:
+        # `f1120` rolls Charisma for "any attack power gained through a
+        # multiclass feat", which is a question asked mid-fight, and a
+        # `Character` does not outlive the deal where a `Build` does.
+        if self.multiclass:
+            out.add(f"multiclass:{self.multiclass}")
         return out
 
     @property
@@ -5270,6 +5299,51 @@ def legs_of_arm(arm: str) -> tuple[str, ...]:
     """
     legs = OPTION_PACT[arm]
     return (legs,) if isinstance(legs, str) else tuple(legs)
+
+
+def multiclass_from(feats: Iterable[str]) -> str:
+    """Which class these feats multiclass into, or `""`. `#1161`.
+
+    **Read off `feat.category`, which already says it.** 105 feats carry
+    `Multiclass <Class>` and the class half is the answer -- so there is
+    no table here to drift from the import, and a feat added later is
+    picked up without being listed.
+
+    **Filtered against `CLASSES`, which is load-bearing rather than
+    defensive.** 42 categories begin "Multiclass " and only 26 name a
+    class: the rest are `Multiclass Daily`, `Multiclass Encounter`,
+    `Multiclass Utility`, `Multiclass Whip` and a dozen more, which
+    describe what the feat *does* with a multiclass rather than a class
+    to multiclass into. One of them -- "Multiclass Ardent, Battlemind, or
+    Psion" -- names three, and a card offering a choice of three is not a
+    fact this field can hold. All 16 are excluded by the test rather than
+    by a list.
+
+    The first in sorted order wins when a character somehow holds two,
+    which no dealt character does: `feats_for` draws one feat per slot
+    from a pool already filtered by prerequisite, and the multiclass
+    feats each print an ability minimum. Said rather than left to chance
+    because "the first" is otherwise dictionary order.
+    """
+    from combat_engine import db
+
+    refs = [r for r in feats if r]
+    if not refs:
+        return ""
+    con = db.game()
+    marks = ",".join("?" * len(refs))
+    rows = con.execute(
+        f"select ref, category from feat where ref in ({marks})"
+        " and category like 'Multiclass %'", refs).fetchall()
+    # Sorted **by the ref**, not by the row: `db.game()` hands back
+    # `sqlite3.Row`, which has no ordering, so `sorted(rows)` raises the
+    # moment a hand holds two of these -- the one case the paragraph above
+    # is about. It only ever ran on one before.
+    for _ref, cat in sorted(rows, key=lambda r: r[0]):
+        name = cat[len("Multiclass "):].strip().lower()
+        if name in CLASSES:
+            return name
+    return ""
 
 
 OPTION_PACT: dict[str, str | tuple[str, ...]] = {
@@ -7904,6 +7978,21 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
         # order skills now have too. `#454`.
         worships=who.worships,
     )
+    # **The multiclass follows from the hand**, so it is settled the moment
+    # the feats are. `#1161`: nothing recorded which class a character
+    # multiclassed into, and four rows are blocked a layer below the
+    # symbols they name for want of exactly this one fact.
+    #
+    # Derived rather than drawn, which is why it costs no stream and
+    # cannot move an existing draw: a character multiclasses by taking the
+    # feat, and `feat.category` already says which class. A hand with no
+    # such feat answers `""`, which every reader of the field answers for
+    # -- the same arrangement `race2` has.
+    #
+    # `who.multiclass or ...` so a hand-built character keeps what it was
+    # given, like `who.feats` and `who.powers` above.
+    if not who.multiclass:
+        who = replace(who, multiclass=multiclass_from(feats))
     # A feat that hands over a card takes one back, and both halves happen
     # here: a `Cast` opens on a board with the hand already dealt.
     #

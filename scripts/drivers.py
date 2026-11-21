@@ -39265,6 +39265,95 @@ def a_shift_through_enemies_is_narrowed_by_the_move(out: Result) -> None:
              f" {seen.get('kind')!r})")
 
 
+def multiclassed_into(out: Result) -> None:
+    """Which class a character multiclassed into, which nothing recorded.
+    `#1161`.
+
+    Four rows are blocked a layer below the symbols they name and all four
+    need the one fact: three swap a power for one "from the class you
+    multiclassed into", and `f1120` rolls Charisma for "any attack power
+    gained through a multiclass feat".
+
+    **Derived, not drawn**, so it costs no stream and cannot move an
+    existing draw: a character multiclasses by taking the feat, and
+    `feat.category` already reads `Multiclass <Class>` for the 85 feats
+    that grant one.
+
+    **The `CLASSES` filter is load-bearing and that is what this mostly
+    asserts.** 42 categories begin "Multiclass " and only 26 name a
+    class; the rest say what the feat *does* with a multiclass --
+    `Multiclass Daily`, `Multiclass Encounter`, `Multiclass Whip` -- and
+    one names three classes at once, which is not a fact one field can
+    hold. Every one of the 16 is excluded by the test rather than by a
+    list, so a category added later is handled without being enumerated.
+    """
+    from combat_engine import db
+    from combat_engine.chargen import CLASSES, Character, multiclass_from
+    from combat_engine.content import loader  # noqa: F401
+
+    con = db.game()
+    cats = {r[0] for r in con.execute(
+        "select distinct category from feat where category like 'Multiclass %'")}
+    named = {c for c in cats if c[len("Multiclass "):].strip().lower() in CLASSES}
+    out.that(len(cats) > len(named) > 0,
+             f"the premise: {len(named)} of {len(cats)} 'Multiclass <X>'"
+             " categories name a class")
+
+    # Every feat under a class-naming category derives that class, and
+    # every feat under the others derives nothing. Asserted over ALL of
+    # them rather than a sample: one member would pick the case that works.
+    rows = con.execute(
+        "select ref, category from feat where category like 'Multiclass %'"
+    ).fetchall()
+    wrong = []
+    for ref, cat in rows:
+        want = cat[len("Multiclass "):].strip().lower()
+        want = want if want in CLASSES else ""
+        if multiclass_from([ref]) != want:
+            wrong.append((ref, cat, multiclass_from([ref]), want))
+    out.that(not wrong,
+             f"all {len(rows)} multiclass feats derive the right class, and"
+             f" the {len(cats) - len(named)} non-class categories derive"
+             f" nothing ({wrong[:2]})")
+
+    out.that(multiclass_from([]) == "" and multiclass_from(["f1"]) == "",
+             "an empty hand and an ordinary feat derive nothing")
+
+    # **Two at once must not raise**, which is the case the first draft
+    # got wrong: `db.game()` hands back `sqlite3.Row`, which has no
+    # ordering, so `sorted(rows)` raised the moment a hand held two. It
+    # only ever ran on one, and a probe with a bare `except` reported that
+    # as "a multiclass is never dealt" -- 0 of 78, where the real figure
+    # is 287 of 312.
+    pair = [r[0] for r in rows[:2]]
+    out.that(multiclass_from(pair) in CLASSES or multiclass_from(pair) == "",
+             f"a hand holding two does not raise ({pair})")
+
+    # The board key, under its own name like `race2`.
+    on = Character(cls="fighter", level=10, build="", race="",
+                   skills=frozenset(), worships="", multiclass="rogue")
+    off = Character(cls="fighter", level=10, build="", race="",
+                    skills=frozenset(), worships="")
+    out.that("multiclass:rogue" in on.choices,
+             "a character carrying one says so in `choices`")
+    out.that(not [k for k in off.choices if "multiclass" in k],
+             "THE CONTROL: one without it adds no key, so a reader asking"
+             " 'which class' cannot be answered with the character's own")
+
+    # And it is reached in practice, which the field being right does not
+    # imply: the feats have to be DEALT.
+    from random import Random
+
+    from combat_engine.chargen import build_of, feats_for
+
+    got = sum(1 for cls in sorted(CLASSES)
+              if multiclass_from(feats_for(cls, 10, build_of(cls),
+                                           Random(f"1:{cls}:feats"), [], "")))
+    out.that(got > 0,
+             f"and a dealt hand really gets one: {got} of {len(CLASSES)}"
+             " classes at one seed")
+
+
 def lost_mode(out: Result) -> None:
     """"It loses its fly speed until the end of its next turn", and gets it back.
 
@@ -114313,6 +114402,9 @@ DRIVERS = {
     "shift_through": (a_shift_through_enemies_is_narrowed_by_the_move,
                       "a shift through enemies' spaces, narrowed by the "
                       "move's kind, its distance and the row that asked"),
+    "multiclassed_into": (multiclassed_into,
+                          "which class a character multiclassed into, and "
+                          "the 16 categories that name no class"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
     "racial_power_riders": (racial_power_riders,
