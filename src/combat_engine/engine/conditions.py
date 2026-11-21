@@ -79,6 +79,17 @@ class Rules:
     #: barring the other, and `cannot_move` is the wrong card for them --
     #: it stops walking too.
     no_shift: bool = False
+    #: The crawl is **half** speed, which is a cost of being prone rather
+    #: than a property of crawling -- so it is a field here and not a
+    #: literal in `actions._movement`, where it used to be.
+    #:
+    #: `f3764` prints *"you can crawl at your normal speed"*, and its note
+    #: worked out why none of the obvious doors fit: `c.bonus("speed")` is
+    #: read by `query.speed` for every kind of movement at once, which is
+    #: not the sentence, and `c.extend_every("crawl", n)` is read by
+    #: `c.shift` and `c.teleport` and never by an action the menu builds,
+    #: so it would be a modifier nothing consults.
+    halve_crawl: bool = False
 
 
 NOTHING = Rules()
@@ -118,7 +129,7 @@ RULES: dict[Condition, Rules] = {
     # lands, an adjacent archer still gets a combat-advantage +2 it should
     # not.
     Condition.PRONE: Rules(
-        grants_ca=True, attack=-2, no_shift=True,
+        grants_ca=True, attack=-2, no_shift=True, halve_crawl=True,
         ranged_defences={d: 2 for d in DEFENCES},
     ),
     Condition.REMOVED: Rules(cannot_act=True, cannot_move=True),
@@ -199,6 +210,11 @@ WAIVABLE: dict[str, Any] = {
     "grants_ca": False,
     "speed_cap": None,
     "no_shift": False,
+    #: `f3764`'s word, and the sixth. The same shape as `no_shift` above --
+    #: a printed one-sentence waiver of one field of `Condition.PRONE` --
+    #: and the reason both are here rather than in a closed four-word list
+    #: is that the cards kept turning out to name them.
+    "halve_crawl": False,
 }
 
 #: The old private name, kept as an alias because `rules_for` and `c.waive`

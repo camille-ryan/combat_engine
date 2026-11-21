@@ -61386,6 +61386,40 @@ def a_prone_creature_crawls_at_half_speed(out: Result) -> None:
              " `can_shift` too, so an offer the menu makes and the mover"
              f" refuses would show up here (performed={took})")
 
+    # -- and the card that waives the OTHER half of the same cost ----------
+    #
+    # `f3764`: *"you can crawl at your normal speed"*. The halving used to
+    # be a literal `// 2` in `_movement`, so it is now `Rules.halve_crawl`
+    # on `Condition.PRONE` and a sixth word in `conditions.WAIVABLE`. The
+    # half-speed assertion far above is the control for the refactor: it
+    # passed unchanged, which is the only thing that says moving a literal
+    # into a table moved nothing for everybody else.
+    full, her, _ = _posed("f2743", 1)
+    f = Cast(world=full, me=her, ref="drivers:crawl")
+    pace2 = speed(full, her)
+    f.prone(on=her)
+    out.that(is_(full, her, Condition.PRONE) and pace2 > 1,
+             "the premise: prone, and a speed worth halving"
+             f" (speed={pace2})")
+    halved = [a for a in movers(full, her) if a.kind == "crawl"]
+    out.that(halved and max(len(a.path) for a in halved) == pace2 // 2,
+             "the control: half speed before the waiver, which is the"
+             f" number the printed action gives ({pace2 // 2})")
+
+    REGISTRY["f3764"].body(Cast(world=full, me=her, ref="f3764", target=her))
+    whole = [a for a in movers(full, her) if a.kind == "crawl"]
+    out.that(whole and max(len(a.path) for a in whole) == pace2,
+             "and `f3764` crawls at its FULL speed -- the waiver read per"
+             " creature, where the halving used to be a literal no modifier"
+             f" could reach ({max((len(a.path) for a in whole), default=0)}"
+             f" of {pace2})")
+    out.that(is_(full, her, Condition.PRONE)
+             and not any(a.kind in ("move", "run", "shift")
+                         for a in movers(full, her)),
+             "THE CONTROL: and it is still prone with no walk, run or"
+             " shift. This card waives the speed and `f2604` waives the"
+             " shift; one waiver must not quietly buy the other")
+
 
 def a_build_time_sub_choice_is_recorded(out: Result) -> None:
     """*"Choose necrotic or cold when you take this feat"* -- a sub-choice

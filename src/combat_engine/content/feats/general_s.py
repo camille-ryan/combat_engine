@@ -2017,10 +2017,13 @@ def f3763(c: Cast) -> None:
 
 
 @power("f3764", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("conditions.Rules.halve_crawl",))
+       reach=PERSONAL, target=SELF)
 def f3764(c: Cast) -> None:
-    """**Re-pointed: the premise was refuted.** This said "crawling is not
+    """**Written. The note below is the diagnosis it was written from**,
+    kept because every step of it holds and the only thing missing was the
+    three changes it names. What landed is at the end.
+
+    **Re-pointed: the premise was refuted.** This said "crawling is not
     an action this engine has, so there is no half speed to raise to a full
     one", and `#995` gave a prone creature the crawl -- `actions._movement`
     builds an `Action(kind="crawl")` per destination, priced as a move and
@@ -2058,7 +2061,25 @@ def f3764(c: Cast) -> None:
 
     Not shared with `f2282`'s `c.crawl()` any more either, which wants the
     crawl not to **provoke**: one symbol for two cards cannot go green
-    correctly for either."""
+    correctly for either.
+
+    ## What landed
+
+    * `conditions.Rules.halve_crawl`, with `Condition.PRONE` carrying it.
+      The halving is a cost of being **prone** rather than a property of
+      crawling, which is why it belongs beside `no_shift` and not in the
+      menu;
+    * `"halve_crawl"` in `conditions.WAIVABLE`, which `f2604` had just
+      made public for exactly this kind of word;
+    * `actions._movement`'s crawl branch reads `rules_for` instead of
+      halving by hand, so the waiver is honoured per creature.
+
+    The refactor is behaviour-neutral for everybody else, and
+    `drivers.crawl`'s existing *"the furthest one is half its speed"*
+    assertion is what says so -- it passed unchanged across the change,
+    which is the only reason to trust that moving a literal into a table
+    moved nothing."""
+    c.waive(Condition.PRONE, "halve_crawl", on=c.me, until=When.ENCOUNTER)
 
 
 def _ranged_while_armed(c: Cast, *refs: str) -> Callable[[dict[str, Any]], bool]:

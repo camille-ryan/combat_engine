@@ -1347,6 +1347,7 @@ def _shift_offers(world: World, encounter: Encounter, actor: int) -> list[Action
 
 
 def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    from .conditions import rules_for
     from .query import can_move, can_run, can_walk, speed
 
     out: list[Action] = []
@@ -1369,8 +1370,17 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
         # that enemy can make an opportunity attack"* is the ordinary walk's
         # provocation, not a special one. #995.
         if encounter.can_spend(actor, ActionType.MOVE) and can_walk(world, actor):
+            # **`rules_for`, not a literal `// 2`.** The halving is a cost
+            # of being prone, not a property of crawling, so it is
+            # `Rules.halve_crawl` and a card may waive it -- `f3764` prints
+            # *"you can crawl at your normal speed"*. Read per creature, so
+            # the waiver recorded by `c.waive` is honoured here the way
+            # `can_shift` honours `no_shift`.
+            pace = speed(world, actor)
+            if rules_for(world, actor, Condition.PRONE).halve_crawl:
+                pace //= 2
             for dest, path in sorted(
-                world.reachable_paths(actor, speed(world, actor) // 2).items()
+                world.reachable_paths(actor, pace).items()
             ):
                 out.append(
                     Action(
