@@ -133,6 +133,7 @@ from combat_engine.engine.events import (
     Moved,
     MoveEnd,
     MoveStart,
+    PointsSpent,
     PowerResolved,
     PowerUsed,
     SkillCheck,
@@ -2504,10 +2505,31 @@ def f3317(c: Cast) -> None:
 
 
 @power("f3323", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_points_spent()",))
+       reach=PERSONAL, target=SELF)
 def f3323(c: Cast) -> None:
-    """Fires the first time the pool empties. `c.restore_use` is the verb
-    waiting for it; nothing announces a pool reaching zero."""
+    """"The first time you drop to 0 power points during an encounter, you
+    regain the use of your p1449."
+
+    The marker was right about both halves: `c.restore_use` was the verb
+    waiting, and nothing announced a pool reaching zero. `PointsSpent`
+    does now, and it carries `left` -- the pool *after* the spend -- so
+    "drop to 0" is a comparison at the moment it happened rather than a
+    read from a handler that may run later.
+
+    `once=True` is the printed "the first time ... during an encounter",
+    and it is the right shape rather than a convenient one: `c.watch`'s
+    `once` reads the log to decide whether the handler did anything, so a
+    spend that leaves a point in the pool does not consume it.
+    """
+    me = c.me
+
+    def emptied(ev: PointsSpent) -> None:
+        if ev.who != me or ev.left > 0:
+            return
+        c.restore_use("p1449", on=me)
+
+    c.watch(PointsSpent, emptied, until=When.ENCOUNTER, on=me,
+            once=True, label=c.ref)
 
 
 @power("f3329", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -21358,9 +21358,18 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         gone = pool.spend(n)
         if gone:
             pool.augmented[self.ref] = pool.augmented.get(self.ref, 0) + gone
-            self.world.bus.emit(
-                Note(text=f"{spender} spends {gone} power point(s) on {self.ref}")
-            )
+            # **`PointsSpent`, not the `Note` this used to emit.**
+            # `PointsRegained`'s docstring had already written down why the
+            # `Note` was wrong -- it carries no `by`, so `audit` refuses it
+            # and no row can watch the moment -- and two feats print "the
+            # first time you drop to 0 power points during an encounter",
+            # which is unaskable without it.
+            from .events import PointsSpent
+
+            self.world.bus.emit(PointsSpent(
+                who=spender, amount=gone,
+                left=pool.points + pool.temporary, by=self.ref,
+            ))
         return gone
 
     def gain_points(self, n: int, *, who: int | None = None,

@@ -57,7 +57,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.components import Position
-from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.events import PointsSpent, PowerResolved
 from combat_engine.engine.grid import neighbours
 
 DEFENCES = (AC, FORT, REF, WILL)
@@ -75,8 +75,6 @@ TRIGGERING = ("PowerUsed.trigger",)
 #: Nothing lets a rider replace the triggering power's own printed effect:
 #: `PowerUsed` is a plain `Event`, so `c.cancel()` cannot stop it.
 INSTEAD = ("c.pre_empt(ref, clause)",)
-#: Spending power points emits a `Note` and nothing a trigger can watch.
-POINTS = ("c.on_points_spent()",)
 
 
 def _used(ref: str):  # noqa: ANN202
@@ -541,16 +539,40 @@ def f3304(c: Cast) -> None:
 
 @power("f3322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       todo=POINTS)
+       )
 def f3322(c: Cast) -> None:
-    """One gap now, and it is the pool rather than the range.
+    """"The first time you drop to 0 power points during an encounter, you
+    and each ally within range of your telepathy can shift 1 square as a
+    free action."
 
-    Spending power points emits a `Note` and no event, so "the first
-    time you drop to 0" has nothing to watch.
+    **Written on `PointsSpent`, which is the event the last note asked
+    for.** It said "spending power points emits a `Note` and no event, so
+    'the first time you drop to 0' has nothing to watch" -- and that was
+    the whole gap. The event carries `left`, the pool *after* the spend,
+    so "drop to 0" is one comparison at the moment it happened rather
+    than a read of the pool from a handler that may run later.
 
-    The range used to be the second gap, on the reasoning that
-    `rt:r46-t2` is declared `out_of_combat` -- "deliberately inert,
-    because the trait is a way of talking" -- so the radius was not a
-    number anything on the board carried. The talking half of that was
-    right and the radius half was not: the trait lays `c.telepathy(5)`
-    now and `c.in_telepathy()` is the read. #665."""
+    **`once=` on the watch, not a latch**, because the printed limit is
+    "the first time ... during an encounter" and that is exactly what
+    `c.watch(..., once=True)` means -- and it reads the log to decide
+    whether the handler *did* anything, so a spend that does not empty
+    the pool does not consume it.
+
+    The range is `c.in_telepathy()`, which the previous note had already
+    corrected itself about: the radius is on the board after all.
+
+    A free action costs nothing, so the only gate the printed sentence
+    carries is who shifts -- `ranger/level_1._ally_steps_beside` makes
+    the same argument for the same reason.
+    """
+    me = c.me
+
+    def emptied(ev: PointsSpent) -> None:
+        if ev.who != me or ev.left > 0:
+            return
+        c.shift(1, who=me)
+        for friend in c.in_telepathy():
+            c.shift(1, who=friend)
+
+    c.watch(PointsSpent, emptied, until=When.ENCOUNTER, on=me,
+            once=True, label=c.ref)

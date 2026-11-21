@@ -27003,6 +27003,100 @@ def points_regained(out: Result) -> None:
              f" single total could not have kept apart ({pool.points})")
 
 
+def pool_emptied(out: Result) -> None:
+    """"The first time you drop to 0 power points during an encounter."
+    `f3322` and `f3323`.
+
+    **The event is the whole of it.** `c.spend_points` announced a `Note`,
+    which carries no `by`, so the moment a pool emptied was unwatchable
+    and both feats were refused in play. `PointsSpent` carries `left` --
+    the pool *after* the spend -- so "drop to 0" is one comparison at the
+    moment it happened rather than a read of the pool from a handler that
+    might run later.
+
+    The negative control is the assertion that matters: a spend that
+    leaves a point behind must announce and do **nothing**. A handler
+    keyed on the event alone, with no `left` test, would pass every
+    positive assertion here.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import PowerPoints
+    from combat_engine.engine.events import PointsSpent
+
+    world, me, _ = _board(seed=3)
+    pool = world.get(me, PowerPoints) or world.add(me, PowerPoints())
+    pool.maximum, pool.points, pool.temporary = 5, 5, 0
+    c = Cast(world=world, me=me, ref="drivers:pool")
+
+    said: list[PointsSpent] = []
+    world.bus.on(PointsSpent, lambda ev: said.append(ev))
+
+    out.that(c.spend_points(2) == 2 and said and said[-1].left == 3,
+             "a spend announces itself, with the pool left behind on the"
+             f" event ({said[-1].left if said else None})")
+    out.that(said[-1].by == "drivers:pool" and said[-1].who == me,
+             "and it is attributable -- the `by` a `Note` could not carry,"
+             " which is why `audit` refused the old announcement")
+
+    # Expiring points count toward what is left, or a character holding
+    # one would read as empty while still able to pay.
+    pool.points, pool.temporary = 0, 2
+    c.spend_points(1)
+    out.that(said[-1].left == 1,
+             "an expiring point counts as left -- it can still be spent,"
+             f" so a pool holding one has not dropped to 0 ({said[-1].left})")
+
+    # -- the rows themselves, not a stand-in handler ---------------------
+    # **A first draft armed its own `c.watch` with a handler that appended
+    # to a list, and the `once=True` assertion failed**: `once` reads the
+    # LOG to decide whether the handler did anything, so a handler that
+    # emits nothing never spends the hold. That is the documented
+    # behaviour and the stand-in was the bug -- both real rows do
+    # something observable (`c.restore_use`, `c.shift`). So the rows are
+    # driven here instead, which is what the rule should have done.
+    # `f3322` is driven rather than `f3323`, because its payout needs no
+    # staging: it shifts the caster, where the other restores the use of a
+    # power that first has to be known and expended. `audit.py` covers
+    # both rows firing; what is asserted here is the trigger.
+    #
+    # Armed by calling the row's own body on a plain board, not through
+    # `audit.board`: 156 rules reach for that and it is order-dependent in
+    # the suite. The body is what has to run either way -- the verb is not
+    # the row.
+    from combat_engine.engine.dsl import REGISTRY
+
+    ref = "f3322"
+    board, who, _ = _board(seed=3)
+    box = board.get(who, PowerPoints) or board.add(who, PowerPoints())
+    box.maximum, box.points, box.temporary = 4, 4, 0
+    REGISTRY[ref].body(Cast(world=board, me=who, ref=ref))
+    spender = Cast(world=board, me=who, ref="drivers:pool")
+
+    def moves() -> int:
+        """Squares the holder has been moved, however it was announced."""
+        return sum(1 for ev in board.bus.log
+                   if getattr(ev, "actor", None) == who
+                   and type(ev).__name__ in ("Moved", "MoveStart", "Shifted"))
+
+    before = moves()
+    spender.spend_points(3)
+    out.that(moves() == before,
+             f"THE CONTROL: {ref} pays nothing while a point is left"
+             f" ({box.points} left, {moves() - before} move event(s))")
+
+    spender.spend_points(1)
+    paid = moves() - before
+    out.that(box.points == 0 and paid > 0,
+             f"{ref} shifts the holder when the pool empties"
+             f" ({box.points} left, {paid} move event(s))")
+
+    box.points = 1
+    spender.spend_points(1)
+    out.that(moves() - before == paid,
+             "and 'the first time ... during an encounter' holds against a"
+             f" second emptying ({moves() - before} against {paid})")
+
+
 def boon_traded(out: Result) -> None:
     """A feat replaces the pact boon's regain with a power point.
 
@@ -114434,6 +114528,9 @@ DRIVERS = {
         "a choose-one race picks, and only five races can move"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
+    "pool_emptied": (pool_emptied,
+                     "the first time a psionic pool drops to 0, and the "
+                     "spend that leaves a point behind"),
     "points_regained": (points_regained,
                         "a power point put back, and the cap that refuses one"),
     "boon_traded": (boon_traded,

@@ -1684,6 +1684,34 @@ class PointsRegained(Event):
 
 
 @dataclass
+class PointsSpent(Event):
+    """Power points were taken out of a psionic pool to augment a row.
+
+    **The spend this file has been describing as a `Note` since
+    `PointsRegained` was written.** That docstring says the spend "cannot
+    be attributed to the row that paid", and it was right: `Note` carries
+    no `by`, so `audit.DID_SOMETHING` refuses it and nothing could watch
+    the moment either.
+
+    `left` is why this is an event rather than only an attribution fix.
+    Two feats print *"the first time you drop to 0 power points during an
+    encounter"* -- `f3322` and `f3323` -- and that is a question about the
+    pool **after** the spend, at the moment it happened. A watcher reading
+    the pool itself would answer the same thing today and the wrong thing
+    the moment anything else moves points between the spend and the
+    handler.
+
+    `amount` is what actually went, which can be less than was asked:
+    `PowerPoints.spend` clamps at what is there.
+    """
+
+    who: int
+    amount: int
+    left: int
+    by: str
+
+
+@dataclass
 class OneShotGiven(Event):
     """A one-shot was put in somebody's hands for them to spend later.
 
