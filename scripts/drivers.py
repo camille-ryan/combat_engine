@@ -26913,6 +26913,18 @@ def points_regained(out: Result) -> None:
     nothing. If the cap were dropped to make those rows pass, they would be
     silently wrong rather than honestly marked, so it is measured here.
 
+    **And the second door now exists, which is how those rows get written
+    without touching the cap.** `c.gain_points(expiring=)` grants above
+    the ceiling and ends on a named beat, so both rules hold at once: a
+    *regain* still refuses a full pool, and a *grant* still reaches one.
+    Asserting the pair together is the point -- dropping the cap would
+    make the grant's assertions pass just as well, and only the regain's
+    would notice.
+
+    `i1793p1` is written on it. `f3625` is not, and its remaining gap is
+    no longer about points at all: its clause is a minor action offered by
+    a trait, which is `c.grant_inline()`.
+
     Three things:
 
     * **a spent point comes back**, which is the eight rows' printed line;
@@ -26954,6 +26966,41 @@ def points_regained(out: Result) -> None:
              "while a transfer to yourself is still refused, which is the"
              " verb the markers first named and the reason a self-regain"
              f" had to exist (moved {moved}, pool {before} -> {pool.points})")
+
+    # -- the other door: a grant that reaches a FULL pool and lapses -----
+    from combat_engine.engine import When
+
+    # The pool is still full from the assertions above, which is the case
+    # the regain refuses and this one must not.
+    out.that(pool.points == pool.maximum and pool.temporary == 0,
+             "the premise: the pool is full and holds no expiring points")
+    gained = c.gain_points(2, expiring=When.EONT)
+    out.that(gained == 2 and pool.temporary == 2,
+             "a FULL pool still takes expiring points -- the case a regain"
+             f" refuses (gained {gained}, temporary {pool.temporary})")
+    out.that(c.points() == pool.maximum + 2,
+             "and `c.points` counts them, because every reader of it is"
+             f" asking what can be paid ({c.points()})")
+
+    # Spent from the expiring stack first: they are the ones about to go.
+    spent = c.spend_points(1)
+    out.that(spent == 1 and pool.temporary == 1 and pool.points == pool.maximum,
+             "a spend takes the EXPIRING point first and leaves the pool"
+             f" alone (temporary {pool.temporary}, pool {pool.points})")
+
+    # `When.EONT` is the end of the holder's **next** turn, so the clock
+    # has to come round twice: `TurnStart` is what advances it, which is
+    # why ending two turns without starting them does nothing.
+    from combat_engine.engine.events import TurnEnd, TurnStart
+
+    for _ in range(2):
+        world.bus.emit(TurnStart(actor=me, round=world.round))
+        world.bus.emit(TurnEnd(actor=me, round=world.round))
+    out.that(pool.temporary == 0,
+             f"the unspent remainder lapses on the clock ({pool.temporary})")
+    out.that(pool.points == pool.maximum,
+             "and the lapse does not reach into the pool, which is what a"
+             f" single total could not have kept apart ({pool.points})")
 
 
 def boon_traded(out: Result) -> None:

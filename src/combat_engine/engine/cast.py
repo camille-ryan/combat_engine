@@ -21334,8 +21334,16 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         return self.world.get(who, PowerPoints) or self.world.add(who, PowerPoints())
 
     def points(self, *, of: int | None = None) -> int:
-        """How many power points this creature has left."""
-        return self._pool(self.me if of is None else of).points
+        """How many power points this creature has left.
+
+        **Expiring points included**, because every reader of this asks
+        whether the character can pay for something and these can pay. A
+        row that needed to tell them apart would read the pool, and none
+        does -- "you can spend no more than 2 power points" is a cap on
+        the spend, not a question about where they came from.
+        """
+        pool = self._pool(self.me if of is None else of)
+        return pool.points + pool.temporary
 
     def spend_points(self, n: int, *, who: int | None = None) -> int:
         """Spend power points to augment this row. Returns how many went.
@@ -21355,7 +21363,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             )
         return gone
 
-    def gain_points(self, n: int, *, who: int | None = None) -> int:
+    def gain_points(self, n: int, *, who: int | None = None,
+                    expiring: When | None = None) -> int:
         """"You regain 2 power points." Returns how many actually went in.
 
         The mirror of `c.spend_points`, and two rows were left out for want
@@ -21381,11 +21390,42 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         Yours, so it defaults to the caster -- `who=` for `p11118`'s *"you
         or an ally you can see regains 1 power point"*.
+
+        **`expiring=` is the other card and the clamp is why it is a
+        separate door.** *"You gain 2 power points that expire at the end
+        of your turn"* hands points over from outside the pool, so a
+        character already at `maximum` must still take them -- `gain`
+        would answer 0 and the row would fire and do nothing. They go to
+        `PowerPoints.temporary`, `spend` takes them **first** because they
+        are the ones about to lapse, and whatever is left when the clock
+        runs out goes back. `f3625` and `i1793p1` are the two cards.
         """
         from .events import PointsRegained
 
         holder = self.me if who is None else who
-        got = self._pool(holder).gain(n)
+        pool = self._pool(holder)
+        if expiring is not None:
+            # **Granted above the pool and uncapped, which is the whole
+            # difference from the clamp above.** "You gain 2 power points
+            # that expire at the end of your turn" is not a refund of
+            # points already spent -- the card hands them over from
+            # outside, so a character at its maximum still takes them,
+            # where `gain` would answer 0 and the row would do nothing.
+            pool.temporary += n
+            got = n
+
+            def lapse() -> None:
+                # What is **left** of this grant. The character may have
+                # augmented with some of it, and `spend` takes expiring
+                # points first, so anything still standing is owed back.
+                pool.temporary = max(0, pool.temporary - n)
+
+            self.world.effects.apply(
+                holder, self.me, expiring, label=f"{self.ref} points+{n}",
+                on_end=[lapse], by=self.ref,
+            )
+        else:
+            got = pool.gain(n)
         if got:
             self.world.bus.emit(
                 PointsRegained(who=holder, amount=got, by=self.ref)

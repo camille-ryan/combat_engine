@@ -2350,18 +2350,35 @@ def f3624(c: Cast) -> None:
 
 @power("f3625", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.grant_points(expiring=)",))
+       dropped=("c.grant_inline()",))
 def f3625(c: Cast) -> None:
     """The surge half plays; an augmented at-will is a psionic power like
     any other, so the keyword covers both arms of the printed trigger.
 
-    **Re-pointed off `c.regain_points()`, which arrived and does not fit.**
-    The second printed sentence trades a surge for "2 power points that
-    expire at the end of your turn", and a regain is the wrong shape twice
-    over: it caps at the pool's maximum, where these sit on top of it, and
-    it has no duration, where these end on a named beat. What is wanted is
-    a *grant* with an expiry, which is a different verb and arrives with
-    `i1793p1`'s identical gap rather than with this one.
+    **Re-pointed again, and the points half has now arrived.**
+    `c.gain_points(expiring=)` exists and is exactly what the last note
+    asked for -- a grant above the pool's ceiling, ending on a named
+    beat -- and `i1793p1` is written on it. So the number is no longer
+    the problem.
+
+    What is left is the **shape of the offer**, which is a narrower and
+    different gap: the clause is *"once per encounter, as a minor action,
+    you can lose a healing surge to gain 2 power points"*, so it is a
+    card the character may choose to use, printed inside the feat with no
+    ref of its own. That is `c.grant_inline()`, which three item blocks
+    already wait on, and this is the fourth row and the first feat.
+
+    **The second-card convention does not rescue it, and a feat is where
+    it would have been most likely to.** `fNNNb` is the tree's ref for a
+    card printed inside another, 227 of them are in `game.db`, and
+    `f3625b` is **not** -- because this clause is a sentence of the
+    Benefit rather than a printed card, so the ETL had nothing to mint.
+    `i1188p1`'s note makes the same point from the item side for a
+    different reason: `item_block` carries no `b` refs at all.
+
+    So the group is right rather than convenient. Declaring a row for a
+    ref the database does not have would be a row against a card nothing
+    printed.
     """
     _surge_when_it_lands(c, lambda p: Keyword.PSIONIC in p.keywords)
 

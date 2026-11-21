@@ -1029,22 +1029,34 @@ def i1771p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.grant_points(expiring=)",),
+    dropped=("PowerPoints.earmark",),
 )
 def i1793p1(c: Cast) -> None:
     """A power point out of nowhere, held until the end of your next turn.
 
-    **Re-pointed off `c.regain_points()`, which arrived and is not this.**
-    A regain refills what was spent and is capped at the pool's maximum;
-    this point is created *over* the ceiling and expires on a named beat.
-    Spending it on the new verb would give a character with a full pool
-    nothing, and a character with a spent one a permanent point -- wrong
-    in both directions.
+    **Written on `c.gain_points(expiring=)`**, which is what the two
+    previous markers were each reaching for. The note that asked for it
+    had the shape exactly right: a regain refills what was spent and caps
+    at the pool's maximum, where this point is created *over* the ceiling
+    and ends on a named beat -- so a regain would give a character with a
+    full pool nothing and one with a spent pool a permanent point, wrong
+    in both directions. `expiring=` grants above the cap and takes back
+    whatever is unspent when the clock runs out.
 
-    The "only to augment a psionic attack power" half still rides on the
-    same verb: a point nothing can create cannot be earmarked either.
-    `f3625` prints the same mechanism and now names the same symbol.
+    `When.EONT` is the printed "until the end of your next turn", and
+    `PowerPoints.spend` takes expiring points before pool points, so a
+    character who augments anything at all spends this one first rather
+    than letting it lapse beside a full pool.
+
+    **What is still missing is the earmark, and it is a narrower gap than
+    the verb was.** The card says the point may be spent *only* to
+    augment a psionic **attack** power, and a point in the pool carries
+    no such tag: `spend` takes a count. So the row is strictly generous
+    by one point on a utility augment, which is the whole of the
+    remaining difference -- it plays, and `f3625` prints the same
+    mechanism.
     """
+    c.gain_points(1, expiring=When.EONT, who=c.me)
 
 
 @power(

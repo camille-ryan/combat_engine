@@ -2188,16 +2188,36 @@ class PowerPoints:
     #: row that declares `augments=`, including the ones bought with
     #: nothing, so a watcher can tell this use from the last.
     last: dict[str, int] = field(default_factory=dict)
+    #: Points **above** the pool that expire on a clock rather than at the
+    #: end of the fight -- "you gain 2 power points that expire at the end
+    #: of your turn".
+    #:
+    #: A second number rather than a bigger `points`, for two reasons the
+    #: cards force. `gain` clamps at `maximum`, which is right for "you
+    #: regain 2 power points" and wrong here: a full pool must still take
+    #: these, because the card grants them from outside. And they have to
+    #: be told apart to be taken away again when the clock runs out, which
+    #: a single total cannot do.
+    temporary: int = 0
 
     def refresh(self) -> None:
         self.points = self.maximum
+        self.temporary = 0
         self.augmented.clear()
         self.last.clear()
 
     def spend(self, n: int) -> int:
-        """Take `n` points if they are there. Returns how many actually went."""
-        n = max(0, min(n, self.points))
-        self.points -= n
+        """Take `n` points if they are there. Returns how many actually went.
+
+        **Expiring points go first**, which is not a courtesy to the
+        player: they are about to vanish, so spending the pool ahead of
+        them would throw them away and make the granting card worth
+        nothing on any turn the character also augments from the pool.
+        """
+        n = max(0, min(n, self.points + self.temporary))
+        from_temp = min(n, self.temporary)
+        self.temporary -= from_temp
+        self.points -= n - from_temp
         return n
 
     def gain(self, n: int) -> int:
