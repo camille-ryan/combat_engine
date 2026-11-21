@@ -13388,6 +13388,7 @@ class Cast:
     def no_miss_damage(
         self,
         *,
+        half: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
         when: Callable[[dict[str, Any]], bool] | None = None,
@@ -13402,10 +13403,26 @@ class Cast:
         damage from **its** attacks that deal damage on a miss", of a
         creature that cannot see you. The context that reads this carries
         `source` now, which is the only thing that was in the way. #747.
+
+        **`half=True` is the weaker printed form** -- "that damage is
+        halved" rather than removed -- and it is a second hold rather than
+        a number on this one, for `floor_damage_dice`'s reason: both are
+        read where the blow is priced and folding them would make a
+        creature holding each come out with the weaker. Read after the
+        all-or-nothing hold, so holding both gives no damage, which is
+        what both cards together mean.
+
+        Rounded **down**, as every halving in this engine is (`c.halve`,
+        the healing halver), and the card prints no exception.
+
+        "Unless it is ongoing damage" needs nothing: ongoing damage is not
+        a miss, so its ticks arrive with `miss=False` and are never
+        reached. The miss damage that *imposed* the ongoing is halved,
+        which is the sentence read exactly. `i3239x1` is the card.
         """
         return self.bonus(
-            "no_miss_damage", 1, on=on, until=until, kind="untyped",
-            when=when,
+            "half_miss_damage" if half else "no_miss_damage",
+            1, on=on, until=until, kind="untyped", when=when,
         )
 
     def merge(

@@ -1859,6 +1859,27 @@ def deal_damage(
                  {"power": detail, "source": source})
     ):
         amount = 0
+    # **The weaker printed form: halved rather than removed.**
+    #
+    # **A creature holding both takes the stronger, and the `and amount`
+    # guard is what makes that true -- not the `elif`.** Proven by a
+    # plant: turning this into a second `if` left all four assertions
+    # green, because the branch above sets `amount = 0` and the guard
+    # then refuses. So the `elif` is a style choice, and the "both held"
+    # assertion cannot tell the two spellings apart -- recorded because I
+    # first wrote the opposite, corrected a true comment into a false one,
+    # and the plant caught it rather than any gate.
+    #
+    # "Unless it is ongoing damage" needs no test: ongoing damage is not a
+    # miss, so its ticks never arrive here. The miss damage that *imposed*
+    # the ongoing is halved, which is the sentence read exactly.
+    #
+    # Rounded down, as every halving in this engine is. `i3239x1`.
+    elif miss and amount and _mods(
+        world, target, "half_miss_damage",
+        {"power": detail, "source": source},
+    ):
+        amount //= 2
 
     absorbed = min(health.temp, amount)
     health.temp -= absorbed

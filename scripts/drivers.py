@@ -34235,6 +34235,50 @@ def a_minion_missed_takes_nothing(out: Result) -> None:
              f"nonminion={not is_minion(world, other)}, hp={ordinary.hp}")
 
 
+def miss_damage_halved(out: Result) -> None:
+    """"When an attack deals damage to you on a miss, that damage is
+    halved, unless it is ongoing damage." `i3239x1`.
+
+    The weaker form of the hold `a_minion_missed_takes_nothing` drives.
+    Both are read in the same place in `resolve.deal_damage`, which is
+    the only thing that sees the `miss` flag, and a second hold rather
+    than a number on the first for `floor_damage_dice`'s stated reason:
+    folding them would make a creature holding each come out with the
+    weaker.
+
+    Four things, and two of them are the ones a number on one hold could
+    not have got right -- the precedence when both are held, and that a
+    landed blow is untouched.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.resolve import deal_damage
+
+    def took(*, half: bool, none: bool, miss: bool, amount: int = 7) -> int:
+        world, me, _ = _board(seed=6)
+        hp = world.get(me, Health)
+        before = hp.hp
+        c = Cast(world=world, me=me, ref="drivers:halfmiss")
+        if half:
+            c.no_miss_damage(half=True, on=me)
+        if none:
+            c.no_miss_damage(on=me)
+        deal_damage(world, me, me, amount, detail="drivers", miss=miss)
+        return before - world.get(me, Health).hp
+
+    out.that(took(half=False, none=False, miss=True) == 7,
+             "the premise: an unheld creature takes miss damage in full")
+    out.that(took(half=True, none=False, miss=True) == 3,
+             "held, it is halved and rounded DOWN -- 7 becomes 3, not 4")
+    out.that(took(half=True, none=False, miss=False) == 7,
+             "THE CONTROL: a blow that LANDS is untouched, which is the"
+             " whole of what the `miss` flag is for")
+    out.that(took(half=True, none=True, miss=True) == 0,
+             "and a creature holding both takes nothing -- the stronger"
+             " card wins, which is what the two together mean")
+
+
 def a_mark_that_lapses(out: Result) -> None:
     """"The mark ends if you do not attack it", and the row that forbids it.
 
@@ -114497,6 +114541,9 @@ DRIVERS = {
     "multiclassed_into": (multiclassed_into,
                           "which class a character multiclassed into, and "
                           "the 16 categories that name no class"),
+    "miss_damage_halved": (miss_damage_halved,
+                           "miss damage halved rather than removed, and "
+                           "which hold wins when a creature has both"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
     "racial_power_riders": (racial_power_riders,

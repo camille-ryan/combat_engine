@@ -1712,11 +1712,27 @@ def i2448p1(c: Cast) -> None:
 
 
 @power("i3239x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_miss_damage(half=)",))
+       reach=PERSONAL, target=SELF)
 def i3239x1(c: Cast) -> None:
-    """`deal_damage` is handed a `miss` flag and keeps it out of the damage
-    context, so the only reader is the all-or-nothing `no_miss_damage` mod;
-    halving needs the flag where a gate can see it."""
+    """"When an attack deals damage to you on a miss, that damage is
+    halved, unless it is ongoing damage."
+
+    **Written on `c.no_miss_damage(half=True)`.** The marker was right
+    about where the flag lives -- `deal_damage` is handed `miss` and the
+    only thing reading it was the all-or-nothing hold -- so this is a
+    second hold beside it rather than a number on it, read in the same
+    place. `resolve.deal_damage` takes the stronger when a creature holds
+    both, which is what the two cards together mean.
+
+    **"Unless it is ongoing damage" needs no clause here**, and that is
+    worth saying rather than leaving as a silent omission: ongoing damage
+    is not a miss, so its ticks arrive with `miss=False` and never reach
+    this hold. The miss damage that *imposed* the ongoing is halved,
+    which is the sentence read exactly.
+
+    `on=c.me` because the wearer is who the card protects, and this is a
+    `target=SELF` property."""
+    c.no_miss_damage(half=True, on=c.me)
 
 
 @power("i3248x1", level=9, cls=ITEM, action=ActionType.NONE,
