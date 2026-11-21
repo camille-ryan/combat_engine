@@ -243,7 +243,22 @@ ARMOUR = ("chargen.armor_proficiency()",)
 #: parent's. `chargen._from_class_list` trains nothing rather than offering
 #: the parent's wider list, which is the conservative direction and a
 #: refusal rather than an approximation.
-BUILD_SKILLS = ("class_skill.build",)
+#: **Retired.** The three rows that carried this are unmarked now: `#1423`
+#: put each printed build's own `Class Skills` line in `class_skill.build`,
+#: and `chargen._class_skill_pool` resolves the two-word `"<build> <class>"`
+#: form `feat.trains_from` holds.
+#:
+#: Kept as a note rather than deleted outright because the shape is worth
+#: remembering: the symbol named a **column**, which is why it read as
+#: unfixable from here -- no body in this file could have answered it, and
+#: three rows correctly waited rather than approximating. `_from_class_list`
+#: refused the build case outright on the ground that the parent's list is a
+#: superset, and that refusal was right until the narrow list existed.
+#:
+#: `f3633` is the fourth row printing the same sentence and it carried **no
+#: marker at all** -- its training clause resolved to the empty set while
+#: the row reported complete, which is the silent half of this gap.
+_BUILD_SKILLS_RETIRED = "class_skill.build"
 #: Dim light and darkness are not states of a square this engine keeps.
 #: Changing the dice another row rolls -- up, down, or maximised.
 DICE = ("c.change_dice()",)
@@ -2029,7 +2044,7 @@ def f3678b(c: Cast) -> None:
 
 @power("f3615", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=BUILD_SKILLS, proficiency=("w:ki-focus",))
+       proficiency=("w:ki-focus",))
 def f3615(c: Cast) -> None:
     """The extra damage plays, held to once a fight by `once=True`. All
     four arms of the gate can be asked now: one-handed is a property the
@@ -2068,7 +2083,7 @@ def f3617(c: Cast) -> None:
 
 @power("f3618", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=BUILD_SKILLS, proficiency=("w:holy-symbol",))
+       proficiency=("w:holy-symbol",))
 def f3618(c: Cast) -> None:
     """`p13816` is a ref now, so the card's third clause is an ordinary
     `c.grant_row` -- and that turns the row into a trait.
@@ -2377,7 +2392,7 @@ def f3628(c: Cast) -> None:
 
 @power("f3629", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=BUILD_SKILLS, proficiency=("w:holy-symbol",))
+       proficiency=("w:holy-symbol",))
 def f3629(c: Cast) -> None:
     """Both powers are refs now, so both are ordinary grants. `p13554` is
     printed as "you can use it as an encounter power" and carries its own

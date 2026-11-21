@@ -3641,7 +3641,11 @@ def dealt_hand(seed: int | str, cls: str, level: int,
     of its own and is not this.
     """
     if trained is None:
-        trained = class_training(cls, race, Random(f"{seed}:{cls}:skills"))
+        # `who_chassis` is already the chassis this hand is being dealt for,
+        # so the skill pool and the powers now agree about which build the
+        # character is -- they did not before `#1423`.
+        trained = class_training(cls, race, Random(f"{seed}:{cls}:skills"),
+                                 chassis=who_chassis)
     return loadout(cls, level, build, Random(f"{seed}:{cls}:{build.name}"),
                    who_chassis=who_chassis, trained=trained)
 
@@ -6907,12 +6911,15 @@ def _from_class_list(db: sqlite3.Connection, printed: str,
     "blackguard paladin", "cavalier paladin", "binder warlock". Deciding
     what to do about that is this function's job and not the extractor's.
 
-    **The build case is deliberately refused, not approximated.** Taking
-    the last word gives the parent class, whose list is a *superset* of the
-    build's, so a character could be trained in a skill the card does not
-    offer. One printed sentence silently becoming a wider one is the fault
-    this repo keeps finding, so those four train nothing here and the rows
-    keep a marker naming the sub-option gap. #548, #575.
+    **The build case was deliberately refused and is now resolved**, which
+    is the same judgement rather than a reversal of it. The refusal was
+    right: taking the last word gives the parent class, whose list is a
+    *superset* of the build's, so a character could be trained in a skill
+    the card does not offer, and one printed sentence silently becoming a
+    wider one is the fault this repo keeps finding. What changed is that the
+    build's own printed list exists -- `class_skill.build`, `#1423` -- so
+    the narrow answer can be given instead of none. The four rows'
+    markers come off with it. #548, #575.
 
     Matched case-insensitively against `class_skill.class`, like
     `_trained_skills` below and for the same #339 reason: the table's key
@@ -6923,21 +6930,58 @@ def _from_class_list(db: sqlite3.Connection, printed: str,
 
 
 def _class_skill_pool(db: sqlite3.Connection, printed: str) -> set[str]:
-    """Every skill on the class list a page names, by printed class word.
+    """Every skill on the class list a page names, by printed words.
 
     Split out of `_from_class_list` so `_plus_race` can read the pool
     without also taking the draw: a race picking from the character's own
     list has to exclude what it already has, which means seeing the pool
     rather than one sample of it. #688.
 
-    Empty for a build ("executioner assassin") or a class this build does
-    not import -- never the parent's wider list, which is the narrowing
-    `_from_class_list`'s docstring argues for.
+    **A build is resolved now, where it used to return the empty set.**
+    Four of the 32 feats printing this name a build rather than a class --
+    `"blackguard paladin"`, `"cavalier paladin"`, `"executioner assassin"`,
+    `"binder warlock"` -- and `#1423` put the build's own printed list in
+    `class_skill.build`, so the narrowing `_from_class_list` argued for is
+    available instead of merely refused. Two words, build first, which is
+    how every one of the four is printed.
+
+    Still never the parent's wider list: a build with no row of its own
+    returns empty here rather than falling back, because this reader
+    answers *"the list this card names"* and a superset is the fault the
+    refusal existed to prevent. That is the opposite of
+    `class_training`'s fallback, which answers "what is this character
+    trained in" and must not come back with nothing.
     """
+    words = printed.lower().split()
+    if len(words) == 2:
+        rows = db.execute(
+            "SELECT skill FROM class_skill"
+            " WHERE lower(class) = ? AND build = ? ORDER BY skill",
+            (words[1], words[0]),
+        ).fetchall()
+        return {r["skill"] for r in rows}
+    # **The class's OWN list, not the union of its builds.** `class_skill`
+    # carries a row set per printed variant since `#1423`, so a bare
+    # `lower(class) = 'paladin'` matches the paladin, the blackguard and the
+    # cavalier at once and comes back with **11** skills where the paladin
+    # prints 7 -- four of them from lists this card does not name. That is
+    # the superset fault this function's own note is about, arriving from
+    # the other side.
+    #
+    # `build = ''` first, then the variant `class` itself describes, for
+    # `class_training`'s reason: five classes are printed only as builds and
+    # have no `build = ''` row at all.
     rows = db.execute(
-        "SELECT skill FROM class_skill WHERE lower(class) = ? ORDER BY skill",
+        "SELECT skill FROM class_skill"
+        " WHERE lower(class) = ? AND build = '' ORDER BY skill",
         (printed.lower(),),
     ).fetchall()
+    if not rows:
+        rows = db.execute(
+            "SELECT s.skill FROM class_skill s JOIN class c ON c.ref = s.ref"
+            " WHERE lower(c.name) = ? ORDER BY s.skill",
+            (printed.lower(),),
+        ).fetchall()
     return {r["skill"] for r in rows}
 
 
@@ -6977,7 +7021,8 @@ FEATURE_TRAINS: dict[str, tuple[str, ...] | frozenset[str]] = {
 def _trained_skills(cls: str, feats: list[str], rng: Random,
                     race: str = "",
                     wanted: Sequence[str] = (),
-                    features: Sequence[str] = ()) -> frozenset[str]:
+                    features: Sequence[str] = (),
+                    chassis: str = "") -> frozenset[str]:
     """Which skills this character is trained in: the given, plus the chosen.
 
     Off `class_skill`, which `etl/build.py` fills from the two sentences
@@ -7027,7 +7072,7 @@ def _trained_skills(cls: str, feats: list[str], rng: Random,
     # Drawn through the same helper `spawn` calls before it picks the
     # feats, so the two cannot disagree about what the pool handed out:
     # same key, same stream, same prefix of draws.
-    before = class_training(cls, race, rng, db=db)
+    before = class_training(cls, race, rng, db=db, chassis=chassis)
     # **And the feats apply even to a class with no entry.** A multiclass
     # feat's "you gain training in Nature" is training the character has
     # however it was built, so this is not inside any class guard.
@@ -7078,7 +7123,8 @@ def _trained_skills(cls: str, feats: list[str], rng: Random,
 
 
 def class_training(cls: str, race: str, rng: Random,
-                   db: sqlite3.Connection | None = None) -> frozenset[str]:
+                   db: sqlite3.Connection | None = None,
+                   chassis: str = "") -> frozenset[str]:
     """The skills a character has **before it picks a feat**. #1135.
 
     Steps 2 and 4 of building a character: what the race trains it in, what
@@ -7117,11 +7163,50 @@ def class_training(cls: str, race: str, rng: Random,
         from combat_engine.db import game
 
         db = game()
-    rows = db.execute(
-        "SELECT skill, granted FROM class_skill WHERE lower(class) = ?"
-        " ORDER BY skill",
-        (cls.lower(),),
-    ).fetchall()
+    # **The build's own printed list where there is one, the class's
+    # otherwise.** The compendium files a build as its own `Class` entry and
+    # prints a `Class Skills` line on all 25 of them; for 18 that list is
+    # the base class's, and for **seven** it is not. Every one of the seven
+    # is a chassis `declared_chassis` deals, so before `#1423` a blackguard
+    # drew from the paladin pool -- four of its printed skills were never
+    # drawable and three it never printed were.
+    #
+    # `'original'` is `chargen`'s word for "the class's own", and `''` is the
+    # database's, so the one is mapped onto the other here rather than
+    # stored twice.
+    want = "" if chassis.lower() in ("", "original") else chassis.lower()
+    rows = []
+    if want:
+        rows = db.execute(
+            "SELECT skill, granted FROM class_skill"
+            " WHERE lower(class) = ? AND build = ? ORDER BY skill",
+            (cls.lower(), want),
+        ).fetchall()
+    # **Falls back rather than returning nothing.** 18 of the 25 variants
+    # print the base list, and a build with no row of its own is one of
+    # those or is a chassis the content tree named and the compendium does
+    # not -- either way the class's list is the right answer and an empty
+    # set would train the character in nothing.
+    #
+    # **And the fallback joins `class.ref`, not `build = ''`, because five
+    # classes have no base entry at all.** `cleric`, `fighter`, `rogue`,
+    # `warlord` and `wizard` are printed only as builds -- there is no plain
+    # `Cleric` page -- so they have no `build = ''` row and a fallback
+    # looking for one returned **nothing**: every one of those five trained
+    # in no skills whatever. Four of the five are in the replay fixtures.
+    #
+    # `class` still holds one row per class, the earliest printing, and its
+    # `ref` names which variant that is. Joining it reproduces exactly the
+    # list this function returned before `#1423` for a caller that names no
+    # chassis, and it cannot drift from `class.skill_choices`, which is read
+    # ten lines down off the same row.
+    if not rows:
+        rows = db.execute(
+            "SELECT s.skill, s.granted FROM class_skill s"
+            " JOIN class c ON c.ref = s.ref"
+            " WHERE lower(c.name) = ? ORDER BY s.skill",
+            (cls.lower(),),
+        ).fetchall()
     if not rows:
         # An unknown class trains in nothing and takes no race pick either
         # -- which is what this did before the split, and is not a
@@ -7374,7 +7459,8 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
     # hoisting the call above the deal changes neither set.
     skills_key = f"{world.rng.seed}:{who.ref}:{who.level}:skills"
     before_feats = who.skills or sorted(
-        class_training(who.cls, who.race, Random(skills_key))
+        class_training(who.cls, who.race, Random(skills_key),
+                       chassis=getattr(who, "chassis", ""))
     )
     # An empty power list means "deal me a hand", which is what both callers
     # want and what neither of them used to do: each kept its own list of
@@ -7664,6 +7750,12 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
                 # this file.
                 + [c[c.rindex(":cf:") + 1:] for c in took_options
                    if ":cf:" in c],
+                # **Which build, so the pool is the one the build prints.**
+                # Seven of the chassis `declared_chassis` deals print their
+                # own `Class Skills` line and used to be trained from the
+                # base class's -- a blackguard could never draw four of its
+                # printed skills and could draw three it never had. #1423.
+                chassis=getattr(who, "chassis", ""),
             )
         ),
         Gear(

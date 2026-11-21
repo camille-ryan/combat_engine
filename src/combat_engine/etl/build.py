@@ -210,7 +210,20 @@ CREATE INDEX class_ref ON class(ref);
 -- `dsl.SKILLS` already and the tree writes `skill:stealth` as a modifier
 -- key in 50 files. Nothing to scrub.
 CREATE TABLE class_skill (
-  class TEXT, ref TEXT, skill TEXT, ability TEXT, granted INTEGER
+  class TEXT, ref TEXT, skill TEXT, ability TEXT, granted INTEGER,
+  -- **Which BUILD's printed list this row belongs to**, '' for the class's
+  -- own. The compendium files a build as its own `Class` entry --
+  -- `Paladin (Blackguard)` -- and this table used to keep one row per
+  -- class, so a build's list was read off its base. Harmless for 18 of the
+  -- 25 printed variants and wrong for seven, all seven of which
+  -- `chargen.declared_chassis` deals: a blackguard was trained from a pool
+  -- missing four of its printed skills and offering three it never had.
+  --
+  -- The slug, matching how `chargen` names a chassis (`blackguard`), not a
+  -- second printed string. `''` and not `'original'`: the empty string is
+  -- the database saying "the class's own list", and mapping `original` onto
+  -- it is the reader's job. #1423.
+  build TEXT
 );
 CREATE INDEX class_skill_class ON class_skill(class);
 CREATE INDEX class_skill_ref ON class_skill(ref);
@@ -2227,16 +2240,44 @@ def _classes(
     seen: set[str] = set()
     for row in rows:
         bare = row["Name"].split("(")[0].strip()
+        plain = row["PlainTxt"] or re.sub(r"<[^>]+>", " ", row["Txt"] or "")
+        # **Every variant's skill list, before the one-row-per-class guard
+        # below.** `class` keeps its contract -- the earliest printing, which
+        # later books amend rather than replace -- and that guard used to
+        # take the skill list with it, so six paladins' worth of printed
+        # lists collapsed into whichever paladin came first. The seven builds
+        # whose list genuinely differs are named in `class_skill.build`'s own
+        # note. #1423.
+        # **`_slug`, not `.lower()`.** The hand-rolled lowercase was right
+        # for 24 of the 25 and wrong for the one whose printed name carries
+        # a typographic apostrophe: it lowercases to a word with that
+        # character still in it, where `chargen.declared_chassis` calls the
+        # chassis `sha-ir`, so the join missed and the build fell
+        # back to its base list. It happens to be one of the 18 whose list
+        # IS the base, so nothing was wrong on the sheet -- right by luck,
+        # which is not a thing to leave in a key. `_slug` is the function
+        # the refs were built with, so this cannot drift from them again.
+        _build = (
+            _slug(row["Name"].split("(", 1)[1].rstrip(") "))
+            if "(" in row["Name"] else ""
+        )
+        _picks, _skills = _skills_of(plain)
+        out.executemany(
+            "INSERT INTO class_skill VALUES (?,?,?,?,?,?)",
+            [(bare, f"c{row['ID']}", sk, ab, gr, _build)
+             for sk, ab, gr in _skills],
+        )
         if bare in seen:
             continue
         seen.add(bare)
-        plain = row["PlainTxt"] or re.sub(r"<[^>]+>", " ", row["Txt"] or "")
         found: dict[str, str] = {}
         for field_, pattern in _CHASSIS.items():
             m = re.search(pattern, plain, re.I)
             if m:
                 found[field_] = m.group(1).strip()
-        picks, skills = _skills_of(plain)
+        # `_picks` is already in hand from the per-variant pass above; the
+        # skill list is written there, so only the pick count is wanted here.
+        picks = _picks
         out.execute(
             "INSERT OR REPLACE INTO class VALUES"
             " (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -2254,10 +2295,9 @@ def _classes(
                 picks,
             ),
         )
-        out.executemany(
-            "INSERT INTO class_skill VALUES (?,?,?,?,?)",
-            [(bare, f"c{row['ID']}", s, a, g) for s, a, g in skills],
-        )
+        # The base row's list is written by the per-variant pass above, which
+        # runs for every row including this one -- writing it again here
+        # would double every skill for the earliest printing.
         # The printed name, where printed names live. `bare` is the slug and
         # stays in the table as the key the content tree is organised by.
         #
