@@ -3131,6 +3131,7 @@ class Cast:
         kind: str = "",
         *,
         made_by: str = "",
+        unlit: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
         when: str = "",
@@ -3215,6 +3216,17 @@ class Cast:
             )
         if made_by:
             return self._ignores_difficult_made_by(made_by, who, moves, until)
+        # **Refused together for the reason `made_by` and `kind` are**: the
+        # three are different questions and a card printing two wants two
+        # calls. No card prints two today.
+        if unlit and (kind or made_by or when):
+            raise ValueError(
+                f"{self.ref}: c.ignores_difficult(unlit=True) is a question"
+                " about the SQUARE and does not combine with `kind`,"
+                " `made_by` or `when` -- one call each."
+            )
+        if unlit:
+            return self._ignores_difficult_unlit(who, moves, until)
         word = kind.lower() or "*"
         # **Refused, not accepted silently.** `"*"` is the bare call --
         # every sort of going -- and anything else must be a label something
@@ -3400,6 +3412,40 @@ class Cast:
             who, self.me, until, label=f"{self.ref} oversized",
             on_suspend=[lambda: setattr(gear, "oversized", was)],
             on_resume=[lambda: setattr(gear, "oversized", categories)],
+            by=self.ref,
+        )
+
+    def _ignores_difficult_unlit(
+        self, who: int, moves: Any, until: When
+    ) -> Effect | None:
+        """"You ignore difficult terrain in squares of dim light or
+        darkness." `f3573`, and the only row printing it.
+
+        A **square** predicate, which none of the verb's other three
+        waivers can express: `kind=` is a label, `when=` a move kind,
+        `made_by=` a provenance. `World.difficult` asks
+        `query.light_level` per rough square when this is set, which is
+        the reader `c.unlit` already uses.
+
+        `on_suspend`/`on_resume` rather than `on_end`, for the reason the
+        `made_by=` half records: `Effects._lift` runs the first for an
+        expiry *and* a suspension, so the waiver comes off exactly once
+        either way.
+        """
+        if moves.ignores_unlit:
+            return None
+        moves.ignores_unlit = True
+
+        def drop() -> None:
+            moves.ignores_unlit = False
+
+        def restore() -> None:
+            moves.ignores_unlit = True
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} sure-footed in the dark",
+            on_suspend=[drop],
+            on_resume=[restore],
             by=self.ref,
         )
 

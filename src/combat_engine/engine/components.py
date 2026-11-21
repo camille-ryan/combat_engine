@@ -446,6 +446,16 @@ class Movement:
     #: once -- a forest square with a swarm standing in it is still forest.
     #: #659.
     ignores_made_by: frozenset[str] = frozenset()
+    #: Rough going is free in squares that are **unlit** -- dim light or
+    #: darkness. `f3573` prints exactly that and nothing else.
+    #:
+    #: A square predicate, which is a fourth kind of waiver beside the
+    #: three above: `ignores` is by label, `ignores_when` by move kind,
+    #: `ignores_made_by` by provenance, and none of them can ask anything
+    #: about *where* the square is. Written ungated the feat would be free
+    #: movement over every sort of rough going anywhere, which is a much
+    #: bigger card.
+    ignores_unlit: bool = False
     #: **The whole board costs this creature double**, which is what "treats
     #: all squares as difficult terrain" prints.
     #:

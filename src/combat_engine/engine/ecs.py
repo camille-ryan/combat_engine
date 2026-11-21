@@ -364,7 +364,26 @@ class World:
         # square that happens to have a swarm standing in it was labelled
         # `forest` and is still difficult for the forest's reason. #659.
         made = self._shared_by() if moves.ignores_made_by else {}
-        if not ignored and not made:
+        # **A square predicate, which none of the three waivers above can
+        # be.** `f3573` ignores rough going "in squares of dim light or
+        # darkness" -- a fact about the square, where `ignores` is a
+        # label, `ignores_when` a move kind and `ignores_made_by` a
+        # provenance. `query.light_level` is the reader `c.unlit` already
+        # uses, and its docstring lists ignoring difficult terrain among
+        # the rows wanting the question, so this is the nineteenth caller
+        # rather than a twentieth way of reading `Grid.light`.
+        #
+        # Asked only when something laid the waiver: the light of every
+        # rough square is not worth computing for the creatures that do
+        # not have it.
+        unlit: set[Any] = set()
+        if moves.ignores_unlit:
+            from .query import light_level
+            from .types import Light
+
+            unlit = {sq for sq in rough
+                     if light_level(self, sq) is not Light.BRIGHT}
+        if not ignored and not made and not unlit:
             return set(rough) | imposed
         return {
             sq
@@ -376,6 +395,8 @@ class World:
                     made.get(sq), moves.ignores_made_by
                 )
             )
+            # The square's own light, when something waived it.
+            and sq not in unlit
         } | imposed
 
     def _wall_tolls(self, for_: int) -> dict[Any, int]:

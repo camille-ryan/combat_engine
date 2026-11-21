@@ -906,18 +906,27 @@ def f3572(c: Cast) -> None:
 
 @power("f3573", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.ignores_difficult(in_light=)",))
+       )
 def f3573(c: Cast) -> None:
-    """Ignoring difficult terrain **in unlit squares**, and the gate is the
-    whole of it: written ungated this is free movement over every kind of
-    rough going anywhere, which is a far bigger feat than the card.
+    """"You ignore difficult terrain in squares of dim light or darkness."
 
-    The light half is readable now -- `c.unlit` answers it -- so what is left
-    is a *gated* ignore. `c.ignores_difficult` has grown a `when=` since this
-    was written, but it is a **move kind**: `movement.PRICED_KINDS`, so
-    `when="shift"` or `"charge"`, and anything outside the set raises. What
-    this card gates on is a property of the *square* the creature is in, and
-    `Movement.ignores` is a set of labels with nowhere to hang a predicate."""
+    **Written on `c.ignores_difficult(unlit=True)`.** The marker's
+    diagnosis was exact and is why the parameter has the shape it does:
+    `when=` is a **move kind** (`movement.PRICED_KINDS`), `kind=` is a
+    terrain label and `made_by=` a provenance, so none of the three could
+    ask about the *square* -- and `Movement.ignores` is a set of labels
+    with nowhere to hang a predicate. There is one now, and
+    `World.difficult` asks `query.light_level` per rough square only when
+    something laid it.
+
+    **The parameter is `unlit=` and the marker said `in_light=`, which is
+    the wrong way round.** The card frees the *dim and dark* squares, so a
+    reader of the old name would have built the complement -- rough going
+    free in the light, which is no card at all.
+
+    Ungated this would be free movement over every sort of rough ground
+    anywhere, which is the far bigger feat the marker warned about."""
+    c.ignores_difficult(unlit=True, on=c.me)
 
 
 @power("f3574", level=1, cls="", usage=AT_WILL, action=NONE,

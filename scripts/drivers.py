@@ -34279,6 +34279,55 @@ def miss_damage_halved(out: Result) -> None:
              " card wins, which is what the two together mean")
 
 
+def sure_footed_in_the_dark(out: Result) -> None:
+    """"You ignore difficult terrain in squares of dim light or darkness."
+    `f3573`, the only row printing it.
+
+    **A square predicate, which the verb's other three waivers cannot
+    be.** `kind=` is a terrain label, `when=` a move kind
+    (`movement.PRICED_KINDS`), `made_by=` a provenance -- so none could
+    ask where the square is, and `Movement.ignores` is a set of labels
+    with nowhere to hang a predicate.
+
+    The control is the whole value: **lit** rough ground must still cost
+    two. Written ungated the feat is free movement over every sort of
+    rough going anywhere, which is the bigger card the row's marker
+    warned about, and an assertion that only checks the dark squares
+    would pass on it.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.types import Light
+
+    world, me, _ = _board(seed=8)
+    # Two rough squares, one lit and one not.
+    # Both are dicts keyed by square -- `difficult` holds the label and
+    # `light` the level, which is why neither is a set.
+    dark, lit = (6, 6), (7, 6)
+    for sq in (dark, lit):
+        world.grid.difficult[sq] = "rubble"
+    world.grid.light[dark] = Light.DARK.value
+
+    c = Cast(world=world, me=me, ref="drivers:dark")
+    price = world.crossing(me)
+    out.that(price((5, 6), dark) == 2 and price((6, 6), lit) == 2,
+             "the premise: both rough squares cost two before the feat")
+
+    c.ignores_difficult(unlit=True, on=me)
+    after = world.crossing(me)
+    out.that(after((5, 6), dark) == 1,
+             "the unlit rough square is free")
+    out.that(after((6, 6), lit) == 2,
+             "THE CONTROL: the LIT rough square still costs two -- an"
+             " ungated waiver would have freed it, which is a much bigger"
+             " card")
+
+    # And it is the square's light, not the creature's.
+    out.that(dark not in world.difficult(me) and lit in world.difficult(me),
+             f"the rough set drops only the unlit square"
+             f" ({sorted(world.difficult(me))})")
+
+
 def a_mark_that_lapses(out: Result) -> None:
     """"The mark ends if you do not attack it", and the row that forbids it.
 
@@ -114544,6 +114593,9 @@ DRIVERS = {
     "miss_damage_halved": (miss_damage_halved,
                            "miss damage halved rather than removed, and "
                            "which hold wins when a creature has both"),
+    "dark_footing": (sure_footed_in_the_dark,
+                     "rough going free in the dark, and still costly in "
+                     "the light"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
     "racial_power_riders": (racial_power_riders,
