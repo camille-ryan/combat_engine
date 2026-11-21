@@ -47,10 +47,12 @@ this repository is built on.
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import inspect
 import os
 import re
+import textwrap
 import traceback
 import weakref
 from collections.abc import Callable
@@ -2690,6 +2692,47 @@ def _any_weapon(want: str):  # noqa: ANN202
     return None
 
 
+@cache
+def _asks_about_own_gear_src(src: str) -> bool:
+    """Does this body ask about the weapon or implement its item sits on?
+
+    Walked as an `ast`, never as a substring, for `#1093`'s reason: these
+    rows are exactly the ones whose *docstrings* discuss `c.my_weapon` and
+    `mine=True` at length -- `i1884x1`'s own note names both -- so a
+    substring test would answer True for every row that merely explains
+    the mechanism and the gate would be no gate at all.
+
+    Two spellings, because they are the two doors onto the same fact:
+    `c.my_weapon()` reads it and `c.gains_property(mine=True)` writes it.
+    Both resolve through `Cast._my_item`, so a row using either is a row
+    whose own gear has to be in hand for the board to say anything.
+    """
+    try:
+        tree = ast.parse(textwrap.dedent(src))
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr == "my_weapon":
+            return True
+        if isinstance(node, ast.Call):
+            for kw in node.keywords:
+                if kw.arg == "mine" and isinstance(kw.value, ast.Constant) \
+                        and kw.value.value is True:
+                    return True
+    return False
+
+
+def _asks_about_own_gear(declared: object) -> bool:
+    """`_asks_about_own_gear_src` over a declared row's body."""
+    body = getattr(declared, "body", None)
+    if body is None:
+        return False
+    try:
+        return _asks_about_own_gear_src(inspect.getsource(body))
+    except (OSError, TypeError):
+        return False
+
+
 def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
     """Wield whatever the row's own Requirement says it needs.
 
@@ -3651,6 +3694,53 @@ def _board(ref: str, seed: int, pose: bool = False,
                     takes_it.item = magic.ref
                     takes_it.enhancement = max(
                         takes_it.enhancement, magic.plus)
+            # **And the same for an implement-slot item, which is the
+            # larger half and was not staged at all.** `implement` is the
+            # biggest slot in the table -- 412 items against `weapon`'s
+            # 318 -- and the branch above reaches none of them, so a row
+            # phrased "using this implement" was unprovable the way
+            # `#1147`'s weapon rows were.
+            #
+            # Two steps rather than one, because the fielded character
+            # need not be holding an implement at all: a level-8 caster on
+            # seed 7 holds an axe and a blowgun, so there was nothing to
+            # stamp even in principle. `chargen.HOLY_SYMBOL` is the
+            # constant `_hand_it_the_weapon` already uses for exactly this
+            # absence, and appending to `gear.weapons` is enough to hold
+            # it, since `Gear.held` is the weapons that are not stowed.
+            #
+            # **Do not read a big win into this.** Measured off the
+            # baseline before building it: implement-slot rows are 50
+            # silent of 572 and weapon-slot rows 40 of 447 -- **9% each**,
+            # so the gap costs a handful of rows that ask about their own
+            # implement and not the 412 that merely belong to one. It is
+            # here because it is the symmetric and honest fix for those,
+            # not because it moves a number.
+            elif magic.slot == "implement":
+                from dataclasses import replace as _replace2
+
+                from combat_engine.engine import Gear as _Gear
+
+                gear = world.get(caster, _Gear)
+                if gear is not None:
+                    through = gear.implement
+                    # **Appending one is gated on the row asking, and
+                    # stamping is not.** Stamping an implement already in
+                    # hand changes nothing about the board; putting one
+                    # into an empty hand changes where the character
+                    # stands, because a caster holding an implement is
+                    # posed at range. That cost `i2624p1` -- a
+                    # `CloseBurst(1)` which fired 10 times and found no
+                    # enemy within 1, where before it had an adjacent one.
+                    # It read as a clean regression and was: a provable
+                    # row made unprovable by staging it did not ask for.
+                    if through is None and _asks_about_own_gear(declared):
+                        through = _replace2(chargen.HOLY_SYMBOL)
+                        gear.weapons.append(through)
+                    if through is not None:
+                        through.item = magic.ref
+                        through.enhancement = max(
+                            through.enhancement, magic.plus)
         _hand_it_the_weapon(world, caster, declared)
         foe_team = Team.ENEMY
 

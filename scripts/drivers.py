@@ -40710,6 +40710,161 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def an_implement_carries_a_weapon_material(out: Result) -> None:
+    """A material on an implement is seen by what reads materials.
+
+    `i1884x1` is an implement whose Property is a weapon material, and 11
+    stat blocks read one through `c.regeneration(unless_struck_by=)`. The
+    write was never the gap: `c.gains_property(mine=True)` matches on
+    `Weapon.item`, which an implement block carries. **The reader was.**
+    `struck_by_property` resolves the swing through `c.weapon_of`, and
+    `Gear.main` skips implements on purpose -- a wizard holding nothing but
+    an orb is holding nothing it can swing -- so the property sat on the
+    item and nothing could ever see it.
+
+    The row's marker named `c.struck_by_property(implement=)` and the
+    parameter landed on `c.weapon_of(implement=)` instead, one layer down.
+    The reason is the thing worth asserting: `struck_by_property` has
+    **one** caller in the tree, inside `regeneration`, and the stat blocks
+    reaching it have no business knowing the attacker held an implement.
+    A parameter they would never pass is dead.
+
+    So it is off by default, and the control below is the whole reason:
+    `m2077a4` rolls `c.w()` when `weapon_of` is not None and `1d8` when it
+    is, so a widening with no parameter would have it rolling weapon dice
+    for a creature swinging an orb.
+    """
+    from dataclasses import replace
+
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit, TurnStart
+
+    #: A real implement power and a real weapon power, both heroic. Taken
+    #: off `REGISTRY` rather than invented: the gate is the power's
+    #: keywords, so a made-up ref would resolve to None and the implement
+    #: branch would be skipped for the wrong reason.
+    BY_IMPLEMENT, BY_WEAPON = "p10188", "p10274"
+
+    def fight(power: str, silver_the: str) -> tuple[int, int, int]:
+        fielded = story.field_encounter(seed=7, level=8)
+        world = fielded.world
+        pc = next(e for e in sorted(world.entities)
+                  if not query.stat_block(world, e))
+        mon = next(e for e in sorted(world.entities)
+                   if query.stat_block(world, e))
+        gear = world.get(pc, Gear)
+        assert gear is not None
+        # An implement in hand, since a fielded level-8 character on this
+        # seed holds an axe and a blowgun and no implement at all.
+        if gear.implement is None:
+            from combat_engine import chargen
+            gear.weapons.append(replace(chargen.HOLY_SYMBOL))
+        arm = {"implement": gear.implement, "weapon": gear.main}[silver_the]
+        assert arm is not None
+        Cast(world=world, me=pc, ref="drivers:material").gains_property(
+            "silvered", ref=arm.ref, on=pc)
+        hurt = world.get(mon, Health)
+        assert hurt is not None
+        hurt.hp = max(1, hurt.max_hp - 40)
+        Cast(world=world, me=mon, ref="drivers:material").regeneration(
+            5, on=mon, until=When.ENCOUNTER, unless_struck_by="silvered")
+        rnd = [1]
+
+        def turn() -> int:
+            was = hurt.hp
+            rnd[0] += 1
+            world.bus.emit(TurnStart(actor=mon, round=rnd[0], ghost=False))
+            return hurt.hp - was
+
+        clean = turn()
+        world.bus.emit(Hit(attacker=pc, target=mon, power=power,
+                           critical=False))
+        return clean, turn(), turn()
+
+    hit = fight(BY_IMPLEMENT, "implement")
+    out.that(hit == (5, 0, 5),
+             "a material on the IMPLEMENT is seen when the attack was an"
+             " implement attack -- the whole of `i1884x1`, and what"
+             f" `Gear.main` skipping implements hid (healed {hit[0]},"
+             f" {hit[1]}, {hit[2]})")
+
+    wrong = fight(BY_WEAPON, "implement")
+    out.that(wrong == (5, 5, 5),
+             "while a WEAPON attack does not pick the implement's material"
+             " up -- the control that separates 'resolve the implement when"
+             " the power is one' from 'prefer whatever magic thing is held',"
+             f" which is `struck_with` and would be wrong here (healed"
+             f" {wrong[0]}, {wrong[1]}, {wrong[2]})")
+
+    plain = fight(BY_WEAPON, "weapon")
+    out.that(plain == (5, 0, 5),
+             "and the weapon case still works, so the implement branch was"
+             f" added before the reach test and not instead of it (healed"
+             f" {plain[0]}, {plain[1]}, {plain[2]})")
+
+    # -- the default, which is what protects the other four callers -----
+    fielded = story.field_encounter(seed=7, level=8)
+    world = fielded.world
+    pc = next(e for e in sorted(world.entities)
+              if not query.stat_block(world, e))
+    mon = next(e for e in sorted(world.entities)
+               if query.stat_block(world, e))
+    gear = world.get(pc, Gear)
+    assert gear is not None
+    gear.weapons = [w for w in gear.weapons if w.group == "implement"]
+    if gear.implement is None:
+        from combat_engine import chargen
+        gear.weapons.append(replace(chargen.HOLY_SYMBOL))
+    gear.__post_init__()
+    asked = Cast(world=world, me=pc, ref="drivers:material")
+    ev = Hit(attacker=pc, target=mon, power=BY_IMPLEMENT, critical=False)
+    out.that(asked.weapon_of(ev) is None,
+             "a creature holding ONLY an implement answers None to the"
+             " default `weapon_of` -- which is what `m2077a4` reads to roll"
+             " 1d8 instead of weapon dice, and what a widening with no"
+             " parameter would have broken")
+    found = asked.weapon_of(ev, implement=True)
+    out.that(found is not None and found.group == "implement",
+             "and answers the implement when asked for one, off"
+             " `Gear.implement` rather than `struck_with`'s first magic"
+             f" thing held ({found.ref if found else None})")
+
+    # -- and the board's own gate, which is why this row is provable ----
+    # `audit.board` stamps an implement-slot item onto an implement in
+    # hand, and APPENDS one only when the row asks about its own gear --
+    # because putting an implement into a caster's empty hand poses them
+    # at range, which cost `i2624p1`, a `CloseBurst(1)`, every adjacent
+    # enemy. Read as an `ast`: these rows are exactly the ones whose
+    # docstrings discuss the mechanism at length, so a substring test
+    # would answer True for every row that merely explains it.
+    import audit
+
+    asks = '''
+def row(c):
+    """A docstring is not a call."""
+    c.gains_property("silvered", mine=True, on=c.me)
+'''
+    explains = '''
+def row(c):
+    """This would want `mine=True`, the way `c.my_weapon()` does, but
+    it does neither -- it is a note ABOUT the mechanism."""
+    c.damage(5)
+'''
+    out.that(audit._asks_about_own_gear_src(asks),
+             "the board's gate sees a body that really calls"
+             " `gains_property(mine=True)`")
+    out.that(not audit._asks_about_own_gear_src(explains),
+             "and does NOT see a body that only NAMES `mine=True` and"
+             " `c.my_weapon` in its docstring -- a substring test answers"
+             " True here, and `i1884x1`'s own note names both, so the gate"
+             " would have been no gate at all")
+
+
 def a_property_counting_against_one_creature(out: Result) -> None:
     """A weapon property narrowed to the creature being struck.
 
@@ -115024,6 +115179,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "implement_material": (an_implement_carries_a_weapon_material,
+                           "a weapon material on an implement is seen by "
+                           "what reads materials"),
     "scoped_property": (a_property_counting_against_one_creature,
                         "a weapon property narrowed to the creature being "
                         "struck, not laid on the weapon"),

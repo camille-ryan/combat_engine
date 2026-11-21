@@ -23031,9 +23031,17 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         treated weapon is one weapon, and the other must not carry it.
 
         False when no weapon can be identified, which is the honest answer
-        for an unarmed or implement attack and the one the printed sentence
-        wants: a creature not struck *by a weapon* was not struck by one
-        with the property.
+        for an unarmed attack and the one the printed sentence wants: a
+        creature not struck *by a weapon* was not struck by one with the
+        property.
+
+        **An implement attack is not in that bucket, and used to be.** This
+        resolves with `weapon_of(implement=True)`, because an implement is
+        a thing that strikes you and can carry a material: `i1884x1` is an
+        implement whose whole Property is one, and against the 11 stat
+        blocks reading a material it would otherwise lay a property that
+        nothing could ever see. The default stays off for the callers
+        asking *"was this a weapon attack"* -- see `weapon_of`.
 
         **Hand it an attack event, not a `DamageApplied`.** `weapon_of`
         finds the swing through `ev.attacker`, and `DamageApplied` carries
@@ -23054,7 +23062,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         on the character's weapons, so an unarmed blow does not carry that
         one either.
         """
-        weapon = self.weapon_of(ev)
+        weapon = self.weapon_of(ev, implement=True)
         if weapon is None:
             return False
         if prop in weapon.properties:
@@ -23068,7 +23076,9 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         return any(p == prop and pred(victim)
                    for p, _ref, pred in gear.scoped)
 
-    def weapon_of(self, ev: Any = None) -> Weapon | None:
+    def weapon_of(
+        self, ev: Any = None, *, implement: bool = False,
+    ) -> Weapon | None:
         """Which weapon the attack behind this event was swung with.
 
         `c.struck_with` answers a looser question -- it prefers whatever
@@ -23076,6 +23086,31 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         using this ki focus" and wrong for a coated blade: a poison is on
         one weapon and the other must not carry it. This one picks the way
         the attack itself did, off the reach of the row that made it.
+
+        **`implement=True` admits an implement attack, and it is off by
+        default because the callers want opposite things.** `Gear.main`
+        skips implements on purpose -- a wizard holding nothing but an orb
+        is holding nothing it can swing -- so an implement power resolves
+        to a weapon it never used, or to None. Two readings, both right:
+
+        * *"was this a weapon attack"* wants the default. `m2077a4` rolls
+          `c.w()` when this is not None and `1d8` when it is, so admitting
+          an implement would have it rolling weapon dice for a creature
+          swinging an orb;
+        * *"what struck me, and what was on it"* wants the implement. That
+          is `struck_by_property`, and `i1884x1` is the card that needs it
+          -- an implement whose Property is a weapon material, against the
+          11 stat blocks that read one through
+          `c.regeneration(unless_struck_by=)`.
+
+        Resolved through `Gear.implement`, which already prefers a born
+        implement over a weapon serving as one, rather than through
+        `struck_with`'s "first magic thing held" -- that would hand a
+        caster's magic axe to an orb's attack, which is the exact
+        confusion this method's first paragraph exists to refuse.
+
+        Falls through to the weapon when the attacker holds no implement,
+        so an implement power cast by something unarmed is unchanged.
         """
         from .dsl import get, reach_of
 
@@ -23085,6 +23120,12 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         if gear is None:
             return None
         p = get(getattr(ev, "power", "") or "")
+        if implement and p is not None and Keyword.IMPLEMENT in self.keywords_of(p):
+            # Before the reach test, deliberately: an implement power is
+            # often ranged, and `gear.ranged` would answer "the bow".
+            through = gear.implement
+            if through is not None:
+                return through
         # The *attacker's* reshape, not the caster's: this picks which
         # weapon fired the shot being answered. #614.
         fired = p is not None and reach_of(

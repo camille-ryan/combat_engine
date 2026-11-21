@@ -1091,7 +1091,6 @@ def i1843p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.struck_by_property(implement=)",),
 )
 def i1884x1(c: Cast) -> None:
     """**Re-pointed, and the old note's closing claim was false.** It said
@@ -1119,10 +1118,21 @@ def i1884x1(c: Cast) -> None:
     weapon and the other must not carry it. Reconciling those two readings
     is the parameter.
 
-    Left unwritten rather than written inert, and the marker stays `todo`:
-    laying a property nothing reads would make this row fire and report
-    finished while the card does nothing in any fight, which is the worst
-    of the three outcomes."""
+    **It landed on `c.weapon_of(implement=)` and not on
+    `c.struck_by_property`, which the marker named.** The reason is worth
+    keeping: `struck_by_property` has exactly **one** caller in the tree,
+    inside `c.regeneration(unless_struck_by=)`, and the 11 stat blocks
+    reaching it have no business knowing the attacker held an implement.
+    A parameter they would never pass is a dead parameter, so the
+    reconciliation belongs one level down, where `Gear.main` was dropping
+    the implement -- and `struck_by_property` simply asks for it.
+
+    Off by default there, because the other four callers of `weapon_of`
+    ask the opposite question. `m2077a4` is the sharp one: it rolls
+    `c.w()` when `weapon_of` is not None and `1d8` when it is, so a
+    widening with no parameter would have had a creature rolling weapon
+    dice for an orb."""
+    c.gains_property("silvered", mine=True, on=c.me)
 
 
 @power(
