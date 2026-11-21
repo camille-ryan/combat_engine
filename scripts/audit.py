@@ -978,11 +978,12 @@ KNOWN_SILENT = {
     # Build-gated class-feature legs: `chargen` deals one build and each leg
     # checks its own, so four of the five always decline, and the one that
     # matches hands over a row -- which the log does not see either.
-    "cf:monk-f0s0": "declines unless the monk took its own tradition; one build is dealt",
-    "cf:monk-f0s1": "declines unless the monk took its own tradition; one build is dealt",
-    "cf:monk-f0s2": "declines unless the monk took its own tradition; one build is dealt",
-    "cf:monk-f0s3": "declines unless the monk took its own tradition; one build is dealt",
-    "cf:monk-f0s4": "declines unless the monk took its own tradition; one build is dealt",
+    # Its four siblings came off this list when `#1429` gave each arm a
+    # header `on_leg` gate: `_class_of_leg` reads the same field, so the
+    # board poses each on its own leg and four of the five fire. This one
+    # still does not, and the excuse is kept because it is now a claim
+    # about this arm rather than about the build that was dealt.
+    "cf:monk-f0s0": "its clause needs more than its own leg being posed",
     # Pools. Both guards are deliberate and documented in the rows: a full
     # pool must not be raised, and `f3769`'s check comes first precisely so
     # a full pool does not cost a use of the row for nothing.
