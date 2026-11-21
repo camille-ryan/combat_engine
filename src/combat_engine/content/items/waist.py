@@ -1826,7 +1826,7 @@ def i2208p2(c: Cast) -> None:
 
 @power("i3469x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.teleport(occupied_fails=)",))
+       todo=("movement.teleport(needs_sight)",))
 def i3469x1(c: Cast) -> None:
     """No sight needed to a space you have seen, and a teleport aimed at an
     occupied space fails and spends the power.
@@ -1858,10 +1858,38 @@ def i3469x1(c: Cast) -> None:
     permission that expends the power on failure are not one gap, and one
     symbol could not go green correctly for both.
 
-    `todo=` rather than `dropped=`, because nothing is written here. The
-    wearer enjoys the printed benefit anyway -- the engine grants it to
-    everybody -- so the item is stronger than its card by the one clause
-    it cannot pay, which is recorded here rather than papered over."""
+    `todo=` rather than `dropped=`, because nothing is written here.
+
+    ## Re-pointed a third time, and both halves of the old note were wrong
+
+    `#1439` holds this. Measured rather than read:
+
+    **The penalty already holds.** On a board, `c.teleport(to=<occupied>)`
+    returns False and nobody moves, because `to in options` is False --
+    and `dsl.use` spends the usage **after** the body whatever it
+    returned, which the comment there states outright: *"the card spends
+    the action and the use whether the check lands or not"*. So *"fails
+    and spends the power"* is the behaviour today, and the claim above
+    that the item is *"stronger than its card by the one clause it cannot
+    pay"* is refuted -- the clause is paid.
+
+    **And "line of sight is not modelled at all" is stale.**
+    `query.line_of_sight` exists. What is true is narrower and is the real
+    gap: **nothing in `movement.py` consults it for a destination** -- no
+    reference to `line_of_sight` or `sight_squares` in that module -- so a
+    teleport needs no sight to where it is going and the card's waiver
+    grants every creature what it already has.
+
+    So the marker names the layer that would enforce the requirement. A
+    `c.teleport(...)` parameter would report ARRIVED without the
+    requirement existing, which is the mistake all three previous markers
+    on this row made in three different ways.
+
+    **528 rows call `c.teleport`**, so requiring sight is a behaviour
+    change reaching every one of them and a balance decision as much as a
+    rules one. Two things to settle with it, both on the issue: sight to a
+    **square** rather than to a creature, and *"a space you have seen"*
+    being a **memory** that nothing records."""
 
 
 @power("i3469p1", level=8, cls=ITEM, usage=DAILY, action=MOVE,
