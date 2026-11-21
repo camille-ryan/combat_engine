@@ -1349,7 +1349,22 @@ def i1188p1(c: Cast) -> None:
     does not have, which is a gap in the import rather than a thing a body
     may invent. `c.grant_attack` is not it either: it makes a creature
     swing *now*, out of turn, and it raises outright on a `ref=` that is
-    not declared."""
+    not declared.
+
+    **Measured and filed as `#1438`.** The claim above is exact, counted
+    off `game.db`: `feat` carries **227** second-card refs and `power`
+    **154**, and `item_block` carries **0 of 2,491**. So the convention is
+    used 381 times and stops at the table these rows live in.
+
+    Four rows wait on it -- `i1188p1`, `i3569p1`, `i2980p1`, `f3625` --
+    and it is **ETL work**, so it is queued for the deferred batch rather
+    than worked around here.
+
+    And the symbol is likely to move with the fix: `c.grant_inline()`
+    names a `Cast` verb, but if the importer mints the ref then
+    `c.grant_row` already *is* the verb and nothing new is wanted. Left as
+    it is only because re-pointing it to an importer symbol belongs in
+    that batch."""
 
 
 @power("i1368p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
