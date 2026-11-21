@@ -6380,7 +6380,8 @@ class Cast:
             who=who, power=ref, extra=extra, now=now, by=self.ref))
         return now
 
-    def restore_use(self, ref: str, *, on: int | None = None) -> bool:
+    def restore_use(self, ref: str, *, on: int | None = None,
+                    once_per_round: bool = False) -> bool:
         """"You regain the use of your second wind."
 
         The inverse of spending one, and the opposite of `c.forbid`: that
@@ -6399,14 +6400,41 @@ class Cast:
         therefore silent by construction. `i3271p1` is the worked example
         and it hid in the `UNUSED` bucket rather than the silent one for its
         whole life. #899.
+
+        **`once_per_round=` hands back the ROUND, not a use**, which is a
+        different budget and the reason two rows sat inert with the verb
+        already in the tree. A once-per-round at-will is refused by
+        `dsl.usable` off `Powers.last_round`, and it never increments
+        `used` -- so the guard above answers 0 and nothing could ever be
+        given back. 353 rows in the tree are once-per-round, so this is
+        not a one-row convenience.
+
+        It clears only the mark, deliberately. `Powers.restore` pops
+        `used` as well, which would refund a use to a row that is both
+        once-per-round *and* limited, and neither card says anything
+        about the daily or encounter budget. `f3697` and `i724x1` are the
+        two.
         """
         from .components import Powers as _Powers
 
         who = on if on is not None else self.me
         powers = self.world.get(who, _Powers)
-        if powers is None or powers.times(ref) == 0:
+        if powers is None:
             return False
-        powers.restore(ref)
+        if once_per_round:
+            # **The round mark, not a spent use**, and the guard below is
+            # exactly why this needs its own door: a once-per-round
+            # at-will never increments `used`, so `times(ref) == 0` is
+            # always true for one and the restore could never happen. Both
+            # rows that print this had worked that out and measured it --
+            # the mark set, `usable` refusing, `restore_use` answering
+            # False, the mark untouched.
+            if not powers.clear_round(ref):
+                return False
+        elif powers.times(ref) == 0:
+            return False
+        else:
+            powers.restore(ref)
         from .events import UseRestored
 
         self.world.bus.emit(UseRestored(who=who, power=ref, by=self.ref))

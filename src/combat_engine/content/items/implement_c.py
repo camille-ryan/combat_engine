@@ -595,7 +595,7 @@ def i704x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.restore_use(once_per_round=)",),
+    dropped=("c.struck_with(distinct=)",),
 )
 def i724x1(c: Cast) -> None:
     """**Re-pointed, and the old note's premise was wrong.** It said this
@@ -625,7 +625,37 @@ def i724x1(c: Cast) -> None:
     construction, which is the printed distinctness clause; and
     `c.struck_with` is the read for "with this ki focus" -- its own
     docstring names a ki focus as the case it is right for, where
-    `c.weapon_of` is not."""
+    `c.weapon_of` is not.
+
+    **Written on `c.restore_use(once_per_round=)`**, which is the keyword
+    this note asked for and `f3697` shares. The hand-back clears the round
+    mark in `Powers.last_round` -- the budget `dsl.usable` refuses on --
+    and not a spent use, so the flurry's own allowance is untouched.
+
+    **One clause is short and it is not the one this note predicted.** It
+    said the two uses "are triggered by two different `Hit` events by
+    construction", and that is true of the events and not of the printed
+    sentence: the card says two different **attacks that you make with
+    this ki focus**, and `c.struck_with` answers which weapon struck, not
+    which attack. Two hits of the same attack -- an area power landing on
+    two enemies -- are two `Hit` events and one attack, so the row is
+    generous there. `c.struck_with(distinct=)` is the gap, named for the
+    read that would have to tell them apart.
+
+    `c.latch(per_turn=True)` is the "additional time during your turn":
+    one hand-back a turn, however many times the monk connects."""
+    me = c.me
+
+    def connected(ev: Hit) -> None:
+        if ev.attacker != me or c.struck_with(ev) is None:
+            return
+        flurry = c.flurry_of_blows()
+        if not flurry or c.latched(f"{c.ref} again", per_turn=True):
+            return
+        if c.restore_use(flurry, on=me, once_per_round=True):
+            c.latch(f"{c.ref} again", per_turn=True)
+
+    c.watch(Hit, connected, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

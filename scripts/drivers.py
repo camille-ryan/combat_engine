@@ -39614,6 +39614,82 @@ def once_spent(out: Result) -> None:
              f" fix must not restore (other {rejected.amount}, mine"
              f" {wanted.amount})")
 
+def round_handed_back(out: Result) -> None:
+    """"You can use <a once-per-round power> a second time during this
+    turn." `f3697` and `i724x1`.
+
+    **Two budgets wear the same word and only one of them was reachable.**
+    `c.restore_use` hands back a spent *use* and guards on
+    `times(ref) == 0`; a once-per-round at-will never increments `used`,
+    so that guard was always true and the verb could never do anything
+    for one. What `dsl.usable` actually refuses on is
+    `Powers.last_round`, which nothing reached. Both rows had measured
+    exactly this and sat `todo=` on it.
+
+    So `once_per_round=True` clears the round mark. The control is that it
+    clears **only** the mark: `Powers.restore` pops `used` as well, which
+    would refund a use to a row that is once-per-round *and* limited, and
+    neither card says anything about the encounter or daily budget.
+    """
+    # **`loader` first, or `REGISTRY` is near-empty.** The first draft read
+    # the registry without it and the premise assertion failed with an
+    # empty ref -- which is the assertion doing its job: a rule that picks
+    # its subject off the registry has to make sure the registry is filled.
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+    from combat_engine.engine.types import Usage
+
+    # A real once-per-round row, chosen off the registry rather than named:
+    # 353 rows declare it and a hardcoded ref would rot.
+    atwill = next((r for r, p in sorted(REGISTRY.items())
+                   if p.once_per_round and p.usage is Usage.AT_WILL), "")
+    out.that(bool(atwill), f"the premise: the tree has a 1/round at-will ({atwill})")
+    if not atwill:
+        return
+
+    world, me, _ = _board(seed=5)
+    known = world.get(me, Powers) or world.add(me, Powers())
+    known.known.append(atwill)
+    c = Cast(world=world, me=me, ref="drivers:round")
+
+    known.note_round(atwill, world.round)
+    ok, why = usable(world, me, REGISTRY[atwill])
+    out.that(not ok and "round" in why,
+             f"used this round, it is refused ({why!r})")
+
+    # The old door, kept: a spent *use* is what it asks about, and an
+    # at-will has none, so this must go on answering False.
+    out.that(c.restore_use(atwill, on=me) is False,
+             "a plain restore still answers False -- an at-will has no"
+             " spent use to give back, which is why the verb was unusable"
+             " here and why that branch is unchanged")
+
+    out.that(c.restore_use(atwill, on=me, once_per_round=True) is True,
+             "and the round is handed back")
+    ok2, _ = usable(world, me, REGISTRY[atwill])
+    out.that(ok2, "so the row is usable again this round")
+
+    out.that(c.restore_use(atwill, on=me, once_per_round=True) is False,
+             "with no mark to clear it answers False, which is the printed"
+             " Requirement -- 'you have ALREADY used it during this turn'")
+
+    # THE CONTROL: a limited row keeps its spent uses.
+    limited = next((r for r, p in sorted(REGISTRY.items())
+                    if p.once_per_round and p.usage is not Usage.AT_WILL), "")
+    if limited:
+        known.known.append(limited)
+        known.note_use(limited, world.round)
+        spent = known.times(limited)
+        out.that(spent == 1, f"the premise: one use spent of {limited}")
+        c.restore_use(limited, on=me, once_per_round=True)
+        out.that(known.times(limited) == spent,
+                 "THE CONTROL: handing back the ROUND leaves the spent use"
+                 f" alone ({known.times(limited)} of {spent}) -- `restore`"
+                 " would have refunded it")
+
+
 def creature_kinds(out: Result) -> None:
     """Every player character is a natural humanoid, and an origin replaces it.
 
@@ -114531,6 +114607,9 @@ DRIVERS = {
     "pool_emptied": (pool_emptied,
                      "the first time a psionic pool drops to 0, and the "
                      "spend that leaves a point behind"),
+    "round_handed_back": (round_handed_back,
+                          "a second use of a once-per-round power in one "
+                          "turn, and the spent use it must not refund"),
     "points_regained": (points_regained,
                         "a power point put back, and the cap that refuses one"),
     "boon_traded": (boon_traded,

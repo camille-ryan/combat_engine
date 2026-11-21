@@ -661,30 +661,40 @@ def f3696b(c: Cast) -> None:
 
 @power("f3697", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.restore_use(once_per_round=)",))
+       )
 def f3697(c: Cast) -> None:
     """A second use of the monk's flurry in a turn the action point bought.
 
-    **Marked, because the whole feat is a no-op and it carried no marker at
-    all.** `c.restore_use` cannot hand back a `once_per_round` row: it
-    guards on `times(ref) == 0`, and an at-will never increments `used`, so
-    the budget it would give back was never spent. The refusal lives in
-    `dsl.usable` off `Powers.last_round`, which `restore_use` does not
-    touch. Probed end to end on a once-per-round at-will:
+    **Written: the body was already right and wanted one keyword.** The
+    measurement below is what it was marked on, and it was exact --
+    `c.restore_use` could not hand back a `once_per_round` row because it
+    guards on `times(ref) == 0` and an at-will never increments `used`.
+    `once_per_round=True` clears the round mark in `Powers.last_round`
+    instead, which is the budget `dsl.usable` actually refuses on. Nothing
+    else here changed.
+
+    It clears only the mark and not a use, which matters for a row that is
+    once-per-round *and* limited: the card grants a second use this turn
+    and says nothing about the daily budget.
+
+    The original probe, kept because it is the evidence:
 
         times(ref)                           0
         usable, after the round is noted     (False, 'already used this round')
         c.restore_use(ref)                   False
         usable, after restore_use            (False, 'already used this round')
 
-    So both printed conditions are read correctly, the watch arms, and
-    then nothing happens -- which is the "drawable and inert" fault rather
-    than a clause missing, and why this is `todo=` rather than `dropped=`:
-    the restore **is** the whole effect.
+    Both printed conditions were read correctly, the watch armed, and then
+    nothing happened -- the "drawable and inert" fault rather than a clause
+    missing, which is why it was `todo=` and not `dropped=`: the restore
+    **is** the whole effect.
 
-    317 rows in the tree are at-will *and* once-per-round, so the keyword
-    is not a one-row convenience. `items/implement_c.i724x1` wants the
-    same thing for the same reason and carries the same symbol, found by
+    **353** rows in the tree are once-per-round, so the keyword is not a
+    one-row convenience. The note said 317 and the count has grown; it is
+    one query over `dsl.REGISTRY` rather than a number to carry.
+
+    `items/implement_c.i724x1` wanted the
+    same thing for the same reason and carried the same symbol, found by
     the agent reading that file -- this row was its side finding, and it
     is the kind only a neighbour notices, because an unmarked inert feat
     looks finished from every angle `todo.py` and `audit.py` can see.
@@ -713,7 +723,7 @@ def f3697(c: Cast) -> None:
             return
         if known.last_round.get(flurry) != c.world.round:
             return
-        c.restore_use(flurry, on=me)
+        c.restore_use(flurry, on=me, once_per_round=True)
 
     c.watch(ActionPointSpent, spent, until=When.ENCOUNTER, on=me, label=c.ref)
 

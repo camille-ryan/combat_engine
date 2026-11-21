@@ -2092,6 +2092,22 @@ class Powers:
         """
         self.last_round[ref] = round_
 
+    def clear_round(self, ref: str) -> bool:
+        """Forget the round mark, leaving any spent uses alone.
+
+        The inverse of `note_round`, and **not** `restore`: that pops
+        `used` as well, which would refund a use to a row that is both
+        once-per-round and limited -- right for the at-wills that have no
+        uses to refund and wrong for anything else. Two cards grant a
+        second use of a once-per-round row in one turn and neither says
+        anything about its daily or encounter budget.
+
+        Returns whether there was a mark to clear, which is the printed
+        Requirement on both: *"you have already used ... during this
+        turn"*.
+        """
+        return self.last_round.pop(ref, None) is not None
+
     def unuse(self, ref: str) -> None:
         """Give back one use. What a reliable power does when it misses.
 

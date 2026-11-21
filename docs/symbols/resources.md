@@ -75,7 +75,7 @@ Things a creature spends, and the budget it spends them from.
   - Hand a spent charge back. False if none had been spent.
 - `c.restore_per_day(self, ref: 'str') -> 'bool'`
   - Hand one use of a daily allowance back. False when none was spent.
-- `c.restore_use(self, ref: 'str', *, on: 'int | None' = None) -> 'bool'`
+- `c.restore_use(self, ref: 'str', *, on: 'int | None' = None, once_per_round: 'bool' = False) -> 'bool'`
   - "You regain the use of your second wind."
 - `c.spend_charge(self, key: 'str', limit: 'int' = 1, *, on: 'int | None' = None) -> 'bool'`
   - Take one from a per-encounter charge. False when none is left.
