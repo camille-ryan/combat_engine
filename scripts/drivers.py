@@ -56150,6 +56150,7 @@ def a_race_that_trains_a_skill(out: Result) -> None:
     # draft of this rule could not see.
     from combat_engine.chargen import _class_skill_pool
     from combat_engine.db import game
+    from combat_engine.engine.components import Powers as _Powers
 
     db = game()
     row = db.execute(
@@ -56159,11 +56160,46 @@ def a_race_that_trains_a_skill(out: Result) -> None:
         "SELECT skill FROM class_skill WHERE lower(class) = 'cleric'"
         " AND granted = 1")}
     owed = len(given) + int((row[0] if row else 0) or 0)
-    out.that(len(plain) == owed,
+    # **The feats' own training comes off first, and leaving it in was this
+    # assertion pinning a bug in place.** The sibling assertion forty lines
+    # up already says why -- *"an inequality rather than a count, because
+    # the hand is not pinned on this path and a skill-training feat
+    # legitimately adds to it"* -- and this one used an equality anyway. It
+    # held only because the four feats printing *"training in one skill from
+    # the <build>'s class skills list"* trained **nothing**:
+    # `_class_skill_pool` returned the empty set for a two-word build name.
+    #
+    # `#1423` made them work, this board's cleric is dealt one of the four,
+    # and the line went red on a character that had just become correct. The
+    # equality is kept -- it is what catches a parse matching too widely,
+    # which is why this reads `class_skill` rather than a second race -- and
+    # it is asked of the **class half**, which is what the sentence claims.
+    _trains = set()
+    _pw = _bland_world.get(_bland, _Powers)
+    for _ref in sorted(getattr(_pw, "known", []) or []):
+        _got = db.execute(
+            "SELECT trains, trains_choice, trains_from FROM feat WHERE ref = ?",
+            (_ref,),
+        ).fetchone()
+        if _got is None:
+            continue
+        if _got["trains"]:
+            _trains |= {w for w in _got["trains"].split(",") if w}
+        # A *choice* and a *from a list* are each one skill, and which one
+        # cannot be re-derived here without re-running the draw -- so what
+        # comes off is whatever the character holds that its own class list
+        # could not have given it.
+        if _got["trains_choice"] or _got["trains_from"]:
+            _trains |= (set(plain) - given
+                        - set(_class_skill_pool(db, "cleric")))
+    out.that(len(set(plain) - _trains) == owed,
              "and a race printing a skill bonus and no training leaves the"
-             " character with exactly what its class page gives -- the"
-             " granted skills plus its printed number of picks",
-             f"{len(plain)} trained; {len(given)} granted +"
+             " character with exactly what its CLASS page gives -- the"
+             " granted skills plus its printed number of picks, with any"
+             " skill a held feat trained taken off first",
+             f"{len(set(plain) - _trains)} from the class"
+             f" ({len(plain)} trained less {len(_trains)} from feats);"
+             f" {len(given)} granted +"
              f" {owed - len(given)} picks = {owed}")
     out.that(bool(_class_skill_pool(db, "cleric")),
              "measured against a class list that is actually populated, so"
