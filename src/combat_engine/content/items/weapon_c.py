@@ -2015,33 +2015,37 @@ def i2964p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("conditions.skill_penalty()",),
+    narrative=("skill:perception",),
 )
 def i3091x1(c: Cast) -> None:
     """The +2 is a real modifier with a reader and is exact.
 
-    **Re-pointed, and the old premise was false in both halves.** It read
-    "nobody sleeps in a fight and nothing records that they might".
-    `Condition.UNCONSCIOUS` is live, carries a `conditions.Rules` entry of
-    its own, and 14 content rows carry `Keyword.SLEEP` -- so a fight does
-    put creatures into the nearest recorded state and `c.sleeping()` asked
-    for a reader that is already there under another name.
+    **The page settles the second clause, and it is narrative.** Two
+    re-pointings guessed at where *"the Perception penalty while
+    sleeping"* lives -- first that nothing records sleeping, then that a
+    condition ought to charge a skill and none does. Both were reasoning
+    from the engine. The printed rule is in neither place, PHB p264:
 
-    What is missing is the **penalty**, not the state: `Rules` carries
-    `attack`, `defences` and `ranged_defences` and nothing that touches a
-    skill, so no condition in the table charges anything to a
-    `skill:perception` check and there is nothing for this clause to
-    waive. Named as a function rather than as `Rules.skills`, because a
-    dict field on a frozen dataclass takes a `default_factory` and so
-    leaves no class attribute for `blocked.py` to find -- the trap
-    `Defences.immune` is sitting in two files over.
+      > *"If your entire group sleeps at the same time without setting a
+      > watch, the DM uses your individual passive Perception scores,
+      > counting the -5 penalty for being asleep, to determine whether
+      > you hear approaching danger and wake up."*
 
-    Once a condition can charge a skill, the waiver needs no second verb:
-    the penalty would be a term in `skills.modifier`'s sum, which an item
-    bonus cancels arithmetically. Whether the printed "while sleeping"
-    attaches to `UNCONSCIOUS` is the judgement left for whoever builds
-    it -- the card says asleep and the engine's state is a creature that
-    cannot act."""
+    So it is a **-5 to passive Perception during a rest**, and the
+    sentence it appears in is about hearing danger and waking up. There is
+    no combat moment: nothing in a fight makes a sleeping creature's
+    passive Perception check, and the penalty is a number the DM applies
+    while narrating a watch. That is what `narrative=` is for.
+
+    **The condition half of the old note was wrong in the useful
+    direction, and it is filed rather than dropped.** `Rules` really
+    carries nothing that touches a skill -- but two printed conditions
+    charge one. BLINDED and DEAFENED each print *"you take a -10 penalty
+    to Perception checks"*, `Condition.BLINDED` carries no such term and
+    `Condition.DEAFENED` is a bare `Rules()`, and 62 and 70 content sites
+    apply them. That is a real engine gap over 132 sites and it is **not**
+    this row's: no marked row waits on it, and this clause would still be
+    narrative after it landed. #1440."""
     c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER)
 
 
