@@ -34,6 +34,7 @@ from .events import (
     Escaped,
     Note,
     SavingThrow,
+    SustainDue,
     TurnEnd,
     TurnStart,
 )
@@ -1261,7 +1262,22 @@ class Effects:
                 and eff.sustained < self.world.round
                 and not self._sustain_by_default(eff, paid)
             ):
-                self.end(eff, "not sustained")
+                # **Announced before it goes**, which is the only moment a
+                # card reading "when a power you could sustain would end"
+                # can act in -- `i2740p1` was offered as a standing free
+                # action for want of this. The live `Effect` rides as a
+                # plain attribute so a row can sustain *this* hold without
+                # the object reaching `Event.wire` and every fixture.
+                due = SustainDue(who=eff.source, effect=eff.label,
+                                 by=eff.by)
+                due.hold = eff  # ty: ignore[unresolved-attribute]
+                self.world.bus.emit(due)
+                # Read back rather than cancelled: a listener that
+                # sustained it has moved `sustained`, and cancelling would
+                # have left the hold standing with none of the sustain
+                # bookkeeping run. See `SustainDue`.
+                if eff.sustained < self.world.round and not eff.ended:
+                    self.end(eff, "not sustained")
 
     def _warn_sustainless(self, eff: Effect) -> None:
         """A `When.SUSTAIN` effect nobody can sustain lapses after a round.

@@ -90,6 +90,7 @@ from combat_engine.engine import (
     SecondWind,
     SkillCheck,
     SurgeSpent,
+    SustainDue,
     Trigger,
     TurnStart,
     Usage,
@@ -511,9 +512,19 @@ def i1734x1(c: Cast) -> None:
                     when=lambda ctx: ctx.get("target") == me)
 
 
+def _my_sustain_lapsing(world, me: int, ev) -> bool:  # noqa: ANN001
+    """A hold of mine, with a printed cost, about to lapse unsustained."""
+    hold = getattr(ev, "hold", None)
+    return (getattr(ev, "who", None) == me
+            and hold is not None
+            and hold.sustain_cost is not None)
+
+
 @power("i2740p1", level=2, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, trigger="a power you could sustain would end",
-       dropped=("events.SustainDue",))
+       reach=PERSONAL, target=SELF,
+       trigger="a power you could sustain would end",
+       on=Trigger(SustainDue, _my_sustain_lapsing,
+                  "a power you could sustain would end"))
 def i2740p1(c: Cast) -> None:
     """A free action that sustains **is** "you sustain that power without
     using the action normally required": `Effects.sustain` is the same
@@ -521,21 +532,34 @@ def i2740p1(c: Cast) -> None:
     `actions._sustaining` only offers that one while the creature can
     still afford the cost -- which is the hole this power fills.
 
-    Only the wearer's own holds, only ones with a cost printed on them,
-    and only ones not already sustained this round, which is the same
-    three tests the paid action makes.
+    **The trigger is declared now, and the dropped clause was exact.** It
+    read: *"nothing announces a sustainable effect reaching its last
+    round, so the row is offered as a free action rather than declared
+    against the moment the card names."* `events.SustainDue` is that
+    announcement -- emitted by `Effects._on_turn_end` immediately before
+    `end(eff, "not sustained")`, which is the only moment the printed
+    sentence can act in.
 
-    Dropped: the trigger. Nothing announces a sustainable effect reaching
-    its last round, so the row is offered as a free action rather than
-    declared against the moment the card names."""
-    mine = [
-        e for e in c.world.effects.live.values()
-        if e.source == c.me and e.sustain_cost is not None
-        and not e.ended and e.sustained < c.world.round
-    ]
-    pick = c.choose(mine, "which effect is sustained for free")
-    if pick is not None:
-        c.world.effects.sustain(pick)
+    **It sustains the hold the event names**, off the live `Effect` riding
+    as `ev.hold`, where the standing version had to `c.choose` among every
+    sustainable hold the wearer had. That choice was the approximation:
+    the card is about **one** power -- the one that would end -- and
+    offering a menu let the wearer sustain a different one that was in no
+    danger.
+
+    The three tests the paid action makes still hold, and two of them have
+    moved into the trigger: it is the wearer's own hold (`ev.who` is
+    `eff.source`) with a cost printed on it. The third -- not already
+    sustained this round -- is what the emitter is asking about, so it is
+    true by construction here rather than re-tested.
+
+    No cancel. `SustainDue` is not a `Decision` deliberately: refusing it
+    would leave the hold standing with none of the sustain bookkeeping
+    run, which is a different thing from sustaining it."""
+    hold = getattr(c.trigger, "hold", None)
+    if hold is None or hold.ended:
+        return
+    c.world.effects.sustain(hold)
 
 
 @power("i2997x1", level=2, cls=ITEM, action=ActionType.NONE,

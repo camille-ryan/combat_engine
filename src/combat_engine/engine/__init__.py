@@ -127,6 +127,7 @@ from .events import (
     SkillCheck,
     Summoned,
     SurgeSpent,
+    SustainDue,
     TempHP,
     TotalDefence,
     TrapSprung,

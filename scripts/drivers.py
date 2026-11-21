@@ -40710,6 +40710,116 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def a_sustain_about_to_lapse_is_announced(out: Result) -> None:
+    """`events.SustainDue`, and `i2740p1` declared against it.
+
+    The card prints *"a power you could sustain would end"* as its
+    trigger. Nothing announced that moment, so the row had been written as
+    a standing free action that `c.choose`s among every sustainable hold
+    the wearer has -- which is wider than print: the card is about the ONE
+    power that would end, and a menu let the wearer sustain a different
+    one that was in no danger.
+
+    `Effects._on_turn_end` now emits `SustainDue` immediately before
+    `end(eff, "not sustained")` and **reads `eff.sustained` back**, so a
+    listener that sustained the hold stops it lapsing. Not a `Decision`:
+    cancelling would leave the hold standing with none of the sustain
+    bookkeeping run, which is a different thing from sustaining it.
+
+    **This rule is the only proof of the row.** A declared trigger means
+    `audit` reports it UNUSED -- the board never poses a lapsing sustain
+    -- so the standing version's audit credit is gone and this replaces
+    it. Said plainly because that trade is easy to make by accident.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.items.neck import _my_sustain_lapsing
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When as W
+    from combat_engine.engine.events import SustainDue, TurnEnd
+    from combat_engine.engine.types import ActionType
+
+    def board(*, armed: bool) -> tuple:
+        got = story.field_encounter(seed=7, level=3)
+        w = got.world
+        me = next(e for e in sorted(w.entities)
+                  if not query.stat_block(w, e))
+        hold = w.effects.apply(
+            me, me, W.SUSTAIN, label="drivers:sustained",
+            sustain_cost=ActionType.MINOR, by="drivers:sustain",
+        )
+        seen: list = []
+        w.bus.on(SustainDue, lambda ev: seen.append(ev))
+        if armed:
+            # **Stands in for the trigger dispatcher, deliberately.** A
+            # declared `on=` is installed by `triggers` when the creature
+            # holds the row, and the body has to run INSIDE the emit --
+            # after it the hold has already ended. So the listener does
+            # what the dispatcher does and nothing more: ask the row's own
+            # predicate, then run its body with the event as `c.trigger`.
+            def answer(ev: SustainDue) -> None:
+                if _my_sustain_lapsing(w, me, ev):
+                    REGISTRY["i2740p1"].body(
+                        Cast(world=w, me=me, ref="i2740p1", target=me,
+                             trigger=ev))
+
+            w.bus.on(SustainDue, answer)
+        return w, me, hold, seen
+
+    # -- the announcement -------------------------------------------------
+    w, me, hold, seen = board(armed=False)
+    out.that(hold is not None and not hold.ended,
+             "the premise: a sustainable hold with a printed cost is"
+             " standing")
+    w.round += 1
+    w.bus.emit(TurnEnd(actor=me, round=w.round, ghost=False))
+    out.that(len(seen) == 1 and seen[0].who == me,
+             "its last round is ANNOUNCED -- one `SustainDue` naming the"
+             f" creature that may sustain it ({len(seen)} event(s))")
+    out.that(seen and getattr(seen[0], "hold", None) is hold,
+             "and the live hold rides as `ev.hold`, so a row can sustain"
+             " THAT one rather than pick among its own")
+    out.that(hold.ended,
+             "THE CONTROL: and with nothing listening it still lapses --"
+             " the announcement does not keep it alive, which is what"
+             " makes it an event rather than a reprieve")
+
+    # -- and the row answering it -----------------------------------------
+    w2, me2, hold2, seen2 = board(armed=True)
+    w2.round += 1
+    w2.bus.emit(TurnEnd(actor=me2, round=w2.round, ghost=False))
+    out.that(bool(seen2), "the premise: the moment was announced again")
+    out.that(not hold2.ended,
+             "and `i2740p1` sustains it for free, so the hold SURVIVES the"
+             " round it would have lapsed in -- the whole card")
+    out.that(hold2.sustained == w2.round,
+             "with the sustain bookkeeping run, which is why this is a"
+             " sustain and not a cancelled lapse"
+             f" (sustained={hold2.sustained}, round={w2.round})")
+
+    # -- the predicate's negatives, which the boards above cannot vary -----
+    #
+    # Both boards announce exactly one `SustainDue`, for the wearer, on a
+    # hold with a cost -- so every gate in `_my_sustain_lapsing` is held
+    # constant and unplantable there. Asked directly instead.
+    ev = seen2[0]
+    other = next(e for e in sorted(w2.entities) if e != me2)
+    out.that(not _my_sustain_lapsing(w2, other, ev),
+             "THE CONTROL: somebody ELSE's lapsing sustain is not this"
+             " wearer's business -- `ev.who` is the hold's source")
+    free = w2.effects.apply(
+        me2, me2, W.SUSTAIN, label="drivers:costless",
+        by="drivers:sustain")
+    bare = SustainDue(who=me2, effect=free.label, by=free.by)
+    bare.hold = free
+    out.that(not _my_sustain_lapsing(w2, me2, bare),
+             "and a hold with NO printed cost is not either: the card says"
+             " 'without using the action normally required', so a sustain"
+             " that costs nothing has no action to waive")
+
+
 def first_aid_beyond_stabilising(out: Result) -> None:
     """The two uses of First Aid the engine did not have. PHB Deluxe p186.
 
@@ -115936,6 +116046,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "sustain_due": (a_sustain_about_to_lapse_is_announced,
+                    "a sustainable hold's last round is announced, and the "
+                    "item that answers it"),
     "first_aid": (first_aid_beyond_stabilising,
                   "the two uses of First Aid besides stabilising, and the "
                   "feat that restores what one withholds"),

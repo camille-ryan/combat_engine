@@ -879,6 +879,41 @@ class Healed(Decision):
 
 
 @dataclass
+class SustainDue(Event):
+    """A sustainable hold is about to lapse for want of being sustained.
+
+    Announced by `Effects._on_turn_end` immediately **before**
+    `end(eff, "not sustained")`, which is the only moment a card reading
+    *"when a power you could sustain would end"* can act in. Nothing
+    announced it, so `i2740p1` -- a free action that sustains without
+    paying the cost -- was offered as a standing free action instead of
+    being declared against the moment it prints.
+
+    **Not a `Decision`.** Cancelling would leave the hold standing
+    unsustained, which is a different thing from sustaining it: the
+    sustain bookkeeping (`sustained`, `on_sustain`) would never run. A
+    row answering this calls `Effects.sustain` instead, and the emitter
+    reads `eff.sustained` back afterwards -- the same
+    read-it-back-off-the-event discipline `Bus` insists on, reached
+    without making the event refusable.
+
+    `who` is the hold's **source**, which is who may sustain it;
+    `effect` is its label and `by` the ref that laid it, so a gate can
+    narrow to its own power without the live object.
+
+    The `Effect` itself rides as a plain attribute `hold`, never a field,
+    for `#703`'s reason: `Event.wire()` ships every declared field, so a
+    component here would reach the page and every replay fixture. A row
+    that wants to sustain *this* hold reads it; a row that only wants to
+    know it happened does not have to.
+    """
+
+    who: int
+    effect: str = ""
+    by: str = ""
+
+
+@dataclass
 class SurgeSpent(Decision):
     """A healing surge leaving somebody's pool, and refusable.
 
