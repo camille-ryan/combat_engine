@@ -130,7 +130,13 @@ R33 = (
 #: rather than a roll of its own. `DamageRolled` retypes `parts[0]`, the
 #: power's own part, and nothing reaches the part a modifier contributed,
 #: so the two feats that recolour that rider have nowhere to write.
-RIDER_RETYPE = ("c.bonus(retype=)",)
+#: **Retired by `#1425`.** `c.retype_rider` exists and the three rows that
+#: carried this are written. Kept as a note because the symbol was pointing
+#: at the wrong verb and the reason is worth remembering: it read
+#: `c.bonus(retype=)`, and `c.bonus` is where the rider is *laid*, not
+#: where its type is decided. `Mods.split` is where a blow is broken into
+#: typed parts, and that is where a rename has to be read.
+_RIDER_RETYPE_RETIRED = "c.bonus(retype=)"
 #: The other side of the same coin: the *size* of that rider, and the
 #: moment it is paid. Four rows in the r47 run read "the additional
 #: necrotic damage from `p8278`" and the blow's parts are not on the
@@ -1513,19 +1519,36 @@ def f1631(c: Cast) -> None:
 # -- the r47 run ------------------------------------------------------------
 
 
-@power("f1639", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RIDER_RETYPE)
+@power("f1639", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, implemented_in=("p8278",))
 def f1639(c: Cast) -> None:
-    """**Re-aimed.** The marker said `c.deals(ref=)` -- retyping one
-    named row rather than this creature's weapon -- and that is written
-    now, four times over, in `_retype` above. It does not answer here.
+    """*"Your `p8278` racial power deals cold and necrotic damage."*
 
-    `p8278` rolls no damage and makes no attack: its whole payload is a
-    typed damage rider laid on the *next* blow the character lands, so
-    no `DamageRolled` ever carries `detail == "p8278"` to catch.
-    `deal_damage` splits a blow into typed parts, a rider is a part of
-    its own, and only `parts[0]` -- the power's own -- is reachable from
-    the event. Nothing retypes the part a modifier contributed."""
+    **Written, and the old note's diagnosis was right in every particular**
+    -- which is why it is worth keeping the shape of it. `p8278` rolls no
+    damage and makes no attack: its whole payload is a typed rider laid on
+    the *next* blow, so no `DamageRolled` ever carries
+    `detail == "p8278"`, and `c.deals(ref=)` compares its ref against the
+    row being **rolled**, which is somebody else's attack.
+
+    **What it could not see is that no facility was needed.** The clause
+    lives in `p8278`'s body gated on `c.feat("f1639")` -- `#550`'s
+    convention, which `f1652` below has used for this very power all along.
+    The rider's type is a property of the one `c.bonus` that row lays, and
+    the only place it can be decided is where it is laid.
+
+    An engine verb for this was written, probed and planted before
+    `invoker_b.f2994` -- three riders on three racial powers, the identical
+    shape -- made the convention obvious. Recorded on `#1425`, which is
+    closed as not-planned.
+
+    Two types, which is the printed **"and"** -- the rider deals both, not
+    one instead of the other, and `c.bonus(dtype=)` has always taken a
+    `Sequence[DamageType]`.
+
+    `AT_WILL`, not the `ENCOUNTER` it carried: the card prints no limit and
+    the row has no declared trigger, so the usage was never observed either
+    way -- but `AT_WILL` cannot become wrong the day it grows one."""
 
 
 @power("f1640", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1713,9 +1736,8 @@ def f1644b(c: Cast) -> None:
         c.reroll_save(keep="best")
 
 
-@power("f1646", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=RIDER_RETYPE)
+@power("f1646", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, implemented_in=("p8278",))
 def f1646(c: Cast) -> None:
     """Two named rows take a damage type chosen at build time, and one
     of them plays.
@@ -1728,7 +1750,15 @@ def f1646(c: Cast) -> None:
     necrotic" is a blow of two types, which is `DamageRolled.dtypes` --
     the "and", where setting `dtype` alone would be the "instead".
 
-    Dropped: the p8278 half, for the reason f1639 gives."""
+    **The p8278 half is written now**, in `p8278`'s own body -- `#550`'s
+    convention, and `f1639` carries the full reasoning for why that is the
+    site rather than a new engine verb.
+
+    Both halves read the **same** `c.element` expression, which is what
+    keeps them from disagreeing about which type the build chose: the
+    `p1448` watcher below and the clause in `p8278` are one reading rather
+    than a copy of one. `implemented_in` names the second site, so
+    `blocked.py` can see that this row is finished in two places."""
     me = c.me
     picked = c.element(on=me)
     if picked is None:
@@ -1810,10 +1840,14 @@ def f1656(c: Cast) -> None:
     c.watch(PowerUsed, exclusive, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
-@power("f1659", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RIDER_RETYPE)
+@power("f1659", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, implemented_in=("p8278",))
 def f1659(c: Cast) -> None:
-    """Same gap as f1639, on a different type, and re-aimed with it."""
+    """*"Your `p8278` racial power deals fire damage and necrotic damage."*
+
+    Same card as `f1639` on a different type, written in `p8278` beside
+    it -- `#550`'s convention. See `f1639` for why `c.deals(ref=)` cannot
+    answer and why no new verb was needed either."""
 
 
 @power("f1660", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

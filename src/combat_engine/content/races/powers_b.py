@@ -1328,9 +1328,44 @@ def p8278(c: Cast) -> None:
     row's. Both are spent by the same `DamageRolled`: `cast.spend_damage`
     ends each hold on the blow its own `mod.applies` matches, and neither
     carries a gate, so they travel together."""
+    # **Three feats rename what this rider deals, and the rename belongs
+    # here** -- `#550`'s convention, the same one `f1652` below already
+    # uses. Each prints "your `p8278` racial power deals X and necrotic
+    # damage", and the type is a property of the one rider this row lays,
+    # so the only place it can be decided is where that rider is laid.
+    #
+    # **No engine facility is needed and one was nearly built.** A
+    # `c.retype_rider` was written, probed and planted before `f2994` --
+    # the same shape, three riders on three racial powers -- showed the
+    # house answer: a feat naming one power writes its clause into that
+    # power. `c.deals(ref=)` genuinely cannot do it, which is what made a
+    # verb look necessary; the convention can, because this body knows
+    # which feats the character holds.
+    #
+    # **A plain `if` each, not a chain.** None of the three is bracketed,
+    # and `content/CLAUDE.md`'s rule is that an unbracketed feat is a plain
+    # `if` -- so a character holding two gets both types rather than
+    # whichever the chain reached first. A set, because "cold and necrotic"
+    # and "fire and necrotic" overlap on necrotic.
+    types = {DamageType.NECROTIC}
+    if c.feat("f1639"):
+        types.add(DamageType.COLD)
+    if c.feat("f1659"):
+        types.add(DamageType.FIRE)
+    if c.feat("f1646"):
+        # `f1646`'s type is the build-time choice its own `p1448` half
+        # reads, so both halves ask `c.element` rather than one copying
+        # the other -- see that row.
+        picked = c.element(on=c.me)
+        if picked is not None:
+            types.add(picked)
+    # Sorted, so the tuple is stable across processes: `DamageType` is a
+    # `StrEnum` and a set of them iterates in per-process hash order, which
+    # `replay`'s `_FROZEN` normaliser exists because of.
     c.bonus(
         "damage", max(c.con_mod, c.cha_mod), dice="1d8",
-        until=When.EONT, on=c.me, once=True, dtype=DamageType.NECROTIC,
+        until=When.EONT, on=c.me, once=True,
+        dtype=tuple(sorted(types)),
     )
     # `#550`'s convention: the clause of a feat that names one power, written
     # into that power. Heroic tier, so 2 -- 11 and 21 are paragon.
