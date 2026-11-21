@@ -40710,6 +40710,84 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def acrobatics_softens_a_fall(out: Result) -> None:
+    """Half an Acrobatics check comes off falling damage. Trained only.
+
+    PHB Deluxe page 182: *"Make an Acrobatics check, and reduce the amount
+    of falling damage you take by one-half your check result (round
+    down)."* No DC and no success clause, which is why `i802x1`'s marker
+    recorded the rule as unfindable -- its scan was looking for a DC the
+    rule does not have.
+
+    **The two arms share their fall dice, which is what makes the
+    arithmetic exact.** `falling.drop` rolls the fall *before* it asks for
+    the check, so the same seed gives both arms the same `rolled` and the
+    untrained arm's damage **is** that number. The reduction is then the
+    difference, and it is compared against the check total the trained arm
+    announced -- not against anything this file computed.
+
+    Run over several seeds because both rolls are random: the formula is
+    asserted on every one, and the round-down is only exercised by the
+    seeds whose total came out odd, so that count is asserted rather than
+    hoped for.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import falling, query
+    from combat_engine.engine.components import Skills
+    from combat_engine.engine.events import SkillCheck
+
+    def fall(seed: int, trained: bool) -> tuple[int, int | None]:
+        """Damage taken, and the Acrobatics total if one was rolled."""
+        got = story.field_encounter(seed=seed, level=3)
+        w = got.world
+        me = next(e for e in sorted(w.entities)
+                  if not query.stat_block(w, e))
+        skills = w.get(me, Skills)
+        assert skills is not None
+        # A `frozenset`, so it is replaced rather than mutated.
+        words = set(skills.trained)
+        skills.trained = frozenset(
+            words | {"acrobatics"} if trained else words - {"acrobatics"})
+        rolled: list[int] = []
+        w.bus.on(SkillCheck, lambda ev: rolled.append(ev.total)
+                 if ev.skill == "acrobatics" else None)
+        falling.lift(w, me, 20)
+        hurt = falling.drop(w, me)
+        return hurt, (rolled[-1] if rolled else None)
+
+    seeds = (3, 7, 11, 19, 23, 31)
+    rows = []
+    for seed in seeds:
+        bare, none_rolled = fall(seed, trained=False)
+        soft, total = fall(seed, trained=True)
+        rows.append((seed, bare, soft, total, none_rolled))
+
+    out.that(all(r[4] is None for r in rows),
+             "THE CONTROL: an UNtrained creature rolls no Acrobatics check"
+             " at all -- trained only, and without this the rule below"
+             " could be passing on a check everybody makes")
+    out.that(all(r[3] is not None for r in rows),
+             "while a trained one does, on every seed")
+    out.that(all(r[1] > 0 for r in rows),
+             "the premise: a 20-square fall really hurts on every seed, so"
+             f" there is something to reduce ({[r[1] for r in rows]})")
+
+    exact = [r for r in rows
+             if r[2] == max(0, r[1] - (r[3] or 0) // 2)]
+    out.that(len(exact) == len(rows),
+             "and the trained creature takes the fall MINUS half its check"
+             " result, on every seed -- measured against the total the"
+             " check announced, never against a number this rule computed"
+             f" ({[(r[1], r[3], r[2]) for r in rows]})")
+
+    odd = [r for r in rows if (r[3] or 0) % 2 == 1]
+    out.that(len(odd) >= 1,
+             "and at least one seed rolled an ODD total, which is the only"
+             " case that pins 'round down' -- an even total passes under"
+             f" either rounding ({len(odd)} of {len(rows)} odd)")
+
+
 def the_second_nearest_may_be_quarry(out: Result) -> None:
     """`f2462`: the second-nearest enemy counts as nearest, and stays second.
 
@@ -115469,6 +115547,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "fall_softened": (acrobatics_softens_a_fall,
+                      "half an Acrobatics check comes off falling damage, "
+                      "trained only"),
     "second_nearest_quarry": (the_second_nearest_may_be_quarry,
                               "the second-nearest enemy counts as nearest, "
                               "and does not creep further out"),

@@ -73,6 +73,53 @@ def lift(world: World, eid: int, squares: int) -> int:
     return pos.height
 
 
+def _acrobatic_softening(world: World, eid: int) -> int:
+    """How much of a fall an Acrobatics check takes off. Trained only.
+
+    The printed rule, PHB Deluxe page 182, under *Reduce Falling Damage
+    (Trained Only)*:
+
+    > *"Free action if you fall or a move action if you jump down. Damage
+    > Reduced: Make an Acrobatics check, and reduce the amount of falling
+    > damage you take by one-half your check result (round down)."*
+
+    It carries a worked example -- a 40-foot pit, 24 damage from 4d10, a
+    check result of 21 reducing it by 10, 14 taken -- which is what
+    settles the rounding as `// 2` rather than anything cleverer.
+
+    **There is NO DC, and that is why this was recorded as unwritable.**
+    `i802x1`'s marker said *"what is missing is the printed rule the check
+    resolves against: its DC, and how much a success takes off"*, and its
+    note recorded a scan of all 18 PDFs in `resources/` finding only the
+    "Trained Only" sentence. The scan was looking for a DC and a success
+    clause; the rule has neither -- it is a flat halving of the result, so
+    there is no threshold and no failure case. A search can come back
+    empty because the premise is wrong and not only because the page is
+    missing, which is the sharper form of this repository's own *"a failed
+    search is not an absent table"*.
+
+    **No consent is asked, deliberately.** The printed cost is a *free*
+    action on a fall and the reduction can never be negative, so there is
+    no decision for a row or a policy to make -- taking it is strictly
+    better in every board state. The *move action* half is the voluntary
+    one, and that is jumping down rather than falling.
+
+    `purpose="fall"` so a card can narrow to this check in particular, the
+    way `#1276` separates a plain Stealth check from one made to escape.
+    `CheckResult.total` already existed for this: its own docstring says
+    it is there "because one printed row halves the result rather than
+    comparing it to anything".
+    """
+    from .components import Skills
+    from .skills import check
+
+    trained = world.get(eid, Skills)
+    if trained is None or "acrobatics" not in trained.trained:
+        return 0
+    rolled = check(world, eid, "acrobatics", purpose="fall")
+    return max(0, rolled.total // 2)
+
+
 def drop(world: World, eid: int, squares: int = 0, *, by: int = 0, safe: bool = False) -> int:
     """The fall itself. Returns the damage actually taken.
 
@@ -112,7 +159,12 @@ def drop(world: World, eid: int, squares: int = 0, *, by: int = 0, safe: bool = 
         pos.height = floor
         dice = ev.squares // SQUARES_PER_DIE
         rolled = sum(world.rng.roll(FALL_DIE).total for _ in range(dice))
-        hurt = max(0, rolled - ev.soften)
+        # **Additive with `ev.soften`, and after the window.** An interrupt
+        # softening a fall and the faller's own Acrobatics check are two
+        # different reductions of one number, so they sum; and the check is
+        # rolled here rather than by a listener because it is a rule every
+        # trained creature has, not a card somebody holds.
+        hurt = max(0, rolled - ev.soften - _acrobatic_softening(world, eid))
         if hurt:
             from .resolve import deal_damage
 

@@ -1299,7 +1299,6 @@ def i776p1(c: Cast) -> None:
 
 @power("i802x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("falling.drop(check=)",),
        narrative=("skill:acrobatics", "skill:athletics"))
 def i802x1(c: Cast) -> None:
     """Three circumstances, and only two of them are narrative. Balancing
@@ -1309,25 +1308,32 @@ def i802x1(c: Cast) -> None:
     should set it is a real absence rather than a clause with no combat
     meaning.
 
-    **The mechanism is there and the NUMBERS are not, which is why this
-    stays marked.** `falling.drop` subtracts `ev.soften` from the rolled
-    damage and an interrupt may set it, so a +4 to the check has
-    somewhere to land. What is missing is the printed rule the check
-    resolves against: its DC, and how much a success takes off.
+    **The clause plays now, and the marker's premise was the thing that
+    was wrong.** It said *"what is missing is the printed rule the check
+    resolves against: its DC, and how much a success takes off"*, and
+    recorded a scan of all 18 PDFs in `resources/` turning up only the
+    "Trained Only" sentence with no numbers beside it.
 
-    Looked for rather than assumed. `game.db` carries three `rules_*`
-    tables -- `rules_dc`, `rules_condition`, `rules_complexity` -- and
-    **none** of them mentions falling; a scan of all 18 PDFs in
-    `resources/` found the "Trained Only" sentence (*"a creature must
-    have training in Acrobatics to make a check to reduce falling
-    damage"*) with no numbers beside it.
+    The rule is on PHB Deluxe page 182 and it has **no DC and no success
+    clause**: *"Make an Acrobatics check, and reduce the amount of falling
+    damage you take by one-half your check result (round down)"*, with a
+    worked example beside it. So the earlier scan was searching for two
+    things the rule does not contain, and came back empty for that reason
+    rather than because the page was missing.
 
-    **A failed search is not an absent table**, which this project has
-    paid for once -- a heading rendered in small caps extracted as
-    nonsense and three searches came back empty on a page that was
-    there. So this records where I looked. What it does establish is
-    that the number is not derivable from `game.db`, so the clause
-    cannot be landed without reading the page."""
+    **That is the sharper form of this tree's own "a failed search is not
+    an absent table".** The recorded failure was honest about *where* it
+    looked and wrong about *what* it was looking for -- and the note's own
+    warning was the reason to look again. Found with a body phrase
+    (`"Acrobatics check to reduce"`), which is what that rule recommends
+    over a heading.
+
+    `engine.falling._acrobatic_softening` is where it lives, because it is
+    a rule every trained creature has rather than a card anybody holds.
+    This item's own contribution is the `+4`, which `_skills` lays as
+    `skill:acrobatics` and `skills.modifier` folds into the check with no
+    change here -- so the item's clause is the bonus and the engine's is
+    the check."""
     c.ignores_difficult("forest", on=c.me)
     _skills(c, 4, "acrobatics", "athletics")
 
