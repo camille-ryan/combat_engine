@@ -1307,7 +1307,27 @@ def i802x1(c: Cast) -> None:
     either. Softening a fall is not -- falls happen on a board, `Fell`
     already carries a `soften` an interrupt can lower, and the check that
     should set it is a real absence rather than a clause with no combat
-    meaning."""
+    meaning.
+
+    **The mechanism is there and the NUMBERS are not, which is why this
+    stays marked.** `falling.drop` subtracts `ev.soften` from the rolled
+    damage and an interrupt may set it, so a +4 to the check has
+    somewhere to land. What is missing is the printed rule the check
+    resolves against: its DC, and how much a success takes off.
+
+    Looked for rather than assumed. `game.db` carries three `rules_*`
+    tables -- `rules_dc`, `rules_condition`, `rules_complexity` -- and
+    **none** of them mentions falling; a scan of all 18 PDFs in
+    `resources/` found the "Trained Only" sentence (*"a creature must
+    have training in Acrobatics to make a check to reduce falling
+    damage"*) with no numbers beside it.
+
+    **A failed search is not an absent table**, which this project has
+    paid for once -- a heading rendered in small caps extracted as
+    nonsense and three searches came back empty on a page that was
+    there. So this records where I looked. What it does establish is
+    that the number is not derivable from `game.db`, so the clause
+    cannot be landed without reading the page."""
     c.ignores_difficult("forest", on=c.me)
     _skills(c, 4, "acrobatics", "athletics")
 
