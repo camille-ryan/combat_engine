@@ -1439,6 +1439,13 @@ class Effects:
                 when_=when_,
                 granted_via=granted_via,
                 keywords=tuple(sorted(set(ctx["keywords"]))),
+                # The same datum one field over, and the argument above is
+                # its argument too: `f3318` triggers on "a saving throw to
+                # avoid being knocked prone" and `against=str(eff)` is a
+                # display string. `ctx["conditions"]` is already built from
+                # `eff.conditions` 55 lines up and already read at the
+                # `saves_twice` test, so this costs nothing. #1391.
+                conditions=tuple(sorted(ctx["conditions"])),
             )
         )
         # Refusing it is not the same as failing it. A cancelled save never

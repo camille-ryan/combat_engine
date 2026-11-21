@@ -280,7 +280,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
 
 ## rolling and the trigger
 
-- `c.ability_check(self, ability: 'Ability', dc: 'int' = 0, *, who: 'int | None' = None, bonus: 'int' = 0)`
+- `c.ability_check(self, ability: 'Ability', dc: 'int' = 0, *, who: 'int | None' = None, bonus: 'int' = 0, purpose: 'str' = '')`
   - Roll a raw ability check. Truthy when it beat the DC.
 - `c.check(self, skill: 'str', dc: 'int' = 0, *, who: 'int | None' = None, bonus: 'int' = 0, against: 'int | None' = None)`
   - Roll a skill check. Truthy when it beat the DC.
@@ -298,7 +298,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Did the attack behind this event use a weapon with that property?
 - `c.struck_with(self, ev: 'Any' = None) -> 'Weapon | None'`
   - The weapon or implement the triggering attack was made with.
-- `c.substitute_check(self, skill: 'str', *, instead_of: 'str' = '', ev: 'Any' = None) -> 'bool'`
+- `c.substitute_check(self, skill: 'str', *, instead_of: 'str' = '', ev: 'Any' = None, purpose: 'str' = '') -> 'bool'`
   - Roll the check that was just declared as a different skill.
 - `c.trigger: Any`
   - the event being answered, on an interrupt or reaction.

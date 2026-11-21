@@ -68,6 +68,7 @@ from combat_engine.engine import (
     Attack,
     Bloodied,
     Cast,
+    CheckDeclared,
     CloseBlast,
     CloseBurst,
     Condition,
@@ -2432,31 +2433,52 @@ def f2241(c: Cast) -> None:
     c.grant_row("p9401", on=c.me, until=When.ENCOUNTER)
 
 
-@power("f2246", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.skill_instead(purpose=)",))
+@power("f2246", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2246(c: Cast) -> None:
-    """*"You also gain a +2 feat bonus to Acrobatics checks."*
-
-    That half is unconditional and lands. It had no reason to be inert even
-    before `#1300` -- the row was declared `out_of_combat=True` whole
-    because its *other* clause was about climbing, and `lint.py` reding the
-    row for the climb word is what made somebody read both.
-
-    **Dropped: the substitution.** *"You can use your Acrobatics skill in
-    place of your Athletics checks to climb."* That is a different mechanic
-    from a bonus -- the check is rolled against a **different skill's**
-    modifier, keyed to one purpose -- and nothing swaps one skill for
-    another. `skills.check` takes the skill by name from its caller, so the
-    swap belongs beside `c.rolls_with`, which does the same job for an
-    attack's ability.
+    """*"You can use your Acrobatics skill in place of your Athletics checks
+    to climb walls. You also gain a +2 feat bonus to Acrobatics checks."*
 
     The +2 is to Acrobatics generally, so it is **not** gated on the climb
-    purpose. Reading the card as narrowing it would be the commoner
-    mistake: the sentence that mentions climbing is the other one."""
+    purpose. Reading the card as narrowing it would be the commoner mistake:
+    the sentence that mentions climbing is the other one.
+
+    **The substitution is written now and the marker was one layer off.** It
+    read `c.skill_instead(purpose=)`, and `c.substitute_check` had existed
+    for a while -- what it could not do was narrow to a *circumstance*. The
+    card swaps one kind of Athletics check, so `instead_of="athletics"`
+    alone is a row stronger than its card: it would answer a swim and a jump
+    as well. `purpose=` is the guard, added in `#1391` along with the
+    declared `CheckDeclared.purpose` it reads.
+
+    **And the climb purpose is one the engine already supplies**, which is
+    what makes this reachable rather than merely written --
+    `movement._climb_squares` rolls `check(world, eid, "athletics", dc,
+    purpose="climb")`. Nothing had to be built to reach it.
+
+    A `c.watch` and not a declared trigger, because the row has a standing
+    job too: `on=` means the body runs only when the trigger fires, so the
+    +2 would never be laid. `ev=ev` for the reason `c.substitute_check`
+    documents -- a watch handler closes over the `Cast` that *armed* it, so
+    the check being answered has to be handed over by name."""
+    me = c.me
     c.bonus(
         "skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
     )
+
+    def climbing(ev: CheckDeclared) -> None:
+        # **`ev.actor == me` and not `on=c.me`.** `c.watch`'s `on=` names
+        # who *holds* the watch effect, not whose events it hears, so the
+        # handler is offered every climb check in the fight -- and without
+        # this the feat would swap an ally's Athletics for *this*
+        # character's Acrobatics modifier. The rule `c.watch`'s own
+        # docstring states: the narrowing is an `if` in `fn`.
+        if ev.actor == me:
+            c.substitute_check("acrobatics", instead_of="athletics",
+                               purpose="climb", ev=ev)
+
+    c.watch(CheckDeclared, climbing, until=When.ENCOUNTER, on=c.me,
+            label=c.ref)
 
 
 @power("f2290", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

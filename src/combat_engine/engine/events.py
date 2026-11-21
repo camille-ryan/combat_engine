@@ -2268,6 +2268,26 @@ class SavingThrow(Decision):
     #: new one. Every reader tests membership (`Keyword.POISON in
     #: ev.keywords`), which a tuple answers.
     keywords: tuple[Keyword, ...] = ()
+    #: The conditions the effect being saved against imposes, read off the
+    #: effect. The exact mirror of `keywords` above, declared for the same
+    #: reason and with the same two constraints -- `f3318` prints *"a saving
+    #: throw to avoid being knocked prone"* and had nothing to match on,
+    #: because `against` is `str(eff)`, a **display string**, and the one
+    #: structured field beside it carried keywords and not conditions.
+    #:
+    #: `cast.py`'s save context has had a `"conditions"` key all along and
+    #: passed it `frozenset()` -- so a *modifier* could be gated on it and
+    #: nothing populated it. `durations.py` builds the real set
+    #: (`frozenset(eff.conditions)`) 55 lines above the construction site,
+    #: so the datum was already in hand at the moment the event was made.
+    #:
+    #: **A sorted tuple and not a `frozenset`, which is `#1120`** -- see the
+    #: whole of `keywords`' note above; `Condition` is a `StrEnum` too, so an
+    #: unsorted set would iterate in per-process hash order and move
+    #: `replay`'s flake rather than remove it. Membership is what every
+    #: reader wants (`Condition.PRONE in ev.conditions`), which a tuple
+    #: answers. #1391.
+    conditions: tuple[Condition, ...] = ()
 
 
 @dataclass
@@ -2310,6 +2330,32 @@ class CheckDeclared(Event):
     skill: str
     dc: int
     target: int | None = None
+    #: **What the check is FOR**, as a named printed circumstance and not a
+    #: vague intent -- `"climb"`, `"swim"`, `"break objects"`. Empty for
+    #: every caller that does not say, which is most of them, so a gate
+    #: asking for a purpose is False on an ordinary check rather than
+    #: absent from the event.
+    #:
+    #: **Declared, where `SkillCheck.purpose` was an undeclared attribute
+    #: set with a `ty: ignore` -- and this reverses that call on purpose.**
+    #: The reason given for the attribute was that a declared field reaches
+    #: `wire()` and so the page and every replay fixture, and that what a
+    #: check was for is not a change in how a fight resolves. The first
+    #: half is measurably not a cost here: an event repr omits a field
+    #: still holding its default, so the 23 `CheckDeclared` and 23
+    #: `SkillCheck` lines across the eight fixtures are byte-identical
+    #: either way, and no re-record is owed.
+    #:
+    #: What the attribute *did* cost is this component's named failure
+    #: mode. Three layers want this datum -- `skills.modifier`'s context
+    #: (`#1111`), a row watching a resolved check (`f946`), and
+    #: `c.substitute_check` narrowing to one purpose (`f2246`) -- and every
+    #: one of them had to reach it through `getattr(ev, "purpose", "")`,
+    #: which is indistinguishable from a typo and which `lint.py`'s
+    #: predicate walk cannot see. `engine/CLAUDE.md` names exactly this:
+    #: *"a predicate reading a field its event lacks... a `getattr` with a
+    #: default hides the mistake"*. #1391.
+    purpose: str = ""
 
 
 @dataclass
@@ -2381,6 +2427,11 @@ class SkillCheck(Decision):
     #: seven of the others as "cannot be defined after fields with default
     #: values" -- one mistake reported as seven faults.
     target: int | None = None
+    #: Same field as `CheckDeclared.purpose` above, which carries the whole
+    #: note. It was `announced.purpose = purpose` with a
+    #: `ty: ignore[unresolved-attribute]` in `skills.check`; declaring it
+    #: retires the suppression and makes the datum visible to `lint.py`.
+    purpose: str = ""
 
 
 @dataclass

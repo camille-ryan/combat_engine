@@ -234,7 +234,15 @@ def _saves_off_prone(c: Cast, who: int, ev: EffectApplied) -> bool:
         return False
     if ev.source == who:
         return False
-    if not c.save(on=who, bare=True, against=f"{c.ref} prone"):
+    # **`avoiding=` is what makes this throw knowable to a watcher**, and
+    # the `against=` half is left exactly as it was. That string spells the
+    # condition into the middle of a display label, which reads correctly in
+    # a log and which no gate could ever match -- `f3318` pays out "when you
+    # make a save to avoid being knocked prone" and had nothing to test. A
+    # bare save precedes the effect it is avoiding, so `c.save` cannot work
+    # the conditions out for itself here. #1391.
+    if not c.save(on=who, bare=True, against=f"{c.ref} prone",
+                  avoiding=(Condition.PRONE,)):
         return False
     landing.conditions = tuple(x for x in landing.conditions if x is not Condition.PRONE)
     c.note(f"{c.ref}: {who} saves against being knocked prone")

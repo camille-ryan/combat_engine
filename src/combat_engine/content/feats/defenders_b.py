@@ -50,9 +50,11 @@ from combat_engine.engine import (
     Keyword,
     MoveEnd,
     PowerUsed,
+    SavingThrow,
     SecondWind,
     Trigger,
     When,
+    World,
     about_me,
     power,
 )
@@ -525,37 +527,70 @@ def f3298(c: Cast) -> None:
     c.bonus(AC, 1, on=me, until=When.ENCOUNTER, when=armed_and_unarmoured)
 
 
-@power("f3318", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_save()",))
+def _my_prone_save(world: World, me: int, ev: Any) -> bool:
+    """`f3318`'s moment: a throw this character makes to avoid falling prone.
+
+    Reads `SavingThrow.conditions`, which is declared since `#1391` and is
+    the whole reason this row could not be written. The twelve fields before
+    it were `seq`, `depth`, `cancelled`, `reason`, `actor`, `against`,
+    `natural`, `bonus`, `saved`, `when_`, `granted_via` and `keywords` --
+    `against` is `str(eff)`, a display string, so which save this was could
+    not be asked.
+
+    **Not gated on `saved`**, because the card is not: *"when you make a
+    save to avoid being knocked prone"* pays on the attempt. The shift is
+    worth having either way -- a failed save leaves the character prone and
+    a successful one does not, and neither is what the sentence turns on.
+
+    **A plain `(world, me, ev)` predicate and not a closure factory.**
+    `triggers._answers` calls `t.when(self.world, eid, ev)`, so a factory
+    raises `TypeError` on the first saving throw in the fight rather than
+    failing a gate -- which is how the first draft of this was caught.
+    `items.arms._my_save_against_hold` is the same shape and was the
+    precedent to have copied.
+    """
+    return (getattr(ev, "actor", None) == me
+            and Condition.PRONE in getattr(ev, "conditions", ()))
+
+
+@power("f3318", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you make a saving throw to avoid being knocked prone",
+       on=Trigger(SavingThrow, _my_prone_save,
+                  "you save against being knocked prone"))
 def f3318(c: Cast) -> None:
-    """Pays out on one particular saving throw succeeding. `SavingThrow`
-    carries `against` as a free-text label and nothing sets it to the
-    condition the throw is avoiding, so which save this is cannot be
-    asked -- the gap the warden's f1024 names.
+    """*"When you make a save to avoid being knocked prone, you can also
+    shift a number of squares equal to your Wisdom modifier as a free
+    action."*
 
-    **Re-measured 2026-11-19 and this diagnosis is right**, which is worth
-    recording because `triage.json` had judged the symbol `mis-marked` on
-    the ground that the hook exists. It does -- `Trigger(SavingThrow,
-    pred)` is declared by `items.arms.i3556p1` -- and that is not the
-    blocker: the predicate has nothing to look at. The twelve fields are
-    `seq`, `depth`, `cancelled`, `reason`, `actor`, `against`, `natural`,
-    `bonus`, `saved`, `when_`, `granted_via` and `keywords`, and the old
-    verdict deferred this row's gate to a `SavingThrow.effect` that is not
-    among them.
+    **`AT_WILL` and not `ENCOUNTER`, which the marked version carried.** The
+    card prints no once-per-encounter limit, and a declared trigger is the
+    case where the difference is real rather than cosmetic:
+    `turns.arm_traits` skips a row with an `on=`, so the usage is not spent
+    by the arming and `ENCOUNTER` would genuinely mean once a fight. See
+    `content/CLAUDE.md`, which names this as the silent narrowing.
 
-    **The moment itself is real**, which the old verdict also doubted. Six
-    printed rows say *"a saving throw to avoid falling prone"* (`m168a2`,
-    `m169a1`, `m729a0`, `m839a3`, `m972a3`, `m1123a6`) and two content rows
-    already raise one -- `monsters/level_06/skirmishers_sa` tests
-    `ev.condition is Condition.PRONE` and calls `c.save()`, and
-    `level_10/soldiers_sa` writes the condition into the label by hand as
-    `against=f"{c.ref} prone"`. That hand-written label is the workaround a
-    field would replace.
+    The marker was `c.on_save()` and the gap was a **field, not a verb** --
+    the hook already existed, declared by `items.arms.i3556p1`, and the
+    predicate had nothing to look at. `SavingThrow.conditions` is the fix
+    and the row's own previous docstring had diagnosed it correctly.
 
-    So the fix is `SavingThrow.conditions`, the exact mirror of `keywords`
-    -- and `cast.py`'s save modifier context already carries a
-    `"conditions"` key, passed empty. It owes a `replay` re-record because
-    `SavingThrow` is in `wire()`. `#1391`."""
+    **The raiser had to be told too**, which is the half a field alone does
+    not buy. A save-ends throw reads its conditions off the effect it is
+    ending, but this throw happens *before* the prone lands -- it is the
+    `bare=True` branch -- so `c.save` grew an `avoiding=` and
+    `monsters/level_10/soldiers_sa._saves_off_prone` passes
+    `avoiding=(Condition.PRONE,)`. That helper used to spell the word into
+    the label by hand as `against=f"{c.ref} prone"`, which no gate could
+    read.
+
+    One correction to that old note: it said this *"owes a `replay`
+    re-record because `SavingThrow` is in `wire()`"*. It does not. A fixture
+    records an event's repr and a repr omits a field still holding its
+    default, so the 38 `SavingThrow` lines across the eight fixtures are
+    byte-identical. Un-refusing the feat moves the chargen draw, which is a
+    different reason to expect one. #1391."""
+    c.shift(c.wis_mod)
 
 
 def _flurry_with_a_sling(c: Cast, ref: str) -> Callable[[dict[str, Any]], bool]:

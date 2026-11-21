@@ -990,35 +990,44 @@ def i1697p1(c: Cast) -> None:
 
 
 @power("i1700x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ability_check(purpose=)",))
+       reach=PERSONAL, target=SELF, dropped=("actions.break_object()",))
 def i1700x1(c: Cast) -> None:
     """The Athletics half is unconditional and written.
 
-    **"Strength checks made to break objects" is two absences, and the
-    marker names the smaller one.** Measured, because the parameter half
-    looked as though it might already exist:
+    **"Strength checks made to break objects" was two absences and the
+    marker named the smaller one. That half has landed, so the marker
+    moves to the one that is left.** It used to read
+    `c.ability_check(purpose=)`; `#1391` added that parameter, threaded it
+    through `skills.ability_check` into the modifier context beside
+    `#1111`'s skill-path key, and the +5 is now *gateable*:
 
-    * `c.ability_check` **does** exist and rolls a raw Strength check --
-      `skills.ability_check`, announced as `SkillCheck` under the key
-      `ability:str` so no skill rider fires on it.
-    * `purpose` exists on the **skill** path only. `SkillCheck.purpose` is
-      a plain attribute, `skills.check` takes `purpose=`, and
-      `skills.modifier`'s context carries it (`#1111`). `skills
-      .ability_check` takes no such argument and its context is
-      `{actor, skill, ability, natural}`, so a bonus narrowed to one kind
-      of ability check cannot be gated. That is the symbol, and it is
-      genuinely absent.
-    * **But landing it alone would move this row nowhere**, which is the
-      part worth writing down. Nothing in this engine rolls a check to
-      break anything. The only two purposes that exist are
-      `actions.SPOT_PURPOSE` and `actions.FEINT_PURPOSE`, both in-combat
-      named actions, and a `Scenery` is broken by being *attacked* -- it
-      carries `Health` and `query.combatants` subtracts it. There is no
-      action, so there is no check for a purpose to label.
+        c.bonus("ability:str", 5, on=c.me, until=When.ENCOUNTER,
+                kind="item",
+                when=lambda ctx: ctx.get("purpose") == "break objects")
 
-    So this is not `narrative=` either, which would be the honest shape:
-    that field is a closed `skill:<name>` vocabulary and a raw Strength
-    check is not one of the seventeen skills."""
+    **`"ability:str"` and not `"ability:strength"`**, which the first draft
+    of this recipe had wrong. `skills.ability_check` builds its key as
+    `f"ability:{ability.value}"` and `Ability.STR.value` is `"str"`, so the
+    longer spelling is a modifier nothing ever reads -- dead on the key as
+    well as on the purpose, and neither would have raised.
+
+    **It is deliberately not written, and that is the point of the new
+    marker.** Nothing in this engine rolls a check to break anything, so
+    that gate is satisfiable by nothing -- a uniformly dead `when=`, which
+    looks exactly like a working one and hides drift in the key it tests.
+    Re-measured for `#1391`: the engine supplies four purposes
+    (`"climb"`, `"swim"`, `"escape"`, `"suffocation"`) plus
+    `actions.SPOT_PURPOSE` and `actions.FEINT_PURPOSE`, and a `Scenery` is
+    broken by being **attacked** -- it carries `Health` and
+    `query.combatants` subtracts it. There is no break action, so there is
+    no check for a purpose to label.
+
+    So the gap is an action, the marker names it, and the recipe above is
+    left here so whoever lands it does not have to re-derive the gate.
+
+    Still not `narrative=`: that field is a closed `skill:<name>`
+    vocabulary and a raw Strength check is not one of the seventeen
+    skills."""
     _skills(c, 2, "athletics")
 
 

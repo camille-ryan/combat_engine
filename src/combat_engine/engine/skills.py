@@ -176,7 +176,8 @@ def modifier(
 
 
 def ability_check(
-    world: World, eid: int, ability: Ability, dc: int = 0, *, bonus: int = 0
+    world: World, eid: int, ability: Ability, dc: int = 0, *, bonus: int = 0,
+    purpose: str = "",
 ) -> CheckResult:
     """A raw ability check: d20 + ability modifier + half level.
 
@@ -198,6 +199,15 @@ def ability_check(
     first, so "when you would make the check" can still lay a bonus, and
     `skills.modifier` cannot be reused because its `SKILLS` lookup has no
     entry for a bare ability and would silently contribute half level only.
+
+    **`purpose` is the printed circumstance**, as it is on `check()` -- and
+    this function is where `#1111`'s gate had no way in. `modifier` has
+    carried `"purpose"` in its context since then, so a *skill* bonus could
+    be narrowed to "Athletics made to swim"; an **ability** check builds its
+    own context eight lines below and had no such key, so `i1700x1`'s *"+5
+    item bonus to Strength checks made to break objects"* was a gate that
+    could never be satisfied -- the uniformly-dead kind, which looks exactly
+    like a working one. #1391.
     """
     fixed = 0
     stats = world.get(eid, Stats)
@@ -207,7 +217,8 @@ def ability_check(
     # Announced here too, under the same `ability:<name>` key: a row that
     # wants "any check you are about to make" must hear this one, and
     # `f2804`'s own predicate is what narrows to a skill. #693.
-    declared = world.bus.emit(CheckDeclared(actor=eid, skill=key, dc=dc))
+    declared = world.bus.emit(
+        CheckDeclared(actor=eid, skill=key, dc=dc, purpose=purpose))
     # Read back, for `check()`'s reason. Here it can change the *kind* of
     # check: a row standing History in for an Intelligence check turns the
     # raw ability roll into a skill roll, and `finish` below branches on
@@ -222,6 +233,7 @@ def ability_check(
         bonus=bonus,
         total=natural + bonus,
         success=False,
+        purpose=purpose,
     )
 
     def finish(ev: SkillCheck) -> None:
@@ -231,7 +243,8 @@ def ability_check(
             # ability's modifier, and the substitute skill has its own
             # (plus any training). `c.substitute_check` is the only route
             # here. Half level is inside `modifier`, so it is not lost.
-            ev.bonus += modifier(world, eid, ev.skill, None, ev.natural)
+            ev.bonus += modifier(world, eid, ev.skill, None, ev.natural,
+                                 ev.purpose)
             ev.total = ev.natural + ev.bonus
             ev.success = ev.dc <= 0 or ev.total >= ev.dc
             return
@@ -239,7 +252,12 @@ def ability_check(
         mods = world.get(eid, Mods)
         if mods is not None:
             ctx = {"actor": eid, "skill": ev.skill,
-                   "ability": ability.value, "natural": ev.natural}
+                   "ability": ability.value, "natural": ev.natural,
+                   # The key `modifier` has had since `#1111` and this
+                   # branch did not, so an ability-check bonus could not be
+                   # narrowed to what the check was for. Empty rather than
+                   # absent, so a gate reads False instead of raising.
+                   "purpose": ev.purpose}
             # Both keys are read here, which is what keeps them off
             # `lint.py`'s unread-modifier list: the narrow one for "+2 to
             # Strength checks" and the wide one for "+1 to ability checks".
@@ -326,7 +344,14 @@ def check(
     # has to call odd or even cannot be offered the choice by `SkillCheck`:
     # that one carries `natural` already. #693.
     declared = world.bus.emit(
-        CheckDeclared(actor=eid, skill=skill, dc=dc, target=target))
+        CheckDeclared(actor=eid, skill=skill, dc=dc, target=target,
+                      # **On the declaration and not only the roll**, which
+                      # is what `c.substitute_check` needs: it answers
+                      # `CheckDeclared`, so a card narrowing the swap to one
+                      # circumstance -- `f2246`'s "in place of your Athletics
+                      # checks to climb walls" -- has to read the purpose
+                      # before the d20. #1391.
+                      purpose=purpose))
     # **Read back, because a row is invited to change it.** `Bus`'s own
     # docstring requires this -- *"fields a listener is invited to change:
     # read them back off the event rather than from the local you passed
@@ -382,16 +407,17 @@ def check(
     # *named action* rather than a vague intent, and without this a row
     # keyed to it fires on any successful Bluff check against anybody.
     #
-    # An attribute for the reason `Effect.by` and `Hit.result` are: a
-    # declared field reaches `Event.wire()` and so the page and every
-    # replay fixture, and what the check was for is not a change in how a
-    # fight resolves. Empty for every caller that does not say, which is
-    # all but one today.
-    announced.purpose = purpose  # ty: ignore[unresolved-attribute]
+    # **A declared field since `#1391`, and the paragraph above used to
+    # argue for an attribute.** The wire cost it feared is not there -- an
+    # event repr omits a defaulted field, so every fixture line is
+    # byte-identical -- and the attribute cost three readers a
+    # `getattr(ev, "purpose", "")`, which is this component's named failure
+    # mode. `events.CheckDeclared.purpose` carries the full note.
+    announced.purpose = purpose
 
     def finish(ev: SkillCheck) -> None:
         ev.bonus += modifier(world, eid, ev.skill, ev.target, ev.natural,
-                             getattr(ev, "purpose", ""))
+                             ev.purpose)
         ev.total = ev.natural + ev.bonus
         ev.success = ev.dc <= 0 or ev.total >= ev.dc
 

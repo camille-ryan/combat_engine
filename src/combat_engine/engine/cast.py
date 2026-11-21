@@ -1935,6 +1935,7 @@ class Cast:
     def save(
         self, *, on: int | None = None, bonus: int = 0, against: str = "",
         bare: bool = False, when_: str = "end", against_trap: bool = False,
+        avoiding: Sequence[Condition] = (),
     ) -> bool:
         """Roll a saving throw now against one save-ends effect.
 
@@ -1960,6 +1961,30 @@ class Cast:
         form -- "a saving throw against an ongoing damage effect" -- or a
         label fragment. Without it this takes whichever save-ends effect it
         finds first, which may well be a daze when the row means the burn.
+
+        **`avoiding` is what the throw is FOR, on a `bare=True` save**, and
+        it exists because that is the one case the engine cannot work out
+        for itself. A save-ends throw reads its conditions off the effect it
+        is ending -- `durations` populates `SavingThrow.conditions` from
+        `eff.conditions` -- but *"it can roll an immediate saving throw to
+        avoid falling prone"* is rolled **before** any effect is in place,
+        so there is nothing to read. Six printed rows say it (`m168a2`,
+        `m169a1`, `m729a0`, `m839a3`, `m972a3`, `m1123a6`) and `f3318` pays
+        out on it: *"when you make a save to avoid being knocked prone".*
+
+        The workaround it replaces is in `monsters/level_10/soldiers_sa`,
+        which wrote the word into the label by hand as
+        `against=f"{c.ref} prone"` -- which no gate could read, because
+        `against` is a display string and the condition was spelled into
+        the middle of it.
+
+        It reaches the **modifier context as well as the event**, which
+        fills a key that has been there and empty all along: the bare
+        branch passed `"conditions": frozenset()`, so "+2 to saves against
+        being immobilized" was a gate nothing could ever satisfy on this
+        path. A `Sequence`, not one condition, because a single throw can
+        avoid more than one -- "immobilized or slowed" is printed as a
+        pair. #1391.
 
         **`when_` is where in the turn the throw is being taken** --
         `"early"` for one handed over at the start of a turn, which is what
@@ -2009,9 +2034,15 @@ class Cast:
                 None,
             )
             words = keywords_of(held or label)
+            # **`held` may be None here and `avoiding` is why the caller
+            # gets a say.** A bare save precedes the effect it is avoiding,
+            # so there is usually nothing to read conditions off; when the
+            # label does find an effect, both sources are taken.
+            shunned = set(avoiding) | set(held.conditions if held else ())
             plus = bonus + self.total(
                 "save", who, {"actor": who, "label": label,
-                              "conditions": frozenset(), "ongoing": False,
+                              "conditions": frozenset(shunned),
+                              "ongoing": False,
                               "dtype": None,
                               "keywords": words,
                               "when_": when_,
@@ -2023,6 +2054,7 @@ class Cast:
                     bonus=plus, saved=natural + plus >= 10,
                     when_=when_, granted_via=self.ref,
                     keywords=tuple(sorted(set(words))),
+                    conditions=tuple(sorted(shunned)),
                 )
             )
             return ev.saved
@@ -20510,7 +20542,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 return False
         return True
 
-    def ability_check(self, ability: Ability, dc: int = 0, *, who: int | None = None, bonus: int = 0):  # noqa: ANN201, E501
+    def ability_check(self, ability: Ability, dc: int = 0, *, who: int | None = None, bonus: int = 0, purpose: str = ""):  # noqa: ANN201, E501
         """Roll a raw ability check. Truthy when it beat the DC.
 
         `c.ability_check(Ability.STR, 20)` for "make a DC 20 Strength
@@ -20525,11 +20557,22 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         instead of comparing it. See `skills.ability_check` for why this
         announces a `SkillCheck` under an `ability:<name>` key rather than
         inventing a skill.
+
+        **`purpose` is the printed circumstance the check is made in** --
+        `"break objects"`, `"climb"` -- and it is what makes a narrowed
+        bonus reachable rather than merely layable. `skills.modifier` has
+        carried a `"purpose"` key since `#1111`, so
+        `c.bonus("ability:strength", 5, when=lambda ctx:
+        ctx.get("purpose") == "break objects")` has always been *writable*;
+        nothing could ever make a check that satisfied it, so the gate was
+        uniformly dead and read exactly like a working one. `i1700x1` is
+        the row. #1391.
         """
         from .skills import ability_check as _ability_check
 
         roller = self.me if who is None else who
-        return _ability_check(self.world, roller, ability, dc, bonus=bonus)
+        return _ability_check(self.world, roller, ability, dc, bonus=bonus,
+                              purpose=purpose)
 
     def shield_bonus(self, *, of: int | None = None) -> int:
         """What this creature's shield adds to AC and Reflex. 0 for none.
@@ -20552,7 +20595,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         return _passive(self.world, self.me if of is None else of, skill)
 
     def substitute_check(
-        self, skill: str, *, instead_of: str = "", ev: Any = None
+        self, skill: str, *, instead_of: str = "", ev: Any = None,
+        purpose: str = "",
     ) -> bool:
         """Roll the check that was just declared as a different skill.
 
@@ -20605,6 +20649,17 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         `ability:<name>` key to narrow to a raw ability check. Empty means
         the card narrows by its trigger alone.
 
+        **`purpose` is the second guard and narrows to the printed
+        circumstance.** *"You can use your Acrobatics skill in place of your
+        Athletics checks to climb walls"* -- `f2246` -- swaps one *kind* of
+        Athletics check and not every one, so `instead_of="athletics"` alone
+        is a row stronger than its card: it would answer a swim and a jump
+        as well. It reads `CheckDeclared.purpose`, which is declared since
+        `#1391` and was an undeclared attribute before it, so this guard
+        could not have been written at all.
+
+        Empty means the card does not narrow, which is every other caller.
+
         `ev=` names the check when it is not the trigger, for
         `c.reroll_check`'s reason and in its spelling: a standing
         substitution is armed as a `c.watch`, and a watch handler closes
@@ -20635,6 +20690,12 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             allowed = {w.strip().lower() for w in instead_of.split(",") if w.strip()}
             if ev.skill.lower() not in allowed:
                 return False
+        if purpose and ev.purpose.lower() != purpose.lower():
+            # A card naming the circumstance swaps only that one. Refusing
+            # when the check states no purpose at all is deliberate: a row
+            # printed "to climb" must not answer a check nobody said was a
+            # climb, which is the narrowing the guard exists for.
+            return False
         was = ev.skill
         if was.lower() == asked:
             return False
