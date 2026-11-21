@@ -246,9 +246,10 @@ def f1123(c: Cast) -> None:
 
 
 @power("f1134", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.bonus(per_die=)",))
+       reach=PERSONAL, target=SELF, todo=("c.offer_before_aim()",))
 def f1134(c: Cast) -> None:
-    """Re-aimed twice, and the second time was to stop blaming the wrong verb.
+    """Re-aimed three times, and the third time retired a claim I measured
+    to be false.
 
     The first marker named `c.widen_area()`, which has never existed, while
     `c.widen_areas` does and is exactly the payout -- so the instrument agreed
@@ -257,13 +258,45 @@ def f1134(c: Cast) -> None:
     The second named `c.change_dice()`. That verb exists now and is **not**
     this gap: it swaps which die a row rolls, and the price here is "-2 to
     *each die* of damage rolled", which leaves the dice alone and charges
-    against every one of them. A modifier is laid against a roll's total, so
-    there is nothing that scales with how many dice made it -- the same thing
-    f763 and f2766 want from the other direction, where the multiplier is per
-    die rather than the penalty.
+    against every one of them.
 
-    Writing the wider blast alone would be the payout with no price, which is
-    a strictly better card than the one printed."""
+    The third named `c.bonus(per_die=)`, on the reasoning that "a modifier
+    is laid against a roll's total, so there is nothing that scales with
+    how many dice made it". **That is true of `c.bonus` and false of the
+    row**, which is the distinction a marker has to get right. Since #703,
+    `resolve.deal_damage` hangs the live `Roll` on `DamageRolled` as
+    `ev.roll`, and `amount = max(0, rolled.amount)` reads a listener's
+    change back -- so a per-die price is a listener away. Measured on a
+    board: a 3d6 blow announced faces `[3, 2, 4]` and a listener taking 2
+    off each die repriced the blow. No verb is missing for the price.
+
+    **The missing thing is the moment.** The card is *"before using a
+    wizard at-will or encounter attack power, you can choose to"* -- a
+    per-use decision taken before the row aims, because the payout
+    increases the blast or burst and the area is settled during aiming.
+    Nothing a trait can arm runs there:
+
+    * `PowerUsed` carries `targets`, so it is already too late;
+    * `Power.effect_before` **is** the right moment -- its own note says
+      "everything below settles the target list" -- but it is a header
+      field on the power being used, so only that power can fill it;
+    * `c.pre_empt` is the class-of-powers door the component file points
+      at, and it needs the row to read `instead_of`. This clause is not
+      "instead of" anything: it adds a square and charges for it.
+
+    So the gap is a facility for offering a per-use choice before aiming,
+    for a class of powers rather than a named one -- the same shape
+    `Powers.pre_empts` gives the action menu, at `effect_before`'s moment.
+
+    Writing the wider blast alone would be the payout with no price, which
+    is a strictly better card than the one printed. Writing it as a
+    standing trait would be worse than that: it would widen every power
+    all fight and remove the choice the card is made of.
+
+    #1436 holds the design and the three doors that are not it. Its census
+    is one row -- this one -- and deliberately a floor: nothing has swept
+    for other cards phrased "before using <a class of powers>, you can
+    choose to", so the facility wants sizing after that sweep."""
 
 
 @power("f1128", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
