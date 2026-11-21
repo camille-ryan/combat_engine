@@ -961,7 +961,7 @@
   "DamageApplied(source=8, target=4, amount=3, dtype=<DamageType.FIRE: 'fire'>, absorbed=0, hp=15, detail='m4865a1')",
   "PowerResolved(actor=4, power='mba', targets=[8], rolls=[AttackResult(hit=False, critical=False, natural=8, total=10, target_defence=14, advantage=False, cancelled=False, forced=False, turned=False, weapon='', target=8, treated='', rolls=[8], rerolled_by=[])])",
   "TurnEnd(actor=4, round=2)",
-  "SavingThrow(actor=4, against='e84[ongoing 5, save ends, ongoing 5 fire]', natural=17, bonus=0, saved=True, keywords=(<Keyword.FIRE: 'fire'>,))",
+  "SavingThrow(actor=4, against='e84[ongoing 5, save ends, ongoing 5 fire]', natural=17, bonus=0, saved=True, keywords=(<Keyword.FIRE: 'fire'>,), dtypes=(<DamageType.FIRE: 'fire'>,))",
   "EffectExpired(actor=4, what='e84[ongoing 5, save ends, ongoing 5 fire]', why='saved')",
   "TurnStart(actor=8, round=2)",
   "ActionSpent(actor=8, cost=<ActionType.STANDARD: 'standard'>)",

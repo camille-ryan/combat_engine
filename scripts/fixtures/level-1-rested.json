@@ -1015,7 +1015,7 @@
   "Bloodied(actor=7, source=1, power='mba')",
   "PowerResolved(actor=1, power='mba', targets=[7], rolls=[AttackResult(hit=True, critical=False, natural=15, total=22, target_defence=15, advantage=False, cancelled=False, forced=False, turned=False, weapon='w3612', target=7, treated='', rolls=[15], rerolled_by=[])])",
   "TurnEnd(actor=1, round=3)",
-  "SavingThrow(actor=1, against='e96[ongoing 2, save ends, ongoing 2 untyped]', natural=15, bonus=0, saved=True)",
+  "SavingThrow(actor=1, against='e96[ongoing 2, save ends, ongoing 2 untyped]', natural=15, bonus=0, saved=True, dtypes=(<DamageType.UNTYPED: 'untyped'>,))",
   "EffectExpired(actor=1, what='e96[ongoing 2, save ends, ongoing 2 untyped]', why='saved')",
   "TurnStart(actor=8, round=3)",
   "ActionSpent(actor=8, cost=<ActionType.STANDARD: 'standard'>)",
