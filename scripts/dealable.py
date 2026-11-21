@@ -100,12 +100,46 @@ def _offered(spread: list[tuple[str, int, str, str, str]]) -> set[str]:
     return seen
 
 
+def _item_blocks(seeds: int) -> set[str]:
+    """Every item **block** the treasure dealer hands out across the spread.
+
+    The unit of work for an item is a block (`i601p1`, `i601x1`) and not the
+    item, so the census counts blocks -- which is also what `REGISTRY` holds.
+    `chargen.treasure` returns `Magic` rows whose `powers` tuple *is* the
+    block list, so this reads the dealer's own output rather than inferring
+    from the `item` table.
+
+    Seeded rather than enumerated, because treasure is drawn and not chosen:
+    there is no (class, level) key that names a parcel. So the honest knob is
+    how many seeds were tried, and it is reported.
+    """
+    from random import Random
+
+    from combat_engine import chargen
+
+    out: set[str] = set()
+    for cls in sorted(chargen.CLASSES):
+        for level in HEROIC:
+            who = chargen.Character(cls=cls, level=level, build="", race="",
+                                    skills=frozenset(), worships="")
+            for seed in range(seeds):
+                try:
+                    parcels = chargen.treasure(who, Random(seed))
+                except Exception:
+                    continue
+                for magic in parcels:
+                    out |= set(getattr(magic, "powers", ()) or ())
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--races", action="store_true",
                     help="add a pass over every race at level 10")
     ap.add_argument("--show", type=int, default=0,
                     help="list this many never-offered refs")
+    ap.add_argument("--items", type=int, default=0, metavar="SEEDS",
+                    help="also census item blocks, over this many treasure seeds")
     args = ap.parse_args(argv)
 
     import combat_engine.content  # noqa: F401  registers the rows
@@ -130,6 +164,22 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print(f"  a sample of never-offered, {min(args.show, len(never))} of {len(never)}:")
         print("   ", " ".join(sorted(never)[:args.show]))
+
+    if args.items:
+        blocks = {r for r, p in REGISTRY.items()
+                  if r.startswith("i") and not p.todo and not p.dropped}
+        dealt = _item_blocks(args.items) & blocks
+        print()
+        from combat_engine import chargen as _cg
+        print(f"  ITEM BLOCKS, {len(_cg.CLASSES)} classes x {len(HEROIC)} levels"
+              f" x {args.items} treasure seed(s)")
+        print(f"    declared blocks   {len(blocks)}  (written, unmarked)")
+        print(f"    dealt at least once {len(dealt)}")
+        print(f"    never dealt       {len(blocks) - len(dealt)}")
+        if blocks:
+            print(f"    coverage          {100 * len(dealt) / len(blocks):.1f}%")
+        print("    Treasure is DRAWN, not chosen, so this number rises with")
+        print("    the seed count and never settles -- it is a sampling floor.")
     print()
     print("  A ledger, not a gate. 'Never offered' is relative to the spread")
     print("  above: a feat wanting a particular chassis AND race is narrow,")
