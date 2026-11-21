@@ -106043,26 +106043,6 @@ def an_illusions_advantage_outlasts_the_turn_only_for_a_save_ends_hold(
     )
 
 
-if __name__ == "__main__":
-    import sys
-
-    sys.argv = sys.argv[:1]
-    tally = {"passed": 0, "failed": 0, "skipped": 0}
-    for rule in (
-        a_banked_reroll_is_spent_once_across_both_printed_rolls,
-        a_missed_boosted_roll_buys_exactly_one_free_card,
-        an_enemy_follows_the_ally_a_virtue_slid,
-        an_illusions_advantage_outlasts_the_turn_only_for_a_save_ends_hold,
-    ):
-        print(rule.__name__)
-        res = Result(rule.__name__)
-        rule(res)
-        tally["passed"] += res.passed
-        tally["failed"] += len(res.failed)
-        tally["skipped"] += len(res.skipped)
-        print(f"  {res.passed} passed, {len(res.failed)} failed,"
-              f" {len(res.skipped)} skipped")
-    print(tally)
 
 
 def a_borrowed_divine_card_and_the_racial_pick_are_one_per_encounter(
