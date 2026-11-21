@@ -228,11 +228,16 @@ class World:
         return self.decider(actor, kind, options, prompt)
 
     def reachable_paths(
-        self, eid: int, budget: int, kind: str = "walk", share: bool = False
+        self, eid: int, budget: int, kind: str = "walk", share: bool = False,
+        by: str = "",
     ) -> dict[Any, list[Any]]:
         from .movement import reachable
 
-        return reachable(self, eid, budget, kind=kind, share=share)
+        # `by` is the row that asked for the move, carried so that
+        # `movement.may_enter`'s gate can narrow on it -- three cards say
+        # "when a <class> power allows you to shift". Empty for a move
+        # nobody attributed.
+        return reachable(self, eid, budget, kind=kind, share=share, by=by)
 
     def reachable_squares(
         self, eid: int, budget: int, kind: str = "walk", share: bool = False

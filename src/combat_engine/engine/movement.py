@@ -27,7 +27,7 @@ and `settle` puts anything still overlapping into the nearest square it fits.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .components import Movement, Position
 from .events import (
@@ -415,6 +415,7 @@ def _clear(
     target: set[Square] | frozenset[Square],
     *,
     overhead: bool = False,
+    move: dict[str, Any] | None = None,
 ) -> bool:
     """Can `eid` be in these squares? Terrain always blocks; a creature only
     blocks somebody moving along the ground."""
@@ -462,7 +463,7 @@ def _clear(
         # the cheaper read and the commoner case. #626.
         if (not (overhead or ghost)
                 and not shares_space(world, who)
-                and not may_enter(world, eid, who)):
+                and not may_enter(world, eid, who, move=move)):
             return False
     return True
 
@@ -604,7 +605,8 @@ def _may_squeeze(world: World, eid: int, sq: Square) -> bool:
     return mods.total("may_squeeze", {"gap": kind}) > 0
 
 
-def may_enter(world: World, mover: int, occupant: int) -> bool:
+def may_enter(world: World, mover: int, occupant: int, *,
+              move: dict[str, Any] | None = None) -> bool:
     """Has **this mover** a standing permission to enter that creature's
     square?
 
@@ -639,7 +641,20 @@ def may_enter(world: World, mover: int, occupant: int) -> bool:
     mods = world.get(mover, Mods)
     if mods is None or not mods.items:
         return False
-    return mods.total("may_enter", {"mover": mover, "occupant": occupant}) > 0
+    # **The move's own facts, when the caller knows them.** The context
+    # named only the two participants, and three cards narrow on the
+    # movement instead: "during this shift", "to shift 3 or more squares",
+    # "when a <class> power allows you to shift". A gate handed only
+    # `mover` and `occupant` cannot ask any of that, so `f3116` and
+    # `f3320` were refused in play with the verb already in the tree.
+    #
+    # `kind` and `squares` come free -- `reachable` already takes the
+    # first and the second is its own budget -- and `by` is threaded from
+    # the row that asked for the move. Absent for a move nobody attributed,
+    # so a gate narrowing on it answers False, which is the conservative
+    # direction: no permission rather than a standing one.
+    ctx = {"mover": mover, "occupant": occupant, **(move or {})}
+    return mods.total("may_enter", ctx) > 0
 
 
 def blocks_entry(world: World, eid: int, mover: int) -> bool:
@@ -1435,7 +1450,7 @@ def _forced_square(
 
 def reachable(
     world: World, eid: int, budget: int, *, mode: str | None = None,
-    kind: str = "walk", share: bool = False,
+    kind: str = "walk", share: bool = False, by: str = "",
 ) -> dict[Square, list[Square]]:
     """Every square reachable within `budget`, with a path to each.
 
@@ -1493,7 +1508,8 @@ def reachable(
             if nxt in shut:
                 continue
             if not _clear(world, eid, footprint(nxt, pos.size),
-                          overhead=overhead or share):
+                          overhead=overhead or share,
+                          move={"kind": kind, "squares": budget, "by": by}):
                 continue
             step_cost = price(here, nxt)
             score = (spent + step_cost, risked + _provokes_step(threat, here, nxt, pos.size))

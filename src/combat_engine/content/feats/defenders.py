@@ -31,6 +31,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.basic import MELEE
+from combat_engine.engine.components import Powers
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import OpportunityWindow, PowerResolved
 from combat_engine.engine.query import holding
@@ -431,16 +432,60 @@ def f3166(c: Cast) -> None:
     )
 
 
-@power("f3116", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.phasing(when=)",))
-def f3116(c: Cast) -> None:
-    """Lets a shift pass through occupied squares while a named racial
-    power is unspent.
+def _monk_shift(ctx: dict[str, Any], *, least: int = 1) -> bool:
+    """Is this a shift of `least`+ squares that a monk power asked for?
 
-    **Re-aimed.** `c.shift(through=)` was the wrong symbol: the row does
-    not take the shift, a monk power does, so there is no call here to
-    pass an argument to. Moving through an occupied square is
-    `c.phasing`, which exists -- what it has no form of is a gate, and
-    this card grants it for one kind of movement out of one kind of row.
-    Laid bare it would let the monk walk through walls all fight.
+    The three facts come off `movement.may_enter`'s context: `kind` is the
+    sort of move, `squares` how far it is going, and `by` the row that
+    called for it. None of them was there before `#1431`, which is why both
+    cards that narrow on them sat refused in play with `c.may_enter`
+    already in the tree.
+
+    `by` empty means a move nobody attributed, and the answer is False --
+    no permission rather than a standing one.
     """
+    from combat_engine.engine import get
+
+    if ctx.get("kind") != "shift" or int(ctx.get("squares") or 0) < least:
+        return False
+    asked = get(str(ctx.get("by") or ""))
+    return asked is not None and asked.cls == "monk"
+
+
+@power("f3116", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f3116(c: Cast) -> None:
+    """"When a c362 power allows you to shift, if you have not yet used
+    your p1452 power, you can enter enemies' spaces during this shift."
+
+    **Written on `c.may_enter(when=)`, once its gate could see the move.**
+    The marker was right that the row takes no shift of its own -- a monk
+    power does -- so there was no call here to pass an argument to, and
+    right that laying `c.phasing` bare would let the monk walk through
+    walls all fight. What was missing was the narrowing, and the gate's
+    context carried only the two creatures. It carries `kind`, `squares`
+    and `by` now.
+
+    `c.may_enter` and not `c.phasing`: this is permission to enter an
+    occupied **square**, where phasing also waives walls and earth, which
+    the card says nothing about.
+
+    The racial power is read **at the moment the square is entered**, not
+    when the trait is armed: "if you have not yet used" is a question
+    about the shift, and a monk who spends `p1452` mid-fight loses this
+    for the rest of it.
+
+    "You must end this movement in an unoccupied square" needs nothing
+    here -- `movement.settle` already refuses an occupied stop, which is
+    the same rule phasing leans on.
+    """
+    me = c.me
+
+    def unspent_and_monk(ctx: dict[str, Any]) -> bool:
+        if not _monk_shift(ctx):
+            return False
+        known = c.world.get(me, Powers)
+        return known is not None and known.times("p1452") == 0
+
+    c.may_enter(side="enemy", on=me, when=unspent_and_monk,
+                until=When.ENCOUNTER)

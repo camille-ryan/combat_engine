@@ -39193,6 +39193,78 @@ def sealed_space(out: Result) -> None:
              f"ally {ally} into {mate}'s square {seat}")
 
 
+def a_shift_through_enemies_is_narrowed_by_the_move(out: Result) -> None:
+    """"When you use a <class> power to shift 3 or more squares, you can
+    shift through enemies' spaces." `f3116`, `f3320`.
+
+    **The gate could not see the move, which is why both rows were
+    refused in play with `c.may_enter` already in the tree.** Its context
+    named `mover` and `occupant` only, and these cards narrow on the
+    movement: its kind, the row that asked for it, and how far it goes.
+    `movement.reachable` already took `kind` and owns the distance as its
+    own budget; `by` is threaded from `c.shift`.
+
+    The control is the assertion that matters, and it is the trade both
+    markers refused: an **unnarrowed** `c.may_enter(side="enemy")` is
+    standing permission to walk through every enemy, on any move, all
+    fight -- strictly better than either card. So a walk must be refused
+    where a long monk shift is allowed, on the same board, through the
+    same creature.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.feats.defenders import _monk_shift
+    from combat_engine.engine.dsl import REGISTRY
+
+    # A real monk row, chosen off the registry: `_monk_shift` asks
+    # `Power.cls == "monk"` and a named ref would rot.
+    monk = next((r for r, p in sorted(REGISTRY.items())
+                 if p.cls == "monk" and not p.todo and not p.dropped), "")
+    out.that(bool(monk), f"the premise: a declared monk row ({monk})")
+    if not monk:
+        return
+
+    def ctx(**kw: object) -> dict:
+        base = {"mover": 1, "occupant": 2, "kind": "shift",
+                "squares": 3, "by": monk}
+        base.update(kw)
+        return base
+
+    out.that(_monk_shift(ctx(), least=3),
+             "a 3-square shift asked for by a monk row passes")
+    out.that(not _monk_shift(ctx(squares=2), least=3),
+             "THE CONTROL: a 2-square shift does not -- the card says 3")
+    out.that(_monk_shift(ctx(squares=2), least=1),
+             "while f3116's form, which prints no distance, takes it")
+    out.that(not _monk_shift(ctx(kind="walk"), least=1),
+             "THE CONTROL: a WALK is refused, however far -- 'to shift' is"
+             " the printed word, and an unnarrowed gate would be standing"
+             " permission to walk through every enemy all fight")
+    out.that(not _monk_shift(ctx(by=""), least=1),
+             "and an unattributed move is refused: no permission rather"
+             " than a standing one")
+    other = next((r for r, p in sorted(REGISTRY.items())
+                  if p.cls and p.cls != "monk" and not p.todo), "")
+    if other:
+        out.that(not _monk_shift(ctx(by=other), least=1),
+                 f"THE CONTROL: another class's row is refused ({other})")
+
+    # And the context really arrives with those keys on a real shift.
+    from combat_engine.engine.cast import Cast
+
+    world, me, _ = _board(seed=4)
+    c = Cast(world=world, me=me, ref="drivers:through")
+    seen: dict = {}
+    c.may_enter(side="enemy", on=me,
+                when=lambda got: bool(seen.update(got)) or True)
+    c.shift(1, who=me)
+    out.that({"kind", "squares", "by"} <= set(seen),
+             "and a real shift hands the gate the move's own facts"
+             f" ({sorted(seen)})")
+    out.that(seen.get("by") == "drivers:through" and seen.get("kind") == "shift",
+             f"with `by` naming the row that asked ({seen.get('by')!r},"
+             f" {seen.get('kind')!r})")
+
+
 def lost_mode(out: Result) -> None:
     """"It loses its fly speed until the end of its next turn", and gets it back.
 
@@ -114238,6 +114310,9 @@ DRIVERS = {
                            "a spent row coming back says so, on both paths"),
     "lost_mode": (lost_mode,
                   "a creature loses a way of moving, and gets it back"),
+    "shift_through": (a_shift_through_enemies_is_narrowed_by_the_move,
+                      "a shift through enemies' spaces, narrowed by the "
+                      "move's kind, its distance and the row that asked"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
     "racial_power_riders": (racial_power_riders,

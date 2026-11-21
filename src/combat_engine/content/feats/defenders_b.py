@@ -29,6 +29,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.feats.defenders import _monk_shift
 from combat_engine.content.features.defenders_sa import warding
 from combat_engine.engine import (
     AC,
@@ -692,32 +693,34 @@ def f3319(c: Cast) -> None:
 
 
 @power("f3320", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.phasing(when=)",))
+       reach=PERSONAL, target=SELF)
 def f3320(c: Cast) -> None:
-    """Lets a long shift taken by one class's power pass through enemies'
-    squares.
+    """"When you use a c362 power or monk paragon path power to shift 3 or
+    more squares, you can shift through enemies' spaces."
 
-    **Re-aimed, the same way f3116 was and for the same reason.**
-    `c.shift(through=)` named an argument to a call this row does not
-    make: the row is bodiless with `action=NONE`, and the shift belongs to
-    whichever monk power is being used -- `c362` is the class, so the set
-    is every monk and monk paragon power and there is no finite list of
-    bodies to edit either. The old note's other premise is also spent:
-    #684 made `movement.shift` walk a route, so a path crossing several
-    squares is no longer the thing missing.
+    **Written on `c.may_enter(when=)`.** The marker's diagnosis was exact
+    and is worth keeping: the row makes no call to pass an argument to,
+    there is no finite list of bodies to edit because `c362` is a whole
+    class, and the gate's context "carries `mover` and `occupant` and
+    nothing about the move: not its kind, not the row that called for it,
+    not how far it is going", while this card narrows on all three.
 
-    What is missing is the **gate**. Moving through an occupied square is
-    `c.may_enter`, which takes `sizes`, `side` and a `when=` -- and the
-    context that gate is handed carries `mover` and `occupant` and nothing
-    about the move: not its kind, not the row that called for it, not how
-    far it is going. This card narrows on all three ("a `c362` power", "to
-    shift", "3 or more squares").
+    It carries all three now. `movement.reachable` already took `kind`
+    and owns the distance as its own budget; `by` is threaded from
+    `c.shift`, which knows the row. So the three clauses are three terms
+    of one predicate, and `_monk_shift(least=3)` is shared with `f3116`.
 
-    So this is **not** written as `c.may_enter(side="enemy", on=c.me)`
-    with the narrowing dropped. That is the standing permission to walk
-    through every enemy all fight, on any move, which is strictly better
-    than the card -- the trade `Moved.stretched_` refused for `f2459`, and
-    the reason this stays `todo=` rather than taking `dropped=`."""
+    **Not written as `c.may_enter(side="enemy")` with the narrowing
+    dropped**, which the marker also called out: that is standing
+    permission to walk through every enemy all fight, on any move,
+    strictly better than the card.
+
+    The paragon half costs nothing to say and is said by the same test:
+    `Power.cls` is `monk` for a monk paragon path row too, and the
+    project stops at 10 so none is dealt anyway.
+    """
+    c.may_enter(side="enemy", on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx: _monk_shift(ctx, least=3))
 
 
 @power("f3326", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

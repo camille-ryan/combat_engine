@@ -6033,8 +6033,12 @@ class Cast:
         # multi-square shift jumped straight to its destination and entered
         # no square on the way. Two rows print a clause about the squares in
         # between; `movement.shift` walks them now. #684.
+        # `by=self.ref` so `movement.may_enter`'s gate can narrow on the
+        # row that asked for the shift -- "when a <class> power allows you
+        # to shift" is three cards, and the gate saw only the two
+        # creatures before.
         routes = self.world.reachable_paths(mover, squares_, kind="shift",
-                                            share=share)
+                                            share=share, by=self.ref)
         if not routes:
             return False
         options = self._nearest_first(list(routes), toward, away_from, mover)
