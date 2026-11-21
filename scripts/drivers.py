@@ -84387,6 +84387,109 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_racial_fork_is_read_off_the_dealt_power(out: Result) -> None:
+    """"Expend your rt:r16-t1 power to regain the use of your p9402."
+
+    `f2817` carried `todo=("rt:r16-t1",)` on the reading that the row
+    would go green the day that trait was declared. It would not have:
+    `rt:r16-t1` is a racial **trait**, not a power -- its own text is
+    *"you have your choice of either <one> or `p1831`"* -- so the ETL
+    resolved the card's reference to the trait that **describes** the
+    choice where the card means the power that choice landed on. A trait
+    is not something `c.expend_row` can take a use of.
+
+    What the card means is readable from the draw. `chargen.RaceLine` for
+    this race carries `one_of=("p1831", "p2473")`, so exactly one arrives
+    and which one did *is* the recorded choice -- the argument `rt:r6-t3`
+    already makes for its own fork.
+
+    **Both arms, because one of them would pass on a hard-coded ref.** A
+    body naming only the first option works for half the characters of
+    that race and reports nothing for the other half, which is why the
+    pair is driven rather than the one the board happens to deal.
+    """
+    from audit import board as posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    PAIR = ("p1831", "p2473")
+    GETS_BACK = "p9402"
+
+    out.that(all(ref in REGISTRY for ref in (*PAIR, GETS_BACK)),
+             "both halves of the fork and the row it buys back are"
+             " declared -- the premise, since `c.expend_row` on an"
+             " undeclared ref answers False for ever and would make every"
+             " arm below read the same",
+             f"{[ref in REGISTRY for ref in (*PAIR, GETS_BACK)]}")
+
+    def traded(holding: str | None) -> tuple[int, int, dict[str, int]]:
+        """Fire `f2817` for a character holding one option, or neither."""
+        world, me, _start = posed("f2817", 1)
+        known = world.get(me, Powers)
+        for ref in PAIR:
+            while ref in known.known:
+                known.known.remove(ref)
+        if holding:
+            known.known.append(holding)
+        if GETS_BACK not in known.known:
+            known.known.append(GETS_BACK)
+        # Spend it, or there is nothing for the feat to hand back and
+        # every arm reads "unchanged" for the wrong reason.
+        known.note_use(GETS_BACK, 1)
+        before = known.times(GETS_BACK)
+        REGISTRY["f2817"].body(
+            Cast(world=world, me=me, ref="f2817", target=me))
+        return before, known.times(GETS_BACK), {
+            ref: known.times(ref) for ref in PAIR}
+
+    for option in PAIR:
+        before, after, spent = traded(option)
+        out.that(before > 0,
+                 f"holding {option}: the row it buys back really has a"
+                 " spent use to regain -- without this the arm would read"
+                 " 'unchanged' whether or not the feat fired",
+                 f"{GETS_BACK} spent {before} time(s) before")
+        out.that(after < before,
+                 f"holding {option}: the use comes back",
+                 f"{GETS_BACK}: {before} -> {after}")
+        out.that(spent[option] == 1 and all(
+                     v == 0 for k, v in spent.items() if k != option),
+                 f"holding {option}: and THAT option is what paid for it"
+                 " -- a body naming one of the two would pass for half"
+                 " the characters of this race and report nothing for the"
+                 " rest",
+                 f"{spent}")
+
+    before, after, spent = traded(None)
+    out.that(after == before and not any(spent.values()),
+             "a character holding neither option pays nothing and regains"
+             " nothing -- `c.expend_row`'s False is the printed"
+             " Requirement, and the row must not look finished while"
+             " never paying",
+             f"{GETS_BACK}: {before} -> {after}, racial {spent}")
+
+    out.that(not (getattr(REGISTRY["f2817"], "todo", ()) or ()),
+             "and f2817 carries no marker: the ref it waited for was the"
+             " trait, which declaring could never have helped",
+             f"{getattr(REGISTRY['f2817'], 'todo', ())}")
+    # **And the trait it used to wait for is still undeclared, on
+    # purpose.** Declaring it inert reads well -- a ref a card cites
+    # should resolve -- and it moves a dealt race:
+    # `RaceLine.granted()` includes it, `choices.race_options` scores
+    # `traits_written` over the granted rows that are declared and
+    # unmarked, so the count goes 3 to 4 and `replay`'s `level-3-full`
+    # fixture deals a different race. Measured both ways: 8 of 8 green
+    # without it, one diverged with it. Pinned here so the declaration
+    # arrives with a re-record rather than as a surprise.
+    out.that("rt:r16-t1" not in REGISTRY,
+             "the trait is still undeclared, and declaring it owes a"
+             " `replay` re-record -- it raises this race's"
+             " `traits_written` score and changes which race a fixture"
+             " deals. This row needs nothing from it",
+             f"{'rt:r16-t1' in REGISTRY}")
+
+
 def a_multiclass_swap_limits_both_halves(out: Result) -> None:
     """Three cards trade across classes, and each half is its own filter.
 
@@ -118803,6 +118906,9 @@ DRIVERS = {
     "a_multiclass_swap_limits_both_halves": (
         a_multiclass_swap_limits_both_halves,
         "a cross-class swap filters both halves"),
+    "a_racial_fork_is_read_off_the_dealt_power": (
+        a_racial_fork_is_read_off_the_dealt_power,
+        "a racial fork read off the dealt power"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

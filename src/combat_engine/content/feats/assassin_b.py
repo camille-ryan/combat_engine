@@ -911,25 +911,51 @@ def f1808(c: Cast) -> None:
 
 
 @power("f2817", level=1, cls="", usage=ENCOUNTER, action=ActionType.FREE,
-       reach=PERSONAL, target=SELF, todo=("rt:r16-t1",))
+       reach=PERSONAL, target=SELF)
 def f2817(c: Cast) -> None:
     """Spend the racial power, get the other one back.
 
-    **Re-aimed off `c.on_racial_power()`, which is no longer true, and
-    then marked for a narrower reason.** The note here said the power
-    being spent arrives as a name rather than a ref; it arrives as
-    `rt:r16-t1`, so nothing is left in prose and `c.expend_row` /
-    `c.restore_use` are both the verbs this needs -- f2830 next door is
-    the same shape written out.
+    Two re-aimings got here and the second was still wrong, in the way
+    the tree has a name for: **the spec's ref is not the card's**.
 
-    What stops it is that **no row declares `rt:r16-t1`**. `c.expend_row`
-    on an undeclared ref answers False for ever, and its False is the
-    printed Requirement, so the body below is right and inert: the row
-    would look finished and never pay. The marker is the ref, so this
-    goes green the day race r16's first trait is written, which is the
-    only thing it is waiting for.
+    The card reads *"you can expend your `rt:r16-t1` power"*, and
+    `rt:r16-t1` is a **racial trait**, not a power -- its own text is
+    *"you have your choice of either <one> or `p1831`"*. So the ETL
+    resolved the reference to the trait that **describes** the choice
+    where the card means the power that choice landed on. The old marker
+    read that literally and waited for the trait to be declared;
+    declaring it would not have helped, because a trait is not something
+    `c.expend_row` can take a use of.
+
+    What the card means is readable without it. `chargen.RaceLine` for
+    this race carries `powers=("p1831", "p2473")` and
+    `one_of=("p1831", "p2473")`, so the draw deals **exactly one** of the
+    two and which one arrived *is* the recorded choice -- the same
+    argument `rt:r6-t3` makes for its own fork. The body asks which one
+    the character holds and expends that.
+
+    Written as `f2830` next door is, which is the same card for another
+    race with a power ref the ETL got right: the payout happens only if
+    `c.expend_row` found a use to take.
+
+    **`rt:r16-t1` is deliberately still undeclared, and the measurement
+    is why.** Declaring it inert is a one-liner and reads well -- a ref a
+    card cites should resolve -- and it **moves a dealt race**:
+    `RaceLine.granted()` for this race includes it, `choices.race_options`
+    scores `traits_written` over the granted rows that are declared and
+    unmarked, so the count goes 3 to 4, this race outranks another, and
+    `replay`'s `level-3-full` fixture deals `r65` where it dealt `r16`.
+    Measured both ways -- 8 of 8 fixtures green with this row alone, one
+    diverged with the declaration.
+
+    That is the score term working rather than a fault, so the
+    declaration is owed a `replay` re-record and belongs batched with
+    other draw-moving work rather than paid for by itself. This row needs
+    nothing from it.
     """
-    if c.expend_row("rt:r16-t1", on=c.me):
+    held = next((ref for ref in ("p1831", "p2473")
+                 if c.knows(ref) == c.me), "")
+    if held and c.expend_row(held, on=c.me):
         c.restore_use("p9402", on=c.me)
 
 
