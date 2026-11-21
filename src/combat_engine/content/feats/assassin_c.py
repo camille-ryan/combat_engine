@@ -69,7 +69,24 @@ SHROUDS = "p9400"
 #: lengthening it. #502.
 #: A row's printed Requirement, waived for one use. `Power.requires` is
 #: asked by `dsl.usable` and nothing standing on the creature relaxes it.
-REQUIREMENT = ("c.ignore_requirement(ref)",)
+#: **Retired by `#1424`.** `c.ignore_requirement` exists and the three rows
+#: that carried this are written. Kept as a note because the grouping was
+#: the useful part: `f2931`, `f2933` and `rogue_b.f2338` print three
+#: different conditions and **one** sentence between them -- a named row's
+#: Requirement met by something its own predicate will not accept.
+_REQUIREMENT_RETIRED = "c.ignore_requirement(ref)"
+
+
+def _bloodied_now(world: Any, eid: int) -> bool:
+    """`f2931`'s condition, asked at use time rather than at arming.
+
+    The `(world, eid)` shape `c.ignore_requirement` wants, which is also
+    `requires=`'s own shape -- so the waiver is written like the gate it
+    answers.
+    """
+    from combat_engine.engine.query import bloodied
+
+    return bloodied(world, eid)
 
 
 def _used(ref: str):  # noqa: ANN202
@@ -313,15 +330,27 @@ def f2932(c: Cast) -> None:
 
 
 @power("f2933", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=REQUIREMENT,
+       reach=PERSONAL, target=SELF,
        trigger="you use p8278",
        on=Trigger(PowerUsed, _used("p8278"), "you use that racial power"))
 def f2933(c: Cast) -> None:
     """The cheaper action is the whole first sentence and `c.recast` is
-    exactly it. The second -- the triggering creature counting for p9401's
-    own Requirement -- is dropped: that gate is asked by `dsl.usable` off
-    the header and nothing standing on a creature relaxes one."""
+    exactly it.
+
+    **The second sentence is written now.** *"The creature triggering
+    `p8278` counts as a creature for the purposes of this `p9401`"* --
+    `p9401` prints *"Requirement: You must be adjacent to a creature"*, and
+    the triggering creature need not be adjacent. So the sentence is a
+    Requirement met by something the predicate will not accept, which is
+    `c.ignore_requirement` (`#1424`).
+
+    **Unconditional and scoped to the turn**, not a `when=`: the card's
+    condition is *this* use of `p8278`, which the row having fired already
+    establishes -- the trigger is the whole gate. `until=When.EOT` matches
+    the `c.recast` above it, so the waiver and the free action it exists to
+    serve end together rather than the waiver outliving the use."""
     c.recast("p9401", action=ActionType.FREE, per_turn=1, until=When.EOT)
+    c.ignore_requirement("p9401", on=c.me, until=When.EOT)
 
 
 @power("f2934", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -644,11 +673,27 @@ def f2920(c: Cast) -> None:
 
 
 @power("f2931", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REQUIREMENT)
+       reach=PERSONAL, target=SELF)
 def f2931(c: Cast) -> None:
-    """Waives p9401's own Requirement while bloodied. `c.bloodied` is the
-    easy half; the gate is `Power.requires`, asked by `dsl.usable` off the
-    header, and nothing standing on the creature relaxes one."""
+    """*"If you are bloodied, you do not need to meet the requirement for
+    `p9401` to gain the benefit of the effect of `p9401`."*
+
+    **Written, and the old note had the diagnosis exactly right**: the gate
+    is `Power.requires`, and nothing standing on the creature relaxed one.
+    `c.ignore_requirement` is that, added in `#1424`, and it is read in
+    `Power.can_branch` -- the only place a Requirement is ever asked.
+
+    The predicate takes `(world, eid)`, the same shape as `requires=`
+    itself, so "while bloodied" is asked **at use time** rather than at
+    arming. That is the whole of the card's condition: a character who
+    arms this trait unbloodied and is bloodied three rounds later gets the
+    waiver then, and loses it again if healed above half.
+
+    Per-ref by construction -- it waives `p9401` and says nothing about any
+    other row -- which is the property `dsl.usable`'s own waiver note
+    argues for."""
+    c.ignore_requirement("p9401", on=c.me, until=When.ENCOUNTER,
+                         when=_bloodied_now)
 
 
 @power("f2936", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

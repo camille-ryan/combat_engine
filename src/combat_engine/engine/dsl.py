@@ -1695,6 +1695,25 @@ class Swap:
     ceiling: bool = False
 
 
+
+def _requirement_waived(world: World, actor: int, ref: str) -> bool:
+    """Does this creature hold a waiver for this row's Requirement? #1424.
+
+    `None` in the list is an unconditional waiver -- a card printing no
+    condition. Anything else is a `(world, eid)` predicate, the same shape
+    as `requires=` itself, so the waiver reads like the gate it answers.
+
+    **Any one of them is enough**, because two feats both saying a
+    requirement is met is not a requirement met twice.
+    """
+    from .components import Powers
+
+    known = world.get(actor, Powers)
+    if known is None:
+        return False
+    return any(when is None or when(world, actor)
+               for when in known.waived_requires.get(ref, ()))
+
 @dataclass
 class Power:
     ref: str
@@ -2462,7 +2481,22 @@ class Power:
         from .components import Gear
 
         gate = self.requires_of(branch)
-        if gate is not None and not gate(world, actor):
+        if (gate is not None and not gate(world, actor)
+                and not _requirement_waived(world, actor, self.ref)):
+            # **A waiver for THIS row, if the creature carries one.** Three
+            # printed lines say a Requirement is met by something its own
+            # predicate will not accept -- `f2931` while bloodied, `f2933`
+            # through the creature that triggered `p8278`, `f2338` with a
+            # crossbow where the card demands a light blade -- and none of
+            # them is a new gate. See `Powers.waived_requires`.
+            #
+            # Read **here** because this is the only place `requires_of` is
+            # asked, and it already has the two arguments a waiver needs.
+            #
+            # Keyed on the ref, so it cannot widen into "requirements are
+            # advisory": a waiver for `p9401` says nothing about any other
+            # row, which is the property `usable`'s own waiver note argues
+            # for in the opposite direction.
             return False
         if Keyword.WEAPON not in self.keywords:
             return True

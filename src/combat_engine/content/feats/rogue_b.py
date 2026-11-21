@@ -540,7 +540,6 @@ def f2362(c: Cast) -> None:
 
 @power("f2338", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignore_requirement(ref)",),
        trigger="you attack with a bow or a crossbow")
 def f2338(c: Cast) -> None:
     """No reprisal from the creature you are shooting at, and the named
@@ -572,10 +571,24 @@ def f2338(c: Cast) -> None:
     `"range"` and a spread reads `"blast_size"` -- so the kind test there
     can never be false and is not copied here.
 
-    Dropped: shooting a crossbow at a row whose Requirement prints a
-    light blade.
+    **The crossbow half is written now**, and the two objections the old
+    note raised are exactly the two properties `c.ignore_requirement`
+    (`#1424`) was built with -- so they are recorded as satisfied rather
+    than deleted:
 
-    **The marker stands and the reason it used to give was false.** It
+    * it is **per-ref**, so the waiver named here opens `p4488` and
+      `p1387` and no other light-blade Requirement the rogue holds;
+    * it is read in `Power.can_branch`, which is the one place
+      `requires_of` is asked -- so it does not matter that both rows
+      hand-roll `requires=_light_blade` and never consult
+      `Cast.wielding`. That was the "read hand-rolled in N files" half, and
+      waiving at the gate rather than at the reader steps around it.
+
+    The condition is asked at use time, not at arming, for `_holding`'s own
+    reason three paragraphs up: a rogue who sheathes the bow stops having
+    the benefit.
+
+    **The marker's older reason was false and is kept for the record.** It
     read "`Power.requires` is asked by `dsl.usable` and nothing standing
     on the creature relaxes it", and something does: `c.counts_as` writes
     a `(holding, satisfies)` waiver onto `Gear` and `Cast.wielding` reads
@@ -599,9 +612,29 @@ def f2338(c: Cast) -> None:
       to the two rows it is printed for -- which is the "read hand-rolled
       in N files" fault rather than a missing writer.
 
-    f2931 and f2933 wait on the same symbol.
+    `assassin_c.f2931` and `f2933` printed the same sentence with different
+    conditions and are written with it too.
     """
     me = c.me
+
+    def _shooting(world: Any, eid: int) -> bool:
+        """The printed *"attacking with a bow or a crossbow"*, as a
+        `(world, eid)` gate -- which is `requires=`'s own shape and what
+        `c.ignore_requirement` wants. `_holding` takes a `Cast`, so the
+        question is asked of the gear directly here.
+        """
+        gear = world.get(eid, Gear)
+        if gear is None:
+            return False
+        ranged = [gear.ranged] if gear.ranged is not None else []
+        return any(w.group in ("bow", "crossbow")
+                   for w in (*gear.melee, *ranged))
+
+    # The two rows on the Associated Powers line, and only those two.
+    for shot in ("p4488", "p1387"):
+        c.ignore_requirement(shot, on=me, until=When.ENCOUNTER,
+                             when=_shooting)
+
     far = _shot_range(c, "bow", "crossbow")
     if far:
         c.bonus(

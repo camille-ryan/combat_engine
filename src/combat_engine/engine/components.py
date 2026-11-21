@@ -1629,6 +1629,25 @@ class Powers:
     #: Rows taken away for a while. Not the same as spent: a forbidden row
     #: is one the creature still has and cannot currently reach.
     forbidden: set[str] = field(default_factory=set)
+    #: **A named row's own Requirement, waived while a predicate holds.**
+    #: Keyed by the ref the waiver is *for*, so it can never become a
+    #: blanket one -- which is the property `dsl.usable`'s existing waiver
+    #: note demands: *"waiving the whole requirement would make every
+    #: `requires=` a suggestion for anybody willing to route through
+    #: `use_power`."*
+    #:
+    #: Three printed lines want it and all three are the same sentence --
+    #: a Requirement met by something its own predicate will not accept.
+    #: `f2931` is bloodied, `f2933` offers the creature that triggered
+    #: `p8278`, `f2338` offers a crossbow where the card demands a light
+    #: blade. None of them is a new gate.
+    #:
+    #: The predicate takes `(world, eid)`, which is deliberately the **same
+    #: shape as `requires=` itself** -- `Power.can_branch` has exactly those
+    #: two to hand, and a waiver written like the gate it answers cannot
+    #: drift from it. `None` is an unconditional waiver, which is what a
+    #: card printing no condition gets.
+    waived_requires: dict[str, list[Any]] = field(default_factory=dict)
     #: The subset of `forbidden` that is there because a **grant's uses ran
     #: out**, rather than because anything prohibited the row.
     #:

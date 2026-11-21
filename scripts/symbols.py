@@ -535,6 +535,11 @@ CATEGORIES: dict[str, dict] = {
                 "forgo_second_wind", "refuses_forced_attack",
                 "shares_feat_bonus",
                 "counts_as_keyword", "forbid", "forgo_second_wind_heal",
+                # Beside `forbid` because it is the same question answered
+                # the other way: that one takes a named row away, this one
+                # opens a named row whose printed Requirement is not met.
+                # Both are per-ref and neither is a blanket. #1424.
+                "ignore_requirement",
                 "no_run",
                 "gains_property", "loses_property",
                 "no_basic", "no_coup_de_grace",

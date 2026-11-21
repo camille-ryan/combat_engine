@@ -13996,6 +13996,81 @@ class Cast:
             return False
         return bool(held) if not ref else ref in held
 
+    def ignore_requirement(
+        self, ref: str, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[Any, int], bool] | None = None,
+    ) -> Effect | None:
+        """One named row's printed Requirement is met, while `when` holds.
+
+        *"If you are bloodied, you do not need to meet the requirement for
+        `p9401`"* -- `f2931`. Three printed lines want this and all three are
+        the **same sentence**: a Requirement satisfied by something its own
+        predicate will not accept. `f2933` offers the creature that
+        triggered `p8278`; `f2338` offers a crossbow where the card demands
+        a light blade. None of them adds a gate, so none of them needed a
+        new one.
+
+        **`ref` is required and the waiver is only ever for that row.** This
+        is not a convenience: `dsl.usable` already allows one narrow waiver
+        and its note says why the broad kind is refused -- *"waiving the
+        whole requirement would make every `requires=` a suggestion for
+        anybody willing to route through `use_power`."* A waiver for
+        `p9401` says nothing about any other row.
+
+        **`when` takes `(world, eid)`, the same shape as `requires=`
+        itself.** `Power.can_branch` is the only place a Requirement is
+        asked and it has exactly those two arguments, so a waiver is written
+        like the gate it answers and cannot drift from it. `None` is
+        unconditional, which is what a card printing no condition gets.
+
+        Several waivers on one row are fine and any one of them opens it --
+        two feats both saying a requirement is met is not a requirement met
+        twice.
+        """
+        from .components import Powers
+
+        who = self._who(on) or self.me
+        if who is None or not ref:
+            return None
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        # **The effect first**, which is `c.forbid`'s reason a few methods
+        # down: recording the waiver before the thing that takes it back
+        # exists leaves the requirement open for ever if the apply fails.
+        def give_back() -> None:
+            # **Removes ONE entry, not the key.** Two rows may waive the
+            # same Requirement and the first to expire must not take the
+            # second with it. `list.remove` is identity-stable here: each
+            # call appends its own callable, or its own `None`.
+            #
+            # A closure rather than a module-level helper, which is
+            # `c.forbid`'s shape two methods down and matters for a second
+            # reason: `impact.py` narrows a **new method** to the rows that
+            # name it, and cannot speak for a new module-level function at
+            # all -- so the first draft of this took the whole batch WIDE
+            # to spare one `def`.
+            held = known.waived_requires.get(ref)
+            if not held:
+                return
+            try:
+                held.remove(when)
+            except ValueError:
+                return
+            if not held:
+                known.waived_requires.pop(ref, None)
+
+        effect = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} waives {ref}",
+            on_end=[give_back],
+            by=self.ref,
+        )
+        if effect is None:
+            return None
+        known.waived_requires.setdefault(ref, []).append(when)
+        return effect
+
     def forbid(
         self,
         ref: str = "",
