@@ -84387,6 +84387,102 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def mark_counts_as_the_aegis(out: Result) -> None:
+    """"Treat each mark as if you applied it with your chosen aegis."
+
+    The other half of `drivers.mark_knows_its_row`: that rule proves a
+    mark records **which row laid it**, and this one proves a row can lay
+    a mark recording a **different** row deliberately. `i457p1` is the one
+    card in the tree that prints it, and it was `dropped=` on exactly this
+    field.
+
+    `by` and `via` are two fields and that separation is the whole design.
+    `by` stays `i457p1`, so `durations.keywords_of` goes on reading
+    `i457p1`'s keywords for the effect and the mark does not start
+    answering the aegis's keyword gates. `via` is the row it *counts as*,
+    and `c.marked(via=)` is the only reader that looks at it.
+    `durations._install_state` prefers `via` and falls back to `by`, so
+    every mark that is its own doing is unchanged -- the no-aegis case
+    below is that fallback, asserted rather than assumed.
+
+    **All three legs, not one.** The row reads its aegis off the build leg
+    with `c.build`, and a rule staging one leg cannot tell that apart from
+    a constant naming that leg. Three boards, three distinct answers, and
+    a fresh board each time because `c.set_build` *adds* a leg rather than
+    replacing one.
+
+    The plant is the content half -- removing `via=aegis` from `i457p1`
+    makes all three read `i457p1` -- and the engine half is the same
+    assertion from the other side: making `_install_state` read `eff.by`
+    alone reds the same three and leaves the fallback case green.
+    """
+    import audit as A
+    from combat_engine.content.features.builds import SWORDMAGE_F1_OPTIONS
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Relation
+
+    def marked_by_i457p1(leg_ref: str) -> tuple[bool, str, dict[str, bool]]:
+        """Fire `i457p1` with one aegis chosen, or none if `leg_ref` is "".
+
+        Returns whether the mark holds, the `via` the store ended up
+        holding, and what `c.marked(via=)` answers for each of the three
+        aegis refs -- which is the reader every card asking about one goes
+        through.
+        """
+        world, me, _start = A.board("i457p1", 1)
+        foe = next(e for e in world.entities if e != me)
+        if leg_ref:
+            Cast(world=world, me=me, ref="drivers", target=me).set_build(
+                SWORDMAGE_F1_OPTIONS[leg_ref])
+        REGISTRY["i457p1"].body(
+            Cast(world=world, me=me, ref="i457p1", target=foe))
+        reader = Cast(world=world, me=me, ref="drivers", target=foe)
+        return (
+            world.relations.holds(Relation.MARKED_BY, me, foe),
+            world.relations.via(Relation.MARKED_BY, me, foe),
+            {ref: reader.marked(on=foe, via=ref)
+             for ref in SWORDMAGE_F1_OPTIONS},
+        )
+
+    # -- the conditional half: no class feature, so the mark is its own ----
+    held, via, reads = marked_by_i457p1("")
+    out.that(held,
+             "i457p1 marks the enemy whether or not its taker is a"
+             " swordmage -- the aegis clause is a rider on a mark that"
+             " lands either way",
+             f"marked={held}")
+    out.that(via == "i457p1",
+             "with no aegis chosen the mark records the row that laid it,"
+             " which is `_install_state`'s fallback to `by` and what every"
+             " other mark in the tree relies on",
+             f"via={via!r}")
+    out.that(not any(reads.values()),
+             "and it counts as no aegis -- `c.marked(via=)` is False for"
+             " all three, so a card reading one is paid nothing",
+             f"{reads}")
+
+    # -- the printed clause, over every leg --------------------------------
+    answers = {}
+    for leg_ref in SWORDMAGE_F1_OPTIONS:
+        held, via, reads = marked_by_i457p1(leg_ref)
+        answers[leg_ref] = via
+        out.that(held and via == leg_ref,
+                 f"{leg_ref} chosen: the mark lands and counts as THAT"
+                 " aegis -- the printed clause, read off the build leg",
+                 f"marked={held} via={via!r}")
+        out.that(reads == {r: r == leg_ref for r in SWORDMAGE_F1_OPTIONS},
+                 f"{leg_ref}: and the reader agrees -- True for the chosen"
+                 " aegis and False for the other two, which is the"
+                 " narrowing #875 built `via=` for",
+                 f"{reads}")
+
+    out.that(len(set(answers.values())) == 3,
+             "three legs give three distinct answers, so the row is"
+             " reading its taker's choice rather than naming one aegis",
+             f"{answers}")
+
+
 def save_ends_for_somebody_else(out: Result) -> None:
     """"Reduce the resistance the target has against your attack (save ends)."
 
@@ -117587,6 +117683,8 @@ DRIVERS = {
                        "a weapon block's clause lands on its own weapon"),
     "mark_knows_its_row": (mark_knows_its_row,
                            "a mark records which row laid it"),
+    "mark_counts_as_the_aegis": (mark_counts_as_the_aegis,
+                                 "a mark can count as another row"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

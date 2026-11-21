@@ -1949,18 +1949,23 @@ class Cast:
         relation may genuinely be somebody else's, which is the answer the
         card wants.
 
-        **There is deliberately no `c.mark(via=)` to go with this.** The
-        reader needs none -- `durations._install_state` fills `via` from
-        `eff.by`, so every mark already records the row that laid it -- and
-        the one card wanting to lay a mark *as another row* (`i457p1`:
-        "treat each mark as if you applied it with your chosen aegis") is
-        blocked on `chargen.feature_choice()` regardless, because nothing
-        records which aegis the swordmage chose. Writing the override now
-        would also be wrong twice: hijacking `by` moves what
-        `durations.keywords_of` reads for that effect's keywords, so the
-        mark would answer the *other* row's keyword gates. Whoever
-        un-blocks `i457p1` wants a `via` of its own on `Effect`, not this
-        shortcut. #875.
+        **`c.mark(via=)` is the writer, and this paragraph used to say it
+        did not exist and should not.** The default is unchanged --
+        `durations._install_state` still fills a mark's `via` from
+        `eff.by`, so a row that does not pass one records itself -- but the
+        one card that wants to lay a mark *as another row* can now say so.
+        `i457p1` prints *"treat each mark as if you applied it with your
+        chosen aegis"*, and it is written: the chosen aegis is a build leg,
+        which `c.build` reads, so the second half of the old objection
+        ("nothing records which aegis the swordmage chose") was already
+        false.
+
+        The first half was right and is why the field is `via` and not
+        `by`. Hijacking `by` would move what `durations.keywords_of` reads
+        for that effect's keywords, so the mark would answer the *other*
+        row's keyword gates. `Effect.via` is its own field: `by` stays the
+        row that laid it, `via` is the row it counts as, and only this
+        reader looks at the second one. #875.
         """
         who = self._who(on)
         if who is None:
@@ -10166,6 +10171,7 @@ class Cast:
         lapses: bool = False,
         or_adjacent: bool = False,
         keeps: bool = False,
+        via: str = "",
     ) -> Effect | None:
         """Mark the target -- for you, or for somebody else.
 
@@ -10287,6 +10293,14 @@ class Cast:
             who, marker, until, label=f"{self.ref} mark",
             relations=[(Relation.MARKED_BY, marker, who)],
             by=self.ref,
+            # **`via=` is the row the mark COUNTS AS**, where `by` stays
+            # the row that laid it. `i457p1` lays a mark that counts as
+            # whichever aegis the swordmage chose, so `c.marked(via=...)`
+            # answers for that aegis and `durations.keywords_of` -- which
+            # reads `by` -- goes on answering for this row. Rewriting `by`
+            # would have made the mark answer the aegis's keyword gates
+            # too, which is the shortcut `c.marked`'s own note refuses.
+            via=via,
         )
         if held is not None and keeps:
             held.keeps_mark = True

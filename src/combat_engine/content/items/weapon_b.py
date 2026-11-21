@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.builds import SWORDMAGE_F1_OPTIONS
 from combat_engine.content.items.feet import _grabbing
 from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.content.powers.warden import in_any_form
@@ -1980,7 +1981,6 @@ def i3558p1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
-    dropped=("durations.Effect.via",),
 )
 def i457p1(c: Cast) -> None:
     """Re-pointed a second time, because the premise behind
@@ -2026,8 +2026,33 @@ def i457p1(c: Cast) -> None:
     is unreachable until they read the mark instead -- `c.marked(via=)` is
     already the reader for that.
 
-    The mark itself lands, so this stays `dropped=` rather than `todo=`."""
-    c.mark(until=When.SAVE_ENDS)
+    ## What landed
+
+    `durations.Effect.via` is the field, exactly as `Cast.marked`'s own
+    docstring asked for it -- *"whoever un-blocks `i457p1` wants a `via`
+    of its own on `Effect`, not this shortcut"*. `by` stays the row that
+    laid the mark and `via` is the row it **counts as**, so
+    `durations.keywords_of` goes on reading `by` and the mark does not
+    start answering the aegis's keyword gates. `_install_state` prefers
+    `via` and falls back to `by`, so every effect that is its own doing
+    behaves exactly as before.
+
+    So this row marks and tags: *"treat each mark as if you applied it
+    with your chosen aegis"* is `via=` naming that aegis, and
+    `c.marked(via=)` is the reader every card asking about one already
+    goes through. The chosen aegis is read off the build leg, which the
+    measurement above settled.
+
+    **The aegis bodies' own limit is theirs and is recorded there**, not
+    here: each closes over one `victim`, so a swordmage holding two of
+    these marks still has one aegis target. That is a fact about those
+    three rows rather than an unfinished clause of this one, and this row
+    does what its card prints."""
+    aegis = next(
+        (ref for ref, leg in SWORDMAGE_F1_OPTIONS.items() if c.build(leg)),
+        "",
+    )
+    c.mark(until=When.SAVE_ENDS, via=aegis)
 
 
 @power(

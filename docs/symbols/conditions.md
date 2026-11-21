@@ -60,7 +60,7 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Tether a creature: it may not get further than `radius` from
 - `c.link(self, a: 'Square', b: 'Square', *, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None) -> 'Effect | None'`
   - Two squares a mover crosses between in one step.
-- `c.mark(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, by: 'int | None' = None, lapses: 'bool' = False, or_adjacent: 'bool' = False, keeps: 'bool' = False) -> 'Effect | None'`
+- `c.mark(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, by: 'int | None' = None, lapses: 'bool' = False, or_adjacent: 'bool' = False, keeps: 'bool' = False, via: 'str' = '') -> 'Effect | None'`
   - Mark the target -- for you, or for somebody else.
 - `c.move_grabbed(self, *, on: 'int | None' = None) -> 'bool'`
   - Drag a creature you have hold of. A Strength attack vs Fortitude.

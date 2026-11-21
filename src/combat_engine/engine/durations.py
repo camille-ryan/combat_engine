@@ -335,6 +335,26 @@ class Effect:
     #: inside the repr would change every save label in the log and in
     #: the save format. The flag keeps it out of both. `#1278`.
     by: str = field(default="", repr=False)
+    #: The row this effect **counts as**, where `by` is the row that laid
+    #: it. Empty on every effect that is its own doing, which is almost
+    #: all of them -- and then `by` answers both questions, as it always
+    #: has.
+    #:
+    #: **`i457p1` is the row this exists for and `Cast.marked`'s own
+    #: docstring named it**: *"whoever un-blocks `i457p1` wants a `via` of
+    #: its own on `Effect`, not this shortcut"*. Its card lays a mark that
+    #: counts as the swordmage's chosen aegis, so the laying row and the
+    #: row the mark is *of* are two different refs.
+    #:
+    #: **Hijacking `by` is the shortcut that note refuses, for a measured
+    #: reason**: `durations.keywords_of` reads `by` for the effect's
+    #: keywords, so a mark whose `by` was rewritten to the aegis would
+    #: start answering the aegis's keyword gates too.
+    #:
+    #: `repr=False` for `by`'s reason, which matters here as much:
+    #: `str(effect)` is what `SavingThrow.against` carries, so a field
+    #: inside the repr would move every save label in the log. `#1278`.
+    via: str = field(default="", repr=False)
     #: The weapon the blow that laid this came through, by ref; `""` for
     #: an effect that came through none.
     weapon: str = field(default="", repr=False)
@@ -502,6 +522,7 @@ class Effects:
         retarget: Any = None,
         reshape_optional: bool = False,
         by: str = "",
+        via: str = "",
         weapon: str = "",
         saver: int = 0,
     ) -> Effect:
@@ -632,6 +653,11 @@ class Effects:
         # today's behaviour and only the six in `cast.py` that label by
         # content need to say anything.
         eff.by = by or (label.split()[0] if label else "")
+        # **Left empty unless a caller said otherwise**, which is the whole
+        # of the default: `_install_state` falls back to `by`, so every
+        # effect that is its own doing behaves exactly as before and only
+        # a row that means two different refs has to say so.
+        eff.via = via
         # **Which row is taking credit for this, when that is not the row that
         # laid it.** A feat's clause written into the power it names is laid by
         # the *power*, so `by` and the label both say the power -- and the feat
@@ -784,8 +810,13 @@ class Effects:
             # at `apply`. Passing it here is what gives every mark its
             # provenance for free -- the alternative was widening the
             # three-tuple above and moving ten content sites. #875.
+            # **`via` first, then `by`.** They are the same string on
+            # every effect that is its own doing, and `Effect.via` is
+            # where they differ -- a mark that counts as another row.
             self.world.relations.set(
-                kind, s, t, via=getattr(eff, "by", "") or "",
+                kind, s, t,
+                via=(getattr(eff, "via", "") or getattr(eff, "by", "")
+                     or ""),
             )
 
     def _install_conditions(self, eff: Effect, source: int, duration: str) -> None:
