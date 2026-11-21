@@ -131,15 +131,6 @@ from combat_engine.engine.triggers import familiar_dropped
 
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
-#: Nothing raises the use allowance a grant laid down. `c.borrow_row`
-#: hands `rt:r6-t3`'s pick over with `uses=1`, and that budget lives in
-#: `c.grant_row`'s own closure counter, which forbids the ref with
-#: `ran_out=True` the moment the count is reached. Measured on a board for
-#: `f2442`: after one use the ref sits in `Powers.forbidden` and
-#: `Powers.spent_out`; `c.restore_use` returns False and `c.regain_power`
-#: returns `""`, because an at-will is never counted in `Powers.used` at
-#: all, and neither verb touches the forbid.
-GRANT_USES = ("c.raise_grant(ref, uses)",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
 #: "You can swap a power you know for this one." The card is handed over;
@@ -2073,28 +2064,33 @@ def f2408(c: Cast) -> None:
 
 
 @power("f2442", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=GRANT_USES)
+       reach=PERSONAL, target=SELF, implemented_in=("rt:r6-t3",))
 def f2442(c: Cast) -> None:
     """A second use of the card `rt:r6-t3` hands over, when it is martial.
 
-    **Re-pointed, and the premise that was here is spent.** This said
-    nothing records the choice. #914 made the trait's printed fork real, so
-    it borrows and `c.borrow_row` stores the pick: `c.stored_row` names the
-    row, and `Keyword.MARTIAL in get(pick).keywords` answers the card's
-    condition. Both halves of the *gate* are writable.
+    **Written, in the trait's body, which is `#550`.** Two re-pointings got
+    here and both are worth keeping, because each was a different wrong
+    answer about the same card.
 
-    What is missing is the benefit. "Twice per encounter" is the borrowed
-    row's allowance going from one to two, and the allowance is not a
-    refundable use: the trait borrows with `uses=1`, `c.grant_row` counts
-    off `PowerUsed` in a closure, and at the cap it lays
-    `c.forbid(ran_out=True)`. A refund cannot reach that -- see
-    `GRANT_USES` for the board measurement -- and the pick is an at-will,
-    so there is no spent use to hand back in the first place.
+    The first premise was that nothing records the choice. #914 made the
+    trait's printed fork real, so it borrows, and `c.borrow_row` stores the
+    pick -- so the *gate* was writable before the benefit was.
 
-    Ending that forbid from here would mean finding another row's effect
-    by parsing its label, which is exactly the read `c.stored_row` was
-    built to replace. So the gap is a verb that raises a grant's
-    allowance, and it is one gap rather than two."""
+    The second was that the benefit needed a refund. It does not: *"twice
+    per encounter"* is the borrowed row's allowance going from one to two,
+    and `c.grant_row` held both the cap and the count in a closure, so
+    there was nothing to raise and no spent use to hand back either -- the
+    pick is an at-will. `Powers.granted_uses` is the cap's home now and
+    `c.raise_grant` is the write.
+
+    **And the clause belongs to the trait rather than to this row**, for
+    two reasons that are both about reach. The condition is about the
+    pick, which does not exist until `c.borrow_row` has returned it; and
+    the allowance being raised is the trait's own grant, which from here
+    could only be found by parsing its label -- the read `c.stored_row`
+    exists to replace. So this row stays declared as the pointer and
+    `with c.credit("f2442")` in the trait is what makes the raise this
+    feat's doing rather than the trait's."""
 
 
 @power("f2450", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

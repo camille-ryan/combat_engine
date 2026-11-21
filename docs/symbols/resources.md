@@ -75,6 +75,8 @@ Things a creature spends, and the budget it spends them from.
   - "You gain one more use of `p12668` per encounter." Returns the
 - `c.per_day_left(self, ref: 'str', limit: 'int', *, on: 'int | None' = None) -> 'int'`
   - How many of a daily allowance are left today, for this creature.
+- `c.raise_grant(self, ref: 'str', uses: 'int' = 1, *, on: 'int | None' = None) -> 'int'`
+  - Give a granted row **more** uses than the grant allowed.
 - `c.recharge_bonus(self, n: 'int' = 0, *, lower: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Move somebody's recharge roll. *"A +1 bonus to any recharge
 - `c.regain_power(self, ref: 'str' = '', *, daily: 'bool' = False, on: 'int | None' = None) -> 'str'`

@@ -601,6 +601,15 @@ def rt_r6_t3(c: Cast) -> None:
     the row stands down for a character `RaceLine.granted` dealt the
     power: which one arrived is the record of the choice, the same way
     the compendium's own feats gate on it.
+
+    **`f2442`'s clause is here**, which is `#550`: *"if the power you
+    gained from your rt:r6-t3 racial trait is a martial power, you can use
+    it twice per encounter"*. It has to be here and not in the feat's own
+    body, because the condition is about the **pick** -- which only exists
+    once `c.borrow_row` has made it and returned it -- and because the
+    thing it raises is this row's allowance. From the feat's side the only
+    ways in were to re-grant, which `c.grant_row` refuses for a ref
+    already known, or to find this grant's refusal by parsing its label.
     """
     if _holds(c, "p13689"):
         return
@@ -614,7 +623,11 @@ def rt_r6_t3(c: Cast) -> None:
         and p.usage is AT_WILL and p.attack is not None
         and not ref.startswith("cf:")
     ]
-    c.borrow_row(among=among, uses=1)
+    taken = c.borrow_row(among=among, uses=1)
+    if (taken and c.feat("f2442")
+            and Keyword.MARTIAL in c.keywords_of(REGISTRY[taken])):
+        with c.credit("f2442"):
+            c.raise_grant(taken, 1)
 
 
 @power("rt:r6-t1", level=0, cls="", usage=AT_WILL,

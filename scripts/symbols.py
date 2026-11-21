@@ -745,6 +745,16 @@ CATEGORIES: dict[str, dict] = {
                 # always. Seventeen class-feature rows print the second
                 # and carried a marker for it. #642.
                 "more_uses",
+                # **Beside `more_uses` because it is the one verb somebody
+                # looking for `more_uses` will reach for by mistake, and
+                # the other way round.** Two allowances with two readers:
+                # `more_uses` raises a row's own printed ceiling, read in
+                # `dsl.usable`; this raises the allowance a *grant* laid
+                # over it, counted in `Powers.granted_uses`. A borrowed
+                # at-will has no printed ceiling to raise, so `more_uses`
+                # on one returns a bigger number and changes nothing --
+                # measured, and `drivers.raised_grant_allowance` holds it.
+                "raise_grant",
             ]),
             # `c.once_per_board` is here beside `payment_window` because it
             # answers the same kind of question -- how often may this pay --

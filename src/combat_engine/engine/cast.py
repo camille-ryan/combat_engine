@@ -8844,22 +8844,35 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None or ref in known.known:
             return None
+        def _drop() -> None:
+            if ref in known.known:
+                known.known.remove(ref)
+            known.granted_uses.pop(ref, None)
+            known.granted_spent.pop(ref, None)
+
         effect = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} grants {ref}",
-            on_end=[lambda: known.known.remove(ref) if ref in known.known else None],
+            on_end=[_drop],
             by=self.ref,
         )
         if effect is None:
             return None
         known.known.append(ref)
         if uses > 0:
-            spent = [0]
+            # **The cap and the count live on `Powers`, not in this
+            # closure.** Both numbers were right here and unreachable, so
+            # `f2442` -- a second use of whatever `rt:r6-t3` handed over --
+            # had no way in. `c.raise_grant` is the write; the closure
+            # reads the dict every time so a raise mid-fight is seen by a
+            # watch armed before it. #820-adjacent.
+            known.granted_uses[ref] = uses
+            known.granted_spent.setdefault(ref, 0)
 
             def count(ev: Any) -> None:
                 if getattr(ev, "actor", None) != who or getattr(ev, "power", "") != ref:
                     return
-                spent[0] += 1
-                if spent[0] >= uses:
+                known.granted_spent[ref] = known.granted_spent.get(ref, 0) + 1
+                if known.granted_spent[ref] >= known.granted_uses.get(ref, uses):
                     # `ran_out=True`: this is the grant's allowance going,
                     # not a prohibition, and `reentrant` is promised a way
                     # past it. #820.
@@ -8867,6 +8880,60 @@ class Cast:
 
             self.watch(PowerUsed, count, until=until, on=who)
         return effect
+
+    def raise_grant(self, ref: str, uses: int = 1, *,
+                    on: int | None = None) -> int:
+        """Give a granted row **more** uses than the grant allowed.
+
+        `c.grant_row(uses=)` lays one card's printed cadence over another
+        card's -- *"you can use that power once per encounter"* over an
+        at-will -- and a few feats then add to that allowance rather than
+        to the row. `f2442` is the printed case: a second use of whatever
+        `rt:r6-t3` handed over, when the row handed over is martial.
+
+        Returns the new cap, or 0 if this creature holds no *counted*
+        grant of `ref`. Zero is the honest answer for a grant made with
+        `uses=0`, which deliberately left the row its own cadence -- there
+        is no allowance to raise, and raising one would silently narrow a
+        row from at-will to twice a fight.
+
+        **`c.more_uses` is the near-miss and it is not this**, measured
+        rather than argued. That verb raises `Power.uses`' ceiling through
+        `Powers.extra_uses`, read at the one site in `dsl.usable` that
+        compares a row's **printed** allowance against what has been
+        spent. A borrowed row is an at-will, so that site never limits it
+        and the grant's own counter is what does. On the board:
+        `c.more_uses` returns 2 and the row is still refused after one
+        use, with the ref sitting in `Powers.spent_out`; this returns 2
+        and the row is usable. Two allowances, two readers -- a card
+        raising the row's own cadence still wants `c.more_uses`.
+
+        **It lifts a `ran_out` refusal it has made room past**, which is
+        the case a bare `+= uses` would get wrong: the holder may have
+        spent the whole allowance already, and a cap raised underneath a
+        standing refusal buys nothing.
+
+        It lifts it the way the refusal's own `undo` does -- discarding the
+        ref from `forbidden` and `spent_out` -- rather than ending the
+        effect, and that is deliberate. There is no handle to end: the
+        effect is laid inside `grant_row`'s watch and finding it again
+        means matching its label, which is the read `Cast.stored_row`
+        exists to replace. Leaving it standing is safe because both writes
+        are a `discard`, so its eventual end is a no-op, and because the
+        counter lays a **fresh** refusal if the new allowance runs out too.
+        """
+        from .components import Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, Powers)
+        if known is None or ref not in known.granted_uses:
+            return 0
+        known.granted_uses[ref] += uses
+        cap = known.granted_uses[ref]
+        if known.granted_spent.get(ref, 0) < cap:
+            known.forbidden.discard(ref)
+            known.spent_out.discard(ref)
+        return cap
 
     def borrow_row(
         self,

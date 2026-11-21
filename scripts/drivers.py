@@ -84387,6 +84387,211 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def raised_grant_allowance(out: Result) -> None:
+    """"If the power you gained ... is a martial power, use it twice."
+
+    `rt:r6-t3` hands over a 1st-level at-will from another class and lays
+    the printed *"as an encounter power"* over it with
+    `c.grant_row(uses=1)`. `f2442` makes that two when the row handed over
+    is martial -- and the allowance it has to raise lived in
+    `grant_row`'s own closure, so there was nothing to reach.
+
+    `Powers.granted_uses` and `Powers.granted_spent` are the cap and the
+    count now, and the counter reads the dict on every `PowerUsed` rather
+    than closing over the number, which is what lets a raise land after
+    the watch was armed.
+
+    **Driven through the trait's body, not through `c.raise_grant`.** The
+    verb on its own would stay green with `f2442`'s clause deleted; the
+    trait is where `#550` put the clause and so is where the card is
+    either honoured or not.
+
+    The pick is forced through `world.decide`, because the clause is
+    conditional on *which* row was taken and the default decider takes
+    `options[0]` -- which is not martial, so the paying case would never
+    be posed. Both arms of the printed condition are asserted and the pool
+    is asserted to hold both kinds, so an arm going unreachable is a
+    finding here rather than a vacuous pass.
+
+    What the last pair proves, and the number alone does not: a raised cap
+    means a **second use is actually allowed**. The allowance is spent
+    against `dsl.usable`, which is what refuses the row in play.
+    """
+    import audit as A
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.types import Keyword
+
+    TRAIT, FEAT = "rt:r6-t3", "f2442"
+
+    def candidates(martial: bool) -> list[str]:
+        """The pool the trait really offers, on one side of the condition.
+
+        **Recorded off the trait rather than rebuilt here.** A rebuilt
+        copy dropped the printed *"from a class different from yours"*
+        narrowing, so it named refs the trait's own pool excludes -- the
+        forced decider then fell through to `pool[0]` and three
+        assertions were quietly measuring the default pick. Recording it
+        cannot drift from the row.
+        """
+        world, me, _start = A.board(TRAIT, 1)
+        seen: list[str] = []
+
+        def record(who: int, kind: str, pool: list, what: str = ""):  # noqa: ANN202
+            seen.extend(pool)
+            return pool[0]
+
+        world.decider = record
+        dsl.REGISTRY[TRAIT].body(
+            Cast(world=world, me=me, ref=TRAIT, target=me))
+        return [ref for ref in seen
+                if (Keyword.MARTIAL in dsl.REGISTRY[ref].keywords) is martial]
+
+    def playable(martial: bool) -> str:
+        """The first candidate of that kind this board can actually use.
+
+        **Not simply the first candidate**, and the difference is what the
+        `usable` half of this rule rests on. A granted row can be refused
+        for reasons that have nothing to do with an allowance -- the first
+        martial candidate here is refused for *"needs a light blade"*
+        before any use at all -- so asserting "still usable after one use"
+        against it measured the character's hands, not the cap.
+
+        Tested by granting it on a throwaway board, because `dsl.usable`
+        refuses a row the creature does not know and the pool is by
+        definition rows it does not.
+        """
+        for ref in candidates(martial):
+            world, me, _start = A.board(TRAIT, 1)
+            Cast(world=world, me=me, ref="drivers", target=me).grant_row(
+                ref, on=me, uses=1)
+            if dsl.usable(world, me, dsl.REGISTRY[ref])[0]:
+                return ref
+        return ""
+
+    PICK = {True: playable(True), False: playable(False)}
+
+    def posed(*, feat: bool, martial: bool) -> tuple[object, int, str]:
+        """Run the trait with the feat held or not and the pick forced.
+
+        Returns the world, the character, and the ref taken.
+
+        **The ref is the entry the body ADDED**, not the first key in
+        `granted_uses`. `audit.board` arms traits, so `rt:r6-t3` has
+        already borrowed once by the time a rule looks, and reading
+        `next(iter(...))` handed back the *arming* run's pick -- which the
+        forced decider never saw, so the martial cases read as non-martial
+        and the clause looked unwritten. The premise assertion below is
+        what caught it.
+        """
+        world, me, _start = A.board(TRAIT, 1)
+        known = world.get(me, Powers)
+        if feat and FEAT not in known.known:
+            known.known.append(FEAT)
+        before = set(known.granted_uses)
+
+        def forced(who: int, kind: str, pool: list, what: str = ""):  # noqa: ANN202
+            want = PICK[martial]
+            return want if want in pool else pool[0]
+
+        world.decider = forced
+        dsl.REGISTRY[TRAIT].body(
+            Cast(world=world, me=me, ref=TRAIT, target=me))
+        fresh = sorted(set(known.granted_uses) - before)
+        return world, me, (fresh[0] if fresh else "")
+
+    # -- both arms are reachable, so neither case below is vacuous --------
+    out.that(bool(PICK[True]) and bool(PICK[False]),
+             "the trait's pool holds a playable candidate on BOTH sides of"
+             " the printed condition -- so the paying arm and the refusing"
+             " arm are each about the clause rather than about an empty"
+             " set or a row the board cannot swing",
+             f"martial={PICK[True]!r} other={PICK[False]!r}")
+
+    # -- the printed condition, both ways ---------------------------------
+    for feat, martial, want in (
+        (True, True, 2),
+        (True, False, 1),
+        (False, True, 1),
+        (False, False, 1),
+    ):
+        world, me, taken = posed(feat=feat, martial=martial)
+        known = world.get(me, Powers)
+        cap = known.granted_uses.get(taken, 0)
+        is_martial = bool(taken) and Keyword.MARTIAL in dsl.REGISTRY[taken].keywords
+        out.that(bool(taken) and is_martial is martial,
+                 f"feat={feat} martial={martial}: the board posed what it"
+                 " meant to -- the forced pick really is of that kind,"
+                 " which is the premise the cap assertion rests on",
+                 f"took {taken!r}, martial={is_martial}")
+        out.that(cap == want,
+                 f"feat={feat} martial={martial}: the allowance is {want}"
+                 " -- two only with the feat held AND a martial pick,"
+                 " which is both halves of the printed sentence",
+                 f"cap={cap}")
+
+    # -- and a raised cap means a second use is allowed, not just counted --
+    for feat, want_second in ((True, True), (False, False)):
+        world, me, taken = posed(feat=feat, martial=True)
+        known = world.get(me, Powers)
+        world.bus.emit(PowerUsed(actor=me, power=taken, targets=()))
+        after_one = dsl.usable(world, me, dsl.REGISTRY[taken])[0]
+        out.that(after_one is want_second,
+                 f"feat={feat}: after ONE use the borrowed row is"
+                 f" {'still' if want_second else 'no longer'} usable --"
+                 " the cap is spent against `dsl.usable`, which is what"
+                 " refuses it in play",
+                 f"usable={after_one}")
+        world.bus.emit(PowerUsed(actor=me, power=taken, targets=()))
+        after_two = dsl.usable(world, me, dsl.REGISTRY[taken])[0]
+        out.that(not after_two,
+                 f"feat={feat}: and after TWO it is refused either way --"
+                 " the feat raises the allowance, it does not remove it",
+                 f"usable={after_two} spent="
+                 f"{known.granted_spent.get(taken)}")
+
+    # -- `c.more_uses` is the near-miss, and it does NOT do this ----------
+    #
+    # Asserted rather than written in a docstring, because "use the other
+    # verb" is the cheapest wrong answer available here and nothing would
+    # have caught it. `more_uses` raises `Power.uses`' ceiling, read at
+    # one site in `dsl.usable`; a borrowed at-will never reaches that
+    # site, so the number goes up and the refusal stands.
+    for verb, want_usable in (("more_uses", False), ("raise_grant", True)):
+        world, me, taken = posed(feat=False, martial=True)
+        known = world.get(me, Powers)
+        c = Cast(world=world, me=me, ref="drivers", target=me)
+        got = getattr(c, verb)(taken, 1)
+        world.bus.emit(PowerUsed(actor=me, power=taken, targets=()))
+        live = dsl.usable(world, me, dsl.REGISTRY[taken])[0]
+        out.that(got == 2,
+                 f"c.{verb} reports an allowance of 2 -- both verbs answer"
+                 " the question as asked, which is why one is reached for"
+                 " by mistake",
+                 f"{got}")
+        out.that(live is want_usable,
+                 f"c.{verb}: and after one use the row is"
+                 f" {'usable' if want_usable else 'STILL REFUSED'} --"
+                 " `more_uses` raises the row's own printed ceiling, which"
+                 " a borrowed at-will never consults; `raise_grant`"
+                 " raises the grant's",
+                 f"usable={live} spent_out={taken in known.spent_out}")
+
+    # -- the verb declines what it cannot raise ---------------------------
+    world, me, taken = posed(feat=True, martial=True)
+    c = Cast(world=world, me=me, ref="drivers", target=me)
+    out.that(c.raise_grant("p99999", 1) == 0,
+             "`c.raise_grant` returns 0 for a ref this creature holds no"
+             " counted grant of, rather than minting an allowance for a"
+             " row it was never given",
+             f"{c.raise_grant('p99999', 1)}")
+    out.that("p99999" not in world.get(me, Powers).granted_uses,
+             "and it writes nothing for it",
+             f"{sorted(world.get(me, Powers).granted_uses)}")
+
+
 def mark_counts_as_the_aegis(out: Result) -> None:
     """"Treat each mark as if you applied it with your chosen aegis."
 
@@ -117739,6 +117944,8 @@ DRIVERS = {
                            "a mark records which row laid it"),
     "mark_counts_as_the_aegis": (mark_counts_as_the_aegis,
                                  "a mark can count as another row"),
+    "raised_grant_allowance": (raised_grant_allowance,
+                               "a feat adds a use to a granted row"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

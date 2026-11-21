@@ -1581,6 +1581,33 @@ class Powers:
     #: they come"*. Empty or absent both mean none left, and the row's
     #: watches are a no-op then.
     kept_rolls: dict[str, list[int]] = field(default_factory=dict)
+    #: **How large a grant's allowance is, and how much of it has gone**,
+    #: both keyed on the **granted** row's ref.
+    #:
+    #: `Cast.grant_row(uses=)` is the printed cadence of the card doing the
+    #: granting laid over a row with a cadence of its own -- *"you can use
+    #: that power once per encounter"* over an at-will. It held both of
+    #: these numbers in a closure: `uses` was the parameter and `spent` a
+    #: one-element list, so the allowance was correct and **unreachable**.
+    #:
+    #: `f2442` is the card that wanted to reach it. It adds a *second* use
+    #: to the row `rt:r6-t3` hands over, when that row is martial, and the
+    #: only ways in were to re-grant (refused -- `grant_row` returns None
+    #: for a ref already known) or to find the other row's `forbid` by
+    #: parsing its label, which is the read `Cast.stored_row` exists to
+    #: replace. `Cast.raise_grant` is the write and it needs the cap to be
+    #: a fact about the creature, which is what it is.
+    #:
+    #: Here rather than in a rest's bookkeeping because the lifetime is the
+    #: **grant's**: `grant_row`'s own `on_end` drops both entries beside the
+    #: ref it drops from `known`, so a grant that lapses mid-fight takes its
+    #: allowance with it and no rest has to learn a new field.
+    #:
+    #: Absent means *no* allowance rather than none left -- `uses=0` leaves
+    #: the granted row its own printed cadence, which is the common case and
+    #: writes nothing here.
+    granted_uses: dict[str, int] = field(default_factory=dict)
+    granted_spent: dict[str, int] = field(default_factory=dict)
     #: Rows this creature uses as **daily** powers whatever their card
     #: declares, by ref.
     #:
