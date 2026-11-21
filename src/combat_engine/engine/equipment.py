@@ -31,6 +31,7 @@ picked up off the floor -- exactly as a monster's hit points are read in
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
 from .ammunition import FIRES
@@ -186,12 +187,46 @@ def _defence_mods(world, eid: int, magic: Magic) -> None:  # noqa: ANN001
         )
 
 
+def _may_reroll_a_crit_die(world, eid: int) -> tuple[int, str]:  # noqa: ANN001
+    """How many of a critical's extra dice this creature may reroll, and
+    which row grants it.
+
+    The hold is `c.reroll_ones(crit_dice=True)`'s, so the pair of keys is
+    that verb's own: `reroll_damage_pick:crit` carries the threshold and
+    `reroll_damage_pick:crit#n` the count. Only the `pick` shape is read.
+    The loop shape -- reroll *until* the die is not low -- is refused
+    against `ANY_FACE` by `_rolled_above` for the reason that verb gives,
+    and a crit rider is the no-threshold card every time.
+
+    Read off `Mods` directly rather than through `resolve._mods`, which is
+    the usual reader: `resolve` imports this module, so reaching back for
+    it would close a cycle.
+
+    The granting ref comes back with it because the announcement needs a
+    `by` -- a `Rerolled` nobody can attribute is a row that audits SILENT
+    while working, which is `#1183`'s shape.
+    """
+    mods = world.get(eid, Mods)
+    if mods is None:
+        return 0, ""
+    count, by = 0, ""
+    for mod in mods.items:
+        if mod.what == "reroll_damage_pick:crit#n" and mod.value > count:
+            count, by = mod.value, (mod.label or "")
+    return count, by
+
+
 def _crit_rider(world, eid: int, magic: Magic) -> None:  # noqa: ANN001
     """"Critical: +1d6 damage per plus", which 734 heroic items print.
 
     Rolled rather than fixed, and multiplied by the plus, which is what
     "per plus" says. `Mod.roll` is called once per read, which is once per
     critical hit.
+
+    **The individual faces are kept, not just the total**, because
+    `c.reroll_crit_die` swaps one of them and this is the only place they
+    exist. `Roll.bonus` is carried separately for the same reason: a crit
+    rider printed as `1d6+2` would lose its `+2` to a faces-only sum.
     """
     if not magic.crit or not magic.plus:
         return
@@ -201,7 +236,25 @@ def _crit_rider(world, eid: int, magic: Magic) -> None:  # noqa: ANN001
     dice, plus = magic.crit, magic.plus
 
     def roll() -> int:
-        return sum(world.rng.roll(dice).total for _ in range(plus))
+        rolled = [world.rng.roll(dice) for _ in range(plus)]
+        faces = [f for r in rolled for f in r.dice]
+        flat = sum(r.bonus for r in rolled)
+        allow, by = _may_reroll_a_crit_die(world, eid)
+        size = re.search(r"d(\d+)", str(dice))
+        if allow and faces and size:
+            from .events import Rerolled
+
+            for _ in range(min(allow, len(faces))):
+                # The lowest first: the holder chooses which die, and no
+                # printed card makes swapping a high one worth doing.
+                at = faces.index(min(faces))
+                old = faces[at]
+                faces[at] = world.rng.roll(f"1d{size.group(1)}").dice[0]
+                said = Rerolled(actor=eid, roll="crit_damage", by=by,
+                                old=old, new=faces[at])
+                said.replaced = True
+                world.bus.emit(said)
+        return sum(faces) + flat
 
     mods.items.append(
         Mod(what="crit_damage", value=0, kind="untyped", roll=roll,

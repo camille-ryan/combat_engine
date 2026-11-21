@@ -1522,7 +1522,7 @@ def i1761x1(c: Cast) -> None:
     target=SELF,
     trigger="you make a damage roll and dislike the result",
     on=Trigger(DamageRolled, by_me, "you roll damage"),
-    dropped=("c.reroll_crit_die()",),
+    dropped=("c.reroll_faces(crit_dice=)",),
 )
 def i1761p1(c: Cast) -> None:
     """Rerolls the weapon dice of a roll already made, and keeps the second.
@@ -1574,11 +1574,30 @@ def i1761p1(c: Cast) -> None:
     number and long before anything is announced. `Mods.split` returns
     `dict[types, int]` for the same reason.
 
-    So this joins `i2299x1` on `c.reroll_crit_die()` rather than minting a
-    second symbol for one gap: two rows, one printed sentence, one place
-    the dice go missing. That row's own note has the rest of the
-    measurement, including why a `when=` gate on the crit would be
-    unreachable by construction.
+    **It no longer shares `i2299x1`'s symbol, and the reason is the one
+    thing the two cards do not have in common.** That row is now written:
+    `c.reroll_ones(crit_dice=True)` lays a hold that
+    `equipment._crit_rider` reads, and the rider keeps its faces instead
+    of summing them away. So the dice are reachable after all, and the
+    paragraph above is out of date about *where* they go.
+
+    What that does not do is serve **this** card. The hold is read at the
+    moment the rider rolls, and it rerolls unconditionally; this is a
+    **daily**, spent at the holder's choice *after* seeing a result it
+    dislikes. A standing hold would reroll a crit die in every fight and
+    spend nothing, which is a strictly better card than the printed one,
+    and the daily would never be consumed.
+
+    So the gap here is the **reactive** door, not the dice:
+    `c.reroll_faces` is what this row already calls for its `[W]` half,
+    and the crit rider's faces do not reach it -- they live inside a
+    `Mod.roll()` closure that runs during the modifier pass, with nothing
+    announced and nothing to rewrite afterwards. `c.reroll_faces
+    (crit_dice=)` is that one gap, named for the verb this row actually
+    uses rather than for a hold that cannot be spent.
+
+    `i2299x1`'s note has the rest of the measurement, including why a
+    `when=` gate on the crit is unreachable by construction.
 
     `pick=EVERY_DIE` is "as many as you like", and `_rolled_pick`'s floor
     means a die already at its break-even is left alone rather than thrown

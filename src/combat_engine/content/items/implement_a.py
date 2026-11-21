@@ -969,38 +969,34 @@ def i2298x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.reroll_crit_die()",),
 )
 def i2299x1(c: Cast) -> None:
-    """The critical rider is a column applied by `engine/equipment.py`, and
-    the marker is kept -- but the near miss it named is the wrong one and
-    the right verb already exists.
+    """"Reroll one of the extra damage dice granted by a critical hit. You
+    must use the second result, even if it's lower."
 
-    **`c.reroll_ones(below=ANY_FACE, pick=1)` is this printed sentence
-    exactly.** Its own docstring says so: `below=ANY_FACE` is "the card
-    that prints no threshold at all -- reroll as many of the damage dice
-    as you like, but you must use the second result", and `pick=1` is "one
-    die, one reroll, and the new face stands even if it is another 1". So
-    `c.reroll_damage` keeping the higher of two whole rolls was never the
-    nearest thing in the tree, and nothing has to be built to keep a
-    second result.
+    **The marker's own analysis was right and is what this is written
+    from.** It had worked out that `c.reroll_ones(below=ANY_FACE, pick=1)`
+    is this printed sentence exactly -- `below=ANY_FACE` is the card that
+    prints no threshold, `pick=1` is one die whose second result stands
+    even if it is lower -- and that the only thing missing was the dice:
+    the rider is a `Mod` on `crit_damage` whose faces never left
+    `equipment._crit_rider`'s closure, and every reroll hold is read in
+    `Cast._roll_damage_dice`, which the rider does not go through.
 
-    **What is missing is the dice.** The rider is a `Mod` on
-    `crit_damage`, and `equipment._crit_rider`'s `roll()` closure sums
-    `world.rng.roll(dice).total` per plus and hands back an `int`. The
-    faces never leave the closure, `resolve.deal_damage` adds the number
-    in its crit branch, and every reroll hold in this engine is read in
-    `Cast._roll_damage_dice` -- which the rider does not go through. There
-    is no second result to keep because there is no first one left.
+    So `crit_dice=True` is a third narrowing on that verb rather than a
+    verb of its own, and `_crit_rider` keeps its faces and reads the hold.
+    Nothing here needed a new sentence; it needed the rider to look.
 
-    **And a `when=` gate on the crit would be a gate that can never
-    fire.** `_roll_damage_dice` opens with `_take_maximum()`, which a
-    critical hit satisfies -- a crit maximises the power's own faces -- and
-    returns before any reroll hold is read. So a hold narrowed to
-    `ctx["crit"]` is unreachable by construction on the one roll it is
-    about. The high-crit `[W]` dice *do* go through `_roll_damage`, but
-    `Cast._high_crit_dice` returns 0 without the weapon keyword and this
-    is an implement, so that is not this column either."""
+    **`on=c.me` because the wearer is who holds it**, and this is a
+    `target=SELF` property: the rider being rerolled is the one on this
+    rod's own critical, paid when its wearer scores one.
+
+    The marker's second paragraph is still true and is why no `when=` gate
+    appears here: `_roll_damage_dice` opens with `_take_maximum()`, which
+    a critical satisfies, and returns before any hold is read -- so a hold
+    narrowed to `ctx["crit"]` is unreachable on the one roll it is about.
+    The narrowing had to be on the hold's key, not on a predicate."""
+    c.reroll_ones(below=ANY_FACE, pick=1, crit_dice=True, on=c.me)
 
 
 @power(

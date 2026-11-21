@@ -1837,6 +1837,80 @@ def reroll_low(out: Result) -> None:
 
 ############################################################
 
+def crit_die_reroll(out: Result) -> None:
+    """"Reroll one of the extra damage dice granted by a critical hit. You
+    must use the second result, even if it's lower." `i2299x1`.
+
+    **The dice this reaches are not a damage roll the creature makes.**
+    The rider 734 heroic items print is a `Mod` on `crit_damage` laid by
+    `equipment._crit_rider`, and it never passes through
+    `_roll_damage_dice` where every other reroll hold is read -- so
+    `crit_dice=True` is a third narrowing beside `ref` and `keyword`, and
+    the rider keeps its faces instead of summing them away.
+
+    The negative control is the half worth having: an **unqualified**
+    `reroll_ones(pick=1)` must not reach them, or the card becomes
+    "reroll a die of any damage roll", which is a stronger sentence than
+    the one printed. Planted both ways -- blinding the reader reds four of
+    these, and matching the unqualified hold reds exactly the control.
+    """
+    from combat_engine.engine import equipment
+    from combat_engine.engine.cast import ANY_FACE, Cast
+    from combat_engine.engine.components import Magic, Mods
+    from combat_engine.engine.events import Rerolled
+
+    def rider(arm: str) -> tuple[list[Rerolled], list[int]]:
+        world, me, _ = _board()
+        c = Cast(world=world, me=me, ref="drivers:crit")
+        if arm == "crit":
+            c.reroll_ones(below=ANY_FACE, pick=1, crit_dice=True, on=me)
+        elif arm == "plain":
+            c.reroll_ones(below=ANY_FACE, pick=1, on=me)
+        equipment._crit_rider(world, me, Magic(ref="i2299", crit="1d6", plus=3))
+        mods = world.get(me, Mods)
+        # **Mine by label.** A dealt character already wears items of its
+        # own, so the board arrives carrying other `crit_damage` mods.
+        mine = [m for m in mods.items if m.what == "crit_damage" and m.roll
+                and "i2299" in (m.label or "")]
+        if len(mine) != 1:
+            return [], []
+        said: list[Rerolled] = []
+        world.bus.on(Rerolled, lambda ev: said.append(ev))
+        return said, [mine[0].roll() for _ in range(SAMPLE)]
+
+    quiet, plain_totals = rider("none")
+    out.that(plain_totals and min(plain_totals) >= 3 and max(plain_totals) <= 18,
+             "the premise: 1d6 per plus over three plusses rolls 3..18")
+    out.that(not quiet, "and an unheld rider announces nothing")
+
+    said, totals = rider("crit")
+    out.that(len(said) == len(totals) and bool(said),
+             "a held rider announces one reroll per critical")
+    out.that(all(e.roll == "crit_damage" for e in said),
+             "each names the crit damage roll")
+    out.that(bool(said) and all(e.by == "drivers:crit" for e in said),
+             "and credits the row that granted it, not the item -- a "
+             "`Rerolled` nobody can attribute is a working row that "
+             "audits SILENT")
+    base = sum(plain_totals) / len(plain_totals) if plain_totals else 0
+    held = sum(totals) / len(totals) if totals else 0
+    out.that(held > base,
+             "rerolling the lowest raises the mean", f"{held:.2f} vs {base:.2f}")
+    out.that(any(e.new < e.old for e in said),
+             "and the second result stands even when it is WORSE, which is "
+             "what keeps this out of the four holds read with a `max`")
+
+    said_plain, totals_plain = rider("plain")
+    out.that(not said_plain,
+             "THE CONTROL: an unqualified reroll_ones(pick=1) does not "
+             "reach the crit rider's dice")
+    mean_plain = sum(totals_plain) / len(totals_plain) if totals_plain else 0
+    out.that(abs(mean_plain - base) < 1.0,
+             "and leaves its mean where it was", f"{mean_plain:.2f} vs {base:.2f}")
+
+
+############################################################
+
 def counts_as(out: Result) -> None:
     """"You can use a warhammer with any power that requires a light blade."
 
@@ -114400,6 +114474,9 @@ DRIVERS = {
                 "taking a weapon up, and what it costs"),
     "reroll_low": (reroll_low,
                    "each damage die that shows a 1, rolled again"),
+    "crit_die_reroll": (crit_die_reroll,
+                        "one of a critical's extra dice rolled again, and "
+                        "the second result standing even when it is worse"),
     "counts_as": (counts_as,
                   "what is in hand standing in for what a card asks"),
     "declined": (declined,

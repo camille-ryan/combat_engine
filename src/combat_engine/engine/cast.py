@@ -19285,6 +19285,7 @@ class Cast:
         pick: int = 0,
         keyword: Keyword | None = None,
         ref: str = "",
+        crit_dice: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
         when: Callable[[dict[str, Any]], bool] | None = None,
@@ -19320,6 +19321,19 @@ class Cast:
         damage, one racial power, weapon dice only. Unqualified is every
         damage roll the creature makes, which only a couple of cards mean.
 
+        **`crit_dice` is the third narrowing and reaches dice the other
+        two cannot.** "Reroll one of the extra damage dice granted by a
+        critical hit" is about the rider 734 heroic items print, which is a
+        `Mod` on `crit_damage` laid by `equipment._crit_rider` -- not a
+        damage roll this creature makes, so it never passes through
+        `_roll_damage_dice` where every other hold here is read. `i2299x1`
+        is the card, and its own note had worked out that this verb was
+        already the right sentence and only the dice were out of reach.
+
+        It is exclusive with `ref` and `keyword` rather than combining:
+        the crit rider belongs to the wearer's item, so there is no power
+        ref or keyword on it for either to narrow against.
+
         **`pick` is the other printed shape, and it is weaker.** Some cards
         say "if any of the dice come up with a result of 1, **pick one of
         them**, reroll it, and use the new result" -- one die, one reroll,
@@ -19348,7 +19362,20 @@ class Cast:
         """
         who = on if on is not None else self.me
         what = "reroll_damage_pick" if pick else "reroll_damage_below"
-        if ref:
+        if crit_dice:
+            # **A third narrowing, beside `ref` and `keyword`**, because
+            # the extra dice a critical grants are not a damage roll this
+            # creature *makes*: they are a `Mod` on `crit_damage` laid by
+            # `equipment._crit_rider`, which never goes through
+            # `_roll_damage_dice` where the other holds are read. An
+            # unqualified hold would reroll the `[W]` dice as well, which
+            # is a stronger card than the one printed.
+            #
+            # `:crit` rather than `@crit`, since `@` is the ref namespace,
+            # and no `Keyword` has the value `crit`, so it cannot collide
+            # with the `keyword` branch below.
+            what = f"{what}:crit"
+        elif ref:
             what = f"{what}@{ref}"
         elif keyword is not None:
             what = f"{what}:{keyword.value}"
