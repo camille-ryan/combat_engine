@@ -1396,7 +1396,7 @@ def f3588(c: Cast) -> None:
 
 
 @power("f3589", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.borrow_row(powers=)",))
+       reach=PERSONAL, target=SELF)
 def f3589(c: Cast) -> None:
     """Trades `cf:cleric-templar-f1` -- a declared row -- for one of the
     nine domain features printed under `cf:cleric-warpriest-f1`.
@@ -1467,26 +1467,37 @@ def f3589(c: Cast) -> None:
       `chargen.CLASSES.vampire` in `#1118`: silent in both directions, and
       indistinguishable from a row legitimately still waiting.
 
-    **What is genuinely missing is the third printed sentence**: *if the
-    feature grants powers, this feat does not grant them*. Five of the nine
-    -- `s1`, `s2`, `s3`, `s6`, `s7` -- hand their domain's cards over with
-    `c.grant_row` inside their own bodies, and a borrowed trait is armed, so
-    borrowing one of those five gives the powers too. Checked and rejected,
-    rather than assumed:
+    **The third printed sentence is written now, and the census that stood
+    here was low.** It read *"five of the nine -- `s1`, `s2`, `s3`, `s6`,
+    `s7` -- hand their domain's cards over"*. An `ast` walk over all nine
+    bodies says **nine of nine** call `c.grant_row`, so the exposure was
+    the whole list rather than a majority of it, and a cleric borrowing
+    any domain got that domain's cards as well -- strictly better than
+    print, and silent, because the borrow and the grant are each correct
+    on their own. Counted with a walk and not a substring, which is
+    `#1093`'s lesson: a docstring naming the verb is a `Constant` and not
+    a `Call`.
 
-    * `c.borrow_row` takes `attacks=` and `uses=` and nothing that narrows a
-      grant to the feature without the cards it deals.
+    `c.borrow_row(powers=False)` is the hold, which is what the marker
+    named. It writes `Powers.grants_blocked` and `c.grant_row` consults
+    it, which is the only place that can work -- the grant happens when
+    `turns.arm_traits` runs the borrowed trait, long after this body has
+    returned -- and the borrow's own effect takes the entry away with it.
+
+    The alternatives rejected before still read correctly and are kept,
+    because each is a thing the next reader will reach for:
+
+    * `c.forbid` is the wrong shape: it refuses a row the creature
+      *has*, where the sentence stops the card arriving at all, and a
+      cleric that already knew one would lose its own.
     * `c.grant_row` emits **no event** -- it applies an `Effect` labelled
       `"<ref> grants <ref>"` -- so this row cannot watch for what the
       borrowed feature handed over and take it back.
     * `vocab.py --find granted` and `--find grants row` turn up no reader
       asking which rows a feature grants.
-    * Naming the five domains' power refs here would read them out of the
+    * Naming the domains' power refs here would read them out of the
       bodies in `features/warpriest.py` rather than off this card, and would
-      go wrong the next time one of those bodies changed what it deals.
-
-    So the hold is a parameter on `c.borrow_row`, which is what the marker
-    now names."""
+      go wrong the next time one of those bodies changed what it deals."""
     c.forbid("cf:cleric-templar-f1", on=c.me, until=When.ENCOUNTER)
     c.borrow_row(
         among=(
@@ -1501,6 +1512,11 @@ def f3589(c: Cast) -> None:
             "cf:cleric-warpriest-f1s8",
         ),
         uses=0,
+        # The third printed sentence: the feature comes across, the cards
+        # it deals do not. All nine call `c.grant_row` in their own
+        # bodies, so without this a borrowed domain hands the cleric its
+        # powers as well.
+        powers=False,
         until=When.ENCOUNTER,
     )
 

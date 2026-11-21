@@ -84387,6 +84387,191 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def borrowed_without_its_powers(out: Result) -> None:
+    """"If the feature grants powers, this feat does not grant them."
+
+    `f3589` trades a cleric's templar feature for one of the nine domain
+    features printed under `cf:cleric-warpriest-f1`. Each of those hands
+    its domain's four cards over with `c.grant_row` from inside its own
+    body, and a borrowed trait is armed -- so the feat handed over the
+    powers its third sentence says it does not. Silently, because the
+    borrow and the grant are each correct on their own.
+
+    `c.borrow_row(powers=False)` writes `Powers.grants_blocked` and
+    `c.grant_row` consults it. That is the only place it can work: the
+    grant happens when `turns.arm_traits` runs the borrowed trait, long
+    after the borrow returned.
+
+    **The nine and their cards are read off the bodies with an `ast`
+    walk**, not written down here, so this cannot drift from what those
+    rows deal -- and the walk is the point rather than convenience. The
+    row's own note said *five* of the nine grant; nine of nine do, and the
+    census that said five had been made with a substring over the source,
+    where a docstring naming the verb counts. #1093.
+
+    **The granted cards are taken out of the hand first.** `audit.board`
+    deals every level-0 row of the class, which includes the domain cards
+    themselves, so `c.grant_row` returns None for *already known* and both
+    arms read "gained nothing". Measured that way first, and it passed
+    while proving nothing.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from audit import board as posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    NINE = tuple(f"cf:cleric-warpriest-f1s{i}" for i in range(9))
+
+    def grants(ref: str) -> list[str]:
+        """The refs this row's body hands over, off an `ast` walk.
+
+        A walk and not a substring: a docstring mentioning `c.grant_row`
+        is a `Constant`, never a `Call`, which is how the count that used
+        to be in `f3589`'s note came out at five.
+        """
+        tree = ast.parse(textwrap.dedent(inspect.getsource(REGISTRY[ref].body)))
+        found = []
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "grant_row"
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "c"):
+                for arg in node.args[:1]:
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        found.append(arg.value)
+                    elif isinstance(arg, ast.Name):
+                        # `for ref in (...): c.grant_row(ref)` -- pull the
+                        # literals out of the loop this call sits in.
+                        for loop in ast.walk(tree):
+                            if (isinstance(loop, ast.For)
+                                    and isinstance(loop.target, ast.Name)
+                                    and loop.target.id == arg.id):
+                                found.extend(
+                                    e.value for e in ast.walk(loop.iter)
+                                    if isinstance(e, ast.Constant)
+                                    and isinstance(e.value, str))
+        return sorted(set(found))
+
+    census = {ref: grants(ref) for ref in NINE}
+    out.that(all(census[ref] for ref in NINE),
+             "all NINE domain features hand cards over -- the note on"
+             " `f3589` said five, and a census read off a substring is how"
+             " it came to. A tenth, or one that stops granting, reds this",
+             f"{ {k: len(v) for k, v in census.items()} }")
+
+    def borrowed(ref: str, *, powers: bool) -> tuple[str, list[str], list[str]]:
+        """Borrow one domain and arm it. Returns the pick, the block and
+        whichever of that domain's cards the cleric ended up holding."""
+        world, me, _start = posed("f3589", 1)
+        known = world.get(me, Powers)
+        for gone in (*NINE, *census[ref]):
+            while gone in known.known:
+                known.known.remove(gone)
+        c = Cast(world=world, me=me, ref="f3589", target=me)
+        taken = c.borrow_row(among=(ref,), uses=0, powers=powers)
+        block = sorted(known.grants_blocked)
+        if taken:
+            REGISTRY[taken].body(
+                Cast(world=world, me=me, ref=taken, target=me))
+        return taken, block, [r for r in census[ref] if r in known.known]
+
+    for ref in NINE:
+        took, block, got = borrowed(ref, powers=True)
+        out.that(took == ref and got == census[ref],
+                 f"{ref}: borrowed WITH its powers, the cleric ends up"
+                 " holding every card it deals -- the behaviour print"
+                 " forbids, and the premise for the arm below",
+                 f"took {took}, gained {got} of {census[ref]}")
+        took, block, got = borrowed(ref, powers=False)
+        out.that(took == ref and got == [],
+                 f"{ref}: borrowed WITHOUT them, it holds none of them --"
+                 " the third printed sentence",
+                 f"took {took}, gained {got}")
+        out.that(block == [ref],
+                 f"{ref}: and the block names the FEATURE rather than the"
+                 " cards, which is what the sentence is about and what"
+                 " keeps it working when a domain changes what it deals",
+                 f"{block}")
+
+    # -- the feature itself still arrives, which is the other half --------
+    took, _b, _g = borrowed(NINE[1], powers=False)
+    out.that(took == NINE[1],
+             "and the trade still happens: `powers=False` suppresses the"
+             " grants inside the borrowed row, not the borrow",
+             f"took {took!r}")
+
+    # -- the default is untouched -----------------------------------------
+    world, me, _s = posed("f3589", 1)
+    known = world.get(me, Powers)
+    for gone in (*NINE, *census[NINE[1]]):
+        while gone in known.known:
+            known.known.remove(gone)
+    Cast(world=world, me=me, ref="f3589", target=me).borrow_row(
+        among=(NINE[1],), uses=0)
+    out.that(not known.grants_blocked,
+             "a caller that does not pass `powers=` blocks nothing -- the"
+             " nineteen multiclass feats say nothing about suppressing a"
+             " grant and must borrow exactly what they borrowed before",
+             f"{sorted(known.grants_blocked)}")
+
+    # -- the block does not outlive the borrow ----------------------------
+    world, me, _s = posed("f3589", 1)
+    known = world.get(me, Powers)
+    for gone in (*NINE, *census[NINE[1]]):
+        while gone in known.known:
+            known.known.remove(gone)
+    c = Cast(world=world, me=me, ref="f3589", target=me)
+    c.borrow_row(among=(NINE[1],), uses=0, powers=False)
+    out.that(sorted(known.grants_blocked) == [NINE[1]],
+             "the block is on while the borrow is",
+             f"{sorted(known.grants_blocked)}")
+    # **Ended by object, and both fragment selectors were wrong.**
+    # `c.end_effect(against=)` narrows by label *fragment* and ends one
+    # effect. `against="f3589"` ended `f3589 forbids
+    # cf:cleric-templar-f1`, the other effect this row lays. Narrowing to
+    # the domain's own ref was worse rather than better: `audit.board`
+    # arms every level-0 row of the class, so all nine domains have
+    # already granted their cards and `cf:cleric-warpriest-f1s1 grants
+    # p13939` carries that fragment too -- and a premise assertion reading
+    # `NINE[1] in ended.label` passed on it, which is how a weak premise
+    # hides a wrong selector.
+    #
+    # So the effect is picked by its `by` and asserted to be unique.
+    owed = [e for e in world.effects.of(me)
+            if e.by == "f3589" and NINE[1] in e.label]
+    out.that(len(owed) == 1,
+             "exactly one effect on this cleric is f3589's borrow of that"
+             " domain -- the premise, and the thing two fragment"
+             " selectors got wrong before this was asserted",
+             f"{[e.label for e in owed]}")
+    if not owed:
+        return
+    c.end_effect(owed[0], on=me)
+    out.that(not known.grants_blocked,
+             "and the borrow's own `on_end` takes the block away -- a"
+             " suppression that outlived the borrow would silence a domain"
+             " the cleric later took for itself",
+             f"{sorted(known.grants_blocked)}")
+
+    # -- and f3589 really asks for it -------------------------------------
+    src = textwrap.dedent(inspect.getsource(REGISTRY["f3589"].body))
+    asks = [node for node in ast.walk(ast.parse(src))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "borrow_row"
+            and any(k.arg == "powers" for k in node.keywords)]
+    out.that(len(asks) == 1,
+             "f3589's own body passes `powers=` -- read off an `ast` walk"
+             " rather than from the verb, so reverting the content half"
+             " reds this and not only the engine one",
+             f"{len(asks)} borrow_row call(s) naming it")
+
+
 def offer_reads_the_door(out: Result) -> None:
     """A widened target line reaches the power the player is OFFERED.
 
@@ -118219,6 +118404,8 @@ DRIVERS = {
                              "a rerolled roll ignores cover"),
     "offer_reads_the_door": (offer_reads_the_door,
                             "a widened target line reaches the menu"),
+    "borrowed_without_its_powers": (borrowed_without_its_powers,
+                                    "a borrowed feature without its cards"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

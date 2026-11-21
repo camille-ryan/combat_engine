@@ -8880,6 +8880,18 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None or ref in known.known:
             return None
+        # **This row's grants are switched off for this creature.** The one
+        # printed sentence wanting it is *"if the feature grants powers,
+        # this feat does not grant them"* -- `f3589` borrows a domain
+        # feature and all nine of them hand their cards over from inside
+        # their own bodies, so a borrowed trait being armed gave the powers
+        # too. `Cast.borrow_row(powers=False)` is what writes the entry.
+        #
+        # Here rather than at the borrow, because the grant happens later:
+        # the borrowed trait is armed by `turns.arm_traits` well after
+        # `borrow_row` has returned, and that is the moment to stop.
+        if self.ref in known.grants_blocked:
+            return None
         def _drop() -> None:
             if ref in known.known:
                 known.known.remove(ref)
@@ -8916,6 +8928,19 @@ class Cast:
 
             self.watch(PowerUsed, count, until=until, on=who)
         return effect
+
+    def _unblock_grants(self, who: int, ref: str) -> None:
+        """Let `ref`'s grants work for `who` again.
+
+        The other half of `borrow_row(powers=False)`, run from the borrow
+        effect's own `on_end` so a suppression cannot outlive the borrow
+        that wanted it. A `discard`, so an effect ending twice is a no-op.
+        """
+        from .components import Powers
+
+        known = self.world.get(who, Powers)
+        if known is not None:
+            known.grants_blocked.discard(ref)
 
     def raise_grant(self, ref: str, uses: int = 1, *,
                     on: int | None = None) -> int:
@@ -8981,6 +9006,7 @@ class Cast:
         among: Sequence[str] = (),
         attacks: bool = True,
         uses: int = 1,
+        powers: bool = True,
         until: When = When.ENCOUNTER,
     ) -> str:
         """"Choose a 1st-level at-will attack power from <another class>."
@@ -9009,6 +9035,26 @@ class Cast:
         per encounter" survives the row being an at-will. Returns the ref
         taken, or `""` when the set is empty -- an empty set is a gap and
         the caller should still be carrying a marker for it.
+
+        **`powers=False` borrows the feature and not the cards it hands
+        over**, which is a printed sentence and not a refinement:
+        *"if the feature grants powers, this feat does not grant them"*.
+        `f3589` is the row, and the measurement is why this exists --
+        **all nine** of the domain features it may borrow call
+        `c.grant_row` inside their own bodies, so borrowing any of them
+        gave a cleric the domain's cards as well. Strictly better than
+        print, and silent, because the borrow and the grant are each
+        correct on their own.
+
+        It writes `Powers.grants_blocked`, which `c.grant_row` consults,
+        rather than refusing anything here: the grant happens when
+        `turns.arm_traits` runs the borrowed trait, long after this
+        returns. The borrow's own effect takes the entry away with it, so
+        the suppression cannot outlive what it was for.
+
+        Default `True`, so every existing caller borrows exactly what it
+        borrowed before -- nineteen multiclass feats whose cards say
+        nothing about suppressing a grant.
         """
         from .components import Powers
         from .dsl import REGISTRY
@@ -9039,7 +9085,19 @@ class Cast:
         taken = self.choose(sorted(pool), self.ref)
         if not taken:
             return ""
-        self.grant_row(taken, on=self.me, until=until, uses=uses)
+        # **The suppression goes on BEFORE the grant.** `grant_row`'s own
+        # call here is this row's doing and is never suppressed -- the
+        # entry names the *borrowed* ref -- but the borrowed trait can be
+        # armed any time after, so the entry has to be in place by the
+        # time `grant_row` returns rather than after it.
+        if not powers:
+            known_ = self.world.get(self.me, Powers)
+            if known_ is not None:
+                known_.grants_blocked.add(taken)
+        held = self.grant_row(taken, on=self.me, until=until, uses=uses)
+        if not powers and held is not None:
+            held.on_end.append(
+                lambda: self._unblock_grants(self.me, taken))
         # **Recorded, not only granted.** Nine feats print a clause about
         # "the power you chose for your <trait>", and until now the pick
         # existed on the board in exactly one place: the label on

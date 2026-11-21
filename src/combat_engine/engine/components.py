@@ -1608,6 +1608,26 @@ class Powers:
     #: writes nothing here.
     granted_uses: dict[str, int] = field(default_factory=dict)
     granted_spent: dict[str, int] = field(default_factory=dict)
+    #: Rows whose own `Cast.grant_row` calls do **nothing** for this
+    #: creature, by ref.
+    #:
+    #: One printed sentence needs it: *"if the feature grants powers, this
+    #: feat does not grant them"*. `f3589` trades a cleric's templar
+    #: feature for one of the nine domain features printed under
+    #: `cf:cleric-warpriest-f1`, and **all nine** hand their domain's cards
+    #: over with `c.grant_row` inside their own bodies. A borrowed trait is
+    #: armed, so borrowing one gave the powers too -- strictly better than
+    #: print, and silently, because both halves are individually correct.
+    #:
+    #: Keyed on the **granting** row rather than on the granted card,
+    #: because the card is what the body picks and the sentence is about
+    #: the feature. `Cast.borrow_row(powers=False)` is the only writer and
+    #: the borrow's own effect takes the entry away with it.
+    #:
+    #: Not a `Cast.forbid`: that refuses a row the creature *has*, and this
+    #: stops it arriving at all. A creature that already knew the card
+    #: keeps it.
+    grants_blocked: set[str] = field(default_factory=set)
     #: Rows this creature uses as **daily** powers whatever their card
     #: declares, by ref.
     #:

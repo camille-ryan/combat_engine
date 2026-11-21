@@ -7,7 +7,7 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
 
 ## granting and spending a row
 
-- `c.borrow_row(self, cls: 'str' = '', *, level: 'int' = 1, usage: 'Any' = None, keyword: 'Keyword | None' = None, among: 'Sequence[str]' = (), attacks: 'bool' = True, uses: 'int' = 1, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'str'`
+- `c.borrow_row(self, cls: 'str' = '', *, level: 'int' = 1, usage: 'Any' = None, keyword: 'Keyword | None' = None, among: 'Sequence[str]' = (), attacks: 'bool' = True, uses: 'int' = 1, powers: 'bool' = True, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'str'`
   - "Choose a 1st-level at-will attack power from <another class>."
 - `c.borrowed_rows(self, of: 'int', *, at_will: 'bool' = True, melee: 'bool' = True) -> 'list[str]'`
   - That creature's attack rows, for a power that copies one.
