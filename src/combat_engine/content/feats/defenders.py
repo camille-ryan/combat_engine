@@ -437,9 +437,9 @@ def _monk_shift(ctx: dict[str, Any], *, least: int = 1) -> bool:
 
     The three facts come off `movement.may_enter`'s context: `kind` is the
     sort of move, `squares` how far it is going, and `by` the row that
-    called for it. None of them was there before `#1431`, which is why both
-    cards that narrow on them sat refused in play with `c.may_enter`
-    already in the tree.
+    called for it. None of them was there until the gate was widened,
+    which is why both cards that narrow on them sat refused in play with
+    `c.may_enter` already in the tree.
 
     `by` empty means a move nobody attributed, and the answer is False --
     no permission rather than a standing one.
