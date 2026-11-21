@@ -1798,7 +1798,16 @@ class Powers:
     #:
     #: `Cast.amount_for` is the read and the row handing the number out
     #: must use it.
-    amounts: dict[str, list[tuple[int, Callable[[dict[str, Any]], bool] | None]]] = (
+    #: An entry's first half is the number, or a **callable** counted at
+    #: each read -- `query.granted_amount` resolves it, the way
+    #: `Mods.total` resolves `Mod.roll`. `c.change_amount(compute=)`
+    #: is the writer, for a card whose number changes as the fight
+    #: moves.
+    amounts: dict[
+        str,
+        list[tuple[int | Callable[[], int],
+                   Callable[[dict[str, Any]], bool] | None]],
+    ] = (
         field(default_factory=dict)
     )
 

@@ -794,7 +794,7 @@ def f2411(c: Cast) -> None:
 
 @power("f2440", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.change_amount(compute=)",))
+       )
 def f2440(c: Cast) -> None:
     """"-2 or the number of enemies adjacent to you, whichever is worse."
 
@@ -843,9 +843,26 @@ def f2440(c: Cast) -> None:
       outright, so clearing it here reds an instrument, and `scripts/`
       belongs to no component and is not an authoring agent's to edit.
 
-    So the symbol stands and the ladder is recorded rather than written:
-    whoever takes the drivers side gets to decide between a `compute=`
-    and six rungs with the measurement in front of them."""
+    So the symbol stood and the ladder was recorded rather than written.
+    **`compute=` is the one that landed**, for the reason the note gives
+    above: the count changes as the fight moves, and six rungs would each
+    be a number fixed when the trait went up.
+
+    `query.granted_amount` resolves the callable at each read, the way
+    `Mods.total` resolves `Mod.roll` -- one store and one reader, so the
+    two kinds cannot drift. The "whichever is worse" is done **here**,
+    not by the reader: `granted_amount` takes the maximum of what is
+    laid and would otherwise return the bare count, so a single enemy
+    adjacent would read 1 where the card prints 2."""
+    me = c.me
+
+    def worse_of_two() -> int:
+        # "-2 or the number of enemies adjacent to you, whichever is
+        # worse." Counted at the swing rather than at arming, which is
+        # the whole of what `compute=` is for.
+        return max(2, len(c.within(1, of=me, side="enemy")))
+
+    c.change_amount(MARK_KEY, compute=worse_of_two, on=me)
 
 
 @power("f2412", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

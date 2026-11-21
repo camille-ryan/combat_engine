@@ -17,7 +17,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Add to the triggering skill check, after the die is already down.
 - `c.boost_roll(self, amount: 'int', *, kind: 'str' = '', ev: 'Any' = None) -> 'bool'`
   - Add to the triggering roll **without rolling it again**.
-- `c.change_amount(self, ref: 'str', amount: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+- `c.change_amount(self, ref: 'str', amount: 'int' = 0, *, compute: 'Callable[[], int] | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Make a named mechanic hand out a different number.
 - `c.change_dice(self, ref: 'str', dice: 'str', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Make a named row roll different dice.

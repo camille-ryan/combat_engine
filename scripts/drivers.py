@@ -34481,6 +34481,93 @@ def five_more_squares_only_beside_a_shroud(out: Result) -> None:
                      " filter is what decides, not the distance")
 
 
+def a_mark_penalty_counted_at_the_swing(out: Result) -> None:
+    """"A penalty equal to either -2 or the number of enemies adjacent to
+    you, whichever is worse." `f2440`.
+
+    **The number is counted at each read, not when the trait went up**,
+    which is the whole of `c.change_amount(compute=)`. `query.
+    granted_amount` resolves a callable entry the way `Mods.total`
+    resolves `Mod.roll` -- one store, one reader, so a fixed number and a
+    counted one cannot drift apart.
+
+    The control is the case a number decided at arming gets wrong: more
+    enemies crowd in **after** the trait is laid and the penalty has to
+    follow. An assertion that only checks the value once would pass on a
+    constant.
+
+    And the floor is the row's job, not the reader's: `granted_amount`
+    takes the maximum of what is laid, so a bare count would read 1 with
+    one enemy adjacent where the card prints 2.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import granted_amount
+    from combat_engine.engine.resolve import MARK_PENALTY
+
+    world, me, _ = _board(seed=12)
+    c = Cast(world=world, me=me, ref="drivers:mark")
+    out.that(granted_amount(world, me, MARK_PENALTY, 2) == 2,
+             "the premise: an unheld marker grants the printed 2")
+
+    REGISTRY["f2440"].body(Cast(world=world, me=me, ref="f2440"))
+    first = granted_amount(world, me, MARK_PENALTY, 2)
+    beside = len(c.within(1, of=me, side="enemy"))
+    out.that(first == max(2, beside),
+             f"held, it grants the worse of 2 and the count"
+             f" ({first}, with {beside} adjacent)")
+    out.that(first >= 2,
+             "and never less than 2 -- the floor is the row's, since the"
+             " reader would hand back a bare count")
+
+    # **The control: the crowd disperses afterwards.** A number fixed at
+    # arming cannot move; this one must. Moved AWAY rather than crowded
+    # in, because this board starts with every enemy already adjacent --
+    # so there was nowhere to add one and the first version's premise
+    # failed, 5 -> 5.
+    far = 9
+    for foe in c.enemies():
+        c.teleport(40, who=foe, to=(c.here[0] + far, c.here[1]))
+        far += 1
+    now = len(c.within(1, of=me, side="enemy"))
+    out.that(now < beside,
+             f"the premise for the control: fewer adjacent now"
+             f" ({beside} -> {now})")
+    after = granted_amount(world, me, MARK_PENALTY, 2)
+    out.that(after == max(2, now) and after < first,
+             "THE CONTROL: the penalty follows them down -- counted at"
+             f" the read, not at arming ({first} -> {after})")
+
+    # **The floor is asserted by READING the row, not by driving it, and
+    # that is a limit of the board rather than a shortcut.** It only
+    # bites with nobody adjacent, and this board keeps two foes beside
+    # the marker whatever is tried -- moving them to one square, to
+    # spread squares, and moving the caster away all left the premise at
+    # 2 rather than 0. Dropping `max(2, ...)` from the row therefore
+    # leaves every behavioural assertion here green, which the plant
+    # showed, so the structural one is what covers it.
+    #
+    # Parsed rather than grepped: a docstring is a `Constant`, never a
+    # `Call`, and this session has had three substring checks satisfied
+    # by prose about the code (`#1093`).
+    import ast
+    import inspect
+    import textwrap
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(REGISTRY["f2440"].body)))
+    floored = [
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "max"
+        and any(isinstance(a, ast.Constant) and a.value == 2 for a in n.args)
+    ]
+    out.that(bool(floored),
+             "THE FLOOR, read off the row: the count is taken as"
+             " `max(2, ...)`, because `granted_amount` returns the"
+             " maximum of what is LAID and would hand back a bare 0 with"
+             " nobody adjacent")
+
+
 def a_mark_that_lapses(out: Result) -> None:
     """"The mark ends if you do not attack it", and the row that forbids it.
 
@@ -114755,6 +114842,9 @@ DRIVERS = {
     "shroud_hop": (five_more_squares_only_beside_a_shroud,
                    "five more squares of teleport, and only to a square "
                    "beside a shrouded enemy"),
+    "mark_counted": (a_mark_penalty_counted_at_the_swing,
+                     "a mark penalty counted at the swing rather than "
+                     "fixed when the trait was laid"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
     "racial_power_riders": (racial_power_riders,

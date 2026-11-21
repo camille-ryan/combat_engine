@@ -14513,8 +14513,9 @@ class Cast:
     def change_amount(
         self,
         ref: str,
-        amount: int,
+        amount: int = 0,
         *,
+        compute: Callable[[], int] | None = None,
         on: int | None = None,
         until: When = When.ENCOUNTER,
         when: Callable[[dict[str, Any]], bool] | None = None,
@@ -14546,10 +14547,20 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return None
-        entry = (amount, when)
+        # **`compute` is counted at each read, where `amount` is decided
+        # once when it is laid.** `f2440`'s penalty is "-2 or the number of
+        # enemies adjacent to you, whichever is worse", and the count
+        # changes as the fight moves -- a number fixed at arming would be
+        # whatever stood beside the marker when the trait went up.
+        #
+        # Stored in the same slot and resolved by `query.granted_amount`,
+        # the way `Mod.roll` is resolved by `Mods.total`: one store, one
+        # reader, so the two kinds cannot drift apart.
+        entry = (compute or amount, when)
+        shown = "a count" if compute else amount
         effect = self.world.effects.apply(
             who, self.me, until,
-            label=f"{self.ref} makes {ref} grant {amount}",
+            label=f"{self.ref} makes {ref} grant {shown}",
             on_end=[lambda: _drop_amount(known, ref, entry)],
             by=self.ref,
         )

@@ -4215,7 +4215,14 @@ def granted_amount(
     if known is None:
         return default
     seen = ctx or {}
-    laid = [a for a, gate in known.amounts.get(ref, ())
+    # **An entry may be a callable, counted here rather than when it was
+    # laid.** `f2440`'s penalty is "-2 or the number of enemies adjacent
+    # to you, whichever is worse", and that count changes as the fight
+    # moves -- a number fixed at arming would be whatever stood beside
+    # the marker when the trait went up. `Mods.total` resolves `Mod.roll`
+    # at the same moment and for the same reason.
+    laid = [a() if callable(a) else a
+            for a, gate in known.amounts.get(ref, ())
             if gate is None or gate(seen)]
     return max(laid) if laid else default
 
