@@ -3116,10 +3116,14 @@ def f2620(c: Cast) -> None:
 # -- the postures nothing models -------------------------------------------
 
 
-@power("f2604", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("conditions.WAIVABLE",))
+@power("f2604", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2604(c: Cast) -> None:
     """Shifting while prone.
+
+    **Written. The note below is the diagnosis it was written from and is
+    kept verbatim**, because it got every step right and the only thing it
+    was missing was somebody doing the three things it names.
 
     **Re-pointed, because the old premise has gone and with it the reason
     for a verb of its own.** It said `actions._movement` *"returns an
@@ -3175,7 +3179,36 @@ def f2604(c: Cast) -> None:
     back door it used to be: `movement.shift` goes through `can_shift` and
     refuses outright. The printed benefit is a **permission in the action
     menu** in any case, so a body that moved the creature itself would
-    never offer it the choice."""
+    never offer it the choice.
+
+    ## What landed
+
+    All three, exactly as named above:
+
+    * `conditions.WAIVABLE` is the public set, with `no_shift` as its
+      fifth word. `_NEUTRAL` stays as an alias, so `rules_for` and
+      `c.waive` needed no change beyond reading the public name;
+    * `query.can_shift` asks `rules_for` instead of `rules`, so a waiver
+      recorded in `Conditions.waived` is visible to it -- and
+      `movement.shift` goes through it, which is what made the refusal
+      total;
+    * `actions._shift_offers` is the menu half, lifted out of `_movement`
+      so the prone branch can call it. The early return stays: a prone
+      creature still may not walk or run, and falling through would have
+      released both and the zone-repositioning block with them.
+
+    **And the menu's own gate moved from `can_move` to `can_shift`**,
+    which was a second fault in the same place and pointed the other way:
+    nothing there consulted `no_shift` at all, so the prone branch's early
+    return was the only thing withholding a shift from a prone creature,
+    and any other condition barring the shift without barring movement had
+    nothing stopping it. `#246`'s comment argues against `can_walk` there
+    and is untouched -- `can_shift` is `can_move` plus this one field, so
+    a rooted creature still gets its shift.
+
+    `AT_WILL` rather than the `ENCOUNTER` the marked version carried: the
+    card prints no limit, and this row now lays a standing waiver."""
+    c.waive(Condition.PRONE, "no_shift", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2622", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

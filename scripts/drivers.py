@@ -61247,6 +61247,7 @@ def a_prone_creature_crawls_at_half_speed(out: Result) -> None:
     from combat_engine.engine.actions import legal, perform
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.query import is_, speed
 
     MOVES = ("move", "crawl", "run", "shift")
@@ -61320,6 +61321,70 @@ def a_prone_creature_crawls_at_half_speed(out: Result) -> None:
              " movement and goes through the same `can_walk` gate the walk"
              " does, rather than being a new way around it",
              f"kinds={sorted({a.kind for a in movers(other, mob)})}")
+
+    # -- and the one card that waives the shift ban ------------------------
+    #
+    # `f2604` prints *"you can shift while prone"*, which is the exception
+    # to the assertion above -- so it belongs here, where the rule it is an
+    # exception to is stated, rather than in a rule of its own.
+    #
+    # Three things had to change for this and the rule asserts the outcome
+    # rather than any of them: `conditions.WAIVABLE` had to be public and
+    # hold `no_shift`; `query.can_shift` had to ask `rules_for` instead of
+    # `rules`, or the record would be invisible; and the menu had to offer
+    # it, which `actions._shift_offers` does from inside the prone branch.
+    # **`f2743`'s board, not `f2604`'s, and that cost a diagnosis.**
+    # `audit.board("f2604", 1)` deals a character holding `p12704`, which
+    # ENDS a prone the instant it lands -- the probe logged
+    # `ConditionEnded(prone, why='p12704')` one line before
+    # `ConditionApplied`. So the creature was never prone and the premise
+    # below reported it. The row's body carries no `c.feat` gate, so it
+    # can be run on any board.
+    waived, him, _ = _posed("f2743", 1)
+    w = Cast(world=waived, me=him, ref="drivers:crawl")
+    w.prone(on=him)
+    out.that(is_(waived, him, Condition.PRONE),
+             "the premise: the waiver's holder is prone too, or this says"
+             " nothing about shifting WHILE prone")
+    before = [a.kind for a in movers(waived, him)]
+    out.that("shift" not in before,
+             "and before the waiver it is offered no shift, like any other"
+             f" prone creature ({sorted(set(before))})")
+
+    # **Planting `no_shift` out of `conditions.WAIVABLE` RAISES here**
+    # rather than failing, and that is the designed behaviour rather than a
+    # weakness in this rule: `c.waive` refuses an unknown word with a
+    # `KeyError` naming the four it takes, so the row becomes unwritable
+    # loudly instead of laying a waiver nothing honours. Left unguarded,
+    # unlike the `crawls` line above, because swallowing it would hide a
+    # real raise -- and `audit.py` counts a raising row as its worst
+    # outcome, so the gate sees it either way.
+    REGISTRY["f2604"].body(
+        Cast(world=waived, me=him, ref="f2604", target=him))
+    after = movers(waived, him)
+    shifts = [a for a in after if a.kind == "shift"]
+    out.that(bool(shifts),
+             "and `f2604` gets it back -- a waiver on ONE field of"
+             " `Condition.PRONE`, where the creature is still prone and"
+             f" still crawling ({sorted({a.kind for a in after})})")
+    out.that(is_(waived, him, Condition.PRONE)
+             and any(a.kind == "crawl" for a in after),
+             "and is still prone, still offered the crawl: a waiver is not"
+             " the condition lifting, which is what `c.waive` exists to"
+             " say")
+    out.that(not any(a.kind in ("move", "run") for a in after),
+             "THE CONTROL: and still no walk and no run. The waiver names"
+             " `no_shift` and nothing else, so a fix that released the"
+             " prone branch wholesale would pass the line above and fail"
+             f" here ({sorted({a.kind for a in after})})")
+
+    spot = waived.need(him, Position).square
+    took = bool(shifts) and perform(
+        waived, waived.encounter, him, shifts[0])
+    out.that(took and waived.need(him, Position).square != spot,
+             "and the shift is a real action: `movement.shift` goes through"
+             " `can_shift` too, so an offer the menu makes and the mover"
+             f" refuses would show up here (performed={took})")
 
 
 def a_build_time_sub_choice_is_recorded(out: Result) -> None:

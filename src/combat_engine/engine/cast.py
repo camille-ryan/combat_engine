@@ -15173,12 +15173,12 @@ class Cast:
         holder, and `c.surge_value` has the other bug on record.
         """
         from .components import Conditions
-        from .conditions import _NEUTRAL
+        from .conditions import WAIVABLE
 
-        unknown = [w for w in what if w not in _NEUTRAL]
+        unknown = [w for w in what if w not in WAIVABLE]
         if unknown:
             raise KeyError(
-                f"c.waive takes {sorted(_NEUTRAL)}, not {unknown[0]!r}: a"
+                f"c.waive takes {sorted(WAIVABLE)}, not {unknown[0]!r}: a"
                 " condition's other rules are not things a card relaxes"
             )
         who = self.me if on is None else on

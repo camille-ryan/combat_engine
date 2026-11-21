@@ -2150,8 +2150,18 @@ def takes_half(
 
 
 def can_shift(world: World, eid: int) -> bool:
-    """A shift is barred separately from a walk, and by different powers."""
-    return can_move(world, eid) and not any(rules(c).no_shift for c in active(world, eid))
+    """A shift is barred separately from a walk, and by different powers.
+
+    **`rules_for` and not `rules`**, which is the difference between the
+    book's table and this creature's. `f2604` prints *"you can shift while
+    prone"* -- a waiver on one field of `Condition.PRONE` -- and
+    `Conditions.waived` is where `c.waive` records it. Reading the global
+    table made that record invisible here, so the waiver could be laid and
+    the shift still refused: `movement.shift` goes through this, so the
+    refusal was total and no body could work around it.
+    """
+    return can_move(world, eid) and not any(
+        rules_for(world, eid, c).no_shift for c in active(world, eid))
 
 
 def can_move(world: World, eid: int) -> bool:

@@ -179,12 +179,31 @@ def rules_for(world: Any, eid: int, c: Condition) -> Rules:
 #: What each waivable field becomes when a card switches it off. Only the
 #: fields a printed waiver actually names: `cannot_act` and the rest are not
 #: things a feat relaxes, and listing them would invite a row to try.
-_NEUTRAL: dict[str, Any] = {
+#:
+#: **Public as `WAIVABLE`, which is the half a marker could not name.**
+#: `f2604`'s note worked this out and is worth reading: the facility
+#: existed, the *word* was the gap, and no marker could say so while this
+#: was private -- `blocked._surface` indexes public names only, so the row
+#: had to name either `c.waive(no_shift)` (read as a missing keyword on a
+#: verb that takes positional strings, so it would have waited for ever)
+#: or `conditions.Rules.no_shift` (which exists, so it reported ARRIVED on
+#: a row nobody could write).
+#:
+#: `no_shift` is the fifth word, for `f2604`: *"you can shift while
+#: prone"*. It is a printed one-sentence waiver of exactly that field and
+#: nothing else, which is the counter-example the closed-list argument
+#: above invited.
+WAIVABLE: dict[str, Any] = {
     "attack": 0,
     "halve_speed": False,
     "grants_ca": False,
     "speed_cap": None,
+    "no_shift": False,
 }
+
+#: The old private name, kept as an alias because `rules_for` and `c.waive`
+#: both read it and neither should have to change to make the set public.
+_NEUTRAL = WAIVABLE
 
 
 #: Conditions that always arrive together. Dropping to 0 hit points gives all

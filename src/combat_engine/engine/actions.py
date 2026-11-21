@@ -1306,6 +1306,46 @@ def _burst_origins(world: World, actor: int, p, augment: int = 0) -> list[Square
     return sorted(out)
 
 
+def _shift_offers(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Every shift this creature may be offered, at every cost it has.
+
+    **Lifted out so the prone branch can call it.** `f2604` prints *"you
+    can shift while prone"*, and `_movement`'s prone branch returns early
+    after the crawl -- deliberately, because a prone creature may not walk
+    or run. Falling through would have released both of those and the
+    zone-repositioning block besides, so the shift is handed back here and
+    the early return stays what it was.
+
+    Gated on `can_shift`, which is `can_move` plus the one field: it reads
+    `rules_for`, so a waiver recorded by `c.waive` is honoured.
+    """
+    from .movement import OVERHEAD, mode_of, reachable
+    from .query import can_shift
+
+    out: list[Action] = []
+    if not can_shift(world, actor):
+        return out
+    offers = {ActionType.MOVE: 1}
+    for (what, cost), squares_ in _granted(world, actor).items():
+        if what != "shift":
+            continue
+        offers[cost] = max(offers.get(cost, 0), squares_)
+    mode = mode_of(world, actor, None)
+    for cost in sorted(offers, key=lambda a: a.value):
+        if not encounter.can_spend(actor, cost):
+            continue
+        # Priced as a shift, to match `Cast.shift` and `execute`. A
+        # creature exempt from difficult terrain only while shifting was
+        # offered the same squares as one that is not.
+        step = reachable(
+            world, actor, offers[cost],
+            mode="walk" if mode in OVERHEAD else None, kind="shift",
+        )
+        for dest in sorted(step):
+            out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
+    return out
+
+
 def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     from .query import can_move, can_run, can_walk, speed
 
@@ -1340,6 +1380,11 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
                         path=tuple(path),
                     )
                 )
+        # **The shift, when something waived the bar.** `Condition.PRONE`
+        # carries `no_shift=True`, so this is empty for every ordinary
+        # prone creature and is the whole of `f2604` for one that waived
+        # it. The return stays: a prone creature may not walk or run.
+        out.extend(_shift_offers(world, encounter, actor))
         return out
     if encounter.can_spend(actor, ActionType.MOVE) and can_walk(world, actor):
         for dest, path in sorted(world.reachable_paths(actor, speed(world, actor)).items()):
@@ -1383,7 +1428,11 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # a longer one, or one at a different cost -- a stance printing "you can
     # shift 2 squares as a move action" is a change to this menu and nothing
     # else, so it could not be written while the menu was a constant.
-    from .movement import OVERHEAD, mode_of, reachable
+    #
+    # `reachable` alone now -- `OVERHEAD` and `mode_of` went with the shift
+    # block into `_shift_offers`, and the zone-repositioning block below
+    # still prices a walk with it.
+    from .movement import reachable
 
     # **`can_move`, not `can_walk`, and the difference is the whole point.**
     # `_movement` above gates its walk on `can_walk` and this gated on nothing,
@@ -1396,25 +1445,16 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # creature, and rooted is "cannot use move actions to walk or run" -- its own
     # docstring says such a creature "may still shift". Gating this on `can_walk`
     # would take the shift away from every row printing that line.
-    if can_move(world, actor):
-        offers = {ActionType.MOVE: 1}
-        for (what, cost), squares_ in _granted(world, actor).items():
-            if what != "shift":
-                continue
-            offers[cost] = max(offers.get(cost, 0), squares_)
-        mode = mode_of(world, actor, None)
-        for cost in sorted(offers, key=lambda a: a.value):
-            if not encounter.can_spend(actor, cost):
-                continue
-            # Priced as a shift, to match `Cast.shift` and `execute`. A
-            # creature exempt from difficult terrain only while shifting was
-            # offered the same squares as one that is not.
-            step = reachable(
-                world, actor, offers[cost],
-                mode="walk" if mode in OVERHEAD else None, kind="shift",
-            )
-            for dest in sorted(step):
-                out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
+    #
+    # **`can_shift` now, which is `can_move` plus the one field this is
+    # about.** The paragraph above is unchanged and still the reason not to
+    # use `can_walk`; what it missed is that a `no_shift` condition was not
+    # consulted here at all, so the menu lied in the other direction too --
+    # the prone branch's early return was the only thing withholding a
+    # shift from a prone creature, and a condition that bars shifting
+    # without barring movement had nothing stopping it. `can_shift` reads
+    # `rules_for`, so a `f2604` waiver is honoured here as well.
+    out.extend(_shift_offers(world, encounter, actor))
 
     # **Repositioning inside a zone that granted it.** `p16590`: "that
     # character can move from one square in the zone to another as a free
