@@ -556,6 +556,7 @@ def _enemy_hits_nearby_ally(world: World, me: int, ev: Any) -> bool:
 
 @power(
     "cf:bard-f1s1",
+    requires=on_leg("f1s1"),
     level=0,
     cls="bard",
     usage=ENCOUNTER,

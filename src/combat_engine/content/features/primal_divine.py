@@ -141,6 +141,7 @@ _CROWD = 8
 
 @power(
     "cf:avenger-f1s2",
+    requires=on_leg("unity"),
     level=0,
     cls="avenger",
     usage=ENCOUNTER,
@@ -279,6 +280,7 @@ def druid_balance(c: Cast) -> None:
 
 @power(
     "cf:druid-f1s2",
+    requires=on_leg("f1s2"),
     level=0,
     cls="druid",
     usage=ENCOUNTER,
@@ -340,6 +342,7 @@ _ELEMENTS = (Keyword.COLD, Keyword.FIRE, Keyword.LIGHTNING, Keyword.THUNDER)
 
 @power(
     "cf:druid-f1s3",
+    requires=on_leg("f1s3"),
     level=0,
     cls="druid",
     usage=ENCOUNTER,

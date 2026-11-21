@@ -5320,6 +5320,25 @@ OPTION_PACT: dict[str, str | tuple[str, ...]] = {
     "cf:barbarian-f1s1": "thaneborn",               # body
     "cf:barbarian-f1s2": "thunderborn",             # body
     "cf:barbarian-f1s3": "whirling",                # body
+    #: cf:battlemind-f2, cf:psion-f0, cf:shaman-f0 -- **three forks this
+    #: table classified by the wrong end.** `#1427`'s split asked whether
+    #: the *parent* row reads `c.build(...)`, and these three parents do
+    #: not; their **arms** do, every one of them, so the fork is
+    #: leg-decided and the uniform draw could hand a shaman the stalker's
+    #: option while dealing it the elemental's row. Derived from each
+    #: arm's own gate, which `legs.option_arms` now checks.
+    "cf:battlemind-f2s0": "f2s0",                   # gate
+    "cf:battlemind-f2s1": "f2s1",                   # gate
+    "cf:battlemind-f2s2": "f2s2",                   # gate
+    "cf:battlemind-f2s3": "f2s3",                   # gate
+    "cf:psion-f0s0": "f0s0",                        # gate
+    "cf:psion-f0s1": "f0s1",                        # gate
+    "cf:psion-f0s2": "f0s2",                        # gate
+    "cf:shaman-f0s0": "elemental",                  # gate
+    "cf:shaman-f0s1": "protector",                  # gate
+    "cf:shaman-f0s2": "stalker",                    # gate
+    "cf:shaman-f0s3": "watcher",                    # gate
+    "cf:shaman-f0s4": "world speaker",              # gate
     #: cf:bard-f1
     "cf:bard-f1s0": "f1s0",                         # name
     "cf:bard-f1s1": "f1s1",                         # body

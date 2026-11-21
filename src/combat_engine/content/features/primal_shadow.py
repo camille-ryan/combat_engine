@@ -104,6 +104,7 @@ def _end_all(c: Cast, held: list[Effect | None]) -> None:
 
 @power(
     "cf:ardent-f0s1",
+    requires=on_leg("f0s1"),
     level=0,
     cls="ardent",
     usage=ENCOUNTER,
@@ -150,6 +151,7 @@ def ardent_mantle_elation(c: Cast) -> None:
 
 @power(
     "cf:ardent-f0s2",
+    requires=on_leg("f0s2"),
     level=0,
     cls="ardent",
     usage=ENCOUNTER,
@@ -259,6 +261,7 @@ def ardent_power_points(c: Cast) -> None:
 
 @power(
     "cf:barbarian-f1s1",
+    requires=on_leg("thaneborn"),
     level=0,
     cls="barbarian",
     usage=ENCOUNTER,
@@ -311,6 +314,7 @@ def barbarian_thaneborn(c: Cast) -> None:
 
 @power(
     "cf:barbarian-f1s2",
+    requires=on_leg("thunderborn"),
     level=0,
     cls="barbarian",
     usage=ENCOUNTER,
@@ -346,6 +350,7 @@ def barbarian_thunderborn(c: Cast) -> None:
 
 @power(
     "cf:barbarian-f1s3",
+    requires=on_leg("whirling"),
     level=0,
     cls="barbarian",
     usage=ENCOUNTER,

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
+from combat_engine.content.features.builds import on_leg
 from combat_engine.content.powers.shaman._spirit import beside_spirit, friends
 from combat_engine.engine import (
     AC,
@@ -151,7 +152,7 @@ def shaman_f0(c: Cast) -> None:
     c.grant_row("p6515")
 
 
-@power("cf:shaman-f0s0", **TRAIT,)
+@power("cf:shaman-f0s0", requires=on_leg("elemental"), **TRAIT)
 def shaman_f0s0(c: Cast) -> None:
     """The option `chargen` has been offering with no row behind it.
 
@@ -209,7 +210,7 @@ def shaman_f0s0(c: Cast) -> None:
     )
 
 
-@power("cf:shaman-f0s1", **TRAIT)
+@power("cf:shaman-f0s1", requires=on_leg("protector"), **TRAIT)
 def shaman_f0s1(c: Cast) -> None:
     """The boon is a rider on somebody else's healing, so it is laid as a
     watcher on `Healed` in the before-window, where the amount is still
@@ -236,7 +237,7 @@ def shaman_f0s1(c: Cast) -> None:
     )
 
 
-@power("cf:shaman-f0s2", **TRAIT)
+@power("cf:shaman-f0s2", requires=on_leg("stalker"), **TRAIT)
 def shaman_f0s2(c: Cast) -> None:
     """Untyped: the card prints no word in front of "bonus". The gate is
     re-asked at each damage roll, so an ally who walks away from the spirit
@@ -256,7 +257,7 @@ def shaman_f0s2(c: Cast) -> None:
         )
 
 
-@power("cf:shaman-f0s3", **TRAIT)
+@power("cf:shaman-f0s3", requires=on_leg("watcher"), **TRAIT)
 def shaman_f0s3(c: Cast) -> None:
     """"Cover from other enemies" is narrower than anything the engine can
     say -- what grants the cover is not in the context the gate is handed --
@@ -307,7 +308,7 @@ def shaman_f0s3(c: Cast) -> None:
                 c.counts_as_nearest(foe, on=friend, until=When.ENCOUNTER)
 
 
-@power("cf:shaman-f0s4", **TRAIT)
+@power("cf:shaman-f0s4", requires=on_leg("world speaker"), **TRAIT)
 def shaman_f0s4(c: Cast) -> None:
     """All four defences, which is what "all defenses" says, and untyped."""
     _spirit_choice(c, "world speaker", ("p9733", "p9736"))

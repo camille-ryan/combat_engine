@@ -36,6 +36,7 @@ is what will start mattering the day the legs exist.
 
 from __future__ import annotations
 
+from combat_engine.content.features.builds import on_leg
 from combat_engine.engine import (
     AC,
     ENCOUNTER,
@@ -131,6 +132,7 @@ def battlemind_option(c: Cast) -> None:
 
 @power(
     "cf:battlemind-f2s0",
+    requires=on_leg("f2s0"),
     level=0,
     cls="battlemind",
     usage=ENCOUNTER,
@@ -149,6 +151,7 @@ def battlemind_option_resilience(c: Cast) -> None:
 
 @power(
     "cf:battlemind-f2s1",
+    requires=on_leg("f2s1"),
     level=0,
     cls="battlemind",
     usage=ENCOUNTER,
@@ -165,6 +168,7 @@ def battlemind_option_strike(c: Cast) -> None:
 
 @power(
     "cf:battlemind-f2s2",
+    requires=on_leg("f2s2"),
     level=0,
     cls="battlemind",
     usage=ENCOUNTER,
@@ -181,6 +185,7 @@ def battlemind_option_speed(c: Cast) -> None:
 
 @power(
     "cf:battlemind-f2s3",
+    requires=on_leg("f2s3"),
     level=0,
     cls="battlemind",
     usage=ENCOUNTER,
@@ -204,6 +209,7 @@ def battlemind_option_focus(c: Cast) -> None:
 
 @power(
     "cf:monk-f0s0",
+    requires=on_leg("f0s0"),
     level=0,
     cls="monk",
     usage=ENCOUNTER,
@@ -229,6 +235,7 @@ def monk_tradition_centred(c: Cast) -> None:
 
 @power(
     "cf:monk-f0s1",
+    requires=on_leg("f0s1"),
     level=0,
     cls="monk",
     usage=ENCOUNTER,
@@ -257,6 +264,7 @@ def monk_tradition_wind(c: Cast) -> None:
 
 @power(
     "cf:monk-f0s2",
+    requires=on_leg("f0s2"),
     level=0,
     cls="monk",
     usage=ENCOUNTER,
@@ -296,6 +304,7 @@ def monk_tradition_tide(c: Cast) -> None:
 
 @power(
     "cf:monk-f0s3",
+    requires=on_leg("f0s3"),
     level=0,
     cls="monk",
     usage=ENCOUNTER,
@@ -326,6 +335,7 @@ def monk_tradition_iron(c: Cast) -> None:
 
 @power(
     "cf:monk-f0s4",
+    requires=on_leg("f0s4"),
     level=0,
     cls="monk",
     usage=ENCOUNTER,
@@ -478,6 +488,7 @@ def psion_discipline(c: Cast) -> None:
 
 @power(
     "cf:psion-f0s0",
+    requires=on_leg("f0s0"),
     level=0,
     cls="psion",
     usage=ENCOUNTER,
@@ -497,6 +508,7 @@ def psion_discipline_shaper(c: Cast) -> None:
 
 @power(
     "cf:psion-f0s1",
+    requires=on_leg("f0s1"),
     level=0,
     cls="psion",
     usage=ENCOUNTER,
@@ -514,6 +526,7 @@ def psion_discipline_telekinetic(c: Cast) -> None:
 
 @power(
     "cf:psion-f0s2",
+    requires=on_leg("f0s2"),
     level=0,
     cls="psion",
     usage=ENCOUNTER,
