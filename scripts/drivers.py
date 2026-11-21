@@ -67594,7 +67594,26 @@ def the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers(
                  "with nothing to compare against is not a pass")
     else:
         off = []
+        pacts = 0
         for opt, pact in chargen.OPTION_PACT.items():
+            # **Only the pact forks, because the table is no longer only
+            # pacts.** `#1427` added 54 pairings for forks whose arm is
+            # decided by an ordinary build leg, and those legs are leg
+            # slugs -- `f0s0`, `second-dex`, `great-weapon` -- which are
+            # not printed anywhere and cannot name themselves in a printed
+            # name. Asking them to reddened this rule on 47 entries that
+            # were never transcribed from a name.
+            #
+            # The scoping is by provenance and not by convenience: a pact
+            # entry is read off a printed name and this is what checks it,
+            # while a leg entry is derived from the arm's own `on_leg`
+            # gate or the `c.build` its body asks, and
+            # `legs.option_arms` is what checks *that* -- against the
+            # rows, which is the stronger question of the two. Between
+            # them every entry is still checked against something.
+            if not opt.startswith("cf:warlock-"):
+                continue
+            pacts += 1
             name = (loc.get(opt) or {}).get("name", "")
             # **The fey pact's variant is named by the variant alone on
             # three of its five options.** `cf:warlock-hexblade-f3s2` is
@@ -67609,7 +67628,7 @@ def the_hexblades_pact_weapon_follows_the_pact_and_gates_its_powers(
             if not re.search(pact.replace("-", "[- ]?"), name, re.I):
                 off.append((opt, pact, name))
         out.that(not off,
-                 f"all {len(chargen.OPTION_PACT)} pact-keyed options name "
+                 f"all {pacts} pact-keyed options name "
                  "their own pact in the printed name this table was "
                  "transcribed from -- the whole of `#1264`'s answer, and "
                  "the half that rots if the import is rebuilt",

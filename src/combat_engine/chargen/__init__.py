@@ -1647,15 +1647,24 @@ def ladder_row(p, level: int = 1) -> bool:  # noqa: ANN001
     #
     # Dealing it is safe precisely because the leg gates it -- the caller
     # applies `leg_named_by(p) in ("", build.name)`, so only the arm whose
-    # leg the character took is ever handed over. The option is recorded
-    # as well, and the two agree by construction now that `OPTION_PACT`
-    # keys the arm to the leg.
-    if _FEATURE_SUB_OPTION.search(p.ref):
+    # leg the character took is ever handed over.
+    #
+    # **The test is the arm's OWN header gate, not whether its fork is
+    # leg-keyed**, and the broader version was wrong. A first attempt
+    # exempted every arm of a fork all of whose arms are in
+    # `OPTION_PACT`, which is true of the warlock's pact forks -- where
+    # the parent really does grant the one it chose, so a hexblade was
+    # dealt arm rows on top of the parent's copy. `drivers.hexblade_pacts`
+    # names it: "a dealt hexblade is handed NONE of the fork options".
+    #
+    # `leg_named_by` is the difference, and it is exactly the distinction
+    # the paragraph above draws: `cf:sorcerer-f0s0` answers 'cosmic' and
+    # `cf:warlock-hexblade-f1s0` answers '', because the first is gated by
+    # the leg that took it and the second is handed over by its parent.
+    if _FEATURE_SUB_OPTION.search(p.ref) and not leg_named_by(p):
         parent = _FEATURE_SUB_OPTION.sub(
             lambda m: m.group(0).split("s")[0], p.ref)
-        arms = BUILD_OPTIONS.get(parent, ())
-        leg_keyed = bool(arms) and all(a in OPTION_PACT for a in arms)
-        if parent in BUILD_OPTIONS and not leg_keyed:
+        if parent in BUILD_OPTIONS:
             return False
     # **The PRINTED level, which `Power.level` does not carry.**
     # `class_feature` has no level column (`#1261`), so every class feature
