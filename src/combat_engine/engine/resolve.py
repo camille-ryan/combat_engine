@@ -687,6 +687,14 @@ def attack(
             # not ask the same question. A rider that sharpens a mark had
             # nothing to gate on and read as unwritable.
             "among": tuple(among),
+            # **Whether this swing was told to ignore cover outright**, as
+            # an argument rather than through a standing waiver. In the
+            # context because `Cast.reroll_attack` recomputes the
+            # situational half against this same dict and has to pass the
+            # value the first roll used -- a difference taken with it
+            # False, over a swing resolved with it True, hands the reroll
+            # back a cover penalty that was never charged.
+            "ignore_cover": ignore_cover,
         }
 
         situational = situational_attack(

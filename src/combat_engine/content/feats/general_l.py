@@ -1594,7 +1594,7 @@ def f2846(c: Cast) -> None:
        trigger="an attack p1450 made you roll again hits",
        on=Trigger(Hit, after_reroll_by("p1450"),
                   "the attack you rerolled hit"),
-       dropped=("c.ignore_cover(reroll=)",))
+       )
 def f2849(c: Cast) -> None:
     """Two of the three clauses are written and the cover one is not.
 
@@ -1619,12 +1619,27 @@ def f2849(c: Cast) -> None:
     from the same power later in the turn is left alone -- the card speaks
     about the attack's damage.
 
-    **Still dropped: the rerolled roll ignores cover and concealment.**
-    `c.ignore_cover` takes a `when=` gate and the obvious version is a gate
-    on `reroll_by` -- silently false, because cover is read inside
-    `defence()` with `resolve`'s own context, where `reroll` is always
-    False. `reroll_attack` re-sums modifiers and nothing else; the target
-    defence it compares against was settled at the first roll.
+    **The cover clause is written, in `p1450`, and the note that stood
+    here was wrong about where cover lives.** It said cover *"is read
+    inside `defence()` with `resolve`'s own context"* and that the target
+    defence *"was settled at the first roll"*. Neither is so: cover is a
+    term in `resolve.situational_attack`, waived by `query.cover_waived`,
+    and both read the **attack** context. So the obvious `when=` gate on
+    `reroll_by` was the right shape all along.
+
+    What was really missing was narrower. `Cast.reroll_attack` re-summed
+    `Mods["attack"]` with `reroll` set and left every ctx-sensitive
+    *situational* term at its first-roll value -- so a reroll-gated
+    waiver was laid, correct, and consulted by nothing. It takes the
+    difference over the whole of `situational_attack` now, which is a
+    superset of what it did and one rule rather than a partial copy.
+
+    The clause itself is in `p1450`'s body and not here, which is the
+    same wrinkle `f980` already put there: the sentence is about the
+    reroll, and `p1450` is what rerolls. This row declares
+    `on=Trigger(Hit, after_reroll_by("p1450"))`, so its body runs after
+    the reroll is scored -- too late to waive anything, and a
+    trigger-declared row's standing modifiers are never laid at all.
     """
     me = c.me
     foe = getattr(c.trigger, "target", None)

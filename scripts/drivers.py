@@ -84387,6 +84387,130 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def reroll_ignores_cover(out: Result) -> None:
+    """"The rerolled attack roll ignores cover and concealment."
+
+    `f2849` prints it and was `dropped=("c.ignore_cover(reroll=)",)` on a
+    note claiming cover is read inside `defence()` and that the defence
+    was settled at the first roll. It is not: cover is a term in
+    `resolve.situational_attack`, waived by `query.cover_waived`, and both
+    read the **attack** context -- so a `when=` gate on `reroll_by` was
+    the right shape from the start.
+
+    The real gap was narrower. `Cast.reroll_attack` re-summed
+    `Mods["attack"]` with `reroll` set and left every ctx-sensitive
+    *situational* term at its first-roll value, so a reroll-gated waiver
+    was laid, correct, and read by nothing. It takes the difference over
+    the whole of `situational_attack` now -- which contains that `_mods`
+    call, so it replaces the old difference rather than adding to it.
+
+    **Driven through `p1450`'s body**, which is where the clause lives and
+    for the reason `f980`'s clause is already there: the sentence is about
+    the reroll, and `p1450` is what rerolls. A rule calling
+    `c.ignore_cover` itself would stay green with the content reverted.
+
+    Both halves of the printed pair are asserted. One call waives both --
+    `concealment_waived` answers *"everything `cover_waived` answers"* --
+    and a rule testing only cover could not tell that from a cover-only
+    waiver.
+
+    Three things keep it honest. The penalty is asserted to be **charged**
+    without the feat, or the +2 would be measuring an unpenalised roll.
+    An ordinary swing in the same turn is asserted still to pay cover, so
+    the waiver is not leaking off its gate. And an always-on waiver is
+    asserted to move the reroll by **nothing**, because it was already
+    waived at the first roll and crediting it twice is the obvious way to
+    get this wrong.
+    """
+    from audit import board as posed
+    from combat_engine.engine import AC
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult, situational_attack
+
+    # Posed on a plain claw rather than on any row in this family:
+    # `audit.board` arms every `action=NONE` row, so posing on a trait that
+    # waives something hands the caster its own waiver before the baseline
+    # is read. `m1092a0` waives nothing -- the same choice, and the same
+    # reason, as `drivers.cover_and_concealment`.
+    NEUTRAL = "m1092a0"
+
+    def rerolled(*, feat: bool, state: str, always: bool = False) -> dict:
+        """Fire `p1450`'s body over a staged penalty and report the sums.
+
+        `before`/`after` are the situational total with and without the
+        reroll context, which is the pair `reroll_attack` differences.
+        """
+        world, me, _armed = posed(NEUTRAL, 1)
+        foe = sorted(enemies(world, me))[0]
+        stage = Cast(world=world, me=me, ref="drivers:stage")
+        (stage.cover if state == "cover" else stage.conceal)(
+            on=foe, until=When.ENCOUNTER)
+        known = world.get(me, Powers)
+        if feat and "f2849" not in known.known:
+            known.known.append("f2849")
+        if always:
+            Cast(world=world, me=me, ref="drivers:always").ignore_cover(
+                on=me, until=When.ENCOUNTER)
+        result = AttackResult(target=foe, target_defence=99, natural=10,
+                              total=10, rolls=[10])
+        ctx = {"attacker": me, "target": foe, "power": NEUTRAL,
+               "advantage": False, "charge": False, "branch": 0,
+               "among": (foe,), "ignore_cover": False}
+        ev = AttackRolled(attacker=me, target=foe, power=NEUTRAL, vs=AC,
+                          natural=10, bonus=0, total=10, defence=99,
+                          advantage=False)
+        ev.result, ev.ctx = result, ctx
+        start = result.total
+        c = Cast(world=world, me=me, ref="p1450", target=None)
+        c.trigger = ev
+        REGISTRY["p1450"].body(c)
+        # The die moved too, so the clause's contribution is what is left
+        # after taking the new face out.
+        beyond = result.total - start - (result.natural - 10)
+        plain = situational_attack(world, me, foe, NEUTRAL, ctx, among=(foe,))
+        return {"beyond": beyond, "plain": plain, "world": world,
+                "me": me, "foe": foe}
+
+    for state, penalty in (("cover", -2), ("concealed", -2)):
+        bare = rerolled(feat=False, state=state)
+        out.that(bare["plain"] == penalty,
+                 f"{state}: an unaided swing is charged {penalty} -- the"
+                 " premise, without which the waiver below would be"
+                 " measuring a roll nothing penalised",
+                 f"situational={bare['plain']}")
+        out.that(bare["beyond"] == 0,
+                 f"{state}: and with the feat NOT held the reroll gets"
+                 " nothing beyond its new die",
+                 f"beyond the die: {bare['beyond']:+}")
+
+        held = rerolled(feat=True, state=state)
+        out.that(held["beyond"] == -penalty,
+                 f"{state}: with `f2849` held the reroll gets"
+                 f" {-penalty:+} -- exactly the penalty handed back, which"
+                 " is what 'the rerolled attack roll ignores cover and"
+                 " concealment' says. Both halves, from one call, because"
+                 " the two waiver readers are nested",
+                 f"beyond the die: {held['beyond']:+}")
+        out.that(held["plain"] == penalty,
+                 f"{state}: and an ordinary swing in the same turn is"
+                 " STILL charged it -- the waiver is gated on `reroll_by`"
+                 " and does not leak off the one reroll",
+                 f"situational outside the reroll: {held['plain']}")
+
+        both = rerolled(feat=True, state=state, always=True)
+        out.that(both["beyond"] == 0,
+                 f"{state}: a creature that ALREADY ignores cover gains"
+                 " nothing on the reroll -- it was waived at the first"
+                 " roll, and paying it again is the obvious way to get a"
+                 " difference wrong",
+                 f"beyond the die: {both['beyond']:+}")
+
+
 def raised_grant_allowance(out: Result) -> None:
     """"If the power you gained ... is a martial power, use it twice."
 
@@ -117946,6 +118070,8 @@ DRIVERS = {
                                  "a mark can count as another row"),
     "raised_grant_allowance": (raised_grant_allowance,
                                "a feat adds a use to a granted row"),
+    "reroll_ignores_cover": (reroll_ignores_cover,
+                             "a rerolled roll ignores cover"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

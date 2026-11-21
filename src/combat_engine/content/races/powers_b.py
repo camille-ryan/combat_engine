@@ -353,11 +353,43 @@ def p1450(c: Cast) -> None:
     `c.trigger` is the `AttackRolled` this row was offered for, so
     `ev.power` is what names the attack being rerolled -- the only way to
     tell `p919`'s miss from any other. #1061.
+
+    **`f2849`'s cover clause is here for the same reason**, and it is the
+    second instance of the wrinkle above rather than a new one: *"the
+    rerolled attack roll ignores cover and concealment"* is a sentence
+    about the reroll, and this is the body that rerolls.
+
+    Laid **before** `c.reroll_attack` and gated on `reroll_by`, which is
+    the only arrangement that works. The feat's own row declares
+    `on=Trigger(Hit, after_reroll_by("p1450"))`, so its body runs after the
+    reroll has already been scored -- a waiver laid there would be laid
+    too late and, per the content guide, a trigger-declared row's standing
+    modifiers are never laid at all. The gate keeps the blast radius at
+    one reroll: `reroll_attack` stamps `reroll_by` with its own caller's
+    ref, so nothing else on the board sees the waiver, and an ordinary
+    swing this turn is charged cover as usual.
+
+    One call for both halves, because `query.concealment_waived` answers
+    *"everything `cover_waived` answers"* -- the two readers are nested
+    deliberately -- and the printed sentence names the pair.
     """
     lent(c)                      # f3158's sibling: f3159 lends this one
     ev = c.trigger
     rerolling = getattr(ev, "power", "") if ev is not None else ""
     extra = 2 if rerolling == "p919" and c.feat("f980") else 0
+    if c.feat("f2849"):
+        with c.credit("f2849"):
+            # `on=c.me` spelled out: this row is `target=NO_TARGET`, so a
+            # bare call is the mistake `lint` fails you for -- `on`
+            # defaults through `Cast._who` to `self.target`, which is
+            # nobody here. `c.ignore_cover` happens to default it to the
+            # caster itself, which makes the bare form correct by
+            # accident and unreadable on purpose.
+            c.ignore_cover(
+                on=c.me,
+                until=When.EOT,
+                when=lambda ctx: ctx.get("reroll_by") == "p1450",
+            )
     c.reroll_attack(keep="new", bonus=extra)
 
 

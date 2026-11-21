@@ -54,6 +54,11 @@ Both this and `weapon` below, because a card names one weapon as often as a fami
 Written by `resolve._group_of`, which looks it up on the attacker rather than taking it from the call site -- `Gear.weapons` holds per-character `replace(w)` copies, so it reads whatever `c.improvised` or `c.weapon_group` has done to the weapon. On the damage context too since #1276. #1276.
 - `ctx['hand']` -- which hand the weapon is in.
 - `ctx['how']` -- the kind of forced movement -- push, pull, slide.
+- `ctx['ignore_cover']` -- was this swing told to ignore cover OUTRIGHT, as an argument to `c.strike` rather than through a standing waiver.
+
+Distinct from asking whether cover was waived, which is `query.cover_waived` and reads `Mods` -- this is the caller's own flag, and a gate wanting the effective answer wants the reader instead.
+
+In the context because `Cast.reroll_attack` recomputes the situational half against this same dict and has to pass the value the first roll used: a difference taken with it False, over a swing resolved with it True, hands the reroll back a cover penalty that was never charged. `f2849` is the row that needed the recompute.
 - `ctx['keywords']` -- the keywords of the row or effect being asked about.
 - `ctx['kind']` -- **which kind of movement is asking to enter the square** -- on the ctx a `c.may_enter(when=)` veto is handed, and on no other. One of `walk`, `shift`, `run`, `charge`, `teleport`; written by `movement._clear`'s `move={...}` beside `squares` and `by`.
 

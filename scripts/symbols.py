@@ -937,6 +937,19 @@ CTX_KEYS: dict[str, str] = {
         "the weapon. On the damage context too since #1276. #1276."),
     "hand": "which hand the weapon is in.",
     "how": "the kind of forced movement -- push, pull, slide.",
+    "ignore_cover": (
+        "was this swing told to ignore cover OUTRIGHT, as an argument to "
+        "`c.strike` rather than through a standing waiver.\n\n"
+        "Distinct from asking whether cover was waived, which is "
+        "`query.cover_waived` and reads `Mods` -- this is the caller's "
+        "own flag, and a gate wanting the effective answer wants the "
+        "reader instead.\n\n"
+        "In the context because `Cast.reroll_attack` recomputes the "
+        "situational half against this same dict and has to pass the "
+        "value the first roll used: a difference taken with it False, "
+        "over a swing resolved with it True, hands the reroll back a "
+        "cover penalty that was never charged. `f2849` is the row that "
+        "needed the recompute."),
     "keywords": "the keywords of the row or effect being asked about.",
     # **`kind` was one key over four unrelated vocabularies** -- a range
     # shape, a kind of movement, a kind of roll, and absent -- and from a

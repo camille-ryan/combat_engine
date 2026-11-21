@@ -7078,8 +7078,44 @@ class Cast:
             # again". A bare `reroll` flag would have them modify every
             # reroll on the board, including a magic weapon's.
             again = {**ctx, "reroll": True, "reroll_by": self.ref}
-            result.total += _mods(self.world, who, "attack", again) - _mods(
-                self.world, who, "attack", ctx
+            # **The difference is taken over the whole situational half, not
+            # over `_mods` alone, and that is what made `f2849` writable.**
+            # It prints *"the rerolled attack roll ignores cover and
+            # concealment"*, and cover is not a bonus to the defence here --
+            # it is a term in `situational_attack`, waived by
+            # `cover_waived`, which reads this same context. So an
+            # `ignore_cover(when=...)` gated on the reroll was laid,
+            # correct, and consulted by nothing: this function re-summed
+            # `Mods["attack"]` and left every ctx-sensitive *situational*
+            # term at its first-roll value.
+            #
+            # `_mods(..., "attack", ...)` is **inside** `situational_attack`,
+            # so this replaces that difference rather than adding to it --
+            # taking both would count the gated modifiers twice. It is a
+            # superset: the cover and concealment waivers, long range,
+            # the mark penalty and the underwater one all move now, each
+            # for the same reason and none of them by a second rule.
+            # *"Two implementations of one rule is how they drift"* is that
+            # function's own docstring.
+            #
+            # Every argument but the context is identical across the pair,
+            # so anything that does not read the context cancels -- which
+            # is the whole of why this is safe for the 18 rows that reroll
+            # and lay no reroll-gated anything: their difference is 0.
+            from .resolve import situational_attack as _situational
+
+            same = {
+                "ca": bool(ctx.get("advantage")),
+                "charge": bool(ctx.get("charge")),
+                "ignore_cover": bool(ctx.get("ignore_cover")),
+                "branch": int(ctx.get("branch", 0) or 0),
+                "among": tuple(ctx.get("among", ()) or ()),
+            }
+            aimed = str(ctx.get("power", "") or getattr(ev, "power", "") or "")
+            victim = result.target
+            result.total += (
+                _situational(self.world, who, victim, aimed, again, **same)
+                - _situational(self.world, who, victim, aimed, ctx, **same)
             )
         # **These two lines judged a rerolled die by three wrong rules**, and
         # they are live: a reroll driven from an `AttackRolled` listener is
