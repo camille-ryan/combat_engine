@@ -4496,7 +4496,15 @@ def affordable(world: World, actor: int, p: Power) -> tuple[int, ...]:
     from .components import PowerPoints
 
     pool = world.get(actor, PowerPoints)
-    have = pool.points if pool is not None else 0
+    # **`temporary` counts, and leaving it out made `i1793p1` useless.**
+    # That card grants a power point "until the end of your next turn"
+    # and says it may be spent *only* to augment an attack power -- so an
+    # augment is the one thing it is for. `PowerPoints.spend` takes
+    # expiring points first, but this is the reader that decides which
+    # augments are **offered**, so a point the menu cannot see cannot be
+    # spent at all. The grant shipped before this did, and the row was
+    # written against a point it could not use.
+    have = (pool.points + pool.temporary) if pool is not None else 0
     return tuple(n for n in p.augment_costs if n <= have)
 
 

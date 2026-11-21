@@ -27046,6 +27046,28 @@ def pool_emptied(out: Result) -> None:
              "an expiring point counts as left -- it can still be spent,"
              f" so a pool holding one has not dropped to 0 ({said[-1].left})")
 
+    # **An expiring point must be able to buy an augment**, which is the
+    # one thing `i1793p1` grants it for. `dsl.affordable` is the reader
+    # that decides which augments are OFFERED, and it read `pool.points`
+    # alone -- so the grant shipped against a point nothing could spend,
+    # and `spend` taking expiring points first did not help. Asserted
+    # through `affordable` and not through `spend` for exactly that
+    # reason: the menu is where it was invisible.
+    from combat_engine.engine.dsl import REGISTRY, affordable
+
+    augmenting = next((p for p in REGISTRY.values()
+                       if p.augments and 1 in p.augment_costs), None)
+    out.that(augmenting is not None,
+             "the premise: some row in the tree augments for 1 point")
+    if augmenting is not None:
+        pool.points, pool.temporary = 0, 0
+        out.that(1 not in affordable(world, me, augmenting),
+                 "with an empty pool the 1-point augment is not offered")
+        pool.temporary = 1
+        out.that(1 in affordable(world, me, augmenting),
+                 "and ONE EXPIRING POINT buys it -- the reader that"
+                 " decides what is offered counts them")
+
     # -- the rows themselves, not a stand-in handler ---------------------
     # **A first draft armed its own `c.watch` with a handler that appended
     # to a list, and the `once=True` assertion failed**: `once` reads the
