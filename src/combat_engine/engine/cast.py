@@ -22444,6 +22444,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         every: bool = False,
         held: bool = False,
         mine: bool = False,
+        against: Callable[[int], bool] | None = None,
         on: int | None = None,
     ) -> int:
         """Lay a printed weapon property on that creature's weapons. Returns how many.
@@ -22500,6 +22501,39 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         rows across the weapon, implement and feat trees print the same
         sentence about silver, and a content-local helper cannot be
         imported by all three trees without a seam nobody wants.
+
+        **`against=` narrows the property to the creature being struck**, and
+        it touches no weapon at all -- which is the whole reason it is its
+        own door rather than a sixth selector. The five above pick *which
+        weapon* carries the property; this one answers *who it counts
+        against*, and a property sitting on a weapon cannot hold that,
+        because the weapon does not know who it is pointed at. `f2893`
+        prints "while an enemy grants combat advantage to you, your attacks
+        against that enemy count as silvered", where `f1075` prints the
+        blanket and wants `every=True`.
+
+        A predicate, handed the victim's id, rather than a creature: the
+        card scopes to *an* enemy and not a named one, so there is no id to
+        pass when the trait arms, and both halves of its gate come and go
+        mid-fight. Evaluated at the moment of the read, by
+        `struck_by_property` -- which is the one reader that knows who was
+        struck, and therefore the one place this can be seen. `_high_crit`
+        and `_weapon_is` ask about the holder's own weapon and are
+        deliberately not changed: a critical die cannot depend on who is in
+        front of you, and neither can whether a card's Requirement is met.
+
+        Returns 1 for the hold laid, not a weapon count, because no weapon
+        changed. The selectors do not combine with it -- a scoped hold is
+        about the character's attacks, the way `counts_as` is -- so passing
+        `against=` with `every=` or `group=` raises rather than quietly
+        honouring one of them.
+
+        **Keyed on the laying row's ref, so arming it twice says the same
+        thing once.** The blanket gets that for free by unioning into a
+        `set`; a list of closures cannot, because two closures built from
+        the same line of the same row are never equal. Without the key a
+        trait re-armed each encounter would stack a hold per fight on any
+        `Gear` that outlives one.
         """
         who = self._who(on)
         if who is None:
@@ -22507,6 +22541,30 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         gear = self.world.get(who, Gear)
         if gear is None:
             return 0
+        if against is not None:
+            if every or group or ref or held or mine:
+                raise ValueError(
+                    "gains_property: against= scopes the property to the "
+                    "creature struck and lays it on no weapon, so it does "
+                    "not combine with a weapon selector")
+            from .events import WeaponChanged as _Changed
+            # Keyed on this row's ref so re-arming replaces rather than
+            # stacks -- "arming the trait twice says the same thing twice"
+            # is free for the blanket, which unions into a set, and has to
+            # be written here because two closures are never equal.
+            gear.scoped = [e for e in gear.scoped
+                           if (e[0], e[1]) != (prop, self.ref)]
+            gear.scoped.append((prop, self.ref, against))
+            # Announced for the reason `WeaponChanged`'s own docstring gives
+            # -- it names "a silvered blanket" as one of the three rows it
+            # rescued from `KNOWN_SILENT`, and a scoped hold is that row's
+            # narrower sibling, so it would have been silent in exactly the
+            # same way. `weapon=""` because no weapon carries this one:
+            # that is the honest answer here, not a missing lookup.
+            self.world.bus.emit(_Changed(
+                actor=who, weapon="", field="scoped", what=prop,
+            ))
+            return 1
         from .events import WeaponChanged
 
         # `replace` and a write-back -- see `weapon_dice` above for why, and
@@ -22985,9 +23043,30 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         working: watch `Hit`, which carries `attacker`, `target` and the
         power. The printed sentence costs nothing by it, because damage
         *from a weapon* arrives through a hit.
+
+        **A scoped property counts here and only here.** `gains_property`
+        with `against=` lays a property on the character rather than on a
+        weapon, because it is narrowed to the creature being struck -- so
+        this is the one reader with both halves in hand, `ev.attacker` to
+        find the hold and `ev.target` to ask it about. Still gated on a
+        weapon being identified, which keeps a narrowed property exactly as
+        strong as the blanket it narrows and no stronger: `every=True` lays
+        on the character's weapons, so an unarmed blow does not carry that
+        one either.
         """
         weapon = self.weapon_of(ev)
-        return weapon is not None and prop in weapon.properties
+        if weapon is None:
+            return False
+        if prop in weapon.properties:
+            return True
+        ev = ev if ev is not None else self.trigger
+        attacker = getattr(ev, "attacker", None) if ev is not None else None
+        victim = getattr(ev, "target", None) if ev is not None else None
+        gear = self.world.get(attacker, Gear) if attacker is not None else None
+        if gear is None or not isinstance(victim, int):
+            return False
+        return any(p == prop and pred(victim)
+                   for p, _ref, pred in gear.scoped)
 
     def weapon_of(self, ev: Any = None) -> Weapon | None:
         """Which weapon the attack behind this event was swung with.

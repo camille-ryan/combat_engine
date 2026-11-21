@@ -40710,6 +40710,185 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def a_property_counting_against_one_creature(out: Result) -> None:
+    """A weapon property narrowed to the creature being struck.
+
+    `f2893` prints *"while an enemy grants combat advantage to you, your
+    attacks against that enemy count as silvered"*, where `f1075` prints
+    the blanket. A property lives on the weapon and **the weapon does not
+    know who it is pointed at**, so the narrowed one is a hold on the
+    character -- `Gear.scoped`, laid by `c.gains_property(against=)` and
+    read by `struck_by_property`, the one reader holding both the attacker
+    and the victim.
+
+    Asserted through `c.regeneration(unless_struck_by=)` rather than
+    through `struck_by_property` directly, because that is the caller the
+    fifteen stat blocks printing this sentence actually go through, and it
+    is the same reader `regeneration_suspended` above already proves the
+    blanket with. So the two rules differ in exactly one thing -- whether
+    the property is scoped -- which is what makes the comparison worth
+    anything.
+
+    The pair that matters is the **predicate's two answers on one board**:
+    a hold whose predicate says yes must suspend the regeneration exactly
+    as the blanket does, and a hold whose predicate says no must suspend
+    nothing at all. Without the second, every assertion here would pass on
+    an implementation that ignored the predicate and counted any scoped
+    hold -- which is `f1075`'s sentence wearing `f2893`'s marker, and the
+    direction the row's own note refused.
+
+    Then the real row, with the real condition, because a predicate the
+    rule wrote itself proves the plumbing and not the card: `f2893` is
+    armed on a board where the monster does grant combat advantage and on
+    one where it does not.
+
+    **"An enemy grants combat advantage to you" is asked as "do I have it
+    against that enemy"** -- the same fact from the two ends. The
+    arguments-reversed reading is a real hazard rather than a hypothetical
+    one, so it is planted below.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit, TurnStart
+
+    def fight(
+        lay: Callable[[World, int, int], None] | None,
+    ) -> tuple[int, int, int]:
+        """Heal per turn: clean, after a hit, then the turn after that."""
+        fielded = story.field_encounter(seed=7, level=3)
+        world = fielded.world
+        pc = next(e for e in sorted(world.entities)
+                  if not query.stat_block(world, e))
+        mon = next(e for e in sorted(world.entities)
+                   if query.stat_block(world, e))
+        hurt = world.get(mon, Health)
+        assert hurt is not None
+        hurt.hp = max(1, hurt.max_hp - 40)
+        if lay is not None:
+            lay(world, pc, mon)
+        Cast(world=world, me=mon, ref="drivers:scoped").regeneration(
+            5, on=mon, until=When.ENCOUNTER, unless_struck_by="silvered")
+        rnd = [1]
+
+        def turn() -> int:
+            was = hurt.hp
+            rnd[0] += 1
+            world.bus.emit(TurnStart(actor=mon, round=rnd[0], ghost=False))
+            return hurt.hp - was
+
+        clean = turn()
+        world.bus.emit(Hit(attacker=pc, target=mon, power="rba",
+                           critical=False))
+        return clean, turn(), turn()
+
+    def scoped(answer: bool) -> Callable[[World, int, int], None]:
+        def lay(world: World, pc: int, mon: int) -> None:
+            Cast(world=world, me=pc, ref="drivers:scoped").gains_property(
+                "silvered", against=lambda victim: answer, on=pc)
+        return lay
+
+    yes = fight(scoped(True))
+    out.that(yes == (5, 0, 5),
+             "a property scoped to the creature struck suspends the"
+             " regeneration exactly as the blanket does -- same reader, same"
+             f" one turn (healed {yes[0]}, {yes[1]}, {yes[2]})")
+
+    no = fight(scoped(False))
+    out.that(no == (5, 5, 5),
+             "and a scoped property whose condition is FALSE suspends"
+             " nothing, without which this passes on an implementation that"
+             " ignores the predicate and so lays `f1075`'s blanket under"
+             f" `f2893`'s marker (healed {no[0]}, {no[1]}, {no[2]})")
+
+    # No weapon, no property -- the narrowed one must be exactly as strong
+    # as the blanket it narrows and no stronger. `every=True` lays on the
+    # character's weapons, so an unarmed blow carries neither.
+    def disarmed(world: World, pc: int, mon: int) -> None:
+        gear = world.get(pc, Gear)
+        assert gear is not None
+        gear.weapons = []
+        Cast(world=world, me=pc, ref="drivers:scoped").gains_property(
+            "silvered", against=lambda victim: True, on=pc)
+
+    bare = fight(disarmed)
+    out.that(bare == (5, 5, 5),
+             "a scoped property does not travel on a creature with no weapon"
+             " at all, which is where the blanket it narrows also stops"
+             f" (healed {bare[0]}, {bare[1]}, {bare[2]})")
+
+    # -- and the row, with the printed condition rather than a stub ------
+    def arm_f2893(grant: bool) -> tuple[int, int, int]:
+        def lay(world: World, pc: int, mon: int) -> None:
+            if grant:
+                # The card's own condition, laid the way the printed
+                # sentence says it: the ENEMY grants, to me.
+                Cast(world=world, me=pc,
+                     ref="drivers:scoped").grants_advantage(
+                         on=mon, to=pc, until=When.ENCOUNTER)
+            REGISTRY["f2893"].body(
+                Cast(world=world, me=pc, ref="f2893", target=pc))
+        return fight(lay)
+
+    granting = arm_f2893(grant=True)
+    out.that(granting == (5, 0, 5),
+             "`f2893` itself suspends it while the enemy is granting combat"
+             f" advantage (healed {granting[0]}, {granting[1]},"
+             f" {granting[2]})")
+
+    plain = arm_f2893(grant=False)
+    out.that(plain == (5, 5, 5),
+             "and does nothing when it is not -- the half the card spends"
+             " its whole sentence on, and the half a blanket cannot say"
+             f" (healed {plain[0]}, {plain[1]}, {plain[2]})")
+
+    # A scoped hold is about the character's attacks and lays on no weapon,
+    # so a weapon selector alongside it has no honest reading -- one of the
+    # two has to be ignored, and ignoring either quietly is how `f1075`'s
+    # blanket would end up wearing `f2893`'s narrowing.
+    board = story.field_encounter(seed=7, level=3)
+    lone = next(e for e in sorted(board.world.entities)
+                if not query.stat_block(board.world, e))
+    refused = False
+    try:
+        Cast(world=board.world, me=lone,
+             ref="drivers:scoped").gains_property(
+                 "silvered", every=True,
+                 against=lambda victim: True, on=lone)
+    except ValueError:
+        refused = True
+    out.that(refused,
+             "and `against=` with a weapon selector RAISES rather than"
+             " quietly honouring one of them, which is the only reading"
+             " under which a scoped hold and a blanket cannot be confused")
+
+    # Arming a trait twice must say the same thing once. The blanket gets
+    # that free -- `every=True` unions into a set -- and a list of closures
+    # cannot, because two closures off one line are never equal. A trait
+    # re-armed per encounter would otherwise stack a hold per fight.
+    twice = Cast(world=board.world, me=lone, ref="f2893")
+    for _ in range(3):
+        twice.gains_property("silvered", against=lambda victim: True,
+                             on=lone)
+    worn = board.world.get(lone, Gear)
+    assert worn is not None
+    out.that(len(worn.scoped) == 1,
+             "and arming the same row three times leaves ONE hold, not"
+             " three -- the blanket is idempotent by being a set and this"
+             f" has to be keyed on the ref to match ({len(worn.scoped)})")
+
+    other = Cast(world=board.world, me=lone, ref="f1075")
+    other.gains_property("silvered", against=lambda victim: True, on=lone)
+    out.that(len(worn.scoped) == 2,
+             "while a DIFFERENT row laying the same property is its own"
+             " hold -- the key is (property, ref), so deduping on the"
+             f" property alone would lose one ({len(worn.scoped)})")
+
+
 def once_spend_moments(out: Result) -> None:
     """A one-shot bonus is spent where it is READ, not by the next swing.
 
@@ -114845,6 +115024,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "scoped_property": (a_property_counting_against_one_creature,
+                        "a weapon property narrowed to the creature being "
+                        "struck, not laid on the weapon"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
     "racial_power_riders": (racial_power_riders,

@@ -2497,6 +2497,32 @@ class Gear:
     #: property, a group, a category -- **plus the printed slug**, because
     #: several of these cards name one weapon rather than a group.
     counts_as: list[tuple[str, str]] = field(default_factory=list)
+    #: Weapon properties that only count against *some* creatures:
+    #: `(property, ref, predicate)` triples, where the predicate is handed a
+    #: victim's entity id and answers whether this character's blows count
+    #: as carrying the property against that creature right now.
+    #:
+    #: **The `ref` is in the key so that arming the trait twice says the
+    #: same thing once**, which is the behaviour the blanket gets for free:
+    #: `every=True` unions into a `set`, where a list of closures cannot
+    #: dedupe itself -- two closures are never equal, even built from the
+    #: same line of the same row. So the writer replaces an entry with the
+    #: same `(property, ref)` rather than appending beside it.
+    #:
+    #: Separate from the properties on `Weapon` because a property lives on
+    #: the weapon and **the weapon does not know who it is pointed at**.
+    #: `f2893` prints "while an enemy grants combat advantage to you, your
+    #: attacks against that enemy count as silvered" -- both halves dynamic,
+    #: scoped to one creature at a time -- where `f1075` prints the blanket
+    #: and lays it on the weapons with `every=True`.
+    #:
+    #: A predicate rather than a set of ids because the gate comes and goes
+    #: mid-fight and nothing emits when it does: combat advantage is derived
+    #: from position, conditions and modifiers, so a set written when the
+    #: trait armed would be answering about the board as it was. Resolved at
+    #: the moment of the read instead, which is `Cast.struck_by_property`.
+    scoped: list[tuple[str, str, Callable[[int], bool]]] = field(
+        default_factory=list)
     #: This creature's **arena weapons**, by ref.
     #:
     #: `cf:fighter-weaponmaster-f3s0` prints *"you select two weapons as

@@ -698,6 +698,13 @@ CATEGORIES: dict[str, dict] = {
                 "augmented", "lend_augment", "points",
                 "points_spent", "regain_points", "spend_points", "gain_points",
                 "spend_shrouds", "transfer_points",
+                # Banking points *into an item* rather than spending them,
+                # and the third way an augment gets paid for. One family:
+                # `store_points` puts them in, `stored_points` reads the
+                # balance, `spend_stored` takes them out, and `augment_paid`
+                # is the clause that says this use needs no points at all.
+                "store_points", "stored_points", "spend_stored",
+                "augment_paid",
             ]),
             ("charges and per-day uses", [
                 "ammunition", "charge_left",
@@ -990,6 +997,29 @@ CTX_KEYS: dict[str, str] = {
         "(`\"i1564p1 is a ranged power\"`), and reading a ref back out of "
         "a sentence is the fragile shape this file exists to prevent. "
         "#1233."
+    ),
+    "kind": (
+        "**which kind of movement is asking to enter the square** -- on "
+        "the ctx a `c.may_enter(when=)` veto is handed, and on no other. "
+        "One of `walk`, `shift`, `run`, `charge`, `teleport`; written by "
+        "`movement._clear`'s `move={...}` beside `squares` and `by`.\n\n"
+        "Beside `squares` rather than folded into it because the two "
+        "printed shapes ask different questions of one step: *\"you can "
+        "shift through an enemy's space\"* is about the kind, and *\"you "
+        "can move through on a move of 3 or more\"* is about the budget. "
+        "A gate handed one could not write the other.\n\n"
+        "**The hazard this entry exists against**: a ctx is a plain dict, "
+        "so before `move=` was merged in, a gate reading `ctx['kind']` "
+        "was False on every step and the row did nothing -- which is this "
+        "key's whole reason for being named here rather than left to be "
+        "rediscovered."
+    ),
+    "squares": (
+        "**how many squares the movement has to spend**, on the same "
+        "`c.may_enter(when=)` ctx as `kind` and written by the same "
+        "`move={...}`. The budget the step is being paid out of, not the "
+        "distance already covered.\n\n"
+        "See `kind` above for why both are carried."
     ),
     "provoked_by": (
         "the **ref that opened the opportunity window** this swing is "

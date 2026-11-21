@@ -30,6 +30,8 @@ Things a creature spends, and the budget it spends them from.
 
 - `c.augment: int`
   - how many power points this use was augmented by, or 0 -- set by `dsl.use` for a row that declares `augments=`.
+- `c.augment_paid(self, cap: 'int', *, who: 'int | None' = None) -> 'None'`
+  - "Instead of spending power points to augment the power." A cap.
 - `c.augment_spend: int | None`
   - the same number when the *body* settled it instead, which is every row whose augments only move a die. `None` until `content.powers.augment.augment` asks. Read `c.augment_used` rather than either field.
 - `c.augment_used`
@@ -50,6 +52,12 @@ Things a creature spends, and the budget it spends them from.
   - Spend power points to augment this row. Returns how many went.
 - `c.spend_shrouds(self) -> 'int'`
   - Invoke them: the count goes, and what it was is returned.
+- `c.spend_stored(self, n: 'int', *, into: 'str' = '', who: 'int | None' = None) -> 'int'`
+  - Take banked points back out of an item. How many actually came.
+- `c.store_points(self, n: 'int', *, into: 'str' = '', who: 'int | None' = None) -> 'int'`
+  - "Expend 1 or 2 power points and place them in the orb."
+- `c.stored_points(self, into: 'str' = '', *, of: 'int | None' = None) -> 'int'`
+  - How many power points are banked in that item. 0 if none are.
 - `c.transfer_points(self, n: 'int', *, on: 'int | None' = None) -> 'int'`
   - "You transfer 1 or 2 power points to the target."
 

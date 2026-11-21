@@ -50,6 +50,11 @@ Written by `resolve._group_of`, which looks it up on the attacker rather than ta
 - `ctx['hand']` -- which hand the weapon is in.
 - `ctx['how']` -- the kind of forced movement -- push, pull, slide.
 - `ctx['keywords']` -- the keywords of the row or effect being asked about.
+- `ctx['kind']` -- **which kind of movement is asking to enter the square** -- on the ctx a `c.may_enter(when=)` veto is handed, and on no other. One of `walk`, `shift`, `run`, `charge`, `teleport`; written by `movement._clear`'s `move={...}` beside `squares` and `by`.
+
+Beside `squares` rather than folded into it because the two printed shapes ask different questions of one step: *"you can shift through an enemy's space"* is about the kind, and *"you can move through on a move of 3 or more"* is about the budget. A gate handed one could not write the other.
+
+**The hazard this entry exists against**: a ctx is a plain dict, so before `move=` was merged in, a gate reading `ctx['kind']` was False on every step and the row did nothing -- which is this key's whole reason for being named here rather than left to be rediscovered.
 - `ctx['label']` -- the label of the effect being asked about.
 - `ctx['marker']` -- the creature trying to lay a mark, on the context `Cast.mark` builds to ask whether it is allowed to. Beside `target`, which is the creature it is trying to mark.
 
@@ -81,6 +86,9 @@ Empty for every caller that does not say, so a gate asking for a purpose is Fals
 - `ctx['roll_kind']` -- which kind of roll is being changed -- `attack` `check` `save`. Written by `p6186`, the one row that boosts whatever triggered it, and read by the three rows that narrow its die to an attack roll. Not `Cast.boost_roll`'s `kind=`, which is a parameter and a filter.
 - `ctx['skill']` -- the skill being checked, lowercased.
 - `ctx['source']` -- who laid the effect.
+- `ctx['squares']` -- **how many squares the movement has to spend**, on the same `c.may_enter(when=)` ctx as `kind` and written by the same `move={...}`. The budget the step is being paid out of, not the distance already covered.
+
+See `kind` above for why both are carried.
 - `ctx['target']` -- who it lands on. The commonest key in the tree.
 - `ctx['weapon']` -- which weapon this swing went through, by ref, `""` for a swing through none. See `group` above for why both: a card names one weapon as often as a family, the same reason `query.holding` matches a ref and a group.
 

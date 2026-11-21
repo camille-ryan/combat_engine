@@ -118,6 +118,7 @@ from combat_engine.engine.query import (
     distance_between,
     enemies,
     flanked_by,
+    has_combat_advantage,
     immune_to,
     race_skills,
     races_sized,
@@ -2833,31 +2834,41 @@ def f2889(c: Cast) -> None:
 
 
 @power("f2893", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.gains_property(against=)",))
+       reach=PERSONAL, target=SELF)
 def f2893(c: Cast) -> None:
-    """**Re-pointed, not blocked on the compendium, which prints this in
-    full.** Silver is a weapon property now and `c.gains_property` lays
-    it -- but this card scopes it to **one enemy**: "while an enemy grants
-    combat advantage to you, your attacks *against that enemy* count as
-    silvered". A property lives on the weapon and the weapon does not know
-    who it is pointed at, so a per-target property is a different thing
-    from the blanket `f1075` and `i1764x1` print. Both halves of the gate
-    are dynamic too -- the grant comes and goes mid-fight.
+    """The narrowing the marker named, which is the whole card: "while an
+    enemy grants combat advantage to you, your attacks *against that
+    enemy* count as silvered".
 
-    **The last line of this note used to contradict the first and is
-    gone.** It said silver "is a material nothing on a weapon or a blow
-    carries", which was true before `c.gains_property` and is why the row
-    had been marked at the compendium once: `f1075` lays `"silvered"` with
-    `every=True` today, and fifteen stat blocks read it through
-    `c.regeneration(unless_struck_by=)` -- `Cast.struck_by_property` asks
-    the attacker's weapon at the moment of the `Hit`.
+    `c.gains_property(against=)` is that narrowing. A property lives on a
+    weapon and the weapon does not know who it is pointed at, so this one
+    is a hold on the character instead, read by `struck_by_property` at
+    the moment of the `Hit` -- which is the one reader holding both the
+    attacker and the victim.
 
-    So the gap is exactly the narrowing and nothing else. Writing the
-    blanket here instead would be `f1075`'s printed sentence rather than
-    this one -- silver against every creature, for the whole fight, where
-    the card gives it against one enemy and only while that enemy is
-    granting combat advantage. Wider than the page, which is the direction
-    worth refusing."""
+    **A predicate and not a creature**, because the card scopes to *an*
+    enemy rather than a named one: there is no id to pass when the trait
+    arms, and both halves of the gate come and go mid-fight. So it is
+    asked per blow.
+
+    **"An enemy grants combat advantage to you" is `has_combat_advantage`
+    with the arguments this way round.** The printed sentence is about
+    what the enemy gives; the question the engine can answer is what I
+    have against it, and they are the same fact named from the two ends.
+    Reading it the other way -- me granting to the enemy -- would pay out
+    exactly when the card does not.
+
+    Writing the blanket here instead would have been `f1075`'s printed
+    sentence rather than this one: silver against every creature for the
+    whole fight, where this card gives it against one enemy and only
+    while that enemy is granting. Wider than the page, which is the
+    direction worth refusing, and why the row waited."""
+    me = c.me
+
+    def granting(victim: int) -> bool:
+        return has_combat_advantage(c.world, me, victim)
+
+    c.gains_property("silvered", against=granting, on=me)
 
 
 @power("f2894", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
