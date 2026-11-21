@@ -108,6 +108,14 @@ def features(
     # ally actually gets helped by today is `#1075`, the story-side
     # pass after the fight. #1074.
     f["is_stabilise"] = float(action.kind == "stabilise")
+    # **The other two uses of First Aid, named on the day they were
+    # added**, which is what `drivers.kinds_named` exists to force and what
+    # seven earlier kinds each got wrong. The same caveat as `stabilise`
+    # above applies and is the whole of what this does: `doctrine.py` does
+    # not prefer either yet, so naming them only stops them being scored
+    # entirely by terms that are about something else. PHB Deluxe p186.
+    f["is_use_second_wind"] = float(action.kind == "use_second_wind")
+    f["is_grant_save"] = float(action.kind == "grant_save")
     f["is_end"] = float(action.kind == "end")
     f["is_wield"] = float(action.kind == "wield")
     # Named for the reason the comment below gives, and it was earned the

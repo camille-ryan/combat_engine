@@ -161,6 +161,7 @@ def legal(
     out.extend(_action_points(world, encounter, actor))
     out.extend(_manoeuvres(world, encounter, actor))
     out.extend(_stabilising(world, encounter, actor))
+    out.extend(_first_aid(world, encounter, actor))
     out.extend(_ally_unlocks(world, encounter, actor))
     out.extend(_cowing(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
@@ -284,6 +285,32 @@ def _delaying(world: World, encounter: Encounter, actor: int) -> list[Action]:
 #: band would make saving a friend harder for a stronger party.
 STABILISE_DC = 15
 
+#: The other two uses of First Aid, read off the same printed block as
+#: `STABILISE_DC` -- PHB Deluxe page 186, *Heal (Wisdom) / First Aid*,
+#: which is one standard action with three bullets:
+#:
+#:     Use Second Wind: Make a DC 10 Heal check to allow an adjacent
+#:     character to use his or her second wind without the character
+#:     having to spend an action. The character doesn't gain the defense
+#:     bonuses normally granted by second wind.
+#:
+#:     Grant a Saving Throw: Make a DC 15 Heal check. If you succeed, an
+#:     adjacent ally can immediately make a saving throw, or the ally gets
+#:     a +2 bonus to a saving throw at the end of his or her next turn.
+#:
+#: Static numbers for `STABILISE_DC`'s reason: the page prints one figure
+#: each, so reading them off `dc.py`'s band would make helping a friend
+#: harder for a stronger party.
+#:
+#: **The withheld defence bonus is load-bearing rather than a detail.**
+#: `f3710` prints *"when you succeed on a Heal check to grant second wind,
+#: the subject gains the defense bonus that second wind normally grants"*
+#: -- a card that has nothing to grant back unless the base use withholds
+#: it. `c.second_wind(defences=False)` is how, and three rows waited on
+#: this whole block: `f3710`, `f1390` and `i650x1`.
+FIRST_AID_WIND_DC = 10
+FIRST_AID_SAVE_DC = 15
+
 
 def _stabilising(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """The Heal check that stops an adjacent dying ally's death saves. #1074.
@@ -319,6 +346,54 @@ def _stabilising(world: World, encounter: Encounter, actor: int) -> list[Action]
             continue
         out.append(Action(kind="stabilise", cost=ActionType.STANDARD,
                           targets=(friend,)))
+    return out
+
+
+def _first_aid(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """The two uses of First Aid besides stabilising. PHB Deluxe p186.
+
+    `_stabilising` above is the third bullet of the same printed block and
+    was written first, so this is deliberately shaped like it: a standard
+    action, an **adjacent** ally, and the offer withheld when there is
+    nothing for the check to achieve.
+
+    * **Use Second Wind**, DC 10 -- offered only for an ally that could
+      actually take one. The test is `_second_winding`'s own, minus the
+      action economy: a `Build` (so a character), a surge left, and
+      `second-wind` not already used. Offering it otherwise would put a
+      standard action on the menu that buys nothing, which is the shape
+      `_stabilising` refuses for an already-stable ally.
+    * **Grant a Saving Throw**, DC 15 -- offered only when the ally has a
+      save-ends effect on it. Without that test the action is always
+      available and always useless, and `policy/` would be scoring a
+      choice with no outcome.
+
+    Both are the healer's standard action, so one per turn falls out of the
+    economy rather than needing a counter, which is the argument
+    `_stabilising` makes and it carries over unchanged.
+    """
+    from .query import allies as _friends
+
+    out: list[Action] = []
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return out
+    for friend in _friends(world, actor):
+        if friend == actor or distance_between(world, actor, friend) > 1:
+            continue
+        health = world.get(friend, Health)
+        known = world.get(friend, Powers)
+        if (
+            world.get(friend, Build) is not None
+            and health is not None
+            and health.surges > 0
+            and known is not None
+            and known.times("second-wind") == 0
+        ):
+            out.append(Action(kind="use_second_wind",
+                              cost=ActionType.STANDARD, targets=(friend,)))
+        if any(e.when is When.SAVE_ENDS for e in world.effects.of(friend)):
+            out.append(Action(kind="grant_save",
+                              cost=ActionType.STANDARD, targets=(friend,)))
     return out
 
 
@@ -3455,6 +3530,78 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         world.bus.emit(Note(
             text=f"{actor} stabilises {friend} "
                  f"({got.total} vs {STABILISE_DC})"))
+        return True
+
+    if action.kind in ("use_second_wind", "grant_save"):
+        # Shaped like `stabilise` above, and re-checking at execution for
+        # the same reason: the menu was built before anything else on this
+        # turn happened, so the ally may have taken its own second wind or
+        # saved against the effect in between.
+        from .cast import Cast
+        from .skills import check as roll_check
+
+        if not action.targets:
+            return False
+        friend = action.targets[0]
+        if distance_between(world, actor, friend) > 1:
+            return False
+
+        if action.kind == "use_second_wind":
+            health = world.get(friend, Health)
+            known = world.get(friend, Powers)
+            if (
+                world.get(friend, Build) is None
+                or health is None
+                or health.surges <= 0
+                or known is None
+                or known.times("second-wind") > 0
+            ):
+                return False
+            got = roll_check(world, actor, "heal", FIRST_AID_WIND_DC,
+                             target=friend, purpose="second wind")
+            if not got.success:
+                world.bus.emit(Note(
+                    text=f"{actor} fails to grant {friend} a second wind "
+                         f"({got.total} vs {FIRST_AID_WIND_DC})"))
+                return True
+            # **`defences=False` and `cost=NONE`, both printed.** "without
+            # the character having to spend an action" is the cost, and
+            # "doesn't gain the defense bonuses" is the parameter -- which
+            # `f3710` exists to hand back, so neither is a default worth
+            # quietly changing.
+            #
+            # `purpose="second wind"` on the check above is what `f3710`
+            # and `f1390` read to know which Heal check this was:
+            # `skills.check` stamps it on `CheckDeclared` and `SkillCheck`.
+            Cast(world=world, me=actor, ref="first-aid").second_wind(
+                on=friend, cost=ActionType.NONE, defences=False)
+            world.bus.emit(Note(
+                text=f"{actor} grants {friend} a second wind "
+                     f"({got.total} vs {FIRST_AID_WIND_DC})"))
+            return True
+
+        pending = [e for e in world.effects.of(friend)
+                   if e.when is When.SAVE_ENDS]
+        if not pending:
+            return False
+        got = roll_check(world, actor, "heal", FIRST_AID_SAVE_DC,
+                         target=friend, purpose="saving throw")
+        if not got.success:
+            world.bus.emit(Note(
+                text=f"{actor} fails to grant {friend} a save "
+                     f"({got.total} vs {FIRST_AID_SAVE_DC})"))
+            return True
+        # **The immediate save, which is the first of the two printed
+        # outcomes.** The page offers "or the ally gets a +2 bonus to a
+        # saving throw at the end of his or her next turn" as the
+        # alternative; the immediate one is taken because it is the one
+        # that resolves now and `policy/` can score, and because the
+        # deferred form needs a bonus keyed to a throw that has not
+        # happened. Said here rather than left as a silent pick.
+        world.effects.save(pending[0])
+        world.bus.emit(Note(
+            text=f"{actor} grants {friend} a save "
+                 f"({got.total} vs {FIRST_AID_SAVE_DC})"))
         return True
 
     if action.kind == "stand":

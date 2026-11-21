@@ -57,6 +57,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
+    DEFENCES,
     ENCOUNTER,
     FORT,
     FREE,
@@ -989,11 +990,33 @@ def f3709(c: Cast) -> None:
     """Substituting a knowledge skill for Endurance, out of a fight."""
 
 
+def _my_heal_check(purpose: str):  # noqa: ANN202
+    """A Heal check of mine, for that printed purpose, that SUCCEEDED.
+
+    `skills.check` stamps `purpose` on both `CheckDeclared` and
+    `SkillCheck` -- added for a card reading "a Bluff check to gain combat
+    advantage" -- and `actions._first_aid` passes `"second wind"` and
+    `"saving throw"` for its two uses. So "a Heal check to grant second
+    wind" is askable without reading a DC back out of the event, which is
+    the fragile shape that would have been the alternative.
+    """
+
+    def mine(world, me: int, ev) -> bool:  # noqa: ANN001
+        return (getattr(ev, "actor", None) == me
+                and getattr(ev, "skill", "") == "heal"
+                and getattr(ev, "purpose", "") == purpose
+                and bool(getattr(ev, "success", False)))
+
+    return mine
+
+
 @power("f3710", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.heal_check()",))
+       reach=PERSONAL, target=SELF)
 def f3710(c: Cast) -> None:
-    """Re-aimed twice over. `events.SkillCheck` exists and is declarable,
+    """**Written, and the engine half is what it was waiting for.** The
+    note below is the diagnosis, kept verbatim; what landed is at the end.
+
+    Re-aimed twice over. `events.SkillCheck` exists and is declarable,
     so "when you succeed on a check" is not the gap; `c.second_wind` is
     the one door to a second wind and already lays the defence bonus the
     first clause is about, so `c.grant_action('second wind')` is not it
@@ -1023,7 +1046,77 @@ def f3710(c: Cast) -> None:
     the same absence, and `f1390`'s own note -- "nothing says a Heal check
     is what allowed [a second wind]" -- is this gap from the other side.
     A new action kind also owes a policy term, which is a second component
-    and not something a marker here should name."""
+    and not something a marker here should name.
+
+    ## What landed
+
+    `actions._first_aid` offers the two uses the engine was missing, off
+    the printed block on PHB Deluxe page 186 -- *Use Second Wind* at DC 10
+    and *Grant a Saving Throw* at DC 15, both a standard action on an
+    **adjacent** ally. `FIRST_AID_WIND_DC` and `FIRST_AID_SAVE_DC` carry
+    the quotes. The policy terms landed with them, which is what
+    `drivers.kinds_named` exists to force.
+
+    **This card's first clause only means anything because the base use
+    withholds the bonus.** The page says the granted second wind gives
+    *"no defense bonuses"*; this card says *"the subject gains the defense
+    bonus that second wind normally grants"*. So `c.second_wind` grew
+    `defences=False`, `_first_aid` passes it, and this row hands it back.
+    The two interlock, and writing either without the other would have
+    been wrong in opposite directions.
+
+    **Both clauses ride the `purpose` field rather than a DC.**
+    `skills.check` stamps it and `_first_aid` passes `"second wind"` and
+    `"saving throw"`, so "a Heal check to grant second wind" is a gate and
+    not an inference from the number it beat.
+
+    The save clause is a `+2` spent by the next throw, which is the throw
+    `_first_aid` rolls immediately after the check it is gated on --
+    `Effects.save` reads `holder.total("save", ctx)`, so the bonus has a
+    reader. `once=True` so it pays for that throw and not every later one.
+
+    The ritual clause is out of combat and carries no marker, like the
+    three rows below it.
+
+    **A standing trait with two watches, not a declared trigger**, because
+    the card prints **two** different moments -- one Heal check to grant a
+    second wind, another to grant a save -- and a row holds one `on=`.
+    Writing it with a declared trigger would have made the second clause
+    unreachable: the body only runs when the declared one fires."""
+    me = c.me
+
+    def gave_a_wind(ev: SkillCheck) -> None:
+        if not _my_heal_check("second wind")(c.world, me, ev):
+            return
+        subject = getattr(ev, "target", None)
+        if subject is None:
+            return
+        # The bonus the granted second wind withheld, in the shape
+        # `c.second_wind` lays it: all four defences, untyped, until the
+        # start of the subject's next turn.
+        for defence in DEFENCES:
+            c.bonus(defence, 2, until=When.SONT, on=subject, kind="untyped")
+
+    def gave_a_save(ev: SkillCheck) -> None:
+        if not _my_heal_check("saving throw")(c.world, me, ev):
+            return
+        subject = getattr(ev, "target", None)
+        if subject is None:
+            return
+        # Spent by the throw `_first_aid` rolls immediately after the
+        # check this is gated on. `once=True` so it pays for that one and
+        # not every save for the rest of the fight.
+        c.bonus("save", 2, once=True, on=subject, kind="power")
+
+    # **Gated inside each handler, because `c.watch` takes no `when=`.**
+    # `_my_heal_check` is a `(world, me, ev)` predicate so it reads the
+    # same whether a `Trigger` asks it or a handler does -- which is what
+    # lets the two clauses share one spelling of "a Heal check of mine,
+    # for that purpose, that succeeded".
+    for purpose, clause in (("second wind", gave_a_wind),
+                            ("saving throw", gave_a_save)):
+        c.watch(SkillCheck, clause, until=When.ENCOUNTER, on=me,
+                label=f"{c.ref} {purpose}")
 
 
 @power("f3711", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

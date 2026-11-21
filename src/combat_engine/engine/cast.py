@@ -11439,7 +11439,7 @@ class Cast:
 
     def second_wind(
         self, *, on: int | None = None, cost: ActionType = ActionType.STANDARD,
-        heal: bool = True,
+        heal: bool = True, defences: bool = True,
     ) -> bool:
         """Take a second wind: a surge, and +2 to AC until your next turn.
 
@@ -11523,7 +11523,17 @@ class Cast:
         # second way: a card reading "+1 AC and +3 to the others" would
         # have to be written against the bug and would go to +5 AC the
         # day it was fixed.
-        if not nothing:
+        # **`defences=False` is First Aid's clause, not a convenience.**
+        # The printed Heal use reads *"allow an adjacent character to use
+        # his or her second wind without the character having to spend an
+        # action. The character doesn't gain the defense bonuses normally
+        # granted by second wind."* So a second wind granted that way is
+        # the same surge with the bonus withheld -- and `f3710` prints the
+        # other half, *"the subject gains the defense bonus that second
+        # wind normally grants"*, which has nothing to grant back unless
+        # this parameter exists. The two cards interlock, which is why the
+        # default stays True: every other door gives the bonus.
+        if not nothing and defences:
             for defence in DEFENCES:
                 self.bonus(defence, 2, until=When.SONT, on=who, kind="untyped")
         return True

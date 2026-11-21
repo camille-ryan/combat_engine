@@ -40710,6 +40710,217 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def first_aid_beyond_stabilising(out: Result) -> None:
+    """The two uses of First Aid the engine did not have. PHB Deluxe p186.
+
+    One printed block, three bullets, and only *Stabilize the Dying* was
+    built (`#1074`). The other two are *Use Second Wind* at DC 10 and
+    *Grant a Saving Throw* at DC 15, and three rows waited on them --
+    `f3710`, `f1390` and `i650x1`.
+
+    **The withheld defence bonus is the part worth asserting hardest.**
+    The page says a second wind granted this way gives *"no defense
+    bonuses"*; `f3710` prints *"the subject gains the defense bonus that
+    second wind normally grants"*. So the two interlock: the base use has
+    to withhold it or the card has nothing to give back, and the card has
+    to exist or withholding it is just a nerf. Both directions are
+    asserted and both are planted.
+
+    The checks are forced with a large `skill:heal` modifier rather than
+    left to a d20, so the success and failure paths are both reachable and
+    neither assertion is a coin toss.
+    """
+    from combat_engine.engine import DEFENCES
+    from combat_engine.engine.actions import (
+        FIRST_AID_SAVE_DC,
+        FIRST_AID_WIND_DC,
+        Action,
+        legal,
+        perform,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import (
+        Health,
+        Ident,
+        Position,
+        Powers,
+    )
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When as W
+    from combat_engine.engine.events import SavingThrow
+    from combat_engine.engine.query import is_
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import Condition
+    from combat_engine.story import Party, field_encounter
+
+    out.that((FIRST_AID_WIND_DC, FIRST_AID_SAVE_DC) == (10, 15),
+             "the two DCs are the printed 10 and 15, read off the page"
+             f" beside `STABILISE_DC`'s 15 ({FIRST_AID_WIND_DC},"
+             f" {FIRST_AID_SAVE_DC})")
+
+    def board(*, sure: int = 30) -> tuple[World, Encounter, int, int]:
+        """A healer beside an ally, with the Heal check forced by `sure`."""
+        band = Party.of(["cleric", "fighter", "rogue", "wizard"], 2)
+        got = field_encounter(seed=7, level=2, party=band)
+        world = got.world
+        pcs = [e for e in sorted(world.entities)
+               if (i := world.get(e, Ident)) and str(i.ref).startswith("c:")]
+        enc = Encounter(world)
+        enc.start()
+        for _ in range(20):
+            if world.turn in pcs:
+                break
+            enc.advance()
+        healer = world.turn
+        mate = next(e for e in pcs if e != healer)
+        # Beside each other: `grid.lift` then `grid.place`, never the
+        # field alone -- the grid keeps its own occupancy and `allies`,
+        # `distance_between` and the offer all read that.
+        here = world.need(healer, Position).square
+        spot = (here[0] + 1, here[1])
+        world.grid.lift(mate)
+        world.need(mate, Position).square = spot
+        world.grid.place(mate, frozenset({spot}))
+        Cast(world=world, me=healer, ref="drivers:aid").bonus(
+            "skill:heal", sure, on=healer, until=W.ENCOUNTER)
+        return world, enc, healer, mate
+
+    def offers(world: World, enc: Encounter, who: int,
+               kind: str) -> list[Action]:
+        return [a for a in legal(world, enc, who) if a.kind == kind]
+
+    # -- Use Second Wind ---------------------------------------------------
+    world, enc, healer, mate = board()
+    hp = world.need(mate, Health)
+    out.that(hp.surges > 0
+             and world.need(mate, Powers).times("second-wind") == 0,
+             "the premise: the ally has a surge and has not used its"
+             f" second wind ({hp.surges} surge(s))")
+    winds = offers(world, enc, healer, "use_second_wind")
+    out.that(bool(winds) and winds[0].targets == (mate,),
+             "the healer is offered a First Aid second wind for the ally"
+             f" beside it ({len(winds)} offer(s))")
+
+    hp.hp = max(1, hp.max_hp // 3)
+    was = hp.hp
+
+    # **Measured as a CHANGE, never against zero.** A dealt character
+    # already carries defence modifiers of its own -- this one has +1 AC
+    # before anybody heals it -- so the first draft asserted `== 0` here
+    # and `== 2` below and failed on both while the code was right. What
+    # the card is about is the delta.
+    def guards(w: World, who: int) -> list[int]:
+        asking = Cast(world=w, me=who, ref="drivers:aid")
+        return [asking.total(d, on=who) for d in DEFENCES]
+
+    kit = guards(world, mate)
+    took = perform(world, enc, healer, winds[0])
+    out.that(took and hp.hp > was,
+             "and taking it spends the ally's surge and heals it, which is"
+             f" the printed 'use his or her second wind' ({was} ->"
+             f" {hp.hp})")
+    after = guards(world, mate)
+    out.that(after == kit,
+             "THE CONTROL and the printed clause: its defences do not move"
+             " -- *\"the character doesn't gain the defense bonuses"
+             " normally granted by second wind\"* -- which is the whole"
+             f" reason `f3710` has something to give back ({kit} ->"
+             f" {after})")
+
+    out.that(not offers(world, enc, healer, "use_second_wind"),
+             "and it is not offered a second time: the ally has used its"
+             " second wind now, so the standard action would buy nothing")
+
+    # -- the same grant with f3710 held ------------------------------------
+    world2, enc2, healer2, mate2 = board()
+    REGISTRY["f3710"].body(
+        Cast(world=world2, me=healer2, ref="f3710", target=healer2))
+    again = offers(world2, enc2, healer2, "use_second_wind")
+    out.that(bool(again), "the premise: the grant is still offered")
+    kit2 = guards(world2, mate2)
+    perform(world2, enc2, healer2, again[0])
+    got = guards(world2, mate2)
+    out.that(got == [k + 2 for k in kit2],
+             "and with `f3710` held the subject gains exactly +2 on ALL"
+             " FOUR defences -- the way `c.second_wind` lays them, and the"
+             f" card's whole first clause ({kit2} -> {got})")
+
+    # -- Grant a Saving Throw ----------------------------------------------
+    world3, enc3, healer3, mate3 = board()
+    out.that(not offers(world3, enc3, healer3, "grant_save"),
+             "THE CONTROL: no save is offered for an ally with nothing to"
+             " save against -- without this the action is always on the"
+             " menu and always useless, and `policy/` would be scoring a"
+             " choice with no outcome")
+    Cast(world=world3, me=healer3, ref="drivers:aid").dazed(
+        on=mate3, until=W.SAVE_ENDS)
+    saves = offers(world3, enc3, healer3, "grant_save")
+    out.that(bool(saves) and saves[0].targets == (mate3,),
+             "and it IS offered once the ally has a save-ends effect"
+             f" ({len(saves)} offer(s))")
+    out.that(is_(world3, mate3, Condition.DAZED),
+             "the premise: the ally really is dazed save-ends, so there is"
+             " a throw for the grant to produce")
+
+    # The throw is read off the bus rather than inferred from whether the
+    # daze went away: a granted save can be FAILED, and a rule checking
+    # only the condition would report that as a missing grant.
+    throws: list = []
+    world3.bus.on(SavingThrow, lambda ev: throws.append(ev))
+    out.that(perform(world3, enc3, healer3, saves[0]) and len(throws) == 1,
+             "and taking it rolls the ally EXACTLY one saving throw -- the"
+             " printed 'an adjacent ally can immediately make a saving"
+             f" throw' ({len(throws)} throw(s))")
+    out.that(bool(throws) and throws[0].actor == mate3,
+             "rolled by the ALLY and not by the healer, which is the half a"
+             " check one creature makes for another gets wrong"
+             f" ({throws[0].actor if throws else None} vs {mate3})")
+
+    # -- and `f3710`'s second clause: +2 to that throw ---------------------
+    world4, enc4, healer4, mate4 = board()
+    Cast(world=world4, me=healer4, ref="drivers:aid").dazed(
+        on=mate4, until=W.SAVE_ENDS)
+    REGISTRY["f3710"].body(
+        Cast(world=world4, me=healer4, ref="f3710", target=healer4))
+    helped: list = []
+    world4.bus.on(SavingThrow, lambda ev: helped.append(ev))
+    granted = offers(world4, enc4, healer4, "grant_save")
+    out.that(bool(granted),
+             "the premise: with the feat held the grant is still offered")
+    # A SECOND save-ends effect, so there is a later throw to check the
+    # +2 has gone. Without it, dropping `once=True` passes: one throw
+    # cannot tell a one-shot bonus from a standing one.
+    Cast(world=world4, me=healer4, ref="drivers:aid").slowed(
+        on=mate4, until=W.SAVE_ENDS)
+    kitted = guards(world4, mate4)
+    perform(world4, enc4, healer4, granted[0])
+    plain = throws[0].bonus if throws else 0
+    out.that(bool(helped) and helped[0].bonus == plain + 2,
+             "and with `f3710` held the throw carries exactly +2 MORE than"
+             " the ungated one -- compared against the earlier board's"
+             " throw rather than against a literal, so the feat's"
+             f" contribution is what is measured ({plain} -> "
+             f"{helped[0].bonus if helped else None})")
+
+    out.that(guards(world4, mate4) == kitted,
+             "THE CONTROL: and granting a SAVE moves no defences -- the"
+             " second-wind clause is gated on the check's `purpose`, so a"
+             " row reading only 'a Heal check of mine that succeeded'"
+             f" would pay here too ({kitted} -> {guards(world4, mate4)})")
+
+    left = [e for e in world4.effects.of(mate4) if e.when is W.SAVE_ENDS]
+    out.that(bool(left),
+             "the premise: a second save-ends effect is still on the ally,"
+             f" so there is a later throw to measure ({len(left)} left)")
+    world4.effects.save(left[0])
+    later = [e for e in helped if e is not helped[0]]
+    out.that(bool(later) and later[-1].bonus == plain,
+             "and the NEXT throw carries no +2: the bonus is `once=True`,"
+             " spent by the throw the card grants, where a standing one"
+             f" would help every save for the rest of the fight ({plain} vs"
+             f" {later[-1].bonus if later else None})")
+
+
 def acrobatics_softens_a_fall(out: Result) -> None:
     """Half an Acrobatics check comes off falling damage. Trained only.
 
@@ -115646,6 +115857,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "first_aid": (first_aid_beyond_stabilising,
+                  "the two uses of First Aid besides stabilising, and the "
+                  "feat that restores what one withholds"),
     "fall_softened": (acrobatics_softens_a_fall,
                       "half an Acrobatics check comes off falling damage, "
                       "trained only"),
