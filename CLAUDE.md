@@ -866,23 +866,38 @@ been measured and **cannot be tuned away** — see `_changed`'s docstring
 before trying.
 
 **It is no longer the only expensive one, and that is the correction worth
-reading.** `drivers` costs **658s**, which is more than the other 26
-instruments put together, so a whole `--all` is **35 minutes** and not the
-25 this file claimed two paragraphs up:
+reading.** `drivers` is the second wall, and **658s is stale by a third** —
+the figure below is what `logs/instruments.jsonl` records, which is the
+ledger `check.py --history` reads and the only count here nobody has to
+re-measure by hand:
 
 ```
-audit (solo)                     1,217s
-drivers                            658s
-browser (solo)                     169s
-the other 26 instruments          ~304s
-serial sum 2,348s, wall 35 min     the lanes buy about 4 minutes
+audit, wide           median 1,488s over 431 runs
+drivers, in a sweep   median   969s over the last 12 before 2026-11-21
+drivers, wide         median 1,053s over 70 runs
+browser (solo)                ~170s
+a whole `--all`               35-50 min
 ```
 
-The lanes buy so little because `audit` is solo and `drivers` dominates
-everything left to parallelise. **And `drivers` costs the same standalone
-as it does inside the suite** — 658s against 650/673/685s — so this is its
-own cost and not contention; `#1066` was filed on the opposite premise and
-the measurement refuted it.
+Do not quote 658s. It was measured when the suite held 474 rules; it holds
+**760** now, and the ledger's own spread on `drivers` is 908-1,245s across
+twelve consecutive runs — so a single reading of it means little and the
+median is the number to plan against.
+
+The lanes buy little because `audit` is solo and `drivers` dominates
+everything left to parallelise. `drivers` does cost about the same
+standalone as inside the suite, which is its own cost rather than
+contention; `#1066` was filed on the opposite premise and the measurement
+refuted it.
+
+**And one tempting inference is NOT supported, measured 2026-11-21.**
+`f7af0896` removed a leftover debug harness that had been running four
+rules a second time on every invocation, and it was reasonable to expect
+that to show up here. It does not: the two runs after the fix are 921.11s
+and 921.12s against a pre-fix median of 969s and a pre-fix **minimum of
+908s**, so the post-fix figures sit inside the old spread and n=2 cannot
+separate them from noise. The four duplicated rules were cheap ones. What
+that commit really bought is the CLI — see `scripts/CLAUDE.md`.
 
 **`drivers` is now measured per rule, and the measurement refuted the plan
 that asked for it.** `drivers.py` prints every rule's seconds and the
