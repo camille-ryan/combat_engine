@@ -5375,6 +5375,17 @@ OPTION_PACT: dict[str, str | tuple[str, ...]] = {
     "cf:monk-f0s2": "f0s2",                         # body
     "cf:monk-f0s3": "f0s3",                         # body
     "cf:monk-f0s4": "f0s4",                         # body
+    #: cf:ranger-f0 -- s1 and s3 carried an `on_leg` gate already; s0 and
+    #: s4 say which leg they are in their printed first clause, and the
+    #: legs' own weapons agree. s0 opens "because of your focus on RANGED
+    #: attacks" against the leg that carries a bow; s4 opens "because of
+    #: your focus on TWO-WEAPON MELEE attacks" against the leg carrying
+    #: two light blades. The fifth leg has no arm of its own, which
+    #: `deal_build_options` answers with nothing -- the printed answer.
+    "cf:ranger-f0s0": "archer",                     # read
+    "cf:ranger-f0s1": "companion",                  # gate
+    "cf:ranger-f0s3": "marauder",                   # gate
+    "cf:ranger-f0s4": "two-blade",                  # read
     #: cf:rogue-scoundrel-f1 -- `read`, and the parent's own branches are
     #: the evidence rather than the flavour: `c.build("brawny")` spends
     #: `c.str_mod`, which is the arm whose bonus is a Strength modifier,

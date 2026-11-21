@@ -144,6 +144,7 @@ def paladin_hands_feature(c: Cast) -> None:
 
 @power(
     "cf:ranger-f0s0",
+    requires=on_leg("archer"),
     level=0,
     cls="ranger",
     usage=ENCOUNTER,
@@ -290,6 +291,7 @@ def ranger_style_marauder(c: Cast) -> None:
 
 @power(
     "cf:ranger-f0s4",
+    requires=on_leg("two-blade"),
     level=0,
     cls="ranger",
     usage=ENCOUNTER,

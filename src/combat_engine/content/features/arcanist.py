@@ -122,6 +122,7 @@ def cleric_word(c: Cast) -> None:
 
 @power(
     "cf:rogue-scoundrel-f1s2",
+    requires=on_leg("shadowy"),
     level=0,
     cls="rogue",
     usage=ENCOUNTER,
@@ -212,6 +213,7 @@ def _weapon_swung(world: World, eid: int, ctx: dict[str, Any]) -> Weapon | None:
 
 @power(
     "cf:rogue-scoundrel-f1s3",
+    requires=on_leg("cutthroat"),
     level=0,
     cls="rogue",
     usage=ENCOUNTER,
