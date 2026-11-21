@@ -3187,10 +3187,15 @@ def i1962p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.dispel(vs=)",),
 )
 def i1964x1(c: Cast) -> None:
-    """**Re-pointed from `c.dispel_defence()`, which priced this as a
+    """*"Add the enhancement bonus of this implement to your Will defense
+    when dispel magic is used against one of your conjuration powers."*
+
+    **Written, and the note below is wrong in its last step -- its own
+    measurement refutes it.** What landed is at the end.
+
+    **Re-pointed from `c.dispel_defence()`, which priced this as a
     facility nobody had started when the verb is already here and is
     missing one argument.** `blocked.py` draws exactly that line -- #677 --
     and reports `c.dispel(vs=)` as *one parameter* of work; the old symbol
@@ -3218,7 +3223,49 @@ def i1964x1(c: Cast) -> None:
     `p3056`, `p3782`. So a hostile dispel exists and this card's condition
     can occur; what none of the six does is **roll**, which is the whole
     of the gap and is exactly what `c.dispel(vs=)` names. `#1435` is the
-    issue I filed against this note and closed as wrong."""
+    issue I filed against this note and closed as wrong.
+
+    ## What landed, and the last claim above is false
+
+    *"What none of the six does is **roll**"* -- two of them do, and they
+    are the two that matter. **Dispel magic is `p2273`** (found by the
+    printed body phrase *"the Will defense of the creator of the
+    conjuration or the zone"*, since the name is stripped), its header
+    carries `attack=Attack(INT, vs=WILL)`, and its body ends with `if not
+    c.strike(on=owner): return`. `p3782` does the same with
+    `c.strike(on=maker)`.
+
+    So there **is** a check for the Will bonus to be added to, and the
+    gate that *"can never be true"* is true whenever dispel magic is
+    rolled. `c.dispel(vs=)` names nothing missing: a row that wants to
+    roll strikes the creator and then dispels, which is what both of
+    those do.
+
+    The clause is therefore an ordinary gated defence bonus.
+    `query.defence` takes the attack's `ctx` -- `defence(world, target,
+    vs, ctx)` at both call sites in `resolve` -- so a `when=` on the
+    defender's side is read with the attacker's context, which carries
+    `"power"`.
+
+    **Gated on `p2273` and nothing wider**, because the card names *dispel
+    magic* rather than dispels in general: `p3782`, `p16036` and `p3056`
+    print the same attack shape and this item does not mention them. The
+    "one of **your** conjuration powers" half needs no test of its own --
+    the attack is against the creator's Will, so a roll reaching this
+    character's Will is already a roll against something it made.
+
+    Read off the column with `c.enhancement`, never written down."""
+    # **Untyped, and `kind="enhancement"` was measured wrong.** The card
+    # says to add the implement's enhancement bonus *to Will*; it does not
+    # say the result is an enhancement bonus, and the implement's own
+    # enhancement already applies to attack and damage rather than to a
+    # defence. Filed as `kind="enhancement"` it collided with the
+    # character's existing +1 enhancement to Will -- same kind, so only
+    # the better applies -- and the row laid a bonus worth nothing:
+    # `Mods.total` read 1 before and 1 after.
+    c.bonus(WILL, c.enhancement, on=c.me, until=When.ENCOUNTER,
+            kind="untyped",
+            when=lambda ctx: ctx.get("power") == "p2273")
 
 
 @power(

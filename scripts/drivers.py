@@ -40782,6 +40782,74 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def a_will_bonus_against_one_named_power(out: Result) -> None:
+    """`i1964x1`: +enhancement to Will, but only against dispel magic.
+
+    *"Add the enhancement bonus of this implement to your Will defense
+    when dispel magic is used against one of your conjuration powers."*
+
+    **The row's note concluded the gate could never be true and its own
+    measurement refuted that.** It said *"what none of the six does is
+    roll"* -- and dispel magic is `p2273`, whose header is
+    `attack=Attack(INT, vs=WILL)` and whose body ends `if not
+    c.strike(on=owner): return`. So the roll happens and there is a Will
+    to raise.
+
+    Asserted through `query.defence`, which is where a defence is read as
+    the attacker sees it and which takes the attack's `ctx` at both
+    `resolve` call sites -- so a `when=` on the defender is read with the
+    attacker's context.
+
+    **The control is the whole card.** Three other rows print the same
+    attack-vs-creator shape (`p3782`, `p16036`, `p3056`) and this item
+    names none of them, so a gate reading "any dispel" or "any attack vs
+    Will" would be wider than print. Both are planted.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Defense
+
+    got = story.field_encounter(seed=7, level=3)
+    w = got.world
+    me = next(e for e in sorted(w.entities)
+              if not query.stat_block(w, e))
+
+    out.that(REGISTRY["p2273"].attack is not None
+             and REGISTRY["p2273"].attack.vs is Defense.WILL,
+             "the premise: dispel magic really attacks Will, so there is a"
+             " defence for this card to raise")
+
+    def will(power: str) -> int:
+        return query.defence(w, me, Defense.WILL, {"power": power})
+
+    before = will("p2273")
+    other = will("p3782")
+    out.that(before == other,
+             "and before the item the two readings agree, so the gap below"
+             f" is the item's doing ({before}, {other})")
+
+    REGISTRY["i1964x1"].body(
+        Cast(world=w, me=me, ref="i1964x1", target=me))
+    plus = Cast(world=w, me=me, ref="i1964x1").enhancement
+    out.that(plus > 0,
+             "the premise: the implement has an enhancement bonus to add,"
+             f" or the assertions below are about adding zero ({plus})")
+
+    out.that(will("p2273") == before + plus,
+             "the Will defence is raised by the implement's enhancement"
+             f" against dispel magic ({before} -> {will('p2273')})")
+    out.that(will("p3782") == other,
+             "THE CONTROL: and NOT against `p3782`, which prints the same"
+             " attack-vs-creator shape and which this card does not name"
+             f" ({will('p3782')})")
+    out.that(will("") == before,
+             "nor against an attack with no power behind it, which is what"
+             " a gate reading 'any attack vs Will' would have raised")
+
+
 def a_reach_asked_per_square(out: Result) -> None:
     """`f2921`: two squares further, but only to a square that qualifies.
 
@@ -116597,6 +116665,8 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "dispel_will": (a_will_bonus_against_one_named_power,
+                    "a Will bonus gated on the one power the card names"),
     "reach_per_square": (a_reach_asked_per_square,
                          "a move's extra reach is asked per destination, "
                          "and the unconditional reach does not grow"),
