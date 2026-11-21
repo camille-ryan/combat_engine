@@ -40710,6 +40710,138 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def a_save_against_prone_knocks_one_down(out: Result) -> None:
+    """`f3470`: succeeding on a save against prone knocks a neighbour down.
+
+    The row's marker claimed the throw did not exist -- "`c.prone` lays
+    prone on a clock and never as something a save can avoid, so
+    `SavingThrow.against` never names it". The `against` half is still
+    true and is why `conditions` had to exist: it is `str(eff)`, a display
+    string. `#1391` declared the field, `c.save` grew `avoiding=`, and
+    `f3318` ships on the same trigger.
+
+    Three things asserted, because the row has three independent ways to
+    be wrong and the board can only pose one of them:
+
+    * **the premise** -- `c.save(bare=True, avoiding=(PRONE,))` really
+      announces a throw whose `conditions` name prone. Without this the
+      two below are statements about a predicate nothing can ever satisfy;
+    * **the predicate** -- gated on `saved`, which is the single field
+      between this card and `f3318`'s. `f3318` prints *"when you make a
+      save"* and is deliberately ungated; this prints *"when you
+      succeed"*;
+    * **the body** -- one adjacent enemy of size Large or smaller, where
+      "or smaller" means Large is **in**. The four feat files carrying
+      `_BIG = (LARGE, HUGE, GARGANTUAN)` answer "is this big", and
+      negating one of those would refuse a target the card allows.
+    """
+    from dataclasses import replace
+
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.feats.general_u import _saved_off_prone
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conditions, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SavingThrow
+    from combat_engine.engine.types import Condition, Size
+
+    fielded = story.field_encounter(seed=7, level=3)
+    world = fielded.world
+    pc = next(e for e in sorted(world.entities)
+              if not query.stat_block(world, e))
+
+    # -- the premise -----------------------------------------------------
+    seen: list[Any] = []
+    world.bus.on(SavingThrow, lambda ev: seen.append(ev))
+    Cast(world=world, me=pc, ref="drivers:footing").save(
+        bare=True, avoiding=(Condition.PRONE,))
+    out.that(bool(seen) and Condition.PRONE in seen[-1].conditions,
+             "a save to AVOID prone is announced and its `conditions` name"
+             " prone -- the premise, since `against` is a display string"
+             f" and could never be asked ({seen[-1].conditions if seen else ()})")
+
+    throw = seen[-1]
+    out.that(_saved_off_prone(world, pc, replace(throw, saved=True)),
+             "and the row's predicate answers a SUCCESSFUL such throw")
+    out.that(not _saved_off_prone(world, pc, replace(throw, saved=False)),
+             "THE CONTROL: and not a failed one -- the one field between"
+             " this card's \"when you succeed\" and `f3318`'s \"when you"
+             " make a save\", which is deliberately ungated")
+    out.that(not _saved_off_prone(world, pc, replace(throw, conditions=())),
+             "nor a throw against something else, which is what reading"
+             " `against` instead of `conditions` could not tell apart")
+    other = next(e for e in sorted(world.entities) if e != pc)
+    out.that(not _saved_off_prone(world, other, throw),
+             "nor somebody else's throw")
+
+    # -- the body --------------------------------------------------------
+    def knock(resize: Size | None = None,
+              adjacent: bool = True) -> tuple[list[int], int]:
+        """Returns who ended up prone, and how many were beside me.
+
+        **The second number is there because the first draft had none**,
+        and that made two of the three negative cases vacuous: a fielded
+        level-3 board poses NOBODY adjacent, so "nothing happened when
+        every neighbour is Huge" was true for the plain reason that there
+        were no neighbours. The pose is built here rather than hoped for.
+        """
+        got = story.field_encounter(seed=7, level=3)
+        w = got.world
+        me = next(e for e in sorted(w.entities)
+                  if not query.stat_block(w, e))
+        foes = [e for e in sorted(w.entities) if query.stat_block(w, e)]
+        if adjacent and foes:
+            # `grid.lift` then `place`, never `Position.square` alone --
+            # the grid keeps its own occupancy and `c.within` reads that.
+            here = w.need(me, Position).square
+            beside = (here[0] + 1, here[1])
+            w.grid.lift(foes[0])
+            w.need(foes[0], Position).square = beside
+            w.grid.place(foes[0], frozenset({beside}))
+        asking = Cast(world=w, me=me, ref="drivers:footing")
+        near = asking.within(1, of=me, side="enemy")
+        if resize is not None:
+            for f in near:
+                asking.resize(resize, on=f)
+        REGISTRY["f3470"].body(Cast(world=w, me=me, ref="f3470", target=me))
+        down = []
+        for f in foes:
+            cond = w.get(f, Conditions)
+            if cond is not None and Condition.PRONE in cond.active:
+                down.append(f)
+        return down, len(near)
+
+    felled, beside_me = knock()
+    out.that(beside_me >= 1,
+             "the premise of every case below: a neighbour is actually"
+             " posed, which a fielded level-3 board does NOT do by itself"
+             f" ({beside_me} adjacent)")
+    out.that(len(felled) == 1,
+             "the body knocks exactly ONE adjacent enemy prone -- the card"
+             f" says one, and `c.within` hands back every neighbour ({len(felled)})")
+
+    big, big_near = knock(resize=Size.HUGE)
+    out.that(big == [] and big_near >= 1,
+             "THE CONTROL: and none when every neighbour is Huge, which is"
+             " the half \"of size Large or smaller\" turns on -- asserted"
+             f" WITH the neighbour count, or it passes on an empty board"
+             f" ({big_near} adjacent, {len(big)} down)")
+
+    large, large_near = knock(resize=Size.LARGE)
+    out.that(len(large) == 1 and large_near >= 1,
+             "while a LARGE neighbour IS knocked down -- 'or smaller'"
+             " includes Large, and a `_BIG` tuple copied from a sibling"
+             f" would have refused it ({large_near} adjacent)")
+
+    alone, alone_near = knock(adjacent=False)
+    out.that(alone == [] and alone_near == 0,
+             "and nobody at all when nothing is adjacent, so the positive"
+             f" above is about the neighbour and not about the row firing"
+             f" ({alone_near} adjacent)")
+
+
 def an_implement_carries_a_weapon_material(out: Result) -> None:
     """A material on an implement is seen by what reads materials.
 
@@ -115179,6 +115311,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "prone_save_reply": (a_save_against_prone_knocks_one_down,
+                         "succeeding on a save against prone knocks an "
+                         "adjacent enemy down"),
     "implement_material": (an_implement_carries_a_weapon_material,
                            "a weapon material on an implement is seen by "
                            "what reads materials"),

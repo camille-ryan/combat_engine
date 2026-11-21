@@ -86,12 +86,14 @@ from combat_engine.engine import (
     Keyword,
     Position,
     PowerUsed,
+    SavingThrow,
     SecondWind,
     Size,
     Trigger,
     TurnStart,
     When,
     Window,
+    World,
     about_me,
     both,
     by_me,
@@ -1086,18 +1088,72 @@ def f3467(c: Cast) -> None:
             label=f"{c.ref} critical against a big one")
 
 
-@power("f3470", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.prone(save_ends=)",))
-def f3470(c: Cast) -> None:
-    """**Re-aimed: the hook exists, the moment does not.**
+def _saved_off_prone(world: World, me: int, ev: Any) -> bool:
+    """`f3470`'s moment: a throw this character **succeeded** on to stay up.
 
-    `c.on_save()` was the wrong name for this. A saving throw *is*
-    answerable -- `Trigger(SavingThrow, ...)` is declared and `i3556p1`
-    ships on it -- so nothing is missing on that side. What is missing is
-    the throw itself: `c.prone` lays prone on a clock and never as
-    something a save can avoid, so `SavingThrow.against` never names it
-    and there is no success to answer. The symbol is the parameter that
-    would make one happen."""
+    `f3318`'s `_my_prone_save` one field apart, and the field is the
+    difference between the two cards: that one pays *"when you make a
+    save"* and is deliberately not gated on `saved`, where this one prints
+    *"when you succeed on a saving throw"* and is.
+
+    A plain `(world, me, ev)` predicate and not a closure factory, for the
+    reason that helper's own note gives: `triggers._answers` calls
+    `t.when(self.world, eid, ev)`, so a factory raises `TypeError` on the
+    first saving throw of the fight.
+    """
+    return (getattr(ev, "actor", None) == me
+            and bool(getattr(ev, "saved", False))
+            and Condition.PRONE in getattr(ev, "conditions", ()))
+
+
+#: **"Large or smaller" excludes the two sizes ABOVE Large.** Written out
+#: rather than copied from the `_BIG = (LARGE, HUGE, GARGANTUAN)` tuple
+#: four other feat files carry: that one answers "is this thing big", and
+#: negating it would refuse a Large target the card allows.
+_ABOVE_LARGE = (Size.HUGE, Size.GARGANTUAN)
+
+
+@power("f3470", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you succeed on a saving throw to avoid being knocked prone",
+       on=Trigger(SavingThrow, _saved_off_prone,
+                  "you succeed on a save against being knocked prone"))
+def f3470(c: Cast) -> None:
+    """*"When you succeed on a saving throw to avoid being knocked prone,
+    you can knock prone one enemy of size Large or smaller that is
+    adjacent to you."*
+
+    **The marker was stale and `#1391` is what made it so.** It said the
+    gap was the throw itself -- "`c.prone` lays prone on a clock and never
+    as something a save can avoid, so `SavingThrow.against` never names
+    it". `against` is still `str(eff)`, a display string, and that half was
+    right. But `SavingThrow.conditions` is declared now, `c.save` grew an
+    `avoiding=`, and the monster helpers pass `avoiding=(Condition.PRONE,)`
+    -- so the throw is real, it is announced, and which save it was can be
+    asked. `f3318` is the sibling that ships on exactly this trigger.
+
+    Measured rather than assumed: **60 cards print "a saving throw to
+    avoid", 54 of them about prone, and 49 of the 51 declared rows are
+    written with no marker at all.** The mechanic was not missing; this row
+    was the last one still saying it was.
+
+    **`AT_WILL`, not the `ENCOUNTER` the marked version carried**, for
+    `f3318`'s reason and `content/CLAUDE.md`'s: a declared trigger makes
+    the usage real, because `turns.arm_traits` skips a row with an `on=` so
+    the usage is never spent by the arming. The card prints no
+    once-per-encounter limit, and `ENCOUNTER` would silently be one.
+
+    `c.choose(optional=True)` is the printed *"you can"* -- one ask, with a
+    decline. `c.may` beside it would put the question twice.
+    """
+    me = c.me
+    beside = [foe for foe in c.within(1, of=me, side="enemy")
+              if c.size_of(on=foe) not in _ABOVE_LARGE]
+    if not beside:
+        return
+    victim = c.choose(beside, "who is knocked prone", optional=True)
+    if victim is not None:
+        c.prone(on=victim)
 
 
 # -- the small standing ones ------------------------------------------------
