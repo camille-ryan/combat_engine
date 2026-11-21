@@ -40710,6 +40710,164 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def the_second_nearest_may_be_quarry(out: Result) -> None:
+    """`f2462`: the second-nearest enemy counts as nearest, and stays second.
+
+    `#1251` enforced the quarry's printed restriction -- *"the nearest
+    enemy to you that you can see"* -- and built `c.counts_as_nearest` so
+    that a clause widening what counts "is more than a modifier nobody
+    consults". This is the second such clause, and the first one that is
+    re-evaluated.
+
+    **The case worth the rule is the creep, and it takes TWO faults.**
+    `query.nearest_enemy` reads `counts_as_nearest`, so a row computing
+    "the second-nearest" *from that reader* can find its own permission
+    inside the set it measures from and name the third-nearest next turn.
+    `f2462` measures off the grid, which is a fixed point -- but the
+    `When.EOT` duration independently prevents it, because the hold is
+    gone before the next reading. Planting either alone changes nothing;
+    planting both reds this. That is worth knowing before anybody
+    "simplifies" one of them on the grounds that the other covers it.
+
+    The other load-bearing case is that the permission **follows the
+    board**. Everything else here passes on a row that lays it once at
+    arming, because the ranks never move -- so an enemy walks in from 5 to
+    2 and the permission has to leave the one at 3.
+
+    Posed by hand at distances 1, 3 and 5, because a fielded board's
+    geometry is nobody's decision and this rule is about ranks.
+    """
+    from combat_engine import story
+    from combat_engine.content import dummy, loader  # noqa: F401
+    from combat_engine.content.feats.ranger_c import _second_nearest
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import TurnEnd, TurnStart
+
+    def posed(gaps: tuple[int, ...]) -> tuple[World, int, list[int]]:
+        """Me, with one enemy at each of those distances along a row.
+
+        **Spawned, not rearranged.** A `field_encounter` fields exactly
+        ONE enemy at every level from 1 to 10 -- measured -- so the three
+        ranks this rule is about cannot be posed by moving what is there.
+        `dummy.spawn` takes the square, which is the whole need.
+
+        The fielded enemy is **killed**, not relocated, so the ranks under
+        test are the only ranks. Moving it 20 squares out was the first
+        draft and it still held a rank -- which is what made the
+        "no second rank at all" case fail, correctly, against a premise I
+        had got wrong rather than against the row.
+        """
+        got = story.field_encounter(seed=7, level=3)
+        w = got.world
+        me = next(e for e in sorted(w.entities)
+                  if not query.stat_block(w, e))
+        here = w.need(me, Position).square
+        for extra in [e for e in sorted(w.entities)
+                      if query.stat_block(w, e)]:
+            hurt = w.get(extra, Health)
+            if hurt is not None:
+                hurt.hp = hurt.dying_at - 1
+        placed = [dummy.spawn(w, level=3, square=(here[0] + gap, here[1]))
+                  for gap in gaps]
+        return w, me, placed
+
+    w, me, foes = posed((1, 3, 5))
+    near, second, third = foes
+    out.that(query.nearest_enemy(w, me) == [near],
+             "the premise: with enemies at 1, 3 and 5 the engine's nearest"
+             f" is the one at 1 ({query.nearest_enemy(w, me)} vs {near})")
+    out.that(_second_nearest(Cast(world=w, me=me, ref="drivers:q"), me)
+             == [second],
+             "and the row names the one at 3 as second-nearest -- not the"
+             " nearest, which is the whole card")
+
+    # -- the permission, and that it does not creep ----------------------
+    REGISTRY["f2462"].body(Cast(world=w, me=me, ref="f2462", target=me))
+    seen = []
+    for rnd in range(2, 5):
+        # **Both halves of the turn.** `When.EOT` is cleared by
+        # `durations._on_turn_end`, so a loop emitting only `TurnStart`
+        # accumulates every permission it ever laid -- which reads as the
+        # row failing to expire and was the harness never ending a turn.
+        w.bus.emit(TurnStart(actor=me, round=rnd, ghost=False))
+        seen.append(set(query.nearest_enemy(w, me)))
+        w.bus.emit(TurnEnd(actor=me, round=rnd, ghost=False))
+
+    out.that(seen[0] == {near, second},
+             "after this character's turn starts, BOTH the nearest and the"
+             f" second-nearest count as nearest ({sorted(seen[0])} vs"
+             f" {sorted((near, second))})")
+    out.that(third not in seen[0],
+             "THE CONTROL: and the one at 5 does not -- the permission adds"
+             " one rank, not every enemy")
+    out.that(seen == [{near, second}] * 3,
+             "and it is still those two on the THIRD turn -- the creep"
+             " case: reading `query.nearest_enemy` to find the second would"
+             " put this row's own permission in the set it measures from,"
+             f" naming the third next turn and the fourth after ({[sorted(s) for s in seen]})")
+
+    # -- and it FOLLOWS the board, which is what re-laying buys ----------
+    # **The discriminating case, and the rule had none.** Laying the
+    # permission once at arming passes everything above: the second-nearest
+    # never changed, so "re-laid each turn" and "laid once" are the same
+    # answer. A plant doing exactly that went green, which is what sent me
+    # back here. So the one at 5 walks in to 2, and the permission has to
+    # move off the one at 3 and onto it.
+    spot = (w.need(me, Position).square[0] + 2,
+            w.need(me, Position).square[1])
+    w.grid.lift(third)
+    w.need(third, Position).square = spot
+    w.grid.place(third, frozenset({spot}))
+    out.that(_second_nearest(Cast(world=w, me=me, ref="drivers:q"), me)
+             == [third],
+             "the premise: once it closes to 2 it IS the second-nearest")
+    w.bus.emit(TurnStart(actor=me, round=9, ghost=False))
+    moved = set(query.nearest_enemy(w, me))
+    w.bus.emit(TurnEnd(actor=me, round=9, ghost=False))
+    out.that(moved == {near, third},
+             "so the next turn the permission names IT and not the one at 3"
+             " -- `When.EOT` drops the old one and `TurnStart` lays the new,"
+             " which is the whole difference between this and the shaman's"
+             f" arm-once version ({sorted(moved)} vs {sorted((near, third))})")
+
+    # -- ties, which is why the helper returns a list --------------------
+    w2, me2, foes2 = posed((1, 3, 3))
+    tied = _second_nearest(Cast(world=w2, me=me2, ref="drivers:q"), me2)
+    out.that(sorted(tied) == sorted(foes2[1:]),
+             "two enemies tied at the second distance are BOTH named, which"
+             " is why this returns a list -- the same argument"
+             f" `query.nearest_enemy`'s own docstring makes ({tied})")
+
+    # -- and nothing to add when there is no second rank -----------------
+    w3, me3, _ = posed((2,))
+    out.that(_second_nearest(Cast(world=w3, me=me3, ref="drivers:q"), me3)
+             == [],
+             "and nothing at all when every enemy ties at the nearest"
+             " distance, rather than promoting one of them")
+
+    # -- both readers skip the dead, through ONE filter -------------------
+    # Not a plantable claim about this row, and it used to be written as
+    # one: the helper carried an `alive` test justified by "`c.enemies()`
+    # does not filter the dead". It does -- `query.enemies` ends with
+    # `and alive(world, o)` -- so the test was dead code and a plant
+    # removing it changed nothing, which is how that was found. What is
+    # worth asserting is the fact itself, since both readers depend on it.
+    w4, me4, dead_near = posed((1, 3, 5))
+    gone = w4.get(dead_near[0], Health)
+    assert gone is not None
+    gone.hp = gone.dying_at - 1
+    asking4 = Cast(world=w4, me=me4, ref="drivers:q")
+    out.that(query.nearest_enemy(w4, me4) == [dead_near[1]]
+             and _second_nearest(asking4, me4) == [dead_near[2]],
+             "a corpse holds no rank for EITHER reader -- with one dead at"
+             " 1 the nearest is the one at 3 and the second is the one at"
+             " 5, because both draw from `query.enemies`, which filters"
+             " `alive` once for both")
+
+
 def a_save_against_prone_knocks_one_down(out: Result) -> None:
     """`f3470`: succeeding on a save against prone knocks a neighbour down.
 
@@ -115311,6 +115469,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "second_nearest_quarry": (the_second_nearest_may_be_quarry,
+                              "the second-nearest enemy counts as nearest, "
+                              "and does not creep further out"),
     "prone_save_reply": (a_save_against_prone_knocks_one_down,
                          "succeeding on a save against prone knocks an "
                          "adjacent enemy down"),

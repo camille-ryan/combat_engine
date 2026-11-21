@@ -70,6 +70,7 @@ from combat_engine.engine import (
     Relation,
     SurgeSpent,
     Trigger,
+    TurnStart,
     When,
     Window,
     World,
@@ -576,18 +577,97 @@ def f2467(c: Cast) -> None:
     """The same trade as f2428, bought for a push instead of a slow."""
 
 
-@power("f2462", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.quarry(nearest=False)",))
-def f2462(c: Cast) -> None:
-    """Lets the second-nearest enemy be named quarry.
+def _second_nearest(c: Cast, me: int) -> list[int]:
+    """The enemies at the second-shortest distance. A list, because ties.
 
-    `c.quarry` takes whoever it is handed and `cf:ranger-f1` takes
-    its target like any other row, so the restriction this feat lifts is
-    not enforced anywhere -- writing the row would be granting a
-    permission already held. Marked rather than left out, because the
-    day the restriction arrives this is the row that relaxes it. The
-    warlock's `c.curse(nearest=False)` is the same shape.
+    **Measured off geometry and deliberately NOT off
+    `query.nearest_enemy`.** That reader consults `counts_as_nearest`, so
+    a permission laid by this very row could sit inside the set the next
+    reading computes from, and the designation would creep one rank
+    further out every turn: second, then third, then fourth. Asking the
+    grid instead is a fixed point.
+
+    **This and `When.EOT` are belt and braces, and the plant is what
+    established that rather than my reasoning.** The note here used to
+    present the creep as a live hazard this measurement alone prevents. It
+    is not: re-pointing this at `nearest_enemy` and leaving the duration
+    alone changes **nothing**, because the hold expires at the end of the
+    ranger's turn and so is gone before the next reading. The creep only
+    appears when *both* are undone -- reader-based ranks **and** an
+    encounter-long hold -- which `drivers.second_nearest_quarry` plants and
+    reds. Either guard alone is sufficient; this one is kept because it is
+    correct without depending on the duration, and the duration is set by
+    the printed moment rather than chosen to make this safe.
+
+    The same measurement `nearest_enemy` makes -- `between(squares(a),
+    squares(b))`, footprint to footprint -- so "the second-nearest" cannot
+    disagree with the engine's own "the nearest" about a Large creature.
+
+    **The dead are already out**, and this note used to claim an `alive`
+    test here was load-bearing -- that `c.enemies()` "does not filter the
+    dead", so a corpse would hold the nearest rank. `query.enemies` ends
+    with `and alive(world, o)`, so both readers inherit one filter and the
+    extra test was dead code justified by a fault that does not exist. A
+    plant removing it changed nothing, which is how it was found.
     """
+    away: dict[int, int] = {}
+    for foe in c.enemies():
+        mine, theirs = squares(c.world, me), squares(c.world, foe)
+        if mine and theirs:
+            away[foe] = between(mine, theirs)
+    if not away:
+        return []
+    nearest = min(away.values())
+    rest = {f: d for f, d in away.items() if d > nearest}
+    if not rest:
+        return []
+    second = min(rest.values())
+    return sorted(f for f, d in rest.items() if d == second)
+
+
+@power("f2462", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2462(c: Cast) -> None:
+    """*"You can designate the second-nearest enemy as your quarry instead
+    of the nearest enemy."*
+
+    **The marker was stale and `73a57042` is what made it so.** Its note
+    said the restriction this feat lifts "is not enforced anywhere --
+    writing the row would be granting a permission already held", which
+    was exactly right when written. `#1251` then enforced it:
+    `cf:ranger-f1` declares `Target.nearest`, `query.nearest_enemy` is the
+    one reader, and `c.counts_as_nearest` is the permission -- built, in
+    that issue's own words, so that a clause widening what counts "is more
+    than a modifier nobody consults". This is the second such clause.
+
+    So the gap was never `c.quarry(nearest=False)`. `c.quarry` still takes
+    whoever it is handed, and that is correct: the restriction lives in the
+    *target pool* -- `_stands_right`, where `candidates()` and `use` cannot
+    disagree about it -- and the permission ADDS to that pool rather than
+    swapping a flag on the verb.
+
+    **Re-laid each of this character's turns, not once at arming.** The
+    shaman's `cf:shaman-f0s3` lays the same permission at arming and
+    records the cost: an enemy arriving later is not covered. That is a
+    fair trade for "adjacent to your spirit", which moves rarely, and a
+    bad one here -- the second-nearest enemy changes whenever anything
+    moves, so an arming-time answer would be the right creature for about
+    one round. The designation is a minor action on this character's own
+    turn, so `TurnStart` is the moment and `When.EOT` is exactly the
+    window that needs covering.
+
+    **It adds rather than replaces, which is what "instead" means here.**
+    The card gives the ranger a choice between two creatures; it does not
+    forbid the nearest. `counts_as_nearest` adding is therefore the
+    printed reading and not a convenience.
+    """
+    me = c.me
+
+    def allow(_ev: Any) -> None:
+        for foe in _second_nearest(c, me):
+            c.counts_as_nearest(foe, on=me, until=When.EOT)
+
+    c.watch(TurnStart, allow, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2469", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
