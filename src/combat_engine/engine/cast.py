@@ -6486,19 +6486,44 @@ class Cast:
 
         who = on if on is not None else self.me
         powers = self.world.get(who, _Powers)
-        if powers is None or extra <= 0:
+        if powers is None or extra == 0:
             return 0
         from .dsl import get as _get
 
-        powers.extra_uses[ref] = powers.extra_uses.get(ref, 0) + extra
         declared = _get(ref)
         printed = declared.uses if declared is not None else 1
+        # **Signed, and floored so the total cannot go below zero.** The
+        # guard used to refuse anything `<= 0`, which made three printed
+        # cards unwritable: *"you lose one use of your p12668 power"* is
+        # this write with a negative, and `c.fewer_uses` is the door that
+        # reads like the card. A total of 0 means the row is refused
+        # outright, which is what losing your only use says.
+        floor = -printed - powers.extra_uses.get(ref, 0)
+        extra = max(extra, floor) if extra < 0 else extra
+        powers.extra_uses[ref] = powers.extra_uses.get(ref, 0) + extra
         now = printed + powers.extra_uses[ref]
         from .events import UsesRaised
 
         self.world.bus.emit(UsesRaised(
             who=who, power=ref, extra=extra, now=now, by=self.ref))
         return now
+
+    def fewer_uses(self, ref: str, n: int = 1, *,
+                   on: int | None = None) -> int:
+        """"You lose one use of your p12668 power." Returns the total left.
+
+        The printed direction of `c.more_uses` and the same write, so
+        there is one implementation of the allowance and two call sites
+        that read like their cards. Three feats print it, each buying a
+        chosen power with it -- `f3582`, `f3588` and `f3616`.
+
+        `n` is taken as a magnitude, so `fewer_uses(ref, 1)` and
+        `fewer_uses(ref, -1)` both take one away rather than one of them
+        quietly adding. The total floors at 0: a row whose only use is
+        lost is refused outright, which is what the sentence says, and at
+        heroic tier `p12668` and `p12710` each print exactly one use.
+        """
+        return self.more_uses(ref, -abs(n), on=on)
 
     def restore_use(self, ref: str, *, on: int | None = None,
                     once_per_round: bool = False) -> bool:

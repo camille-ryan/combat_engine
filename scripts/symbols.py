@@ -745,6 +745,13 @@ CATEGORIES: dict[str, dict] = {
                 # always. Seventeen class-feature rows print the second
                 # and carried a marker for it. #642.
                 "more_uses",
+                # Its printed direction, and the same write underneath --
+                # one implementation of the allowance, two call sites that
+                # read like their cards. `more_uses` refused anything
+                # `<= 0`, so *"you lose one use of your p12668 power"* was
+                # unwritable in the one verb that writes an allowance.
+                # Three feats buy a chosen power with it.
+                "fewer_uses",
                 # **Beside `more_uses` because it is the one verb somebody
                 # looking for `more_uses` will reach for by mistake, and
                 # the other way round.** Two allowances with two readers:

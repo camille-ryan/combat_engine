@@ -84387,6 +84387,126 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_use_traded_for_a_chosen_power(out: Result) -> None:
+    """"You lose one use of X. In exchange, you gain a power of your choice."
+
+    `f3582` and `f3588` both print it and both carried
+    `todo=("chargen.power_choice()",)`. Both ends existed or nearly did:
+    `c.borrow_row(among=)` is the choice, and its own docstring argues the
+    case -- *"inside one encounter a choice made at arming and a choice
+    made at character creation are the same choice"*. `c.fewer_uses` is
+    the price and is new: `c.more_uses` refused anything `<= 0`, so the
+    printed direction of the one verb that writes an allowance could not
+    be written at all.
+
+    **The class is read off the priced row's header.** `f3582` says *"from
+    your class"* and charges one of that class's cards; `f3588` names `c6`
+    and charges that class's card. One ref answers both and no class name
+    enters the file.
+
+    Three things asserted besides the trade. The taken power is of the
+    right class and at or below the character's level, or the pool was
+    wrong rather than the row. The price is charged **only** when
+    something was taken -- *"in exchange"* is one transaction -- which is
+    staged by handing the character every candidate so `borrow_row`'s own
+    `ref not in held` filter empties the pool. And `extra_uses` is read
+    rather than `dsl.usable`, because the posed character does not always
+    hold the row being charged: `f3588`'s price reads *"not known"* on its
+    board, which is a fact about the pose and not about the write.
+    """
+    from audit import board as posed
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    for feat, price in (("f3582", "p12668"), ("f3588", "p12710")):
+        world, me, _start = posed(feat, 1)
+        known = world.get(me, Powers)
+        # The board pre-grants extra uses; the card is about the printed
+        # allowance, so this measures from the printed number.
+        known.extra_uses.clear()
+        reader = Cast(world=world, me=me, ref="drivers", target=me)
+        REGISTRY[feat].body(Cast(world=world, me=me, ref=feat, target=me))
+        took = reader.stored_row(of=feat, on=me)
+
+        out.that(bool(took),
+                 f"{feat} takes a power -- the choice half, which"
+                 " `c.borrow_row(among=)` has always been able to make",
+                 f"took {took!r}")
+        if took:
+            p = REGISTRY[took]
+            out.that(p.cls == REGISTRY[price].cls,
+                     f"{feat}: and it is of the class the card names,"
+                     " read off the ref this card charges rather than"
+                     " written down here",
+                     f"{took} is {p.cls!r}, {price} is"
+                     f" {REGISTRY[price].cls!r}")
+            out.that(p.level is not None and 1 <= p.level <= reader.level,
+                     f"{feat}: at or below this character's level, which"
+                     " is the printed narrowing `c.borrow_row`'s own"
+                     " filter cannot express -- it matches one exact level",
+                     f"{took} is level {p.level}, character is"
+                     f" {reader.level}")
+        out.that(known.extra_uses.get(price) == -1,
+                 f"{feat}: and one use of {price} is gone -- the price,"
+                 " written by `c.fewer_uses` into the same field"
+                 " `c.more_uses` writes and `dsl.usable` reads",
+                 f"extra_uses={dict(known.extra_uses)}")
+
+    # -- the price is charged ONLY in exchange ----------------------------
+    #
+    # Staged through the row's own filter rather than by breaking it:
+    # `c.borrow_row` skips a ref already in `known.known`, so handing the
+    # character every candidate leaves the pool empty, which is the
+    # situation a character with nothing left to choose is really in.
+    world, me, _s = posed("f3582", 1)
+    known = world.get(me, Powers)
+    known.extra_uses.clear()
+    want = REGISTRY["p12668"].cls
+    for ref, p in REGISTRY.items():
+        if (p.cls == want and p.attack is not None and not p.todo
+                and p.level is not None and 1 <= p.level <= 1
+                and p.usage is dsl.Usage.ENCOUNTER and ref not in known.known):
+            known.known.append(ref)
+    REGISTRY["f3582"].body(Cast(world=world, me=me, ref="f3582", target=me))
+    out.that("p12668" not in known.extra_uses,
+             "with nothing left to choose, NO use is lost -- 'in exchange'"
+             " is one transaction, and a row that charged anyway would"
+             " quietly cost a fighter its power for nothing",
+             f"extra_uses={dict(known.extra_uses)}")
+
+    # -- the verb itself: a magnitude, and a floor ------------------------
+    world, me, _s = posed("p12668", 1)
+    known = world.get(me, Powers)
+    known.extra_uses.clear()
+    if "p12668" not in known.known:
+        known.known.append("p12668")
+    c = Cast(world=world, me=me, ref="drivers", target=me)
+    printed = REGISTRY["p12668"].uses
+    # Each read captured once: `fewer_uses` writes, so calling it again
+    # inside the message would spend a second use and the number printed
+    # would describe a different call than the assertion made.
+    lower = c.fewer_uses("p12668", 1)
+    out.that(lower == printed - 1,
+             "`c.fewer_uses` returns the total left, one lower",
+             f"{printed} -> {lower}")
+    out.that(not dsl.usable(world, me, REGISTRY["p12668"])[0],
+             "and at heroic tier that is its only use, so the row is"
+             " refused outright -- which reads harshly and is what the"
+             " sentence says",
+             f"{dsl.usable(world, me, REGISTRY['p12668'])}")
+    floored = c.fewer_uses("p12668", 1)
+    out.that(floored == 0 and known.extra_uses["p12668"] == -printed,
+             "a second call floors at zero rather than going negative",
+             f"total={floored} extra={known.extra_uses['p12668']}")
+    signed = c.fewer_uses("p12668", -5)
+    out.that(signed == 0 and known.extra_uses["p12668"] == -printed,
+             "and a negative argument is taken as a MAGNITUDE, so it"
+             " cannot quietly add uses back",
+             f"total={signed} extra={known.extra_uses['p12668']}")
+
+
 def a_racial_power_buys_an_extra_use(out: Result) -> None:
     """"Expend your rt:r6-t3 power to use a cf:artificer-f2 power again."
 
@@ -118536,6 +118656,8 @@ DRIVERS = {
                                     "a borrowed feature without its cards"),
     "a_racial_power_buys_an_extra_use": (a_racial_power_buys_an_extra_use,
                                          "a racial power bought a use"),
+    "a_use_traded_for_a_chosen_power": (a_use_traded_for_a_chosen_power,
+                                        "a use traded for a chosen power"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

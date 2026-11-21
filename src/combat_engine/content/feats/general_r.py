@@ -1063,12 +1063,71 @@ def f3581(c: Cast) -> None:
 # -- swaps and borrowed class features --------------------------------------
 
 
+def _loses_a_use_for_a_power(
+    c: Cast, price: str, *, usage: object = None,
+) -> str:
+    """"You lose one use of <price>. In exchange, you gain a power of your
+    choice" -- the shape `f3582` and `f3588` share.
+
+    The pool is **this card's class at this character's level or lower**,
+    which is why it is built here rather than passed as `cls=`:
+    `c.borrow_row`'s own filter matches an exact level, and both cards say
+    *"your level or lower"*.
+
+    **The class is read off the priced row's header**, not written down and
+    not looked up: `f3582` says *"from your class"* and the card it charges
+    is one of that class's, and `f3588` names `c6`, whose power is the row
+    it charges. One ref answers both, nothing in this file has to carry a
+    class name, and the day the two disagree the pool comes back empty
+    rather than wrong.
+
+    **The price is charged only if something was taken.** *"In exchange"*
+    is one transaction, and a character offered an empty pool has nothing
+    to exchange -- which is also what keeps this from silently costing a
+    use on a board that cannot serve it.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+
+    want = REGISTRY[price].cls
+    mine = c.level
+    among = [
+        ref
+        for ref, p in REGISTRY.items()
+        if p.cls == want and p.attack is not None and not p.todo
+        and p.level is not None and 1 <= p.level <= mine
+        and (usage is None or p.usage is usage)
+        and ref != price
+    ]
+    taken = c.borrow_row(among=among, uses=0)
+    if taken:
+        with c.credit(c.ref):
+            c.fewer_uses(price, 1)
+    return taken
+
+
 @power("f3582", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.power_choice()",))
+       reach=PERSONAL, target=SELF)
 def f3582(c: Cast) -> None:
-    """Not a swap: what goes back is one *use* of a row rather than the
-    row, and what comes the other way is "a power of your choice" rather
-    than a card. `Swap` names a card's price; this names neither end."""
+    """"You lose one use of p12668. In exchange, you gain an encounter
+    attack power of your choice, from your class and your level or lower."
+
+    **Written, and the marker named a facility that was already there.**
+    It read *"not a swap: what goes back is one use of a row rather than
+    the row, and what comes the other way is a power of your choice rather
+    than a card. `Swap` names a card's price; this names neither end"* --
+    correct about `Swap` and wrong that nothing else answers.
+
+    Both ends exist. `c.borrow_row(among=)` is the choice, and its own
+    docstring makes the argument for using it on a build-time pick:
+    *"inside one encounter a choice made at arming and a choice made at
+    character creation are the same choice"*. `c.fewer_uses` is the price,
+    and it is new -- `c.more_uses` refused anything `<= 0`, so the printed
+    direction of the one verb that writes an allowance was unwritable.
+
+    At heroic tier `p12668` prints **one** use, so losing it refuses the
+    row outright: `dsl.usable` reports *"used 0 of 0"*. That reads harshly
+    and is what the sentence says."""
+    _loses_a_use_for_a_power(c, "p12668", usage=ENCOUNTER)
 
 
 @power("f3583", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -1389,10 +1448,20 @@ def f3587(c: Cast) -> None:
 
 
 @power("f3588", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.power_choice()",))
+       reach=PERSONAL, target=SELF)
 def f3588(c: Cast) -> None:
-    """`f3582` for the rogue's row, and the same two ends: a use rather
-    than a power, and a choice rather than a card."""
+    """`f3582` for the other class's row, and the same two ends.
+
+    One difference, and it is in the card rather than in the code:
+    `f3582` names *"an encounter attack power"* and this one names only
+    *"a c6 attack power ... of your level or lower"*, with no usage at
+    all. So the pool is every attack power of that class at or below the
+    character's level, which is why `usage=` is left off here and passed
+    on `f3582`.
+
+    `c6` is `p12710`'s own class, so the helper reads it off the ref this
+    card charges rather than carrying a class name."""
+    _loses_a_use_for_a_power(c, "p12710")
 
 
 @power("f3589", level=1, cls="", usage=ENCOUNTER, action=NONE,
