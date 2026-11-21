@@ -1378,9 +1378,37 @@ def f633(c: Cast) -> None:
 
 @power("f715", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("dsl.use(attacks_before_damage)",))
+       dropped=("dsl.use(attacks_before_damage)",))
 def f715(c: Cast) -> None:
-    """**Re-pointed: this was never the announcement gap (#496).**
+    """*"You can use your `p1450` racial power to reroll the attack rolls
+    of a single arcane attack power against every target you choose."*
+
+    **Written for every target from the triggering roll onward, so the
+    marker drops to `dropped=`.** `#1394`'s last comment asked for exactly
+    this reading to be checked before the issue was planned against, and
+    it holds: `p1450` is `on=Trigger(AttackRolled, by_me)` and `dsl.use`
+    calls a body once per target, so an area power rolls **in sequence**
+    and the later targets have not rolled when `p1450` fires. The note
+    below's premise -- *"the others have already been resolved"* -- is
+    true only of targets **earlier** in the loop, and those are the
+    residue the marker still names.
+
+    **One watch, in `Window.AFTER`.** `c.reroll_attack` records
+    `result.rerolled_by` and announces `Rerolled`; it does **not** emit a
+    second `AttackRolled`, so the reroll itself cannot recurse. Reading
+    that list after the window is what tells this row `p1450` has just
+    fired, because `Rerolled` carries no power and `AttackResult` has no
+    `power` field -- `AttackRolled` is the only event with both.
+
+    The `c.ref not in` guard is the one that matters: without it the row
+    rerolls its own rerolls for ever.
+
+    Keyed on the power's ref, which is the printed *"a single arcane
+    attack power"*. `p1450` is an encounter power, so one power a fight.
+
+    ## The diagnosis this replaces
+
+    **Re-pointed: this was never the announcement gap (#496).**
 
     `c.reroll_attack` rerolls *the triggering roll* -- one roll, read off
     `c.trigger`. An area power rolls separately against every creature it
@@ -1409,6 +1437,48 @@ def f715(c: Cast) -> None:
     carries no marker -- so counting hits across a use was never the gap.
     `f1123` differs from it by the words "that power's". `#1394`.
     """
+    me = c.me
+    #: Which arcane power `p1450` rerolled a roll of, so every later roll
+    #: of the same one is rerolled too. A closure of this arming, so it
+    #: cannot outlive the board -- the fault `c.once_per_board` exists for.
+    spread: set[str] = set()
+
+    def every_target(ev: AttackRolled) -> None:
+        if getattr(ev, "attacker", None) != me:
+            return
+        result = getattr(ev, "result", None)
+        if result is None:
+            return
+        power = getattr(ev, "power", "") or ""
+        if power in spread:
+            # A later target of the power `p1450` rerolled against.
+            #
+            # **No re-entry guard, and it was measured out rather than
+            # argued out.** The obvious one is `if c.ref not in
+            # result.rerolled_by`, and a plant removing it left this rule
+            # green: `c.reroll_attack` announces `Rerolled` and records
+            # `result.rerolled_by`, and it does **not** emit a second
+            # `AttackRolled` -- so this handler is called once per roll and
+            # cannot re-enter. Dead bookkeeping no plant can redden is
+            # dead bookkeeping, which is the call `audit.board`'s own
+            # clearing branch records.
+            #
+            # What would make it live: `reroll_attack` announcing
+            # `AttackRolled` for the second roll. If that ever lands, this
+            # row loops, and the guard is one line.
+            with c.credit(c.ref):
+                c.reroll_attack(ev=ev)
+            return
+        if "p1450" not in result.rerolled_by:
+            return
+        declared = get(power)
+        if declared is None or declared.attack is None:
+            return
+        if Keyword.ARCANE in (declared.keywords or ()):
+            spread.add(power)
+
+    c.watch(AttackRolled, every_target, on=me, until=When.ENCOUNTER,
+            window=Window.AFTER, label=f"{c.ref} every target")
 
 
 # -- build-time choices -----------------------------------------------------

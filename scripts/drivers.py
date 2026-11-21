@@ -40782,6 +40782,117 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def a_reroll_that_spreads_to_later_targets(out: Result) -> None:
+    """`f715`: `p1450`'s reroll reaches every later target of one power.
+
+    *"You can use your `p1450` racial power to reroll the attack rolls of a
+    single arcane attack power against every target you choose."*
+
+    **`#1394` asked for this reading to be checked before the issue was
+    planned against.** `p1450` is `on=Trigger(AttackRolled, by_me)` and
+    `dsl.use` calls a body once per target, so an area power rolls **in
+    sequence** -- the later targets have not rolled when `p1450` fires. The
+    old note's premise, *"the others have already been resolved"*, is true
+    only of targets **earlier** in the loop, so the row is writable for the
+    rest and the marker drops to `dropped=`.
+
+    Asserted on rolls posed by hand rather than through a real area power:
+    the row reads `AttackRolled`, `result.rerolled_by` and `ev.power`, so
+    those three are what a board has to supply, and posing them directly is
+    what makes the later-target case reachable at all.
+
+    **The recursion guard is the assertion that matters.** Without
+    `c.ref not in result.rerolled_by` the row rerolls its own reroll for
+    ever, and the tell is the number of entries that ref leaves behind.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.resolve import AttackResult
+    from combat_engine.engine.types import Defense, Keyword
+
+    got = story.field_encounter(seed=7, level=3)
+    w = got.world
+    me = next(e for e in sorted(w.entities)
+              if not query.stat_block(w, e))
+    foe = next(e for e in sorted(w.entities) if query.stat_block(w, e))
+
+    #: A real arcane attack power, and a real non-arcane one. Off the
+    #: registry, because the gate reads the row's keywords -- an invented
+    #: ref answers False for the wrong reason.
+    arcane = next(r for r, p in REGISTRY.items()
+                  if p.attack is not None and Keyword.ARCANE in (p.keywords or ()))
+    mundane = next(r for r, p in REGISTRY.items()
+                   if p.attack is not None
+                   and Keyword.ARCANE not in (p.keywords or ())
+                   and Keyword.WEAPON in (p.keywords or ()))
+    out.that(bool(arcane) and bool(mundane),
+             f"the premise: a real arcane attack row and a real non-arcane"
+             f" one ({arcane}, {mundane})")
+
+    REGISTRY["f715"].body(Cast(world=w, me=me, ref="f715", target=me))
+
+    def roll(power: str, *, by_p1450: bool, natural: int = 7) -> AttackResult:
+        """One attack roll of mine, announced the way `resolve` does."""
+        res = AttackResult(hit=False, critical=False, natural=natural,
+                           total=natural, target_defence=20, target=foe)
+        if by_p1450:
+            res.rerolled_by.append("p1450")
+        w.bus.emit(AttackRolled(
+            ctx={"power": power}, attacker=me, target=foe, power=power,
+            vs=Defense.AC, natural=natural, bonus=0, total=natural,
+            defence=20, advantage=False, result=res))
+        return res
+
+    # -- the triggering roll: p1450 rerolled it, so the row only LEARNS --
+    first = roll(arcane, by_p1450=True)
+    out.that("f715" not in first.rerolled_by,
+             "the roll `p1450` itself rerolled is not rerolled again by this"
+             f" row -- it is the one that teaches it which power ({first.rerolled_by})")
+
+    # -- a LATER target of the same power ---------------------------------
+    later = roll(arcane, by_p1450=False)
+    out.that(later.rerolled_by.count("f715") == 1,
+             "a later target of the same power IS rerolled, exactly once --"
+             " the printed 'against every target', and the half the old"
+             f" note said was unreachable ({later.rerolled_by})")
+
+    # -- THE CONTROL: another power's roll --------------------------------
+    other = roll(mundane, by_p1450=False)
+    out.that("f715" not in other.rerolled_by,
+             "THE CONTROL: and a roll of a DIFFERENT power is not -- the"
+             " card says a single power, so a row keyed on 'any later roll'"
+             f" would pay here ({other.rerolled_by})")
+
+    # -- THE CONTROL: a non-arcane power never arms it --------------------
+    w2 = story.field_encounter(seed=7, level=3).world
+    me2 = next(e for e in sorted(w2.entities)
+               if not query.stat_block(w2, e))
+    foe2 = next(e for e in sorted(w2.entities) if query.stat_block(w2, e))
+    REGISTRY["f715"].body(Cast(world=w2, me=me2, ref="f715", target=me2))
+
+    def roll2(power: str, *, by_p1450: bool) -> AttackResult:
+        res = AttackResult(hit=False, critical=False, natural=7, total=7,
+                           target_defence=20, target=foe2)
+        if by_p1450:
+            res.rerolled_by.append("p1450")
+        w2.bus.emit(AttackRolled(
+            ctx={"power": power}, attacker=me2, target=foe2, power=power,
+            vs=Defense.AC, natural=7, bonus=0, total=7,
+            defence=20, advantage=False, result=res))
+        return res
+
+    roll2(mundane, by_p1450=True)
+    after = roll2(mundane, by_p1450=False)
+    out.that("f715" not in after.rerolled_by,
+             "THE CONTROL: `p1450` rerolling a NON-arcane power arms"
+             " nothing -- the printed word is 'arcane', and without this the"
+             f" feat reads as 'any power p1450 touched' ({after.rerolled_by})")
+
+
 def a_will_bonus_against_one_named_power(out: Result) -> None:
     """`i1964x1`: +enhancement to Will, but only against dispel magic.
 
@@ -116721,6 +116832,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "reroll_spreads": (a_reroll_that_spreads_to_later_targets,
+                       "a racial reroll reaches every LATER target of one "
+                       "arcane power, and no other power"),
     "dispel_will": (a_will_bonus_against_one_named_power,
                     "a Will bonus gated on the one power the card names"),
     "reach_per_square": (a_reach_asked_per_square,
