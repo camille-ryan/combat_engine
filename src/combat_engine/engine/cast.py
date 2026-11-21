@@ -3138,6 +3138,28 @@ class Cast:
         both here at once is refused rather than guessed at, because the two
         exemptions have different scopes and one effect cannot carry two
         labels honestly.
+
+        **A PARTIAL exemption -- "ignore 1 square of difficult terrain" --
+        is not a parameter here, and the reason is worth reading before
+        anybody tries.** `f1873` and `f2622` print it and both say the
+        holder is a set of labels with nowhere to put a count. True, and
+        the count is the smaller half of it: a budget is a property of a
+        **path**, not of a square.
+
+        `World.crossing` resolves the waivers once and hands back a pricing
+        closure, and `step`, `reachable` and `costs` all take their price
+        from it -- which is deliberate, so the three cannot disagree. A
+        counter living in that closure is per *move* only on the walking
+        path; inside `reachable`'s Dijkstra it would decrement across every
+        candidate path the search considers, so the budget would be spent by
+        routes the creature never took and the reachable set would come out
+        wrong in a way nothing announces.
+
+        So the work is a remaining-budget term in the search's own node
+        state, not an argument here. Recorded at the verb rather than on the
+        two rows because this is where somebody would come looking for the
+        parameter. #1196's lesson, in the other direction: a symbol that
+        reads like a parameter can be a pathfinding change.
         """
         from .components import Movement
 
