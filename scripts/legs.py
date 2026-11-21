@@ -448,13 +448,18 @@ def option_arms() -> tuple[list[str], int]:
 
     out: list[str] = []
     checked = 0
-    for arm, leg in sorted(chargen.OPTION_PACT.items()):
+    for arm in sorted(chargen.OPTION_PACT):
+        # **Several legs can share one arm**, so every one of them has to
+        # be dealable and the agreement below is membership rather than
+        # equality -- see `chargen.legs_of_arm`.
+        paired = chargen.legs_of_arm(arm)
         parent = arm.rsplit("s", 1)[0]
         cls = REGISTRY[parent].cls if parent in REGISTRY else _class_in_ref(arm)
         legs = {b.name for ch in (chargen.declared_chassis(cls) or ("",))
                 for b in (chargen.legs_for(cls, ch) or ())}
-        if leg not in legs:
-            out.append(f"  {arm:34} paired with {leg!r}, which {cls} "
+        undealable = [x for x in paired if x not in legs]
+        if undealable:
+            out.append(f"  {arm:34} paired with {undealable}, which {cls} "
                        f"cannot deal -- the arm reaches nobody")
             continue
         row = REGISTRY.get(arm)
@@ -468,9 +473,9 @@ def option_arms() -> tuple[list[str], int]:
         if own is None:
             continue
         checked += 1
-        if own != leg:
+        if own not in paired:
             out.append(f"  {arm:34} its row names {own!r}, the table says "
-                       f"{leg!r} -- one of them is crossed")
+                       f"{list(paired)} -- one of them is crossed")
     return out, checked
 
 

@@ -4338,6 +4338,8 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     ),
     #: 4 feat(s) print a prerequisite naming one of these.
     "cf:rogue-scoundrel-f1": (
+        "cf:rogue-scoundrel-f1s0",
+        "cf:rogue-scoundrel-f1s1",
         "cf:rogue-scoundrel-f1s2",
         "cf:rogue-scoundrel-f1s3",
     ),
@@ -5252,7 +5254,25 @@ EXTRA_PICKS: dict[str, str] = {
 #: Read by `deal_build_options`, which narrows a pact-keyed fork to the
 #: character's own leg before drawing. A fork whose options are **not**
 #: all in here is drawn uniformly, exactly as before.
-OPTION_PACT: dict[str, str] = {
+def legs_of_arm(arm: str) -> tuple[str, ...]:
+    """The legs `OPTION_PACT` pairs this arm with -- usually one.
+
+    **Several, because a printed arm can serve more than one leg.**
+    `cf:rogue-scoundrel-f1`'s Charisma arm is the one its parent lays for
+    `trickster` *and* `aerialist` -- `c.build("trickster") or
+    c.build("aerialist")` in one branch, spending `cha_mod` -- so a table
+    mapping one arm to one leg could not express it, and the whole fork
+    stayed uniform rather than being half-keyed on partial information.
+    That is why `f750` and `f763` were the last two feats of `#1427`
+    still reachable by nobody.
+
+    A bare string is still the normal entry and reads as one leg.
+    """
+    legs = OPTION_PACT[arm]
+    return (legs,) if isinstance(legs, str) else tuple(legs)
+
+
+OPTION_PACT: dict[str, str | tuple[str, ...]] = {
     # **The thirteen class forks whose arm is decided by the LEG**, added
     # for `#1427`. These are not pacts, and the table is keyed by leg
     # rather than by pact for exactly that reason -- a warlock's pact is
@@ -5336,6 +5356,18 @@ OPTION_PACT: dict[str, str] = {
     "cf:monk-f0s2": "f0s2",                         # body
     "cf:monk-f0s3": "f0s3",                         # body
     "cf:monk-f0s4": "f0s4",                         # body
+    #: cf:rogue-scoundrel-f1 -- `read`, and the parent's own branches are
+    #: the evidence rather than the flavour: `c.build("brawny")` spends
+    #: `c.str_mod`, which is the arm whose bonus is a Strength modifier,
+    #: and `c.build("trickster") or c.build("aerialist")` spends
+    #: `c.cha_mod`, which is the Charisma one -- two legs, one arm. The
+    #: remaining two go by elimination, and their printed clauses agree:
+    #: the Stealth arm with the leg whose secondary is Wisdom, and the
+    #: club-and-mace proficiency with the last.
+    "cf:rogue-scoundrel-f1s0": ("trickster", "aerialist"),  # read
+    "cf:rogue-scoundrel-f1s1": "brawny",            # read
+    "cf:rogue-scoundrel-f1s2": "shadowy",           # read
+    "cf:rogue-scoundrel-f1s3": "cutthroat",         # read
     #: cf:seeker-f1 -- `read` by elimination: s1 is gated on
     #: `second-str`, and it is the arm with the thrown-weapon attack
     #: bonus, which is the Strength one.
@@ -5631,7 +5663,7 @@ def deal_build_options(rng: Random | None, ref: str, leg: str = "", *,
     """
     options = list(BUILD_OPTIONS[ref])
     if leg and all(o in OPTION_PACT for o in options):
-        options = [o for o in options if OPTION_PACT[o] == leg]
+        options = [o for o in options if leg in legs_of_arm(o)]
         if not options:
             return ()
     # **Capped at the list**, which is not a formality: a ranger holding
