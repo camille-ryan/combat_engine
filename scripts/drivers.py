@@ -40710,6 +40710,97 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def sure_footed_near_the_spirit(out: Result) -> None:
+    """`f1887`: rough going is free beside the spirit, square by square.
+
+    *"You and your allies ignore difficult terrain while adjacent to your
+    spirit companion."* The row used to arm a `MoveStart` watch, read the
+    adjacency **once** before the first step, and grant the whole move --
+    and its note said so honestly: *"'while adjacent to your spirit
+    companion' cannot be asked square by square"*.
+
+    That was true of the four waivers that existed and false of the model
+    they live in. `World.difficult` builds the waived **set of squares**
+    once per move, so a waiver asking about the *destination square* fits
+    it -- which `ignores_unlit` had already shown. `while_near=` is the
+    fifth waiver and the second square predicate.
+
+    **It is the only one that moves**, which is the whole gain, so the
+    rule's two controls are both about the anchor: a square far from the
+    spirit stays expensive, and a spirit that walks away takes the
+    footing with it. Neither is expressible in the arm-once version --
+    that one grants the whole move off one reading.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Position
+    from combat_engine.engine.durations import When as W
+    from combat_engine.engine.grid import distance as grid_distance
+
+    got = story.field_encounter(seed=7, level=3)
+    w = got.world
+    me = next(e for e in sorted(w.entities)
+              if not query.stat_block(w, e))
+    here = w.need(me, Position).square
+
+    # A spirit, given the way `drivers` already gives one: an existing
+    # creature plus a `Companion` naming its owner. What is under test is
+    # the waiver, not the summoning.
+    spirit = next(e for e in sorted(w.entities) if query.stat_block(w, e))
+    w.add(spirit, Companion(owner=me, ref="probe-spirit", kind="spirit"))
+    beside = (here[0] + 1, here[1])
+    w.grid.lift(spirit)
+    w.need(spirit, Position).square = beside
+    w.grid.place(spirit, frozenset({beside}))
+
+    # Rough ground either side of the spirit: one square next to it and
+    # one well away from it.
+    close = (here[0] + 2, here[1])
+    far = (here[0] + 8, here[1])
+    for sq in (close, far):
+        w.grid.difficult[sq] = "mud"
+
+    out.that(close in w.difficult(me) and far in w.difficult(me),
+             "the premise: both squares are rough for this creature before"
+             " anything is waived")
+    gap = grid_distance(beside, close)
+    out.that(gap == 1 and grid_distance(beside, far) > 1,
+             "and the near square really is beside the spirit while the far"
+             f" one is not, or neither control says anything (1 vs"
+             f" {grid_distance(beside, far)})")
+
+    Cast(world=w, me=me, ref="f1887").ignores_difficult(
+        while_near=(spirit, 1), on=me, until=W.ENCOUNTER)
+
+    rough = w.difficult(me)
+    out.that(close not in rough,
+             "the square BESIDE the spirit is free -- the printed waiver,"
+             " asked of that square rather than of the move")
+    out.that(far in rough,
+             "THE CONTROL: and the square 8 away is still rough. The"
+             " arm-once version granted the whole move off one reading, so"
+             " it could not charge for this one")
+
+    # -- the anchor walks away, and the footing goes with it --------------
+    gone = (here[0] + 20, here[1])
+    w.grid.lift(spirit)
+    w.need(spirit, Position).square = gone
+    w.grid.place(spirit, frozenset({gone}))
+    out.that(close in w.difficult(me),
+             "and when the spirit leaves, the square it was beside is"
+             " rough again -- the anchor is an entity id, so the waiver"
+             " follows a creature rather than freezing a set of squares")
+
+    # -- and an anchor off the board waives nothing -----------------------
+    w.despawn(spirit)
+    out.that(close in w.difficult(me),
+             "nor does an anchor that has left the board waive anything --"
+             " no spirit, no sure footing, which `World._anchor_squares`"
+             " answers by returning nothing rather than its last square")
+
+
 def cover_gained_rather_than_held(out: Result) -> None:
     """`f1296` on `p971`: cover you MOVED into, not cover you were in.
 
@@ -116287,6 +116378,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "sure_footed_near": (sure_footed_near_the_spirit,
+                         "rough going is free beside the spirit, square by "
+                         "square, and the waiver follows it"),
     "cover_gained": (cover_gained_rather_than_held,
                      "cover and obscurity you MOVED into, not what you "
                      "were already standing in"),

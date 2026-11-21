@@ -456,6 +456,21 @@ class Movement:
     #: movement over every sort of rough going anywhere, which is a much
     #: bigger card.
     ignores_unlit: bool = False
+    #: Rough going is free, but only in squares **near a named creature** --
+    #: `(anchor, squares)` pairs. `f1887` prints *"you and your allies
+    #: ignore difficult terrain while adjacent to your spirit
+    #: companion"*, so the waiver follows a creature about.
+    #:
+    #: The **fifth** kind of waiver and the second square predicate, after
+    #: `ignores_unlit`. It belongs with that one rather than with the three
+    #: by-label kinds, for the reason that field's note gives: it asks
+    #: something about *where* the square is.
+    #:
+    #: A list because a creature can have two, and the anchor is an entity
+    #: id rather than a position: the spirit moves, and the waiver has to
+    #: move with it. A dead or absent anchor simply matches nothing, which
+    #: is the printed answer -- no spirit, no sure footing.
+    ignores_near: tuple[tuple[int, int], ...] = ()
     #: **The whole board costs this creature double**, which is what "treats
     #: all squares as difficult terrain" prints.
     #:

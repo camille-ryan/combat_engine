@@ -68,7 +68,6 @@ from combat_engine.engine import (
     ForcedMove,
     Hit,
     Moved,
-    MoveStart,
     PowerUsed,
     Relation,
     RelationSet,
@@ -232,26 +231,45 @@ def f1882(c: Cast) -> None:
 
 
 @power("f1887", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.ignores_difficult(while_near=)",))
+       reach=PERSONAL, target=SELF)
 def f1887(c: Cast) -> None:
-    """Sure-footedness is a flag on a creature's `Movement`, held for a
-    duration, with no gate on it -- so "while adjacent to your spirit
-    companion" cannot be asked square by square as the creature crosses
-    the rough ground. It is asked once, at the moment the move starts,
-    and granted for that move: the closest true reading available. The
-    per-square gate is the dropped clause.
-    """
-    def afoot(ev: MoveStart) -> None:
-        spirit = c.companion()
-        if spirit is None or ev.actor == spirit:
-            return
-        if ev.actor not in [c.me, *c.allies()]:
-            return
-        if c.adjacent_to(spirit, ev.actor):
-            c.ignores_difficult(on=ev.actor, until=When.EOT)
+    """*"You and your allies ignore difficult terrain while adjacent to
+    your spirit companion."*
 
-    c.watch(MoveStart, afoot, until=When.ENCOUNTER)
+    **The per-square gate is written now, and the note it replaces was an
+    honest account of an approximation.** It read: *"sure-footedness is a
+    flag on a creature's `Movement`, held for a duration, with no gate on
+    it -- so 'while adjacent to your spirit companion' cannot be asked
+    square by square as the creature crosses the rough ground. It is
+    asked once, at the moment the move starts, and granted for that
+    move."*
+
+    That was true of the four waivers that existed and false of the model
+    they live in. `World.difficult` builds the waived **set of squares**
+    once per move, so a waiver that asks something about the *destination
+    square* fits it exactly -- which `ignores_unlit` had already shown.
+    "Within 1 of the spirit" is such a question, so
+    `c.ignores_difficult(while_near=)` is the fifth waiver and the second
+    square predicate.
+
+    **It is the only waiver that moves**, and that is the gain over the
+    old reading: the anchor is an entity id, so a spirit that steps away
+    takes the sure footing with it mid-move, where the arm-once version
+    granted the whole move on one reading taken before the first step.
+
+    Laid on the shaman and each ally once, standing, rather than on every
+    `MoveStart`: the gate is in the reader now, so there is nothing left
+    for a watch to decide. An ally that joins the fight later is missed,
+    which is the same limit `cf:shaman-f0s3` records about arming over
+    `c.allies()` and is unchanged by this.
+    """
+    spirit = c.companion()
+    if spirit is None:
+        return
+    for mate in [c.me, *c.allies()]:
+        if mate != spirit:
+            c.ignores_difficult(while_near=(spirit, 1), on=mate,
+                                until=When.ENCOUNTER)
 
 
 @power("f1030", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

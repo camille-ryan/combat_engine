@@ -383,7 +383,29 @@ class World:
 
             unlit = {sq for sq in rough
                      if light_level(self, sq) is not Light.BRIGHT}
-        if not ignored and not made and not unlit:
+        # **The second square predicate, and the only one that moves.**
+        # `f1887` prints "while adjacent to your spirit companion", so the
+        # waived squares are the ones near a creature rather than the ones
+        # with a property -- and the anchor is an id, so a spirit that
+        # steps away takes the sure footing with it.
+        #
+        # Asked here rather than in `crossing`'s per-step closure for the
+        # reason the whole set is built here: the answer is a fact about
+        # the destination square, so it is computable once per move like
+        # every other waiver. A per-step counter would NOT be -- see
+        # `Movement.ignores_near`'s sibling gap.
+        near: set[Any] = set()
+        if moves.ignores_near:
+            from .grid import distance as _near_distance
+
+            for anchor, span in moves.ignores_near:
+                spots = self._anchor_squares(anchor)
+                if not spots:
+                    continue
+                near |= {sq for sq in rough
+                         if min(_near_distance(sq, at) for at in spots)
+                         <= span}
+        if not ignored and not made and not unlit and not near:
             return set(rough) | imposed
         return {
             sq
@@ -397,6 +419,8 @@ class World:
             )
             # The square's own light, when something waived it.
             and sq not in unlit
+            # And its distance from an anchor, for the waiver that walks.
+            and sq not in near
         } | imposed
 
     def _wall_tolls(self, for_: int) -> dict[Any, int]:

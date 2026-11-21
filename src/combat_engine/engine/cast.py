@@ -3132,6 +3132,7 @@ class Cast:
         *,
         made_by: str = "",
         unlit: bool = False,
+        while_near: tuple[int, int] | None = None,
         on: int | None = None,
         until: When = When.ENCOUNTER,
         when: str = "",
@@ -3227,6 +3228,17 @@ class Cast:
             )
         if unlit:
             return self._ignores_difficult_unlit(who, moves, until)
+        # **The same refusal, for the same reason.** `while_near` is the
+        # second question about the square and no card prints it beside a
+        # label, a provenance or a move kind.
+        if while_near is not None and (kind or made_by or when or unlit):
+            raise ValueError(
+                f"{self.ref}: c.ignores_difficult(while_near=) is a question"
+                " about the SQUARE and does not combine with `kind`,"
+                " `made_by`, `when` or `unlit` -- one call each."
+            )
+        if while_near is not None:
+            return self._ignores_difficult_near(while_near, who, moves, until)
         word = kind.lower() or "*"
         # **Refused, not accepted silently.** `"*"` is the bare call --
         # every sort of going -- and anything else must be a label something
@@ -3444,6 +3456,59 @@ class Cast:
 
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} sure-footed in the dark",
+            on_suspend=[drop],
+            on_resume=[restore],
+            by=self.ref,
+        )
+
+    def _ignores_difficult_near(
+        self, while_near: tuple[int, int], who: int, moves: Any, until: When
+    ) -> Effect | None:
+        """"You ignore difficult terrain while adjacent to <a creature>."
+
+        `f1887` prints it of a shaman's spirit companion, for the shaman
+        and its allies. The **second** square predicate after
+        `unlit=`, and the only waiver that moves: the anchor is an entity
+        id, so a spirit that steps away takes the sure footing with it,
+        and `World._anchor_squares` answers nothing for one that has left
+        the board -- no spirit, no sure footing, which is the printed
+        reading.
+
+        **Why this is a square predicate and not a per-step gate.**
+        `World.difficult` builds the waived set once per move, and "is
+        this square within 1 of the spirit" is a fact about the
+        destination, so it belongs there with the other four. The thing
+        that genuinely cannot live there is a **count** -- "one square of
+        difficult terrain per move" -- because `movement.reachable` calls
+        the pricing closure while *searching* candidate paths, so a
+        counter would be spent in search order rather than along the path
+        walked. That is `f1873`'s and `f2622`'s gap and it stays marked.
+
+        `on_suspend`/`on_resume` rather than `on_end`, for the reason the
+        other two helpers record: `Effects._lift` runs the first for an
+        expiry *and* a suspension.
+        """
+        anchor, span = int(while_near[0]), int(while_near[1])
+        if span < 0:
+            raise ValueError(
+                f"{self.ref}: c.ignores_difficult(while_near=) takes a"
+                f" distance of 0 or more, not {span}")
+        pair = (anchor, span)
+        if pair in moves.ignores_near:
+            return None
+        moves.ignores_near = (*moves.ignores_near, pair)
+
+        def drop() -> None:
+            moves.ignores_near = tuple(
+                p for p in moves.ignores_near if p != pair)
+
+        def restore() -> None:
+            if pair not in moves.ignores_near:
+                moves.ignores_near = (*moves.ignores_near, pair)
+
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} sure-footed near {anchor}",
             on_suspend=[drop],
             on_resume=[restore],
             by=self.ref,

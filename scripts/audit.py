@@ -849,6 +849,26 @@ KNOWN_SILENT = {
     # of another to prove both halves of the printed rule.
     "cf:bard-skald-f1": "caps the class's daily attack powers per day;"
                         " the board's skald is dealt none of them",
+    # **No spirit, no sure footing -- and the old green here was hollow.**
+    # `f1887` waives difficult terrain for the shaman and its allies while
+    # they are beside the spirit companion, and this board fields **no
+    # companion at all**: `world.having(Companion)` is empty for the row,
+    # measured, and `audit.board` deliberately does not spawn one -- a
+    # second body on the grid would make every other companion reader
+    # ambiguous, which `_WANTS_BEAST`'s own note argues.
+    #
+    # It was credited before because its body armed a `MoveStart` watch
+    # *before* asking for the spirit, so the arming was the "something" it
+    # did. That is the hollow credit this file warns about in as many
+    # words elsewhere -- "the trigger arms and the board never produces
+    # the state the clause is about". With the per-square waiver the row
+    # has nothing to arm and says so honestly.
+    #
+    # `drivers.sure_footed_near` is the proof: it gives the shaman a
+    # spirit, and plants both the distance and the anchor moving away.
+    "f1887": "waives difficult terrain beside the spirit companion; this"
+             " board fields no companion, so there is no anchor to be"
+             " near",
     # **Nothing to share on a board where every implement is plain.**
     # `cf:warlock-hexblade-f3` hands the pact weapon the implement's
     # enhancement, item and properties, and `chargen` deals plain
