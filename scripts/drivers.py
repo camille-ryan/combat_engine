@@ -114059,11 +114059,67 @@ def the_light_silvers_only_the_weapons_it_lent(out: Result) -> None:
              " red exactly here",
              f"{silvered(other)}")
 
-    out.that(REGISTRY["i2478p1"].unfinished == ("Weapon.properties(per_source=)",),
-             "i2478p1 still waits on exactly the one symbol its marker names"
-             " -- a count per source, which no bookkeeping in a row can"
-             " supply because the other source is another row's closure",
-             f"{REGISTRY['i2478p1'].unfinished}")
+    out.that(not REGISTRY["i2478p1"].unfinished,
+             "and the row waits on nothing: the per-source clause is"
+             " written, where this assertion used to pin the marker in"
+             f" place ({REGISTRY['i2478p1'].unfinished})")
+
+    # -- the overlap the dropped clause was really about -------------------
+    #
+    # **Two sources over one weapon, which the hand-rolled bookkeeping
+    # could not see.** Its own note said so: two of these lights over one
+    # ally means the second records nothing, so the first to end strips a
+    # word the second is still paying for. `Weapon.granted_by` holds the
+    # sources instead, so the word goes only when the last one ends.
+    two, lender, _ = _board("i2478p1", 1)
+    mates = [e for e in sorted(allies(two, lender)) if e != lender]
+    out.that(bool(mates),
+             "the premise: the wearer has an ally to be lit by two sources")
+    if mates:
+        mate = mates[0]
+        arms = two.get(mate, Gear)
+        out.that(arms is not None and arms.weapons,
+                 "and the ally carries a weapon to be silvered")
+        if arms is not None and arms.weapons:
+            ref = arms.weapons[0].ref
+
+            def words(who: int) -> frozenset:
+                kit = two.get(who, Gear)
+                return next((w.properties for w in (kit.weapons if kit else [])
+                             if w.ref == ref), frozenset())
+
+            first = Cast(world=two, me=lender, ref="drivers:light-a")
+            second = Cast(world=two, me=lender, ref="drivers:light-b")
+            first.gains_property("silvered", ref=ref, on=mate)
+            second.gains_property("silvered", ref=ref, on=mate)
+            out.that("silvered" in words(mate),
+                     "the premise: two sources have each granted the word")
+
+            first.loses_property("silvered", ref=ref, on=mate,
+                                 mine_only=True)
+            out.that("silvered" in words(mate),
+                     "**the first source ending leaves the word standing**,"
+                     " because the second is still paying for it. This is"
+                     " the clause that was dropped, and the hand-rolled"
+                     f" version reds exactly here ({sorted(words(mate))})")
+
+            second.loses_property("silvered", ref=ref, on=mate,
+                                  mine_only=True)
+            out.that("silvered" not in words(mate),
+                     "and it goes when the LAST source ends -- not before,"
+                     f" and not never ({sorted(words(mate))})")
+
+            # THE CONTROL: a printed property has no source and is never
+            # taken. Nobody granted it, so nobody may take it away.
+            printed = Cast(world=two, me=lender, ref="drivers:light-c")
+            printed.loses_property("high crit", ref=ref, on=mate,
+                                   mine_only=True)
+            kit = two.get(mate, Gear)
+            out.that(all(w.granted_by.get("silvered") in (None, frozenset())
+                         for w in (kit.weapons if kit else [])
+                         if w.ref == ref),
+                     "THE CONTROL: and the sources are emptied rather than"
+                     " left behind, so a later grant starts from nothing")
 
 
 def two_hands_under_one_power_buys_an_extra_attack(out: Result) -> None:

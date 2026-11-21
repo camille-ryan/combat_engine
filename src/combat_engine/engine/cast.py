@@ -22754,7 +22754,16 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 or (mine and weapon.item == self._my_item)
             ):
                 had = weapon.properties
-                weapon = replace(weapon, properties=had | {prop})
+                # **Who paid for the word, beside the word itself.** Two
+                # rows granting one property cannot otherwise be told
+                # apart, so one ending strips what the other is still
+                # paying for -- see `Weapon.granted_by`. A set of refs, so
+                # arming twice from one row is idempotent, which is the
+                # property the blanket already has by unioning.
+                owed = dict(weapon.granted_by)
+                owed[prop] = owed.get(prop, frozenset()) | {self.ref}
+                weapon = replace(weapon, properties=had | {prop},
+                                 granted_by=owed)
                 out.append(weapon)
                 laid += 1
                 # Announced because the write needs no reader and therefore
@@ -22779,6 +22788,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         ref: str = "",
         every: bool = False,
         held: bool = False,
+        mine_only: bool = False,
         on: int | None = None,
     ) -> int:
         """Take a weapon property back off. Returns how many weapons changed.
@@ -22839,7 +22849,34 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 or (held and weapon.ref not in gear.stowed)
             ):
                 had = weapon.properties
-                weapon = replace(weapon, properties=had - {prop})
+                # **`mine_only` drops this row's claim, not the word.**
+                # Two rows granting one property cannot otherwise be told
+                # apart, so one ending strips what the other is still
+                # paying for -- `i2478p1` silvers everybody in its light
+                # and `i1764x1` silvers a weapon standing, and the light
+                # going out was clearing the standing grant.
+                #
+                # The word goes only when no source is left. A weapon's
+                # **printed** properties have no source recorded, so
+                # `mine_only` never touches one -- which is the right
+                # answer: nobody granted it and nobody may take it away.
+                owed = dict(weapon.granted_by)
+                if mine_only:
+                    left = owed.get(prop, frozenset()) - {self.ref}
+                    if left:
+                        owed[prop] = left
+                        out.append(replace(weapon, granted_by=owed))
+                        continue
+                    if prop not in owed:
+                        # Not ours to take: printed, or another row's
+                        # grant laid before sources were recorded.
+                        out.append(weapon)
+                        continue
+                    owed.pop(prop, None)
+                else:
+                    owed.pop(prop, None)
+                weapon = replace(weapon, properties=had - {prop},
+                                 granted_by=owed)
                 out.append(weapon)
                 took += 1
                 # Only when it changed something -- the same rule the writer

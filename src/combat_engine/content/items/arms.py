@@ -905,8 +905,7 @@ def i2475p1(c: Cast) -> None:
 
 
 @power("i2478p1", level=4, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       dropped=("Weapon.properties(per_source=)",))
+       reach=PERSONAL, target=SELF)
 def i2478p1(c: Cast) -> None:
     """All three printed sentences, and the two premises that held the last
     two back were both false.
@@ -941,44 +940,66 @@ def i2478p1(c: Cast) -> None:
     exactly those. A weapon silvered by anything else is never recorded and
     so never stripped.
 
-    Dropped, narrowed to what that leaves: two grants that **overlap in
-    time** still cannot be told apart. Two of these lights over one ally
-    means the second records nothing, so the first to end strips a word the
-    second is still paying for. That wants a count per source on the
-    property itself -- `Weapon.properties(per_source=)` -- and no
-    bookkeeping in a row can supply it, because the other source is
-    another row's closure. The re-use guard below keeps one wearer from
-    being both sources."""
+    **The dropped clause is written, and it is `Weapon.granted_by`.** The
+    note above was exact: two grants that overlap in time could not be
+    told apart, because `Weapon.properties` is a plain frozenset with no
+    record of who paid for a word -- so the first light to end stripped a
+    word the second was still paying for, and a blanket strip would have
+    cleared the standing grant `i1764x1` lays.
+
+    The weapon records the **sources** of each granted word now, and
+    `c.loses_property(mine_only=True)` drops this row's claim rather than
+    the word: it goes only when no source is left. So the hand-rolled
+    "which weapons did not already carry it" bookkeeping is gone -- which
+    is the right outcome, since that was the approximation the marker
+    named and it could not see another row's closure.
+
+    A weapon's **printed** `silvered` has no source recorded and is
+    therefore never stripped. That is not a special case: nobody granted
+    it and nobody may take it away.
+
+    The re-use guard stays, and its reason is narrower now. Two auras from
+    the **same wearer** would be two sources with one ref, and the sources
+    are a set of refs -- so the second grant is idempotent and the first
+    to end would take the word. A *different* wearer's light is a
+    different ref and is counted properly, which is the case the clause was
+    really about."""
     me = c.me
-    # One light, not two: a second use would lay a second aura whose
-    # bookkeeping cannot see the first's, which is the overlap the marker
-    # is about. Re-usable once this one has gone out.
+    # One light, not two: a second aura from the same wearer would be two
+    # sources with one ref, and `Weapon.granted_by` is a set of refs -- so
+    # the second grant would be idempotent and the first to end would take
+    # the word. Re-usable once this one has gone out. The *other* wearer's
+    # light is a different ref and is counted properly.
     if c.my_aura(c.ref):
         return
     lit = c.light(5, on=me)
     zone = c.aura(5, on=me)
-    #: Which of each creature's weapons this row silvered -- the ones that
-    #: did not already carry the word. Only these are stripped again.
-    lent: dict[int, set[str]] = {}
 
     def silver(who: int) -> None:
         if who != me and not _friend(c.world, me, who):
             return
-        if who in lent:
-            return
         gear = c.world.get(who, _Gear)
         if gear is None:
             return
-        fresh = {w.ref for w in gear.weapons if "silvered" not in w.properties}
-        if not fresh:
-            return
-        for weapon in fresh:
-            c.gains_property("silvered", ref=weapon, on=who)
-        lent[who] = fresh
+        for weapon in gear.weapons:
+            c.gains_property("silvered", ref=weapon.ref, on=who)
 
     def unsilver(who: int) -> None:
-        for weapon in lent.pop(who, set()):
-            c.loses_property("silvered", ref=weapon, on=who)
+        # **`mine_only`, which is what the dropped clause wanted.** The
+        # hand-rolled version recorded which weapons did *not* already
+        # carry the word and stripped only those -- and its own note said
+        # why that is not enough: two of these lights over one ally means
+        # the second records nothing, so the first to end strips a word the
+        # second is still paying for. `Weapon.granted_by` holds the sources
+        # instead, so this drops **this row's claim** and the word goes
+        # only when no source is left. A printed `silvered` has no source
+        # recorded and is never touched.
+        gear = c.world.get(who, _Gear)
+        if gear is None:
+            return
+        for weapon in list(gear.weapons):
+            c.loses_property("silvered", ref=weapon.ref, on=who,
+                             mine_only=True)
 
     def entered(ev: ZoneEntered) -> None:
         if ev.zone == zone:

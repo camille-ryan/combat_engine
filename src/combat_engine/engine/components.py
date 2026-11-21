@@ -3047,6 +3047,30 @@ class Weapon:
     #: arrangement `natural` above has. `#1276`.
     lends_natural: bool = False
     properties: frozenset[str] = frozenset()
+    #: Who granted each property that a row laid, by word -> the refs that
+    #: granted it. Empty for a weapon's **printed** properties, which
+    #: nobody granted and nobody may take away.
+    #:
+    #: **Two grants of one word cannot otherwise be told apart**, and that
+    #: is a row silently breaking another row. `i2478p1` silvers the
+    #: weapons of everybody in its light and strips the word when they
+    #: leave; `i1764x1` silvers a weapon standing. Without a count per
+    #: source, the light going out clears the standing grant -- a correct
+    #: reading of one card breaking another.
+    #:
+    #: `i2478p1` had worked around it by recording which weapons did not
+    #: already carry the word, and its own note says why that is not
+    #: enough: two lights over one ally means the second records nothing,
+    #: so the first to end strips a word the second is still paying for.
+    #: That bookkeeping cannot live in a row, because the other source is
+    #: another row's closure.
+    #:
+    #: Written by `Cast.gains_property` and read by
+    #: `Cast.loses_property(mine_only=True)`. A `frozenset` of refs rather
+    #: than a count, so laying the same word twice from one row is
+    #: idempotent -- the same reason `gains_property`'s blanket unions
+    #: into a set.
+    granted_by: dict[str, frozenset[str]] = field(default_factory=dict)
     #: A magic weapon's enhancement bonus, which adds to its attack and its
     #: damage. Zero is a plain weapon, and everything `chargen` hands out is
     #: plain -- the number is here so that the rows that *reduce* it have
