@@ -4260,6 +4260,20 @@ def narrowed_line(line: ClassLine, took_options: Iterable[str]) -> ClassLine:
 
 
 BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
+    # **An item's choice made when it is acquired, not per use.**
+    # `i2775x1` prints "when this item is <bequeathed>, choose angel,
+    # demon, devil, dragon, or giant", and the chosen kind is then what
+    # `p146` may be aimed at. Written as a `c.choose` inside the power's
+    # body first, which let the holder pick whichever kind was standing in
+    # front of them -- strictly stronger than a choice fixed at
+    # acquisition, and the kind of "both halves individually legal"
+    # over-generosity nothing reports.
+    #
+    # The values are **kind words rather than refs**, which this dict
+    # allows: `deal_build_options` picks from the tuple and nothing
+    # resolves a value to a row. `_eligible`'s sub-option guard reads only
+    # `cf:...s<N>` shapes, so a word cannot collide with it.
+    "i2775x1": ("angel", "demon", "devil", "dragon", "giant"),
     # **The 21 class features whose sub-options nothing offered**, added for
     # `#1427`. Each is a fork a character really takes -- the rows are
     # declared and unmarked -- and 166 written, unmarked heroic feats print

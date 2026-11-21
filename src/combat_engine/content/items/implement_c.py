@@ -1576,7 +1576,7 @@ def i2716p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.modify_power()",),
+    implemented_in=("p146",),
 )
 def i2775x1(c: Cast) -> None:
     """**Re-pointed off `c.item_set()`, and this row never belonged to that

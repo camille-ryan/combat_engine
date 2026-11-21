@@ -34328,6 +34328,72 @@ def sure_footed_in_the_dark(out: Result) -> None:
              f" ({sorted(world.difficult(me))})")
 
 
+def a_bequeathed_symbol_widens_who_it_smites(out: Result) -> None:
+    """"When you use your p146 power, you can target creatures of the
+    chosen kind instead of undead creatures." `i2775x1`.
+
+    `#550`'s arrangement: the item names one power, so the clause lives
+    in that power's body gated on the holder, and the item stays declared
+    as a pointer -- `implemented_in=("p146",)`, which `audit` buckets
+    separately.
+
+    The control is the one that matters. `p146` opens `if not
+    c.is_kind("undead"): return`, so a row that merely *ran* would look
+    identical to one that widened nothing; and the tempting shortcut --
+    labelling the chosen enemies `origin:undead` -- is strictly stronger
+    than print, because `query.kinds_of` would believe it and they would
+    be undead for every other card in the fight.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    def smite(*, holding: bool, kind: str, chose: str = "") -> bool:
+        """Did `p146`'s body get past its kind gate?
+
+        The kind is given with `c.set_origin`, which is what
+        `query.kinds_of` reads besides the stat block's own type line --
+        the board's foe is whatever chargen dealt and its type words are
+        in the database, not in a component a rule can write.
+        """
+        world, me, _ = _board(seed=9)
+        foe = next(f for f in Cast(world=world, me=me, ref="x").enemies())
+        Cast(world=world, me=me, ref="drivers:kind").set_origin(
+            kind, on=foe, instead_of="*")
+        if holding:
+            known = world.get(me, Powers) or world.add(me, Powers())
+            if "i2775x1" not in known.known:
+                known.known.append("i2775x1")
+            # **The choice is recorded, not made in the body.** That is
+            # the whole correction this rule drove out: a `c.choose`
+            # inside `p146` let the holder name whichever kind was in
+            # front of them, and the card chooses once when the item
+            # changes hands. `chargen.BUILD_OPTIONS` holds the five.
+            build = world.get(me, Build) or world.add(me, Build())
+            build.choices.add(f"option:i2775x1:{chose or kind}")
+        c = Cast(world=world, me=me, ref="p146", target=foe)
+        before = len(world.bus.log)
+        REGISTRY["p146"].body(c)
+        return len(world.bus.log) > before
+
+    out.that(smite(holding=False, kind="undead"),
+             "the premise: an undead target is smitten by anybody")
+    out.that(not smite(holding=False, kind="dragon"),
+             "THE CONTROL: without the item a dragon is not -- the gate"
+             " `p146` opens with is what the card widens")
+    out.that(smite(holding=True, kind="dragon"),
+             "holding it, the chosen kind is smitten")
+    out.that(smite(holding=True, kind="undead"),
+             "and undead are still fair game -- 'instead of' is the"
+             " holder's option, not a swap that gives something up")
+    out.that(not smite(holding=True, kind="dragon", chose="angel"),
+             "THE CONTROL THE PLANT ASKED FOR: a holder who chose one kind"
+             " cannot smite another. Without this, dropping the kind test"
+             " altogether left every assertion green -- the two cases"
+             " above never disagree with a gate that always passes")
+
+
 def a_mark_that_lapses(out: Result) -> None:
     """"The mark ends if you do not attack it", and the row that forbids it.
 
@@ -114596,6 +114662,9 @@ DRIVERS = {
     "dark_footing": (sure_footed_in_the_dark,
                      "rough going free in the dark, and still costly in "
                      "the light"),
+    "bequeathed_smite": (a_bequeathed_symbol_widens_who_it_smites,
+                         "an item widening which kind a smite may be "
+                         "aimed at, written into the power it names"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
     "racial_power_riders": (racial_power_riders,

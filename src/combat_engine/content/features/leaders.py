@@ -133,8 +133,30 @@ def p146(c: Cast) -> None:
     everything else in the blast is simply not a target -- the body checks
     the creature's own type words rather than being handed a filtered list.
     """
+    # **`i2775x1` is written here**, which is `#550`'s arrangement and the
+    # one `i1461x1`/`p259` already uses: *"when you use your p146 power,
+    # you can target creatures of the chosen kind instead of undead
+    # creatures"*. The item names this row, so the clause lives in this
+    # body gated on the holder, and the item stays declared as a pointer.
+    #
+    # **Not an `origin:undead` label on the chosen enemies**, which was
+    # the tempting shortcut and is strictly stronger than print:
+    # `query.kinds_of` would believe it, so they would be undead for
+    # every other card in the fight.
+    #
+    # **The kind is chosen when the item is acquired, not per use**, which
+    # is `chargen.BUILD_OPTIONS["i2775x1"]` and `c.chosen_option` the
+    # reader. Written as a `c.choose` in this body first, and that was
+    # stronger than print twice over: the holder could pick whichever
+    # kind was standing in front of them, and this body runs once per
+    # target so it could pick a different one for each. The card chooses
+    # once, when the item changes hands.
     if not c.is_kind("undead"):
-        return
+        if not c.feat("i2775x1"):
+            return
+        with c.credit("i2775x1"):
+            if not c.is_kind(c.chosen_option("i2775x1") or ""):
+                return
     if c.strike():
         c.damage("1d10", c.wis_mod, dtype=DamageType.RADIANT)
         c.push(3 + c.cha_mod)
