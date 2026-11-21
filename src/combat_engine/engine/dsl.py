@@ -5497,7 +5497,20 @@ def use(
         from .components import PowerPoints
 
         pool = world.get(actor, PowerPoints) or world.add(actor, PowerPoints())
-        if augment and pool.spend(augment) < augment:
+        # **An alternative payer, consulted before the pool.** Two cards
+        # buy an augment with something that is not power points -- a
+        # healing surge, or a point banked in an item -- and this is the
+        # only place the cost is ever taken, because the comment below is
+        # the binding constraint: the points go before the targets are
+        # chosen, so nothing reacting to a declared attack can pay for it
+        # afterwards. A `Cast` verb could not have reached this.
+        #
+        # The row pays its own price and then declares the next augment
+        # covered up to a cap, which is why one hold serves both cards
+        # whatever they paid with. Spent here so it covers exactly one
+        # augment.
+        if (augment and not pool.take_payer(augment)
+                and pool.spend(augment) < augment):
             return False
         if augment:
             pool.augmented[ref] = pool.augmented.get(ref, 0) + augment

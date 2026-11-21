@@ -2224,10 +2224,32 @@ class PowerPoints:
     #: every encounter and these survive until the day ends.
     #: `turns.extended_rest` is what empties them.
     stored: dict[str, int] = field(default_factory=dict)
+    #: Caps on augments somebody else is paying for. Each entry covers
+    #: **one** augment of at most that many points, and is taken by
+    #: `take_payer` where `dsl.use` settles the cost.
+    #:
+    #: A cap rather than a source, because the row has already paid by the
+    #: time it lays one -- a healing surge for `i1966p1`, a point out of
+    #: `stored` for `i1980p2` -- so what is left to record is only how
+    #: much is covered. That is what lets one hold serve both cards.
+    payers: list[int] = field(default_factory=list)
+
+    def take_payer(self, cost: int) -> bool:
+        """Spend a payer that covers `cost`, if one does. One augment each.
+
+        The **smallest** sufficient cap goes first, so a card covering 2
+        is not burnt on an augment a card covering 1 could have paid for.
+        """
+        fits = sorted(n for n in self.payers if n >= cost)
+        if not fits:
+            return False
+        self.payers.remove(fits[0])
+        return True
 
     def refresh(self) -> None:
         self.points = self.maximum
         self.temporary = 0
+        self.payers.clear()
         self.augmented.clear()
         self.last.clear()
 

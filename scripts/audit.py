@@ -159,6 +159,14 @@ KNOWN_SILENT = {
     # `turns.extended_rest`. A statement about the board, not the row.
     "i1980p1": "an item row banking power points; the board's fallback "
                "class has no pool -- see `drivers.points_banked`",
+    # Its sibling, for the same reason one step on: this one *spends* a
+    # banked point to cover an augment, and nothing banked any -- the
+    # board has no pool, so `c.store_points` put nothing in the orb and
+    # the printed Requirement ("at least 1 power point stored inside the
+    # orb") is correctly unmet. `drivers.points_banked` drives both the
+    # banking and the payer it lays.
+    "i1980p2": "spends a banked point, and the board's fallback class has "
+               "no pool to have banked one -- see `drivers.points_banked`",
     # **The board never poses a trap for a row that already fires, so no
     # row about disarming one can do anything here.** `#1402`.
     #

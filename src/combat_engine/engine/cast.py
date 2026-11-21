@@ -21502,6 +21502,50 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             ))
         return gone
 
+    def spend_stored(self, n: int, *, into: str = "",
+                     who: int | None = None) -> int:
+        """Take banked points back out of an item. How many actually came.
+
+        The other half of `c.store_points`, and the reason a row does not
+        reach into `PowerPoints.stored` itself: the store is a component
+        five readers share, and a body doing its own bookkeeping on one is
+        the fault `c.gain_points`' docstring records.
+
+        Nothing is announced, deliberately. These are spent *to pay for*
+        something the row then does -- an augment, through
+        `c.augment_paid` -- so the row has an effect of its own to be seen
+        by, and a second event would report the price as the outcome.
+        """
+        holder = self.me if who is None else who
+        pool = self._pool(holder)
+        key = into or self.ref
+        gone = max(0, min(n, pool.stored.get(key, 0)))
+        if gone:
+            pool.stored[key] -= gone
+        return gone
+
+    def augment_paid(self, cap: int, *, who: int | None = None) -> None:
+        """"Instead of spending power points to augment the power." A cap.
+
+        Covers **one** augment of at most `cap` points, taken where
+        `dsl.use` settles the cost -- which is the only place it can be,
+        because that comment says the points go before the targets are
+        chosen. A row reacting to an attack already declared cannot buy it
+        afterwards, so this is laid *before* the augmented power is used
+        and spent by it.
+
+        **The row pays its own price first and this only records the
+        cover.** `i1966p1` loses a healing surge, `i1980p2` takes a point
+        out of `c.stored_points` -- two different prices, one hold, which
+        is why there is no `from=` here.
+
+        Lasts the encounter and is cleared by `PowerPoints.refresh`, with
+        no `until=`: both cards are spent per use, so an uncollected cap
+        is a card that was used and not followed through rather than a
+        standing benefit.
+        """
+        self._pool(self.me if who is None else who).payers.append(cap)
+
     def stored_points(self, into: str = "", *, of: int | None = None) -> int:
         """How many power points are banked in that item. 0 if none are.
 

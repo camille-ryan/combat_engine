@@ -27140,7 +27140,7 @@ def points_banked(out: Result) -> None:
     from combat_engine.content import loader  # noqa: F401
     from combat_engine.engine import turns
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import PowerPoints
+    from combat_engine.engine.components import PowerPoints, Powers
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import PointsStored
 
@@ -27179,6 +27179,50 @@ def points_banked(out: Result) -> None:
     turns.extended_rest(world)
     out.that(sum(pool.stored.values()) == 0,
              f"and the extended rest empties it ({pool.stored})")
+
+    # -- somebody else pays for the augment -----------------------------
+    # **Asserted through `dsl.use`, which is the only place a cost is
+    # taken.** `use`'s own comment is the constraint: the points go before
+    # the targets are chosen, so a reaction to a declared attack cannot
+    # pay afterwards and no `Cast` verb could have reached it.
+    from combat_engine.engine.dsl import use
+
+    augmentable = next((r for r, p in sorted(REGISTRY.items())
+                        if p.augments and 1 in p.augment_costs
+                        and not p.todo and not p.dropped), "")
+    out.that(bool(augmentable),
+             f"the premise: an augmentable row to buy ({augmentable})")
+    if augmentable:
+        for paying, label in ((False, "the pool pays"), (True, "a payer pays")):
+            w2, who2, _ = _board(seed=7)
+            box = w2.get(who2, PowerPoints) or w2.add(who2, PowerPoints())
+            box.maximum, box.points = 4, 4
+            known = w2.get(who2, Powers) or w2.add(who2, Powers())
+            if augmentable not in known.known:
+                known.known.append(augmentable)
+            if paying:
+                Cast(world=w2, me=who2, ref="drivers:bank").augment_paid(1)
+            use(w2, who2, augmentable, augment=1)
+            left = box.points
+            out.that(left == (4 if paying else 3),
+                     f"{label}: pool {left} of 4"
+                     + (" -- the cover was collected where the cost is"
+                        " settled" if paying else ""))
+            out.that(box.augmented.get(augmentable, 0) == 1,
+                     f"{label}: and the row is augmented either way"
+                     f" ({box.augmented.get(augmentable, 0)})")
+            if paying:
+                out.that(not box.payers,
+                         f"{label}: the cover is spent, so it covers ONE"
+                         f" augment and not the turn ({box.payers})")
+
+    # Smallest sufficient cap first, so a card covering 2 is not burnt on
+    # an augment a card covering 1 could pay for.
+    pool.payers = [2, 1]
+    out.that(pool.take_payer(1) and pool.payers == [2],
+             f"a 1-point augment takes the 1-cap payer ({pool.payers})")
+    out.that(not pool.take_payer(3) and pool.payers == [2],
+             f"and no payer covers a cost above its cap ({pool.payers})")
 
 
 def boon_traded(out: Result) -> None:

@@ -4471,7 +4471,6 @@ def i1650x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("dsl.use(augment_paid_from)",),
 )
 def i1966p1(c: Cast) -> None:
     """"You lose a healing surge instead of spending power points to
@@ -4497,7 +4496,28 @@ def i1966p1(c: Cast) -> None:
     settled** -- `dsl.use(augment_paid_from)` -- and `i1980p2` wants the
     identical thing with an item's store in place of the surge. One
     symbol, two rows, named for the place it has to live rather than for
-    a verb that cannot reach it."""
+    a verb that cannot reach it.
+
+    **Written on `c.augment_paid`, which is that payer.** `dsl.use` now
+    consults `PowerPoints.take_payer` before `pool.spend`, so the cover
+    is collected exactly where the cost is settled. The row loses the
+    surge itself and records a cap of 2; one hold serves this card and
+    `i1980p2` because each has already paid its own different price by
+    the time it lays one.
+
+    **The one judgement, said rather than hidden.** The printed Trigger
+    is a reaction -- "you use a psionic power through this orb" -- and the
+    cost is settled above targeting, so a reaction cannot reach it. The
+    cover is therefore laid when this free action is used and spent by
+    the next augment, which is the same outcome a turn later in the
+    declaration order. It covers one augment, not the turn, so it is not
+    stronger than the card.
+
+    "No more than 2 power points" is the cap, and the Level 15/25 lines
+    raising it are out of scope above 10 like every other scaling line."""
+    if not c.spend_surge(on=c.me):
+        return
+    c.augment_paid(2)
 
 
 @power(
@@ -4560,7 +4580,6 @@ def i1980p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("dsl.use(augment_paid_from)",),
 )
 def i1980p2(c: Cast) -> None:
     """Spends out of the store the item cannot hold.
@@ -4593,7 +4612,21 @@ def i1980p2(c: Cast) -> None:
     to buy. Both symbols are therefore one: `dsl.use(augment_paid_from)`,
     an alternative payer consulted where the cost is actually taken.
     `i1966p1` is the same gap with a healing surge in place of the
-    store."""
+    store.
+
+    **Written.** `c.augment_paid` is that payer and `dsl.use` collects it
+    where the cost is settled. The price here is a point out of the orb
+    rather than a healing surge, which is the only difference between the
+    two rows: `c.stored_points` is the printed Requirement -- "you must
+    have at least 1 power point stored inside the orb" -- and the point
+    comes out of `PowerPoints.stored` before the cover is laid.
+
+    A cap of 1, which is what the card buys: "augment the triggering
+    power by spending 1 power point from the orb". The Level 25/30 line
+    raising it is out of scope above 10."""
+    if c.spend_stored(1, into="i1980") < 1:
+        return
+    c.augment_paid(1)
 
 
 @power(
