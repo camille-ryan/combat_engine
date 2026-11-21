@@ -4042,10 +4042,32 @@ def i2626x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_sustain(group=)",),
+    out_of_combat=True,
 )
 def i2627x1(c: Cast) -> None:
-    """**The marker is left in place and it is the wrong shape. Both halves
+    """**`out_of_combat=True`, inherited from the power this multiplies
+    rather than decided here.**
+
+    This conjures more of `p1227` and folds their sustains into one minor
+    action. `p1227` is itself `out_of_combat=True` -- its whole body is a
+    `c.note`, because the hand's printed actions are object manipulation
+    and nothing in this engine moves an object -- so more of them is more
+    of nothing, and one sustain for several no-ops is a no-op. The row is
+    complete and inert in a fight, which is what that flag says.
+
+    **Not a scope decision of mine**: it is the call already made on
+    `p1227`, and the two move together. The day object manipulation is
+    modelled and that power gains a body, this flag comes off with it.
+    Said here so the pairing is visible from this row and not only from
+    the other file.
+
+    The analysis that got it here is kept below, because both halves are
+    measurements somebody would otherwise redo. The marker it argues for
+    is gone: no symbol could carry "whether `p1227` has combat meaning",
+    which is why the row sat refused in play with nothing able to resolve
+    it.
+
+    **The marker was left in place and it was the wrong shape. Both halves
     of the note that stood here were false**, so what is recorded now is
     where the hold actually is rather than a symbol to wait for.
 
