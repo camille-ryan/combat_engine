@@ -1536,7 +1536,13 @@ KNOWN_SILENT = {
     "m5596a5": "its Requirement is a form the creature has not changed into",
     "m5596a6": "its Requirement is a form the creature has not changed into",
     # The last three, each its own shape.
-    "m1193a2": "douses a light source; the board models no light",
+    # **`m1193a2`'s excuse is GONE.** It read: "douses a light source; the
+    # board models no light". The row calls `c.douse`, which emits
+    # `Doused` -- admitted to `DID_SOMETHING` in `333201f6` -- so the row
+    # announces itself whether or not the board has a light model, and
+    # `audit` reported it `OUTGROWN`. The light claim may still be true;
+    # it is no longer the reason the row is invisible, which is all this
+    # list is for.
     "m3315a5": "stays hidden on a miss; it is not hidden to begin with",
     # **This said "contracts a disease; no disease system exists to carry
     # one" and was wrong twice over.** The disease system exists -- #515
@@ -3943,12 +3949,37 @@ def _board(ref: str, seed: int, pose: bool = False,
     # `SavingThrow, PowerUsed, PowerResolved`. `i803p1` stays silent and is
     # not this pose's business -- it wants a fear-**keyword** effect, and a
     # condition hold carries no keywords. #1408, #1411.
+    # **On the ally always; on the caster only if it can still act.** Laying
+    # it on both was the first draft and it cost `i891p1`: that row saves
+    # against `dazed` and then `stunned`, so the pose STUNNED the caster, and
+    # a `daily/minor` row on a creature that cannot act is refused outright --
+    # `dsl.usable` answered `(False, 'cannot act')` and the row moved
+    # **silent -> never**, which is the wrong direction.
+    #
+    # The restricting set is derived from `conditions.RULES` rather than
+    # written out, so a condition that gains `cannot_act` later is excluded
+    # without anybody remembering this line: `cannot_act` covers stunned,
+    # unconscious, dying, petrified, removed, surrendered and surprised, and
+    # `one_action`/`no_standard` cover dazed, dominated and shaped.
+    #
+    # The caster half is still worth having for the rest -- blinded,
+    # deafened, immobilized, weakened -- because these rows read `c.save()`
+    # with no `on=` as often as with one.
+    from combat_engine.engine import conditions as _conds
+
+    def _can_still_act(cond) -> bool:  # noqa: ANN001
+        rule = getattr(_conds, "RULES", {}).get(cond)
+        return not (rule is None or rule.cannot_act or rule.one_action
+                    or rule.no_standard)
+
     for _word in _saves_against(ref):
         _named = next((c for c in Condition if c.value == _word), None)
-        if _named is not None and _named is not Condition.DAZED:
-            for _who in (ally, caster):
-                setup.target = _who
-                setup.condition(_named, on=_who, until=When.SAVE_ENDS)
+        if _named is None or _named is Condition.DAZED:
+            continue
+        _on = [ally, caster] if _can_still_act(_named) else [ally]
+        for _who in _on:
+            setup.target = _who
+            setup.condition(_named, on=_who, until=When.SAVE_ENDS)
 
     # And one on the caster, because "Effect: make a saving throw" is a whole
     # shape of utility power and the caster had nothing to save against --
