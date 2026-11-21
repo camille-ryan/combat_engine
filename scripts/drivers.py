@@ -40710,6 +40710,153 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def a_reach_asked_per_square(out: Result) -> None:
+    """`f2921`: two squares further, but only to a square that qualifies.
+
+    *"Two squares further on any teleport that ends beside a shrouded
+    enemy."* `Powers.extra_squares`' own docstring already claimed this was
+    sayable -- *"`when` is a context predicate so 'if it ends beside a
+    shrouded enemy' is sayable"* -- and it was not, because the budget is
+    read before the destination is chosen and the context carried no
+    square. `f2921`'s note recorded the obstacle and stopped there.
+
+    The context carries a destination now, and `Cast.teleport` searches out
+    to the widest any extension could give and asks the gate **per
+    candidate square**. So the field's claim is true and the card is the
+    verb's ordinary `when=`.
+
+    **The control that matters is that a plain teleport does not grow.**
+    An extension gated on a destination must add nothing to the
+    unconditional reach, or every teleport in the game is two squares
+    longer -- 528 rows call `c.teleport`. `_extra_every(dest=None)`
+    refusing is what holds that, and it is asserted both ways here.
+    """
+    from combat_engine import story
+    from combat_engine.content import (
+        dummy,
+        loader,  # noqa: F401
+    )
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Shrouds
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.grid import distance as apart
+    from combat_engine.engine.grid import spread
+    from combat_engine.engine.query import squares
+
+    def board() -> tuple[World, int, int]:
+        got = story.field_encounter(seed=7, level=3)
+        w = got.world
+        me = next(e for e in sorted(w.entities)
+                  if not query.stat_block(w, e))
+        for stray in [e for e in sorted(w.entities)
+                      if query.stat_block(w, e)]:
+            spot = (w.need(me, Position).square[0],
+                    w.need(me, Position).square[1] + 40)
+            w.grid.lift(stray)
+            w.need(stray, Position).square = spot
+            w.grid.place(stray, frozenset({spot}))
+        here = w.need(me, Position).square
+        # A shrouded foe 7 squares east, so the square beside it is 6 away
+        # -- out of a printed 4 and inside 4 + 2.
+        foe = dummy.spawn(w, level=3, square=(here[0] + 7, here[1]))
+        # **`Shrouds` lives on the ASSASSIN**, naming the creature that
+        # carries them -- `on` is the victim and `count` the number, and
+        # `c.shrouds` refuses unless `held.on` is the creature asked
+        # about. Laid the other way round it would answer 0 and every
+        # assertion below would be about an empty gate.
+        w.add(me, Shrouds(on=foe, count=1))
+        return w, me, foe
+
+    PRINTED = 4
+
+    w, me, foe = board()
+    out.that(query.squares(w, foe) and Cast(
+        world=w, me=me, ref="probe").shrouds(foe) > 0,
+        "the premise: the foe really carries a shroud, which is the whole"
+        " of the printed gate")
+
+    here = w.need(me, Position).square
+    beside = (here[0] + 6, here[1])
+    out.that(apart(here, beside) == PRINTED + 2,
+             "and the square beside it is exactly two further than the"
+             f" printed reach ({apart(here, beside)} vs {PRINTED})")
+
+    # -- before the feat: the printed reach and no further ----------------
+    plain = Cast(world=w, me=me, ref="probe")
+    out.that(not plain.teleport(PRINTED, to=beside),
+             "THE CONTROL: without the feat that square is out of reach --"
+             " `to=` names it and the teleport refuses")
+
+    # -- with the feat ----------------------------------------------------
+    w2, me2, _foe2 = board()
+    REGISTRY["f2921"].body(
+        Cast(world=w2, me=me2, ref="f2921", target=me2))
+    start = w2.need(me2, Position).square
+    far = (start[0] + 6, start[1])
+    out.that(Cast(world=w2, me=me2, ref="probe").teleport(PRINTED, to=far),
+             "and with `f2921` held the same teleport reaches it -- two"
+             " squares further, because that square is beside a shrouded"
+             " enemy")
+    out.that(w2.need(me2, Position).square == far,
+             "and the creature is actually there, so this is a move and"
+             f" not a True ({w2.need(me2, Position).square})")
+
+    # -- THE CONTROL: a square two further that does NOT qualify ----------
+    w3, me3, _foe3 = board()
+    REGISTRY["f2921"].body(
+        Cast(world=w3, me=me3, ref="f2921", target=me3))
+    begin = w3.need(me3, Position).square
+    # Six squares the other way, and **asserted legal first**. The first
+    # draft used `begin[0] - 6`, which on this board is `(-4, 3)` -- off
+    # the grid and `passable` False -- so the control passed because the
+    # square was illegal rather than because the gate refused. A plant
+    # dropping the row's adjacency test went green through it.
+    #
+    # **Chosen by search, not by arithmetic.** Two hand-picked offsets
+    # were illegal on this board -- `(-6, 0)` is off the grid and
+    # `(0, +6)` is impassable -- so the square is found by asking which
+    # distance-6 squares are actually legal and far from the shrouded foe.
+    shrouded = next(e for e in sorted(w3.entities)
+                    if Cast(world=w3, me=me3, ref="probe").shrouds(e) > 0)
+    wrong = next(
+        (sq for sq in sorted(spread(frozenset({begin}), PRINTED + 2))
+         if apart(begin, sq) == PRINTED + 2
+         and w3.grid.passable(sq)
+         and w3.grid.occupant(sq) is None
+         and min((apart(sq, at) for at in squares(w3, shrouded)),
+                 default=99) > 1),
+        None)
+    out.that(wrong is not None,
+             "the premise: a LEGAL square exists at the same two-further"
+             " distance that is NOT beside the shrouded foe, or the"
+             " control below passes for the board's reason rather than the"
+             f" gate's ({wrong})")
+    assert wrong is not None
+    out.that(not Cast(world=w3, me=me3, ref="probe").teleport(
+                 PRINTED, to=wrong),
+             "THE CONTROL: and a square two further the OTHER way is still"
+             " out of reach -- the extension is gated on the destination,"
+             " so it lengthens the move only toward what the card names")
+    out.that(w3.need(me3, Position).square == begin,
+             "and nobody moved")
+
+    # -- THE CONTROL that protects all 528 teleporting rows ---------------
+    w4, me4, _ = board()
+    REGISTRY["f2921"].body(
+        Cast(world=w4, me=me4, ref="f2921", target=me4))
+    asked = Cast(world=w4, me=me4, ref="probe")
+    out.that(asked._extra_every(me4, "teleport") == 0,
+             "THE CONTROL: the UNCONDITIONAL reach is unchanged -- a"
+             " destination-gated extension adds nothing when no square is"
+             " named, or every teleport in the game grows by two and 528"
+             f" rows change ({asked._extra_every(me4, 'teleport')})")
+    out.that(asked._extra_every_most(me4, "teleport") == 2,
+             "while the widest it could give is 2, which is what the"
+             " search needs so the gate can be asked about the square at"
+             f" all ({asked._extra_every_most(me4, 'teleport')})")
+
+
 def sure_footed_near_the_spirit(out: Result) -> None:
     """`f1887`: rough going is free beside the spirit, square by square.
 
@@ -116378,6 +116525,9 @@ DRIVERS = {
     "mark_counted": (a_mark_penalty_counted_at_the_swing,
                      "a mark penalty counted at the swing rather than "
                      "fixed when the trait was laid"),
+    "reach_per_square": (a_reach_asked_per_square,
+                         "a move's extra reach is asked per destination, "
+                         "and the unconditional reach does not grow"),
     "sure_footed_near": (sure_footed_near_the_spirit,
                          "rough going is free beside the spirit, square by "
                          "square, and the waiver follows it"),

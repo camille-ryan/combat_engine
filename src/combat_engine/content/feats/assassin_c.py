@@ -57,6 +57,8 @@ from combat_engine.engine.events import (
     SkillCheck,
     TempHP,
 )
+from combat_engine.engine.grid import distance
+from combat_engine.engine.query import squares
 
 #: The row whose body invokes the shrouds and rolls what they are worth.
 SHROUDS = "p9400"
@@ -591,17 +593,53 @@ def f2937(c: Cast) -> None:
 
 
 @power("f2921", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.extend_move(destination=)",))
+       reach=PERSONAL, target=SELF)
 def f2921(c: Cast) -> None:
-    """Two squares further on **any** teleport that ends beside the `p3069`
-    target.
+    """Two squares further on **any** teleport that ends beside a shrouded
+    enemy.
 
-    `c.extend_move` landed (#502) and is keyed to one named row, which this
-    is not: the card narrows by where the move *ends*, across every teleport
-    the character has. The distance is chosen before the destination is, so
-    the gate cannot be asked at the moment `c.squares_for` is read -- which
-    is the same obstacle `f1807` carries."""
+    **Written, and the obstacle was one layer from where the note put
+    it.** It read: *"the distance is chosen before the destination is, so
+    the gate cannot be asked at the moment `c.squares_for` is read"* --
+    true, and `c.extend_every` is the right verb anyway, because the card
+    narrows by kind rather than by row.
+
+    What the note missed is that `Powers.extra_squares` **already claims
+    this is sayable**: its own docstring says *"`when` is a context
+    predicate so 'if it ends beside a shrouded enemy' is sayable"*, which
+    is this card almost word for word. The claim was false only because
+    the context carried no destination.
+
+    So the context carries one now. `Cast._extra_every` takes a `dest`,
+    and `c.teleport` searches out to the widest any extension could give
+    and then asks the gate **per candidate square** -- so a square two
+    further out is offered exactly when that square qualifies. `None` when
+    the destination is not known yet, which makes a gate reading it refuse
+    rather than widen a reach by accident.
+
+    The gate is the printed sentence and nothing more: the square is
+    adjacent to an enemy carrying at least one shroud. `c.shrouds` is the
+    reader and `SHROUDS` is this file's constant for the row that lays
+    them."""
+    me = c.me
+
+    def beside_a_shrouded_foe(ctx: dict[str, Any]) -> bool:
+        dest = ctx.get("dest")
+        if dest is None:
+            # The reach is being asked without a destination -- an
+            # unconditional total. This extension is conditional, so it
+            # adds nothing to that, which is what keeps a plain teleport
+            # the length its card prints.
+            return False
+        return any(
+            c.shrouds(foe) > 0
+            and min((distance(dest, sq) for sq in squares(c.world, foe)),
+                    default=99) <= 1
+            for foe in c.enemies()
+        )
+
+    c.extend_every("teleport", 2, on=me, until=When.ENCOUNTER,
+                   when=beside_a_shrouded_foe)
 
 
 @power("f2935", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

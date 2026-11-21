@@ -35,6 +35,11 @@ Added for `arms.i468x1`, *"you do not provoke opportunity attacks for making ran
 - `ctx['charge']` -- is this use a charge.
 - `ctx['conditions']` -- the conditions in play for this read.
 - `ctx['crit']` -- was it a critical hit.
+- `ctx['dest']` -- **where a move is asking to END**, on the ctx a kind-wide move extension's `when=` is handed -- and on no other. A `Square`, or `None` when the reach is being asked without a destination in mind.
+
+`Powers.extra_squares`' own note promised this before it existed: *"`when` is a context predicate so 'if it ends beside a shrouded enemy' is sayable"*. It was not, because the budget is read before the destination is chosen. `Cast.teleport` now searches out to the widest any extension could give and re-asks `Cast._extra_every` per candidate square with that square as `dest`, so the promise holds and `f2921` is an ordinary `when=`.
+
+**`None` is the load-bearing value.** A gate reading it must refuse, because that reading is the *unconditional* reach -- and if a destination-gated extension counted there, every one of the 528 rows calling `c.teleport` would be longer. `drivers.reach_per_square` plants exactly that.
 - `ctx['dtype']` -- the damage type of this blow.
 - `ctx['dtypes']` -- every type of a blow that is several at once.
 - `ctx['effect']` -- the effect being asked about.

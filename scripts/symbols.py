@@ -998,6 +998,24 @@ CTX_KEYS: dict[str, str] = {
         "a sentence is the fragile shape this file exists to prevent. "
         "#1233."
     ),
+    "dest": (
+        "**where a move is asking to END**, on the ctx a kind-wide move "
+        "extension's `when=` is handed -- and on no other. A `Square`, or "
+        "`None` when the reach is being asked without a destination in "
+        "mind.\n\n"
+        "`Powers.extra_squares`' own note promised this before it existed: "
+        "*\"`when` is a context predicate so 'if it ends beside a shrouded "
+        "enemy' is sayable\"*. It was not, because the budget is read "
+        "before the destination is chosen. `Cast.teleport` now searches out "
+        "to the widest any extension could give and re-asks "
+        "`Cast._extra_every` per candidate square with that square as "
+        "`dest`, so the promise holds and `f2921` is an ordinary `when=`.\n\n"
+        "**`None` is the load-bearing value.** A gate reading it must "
+        "refuse, because that reading is the *unconditional* reach -- and "
+        "if a destination-gated extension counted there, every one of the "
+        "528 rows calling `c.teleport` would be longer. "
+        "`drivers.reach_per_square` plants exactly that."
+    ),
     "kind": (
         "**which kind of movement is asking to enter the square** -- on "
         "the ctx a `c.may_enter(when=)` veto is handed, and on no other. "

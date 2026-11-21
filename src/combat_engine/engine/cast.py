@@ -7502,7 +7502,17 @@ class Cast:
         # See `c.shift`: the print before anything lengthens it, so the
         # arrival can say how much of the extra was actually used.
         printed = squares_
-        squares_ += self._extra_every(mover, "teleport")
+        # **The reach is asked per candidate square, not once.** An
+        # unconditional extension is added here as before; a
+        # destination-gated one cannot be, because the square it is about
+        # has not been chosen -- so the search runs out to the widest any
+        # extension could give and `allowed` below asks the gates about
+        # each square it finds. `f2921` prints *"two squares further on any
+        # teleport that ends beside the target"* and this is what makes it
+        # sayable.
+        flat = self._extra_every(mover, "teleport")
+        squares_ += flat
+        reach = printed + self._extra_every_most(mover, "teleport")
         origin = squares(self.world, mover)
         # Filtered by the mover's whole footprint, not by the one square.
         # `movement.step` requires every square a Large creature covers to
@@ -7523,7 +7533,20 @@ class Cast:
                 for s in covered
             )
 
-        options = [sq for sq in spread(origin, squares_) if fits(sq)]
+        from .grid import distance as _apart
+
+        def allowed(sq: Square) -> bool:
+            """Is this square inside the reach THIS square is allowed?"""
+            if not origin:
+                return False
+            far = min(_apart(at, sq) for at in origin)
+            if far <= squares_:
+                return True
+            return far <= printed + self._extra_every(
+                mover, "teleport", dest=sq)
+
+        options = [sq for sq in spread(origin, max(squares_, reach))
+                   if fits(sq) and allowed(sq)]
         if into is not None:
             options = [sq for sq in options if into(sq)]
         if to is not None:
@@ -15409,7 +15432,8 @@ class Cast:
             return 0
         return max(0, _apart(here.square, dest) - printed)
 
-    def _extra_every(self, mover: int, kind: str) -> int:
+    def _extra_every(self, mover: int, kind: str,
+                     dest: Square | None = None) -> int:
         """The kind-wide half of a move's distance, for `mover`.
 
         Deliberately not `squares_for`, which reads `self.me`: `c.shift(
@@ -15430,12 +15454,42 @@ class Cast:
         # the gate needs the source row's own header to answer either.
         # `self.ref` is that row by construction -- a body calling
         # `c.shift` is the power granting the shift.
-        seen = {"move_kind": kind, "who": mover, "power": self.ref}
+        # **`dest` is in the context, which makes this field's own note
+        # true.** `Powers.extra_squares` says *"`when` is a context
+        # predicate so 'if it ends beside a shrouded enemy' is sayable"* --
+        # and it was not, because the budget is read before the
+        # destination is chosen and the context carried no square. `f2921`
+        # prints exactly that sentence and its note recorded the obstacle.
+        #
+        # `None` when the caller does not know yet, which is the honest
+        # answer and the safe one: a gate reading `ctx["dest"]` gets None
+        # and refuses, so an unconditional reach never includes a
+        # destination-gated square by accident. `Cast.teleport` re-asks
+        # per candidate square.
+        seen = {"move_kind": kind, "who": mover, "power": self.ref,
+                "dest": dest}
         return sum(
             n
             for n, gate in known.extra_squares.get(MOVE_KIND + kind, ())
             if gate is None or gate(seen)
         )
+
+    def _extra_every_most(self, mover: int, kind: str) -> int:
+        """The widest any kind-wide extension could make this move.
+
+        Gates ignored, so a destination-gated square is inside the set
+        `Cast.teleport` searches before it asks whether that square
+        qualifies. Without it the search would never see the square and
+        the gate could not be asked about it -- the obstacle `f2921`'s note
+        describes, one layer along.
+        """
+        from .components import Powers
+
+        known = self.world.get(mover, Powers)
+        if known is None:
+            return 0
+        return sum(n for n, _gate
+                   in known.extra_squares.get(MOVE_KIND + kind, ()))
 
     def squares_for(
         self, ref: str = "", default: int = 0, ctx: dict[str, Any] | None = None
