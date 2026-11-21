@@ -1634,10 +1634,28 @@ def ladder_row(p, level: int = 1) -> bool:  # noqa: ANN001
     # The leg is the other way of choosing and is tested below; this is the
     # `BUILD_OPTIONS` way, for a fork the legs cannot carry because they
     # are already spent. #642.
+    #
+    # **A leg-keyed fork is one the legs DO carry, so the refusal does not
+    # reach it** -- which is the distinction the paragraph above draws and
+    # `#1427`'s first fix then broke. Giving thirteen leg-decided forks a
+    # `BUILD_OPTIONS` entry brought them under this guard, and their arm
+    # rows stopped being dealt at all: a cosmic sorcerer was no longer
+    # dealt its cosmic arm, so a written, unmarked, audited row simply
+    # stopped running for every character that takes it. `drivers.chassis`
+    # caught it and names the sorcerer's four legs; nothing else did,
+    # because a row that is never dealt is silent rather than wrong.
+    #
+    # Dealing it is safe precisely because the leg gates it -- the caller
+    # applies `leg_named_by(p) in ("", build.name)`, so only the arm whose
+    # leg the character took is ever handed over. The option is recorded
+    # as well, and the two agree by construction now that `OPTION_PACT`
+    # keys the arm to the leg.
     if _FEATURE_SUB_OPTION.search(p.ref):
         parent = _FEATURE_SUB_OPTION.sub(
             lambda m: m.group(0).split("s")[0], p.ref)
-        if parent in BUILD_OPTIONS:
+        arms = BUILD_OPTIONS.get(parent, ())
+        leg_keyed = bool(arms) and all(a in OPTION_PACT for a in arms)
+        if parent in BUILD_OPTIONS and not leg_keyed:
             return False
     # **The PRINTED level, which `Power.level` does not carry.**
     # `class_feature` has no level column (`#1261`), so every class feature
@@ -4211,12 +4229,27 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # drawn for them, so every one of those feats was refused by
     # `choices.legal_feats` and reported finished by every other gate.
     #
-    # Only sub-options that are **declared and unmarked** are listed: a
-    # further 29 feats name a fork with no row at all (`cf:sorcerer-f0s3`,
-    # `cf:rogue-scoundrel-f1s1`), which is a content gap rather than this
-    # one and is not papered over by naming a ref nothing registers.
+    # **This used to list only the sub-options that are declared, and that
+    # was wrong in both directions.** The note here said a fork with no row
+    # was "a content gap rather than this one and is not papered over by
+    # naming a ref nothing registers". But an option value is never
+    # resolved to a row -- `chosen_options` hands back strings and the
+    # prerequisite is a plain membership test -- so the value is a record
+    # of **what the character chose**, not a claim that a row implements
+    # it. Thirteen of these forks are arms of a feature the parent row
+    # lays itself, on `features/primal_divine.py`'s stated reasoning:
+    # declaring a second row for one would stack a duplicate untyped
+    # bonus. A character on that leg really does have the arm, so leaving
+    # the ref out made 29 written feats unreachable for a prerequisite the
+    # character met.
+    #
+    # Every printed arm is listed now, and `OPTION_PACT` is what makes
+    # that safe: for a leg-keyed fork the leg picks the arm and no draw
+    # happens, so an arm with no row reaches only the character whose leg
+    # is that arm.
     #: 2 feat(s) print a prerequisite naming one of these.
     "cf:ardent-f0": (
+        "cf:ardent-f0s0",
         "cf:ardent-f0s1",
         "cf:ardent-f0s2",
     ),
@@ -4227,17 +4260,22 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     ),
     #: 3 feat(s) print a prerequisite naming one of these.
     "cf:avenger-f1": (
+        "cf:avenger-f1s0",
+        "cf:avenger-f1s1",
         "cf:avenger-f1s2",
     ),
     #: 7 feat(s) print a prerequisite naming one of these.
     "cf:barbarian-f1": (
+        "cf:barbarian-f1s0",
         "cf:barbarian-f1s1",
         "cf:barbarian-f1s2",
         "cf:barbarian-f1s3",
     ),
     #: 3 feat(s) print a prerequisite naming one of these.
     "cf:bard-f1": (
+        "cf:bard-f1s0",
         "cf:bard-f1s1",
+        "cf:bard-f1s2",
     ),
     #: 2 feat(s) print a prerequisite naming one of these.
     "cf:battlemind-f2": (
@@ -4248,6 +4286,8 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     ),
     #: 1 feat(s) print a prerequisite naming one of these.
     "cf:druid-f1": (
+        "cf:druid-f1s0",
+        "cf:druid-f1s1",
         "cf:druid-f1s2",
         "cf:druid-f1s3",
     ),
@@ -4256,11 +4296,14 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
         "cf:fighter-weaponmaster-f3s0",
         "cf:fighter-weaponmaster-f3s1",
         "cf:fighter-weaponmaster-f3s2",
+        "cf:fighter-weaponmaster-f3s3",
         "cf:fighter-weaponmaster-f3s4",
+        "cf:fighter-weaponmaster-f3s5",
     ),
     #: 12 feat(s) print a prerequisite naming one of these.
     "cf:invoker-f1": (
         "cf:invoker-f1s0",
+        "cf:invoker-f1s1",
         "cf:invoker-f1s2",
     ),
     #: 2 feat(s) print a prerequisite naming one of these.
@@ -4291,6 +4334,7 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     ),
     #: 1 feat(s) print a prerequisite naming one of these.
     "cf:seeker-f1": (
+        "cf:seeker-f1s0",
         "cf:seeker-f1s1",
     ),
     #: 12 feat(s) print a prerequisite naming one of these.
@@ -4304,7 +4348,9 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     #: 5 feat(s) print a prerequisite naming one of these.
     "cf:sorcerer-f0": (
         "cf:sorcerer-f0s0",
+        "cf:sorcerer-f0s1",
         "cf:sorcerer-f0s2",
+        "cf:sorcerer-f0s3",
     ),
     #: 1 feat(s) print a prerequisite naming one of these.
     "cf:swordmage-f1": (
@@ -5198,6 +5244,123 @@ EXTRA_PICKS: dict[str, str] = {
 #: character's own leg before drawing. A fork whose options are **not**
 #: all in here is drawn uniformly, exactly as before.
 OPTION_PACT: dict[str, str] = {
+    # **The thirteen class forks whose arm is decided by the LEG**, added
+    # for `#1427`. These are not pacts, and the table is keyed by leg
+    # rather than by pact for exactly that reason -- a warlock's pact is
+    # one kind of leg and these are the rest.
+    #
+    # Without an entry here `deal_build_options` draws **uniformly**, and
+    # the draw does not look at the character: all four sorcerer legs were
+    # dealt `cf:sorcerer-f0s2`, so three of four held an arm the parent row
+    # does not lay for them. That is the same over-permissive fault
+    # `#1427` was filed about, re-introduced by its own first fix -- an
+    # entry in `BUILD_OPTIONS` with no entry here offers a feat gated on
+    # one arm to a character that took another.
+    #
+    # Each pairing says where it came from, and none is a guess:
+    #
+    #   gate  the arm's own row gates on that leg -- `on_leg(...).leg`,
+    #         which the closure exposes for precisely this question
+    #   body  its row asks `c.build("<leg>")` in the body instead
+    #   name  the leg IS the ref suffix, which is the convention
+    #         `BUILDS` states: "named `fNsM` ... so no table has to pair
+    #         the two"
+    #   read  no row carries it, so it is read off the printed arm and the
+    #         parent's own branch. Nine of the 54, named below.
+    #
+    # 40 of the 54 are therefore derived from the rows themselves, and
+    # every leg was checked against the class's real leg set before being
+    # written here -- a first pass defaulted avenger's and barbarian's to
+    # the `fNsM` convention their classes do not use, and the validation
+    # is what caught it.
+    #: cf:ardent-f0
+    "cf:ardent-f0s0": "f0s0",                       # name
+    "cf:ardent-f0s1": "f0s1",                       # body
+    "cf:ardent-f0s2": "f0s2",                       # body
+    #: cf:avenger-f1 -- `read`: `cf:avenger-f1`'s own branches are the
+    #: evidence. Its docstring pairs the leg whose secondary is Dexterity
+    #: with the arm worked out from Dexterity, and likewise Intelligence;
+    #: s0 is the "+2 + Dex when it moves away" arm and s1 the "+Int when
+    #: another enemy hits you" one.
+    "cf:avenger-f1s0": "pursuit",                   # read
+    "cf:avenger-f1s1": "retribution",               # read
+    "cf:avenger-f1s2": "unity",                     # body
+    #: cf:barbarian-f1 -- `read`: s0 is the only unpaired arm and
+    #: `rageblood` the only unpaired leg the parent branches on.
+    "cf:barbarian-f1s0": "rageblood",               # read
+    "cf:barbarian-f1s1": "thaneborn",               # body
+    "cf:barbarian-f1s2": "thunderborn",             # body
+    "cf:barbarian-f1s3": "whirling",                # body
+    #: cf:bard-f1
+    "cf:bard-f1s0": "f1s0",                         # name
+    "cf:bard-f1s1": "f1s1",                         # body
+    "cf:bard-f1s2": "f1s2",                         # name
+    #: cf:druid-f1
+    "cf:druid-f1s0": "f1s0",                        # name
+    "cf:druid-f1s1": "f1s1",                        # name
+    "cf:druid-f1s2": "f1s2",                        # body
+    "cf:druid-f1s3": "f1s3",                        # body
+    #: cf:fighter-weaponmaster-f3 -- `read`: s5 prints "when using a
+    #: two-handed weapon" and s3 "when using a one-handed weapon", which
+    #: leaves the two unpaired legs in only one order.
+    "cf:fighter-weaponmaster-f3s0": "arena",        # gate
+    "cf:fighter-weaponmaster-f3s1": "battlerager",  # gate
+    "cf:fighter-weaponmaster-f3s2": "brawling",     # gate
+    "cf:fighter-weaponmaster-f3s3": "guardian",     # read
+    "cf:fighter-weaponmaster-f3s4": "tempest",      # gate
+    "cf:fighter-weaponmaster-f3s5": "great-weapon", # read
+    #: cf:invoker-f1 -- `read` by elimination: s0 and s2 are gated, so
+    #: `preservation` is the one leg and s1 the one arm left. s1 is also
+    #: the only one of the three that helps an ally, which is what its
+    #: printed manifestation does (slide an ally 1 square).
+    #:
+    #: **Do not re-pair these off the flavour sentence.** Reading it put
+    #: s0 with `wrath` -- it opens on the gods' war against the
+    #: primordials -- where the mechanical clause settles it the other
+    #: way: s0 pushes a target, s2 is the per-enemy damage bonus.
+    "cf:invoker-f1s0": "malediction",               # gate
+    "cf:invoker-f1s1": "preservation",              # read
+    "cf:invoker-f1s2": "wrath",                     # gate
+    #: cf:monk-f0
+    "cf:monk-f0s0": "f0s0",                         # body
+    "cf:monk-f0s1": "f0s1",                         # body
+    "cf:monk-f0s2": "f0s2",                         # body
+    "cf:monk-f0s3": "f0s3",                         # body
+    "cf:monk-f0s4": "f0s4",                         # body
+    #: cf:seeker-f1 -- `read` by elimination: s1 is gated on
+    #: `second-str`, and it is the arm with the thrown-weapon attack
+    #: bonus, which is the Strength one.
+    "cf:seeker-f1s0": "second-dex",                 # read
+    "cf:seeker-f1s1": "second-str",                 # gate
+    #: cf:sorcerer-f0 -- `read`: the two unpaired arms name their own
+    #: source outright. s1 opens "the elemental power of dragons flows
+    #: through you" and s3 "you draw your spells from the entropic forces
+    #: of the Elemental Chaos", against the `dragon` and `wild` legs.
+    "cf:sorcerer-f0s0": "cosmic",                   # gate
+    "cf:sorcerer-f0s1": "dragon",                   # read
+    "cf:sorcerer-f0s2": "storm",                    # gate
+    "cf:sorcerer-f0s3": "wild",                     # read
+    #: cf:warden-f1
+    "cf:warden-f1s0": "f1s0",                       # gate
+    "cf:warden-f1s1": "f1s1",                       # gate
+    "cf:warden-f1s2": "f1s2",                       # gate
+    "cf:warden-f1s3": "f1s3",                       # gate
+    #: cf:warlock-f1 -- the pact itself, and the one fork in this block
+    #: the table's name actually fits.
+    "cf:warlock-f1s0": "dark",                      # gate
+    "cf:warlock-f1s1": "elemental",                 # gate
+    "cf:warlock-f1s2": "fey",                       # gate
+    "cf:warlock-f1s3": "infernal",                  # gate
+    "cf:warlock-f1s4": "sorcerer-king",             # gate
+    "cf:warlock-f1s5": "star",                      # gate
+    "cf:warlock-f1s6": "vestige",                   # gate
+    #: cf:warlord-marshal-f4
+    "cf:warlord-marshal-f4s0": "bravura",           # gate
+    "cf:warlord-marshal-f4s1": "shielding",         # gate
+    "cf:warlord-marshal-f4s2": "inspiring",         # gate
+    "cf:warlord-marshal-f4s3": "resourceful",       # gate
+    "cf:warlord-marshal-f4s4": "insightful",        # gate
+    "cf:warlord-marshal-f4s5": "tactical",          # gate
     # cf:warlock-binder-f1
     "cf:warlock-binder-f1s0": "fey",
     "cf:warlock-binder-f1s1": "gloom",
@@ -5427,14 +5590,23 @@ def deal_build_options(rng: Random | None, ref: str, leg: str = "", *,
     two entries are two independent draws and could hand the same option
     over twice, or hand over a pair the page does not offer together.
 
-    **`leg` narrows a pact-keyed fork before the draw**, which is a
+    **`leg` narrows a leg-keyed fork before the draw**, which is a
     choice the character does not get to make: a warlock's pact decides
     which option of these forks it has, and the page prints one headed
     section per pact under each. `OPTION_PACT` is the mapping, read off
-    each option's own printed name, and a fork is pact-keyed only when
+    each option's own printed name, and a fork is leg-keyed only when
     **every** one of its options is in that table -- so the sixty-odd
     ordinary forks are untouched and a half-mapped fork stays uniform
     rather than being quietly narrowed on partial information.
+
+    **A pact is one kind of leg and not the only one.** This said
+    "pact-keyed" throughout while the table held nothing but pacts, and
+    that reading is what let `#1427`'s first fix give thirteen
+    leg-decided forks a `BUILD_OPTIONS` entry and no entry here: their
+    arms were then drawn uniformly, so three of four sorcerer legs held
+    an arm their own parent row does not lay. The half-mapped rule above
+    is what makes that safe to fix incrementally, and it is why the
+    thirteen were added to `OPTION_PACT` in full rather than arm by arm.
 
     A leg with no option under a pact-keyed fork answers **nothing**,
     which is the printed answer rather than a gap: the page prints no

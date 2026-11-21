@@ -415,6 +415,65 @@ def chassis_census() -> tuple[list[str], dict[str, int]]:
     return out, counts
 
 
+def option_arms() -> tuple[list[str], int]:
+    """Does `chargen.OPTION_PACT` pair each arm with the leg its row names?
+
+    A leg-keyed fork hands a character the arm its leg took, so the table
+    decides which sub-option every character holds -- and a feat gated on
+    one arm is offered on that leg and refused on the others. A **crossed**
+    pair therefore offers a feat to exactly the wrong character, silently,
+    and nothing else here would see it: every other check reads its
+    expectation out of the same table, so swapping two entries moves both
+    sides together. Measured, 2026-11-21: crossing the invoker's two gated
+    arms left all 196 assertions of the probe that found this green.
+
+    The rows are the independent witness. 40 of the 54 pairings are
+    already written down twice -- once here and once as the arm's own
+    `on_leg(...)` gate or the `c.build("<leg>")` its body asks -- so this
+    asks the two to agree. The other 14 carry no leg in the tree at all
+    (the arm has no row, because its parent lays that branch itself) and
+    only the first half applies to them.
+
+    Two findings, which are two different faults:
+
+        crossed    the arm's row names one leg, the table another
+        dead       the table names a leg the class cannot deal, so the
+                   arm reaches nobody and its feats are unreachable
+    """
+    import inspect
+    import re
+
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY
+
+    out: list[str] = []
+    checked = 0
+    for arm, leg in sorted(chargen.OPTION_PACT.items()):
+        parent = arm.rsplit("s", 1)[0]
+        cls = REGISTRY[parent].cls if parent in REGISTRY else _class_in_ref(arm)
+        legs = {b.name for ch in (chargen.declared_chassis(cls) or ("",))
+                for b in (chargen.legs_for(cls, ch) or ())}
+        if leg not in legs:
+            out.append(f"  {arm:34} paired with {leg!r}, which {cls} "
+                       f"cannot deal -- the arm reaches nobody")
+            continue
+        row = REGISTRY.get(arm)
+        if row is None or row.body is None:
+            continue
+        own = getattr(row.requires_of(None), "leg", None)
+        if own not in legs:
+            asks = re.findall(r'c\.build\(\s*["\']([^"\']+)',
+                              inspect.getsource(row.body))
+            own = next((x for x in asks if x in legs), None)
+        if own is None:
+            continue
+        checked += 1
+        if own != leg:
+            out.append(f"  {arm:34} its row names {own!r}, the table says "
+                       f"{leg!r} -- one of them is crossed")
+    return out, checked
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--class", dest="cls", help="only this class")
@@ -478,7 +537,18 @@ def main() -> int:
               " means. Scope the row -- a `cls=` or a `cf:<class>-` ref.")
     print(f"{len(loose)} row(s) ask about a leg name more than one class owns"
           " without being scoped to one of them")
-    return 1 if dead or wrong or shrunk or loose else 0
+
+    arms, agreed = option_arms()
+    if arms:
+        print()
+        for line in arms:
+            print(line)
+        print("  A leg-keyed fork hands the character the arm its leg took,"
+              " so a crossed pair offers a feat to the wrong character.")
+    print(f"{len(arms)} option arm(s) disagree with the leg their own row"
+          f" names; {agreed} of {len(chargen.OPTION_PACT)}"
+          f" pairings are confirmed against a row")
+    return 1 if dead or wrong or shrunk or loose or arms else 0
 
 
 if __name__ == "__main__":
