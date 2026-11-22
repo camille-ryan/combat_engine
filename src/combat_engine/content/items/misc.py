@@ -1025,6 +1025,17 @@ def i1700x1(c: Cast) -> None:
     So the gap is an action, the marker names it, and the recipe above is
     left here so whoever lands it does not have to re-derive the gate.
 
+    **The DC it would roll against is printed, and `#1471` has it read.**
+    `resources/Dungeon Master's Guide.pdf` pages 64-65 carry **three**
+    tables -- walls (a climb DC beside a break DC), doors, and
+    portcullises -- twelve rows, each with a **level** column except one
+    whose level is printed as a dash. That issue transcribes them as read
+    and names the trap: flattening three printed tables into one and
+    dropping the level column is `#988`'s recorded mistake.
+    `grid.CLIMB_DC` is **not** the climb half of that table -- it is the
+    PHB's generic Athletics surfaces, a different printed table, and
+    neither column of the DMG one is in the tree.
+
     Still not `narrative=`: that field is a closed `skill:<name>`
     vocabulary and a raw Strength check is not one of the seventeen
     skills."""
