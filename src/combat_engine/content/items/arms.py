@@ -1205,7 +1205,7 @@ def _hit_with_both_hands(world: World, eid: int) -> bool:
                "weapon using one power",
        requires=_hit_with_both_hands,
        requires_text="you must have hit with both hands using one power",
-       dropped=("Cast.basic(hand=)",))
+)
 def i2122p1(c: Cast) -> None:
     """**The printed condition is enforced now, and the note that said it
     could not be was false.** It said "nothing in the world records that
@@ -1220,9 +1220,23 @@ def i2122p1(c: Cast) -> None:
     printed "use this power when ..." on an action you choose to take is a
     condition on acting, which is what a Requirement is.
 
-    Still dropped: `c.basic` takes no hand, so the swing is made with
-    whatever the creature's basic attack is rather than with the off-hand
-    weapon the card names."""
+    **Written, and the facility was there under another name.** The note
+    said *"`c.basic` takes no hand"*, which is still true -- and
+    `c.basic(with_=)` names a **weapon**, which is one lookup away:
+    `Gear.off` is the off-hand weapon, so the card's *"with your off-hand
+    weapon"* is `with_=off.ref` rather than a `hand=` the verb would have
+    had to grow.
+
+    A ref and not a hand is also the better shape here. `Gear.off` is
+    already the one definition of which weapon that is -- "the second
+    melee weapon, for a creature fighting with two", and deliberately not
+    `weapons[1]` -- so a `hand="off"` would have had to ask it anyway
+    and would have been a second spelling of one question.
+
+    **None when there is no off-hand weapon**, and the swing is then not
+    made at all rather than falling back to the main hand: the card names
+    one weapon, and the Requirement above has already established the
+    character was fighting with two."""
     # **`on=` is not optional on a `target=SELF` row, and a bare call here
     # swung at the bearer.** Measured before this line was aimed:
     # `AttackDeclared(attacker=1, target=1, power='mba')` and the wearer's
@@ -1239,9 +1253,14 @@ def i2122p1(c: Cast) -> None:
     # The sibling `i1261p1` makes a bare `c.basic()` call **correctly**,
     # because it is `target=EACH_ENEMY` -- so the verb is right and only
     # the aim was missing.
+    gear = c.world.get(c.me, _Gear)
+    off = gear.off if gear is not None else None
+    if off is None:
+        return
     nearby = sorted(c.within(1, side="enemy"))
     if nearby:
-        c.basic(on=c.choose(nearby, "who the off-hand catches"))
+        c.basic(on=c.choose(nearby, "who the off-hand catches"),
+                with_=off.ref)
 
 
 @power("i2492p1", level=5, cls=ITEM, usage=DAILY, action=INTERRUPT,

@@ -87121,6 +87121,102 @@ def an_intimidate_check_names_who_it_cowed(out: Result) -> None:
              f"{REGISTRY['f2130b'].unfinished}")
 
 
+def a_basic_swung_with_the_off_hand(out: Result) -> None:
+    """*"Make a melee basic attack with your off-hand weapon"* --
+    `i2122p1`, after hitting with both weapons under one power.
+
+    **The facility was there under another name.** The row's note said
+    *"`c.basic` takes no hand"*, which is still true and was never the
+    question: `c.basic(with_=)` names a **weapon**, and `Gear.off` is
+    one lookup away -- "the second melee weapon, for a creature fighting
+    with two", and deliberately not `weapons[1]`.
+
+    A ref rather than a hand is the better shape as well as the
+    available one. `Gear.off` already holds the single definition of
+    which weapon that is, so a `hand="off"` would have had to ask it
+    anyway and would have been a second spelling of one question -- the
+    disagreement `Gear.main`'s own docstring records paying for once.
+
+    **No swing at all without an off-hand weapon**, rather than a
+    fall-back to the main hand: the card names one weapon, and a
+    character holding one is not the character its Requirement
+    describes.
+    """
+    from dataclasses import replace as _replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit, Miss
+
+    ROW = "i2122p1"
+
+    def played(
+        *, second: bool,
+    ) -> tuple[Any, int, Gear, list[tuple[int, str | None]]]:
+        """The row run, with a second one-handed weapon in hand or not."""
+        world, me, _ = _board(ROW, 1)
+        gear = must(world.get(me, Gear), "the character has gear")
+        # **A one-handed main weapon, which the board does not deal.**
+        # Its first weapon is a two-handed axe, and wielding that stows
+        # everything else -- so `Gear.off` is None however many weapons
+        # are added and both arms of this rule read the board rather
+        # than the row. Measured, on the first draft.
+        one = next(w for w in gear.weapons if not w.two_handed)
+        if second:
+            gear.weapons.append(
+                _replace(chargen.PRINTED["w3611"], ref="w-off"))
+        gear.wield(one)
+        swung: list[tuple[int, str | None]] = []
+        for kind in (Hit, Miss):
+            world.bus.on(kind, lambda e: swung.append(
+                (e.target, getattr(e.result, "weapon", None))))
+        REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+        return world, me, gear, swung
+
+    # -- the premises ------------------------------------------------------
+    _world, _me, gear, swung = played(second=True)
+    out.that(gear.main is not None and gear.off is not None
+             and gear.main.ref != gear.off.ref,
+             "premise: the character is fighting with two weapons, which"
+             " is what the card's Requirement describes",
+             f"main {gear.main and gear.main.ref},"
+             f" off {gear.off and gear.off.ref}")
+
+    # -- the printed clause -------------------------------------------------
+    out.that(len(swung) == 1,
+             "it makes one basic attack",
+             f"{swung}")
+    out.that(swung and swung[0][1] == gear.off.ref,
+             "and the swing comes through the OFF-HAND weapon -- not the"
+             " main one, which is what a bare `c.basic()` would have"
+             " used and what the row did before",
+             f"{swung}, main {gear.main.ref}, off {gear.off.ref}")
+    out.that(swung and swung[0][1] != gear.main.ref,
+             "stated the other way round too, because the two are"
+             " different weapons on this board and an arm that only"
+             " checked the off-hand would pass if they were the same",
+             f"{swung}")
+
+    # -- no off-hand, no swing ----------------------------------------------
+    _, _, alone, none_swung = played(second=False)
+    out.that(alone.off is None,
+             "premise: with one weapon in hand there is no off-hand one",
+             f"{alone.off}")
+    out.that(not none_swung,
+             "and the row swings NOTHING rather than falling back to the"
+             " main hand -- the card names one weapon, and a character"
+             " holding one is not the one it describes",
+             f"{none_swung}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: the clause it was dropped"
+             " for is the one asserted above",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -122937,6 +123033,9 @@ DRIVERS = {
     "an_intimidate_check_names_who_it_cowed": (
         an_intimidate_check_names_who_it_cowed,
         "an intimidate check names who it cowed"),
+    "a_basic_swung_with_the_off_hand": (
+        a_basic_swung_with_the_off_hand,
+        "a basic swung with the off hand"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,
