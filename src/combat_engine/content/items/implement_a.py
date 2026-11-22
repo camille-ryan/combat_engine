@@ -1666,7 +1666,6 @@ def i2819x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.tome_powers()",),
 )
 def i2900x1(c: Cast) -> None:
     """The mend is written now, and `c.on_any_sustain()` was a general
@@ -1718,7 +1717,20 @@ def i2900x1(c: Cast) -> None:
     Still dropped: the tome holding two chosen daily powers. `c.borrow_row`
     is not that store -- it samples the set when a row is used and records
     no pick -- and `i2900p1` is written off that sampling. This clause is
-    the pick surviving acquisition, which is `chargen`'s to hold."""
+    the pick surviving acquisition, which is `chargen`'s to hold.
+    **And the two daily powers the tome contains.** *"Choose these
+    powers when you acquire the tome; they cannot be changed later"* is
+    a build-time pick: `chargen.BUILD_OPTIONS` records
+    `option:<ref>:<power>` for each, `c.chosen_options` reads them back
+    and `c.grant_row` hands them over. `f2441`'s shape, and the pool is
+    a function in that table because *"wizard daily fire powers ... of a
+    level equal to or lower than that of the tome"* is a set only the
+    registry can answer -- see `chargen._dailies_of`.
+
+    Two really are dealt here, where the cold tome beside this one gets
+    one: at a base level of 2 the import holds two level-1 wizard fire
+    dailies with an attack line. Measured.
+    """
 
     def armed(ev: EffectApplied) -> None:
         if ev.source != c.me or ev.duration != When.SUSTAIN.value:
@@ -1748,6 +1760,8 @@ def i2900x1(c: Cast) -> None:
         c.on_sustain(held, mend)
 
     c.watch(EffectApplied, armed, until=When.ENCOUNTER)
+    for got in c.chosen_options(c.ref):
+        c.grant_row(got, on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -4648,7 +4662,6 @@ def i2897p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.tome_powers()",),
 )
 def i2899x1(c: Cast) -> None:
     """Narrowed twice. **The reading that stood here paid out four times
@@ -4691,12 +4704,29 @@ def i2899x1(c: Cast) -> None:
     "Through this tome" is unaskable and is not gated -- this file's first
     premise, not a shortcut taken here.
 
-    Still dropped: the tome holding two chosen daily powers. `c.borrow_row`
-    is **not** that store, though it is what `i2899p1` was written with: it
-    samples the set at the moment of use and records nothing, and its own
-    note says a campaign carrying between fights would want `chargen` to
-    hold the pick. This clause is the pick surviving acquisition, so the
-    marker stays."""
+    The old note said `c.borrow_row` is not that store -- it samples the
+    set at the moment of use and records nothing -- and that was right:
+    this clause is the pick surviving acquisition.
+
+    **The two daily powers the tome contains are written now.**
+    *"Choose these powers when you acquire the tome; they cannot be
+    changed later"* is a build-time pick, which is what
+    `chargen.BUILD_OPTIONS` records -- `option:<ref>:<power>`, two of
+    them, read back with `c.chosen_options` and handed over with
+    `c.grant_row`. That is `f2441`'s shape exactly.
+
+    The pool is a **function** in that table rather than a literal:
+    *"wizard daily cold powers ... of a level equal to or lower than
+    that of the tome"* is a set only the registry can answer, and
+    `chargen` cannot read content at module level. `_dailies_of`.
+
+    **The cold pool holds ONE power at this tome's level and the card
+    says two.** Wizard dailies land at levels 1, 5 and 9, the tome's
+    base level is 3, and the import holds a single cold daily among the
+    level-1 ones -- so `deal_build_options` caps the draw and the tome
+    contains one. Weaker than print rather than stronger, which is the
+    direction this tree asks for, and it is the import's shortfall
+    rather than this row's."""
 
     def bleed(ev: MoveEnd) -> None:
         who = ev.actor
@@ -4716,6 +4746,8 @@ def i2899x1(c: Cast) -> None:
             return
 
     c.watch(MoveEnd, bleed, until=When.ENCOUNTER)
+    for got in c.chosen_options(c.ref):
+        c.grant_row(got, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cache
 from random import Random
@@ -4333,7 +4333,62 @@ def narrowed_line(line: ClassLine, took_options: Iterable[str]) -> ClassLine:
     return replace(line, **fields) if fields else line
 
 
-BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
+def _dailies_of(cls: str, keyword: str, ceiling: int) -> tuple[str, ...]:
+    """Every daily attack power of one class, keyword and level ceiling.
+
+    The pool two tomes draw from: *"this tome contains two wizard daily
+    cold powers. Both powers must be of a level equal to or lower than
+    that of the tome. Choose these powers when you acquire the tome;
+    they cannot be changed later."*
+
+    **The keyword is a WORD, not a `Keyword` member**, which is the one
+    thing this signature could get wrong cheaply: `chargen` imports no
+    `Keyword` at module level and adding one for a dict literal would
+    pull the enum in for two entries. The word is matched against each
+    row's own `Keyword.value`, lower-cased.
+
+    **A function in `BUILD_OPTIONS` rather than a literal**, because the
+    set is the registry's and `chargen` cannot read content at module
+    level -- the import cycle `_build_options` already works around by
+    importing inside itself. Called once per draw, which is once per
+    character.
+
+    Sorted, so the same seed draws the same pair twice.
+    """
+    # Imported for the side effect, the way `loadout` does it: this is
+    # what registers the rows, and without it the pool is empty and the
+    # tome contains nothing. Measured -- both pools came back `()`.
+    import combat_engine.content
+    from combat_engine.engine.dsl import REGISTRY
+
+    return tuple(sorted(
+        p.ref for p in REGISTRY.values()
+        if p.cls == cls
+        and str(getattr(p.usage, "value", p.usage)).lower() == "daily"
+        and p.attack is not None
+        and keyword in {
+            str(getattr(k, "value", k)).lower() for k in (p.keywords or ())
+        }
+        and 0 < (p.level or 0) <= ceiling
+    ))
+
+
+#: The two tomes' pools, by the item row that reads them back.
+#:
+#: The ceiling is the tome's own `base_level` -- 3 and 2 -- which is the
+#: printed *"a level equal to or lower than that of the tome"*. Both
+#: scale (`scaling: 1`), so a higher-plus copy of the same tome is a
+#: higher-level item and would widen this; the base level is what the
+#: engine deals and is the honest floor.
+#:
+#: **The cold pool holds ONE power at that ceiling and the card deals
+#: two.** `deal_build_options` caps the draw at the list, so the tome
+#: contains one -- weaker than print rather than stronger, which is the
+#: direction this tree asks for, and it is the import's shortfall rather
+#: than this table's: wizard dailies land at levels 1, 5 and 9, so a
+#: level-3 ceiling admits only the level-1 ones and the import holds a
+#: single cold daily among them.
+BUILD_OPTIONS: dict[str, tuple[str, ...] | Callable[[], tuple[str, ...]]] = {
     # **An item's choice made when it is acquired, not per use.**
     # `i2775x1` prints "when this item is <bequeathed>, choose angel,
     # demon, devil, dragon, or giant", and the chosen kind is then what
@@ -4589,6 +4644,12 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # recorded options is exact on a real character, where exactly one is
     # recorded, and lets the board pose the clause.
     "cf:warlord-marshal-f0": ("plain", "archer"),
+    # **The two tomes, whose options are POWERS drawn from the
+    # registry.** Callables rather than literals -- see `_dailies_of`
+    # and the note above this dict. Both deal two, which
+    # `OPTION_PICKS` carries.
+    "i2899x1": lambda: _dailies_of("wizard", "cold", 3),
+    "i2900x1": lambda: _dailies_of("wizard", "fire", 2),
     # **The three forks that deal TWO.** `OPTION_PICKS` carries the
     # count; these are the sets it draws from. All three print *"you
     # gain two of the following"* and had no entry at all, so the
@@ -5230,6 +5291,11 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
 #: Absent means one. Nothing has to be added for the 60-odd forks that
 #: deal one, and a fork whose count is 1 is spelled by leaving it out.
 OPTION_PICKS: dict[str, int] = {
+    # *"This tome contains two wizard daily cold powers."* Capped at the
+    # pool by `deal_build_options`, which matters here: the cold pool
+    # holds one power at the tome's level.
+    "i2899x1": 2,
+    "i2900x1": 2,
     "cf:druid-sentinel-f13": 2,
     "cf:ranger-hunter-f20": 2,
     "cf:ranger-scout-f17": 2,
@@ -5759,6 +5825,27 @@ def _build_options(taken: list[str], rng: Random | None = None,
     }
 
 
+def options_for(ref: str) -> tuple[str, ...]:
+    """The printed options a row offers, with a pool entry resolved.
+
+    `BUILD_OPTIONS[ref]` is usually a tuple and is sometimes a function
+    -- *"this tome contains two wizard daily cold powers ... of a level
+    equal to or lower than that of the tome"* is a set only the registry
+    can answer, and `chargen` cannot read content at module level.
+
+    **Every reader goes through here rather than subscripting the
+    dict.** Two did not, and the moment a callable entry landed they
+    raised: `drivers.a_build_time_option_is_drawn_and_both_halves_are_
+    dealt` called `len()` on a function. One door is what keeps that
+    from happening again.
+
+    `()` for a ref with no entry, which is what a membership test
+    already means.
+    """
+    entry = BUILD_OPTIONS.get(ref, ())
+    return tuple(entry() if callable(entry) else entry)
+
+
 def deal_build_option(rng: Random | None, ref: str) -> str:
     """Which of a row's printed build-time options this character took.
 
@@ -5853,7 +5940,13 @@ def deal_build_options(rng: Random | None, ref: str, leg: str = "", *,
     narrowing, so a fixed answer for a pact-keyed fork is that pact's
     option and not the first of all of them.
     """
-    options = list(BUILD_OPTIONS[ref])
+    # **A callable entry is a pool the REGISTRY answers**, resolved
+    # here rather than at import: `chargen` cannot read content at
+    # module level without reopening the import cycle, and two cards
+    # name a set no literal can hold -- *"this tome contains two wizard
+    # daily cold powers ... of a level equal to or lower than that of
+    # the tome"*. Every existing entry is a tuple and is untouched.
+    options = list(options_for(ref))
     if leg and all(o in OPTION_PACT for o in options):
         options = [o for o in options if leg in legs_of_arm(o)]
         if not options:

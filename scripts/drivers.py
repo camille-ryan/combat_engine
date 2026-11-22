@@ -68047,10 +68047,10 @@ def the_protectors_circle_is_a_leg_the_base_druid_also_has(out: Result) -> None:
              "the family the marker said had to be invented is five rows "
              "listed under the sentence on this chassis's own page",
              f"{took}")
-    out.that(sorted(chargen.BUILD_OPTIONS["cf:druid-protector-f2"]) == sorted(FIVE),
+    out.that(sorted(chargen.options_for("cf:druid-protector-f2")) == sorted(FIVE),
              "and the fork holds exactly those five, named here so a sixth "
              "arriving in the table is seen rather than absorbed",
-             f"{sorted(chargen.BUILD_OPTIONS['cf:druid-protector-f2'])}")
+             f"{sorted(chargen.options_for('cf:druid-protector-f2'))}")
 
     # **The summon, told apart by a NUMBER and not by a flag.** An
     # associate arrives with the summoner's bloodied value and the inline
@@ -70815,7 +70815,7 @@ def the_mages_whole_ladder_was_refused_for_a_list_the_page_prints(
         n = int(r.rsplit("-f", 1)[-1])
         want_level = levels.level_of(r)
         column, value = WANTS[n]
-        for o in chargen.BUILD_OPTIONS[r]:
+        for o in chargen.options_for(r):
             row = g.execute(
                 "select class, level, usage, kind from power where ref = ?",
                 (o,)).fetchone()
@@ -70854,7 +70854,7 @@ def the_mages_whole_ladder_was_refused_for_a_list_the_page_prints(
     seen: dict[str, str] = {}
     shared = []
     for r in RUNGS:
-        key = ",".join(chargen.BUILD_OPTIONS[r])
+        key = ",".join(chargen.options_for(r))
         if key in seen:
             shared.append((seen[key], r))
         seen[key] = r
@@ -70922,7 +70922,7 @@ def the_poison_recipes_and_the_spellbook_are_both_dealt(out: Result) -> None:
         gear = world.get(eid, Gear)
         assert state is not None and gear is not None
         knows = [c[len(head):] for c in state.choices if c.startswith(head)]
-        vials = [r for r in gear.carried if r in set(chargen.BUILD_OPTIONS[FORK])]
+        vials = [r for r in gear.carried if r in set(chargen.options_for(FORK))]
         got[level] = (len(knows), knows, vials)
     out.that({k: v[0] for k, v in got.items()}
              == {k: n for k, (n, _v) in WANT.items()},
@@ -71273,7 +71273,7 @@ def a_waived_bonus_feat_reaches_the_build_and_not_only_the_fight(
         assert state is not None and known is not None and gear is not None
         chose = [c[len(head):] for c in state.choices if c.startswith(head)]
         seen[seed] = (chose[0] if chose else "",
-                      [f for f in chargen.BUILD_OPTIONS[ROW] if f in known.all],
+                      [f for f in chargen.options_for(ROW) if f in known.all],
                       gear.shield)
 
     out.that(all(v[0] for v in seen.values()),
@@ -71337,7 +71337,7 @@ def a_waived_bonus_feat_reaches_the_build_and_not_only_the_fight(
     g = db.game()
     prereqs = {f: (g.execute("select prereq from feat where ref = ?",
                              (f,)).fetchone() or [None])[0]
-               for f in chargen.BUILD_OPTIONS[ROW]}
+               for f in chargen.options_for(ROW)}
     out.that(all(prereqs.values()),
              "both feats really do print a prerequisite, without which "
              "the waiver waives nothing and every reading above would "
@@ -71622,8 +71622,8 @@ def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
     for chassis, fork, other in (
             ("hunter", "cf:ranger-hunter-f19", "cf:ranger-scout-f16"),
             ("scout", "cf:ranger-scout-f16", "cf:ranger-hunter-f19")):
-        mine = set(chargen.BUILD_OPTIONS[fork])
-        theirs = set(chargen.BUILD_OPTIONS[other])
+        mine = set(chargen.options_for(fork))
+        theirs = set(chargen.options_for(other))
         world, eid = dealt(chassis, 10)
         drawn = set(took(world, eid, fork))
         out.that(drawn <= mine,
@@ -71652,10 +71652,10 @@ def a_later_row_adds_one_more_pick_of_an_earlier_rows_fork(
     # would ask `rng.sample` for six of five and raise.
     big = chargen.deal_build_options(
         Random(11), "cf:ranger-hunter-f20", extra=99)
-    out.that(len(big) == len(chargen.BUILD_OPTIONS["cf:ranger-hunter-f20"]),
+    out.that(len(big) == len(chargen.options_for("cf:ranger-hunter-f20")),
              "an extra count beyond the list is capped at the list rather "
              "than raising inside `rng.sample`",
-             f"{len(big)} of {len(chargen.BUILD_OPTIONS['cf:ranger-hunter-f20'])}")
+             f"{len(big)} of {len(chargen.options_for('cf:ranger-hunter-f20'))}")
 
     # -- and every extra-pick entry names a fork that exists ------------
     orphan = sorted(f for f in chargen.EXTRA_PICKS.values()
@@ -71883,7 +71883,7 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
                    if re.match(r"^cf:[a-z']+-[a-z']+-f\d+$", r)
                    and REGISTRY.get(r) is not None
                    and not getattr(REGISTRY[r], "defect", "")
-                   and all(o.startswith("p") for o in chargen.BUILD_OPTIONS[r]))
+                   and all(o.startswith("p") for o in chargen.options_for(r)))
     out.that(len(picks) >= 37,
              "at least 37 chassis forks now carry a list of POWER refs, "
              "which is what the recovered lists are -- every other fork in "
@@ -71897,7 +71897,7 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
     wrong = []
     for parent in picks:
         cls = parent.split(":")[1].split("-")[0]
-        for o in chargen.BUILD_OPTIONS[parent]:
+        for o in chargen.options_for(parent):
             row = g.execute("select class, level from power where ref = ?",
                             (o,)).fetchone()
             if row is None or (row[0] or "").lower() != cls:
@@ -71927,7 +71927,7 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
     off = []
     for parent in picks:
         want = levels.level_of(parent)
-        for o in chargen.BUILD_OPTIONS[parent]:
+        for o in chargen.options_for(parent):
             row = g.execute("select level from power where ref = ?",
                             (o,)).fetchone()
             if row and row[0] not in (want, 0):
@@ -71942,7 +71942,7 @@ def a_defect_marker_the_compendium_disproves(out: Result) -> None:
         p for p in picks
         if all((g.execute("select level from power where ref = ?",
                           (o,)).fetchone() or (None,))[0] == 0
-               for o in chargen.BUILD_OPTIONS[p]))
+               for o in chargen.options_for(p)))
     # -- the warpriest's two recovered domains, and the three refused ---
     # The page gives its domains no banner, so each section is bounded by
     # the domain's **own printed name** -- the same field that held the
@@ -72826,7 +72826,11 @@ def a_build_time_option_is_drawn_and_both_halves_are_dealt(out: Result) -> None:
     # is stricter rather than looser, since a fork dealing two now has
     # both of its picks examined instead of one.
     missed = {}
-    for ref, options in chargen.BUILD_OPTIONS.items():
+    # **`options_for`, not the raw dict value.** An entry may be a
+    # function -- the two tomes draw their options out of the registry --
+    # and `len()` on one raised here the moment the first landed.
+    for ref in chargen.BUILD_OPTIONS:
+        options = chargen.options_for(ref)
         if len(options) < 2:
             continue
         seen = {took for s in range(400)
@@ -72842,9 +72846,23 @@ def a_build_time_option_is_drawn_and_both_halves_are_dealt(out: Result) -> None:
              f"unreachable: {missed}")
     # The trap named, so it cannot come back quietly: a fork that deals
     # more than one must be asked through the plural dealer.
-    multi = sorted(r for r in chargen.BUILD_OPTIONS
-                   if chargen.OPTION_PICKS.get(r, 1) > 1)
-    blind = {r: sorted(set(chargen.BUILD_OPTIONS[r]) -
+    #
+    # **Only forks whose pool is BIGGER than one pick**, and that is the
+    # check's definition being corrected rather than loosened. The arm
+    # below says "the singular dealer misses something", which is true
+    # of a fork offering more options than it deals and **false** of one
+    # whose pool is a single option: `deal_build_options` caps the draw
+    # at the list, so the singular reaches the only option there is and
+    # the gap is empty. `i2899x1` is that case -- its card deals two
+    # wizard daily cold powers and the import holds one at the tome's
+    # level -- and it went red here on a premise about pool size that
+    # was never stated. Measured: pool 1, picks 2, gap 0.
+    multi = sorted(
+        r for r in chargen.BUILD_OPTIONS
+        if chargen.OPTION_PICKS.get(r, 1) > 1
+        and len(chargen.options_for(r)) > 1
+    )
+    blind = {r: sorted(set(chargen.options_for(r)) -
                        {chargen.deal_build_option(Random(f"{s}:{r}"), r)
                         for s in range(400)})
              for r in multi}
@@ -72859,7 +72877,7 @@ def a_build_time_option_is_drawn_and_both_halves_are_dealt(out: Result) -> None:
     fixed = {ref: {chargen.deal_build_option(None, ref) for _ in range(20)}
              for ref in chargen.BUILD_OPTIONS}
     out.that(all(len(v) == 1 for v in fixed.values())
-             and all(next(iter(fixed[r])) == chargen.BUILD_OPTIONS[r][0]
+             and all(next(iter(fixed[r])) == chargen.options_for(r)[0]
                      for r in fixed),
              "while `rng=None` answers the FIRST printed option every time "
              "-- `audit.board` needs one fixed answer per ref or the sweep "
@@ -87224,6 +87242,124 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              "and the row carries no marker: the clause it was dropped"
              " for is the one asserted above",
              f"{REGISTRY[ROW].unfinished}")
+
+
+def a_tome_contains_two_chosen_dailies(out: Result) -> None:
+    """*"This tome contains two wizard daily cold powers. Both powers must
+    be of a level equal to or lower than that of the tome. Choose these
+    powers when you acquire the tome; they cannot be changed later."* --
+    `i2899x1`, and `i2900x1` with fire.
+
+    **The pick surviving acquisition is what was missing**, which both
+    notes said. `c.borrow_row` samples the set at the moment of use and
+    records nothing; this clause is a build-time choice.
+
+    `chargen.BUILD_OPTIONS` already records `option:<ref>:<value>` and
+    `OPTION_PICKS` already deals several, so the only new thing is that a
+    **callable** entry is allowed: *"wizard daily cold powers of a level
+    equal to or lower than that of the tome"* is a set only the registry
+    can answer, and `chargen` cannot read content at module level.
+
+    **The cold pool holds ONE power at that ceiling and the card says
+    two.** `deal_build_options` caps the draw at the list, so the tome
+    contains one -- weaker than print rather than stronger, and the
+    import's shortfall rather than the row's. Asserted, so nobody reads
+    the one as a bug in the draw.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    COLD, FIRE = "i2899x1", "i2900x1"
+
+    # -- the pools ----------------------------------------------------------
+    for ref, word, cap in ((COLD, "cold", 3), (FIRE, "fire", 2)):
+        # **The raw dict entry, not `options_for`.** That resolver is
+        # what every reader goes through -- and it hands back a tuple
+        # either way, so asking it cannot tell a pool from a literal.
+        raw = chargen.BUILD_OPTIONS.get(ref)
+        out.that(callable(raw),
+                 f"{ref}'s options are a FUNCTION of the registry, not a"
+                 " literal -- the printed set is every wizard daily of"
+                 " one keyword at or below the tome's level",
+                 f"{type(raw).__name__}")
+        pool = chargen.options_for(ref)
+        out.that(pool and all(
+                     REGISTRY[p].cls == "wizard"
+                     and str(getattr(REGISTRY[p].usage, "value", "")) == "daily"
+                     and REGISTRY[p].attack is not None
+                     and 0 < (REGISTRY[p].level or 0) <= cap
+                     and word in {
+                         str(getattr(k, "value", k)).lower()
+                         for k in (REGISTRY[p].keywords or ())
+                     }
+                     for p in pool),
+                 f"and every power in it is a wizard daily {word} ATTACK"
+                 f" power of level {cap} or lower -- four filters, each"
+                 " one a clause of the printed sentence",
+                 f"{[(p, REGISTRY[p].level) for p in pool]}")
+        out.that(chargen.OPTION_PICKS.get(ref) == 2,
+                 f"and {ref} deals TWO, which is what the card says",
+                 f"{chargen.OPTION_PICKS.get(ref)}")
+
+    # -- what is actually drawn ---------------------------------------------
+    from random import Random
+
+    fire = chargen.deal_build_options(Random(3), FIRE)
+    out.that(len(fire) == 2 and len(set(fire)) == 2,
+             "the fire tome really is dealt two DISTINCT powers --"
+             " `rng.sample`, which is why the count is one entry rather"
+             " than two independent draws",
+             f"{fire}")
+    cold = chargen.deal_build_options(Random(3), COLD)
+    out.that(len(cold) == 1,
+             "**and the cold tome is dealt one**, because its pool holds"
+             " one at the tome's level: wizard dailies land at levels 1,"
+             " 5 and 9, the base level is 3, and the import holds a"
+             " single cold daily among the level-1 ones. The draw is"
+             " capped at the list rather than raising",
+             f"{cold}")
+
+    # -- the row hands them over --------------------------------------------
+    world, me, _ = _board(FIRE, 1)
+    said = must(world.get(me, Build), "the character has a build")
+    # Guarded, not `fire[0]`/`fire[1]`: under a plant that deals one
+    # pick a bare index raises `IndexError` here and kills the rule
+    # instead of failing it -- no FAIL line on the arms below.
+    said.choices = frozenset({
+        *said.choices,
+        *(f"option:{FIRE}:{got}" for got in fire),
+    })
+    known = must(world.get(me, Powers), "the character has powers")
+    before = set(known.known)
+    REGISTRY[FIRE].body(Cast(world=world, me=me, ref=FIRE))
+    after = set(known.known)
+    out.that(set(fire) <= after,
+             "the row hands BOTH recorded powers over -- `c.chosen_options`"
+             " reads every entry for its ref and `c.grant_row` is the"
+             " door, which is `f2441`'s shape",
+             f"{sorted(after - before)} vs {sorted(fire)}")
+
+    # -- and nothing when the tome recorded nothing --------------------------
+    w2, me2, _ = _board(FIRE, 1)
+    bare = must(w2.get(me2, Build), "the character has a build")
+    bare.choices = frozenset(
+        c for c in bare.choices if not c.startswith(f"option:{FIRE}:"))
+    known2 = must(w2.get(me2, Powers), "the character has powers")
+    was = set(known2.known)
+    REGISTRY[FIRE].body(Cast(world=w2, me=me2, ref=FIRE))
+    out.that(set(known2.known) == was,
+             "and hands over NOTHING when no pick was recorded -- the"
+             " grant reads the sheet rather than re-drawing, so a tome"
+             " nobody chose for contains nothing",
+             f"{sorted(set(known2.known) - was)}")
+
+    for ref in (COLD, FIRE):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
 
 
 def a_feat_widens_the_skill_power_pool(out: Result) -> None:
@@ -114287,7 +114423,7 @@ def the_bladesinger_is_dealt_three_bladespells(out: Result) -> None:
     from combat_engine.engine.types import Keyword, Usage
 
     fork = "cf:wizard-bladesinger-f5"
-    listed = tuple(chargen.BUILD_OPTIONS[fork])
+    listed = tuple(chargen.options_for(fork))
     matched = tuple(sorted(
         r for r, p in REGISTRY.items()
         if Keyword.BLADESPELL in (p.keywords or ())))
@@ -122734,6 +122870,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "tome_contains_two_dailies": (
+        a_tome_contains_two_chosen_dailies,
+        "`i2899x1` and `i2900x1` contain daily powers chosen when the "
+        "tome is acquired (#1112)",
     ),
     "skill_power_pool_widens": (
         a_feat_widens_the_skill_power_pool,
