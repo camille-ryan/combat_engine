@@ -739,8 +739,7 @@ def i1437p1(c: Cast) -> None:
 
 
 @power("i1743x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.boost_roll(kind_of_bonus=)",))
+       reach=PERSONAL, target=SELF)
 def i1743x1(c: Cast) -> None:
     """"When your attack roll is 20 or lower" is a condition on the die,
     and the old note was right that a modifier is decided before the die
@@ -762,11 +761,17 @@ def i1743x1(c: Cast) -> None:
     attack goes after a different defence than its printed Attack line is
     exact here -- which is the one imprecision the gate ships with.
 
-    What is given up, and the marker: a boost is a number added to the
-    total and carries no bonus *type*, so this +1 stacks with another item
-    bonus to attack rolls where the printed rule says the larger of the
-    two applies. 23 rows in the tree lay one, across different slots, so
-    the overlap is rare rather than impossible.
+    **The bonus type is written now, and it was the marker.** A boost is
+    a number added to the total and carried no *type*, so this +1 stacked
+    with another item bonus to attack rolls where the printed rule gives
+    the larger of the two. 23 rows in the tree lay one, across different
+    slots, so the overlap is rare rather than impossible.
+
+    `kind_of_bonus="item"` records the best of its type on the result and
+    adds only the **difference**, so the larger wins whichever order the
+    two arrive in and a smaller one after a larger adds nothing. Untyped
+    boosts -- every other caller -- still stack, which is what the rule
+    says about them.
     """
     me = c.me
 
@@ -779,7 +784,10 @@ def i1743x1(c: Cast) -> None:
             return
         if ev.vs is not FORT or not _has_keyword(ev.power, Keyword.WEAPON):
             return
-        c.boost_roll(1, kind="attack", ev=ev)
+        # **An item bonus, which the boost could not say.** Two of
+        # these on one roll both landed where the rule gives the larger
+        # alone -- 23 rows in the tree lay an item bonus to an attack.
+        c.boost_roll(1, kind="attack", kind_of_bonus="item", ev=ev)
 
     c.watch(AttackRolled, cap, until=When.ENCOUNTER)
 

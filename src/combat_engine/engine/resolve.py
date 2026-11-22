@@ -140,6 +140,23 @@ class AttackResult:
     #: forced second roll misses". The `Rerolled` event is the moment; this is
     #: the fact, still readable once the dust settles. #496.
     rerolled_by: list[str] = field(default_factory=list)
+    #: **The best boost of each bonus type already applied to this roll**,
+    #: by type word.
+    #:
+    #: `Cast.boost_roll` adds straight to `total` and carries no bonus
+    #: type, so two item bonuses to the same attack roll both landed where
+    #: the printed rule gives the larger of the two. `i1743x1` is the row
+    #: that noticed -- *"23 rows in the tree lay one, across different
+    #: slots, so the overlap is rare rather than impossible"*.
+    #:
+    #: Written only by a boost that names a type; a boost that names none
+    #: is untyped and stacks, which is what every existing caller does and
+    #: what the rule says about untyped bonuses.
+    #:
+    #: `repr=False` because this object's repr is in the event stream that
+    #: `replay` records, and a new field there moves every fixture --
+    #: which is a baseline write rather than a behaviour change.
+    boosted: dict[str, int] = field(default_factory=dict, repr=False)
 
     @property
     def parity(self) -> str:

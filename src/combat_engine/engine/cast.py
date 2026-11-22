@@ -7282,7 +7282,7 @@ class Cast:
         self.world.bus.emit(said)
 
     def boost_roll(self, amount: int, *, kind: str = "",
-                   ev: Any = None) -> bool:
+                   kind_of_bonus: str = "", ev: Any = None) -> bool:
         """Add to the triggering roll **without rolling it again**.
 
         "Add 4 to the roll", where the roll has already been made and the
@@ -7300,6 +7300,15 @@ class Cast:
         `kind` is `attack`, `save`, `check`, or empty for whatever triggered.
         It is there so a row can refuse to fire on the wrong sort of roll
         rather than silently boosting one its card never mentions.
+
+        **`kind_of_bonus` is the printed bonus TYPE**, which is a
+        different question and which a boost could not answer: it adds
+        straight to the total, so two item bonuses to one attack roll
+        both landed where the rule gives the larger of the two alone.
+        Only the difference is added, so the larger wins whichever order
+        they arrive in, and a smaller one after a larger answers False.
+        Empty is untyped and stacks, which is every existing caller and
+        is what the rule says about untyped bonuses. `i1743x1`.
 
         **`natural` does not move, and that is the whole point.** The card
         says add to the *roll*, not that the die landed differently, so a
@@ -7326,6 +7335,26 @@ class Cast:
 
         result = getattr(ev, "result", None)
         if result is not None and kind in ("", "attack"):
+            # **A typed boost does not stack with itself**, which is the
+            # printed rule for every named bonus type and which a boost
+            # could not say: it adds straight to `total`, so two item
+            # bonuses to one attack roll both landed where the larger
+            # should apply alone. `i1743x1` is the row that noticed.
+            #
+            # Only the **difference** is added, so the larger of the two
+            # ends up on the roll whichever order they arrive in, and a
+            # smaller one after a larger adds nothing and answers False --
+            # "it did not boost" being the honest answer for a bonus the
+            # rule discards.
+            #
+            # An untyped boost is every existing caller and still stacks,
+            # which is what the rule says about untyped bonuses.
+            if kind_of_bonus:
+                had = result.boosted.get(kind_of_bonus, 0)
+                if amount <= had:
+                    return False
+                amount -= had
+                result.boosted[kind_of_bonus] = had + amount
             result.total += amount
             # **Recomputed from the untouched `natural`**, so a 1 stays a
             # miss: the card adds to the *roll*, not to what the die showed.

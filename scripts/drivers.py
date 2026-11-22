@@ -84407,6 +84407,94 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_boost_carries_a_bonus_type(out: Result) -> None:
+    """Two item bonuses to one attack roll, where the rule gives one.
+
+    `Cast.boost_roll` adds straight to `AttackResult.total` and carried
+    no bonus **type**, so a typed boost stacked with another of its own
+    type -- which the printed rule forbids: only the best bonus of a kind
+    applies. `i1743x1` is the row that noticed, and 23 rows in the tree
+    lay an item bonus to an attack, across different slots, so the
+    overlap is rare rather than impossible.
+
+    `kind_of_bonus=` records the best of its type on the result and adds
+    only the **difference**, so the larger wins whichever order the two
+    arrive in. A smaller one after a larger adds nothing and answers
+    **False** -- "it did not boost" being the honest answer for a bonus
+    the rule discards.
+
+    `kind=` is a different question and both are asserted here, because
+    the two are one word apart at a call site: `kind=` filters which
+    *sort of roll* this will fire on, `kind_of_bonus=` is the printed
+    bonus type.
+
+    Untyped stays stacking, which is every other caller of this verb and
+    is what the rule says about untyped bonuses.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.resolve import AttackResult
+
+    world, me, _start = A.board("i1743x1", 1)
+    c = Cast(world=world, me=me, ref="drivers:boost", target=me)
+
+    class _Roll:
+        """A bare carrier for the roll, which is all `boost_roll` reads."""
+
+    def rolled():  # noqa: ANN202
+        ev = _Roll()
+        ev.result = AttackResult(natural=10, total=10, target_defence=99,
+                                 rolls=[10])
+        ev.attacker = me
+        ev.ctx = {}
+        return ev
+
+    ev = rolled()
+    first = c.boost_roll(1, kind="attack", ev=ev)
+    second = c.boost_roll(1, kind="attack", ev=ev)
+    out.that(first and second and ev.result.total == 12,
+             "two UNTYPED boosts both land -- every existing caller is"
+             " untyped, and that is what the rule says about them",
+             f"{first}/{second}, total {ev.result.total}")
+
+    ev = rolled()
+    one = c.boost_roll(1, kind="attack", kind_of_bonus="item", ev=ev)
+    same = c.boost_roll(1, kind="attack", kind_of_bonus="item", ev=ev)
+    out.that(one and not same and ev.result.total == 11,
+             "two item bonuses of the same size: the second is refused"
+             " and answers False, so the roll carries one of them",
+             f"{one}/{same}, total {ev.result.total}")
+
+    ev = rolled()
+    c.boost_roll(1, kind="attack", kind_of_bonus="item", ev=ev)
+    c.boost_roll(3, kind="attack", kind_of_bonus="item", ev=ev)
+    rising = ev.result.total
+    ev = rolled()
+    c.boost_roll(3, kind="attack", kind_of_bonus="item", ev=ev)
+    c.boost_roll(1, kind="attack", kind_of_bonus="item", ev=ev)
+    falling = ev.result.total
+    out.that(rising == falling == 13,
+             "the LARGER wins whichever order they arrive in -- +1 then"
+             " +3 and +3 then +1 both leave 13, not 14. Both orders,"
+             " because only the difference is added and getting that"
+             " backwards is invisible from one of them",
+             f"rising {rising}, falling {falling}")
+
+    ev = rolled()
+    c.boost_roll(1, kind="attack", kind_of_bonus="item", ev=ev)
+    c.boost_roll(1, kind="attack", kind_of_bonus="feat", ev=ev)
+    out.that(ev.result.total == 12,
+             "and two DIFFERENT types stack, which is the control: the"
+             " rule is about one type, not about boosts",
+             f"total {ev.result.total}, {ev.result.boosted}")
+
+    out.that(not (getattr(REGISTRY["i1743x1"], "dropped", ()) or ()),
+             "i1743x1 carries no marker: the bonus type was its last"
+             " clause",
+             f"{getattr(REGISTRY['i1743x1'], 'dropped', ())}")
+
+
 def a_waiver_that_is_narrowed_rather_than_removed(out: Result) -> None:
     """Two cards narrow an all-or-nothing waiver, and could not say so.
 
@@ -119817,6 +119905,9 @@ DRIVERS = {
     "a_waiver_that_is_narrowed_rather_than_removed": (
         a_waiver_that_is_narrowed_rather_than_removed,
         "a waiver narrowed rather than removed"),
+    "a_boost_carries_a_bonus_type": (
+        a_boost_carries_a_bonus_type,
+        "a boost carries a bonus type"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,
