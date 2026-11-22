@@ -45427,12 +45427,24 @@ def _gate_census() -> tuple[list[tuple[str, str, str]], list[str]]:
         nothing at the call, but the tuple then widens a filter and what
         the filter leads to may well deserve the credit. That one stays a
         finding and is waived with its reason instead.
+
+        **`Continue` is here beside `Return`, and it is the same
+        statement one scope in.** `f1143b` loops over the multiclass
+        swap feats it finds in `REGISTRY` and opens with `if not
+        c.feat(feat): continue` -- which lays nothing for exactly the
+        reason a returning guard lays nothing, and the ref is a loop
+        variable so `resolve` cannot read it either. Without this the
+        site came back as *unreadable*, which is the stronger complaint:
+        not "this gate credits nobody" but "this gate could not be
+        examined at all". Admitting `Continue` answers both, and it is
+        no looser -- a branch whose only statement is `continue` has
+        nowhere to lay anything. #1466.
         """
         out: set[int] = set()
         for node in ast.walk(fn):
             if not isinstance(node, ast.If):
                 continue
-            if any(not isinstance(b, ast.Return | ast.Pass)
+            if any(not isinstance(b, ast.Return | ast.Pass | ast.Continue)
                    for b in node.body) or node.orelse:
                 continue
             test = node.test
@@ -67203,8 +67215,8 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # and `PYTHONPATH=<worktree>/src` is the fix.
     reach = SC._heal_reach()
     out.that(reach["reaches_an_ally"] == 123
-             and reach["holdable"] == 602,
-             "123 of the 602 character-holdable healing rows can reach an"
+             and reach["holdable"] == 603,
+             "123 of the 603 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
              " refusal counter is about, and it has moved seven times:"
              " `i545p2` (#1139) and `p3847` (#1153) by one each against"
@@ -67216,15 +67228,23 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
              " before -- in all six of those the POPULATION grew while"
              " `reaches_an_ally` stood still. The seventh is the exception"
              " and the comment above names it: `p11296c1` moved BOTH,"
-             " because a summon command became a row and it heals an ally",
+             " because a summon command became a row and it heals an ally."
+             " The EIGHTH is `i2324x1` (#1460): its fell-might clause"
+             " grants temporary hit points, which `doctrine.heals` reads"
+             " off the body, and the row had no heal before -- so the"
+             " population grew while `reaches_an_ally` stood still, the"
+             " same shape as the first six",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
-    out.that(reach["self_only"] == 338
+    out.that(reach["self_only"] == 339
              and reach["cannot_reach_an_ally"] == 141
              and reach["reaches_an_ally"] + reach["self_only"]
              + reach["cannot_reach_an_ally"] == reach["holdable"],
-             "and the three buckets partition it -- 338 self-only, 141"
-             " that reach no friend, 122 that do. They have to add up or"
-             " the census is reading something twice."
+             "and the three buckets partition it -- 339 self-only, 141"
+             " that reach no friend, 123 that do. They have to add up or"
+             " the census is reading something twice. `i2324x1` is the"
+             " row that took self-only from 338 to 339, and it is"
+             " `target=SELF` with a temp-HP grant, so it lands in this"
+             " bucket by its declared line and not by a reading."
              " **`p4170` is in the 141 and its heal reaches the caster**,"
              " which is not a contradiction: this census reads the"
              " declared TARGET LINE, and that row's is `EACH_OTHER`."
@@ -71741,24 +71761,62 @@ def three_more_facilities_the_class_work_asked_for(out: Result) -> None:
              "attunements and the bladesinger's own fork. Named so a "
              "number arriving cannot pass unremarked",
              f"{ {r.rsplit('-', 1)[-1]: chargen.OPTION_PICKS[r] for r in picks} }")
-    bad, pairs = [], {}
+    # **The pool can be SMALLER than the pick count, and two tome rows
+    # are.** `deal_build_options` clamps with
+    # `min(OPTION_PICKS[ref] + extra, len(options))`, deliberately -- its
+    # own comment records that a rung asking six of five would raise
+    # inside `rng.sample`. So the thing to assert is *distinct*, and as
+    # many as the pool can supply, rather than the printed figure.
+    #
+    # Measured, and the first of these is a finding about the corpus and
+    # not about this code:
+    #
+    #   `i2899x1`  picks 2, pool **1** -- a level-3 tome of wizard daily
+    #              COLD powers *"of a level equal to or lower than that
+    #              of the tome"*, and the compendium holds one such row
+    #              at level 1. The card cannot be filled from the data,
+    #              so a character gets one power where it prints two
+    #   `i2900x1`  picks 2, pool **2** -- fillable, and there is exactly
+    #              one possible draw
+    #
+    # The `VARIES` arm therefore asks for variation only where there is
+    # a choice to make: a pool of exactly `k` has one draw, and calling
+    # that "answering the first two" would be reading a constraint as a
+    # fault. Both arms still catch what they were written for -- a
+    # repeated option, and a fork with room to choose that does not.
+    bad, pairs, sizes = [], {}, {}
     for ref in picks:
         want = chargen.OPTION_PICKS[ref]
+        pool = chargen.BUILD_OPTIONS.get(ref)
+        held = pool() if callable(pool) else tuple(pool or ())
+        sizes[ref] = len(held)
+        can = min(want, len(held))
         drawn = {chargen.deal_build_options(Random(s), ref) for s in range(30)}
         pairs[ref] = len(drawn)
         for got in drawn:
-            if len(got) != want or len(set(got)) != want:
-                bad.append((ref, got))
+            if len(got) != can or len(set(got)) != can:
+                bad.append((ref, got, f"pool {len(held)}, want {want}"))
     out.that(not bad,
-             "and every draw is that many DISTINCT options -- `rng.sample`, "
-             "which is the whole reason this is a count on one fork rather "
-             "than a second `BUILD_OPTIONS` entry: two entries are two "
-             "independent draws and could hand the same option over twice",
+             "and every draw is as many DISTINCT options as the pool can "
+             "supply -- `rng.sample`, which is the whole reason this is a "
+             "count on one fork rather than a second `BUILD_OPTIONS` "
+             "entry: two entries are two independent draws and could hand "
+             "the same option over twice",
              f"{bad[:3] or 'none repeated over 30 seeds each'}")
-    out.that(all(n > 1 for n in pairs.values()),
-             "and the pair VARIES by seed, so the fork chooses rather than "
-             "answering the first two -- the fault `#1085` is about, one "
-             "arity up",
+    thin = sorted(r for r in picks if sizes[r] <= chargen.OPTION_PICKS[r])
+    out.that(thin == ["i2899x1", "i2900x1"],
+             "and exactly two forks have a pool no bigger than their pick "
+             "count, named so a third arriving cannot hide behind the "
+             "clamp -- `i2899x1` has ONE wizard cold daily at level 3 or "
+             "lower for a card that prints two, which is the compendium "
+             "and not this code, and `i2900x1` has exactly two",
+             f"{thin}: { {r: (sizes[r], chargen.OPTION_PICKS[r]) for r in thin} }")
+    out.that(all(pairs[r] > 1 for r in picks if sizes[r] > chargen.OPTION_PICKS[r]),
+             "and where there IS a choice the pair VARIES by seed, so the "
+             "fork chooses rather than answering the first two -- the "
+             "fault `#1085` is about, one arity up. Asked only of forks "
+             "with room to choose: a pool of exactly `k` has one possible "
+             "draw and is a constraint, not that fault",
              f"{ {r.rsplit('-', 1)[-1]: n for r, n in pairs.items()} }")
 
     # **The rows read both**, which is the half a draw alone does not give.
@@ -72483,16 +72541,44 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
     # reader concludes the feats were done too.** They are not: a feat's
     # family is a keyword the data does not record, which is a different
     # gap from a chassis fork's printed list.
-    out.that(not rows_ and len(feats) == 2,
-             "and NO chassis row carries the symbol any more, while two "
-             "feats still do -- 0 and 2, down from 31 and 4 through 22 "
-             "and 14, 6 and 4, and 0 and 4. `#1269` has the split",
+    # **It is 0 and 0 now, and that is NOT both feats being finished.**
+    # This arm used to read `0 and 2` naming `f3616` and `f3646`, and
+    # the comment above warns that a count cannot tell two going from
+    # two arriving. What happened is a third thing it also cannot see:
+    # both feats stopped carrying *this* symbol without the clause being
+    # written.
+    #
+    #   `f3616`  marker cleared, the gap recorded in `audit.KNOWN_SILENT`
+    #            -- `lint.py` refuses `dropped=` on a row whose body does
+    #            nothing, so the complaint moved rather than closing
+    #   `f3646`  re-pointed to `chargen.LADDER_SKIPS(p15858)`, a
+    #            different gap, so this filter no longer matches it
+    #
+    # So the two arms below assert **where each went**, not how many are
+    # left. That is stricter than the count it replaces: finishing either
+    # row for real, or quietly dropping its excuse, reds here.
+    out.that(not rows_ and not feats,
+             "no chassis row and no feat carries the symbol now -- 0 and "
+             "0, down from 31 and 4 through 22 and 14, 6 and 4, 0 and 4, "
+             "and 0 and 2. `#1269` has the split",
              f"{len(rows_)} rows, {len(feats)} feats: {feats}")
-    out.that(sorted(feats) == ["f3616", "f3646"],
-             "and they are exactly those two feats, which is the half a "
-             "count cannot say: two going while two others arrived "
-             "would read identically",
-             f"{sorted(feats)}")
+    import audit as _audit_for_silent
+
+    out.that("f3616" in _audit_for_silent.KNOWN_SILENT,
+             "and `f3616` reaching 0 is its gap being RELOCATED, not "
+             "closed: its marker went because `lint.py` refuses "
+             "`dropped=` on a row whose body does nothing, and the "
+             "clause is recorded in `audit.KNOWN_SILENT` instead. A "
+             "reader taking 0 for done would be wrong about this row",
+             f"{'f3616' in _audit_for_silent.KNOWN_SILENT}")
+    out.that(REGISTRY["f3646"].unfinished
+             == ("chargen.LADDER_SKIPS(p15858)",),
+             "and `f3646` was RE-POINTED rather than written -- it still "
+             "carries a marker, for a different gap, which is why this "
+             "filter stopped matching it. Both halves said out loud "
+             "because the count above cannot distinguish either case "
+             "from the work being done",
+             f"{REGISTRY['f3646'].unfinished}")
 
     out.that(not [r for r, p in REGISTRY.items()
                   if "Powers.per_encounter(extra=)" in (p.unfinished or ())],
@@ -91882,8 +91968,23 @@ def a_resistance_lasts_an_extra_round(out: Result) -> None:
             world.bus.emit(TurnEnd(actor=who, round=world.round))
 
     def held(world, who: int) -> list:  # noqa: ANN001
+        """This creature's standing RESISTANCES, and not its waivers.
+
+        **A label-suffix match is not enough and `f3564` is why.**
+        `c.ignore_resistance` labels its effect `"<ref> ignores N
+        resist"`, which also ends in `" resist"` -- so the moment that
+        feat was finished and began arming on this board, every arm here
+        read one extra effect and 11 of 16 went red. The rule was right;
+        its filter was reading a second verb's output.
+
+        `f3564`'s own `amount=0` makes it look like a bug and it is not:
+        the card waives the *insubstantial* halving alone, so the
+        blanket resistance figure is deliberately zero and the halving
+        is a separate flag. See its docstring.
+        """
         return [e for e in world.effects.of(who)
-                if str(e.label).endswith(" resist")]
+                if str(e.label).endswith(" resist")
+                and " ignores " not in str(e.label)]
 
     def bare() -> tuple:
         """The board with the ITEM'S OWN watch taken off.
@@ -97306,13 +97407,17 @@ def an_alchemical_attack_is_told_apart_from_an_ordinary_one(out: Result) -> None
     # blast, so one attack really does call the watch three times -- and a
     # latch was written and then removed, because taking it out left this
     # green. `resolve.temp_hp` is "temporary hit points do not stack --
-    # the larger pool wins" and returns *without emitting* when the new
-    # pool is no bigger, so the second and third calls announce nothing.
+    # the larger pool wins", so the second and third calls grant nothing.
     #
     # It is kept because it is the printed clause and it is what would
     # silently go wrong if that non-stacking rule were ever changed -- the
     # same call `story/CLAUDE.md` records for `aftermath`'s `0 <` guard.
     # The second assertion is the one with a live control.
+    #
+    # **That prediction half came true and `temps` records which half.**
+    # `temp_hp` used to return without emitting for a swallowed pool and
+    # now announces every call with `swallowed=`, so this arm went red on
+    # `[3, 3, 3]` while the non-stacking rule itself was untouched. #1466.
     from combat_engine.engine.events import Hit, TempHP
 
     area = [
@@ -97328,12 +97433,31 @@ def an_alchemical_attack_is_told_apart_from_an_ordinary_one(out: Result) -> None
              "alchemical blocks")
 
     def temps(power: str, hits: int) -> list[int]:
+        """The temporary hit points this attack actually GRANTED.
+
+        **`TempHP.swallowed` is read here and the comment above is why.**
+        That comment predicted this arm would go red *"if that
+        non-stacking rule were ever changed"*, and something adjacent
+        changed instead: `resolve.temp_hp` used to return without
+        emitting when the new pool was no bigger, and it now announces
+        every call with `swallowed=` saying whether the pool moved. So
+        three hits of one burst emit three events where they used to emit
+        one, and `[3, 3, 3]` is the *announcement* rather than three
+        payouts.
+
+        The printed rule is intact -- the pool still does not stack -- so
+        the fix is to count what landed, which is what the clause is
+        about. Keeping `len(...) == 1` against the raw event list would
+        have been asserting that an unobservable effect stays
+        unobservable, which is exactly what the event was added to stop.
+        """
         w, who, _ = A.board("f2864", 1)
         foes = [e for e in w.entities if e != who][:hits]
         n = len(w.bus.log)
         for f in foes:
             w.bus.emit(Hit(attacker=who, target=f, power=power, critical=False))
-        return [e.amount for e in w.bus.log[n:] if isinstance(e, TempHP)]
+        return [e.amount for e in w.bus.log[n:]
+                if isinstance(e, TempHP) and not e.swallowed]
 
     if area:
         one, three = temps(area[0], 1), temps(area[0], 3)
@@ -113531,6 +113655,18 @@ UNNAMED_KINDS_OWED = frozenset(
         # inside it is worth more than the squares suggest -- and pricing
         # that is the deferred capability `#293` is about.
         "move_in_zone",
+        # **`shed_light` is owed on the same standing ruling, and it
+        # arrived here the day it landed** -- which is this list working
+        # rather than a lapse, exactly as `move_companion` below records.
+        # `f1270`'s sibling clause offers dropping a light source as a
+        # free action instead of a minor (`actions._shed`), and what that
+        # is worth is a question nothing here can answer cheaply: light
+        # decides concealment for *both* sides, so shedding it helps
+        # whoever benefits more from seeing, and the AI has no term for
+        # that at all. A guessed weight would pre-empt `#293`, and
+        # `#1098`'s rule is that a declared 0.0 claims the kind was
+        # priced at nothing. #1466.
+        "shed_light",
         # **`move_companion` is owed on exactly the same standing ruling**,
         # and it arrived here the day it landed -- which is this list
         # working rather than a lapse. `f1336` prints *"once per turn, you

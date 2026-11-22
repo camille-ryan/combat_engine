@@ -2732,6 +2732,20 @@ def i2323x1(c: Cast) -> None:
         label = str(getattr(ev, "label", ""))
         if not label.endswith(" resist"):
             return
+        # **A waiver is not a resistance, and the suffix cannot tell
+        # them apart.** `c.ignore_resistance` labels its effect
+        # `"<ref> ignores N resist"`, which also ends in `" resist"` --
+        # so this gate reaches it. Today the class test below happens to
+        # catch the one row that lays one (`f3564` is a feat, `cls` is
+        # `""`), which is luck rather than a reading: an artificer power
+        # waiving a resistance would be lengthened as though it granted
+        # one, and the card says *"a resistance you grant"*.
+        #
+        # The same suffix match in `drivers.resist_lasts_an_extra_round`
+        # had no such accidental guard, and 11 of its 16 arms went red
+        # the day `f3564` started arming. #1466.
+        if " ignores " in label:
+            return
         row = get(label.split(" ", 1)[0])
         if row is None or row.cls != "artificer":
             return
