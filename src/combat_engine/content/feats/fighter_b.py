@@ -1333,7 +1333,7 @@ _LIGHT_OR_CHAIN = ("", "cloth", "leather", "hide", "chain")
 
 @power("f1970", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("Weapon.improvised",))
+)
 def f1970(c: Cast) -> None:
     """+1 damage with the weapon style chosen for a class feature.
 
@@ -1362,14 +1362,28 @@ def f1970(c: Cast) -> None:
       armour gate in `features/` is, because another row can change what
       is worn.
 
-    Still dropped, for the one remaining leg: a weapon its wielder is not
-    proficient with counts as improvised, and there is no improvised
-    weapon on the board at all. `Weapon.improvised` is the symbol
-    `cf:fighter-weaponmaster-f3s0` already waits on, and it is the whole
-    of that leg's style -- so the gate is left false rather than guessed.
+    **All six legs are written, and the sixth is where the marker was
+    stale.** It named `Weapon.improvised` -- a column -- and said
+    `cf:fighter-weaponmaster-f3s0` *"already waits on"* it. That row is
+    **unmarked**: its own note settled the reading instead, and the
+    sentence is worth quoting because it is what unblocked this one --
+    *"improvised is a state of a weapon relative to a character, the
+    thing in your hand you were never trained for, and the engine
+    already records exactly that"*.
+
+    So the arena leg asks the proficiency record, negated, through
+    `c.proficient_with` -- the public door onto the same `_trained_with`
+    the attack path uses to decide whether a weapon's proficiency bonus
+    reaches a swing at all. `c.improvised` beside it is the **setter**,
+    for the card that re-states such weapons; this row merely pays on
+    one, so it asks rather than sets.
+
+    Found by checking whether the row this note named as waiting was
+    still waiting. It was not. #1458.
     """
     me, world = c.me, c.world
-    legs = ("great-weapon", "guardian", "tempest", "brawling", "battlerager")
+    legs = ("great-weapon", "guardian", "tempest", "brawling",
+            "battlerager", "arena")
     if not any(c.build(leg) for leg in legs):
         return
     two_handed = c.build("great-weapon")
@@ -1388,6 +1402,20 @@ def f1970(c: Cast) -> None:
             return gear.two_weapon
         if c.build("brawling"):
             return gear.off is None and not gear.shield
+        if c.build("arena"):
+            # **The improvised leg, asked the way its own feature asks
+            # it.** `cf:fighter-weaponmaster-f3s0` is the talent and its
+            # note settled the reading: *"improvised is a state of a
+            # weapon relative to a character -- the thing in your hand
+            # you were never trained for -- and the engine already
+            # records exactly that"*. So the gate is the proficiency
+            # record, negated, and `c.proficient_with` is the public
+            # door onto the same `_trained_with` the attack path uses.
+            #
+            # The old marker named `Weapon.improvised`, a column -- and
+            # the feature that would have waited for it is written and
+            # unmarked, which is how this one was found.
+            return not c.proficient_with(held, on=me)
         return gear.armour in _LIGHT_OR_CHAIN
 
     c.bonus("damage", 1, on=me, until=When.ENCOUNTER, when=style)

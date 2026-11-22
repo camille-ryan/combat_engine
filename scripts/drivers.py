@@ -72792,6 +72792,141 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def the_sixth_fighter_style_is_an_untrained_weapon(out: Result) -> None:
+    """*"+1 damage with the weapon style chosen for a class feature"* --
+    `f1970`, whose sixth leg pays on an **improvised** weapon. #1458.
+
+    **The marker named a column and the row it cited had stopped
+    waiting.** It read `Weapon.improvised` and said
+    `cf:fighter-weaponmaster-f3s0` *"already waits on"* it. That row is
+    unmarked: its own note settled the reading, and the sentence is what
+    unblocked this one -- *"improvised is a state of a weapon relative to
+    a character, the thing in your hand you were never trained for, and
+    the engine already records exactly that"*.
+
+    So `c.proficient_with` is the public door onto `_trained_with`, which
+    the attack path has always used to decide whether a weapon's
+    proficiency bonus reaches a swing. `c.improvised` beside it is the
+    **setter**, for the card that re-states such weapons; this row pays
+    on one and therefore asks.
+
+    **The no-record case is asserted on purpose.** `_trained_with`
+    answers True when a creature has no proficiency record at all --
+    a monster has no `Build`, and a hand-built board records nothing --
+    so a row gating on *not* proficient reads False there rather than
+    paying out blindly. A reader that inverted a missing record would
+    make every probe's weapon improvised.
+    """
+    from dataclasses import replace as _replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Gear, Mods
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW, TALENT = "f1970", "cf:fighter-weaponmaster-f3s0"
+
+    out.that(not REGISTRY[TALENT].unfinished,
+             "premise: the talent this row's marker said it was waiting"
+             " for carries no marker -- which is how the staleness was"
+             " found, and the check is one command",
+             f"{REGISTRY[TALENT].unfinished}")
+    out.that("arena" in [b.name for b in chargen.BUILDS["fighter"]],
+             "and the improvised talent's leg is one of the fighter's"
+             " six, so there is a build for the row to read",
+             f"{[b.name for b in chargen.BUILDS['fighter']]}")
+
+    def staged(*, trained: bool) -> tuple:
+        """A fighter on the arena leg, holding a weapon it may not know."""
+        world, me, _ = _board(ROW, 1)
+        gear = must(world.get(me, Gear), "the character has gear")
+        arm = _replace(chargen.PRINTED["w3623"], ref="w3623")
+        gear.weapons.append(arm)
+        gear.wield(arm)
+        # **A record either way, never an empty one**, because empty means
+        # "no record" and `_trained_with` answers True to that -- the arm
+        # the docstring above is about.
+        #
+        # `frozenset`, so the fields are replaced rather than mutated --
+        # a `.clear()` here raised, which is the kind of thing a rule
+        # written against the wrong container does loudly rather than
+        # quietly.
+        gear.trained = frozenset({"w3623" if trained else "w3610"})
+        gear.bands = frozenset()
+        # **The arena leg has to be the ONLY one.** `c.set_build` adds a
+        # leg rather than replacing one, and the board deals this fighter
+        # `great-weapon` -- so the row's FIRST branch won and both arms
+        # measured the two-handed style instead of the improvised one.
+        # The dealt leg comes out of `Build.choices`, which is the one
+        # place that decides.
+        legs = must(world.get(me, Build), "the character has a build")
+        legs.choices.discard("great-weapon")
+        cast = Cast(world=world, me=me, ref=ROW)
+        cast.set_build("arena")
+        return world, me, cast, arm
+
+    def gained(*, trained: bool) -> int:
+        """What the ROW adds, measured against the same board without it.
+
+        **A bare total is the wrong measurement**, and the first draft of
+        this rule used one: the audit board hands the caster other damage
+        bonuses, so `total("damage")` was already positive before the row
+        ran and the untrained arm passed on the board's own numbers. The
+        difference is the row.
+        """
+        world, me, cast, _arm = staged(trained=trained)
+        # **A real WEAPON power**, because the row's own gate reads the
+        # declared row's keywords first. The first draft used the board's
+        # aura ref, which carries none, so the gate refused in both arms
+        # and the difference was 0 either way.
+        want = {"power": "p997", "actor": me}
+        mods = must(world.get(me, Mods), "the character has mods")
+        before = mods.total("damage", want)
+        REGISTRY[ROW].body(cast)
+        return mods.total("damage", want) - before
+
+    _, me0, cast0, arm0 = staged(trained=False)
+    out.that(not cast0.proficient_with(arm0, on=me0),
+             "premise: the weapon in hand is one this fighter has no"
+             " training with, which is what the card calls improvised",
+             "untrained")
+    _, me1, cast1, arm1 = staged(trained=True)
+    out.that(cast1.proficient_with(arm1, on=me1),
+             "premise: and the same weapon is proficient once it is in"
+             " the training record, so the two arms differ in exactly"
+             " that",
+             "trained")
+
+    untrained, proficient = gained(trained=False), gained(trained=True)
+    out.that(untrained == 1,
+             "the row adds exactly +1 on the arena leg while the weapon"
+             " is one the fighter was never trained for",
+             f"{untrained}")
+    out.that(proficient == 0,
+             "and nothing once it is proficient with it -- the arena"
+             " style is about a weapon you were never trained for, so"
+             " this is the arm that makes the gate the card's rather"
+             " than the leg's",
+             f"{proficient}")
+
+    # -- the missing-record bargain -----------------------------------------
+    w3, me3, c3, _ = staged(trained=False)
+    bare = must(w3.get(me3, Gear), "gear")
+    bare.trained = frozenset()
+    bare.bands = frozenset()
+    out.that(c3.proficient_with(on=me3),
+             "a creature with NO proficiency record answers 'trained' --"
+             " `_trained_with`'s own bargain, kept rather than inverted."
+             " A reader that read a missing record as untrained would"
+             " make every hand-built board's weapon improvised",
+             "no record -> trained")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker: all six legs are written",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_borrowed_power_rolls_on_charisma(out: Result) -> None:
     """*"When you use any attack power gained through a multiclass feat ...
     you can use Charisma for the power's attack rolls"* -- `f1120`. #1457.
@@ -126046,6 +126181,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        the_sixth_fighter_style_is_an_untrained_weapon,
         a_borrowed_power_rolls_on_charisma,
         a_form_ended_from_outside_it,
         a_creature_takes_a_different_stat_block,
@@ -126442,6 +126578,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "arena_style": (
+        the_sixth_fighter_style_is_an_untrained_weapon,
+        "the fighter's sixth style pays on a weapon it was never trained"
+        " for (#1458)",
     ),
     "borrowed_ability": (
         a_borrowed_power_rolls_on_charisma,

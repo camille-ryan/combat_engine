@@ -122,6 +122,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - The ability this character's class attacks with.
 - `c.primary_mod`
   - The modifier of `c.primary`. What the printed phrase means.
+- `c.proficient_with(self, arm: 'Weapon | None' = None, *, on: 'int | None' = None) -> 'bool'`
+  - Is this creature trained with the weapon it is holding?
 - `c.score(self, a: 'Ability') -> 'int'`
   - The raw ability score -- 15, 18 -- not its modifier or bonus.
 - `c.shares_magic(self, weapon: 'Weapon', *, from_: 'Weapon', on: 'int | None' = None) -> 'bool'`

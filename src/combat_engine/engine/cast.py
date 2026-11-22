@@ -24576,6 +24576,40 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             gear.trained = gear.trained | fresh
         return len(fresh)
 
+    def proficient_with(
+        self, arm: Weapon | None = None, *, on: int | None = None
+    ) -> bool:
+        """Is this creature trained with the weapon it is holding?
+
+        The **public** half of `_trained_with`, which the attack path has
+        always used to decide whether a weapon's proficiency bonus reaches
+        the swing. `cf:fighter-weaponmaster-f3s0`'s note is where the
+        reading comes from: *"improvised is a state of a weapon relative
+        to a character -- the thing in your hand you were never trained
+        for -- and the engine already records exactly that."*
+
+        So *"a weapon its wielder is not proficient with counts as
+        improvised"* is this, negated, and `f1970` is the row that needed
+        asking rather than setting. `c.improvised` beside it is the
+        **setter** for the card that re-states such weapons; this is the
+        gate for a card that merely pays on one.
+
+        `arm` left out means whatever is in the main hand, which is what
+        every caller wants and saves each of them the lookup.
+
+        **True when there is no record**, which is `_trained_with`'s own
+        bargain and deliberately not changed here: a monster has no
+        `Build` and a hand-built board records nothing, so turning a
+        missing record into "untrained" would make every probe's weapon
+        improvised. A row gating on *not* proficient therefore reads
+        False on such a board rather than paying out blindly. #1458.
+        """
+        who = self.me if on is None else on
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return True
+        return self._trained_with(gear, arm if arm is not None else gear.main)
+
     def improvised(
         self,
         *,

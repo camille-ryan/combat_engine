@@ -673,7 +673,14 @@ CATEGORIES: dict[str, dict] = {
                 "dex_", "dex_mod", "int_", "int_mod", "level", "mod",
                 "primary", "primary_mod", "score", "stats", "str_", "str_mod",
                 "total", "total_defence", "weapon_dice", "weapon_group",
-                "gains_proficiency", "improvised", "shares_magic",
+                "gains_proficiency", "improvised",
+                # The READER beside `improvised`'s setter: "is this
+                # creature trained with what it is holding", which is
+                # what *"a weapon you are not proficient with counts as
+                # improvised"* asks. `f1970` pays on one; `improvised`
+                # re-states them. #1458.
+                "proficient_with",
+                "shares_magic",
                 "weapon_of", "weapon_proficiency",
                 # Beside `wielding`, which is its opposite: that one
                 # asks what is in hand and this one what was put
