@@ -6738,7 +6738,120 @@ def power_swap(powers: list[str], feats: list[str], *,
         # observable, where a hand edit is not.
         if record is not None:
             record.add(f"option:{ref}:{took}")
+            # **The PAIR, which nothing recorded.** The four `#1114`
+            # rows print a second sentence -- *"you can substitute the
+            # original power back in after another extended rest"* --
+            # and "the original" is the card that left.
+            #
+            # Both refs in one record, and that is not redundancy with
+            # `option:` above: the re-tune **drops** the `option:` entry
+            # when it puts the original back, because that entry is the
+            # live grant. If the drawn card's ref lived only there, the
+            # next rest would have nothing to swap forward to. Measured
+            # -- the second rest raised.
+            record.add(f"swapped:{ref}:{gone}+{took}")
     return out
+
+
+def retrain_on_rest(
+    who: Character, feat: str, *, choices: Iterable[str],
+) -> tuple[Character, frozenset[str]]:
+    """*"You can substitute the original power back in after another
+    extended rest."* -- `f2441`, `f2443`, `f2445`, `f2446`.
+
+    Flips one `Swap.pool` feat's trade: the card the build drew goes
+    back and the original returns, or the other way round.
+
+    **Returns the sheet AND the choices that go with it**, because the
+    trade is recorded in two places and only one of them is the hand.
+    `power_swap` removes the original from `powers` and does **not** add
+    the drawn card there -- it writes `option:<feat>:<power>` and the
+    feat's own body hands the card over with `c.grant_row` at board
+    time, which is `#758`'s convention. So putting the original back
+    means restoring it to the hand *and* dropping the `option:` record,
+    or nothing would change: the feat would go on granting the card the
+    player just gave up.
+
+    A **new** `Character` either way, the way `retrain` beside it
+    promises, so a caller can offer the change and keep the old sheet if
+    the player declines.
+
+    **The AI never calls this, and that is Camille's ruling rather than
+    an omission.** Asked on `#1441`, 2026-11-22:
+
+    > *"you've diagnosed this correctly. Even as a human player I'd have
+    > a hard time using this feat. Beyond forcing a change to test that
+    > it works, I don't think AI ever needs to take this feat or make a
+    > swap. It depends heavily on campaign and scouting.*
+    >
+    > *I would still like, however, to have it available for human
+    > players and for them to have the ability to make that swap."*
+
+    So the facility exists and is reachable, and `policy/` has no term
+    that reaches for it. The reason it would be useless to the AI is
+    worth writing down: the swap is chosen by a fixed rating table, so
+    asking the same question the next day returns the same answer and
+    the character would never swap back. What would change the answer --
+    what tomorrow's adventure needs -- is campaign knowledge the table
+    cannot see.
+
+    **Both halves are PASSED IN, because a `Character` does not carry
+    them.** `power_swap` writes `option:<feat>:<in>` and
+    `swapped:<feat>:<out>` into the set that becomes the spawned
+    entity's `Build.choices` component -- `Character` has fifteen fields
+    and none of them is that set. So the caller hands over what it
+    recorded, which is what `story/save.py` persists and what a page
+    showing the sheet already has.
+
+    Without the `swapped:` half the original is unrecoverable, which is
+    why it is recorded beside the first rather than derived: the sheet's
+    `powers` is the hand *after* the trade, so re-running `power_swap`
+    on it answers a different question.
+
+    Raises rather than returning the sheet unchanged, exactly as
+    `retrain` does and for its stated reason: a silent no-op hands back
+    a character that looks re-tuned and is not.
+    """
+    said = list(choices)
+    took = next(
+        (c.split(":", 2)[2] for c in said
+         if c.startswith(f"option:{feat}:")),
+        "",
+    )
+    pair = next(
+        (c.split(":", 2)[2] for c in said
+         if c.startswith(f"swapped:{feat}:")),
+        "",
+    )
+    gone, _, drawn = pair.partition("+")
+    # `option:` is the live grant and is dropped when the original goes
+    # back, so the drawn ref is read from the pair rather than from it.
+    took = took or drawn
+    if not gone or not took:
+        raise ValueError(
+            f"{feat} recorded no swap on this sheet, so there is nothing "
+            f"to substitute back"
+        )
+    granted = f"option:{feat}:{took}"
+    kept = frozenset(said)
+    if gone in who.powers:
+        # The original is in hand, so this rest takes the drawn card
+        # again: out it goes and the grant comes back.
+        return (
+            replace(who, powers=[p for p in who.powers if p != gone]),
+            kept | {granted},
+        )
+    if granted not in kept:
+        raise ValueError(
+            f"{feat} has neither its original nor its drawn power on "
+            f"this sheet, so there is nothing to substitute"
+        )
+    # The drawn card is in hand by grant, so this rest puts the original
+    # back and stops the grant.
+    return (
+        replace(who, powers=[*who.powers, gone]),
+        frozenset(c for c in kept if c != granted),
+    )
 
 
 def retrain(who: Character, drop: str, take: str) -> Character:

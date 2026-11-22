@@ -2642,14 +2642,16 @@ def f2420(c: Cast) -> None:
        # and 0 is that rather than a guess.
        swap=Swap(level=0, usage=Usage.DAILY, utility=False,
                  pool="class"),
-       # **`dropped=`, and the SAME symbol it used to carry as
-       # `todo=`.** The row plays now -- the pool half is what a
-       # fight sees -- and what is still missing is a rest-time
-       # re-tune, which is the thing that symbol names. So the
-       # marker moves category rather than disappearing, and
-       # `blocked.py --group` keeps listing it for the clause that
-       # really is owed. #1114.
-       dropped=("chargen.retrain_on_rest()",))
+       # **The rest-time re-tune is written and the marker is gone.**
+       # The row always played -- the pool half is what a fight sees --
+       # and that one clause was what was owed.
+       # `chargen.retrain_on_rest` flips the trade off the two records
+       # `power_swap` leaves on the sheet. Camille's ruling on `#1441`
+       # is why it exists rather than being declined: *"I would still
+       # like, however, to have it available for human players and for
+       # them to have the ability to make that swap."* The AI never
+       # calls it, by the same ruling. #1114, #1441.
+       )
 def f2441(c: Cast) -> None:
     """A martial daily attack from the class list, traded for one of the
     same level already in hand. `#1114`.
@@ -2683,14 +2685,16 @@ def f2441(c: Cast) -> None:
        # and 0 is that rather than a guess.
        swap=Swap(level=0, usage=None, utility=True,
                  pool="class"),
-       # **`dropped=`, and the SAME symbol it used to carry as
-       # `todo=`.** The row plays now -- the pool half is what a
-       # fight sees -- and what is still missing is a rest-time
-       # re-tune, which is the thing that symbol names. So the
-       # marker moves category rather than disappearing, and
-       # `blocked.py --group` keeps listing it for the clause that
-       # really is owed. #1114.
-       dropped=("chargen.retrain_on_rest()",))
+       # **The rest-time re-tune is written and the marker is gone.**
+       # The row always played -- the pool half is what a fight sees --
+       # and that one clause was what was owed.
+       # `chargen.retrain_on_rest` flips the trade off the two records
+       # `power_swap` leaves on the sheet. Camille's ruling on `#1441`
+       # is why it exists rather than being declined: *"I would still
+       # like, however, to have it available for human players and for
+       # them to have the ability to make that swap."* The AI never
+       # calls it, by the same ruling. #1114, #1441.
+       )
 def f2443(c: Cast) -> None:
     """`f2441` for a utility power -- the one printed line that names no
     usage, which is why `Swap.utility` exists beside `Swap.usage`. See
@@ -2710,14 +2714,16 @@ def f2443(c: Cast) -> None:
        # and 0 is that rather than a guess.
        swap=Swap(level=0, usage=Usage.AT_WILL, utility=False,
                  pool="class"),
-       # **`dropped=`, and the SAME symbol it used to carry as
-       # `todo=`.** The row plays now -- the pool half is what a
-       # fight sees -- and what is still missing is a rest-time
-       # re-tune, which is the thing that symbol names. So the
-       # marker moves category rather than disappearing, and
-       # `blocked.py --group` keeps listing it for the clause that
-       # really is owed. #1114.
-       dropped=("chargen.retrain_on_rest()",))
+       # **The rest-time re-tune is written and the marker is gone.**
+       # The row always played -- the pool half is what a fight sees --
+       # and that one clause was what was owed.
+       # `chargen.retrain_on_rest` flips the trade off the two records
+       # `power_swap` leaves on the sheet. Camille's ruling on `#1441`
+       # is why it exists rather than being declined: *"I would still
+       # like, however, to have it available for human players and for
+       # them to have the ability to make that swap."* The AI never
+       # calls it, by the same ruling. #1114, #1441.
+       )
 def f2445(c: Cast) -> None:
     """`f2441` for an at-will attack. See `f2441`."""
     got = c.chosen_option(c.ref)
@@ -2735,14 +2741,16 @@ def f2445(c: Cast) -> None:
        # and 0 is that rather than a guess.
        swap=Swap(level=0, usage=Usage.ENCOUNTER, utility=False,
                  pool="class"),
-       # **`dropped=`, and the SAME symbol it used to carry as
-       # `todo=`.** The row plays now -- the pool half is what a
-       # fight sees -- and what is still missing is a rest-time
-       # re-tune, which is the thing that symbol names. So the
-       # marker moves category rather than disappearing, and
-       # `blocked.py --group` keeps listing it for the clause that
-       # really is owed. #1114.
-       dropped=("chargen.retrain_on_rest()",))
+       # **The rest-time re-tune is written and the marker is gone.**
+       # The row always played -- the pool half is what a fight sees --
+       # and that one clause was what was owed.
+       # `chargen.retrain_on_rest` flips the trade off the two records
+       # `power_swap` leaves on the sheet. Camille's ruling on `#1441`
+       # is why it exists rather than being declined: *"I would still
+       # like, however, to have it available for human players and for
+       # them to have the ability to make that swap."* The AI never
+       # calls it, by the same ruling. #1114, #1441.
+       )
 def f2446(c: Cast) -> None:
     """Same as f2441 for an encounter power."""
     got = c.chosen_option(c.ref)

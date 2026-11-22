@@ -39915,9 +39915,15 @@ def multiclassed_into(out: Result) -> None:
                           multiclass="ardent", record=rec)
         out.that(aug[0] not in left,
                  f"the outgoing augmentable at-will goes back ({left})")
-        out.that(len(rec) == 1 and next(iter(rec)).startswith("option:f2697:"),
+        # **Filtered to `option:`, because the record now carries two
+        # entries per trade.** `swapped:<feat>:<out>+<in>` is the pair,
+        # written so a rest-time re-tune can put the original back after
+        # the `option:` grant has been dropped -- see
+        # `chargen.retrain_on_rest`. Counting the whole set read 2.
+        offers = sorted(r for r in rec if r.startswith("option:f2697:"))
+        out.that(len(offers) == 1,
                  f"and the incoming one is recorded against the feat ({rec})")
-        drawn = next(iter(rec)).rsplit(":", 1)[1] if rec else ""
+        drawn = offers[0].rsplit(":", 1)[1] if offers else ""
         row = REGISTRY.get(drawn)
         out.that(row is not None and row.cls == "ardent",
                  f"drawn from the MULTICLASS and not the character's own"
@@ -87217,6 +87223,163 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_swapped_power_goes_back_at_a_rest(out: Result) -> None:
+    """*"You can substitute the original power back in after another
+    extended rest."* -- the second clause on `f2441`, `f2443`, `f2445`
+    and `f2446`, which all four carried as `chargen.retrain_on_rest()`.
+
+    **Camille ruled that it gets built rather than declined**, which is
+    why this exists at all. Asked on `#1441`, 2026-11-22:
+
+    > *"you've diagnosed this correctly. Even as a human player I'd have
+    > a hard time using this feat. Beyond forcing a change to test that
+    > it works, I don't think AI ever needs to take this feat or make a
+    > swap. It depends heavily on campaign and scouting.*
+    >
+    > *I would still like, however, to have it available for human
+    > players and for them to have the ability to make that swap."*
+
+    So the facility is reachable and `policy/` has no term that reaches
+    for it. The reason it is useless to the AI is the diagnosis Camille
+    agreed with: the swap is chosen by a fixed rating table, so asking
+    again the next day returns the same answer.
+
+    **The outgoing card had to start being recorded.** `power_swap` wrote
+    `option:<feat>:<in>` and nothing for the half that left, so *"the
+    original"* was unrecoverable -- the sheet's `powers` is the hand
+    after the trade, so re-running the swap on it answers a different
+    question.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY
+
+    FEATS = ("f2441", "f2443", "f2445", "f2446")
+    FEAT = "f2441"
+
+    # -- both halves are recorded -------------------------------------------
+    hand = [p for p in REGISTRY
+            if REGISTRY[p].cls == "fighter"
+            and REGISTRY[p].usage is not None
+            and str(getattr(REGISTRY[p].usage, "value", "")) == "daily"
+            and (REGISTRY[p].level or 0) >= 1][:4]
+    out.that(len(hand) >= 2,
+             "premise: the class list has at least two dailies for the"
+             " trade to pick between",
+             f"{hand}")
+    said: set[str] = set()
+    left = chargen.power_swap(list(hand), [FEAT], cls="fighter", level=10,
+                              record=said)
+    # `swapped:<feat>:<out>+<in>` carries the PAIR, because the re-tune
+    # drops the `option:` entry -- that one is the live grant -- and the
+    # drawn ref has to survive it.
+    went = {c.split(":", 2)[2].partition("+")[0]
+            for c in said if c.startswith("swapped:")}
+    came = {c.split(":", 2)[2] for c in said if c.startswith("option:")}
+    paired = {c.split(":", 2)[2].partition("+")[2]
+              for c in said if c.startswith("swapped:")}
+    out.that(len(went) == 1 and len(came) == 1 and paired == came,
+             "the trade records BOTH halves -- `option:` for the card"
+             " that came in and `swapped:<out>+<in>` for the pair, which"
+             " nothing recorded before. The pair carries the drawn ref"
+             " too, because the re-tune drops the `option:` entry",
+             f"in {sorted(came)}, out {sorted(went)},"
+             f" paired {sorted(paired)}")
+    # **Guarded, not `next(iter(...))`.** Under a plant that records
+    # neither half a bare `next` raises `StopIteration` here, which kills
+    # the rule instead of failing it -- no FAIL line, so the plant reads
+    # as passing on every arm below.
+    gone = next(iter(sorted(went)), "")
+    took = next(iter(sorted(came)), "")
+
+    def tuned(sheet, feat: str, said_: object) -> tuple:  # noqa: ANN001
+        """`retrain_on_rest`, with a raise turned into a reportable miss.
+
+        It raises by design -- `retrain`'s own reason, that a silent
+        no-op hands back a sheet which looks re-tuned and is not -- so
+        four of this rule's plants reach it. Caught here so they FAIL
+        rather than killing the rule.
+        """
+        try:
+            return chargen.retrain_on_rest(sheet, feat, choices=said_)
+        except ValueError:
+            return None, frozenset()
+    out.that(gone not in left,
+             "premise: the original is out of the hand that comes back",
+             f"{sorted(left)}, gone {gone}")
+
+    # -- the re-tune puts the original back ----------------------------------
+    # **The drawn card is NOT in the hand**, and that is the shape the
+    # re-tune has to work with: `power_swap` removes the original and
+    # writes `option:<feat>:<power>`, and the feat's own body hands the
+    # card over with `c.grant_row` at board time. Measured -- the
+    # returned hand is three long and holds neither `took` nor `gone`.
+    out.that(took not in left,
+             "premise: the drawn card arrives by GRANT and is not in the"
+             " dealt hand, so the trade is recorded in two places and"
+             " only one of them is `powers`",
+             f"{sorted(left)}, took {took}")
+
+    sheet = chargen.Character(cls="fighter", level=10, powers=list(left),
+                              team="good", build="", feats=[FEAT])
+    back, kept = tuned(sheet, FEAT, said)
+    out.that(back is not None and gone in back.powers,
+             "the re-tune puts the ORIGINAL power back into the hand --"
+             " 'substitute the original power back in'",
+             f"{back and sorted(back.powers)}")
+    out.that(f"option:{FEAT}:{took}" not in kept,
+             "**and it drops the grant with it.** Without that the feat"
+             " goes on handing over the card the player just gave up,"
+             " and nothing would have changed",
+             f"{sorted(kept)}")
+    out.that(sheet.powers == list(left),
+             "while the sheet handed in is untouched, the way `retrain`"
+             " beside it promises: a caller can offer the change and"
+             " keep the old sheet if the player declines",
+             f"{sorted(sheet.powers)}")
+
+    # -- and back again ------------------------------------------------------
+    again, re_kept = tuned(back, FEAT, kept) if back is not None \
+        else (None, frozenset())
+    out.that(again is not None and gone not in again.powers
+             and f"option:{FEAT}:{took}" in re_kept,
+             "a second rest swaps the other way -- the original goes and"
+             " the grant comes back. The card says the substitution is"
+             " available at an extended rest and does not say it is"
+             " one-way",
+             f"{again and sorted(again.powers)}, {sorted(re_kept)}")
+
+    # -- it refuses rather than no-opping -----------------------------------
+    bare = chargen.Character(cls="fighter", level=10, powers=list(left),
+                             team="good", build="", feats=[FEAT])
+    try:
+        chargen.retrain_on_rest(bare, FEAT, choices=[])
+        refused = False
+    except ValueError:
+        refused = True
+    out.that(refused,
+             "**with no records it RAISES** rather than handing back a"
+             " sheet that looks re-tuned and is not, which is `retrain`'s"
+             " own stated reason for raising",
+             f"{refused}")
+    try:
+        chargen.retrain_on_rest(bare, "f2443", choices=said)
+        wrong = False
+    except ValueError:
+        wrong = True
+    out.that(wrong,
+             "and a feat with no swap on this sheet raises too -- the"
+             " records are keyed by feat, so one feat's trade cannot be"
+             " re-tuned through another's",
+             f"{wrong}")
+
+    for ref in FEATS:
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker: its pool half always played"
+                 " and the rest-time re-tune is written",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_parry_turns_a_blow_aside(out: Result) -> None:
     """*"Make a melee basic attack against that enemy ... if your result
     exceeds that of the attack roll against you, the enemy's attack
@@ -90684,7 +90847,12 @@ def a_multiclass_swap_limits_both_halves(out: Result) -> None:
         out.that(hand[0] not in after,
                  f"{feat}: the outgoing card leaves the hand",
                  f"{hand} -> {sorted(after)}")
-        got = sorted(recorded)
+        # **Filtered to `option:`, because a trade now records two
+        # entries.** `swapped:<feat>:<out>+<in>` is the pair, written so
+        # a rest-time re-tune can put the original back after the
+        # `option:` grant has been dropped -- see
+        # `chargen.retrain_on_rest`. Counting the whole set read 2.
+        got = sorted(r for r in recorded if r.startswith("option:"))
         out.that(len(got) == 1,
                  f"{feat}: and exactly one incoming card is recorded,"
                  " which `c.chosen_options` is what the body reads",
@@ -101531,13 +101699,23 @@ def a_feat_draws_its_swap_from_the_class_list(out: Result) -> None:
              "the traded power leaves the hand -- the half that already"
              " worked, asserted so the next two are about the new half",
              f"{hand} -> {sorted(after)}")
-    out.that(len(rec) == 1 and next(iter(rec)).startswith("option:f2441:"),
+    # **Filtered to `option:`, because a trade now records two
+    # entries.** `swapped:<feat>:<out>+<in>` is the pair, written so
+    # a rest-time re-tune can put the original back after the
+    # `option:` grant has been dropped -- see
+    # `chargen.retrain_on_rest`. Counting the whole set read 2.
+    granted = sorted(r for r in rec if r.startswith("option:f2441:"))
+    out.that(len(granted) == 1,
              "**and the incoming power is recorded as"
              " `option:f2441:<ref>`** -- the key `Cast.chosen_option`"
              " reads, so the feat's body can hand over what it drew",
              f"{sorted(rec)}")
 
-    took = next(iter(rec)).split(":")[-1]
+    # Off the `option:` entry and not off the whole set: the set also
+    # carries `swapped:<feat>:<out>+<in>` now, and `next(iter(...))` on a
+    # set picked it half the time -- `cls=None usage=None` on a ref that
+    # reads `p10478+p4315`.
+    took = granted[0].split(":")[-1] if granted else ""
     drawn = _REG.get(took)
     out.that(drawn is not None
              and getattr(drawn, "cls", "") == "fighter"
@@ -101620,16 +101798,15 @@ def a_feat_draws_its_swap_from_the_class_list(out: Result) -> None:
         # red run.
         trade = row.swap
         out.that(not getattr(row, "todo", ())
-                 and getattr(row, "dropped", ())
-                 == ("chargen.retrain_on_rest()",)
+                 and not getattr(row, "dropped", ())
                  and trade is not None
                  and trade.pool == "class",
-                 f"`{ref}` carries `Swap(pool=\"class\")` and is"
-                 " `dropped=` on the SAME symbol it used to carry as"
-                 " `todo=` -- it plays now, and what is still owed is the"
-                 " rest-time re-tune that symbol names. The marker moves"
-                 " category rather than vanishing, so"
-                 " `blocked.py --group` keeps listing the real remainder",
+                 f"`{ref}` carries `Swap(pool=\"class\")` and no marker"
+                 " at all: the pool half always played, and the"
+                 " rest-time re-tune that `chargen.retrain_on_rest()`"
+                 " named is written -- see"
+                 " `drivers.a_swapped_power_goes_back_at_a_rest` and"
+                 " Camille's ruling on `#1441`",
                  f"todo={getattr(row, 'todo', ())}"
                  f" dropped={getattr(row, 'dropped', ())}")
     # -- the board must be able to POSE it, which is where this went red --
@@ -122097,6 +122274,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "swap_goes_back_at_a_rest": (
+        a_swapped_power_goes_back_at_a_rest,
+        "`f2441`/`f2443`/`f2445`/`f2446` can put the original power "
+        "back at an extended rest (#1114, #1441)",
     ),
     "parry_turns_a_blow": (
         a_parry_turns_a_blow_aside,
