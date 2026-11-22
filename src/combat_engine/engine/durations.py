@@ -1120,11 +1120,32 @@ class Effects:
         return [e for e in self.live.values() if e.owner == owner]
 
     def stance_of(self, eid: int) -> Effect | None:
-        """The stance this creature is in, if any. At most one, ever."""
-        for eff in self.live.values():
-            if eff.when is When.STANCE and eff.owner == eid:
-                return eff
-        return None
+        """The stance this creature is in, if any.
+
+        **"At most one, ever" is no longer true**, and this returns the
+        **oldest** rather than an arbitrary one. `i1820p1` prints *"you
+        can have two stances active at the same time"*, so `Cast.stance`
+        reads an allowance and sheds the oldest when it is exceeded --
+        which is what makes "the oldest" the useful answer rather than
+        "the one". `stances_of` below is the honest reader for anything
+        that needs the whole set.
+        """
+        return next(iter(self.stances_of(eid)), None)
+
+    def stances_of(self, eid: int) -> list[Effect]:
+        """Every stance this creature is in, oldest first.
+
+        Ordered by the effect id, which `live` is keyed on and which only
+        ever grows -- so "oldest" costs nothing to know and does not need
+        a timestamp nobody else wants.
+
+        Almost always a list of one or none: a second stance needs a card
+        that prints the permission, and one does.
+        """
+        return [
+            eff for _, eff in sorted(self.live.items())
+            if eff.when is When.STANCE and eff.owner == eid
+        ]
 
     def mark_by(self, who: int, marker: int) -> Effect | None:
         """The live mark `marker` has on `who`, if any.

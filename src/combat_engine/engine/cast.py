@@ -10490,15 +10490,58 @@ class Cast:
         nothing ever set it.
 
         Returns the effect so a body can hang mods on it the usual way.
+
+        **"One at a time" is a number now, and one card says so.**
+        `i1820p1` prints *"you can have two stances active at the same
+        time"*, so the allowance is `1 + c.more_stances`'s modifier and
+        the **oldest** stances are shed until what is standing fits. One
+        is what every creature has and what every other row gets, so this
+        is a widening nobody has to opt out of.
+
+        Oldest rather than newest, because the printed sentence is about
+        keeping what you have while adding to it -- shedding the stance
+        just taken would make the second one unreachable.
         """
         who = on if on is not None else self.me
-        previous = self.world.effects.stance_of(who)
-        if previous is not None:
-            self.world.effects.end(previous, "took another stance")
+        allowed = 1
+        from .components import Mods as _Mods
+
+        held = self.world.get(who, _Mods)
+        if held is not None and held.items:
+            allowed += max(0, held.total("extra_stances", {}))
+        standing = self.world.effects.stances_of(who)
+        # One is about to be added, so the room needed is `allowed - 1`.
+        for old_one in standing[:max(0, len(standing) - (allowed - 1))]:
+            self.world.effects.end(old_one, "took another stance")
         return self.world.effects.apply(
             who, self.me, When.STANCE, label=label or self.ref, conditions=conditions,
             by=self.ref,
         )
+
+    def more_stances(
+        self, n: int = 1, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"You can have two stances active at the same time."
+
+        `i1820p1` is the card, and `c.stance` is where it is read: one
+        stance is the baseline and this raises it. A row laying this does
+        not take a stance; it changes how many the creature may hold.
+
+        **The gate is a closure, not a context read.** `c.stance` asks
+        with an empty context -- a stance is assumed by a body, not
+        resolved against a swing -- so a `when=` reading a key could only
+        ever be False. What works is a closure over `c`: *"while you
+        wield this weapon"* becomes a question about the hand, re-asked
+        every time another stance is taken.
+
+        Non-stacking, so two copies of the same card do not buy a third
+        stance between them.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("extra_stances", n, on=who, until=until,
+                          when=when, stacks=False)
 
     def cannot_shift(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         """Cannot shift. Still walks, which is why this is not `immobilized`.

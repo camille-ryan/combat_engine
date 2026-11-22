@@ -2687,11 +2687,42 @@ def i1820x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.stance(keep=)",),
 )
 def i1820p1(c: Cast) -> None:
-    """Two stances at once. `c.stance` ends whatever you were in by
-    definition and at most one is ever live."""
+    """Two stances at once.
+
+    **The marker named a parameter and the card is an allowance.**
+    `c.stance(keep=)` would be a flag on one call, which is the wrong
+    shape twice over: the rows that take a stance are somebody else's and
+    must not change, and the permission outlives any one of them -- *"you
+    can have two stances active at the same time"* is a standing fact
+    about the wielder for the rest of the encounter.
+
+    So `c.stance` reads an allowance -- one, plus `c.more_stances` --
+    and sheds the **oldest** stances until what is standing fits. Oldest,
+    because the printed sentence is about keeping what you have while
+    adding to it; shedding the stance just taken would make the second
+    one unreachable.
+
+    **"While you wield this weapon" is a closure and not a context
+    read.** `c.stance` asks with an empty context -- a stance is assumed
+    by a body, not resolved against a swing -- so a gate reading a key
+    could only ever be False. The closure asks the hand instead, and is
+    re-asked every time another stance is taken, which is what *while*
+    means: put the weapon away and the next stance sheds the first.
+
+    `c.my_weapon()` is the object this block sits on, matched by
+    `Weapon.item` rather than by whatever magic is in hand, and `Gear.held`
+    is what says it is still in a hand rather than on the belt.
+    """
+    def still_wielded(_ctx: dict[str, Any]) -> bool:
+        mine = c.my_weapon()
+        gear = c.world.get(c.me, Gear)
+        if mine is None or gear is None:
+            return False
+        return any(w.ref == mine.ref for w in gear.held)
+
+    c.more_stances(1, on=c.me, until=When.ENCOUNTER, when=still_wielded)
 
 
 @power(

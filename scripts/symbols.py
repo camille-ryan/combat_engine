@@ -382,6 +382,10 @@ CATEGORIES: dict[str, dict] = {
                 # the clause, not while ending it. #550.
                 "credit",
                 "effect", "form", "in_form", "merge", "shaped", "stance",
+                # Beside `stance` because it is read inside it: one
+                # card raises how many a creature may hold at once,
+                # and nothing else reads the key.
+                "more_stances",
                 "transfer",
             ]),
             ("summoning and companions", [

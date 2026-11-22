@@ -85452,6 +85452,110 @@ def a_weapon_barred_while_it_holds_somebody(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def two_stances_at_once(out: Result) -> None:
+    """*"Until the end of the encounter, while you wield this weapon, you
+    can have two stances active at the same time"* -- `i1820p1`.
+
+    **The marker said `c.stance(keep=)` and the card is an allowance.** A
+    flag on one call is the wrong shape twice: the rows that take a stance
+    belong to somebody else and must not change, and the permission
+    outlives any one of them. So `c.stance` reads `1 +
+    c.more_stances`'s modifier and sheds the **oldest** stances until what
+    is standing fits -- oldest, because the printed sentence is about
+    keeping what you have while adding to it, and shedding the stance just
+    taken would make the second one unreachable.
+
+    **"While you wield this weapon" is re-asked, not frozen.** `c.stance`
+    asks the gate with an empty context, so a `when=` reading a key could
+    only ever be False and the row closes over `c` instead. That is what
+    makes *while* mean while: put the weapon away and the next stance
+    sheds the first, with the effect still standing.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW = "i1820p1"
+
+    def staged(
+        *, armed: bool, stow: bool = False,
+    ) -> tuple[Any, int, Cast, Any, Any]:
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref=ROW)
+        mine = cast.my_weapon()
+        if armed:
+            REGISTRY[ROW].body(cast)
+        if stow and mine is not None:
+            must(world.get(me, Gear), "the character has gear").stowed.add(
+                mine.ref)
+        first = Cast(world=world, me=me, ref="drv:a").stance(label="drv A")
+        second = Cast(world=world, me=me, ref="drv:b").stance(label="drv B")
+        return world, me, cast, first, second
+
+    # -- the premise -------------------------------------------------------
+    w0, me0, cast0, *_ = staged(armed=False)
+    out.that(cast0.my_weapon() is not None,
+             "premise: the item is on a weapon in the character's hands,"
+             " which is what the printed 'while you wield this weapon'"
+             " is about",
+             f"{cast0.my_weapon()}")
+
+    # -- the baseline ------------------------------------------------------
+    out.that([e.label for e in w0.effects.stances_of(me0)] == ["drv B"],
+             "with no item, a second stance ends the first -- one at a"
+             " time, which is what a stance IS and what every other row"
+             " on this board still gets",
+             f"{[e.label for e in w0.effects.stances_of(me0)]}")
+
+    # -- the printed clause ------------------------------------------------
+    w1, me1, _, _, _ = staged(armed=True)
+    out.that([e.label for e in w1.effects.stances_of(me1)]
+             == ["drv A", "drv B"],
+             "with the item used, BOTH stand -- and the first is still"
+             " first, so the one shed when a third arrives is the oldest"
+             " rather than whichever the store happened to return",
+             f"{[e.label for e in w1.effects.stances_of(me1)]}")
+
+    # -- the ceiling is two, not unlimited ---------------------------------
+    w2, me2, _, _, _ = staged(armed=True)
+    Cast(world=w2, me=me2, ref="drv:c").stance(label="drv C")
+    out.that([e.label for e in w2.effects.stances_of(me2)]
+             == ["drv B", "drv C"],
+             "a THIRD stance sheds the oldest and keeps two -- the card"
+             " says two, and an allowance that only ever grew would be a"
+             " different card",
+             f"{[e.label for e in w2.effects.stances_of(me2)]}")
+
+    # -- the gate ----------------------------------------------------------
+    w3, me3, cast3, _, _ = staged(armed=True, stow=True)
+    out.that(not any(
+        w.ref == (cast3.my_weapon() or w).ref
+        for w in must(w3.get(me3, Gear), "gear").held),
+             "premise: the weapon really is on the belt rather than in a"
+             " hand",
+             f"held {[w.ref for w in must(w3.get(me3, Gear), 'gear').held]}")
+    out.that([e.label for e in w3.effects.stances_of(me3)] == ["drv B"],
+             "and with it stowed the allowance is withheld, though the"
+             " effect is still standing -- the gate is re-asked on every"
+             " stance rather than frozen when the item was used, which is"
+             " what 'while you wield' means",
+             f"{[e.label for e in w3.effects.stances_of(me3)]}")
+
+    # -- stance_of still answers ------------------------------------------
+    out.that(w1.effects.stance_of(me1) is not None
+             and w1.effects.stance_of(me1).label == "drv A",
+             "`Effects.stance_of` hands back the OLDEST now rather than"
+             " 'the one' -- its docstring said at most one would ever"
+             " exist, and that is the sentence this card changes",
+             f"{w1.effects.stance_of(me1)}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: it was `todo=`, refused in"
+             " play, and is written",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -121214,6 +121318,9 @@ DRIVERS = {
     "a_weapon_barred_while_it_holds_somebody": (
         a_weapon_barred_while_it_holds_somebody,
         "a weapon barred while it holds somebody"),
+    "two_stances_at_once": (
+        two_stances_at_once,
+        "two stances at once"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,
