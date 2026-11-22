@@ -84407,6 +84407,159 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_retype_that_is_offered_each_use(out: Result) -> None:
+    """"You CAN choose to have that power deal your affinity's type."
+
+    `f2179` carried `dropped=("c.deals(may=)",)` on the reasoning that
+    *"a standing retype is a label read inside `Cast._typed` with no
+    moment to ask"*. True of a **standing** retype -- and the answer is
+    not to stand one. `PowerUsed` fires before the body, so the moment to
+    ask is the use, and a retype laid in that handler with `once=True`
+    recolours exactly that blow.
+
+    No parameter, no new verb: `c.deals` already takes `once=` and the
+    consent is `c.may`.
+
+    **Three arms, because the two that matter look alike from one side.**
+    An unbound affinity and a declined offer both leave the blow its own
+    type, so a rule that only tested "declined means untyped" would pass
+    with the consent gate deleted -- the row returns on its first line
+    for a character with no affinity. The bound-and-consented arm is what
+    separates them.
+
+    The affinity is staged into `Build.choices` as `element:<type>`,
+    which is where `chargen` records it and what `c.element` reads -- the
+    posed character has none, so without this every arm reads untyped and
+    the rule proves nothing.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Build, Powers
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import DamageRolled
+
+    NAMED = "p1333"
+
+    def blow(*, bound: bool, consent: bool) -> list[list[str]]:
+        """Fire the named row and report each blow's damage types."""
+        world, me, _start = A.board("f2179", 1)
+        A._revive_everyone(world, except_=())
+        budget = world.get(me, Budget)
+        if budget is not None:
+            budget.refresh()
+        build = world.get(me, Build)
+        if bound and build is not None:
+            build.choices.add("element:fire")
+        known = world.get(me, Powers)
+        if NAMED not in known.known:
+            known.known.append(NAMED)
+
+        def decide(who: int, kind: str, pool: list, what: str = ""):  # noqa: ANN202
+            if kind == "may":
+                want = "yes" if consent else "no"
+                return next((o for o in pool if want in str(o).lower()),
+                            pool[0])
+            return pool[0]
+
+        world.decider = decide
+        REGISTRY["f2179"].body(
+            Cast(world=world, me=me, ref="f2179", target=me))
+        foe = sorted(e for e in world.entities if e != me)[0]
+        at = len(world.bus.log)
+        use(world, me, NAMED, targets=[foe], spend=False)
+        return [sorted(t.name for t in e.types())
+                for e in world.bus.log[at:] if isinstance(e, DamageRolled)]
+
+    taken = blow(bound=True, consent=True)
+    out.that(taken and all("FIRE" in t for t in taken),
+             "with an affinity bound and the offer taken, the named row's"
+             " blow is the affinity's type -- which is the clause, and"
+             " the arm that separates the two below",
+             f"{taken}")
+    declined = blow(bound=True, consent=False)
+    out.that(declined and all("FIRE" not in t for t in declined),
+             "declined, the blow keeps its own type: the card says CAN,"
+             " and an untyped blow is resisted by nothing, so the option"
+             " is a real clause rather than a formality",
+             f"{declined}")
+    unbound = blow(bound=False, consent=True)
+    out.that(unbound and all("FIRE" not in t for t in unbound),
+             "and a character with no affinity bound gets nothing even"
+             " having said yes -- the row returns on its first line,"
+             " which is why the consented arm above is the load-bearing"
+             " one",
+             f"{unbound}")
+    # -- and it is offered EACH use, which one blow cannot show ----------
+    #
+    # Measured as a passing plant: standing the retype for the whole
+    # encounter (`until=ENCOUNTER`, no `once=`) left every assertion
+    # above green, because each of them fires the row once. So the
+    # per-use half needs two blows on one board, consented then
+    # declined.
+    world, me, _s = A.board("f2179", 1)
+    A._revive_everyone(world, except_=())
+    budget = world.get(me, Budget)
+    if budget is not None:
+        budget.refresh()
+    build = world.get(me, Build)
+    if build is not None:
+        build.choices.add("element:fire")
+    known = world.get(me, Powers)
+    if NAMED not in known.known:
+        known.known.append(NAMED)
+    asked: list[str] = []
+    #: Consent is flipped by the first **landed** blow rather than by the
+    #: first ask, because an attack that misses rolls no damage and two
+    #: uses are not two blows -- measured, and the arm read `[['FIRE']]`
+    #: with one entry while looking like a failure of the row.
+    state = {"landed": 0}
+
+    def until_it_lands(who: int, kind: str, pool: list, what: str = ""):  # noqa: ANN202
+        if kind != "may":
+            return pool[0]
+        asked.append(what)
+        want = "yes" if state["landed"] == 0 else "no"
+        return next((o for o in pool if want in str(o).lower()), pool[0])
+
+    world.decider = until_it_lands
+    REGISTRY["f2179"].body(Cast(world=world, me=me, ref="f2179", target=me))
+    foe = sorted(e for e in world.entities if e != me)[0]
+    seen: list[list[str]] = []
+    for _ in range(24):
+        A._revive_everyone(world, except_=())
+        if budget is not None:
+            budget.refresh()
+        at = len(world.bus.log)
+        use(world, me, NAMED, targets=[foe], spend=False)
+        blows = [sorted(t.name for t in e.types())
+                 for e in world.bus.log[at:] if isinstance(e, DamageRolled)]
+        seen.extend(blows)
+        state["landed"] += len(blows)
+        if state["landed"] >= 2:
+            break
+    out.that(len(asked) >= 2,
+             "the offer is made on EACH use rather than once -- the"
+             " premise, since a single ask would make the two arms below"
+             " the same answer twice",
+             f"asked {len(asked)} time(s)")
+    out.that(len(seen) >= 2,
+             "and two blows actually landed inside the attempt budget --"
+             " without this the arm below compares one blow with itself",
+             f"{len(seen)} blow(s) over {len(asked)} use(s)")
+    if len(seen) >= 2:
+        out.that("FIRE" in seen[0] and "FIRE" not in seen[1],
+                 "taken on the first blow and declined on the next, the"
+                 " two differ: the recolour is spent by the blow it"
+                 " recolours rather than standing for the fight, which a"
+                 " single blow cannot tell apart",
+                 f"{seen[:2]}")
+
+    out.that(not (getattr(REGISTRY["f2179"], "dropped", ()) or ()),
+             "f2179 carries no marker: `c.deals(may=)` was a parameter"
+             " nothing needed once the moment to ask was the use",
+             f"{getattr(REGISTRY['f2179'], 'dropped', ())}")
+
+
 def a_basic_attack_names_its_weapon(out: Result) -> None:
     """"Make a basic melee attack using the claw granted by this armor."
 
@@ -119327,6 +119480,9 @@ DRIVERS = {
     "a_basic_attack_names_its_weapon": (
         a_basic_attack_names_its_weapon,
         "a basic attack names its weapon"),
+    "a_retype_that_is_offered_each_use": (
+        a_retype_that_is_offered_each_use,
+        "a retype offered on each use"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

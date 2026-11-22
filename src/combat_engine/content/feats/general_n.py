@@ -2213,7 +2213,7 @@ def f2175(c: Cast) -> None:
 
 
 @power("f2179", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.deals(may=)",))
+       reach=PERSONAL, target=SELF)
 def f2179(c: Cast) -> None:
     """Changes the damage type of one named power.
 
@@ -2241,13 +2241,22 @@ def f2179(c: Cast) -> None:
     because `p1333` is an implement power and the default keyword is
     `WEAPON`. `f1098` is the written precedent for the parameter.
 
-    **What is dropped is the printed "can choose".** The card offers the
-    retype rather than imposing it, and a standing retype is a label read
-    inside `Cast._typed` with no moment to ask -- the same gap
-    `cf:warlock-f1s1` carries, which is why this takes that row's symbol
-    rather than minting a second name for one need. A type is not strictly
-    better than none (an untyped blow is resisted by nothing), so the
-    option is a real clause and not a formality.
+    **The printed "can choose" is written, and it needed no parameter.**
+    The marker read `c.deals(may=)` on the reasoning that *"a standing
+    retype is a label read inside `Cast._typed` with no moment to ask"*.
+    That is true of a **standing** retype and the answer is not to stand
+    one: `PowerUsed` fires before the body, so the moment to ask is the
+    use, and a retype laid in that handler with `once=True` recolours
+    exactly that blow. Measured -- the `DamageRolled` for the named row
+    comes out as the affinity's type with consent and its own without.
+
+    So the clause is per use, which is what *"you can choose"* says, and
+    a type is not strictly better than none -- an untyped blow is
+    resisted by nothing -- so the option is a real clause rather than a
+    formality.
+
+    `cf:warlock-f1s1` shared the symbol and carries no marker any more,
+    so nothing else is waiting on it.
 
     `p1448` itself still carries `c.race_option(damage_type=)`: a race has
     no leg to record *which* option within it was taken, so `c.element`
@@ -2259,7 +2268,21 @@ def f2179(c: Cast) -> None:
     mine = c.element(on=me)
     if mine is None:
         return
-    c.deals(mine, ref="p1333", on=me, until=When.ENCOUNTER)
+
+    def offered(ev: Any) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        if getattr(ev, "power", "") != "p1333":
+            return
+        if not c.may("deal your affinity's type instead", who=me):
+            return
+        # `once=True` and `EOT`: the choice is per use, so the recolour
+        # is spent by the blow it recolours rather than standing for the
+        # rest of the fight.
+        with c.credit(c.ref):
+            c.deals(mine, ref="p1333", on=me, until=When.EOT, once=True)
+
+    c.watch(PowerUsed, offered, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2202", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
