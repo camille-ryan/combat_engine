@@ -253,8 +253,7 @@ def f970(c: Cast) -> None:
 
 @power("f970b", level=1, cls="", usage=DAILY, action=ActionType.STANDARD,
        reach=Melee(2), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
-       attack=Attack(Ability.DEX, vs=REF),
-       dropped=("c.forbid(weapon=)",))
+       attack=Attack(Ability.DEX, vs=REF))
 def f970b(c: Cast) -> None:
     """The grab and the prone land on a hit *and* on a miss -- only the
     damage differs -- so both are written outside the branch.
@@ -274,21 +273,64 @@ def f970b(c: Cast) -> None:
     had recorded:
 
     * *"While grabbing the target, you cannot make attacks with the
-      whip"* -- `c.forbid` takes `ref`, `keyword`, `lacking`, `usage`,
-      `only` and `attacks_only`, and none of them narrows to a **weapon**.
-      Marked.
+      whip"* -- `c.forbid` took `ref`, `keyword`, `lacking`, `usage`,
+      `only` and `attacks_only`, and none of them narrowed to a
+      **weapon**. It takes `weapon=` now, and the restriction lives on
+      `Gear.barred` rather than on `Powers` because it is about the thing
+      in hand and not about a row.
+
+      Barred and **not stowed**, which is the care the clause needs: the
+      whip stays held, so `c.wielding` keeps saying so and the grab this
+      row is holding does not end. `Gear.swingable` takes it out of
+      `melee` and `ranged`, so `main`, `off` and everything reading those
+      agree; a weapon attack with nothing left to swing is then refused
+      in `dsl.usable`. A character carrying a second weapon swings that
+      one, which is what the page allows.
+
+      The weapon is read off the swing rather than named --
+      `AttackResult.weapon` carries the ref this blow came through -- so
+      the card's "the whip" is whatever was actually used. **Not
+      `c.weapon_of()`**, which answers about an *event*: called bare it
+      reads `self.trigger`, and this row declares none, so it returns
+      `None` and the clause would never have been laid.
+
+      And the hold is tied to the **grab's own effect** rather than given
+      a duration. *While grabbing* is the printed condition, so a plain
+      `When.ENCOUNTER` would leave the weapon barred after the victim
+      escapes -- a restriction the card lifts, standing for the rest of
+      the fight. The grant below gets away with `ENCOUNTER` because its
+      reader asks `Relation.GRABBED_BY` live; a barred weapon has no such
+      reader.
     * *"You can sustain the grab as long as the target is within 2 squares
       of you"* -- deliberately **not** marked, because `sustain=` in the
       header with `until=When.SUSTAIN` exists (`m2295a1` is the worked
       example) and I have not established that the range condition cannot
       be written with it. A symbol is a claim that something is missing,
       and that one is unverified. #560."""
-    hit = c.strike().hit
+    swing = c.strike()
+    hit = swing.hit
     if hit:
         c.damage(c.w(2), c.dex_mod)
-    c.grab()
+    held = c.grab()
     c.prone()
     c.penalty("escape", 5)
+    # **"While grabbing the target, you cannot make attacks with the
+    # whip."** Read off the swing rather than named, so "the whip" is the
+    # weapon this blow actually came through.
+    #
+    # **Tied to the grab's own effect, and `until=` alone could not do
+    # it.** The printed condition is *while grabbing*, so a plain
+    # `When.ENCOUNTER` would keep the weapon barred after the victim
+    # escapes -- a restriction the card lifts, left standing for the rest
+    # of the fight. That is a penalty worse than print, which is the
+    # direction this tree refuses hardest. The grant below gets away with
+    # `ENCOUNTER` because its reader asks `Relation.GRABBED_BY` live and
+    # offers nothing once the grab is gone; a barred weapon has no such
+    # reader, so the hold has to end with the grab.
+    if swing.weapon and held is not None:
+        bar = c.forbid(weapon=swing.weapon, on=c.me, until=When.ENCOUNTER)
+        if bar is not None:
+            held.on_end.append(lambda: c.end_effect(bar))
     # **"You can pull it 1 square as a minor action", which is a line in
     # the action menu.** `actions.GRANTABLE` carries `pull_grabbed` now and
     # `actions` offers it one option per legal destination square, so the

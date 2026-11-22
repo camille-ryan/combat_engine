@@ -2518,6 +2518,18 @@ class Gear:
     armour: str = "cloth"
     #: What is on the belt rather than in the hands, by weapon ref.
     stowed: set[str] = field(default_factory=set)
+    #: What may not be **swung**, by weapon ref, while still being held.
+    #:
+    #: *"While grabbing the target, you cannot make attacks with the
+    #: whip"* -- `f970b`. Deliberately not `stowed`: the whip is still in
+    #: hand, so `c.wielding` must keep saying so and the grab it is
+    #: holding does not end. What changes is which weapon a swing may
+    #: come through.
+    #:
+    #: Read by `swingable` below, which `melee` and `ranged` filter -- so
+    #: `main`, `off` and every reader of those get it from one place
+    #: rather than each asking. `c.forbid(weapon=)` is what fills it.
+    barred: set[str] = field(default_factory=set)
     #: What taking a weapon up costs this creature, when something has made
     #: it cheaper than the printed minor action.
     #:
@@ -2886,6 +2898,24 @@ class Gear:
         """What is actually in hand right now."""
         return [w for w in self.weapons if w.ref not in self.stowed]
 
+    @property
+    def swingable(self) -> list[Weapon]:
+        """What is in hand that a swing may actually come through.
+
+        `held` minus `barred`, and the two are different questions on
+        purpose: *"you cannot make attacks with the whip"* does not put
+        the whip away, so `c.wielding` must keep saying it is in hand and
+        the grab it is holding does not end.
+
+        Between `held` and `melee`/`ranged` so that `main`, `off` and
+        everything reading those get the answer from one place. Equal to
+        `held` for every creature nothing has barred, which is all but one
+        feat.
+        """
+        if not self.barred:
+            return self.held
+        return [w for w in self.held if w.ref not in self.barred]
+
     def wield(self, weapon: Weapon) -> None:
         """Take that weapon in hand, putting away whatever cannot share it.
 
@@ -2952,8 +2982,11 @@ class Gear:
         if melee:
             return melee[0]
         # A creature holding only a bow has nothing to swing and something to
-        # fire, and that is what it is using.
-        firing = [w for w in self.held if w.group != "implement"]
+        # fire, and that is what it is using. `swingable` rather than
+        # `held` for the reason the docstring above gives about `melee`:
+        # the two branches must not disagree, and a barred weapon is one
+        # `melee` has already dropped.
+        firing = [w for w in self.swingable if w.group != "implement"]
         return firing[0] if firing else None
 
     @property
@@ -2963,7 +2996,7 @@ class Gear:
         A ranger with a short sword and a longbow has both, and a ranged
         power should be rolling the bow's dice rather than the sword's.
         """
-        return next((w for w in self.held if w.ranged), None)
+        return next((w for w in self.swingable if w.ranged), None)
 
     @property
     def thrown(self) -> Weapon | None:
@@ -2990,7 +3023,7 @@ class Gear:
         implements by hand.
         """
         swingable = [
-            w for w in self.held
+            w for w in self.swingable
             if not w.ranged and w.group != "implement"
         ]
         # **A natural weapon needs a hand free**, which is `cf:monk-f1`'s

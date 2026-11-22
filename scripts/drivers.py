@@ -85266,6 +85266,168 @@ def an_origin_lent_to_one_named_row(out: Result) -> None:
              f"{REGISTRY['i2339p1'].unfinished}")
 
 
+def a_weapon_barred_while_it_holds_somebody(out: Result) -> None:
+    """*"While grabbing the target, you cannot make attacks with the
+    whip"* -- `f970b`, a whip that grabs and goes prone on a hit and a
+    miss alike.
+
+    **The only narrowing `c.forbid` had no word for, because it is not
+    about a row.** `ref`, `keyword`, `lacking`, `usage` and `action` all
+    name something about the power being refused; this card names the
+    thing in the character's **hand**, and the row it would use is
+    perfectly legal. So `weapon=` writes `Gear.barred` rather than
+    anything on `Powers`.
+
+    **Barred and not stowed, which is the whole care.** Putting the whip
+    away would take `c.wielding` False and -- far worse -- is not what
+    the page says: the whip is what is holding the victim. So the weapon
+    stays in `held` and comes out of `swingable`, which `melee`, `ranged`
+    and `main` all filter. A weapon attack with nothing left to swing is
+    then refused in `dsl.usable`, and a character carrying a second
+    weapon swings that one.
+
+    **And the hold ends with the grab, which `until=` alone cannot say.**
+    *While grabbing* is the printed condition, so a plain
+    `When.ENCOUNTER` would leave the weapon barred after the victim
+    escapes -- a restriction the card lifts, standing for the rest of the
+    fight, which is a penalty worse than print. The bar is tied to the
+    grab's own effect instead.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Keyword
+
+    ROW = "f970b"
+
+    def played() -> tuple[Any, int, Cast, Gear, list[str]]:
+        """Run the row against an enemy and hand back the pieces."""
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref=ROW)
+        cast.target = sorted(enemies(world, me))[0]
+        gear = must(world.get(me, Gear), "the character has gear")
+        was = [w.ref for w in gear.weapons]
+        REGISTRY[ROW].body(cast)
+        return world, me, cast, gear, was
+
+    def arms_of(world: Any, me: int) -> list[str]:
+        known = must(world.get(me, Powers), "the character knows powers")
+        return [
+            r for r in known.all
+            if (row := REGISTRY.get(r)) is not None
+            and row.attack is not None
+            and Keyword.WEAPON in (row.keywords or ())
+        ]
+
+    # -- the premises ------------------------------------------------------
+    world, me, cast, gear, carried = played()
+    out.that(len(carried) == 1,
+             "premise: the character carries exactly one weapon, so"
+             " 'nothing left to swing' is reachable at all -- with two in"
+             " hand the printed line lets the other one be used and this"
+             " board could say nothing",
+             f"{carried}")
+    out.that(bool(gear.barred),
+             "the row bars the weapon it swung -- read off"
+             " `AttackResult.weapon`, so 'the whip' is whatever the blow"
+             " actually came through",
+             f"{gear.barred}")
+
+    # -- held, not stowed --------------------------------------------------
+    out.that([x.ref for x in gear.held] == carried,
+             "and the weapon is STILL IN HAND -- stowing it would be a"
+             " different sentence, and the wrong one: the whip is what is"
+             " holding the victim",
+             f"held {[x.ref for x in gear.held]}, stowed {sorted(gear.stowed)}")
+    out.that(gear.main is None and gear.ranged is None,
+             "while nothing is left to swing -- `swingable` drops it, and"
+             " `melee`, `ranged` and `main` all read that, so the three"
+             " cannot disagree about one weapon",
+             f"main {gear.main}, ranged {gear.ranged}")
+
+    # -- the refusal -------------------------------------------------------
+    arms = arms_of(world, me)
+    out.that(bool(arms), "premise: the character knows a weapon attack to"
+             " be refused", f"{arms}")
+    # **Compared against a board the row has not been played on**, not
+    # against "everything is refused": `usable` returns the FIRST reason,
+    # and one of this character's rows is already spent, so an all-of
+    # test asserts the board rather than the clause.
+    w2, me2, _ = _board(ROW, 1)
+    free = [r for r in arms if usable(w2, me2, REGISTRY[r])[0]]
+    out.that(bool(free),
+             "premise: at least one of them was usable before the row was"
+             " played, so there is something for the bar to take away",
+             f"{free} of {arms}")
+    refused = {r: usable(world, me, REGISTRY[r])[1] for r in free}
+    out.that(all(why == "cannot attack with the weapon in hand"
+                 for why in refused.values()),
+             "and every one of those is now refused, for THIS reason"
+             " rather than for a requirement it was failing anyway",
+             f"{refused}")
+
+    out.that(all(usable(w2, me2, REGISTRY[r])[1]
+                 != "cannot attack with the weapon in hand"
+                 for r in arms_of(w2, me2)),
+             "and on a board where the row has not been played, nothing"
+             " is refused for that reason -- the control that says the"
+             " line above is this row's doing",
+             f"{[(r, usable(w2, me2, REGISTRY[r])) for r in arms_of(w2, me2)]}")
+
+    # -- it ends with the grab ---------------------------------------------
+    grabs = [e for e in world.effects.of(cast.target or me)
+             if e.label and e.label.endswith("grab")]
+    out.that(len(grabs) == 1,
+             "premise: exactly one grab is standing, so ending it is"
+             " unambiguous",
+             f"{[e.label for e in grabs]}")
+    if grabs:
+        cast.end_effect(grabs[0])
+    out.that(not gear.barred,
+             "and when the grab ends the weapon is swingable again --"
+             " 'while grabbing' is the printed condition, and a plain"
+             " `When.ENCOUNTER` would have left it barred for the rest of"
+             " the fight, which is a penalty the card does not impose",
+             f"{gear.barred}")
+    out.that(gear.main is not None,
+             "so there is something to swing once more, which is the half"
+             " a cleared set alone does not prove",
+             f"{gear.main}")
+
+    # -- a second weapon is the other half ---------------------------------
+    w3, me3, _ = _board(ROW, 1)
+    gear3 = must(w3.get(me3, Gear), "the character has gear")
+    spare = next(
+        (w for w in gear3.weapons if not w.two_handed), None)
+    out.that(spare is not None, "premise: the dealt weapon is one-handed,"
+             " so a second can share the hands", f"{spare}")
+    if spare is not None:
+        from dataclasses import replace as _replace
+        gear3.weapons.append(_replace(spare, ref="w-spare"))
+    cast3 = Cast(world=w3, me=me3, ref=ROW)
+    cast3.target = sorted(enemies(w3, me3))[0]
+    REGISTRY[ROW].body(cast3)
+    out.that(gear3.main is not None and gear3.main.ref == "w-spare",
+             "with a second weapon in hand the bar takes away one of them"
+             " and the other is what gets swung -- the printed line bars"
+             " a weapon, not attacking",
+             f"barred {gear3.barred}, main {gear3.main and gear3.main.ref}")
+    out.that(all(usable(w3, me3, REGISTRY[r])[1]
+                 != "cannot attack with the weapon in hand"
+                 for r in arms_of(w3, me3)),
+             "and nothing is refused, because something is still"
+             " swingable -- the refusal is 'nothing left', not 'a weapon"
+             " is barred'",
+             f"{[(r, usable(w3, me3, REGISTRY[r])) for r in arms_of(w3, me3)]}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: the clause it was dropped"
+             " for is the one asserted above",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -121025,6 +121187,9 @@ DRIVERS = {
     "an_origin_lent_to_one_named_row": (
         an_origin_lent_to_one_named_row,
         "an origin lent to one named row"),
+    "a_weapon_barred_while_it_holds_somebody": (
+        a_weapon_barred_while_it_holds_somebody,
+        "a weapon barred while it holds somebody"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

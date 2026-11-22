@@ -4721,7 +4721,7 @@ def usable(
     -- so an encounter attack that has just been spent would otherwise refuse
     the very repeat the card is printed to cause.
     """
-    from .components import Mods, Powers
+    from .components import Gear, Mods, Powers
     from .query import can_act
 
     # **An unfinished row is refused outright**, and this is the whole
@@ -4914,6 +4914,23 @@ def usable(
         # allows, so one test covers the menu and every other caller.
         if powers.forbidden_actions and p.action in powers.forbidden_actions:
             return False, f"cannot take {p.action.value} actions"
+        # **A barred weapon, which is not a restriction on a row at all.**
+        # *"While grabbing the target, you cannot make attacks with the
+        # whip"* -- `f970b`. The row is perfectly legal; what it may not
+        # come through is the thing in hand, so `c.forbid(weapon=)` writes
+        # `Gear.barred` and `Gear.swingable` takes it out of `melee` and
+        # `ranged`.
+        #
+        # Refused here only when **nothing is left to swing**: a character
+        # holding a second weapon attacks with that one, which the
+        # properties above have already arranged. Asked of `weapons`
+        # rather than of `held`, so a creature that carries none -- every
+        # monster using a natural attack -- is untouched.
+        if p.attack is not None and Keyword.WEAPON in (p.keywords or ()):
+            gear = world.get(actor, Gear)
+            if (gear is not None and gear.barred and gear.weapons
+                    and gear.main is None and gear.ranged is None):
+                return False, "cannot attack with the weapon in hand"
         # Checked for every usage, because **every printed "1/round" rider
         # is on an at-will** -- and this lived inside the not-at-will branch,
         # so the guard was unreachable and the header field was decoration.

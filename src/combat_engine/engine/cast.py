@@ -14829,6 +14829,7 @@ class Cast:
         lacking: Keyword | None = None,
         usage: Usage | Sequence[Usage] | None = None,
         action: ActionType | Sequence[ActionType] | None = None,
+        weapon: str | Sequence[str] = (),
         only: str | Sequence[str] = (),
         attacks_only: bool = False,
         ran_out: bool = False,
@@ -14836,6 +14837,25 @@ class Cast:
         until: When = When.SAVE_ENDS,
     ) -> Effect | None:
         """Take a row away for a while. "Loses the ability to use ..."
+
+        **`weapon` is the one narrowing that is not about a row at all.**
+        *"While grabbing the target, you cannot make attacks with the
+        whip"* -- `f970b` -- names a **weapon**, and none of `ref`,
+        `keyword`, `lacking`, `usage` or `action` can say that: the row
+        the character would use is perfectly legal, and what it may not
+        come through is the thing in its hand.
+
+        So it is written on `Gear.barred` rather than on `Powers`, and
+        the difference from stowing it matters: the whip stays **held**,
+        so `c.wielding` keeps saying so and the grab the card is about
+        does not end. `Gear.swingable` is the one reader, which `melee`
+        and `ranged` filter -- so `main`, `off` and everything downstream
+        get it from one place instead of each asking.
+
+        A weapon attack with nothing left to swing is then refused by
+        `dsl.usable`, which is the printed sentence: a character holding
+        only the barred weapon cannot attack with it, and one holding a
+        second weapon swings that. Takes a ref or several.
 
         Not the same as spending it: the creature still has the row and
         simply cannot reach it, so it comes back when the effect ends.
@@ -14929,8 +14949,9 @@ class Cast:
             (action,) if isinstance(action, ActionType) else tuple(action)
         )
         kept = (only,) if isinstance(only, str) and only else tuple(only)
+        arms = (weapon,) if isinstance(weapon, str) and weapon else tuple(weapon)
         if (not ref and keyword is None and lacking is None
-                and not usages and not actions_ and not kept):
+                and not usages and not actions_ and not kept and not arms):
             return None
 
         undo: list[Callable[[], None]] = []
@@ -14943,6 +14964,11 @@ class Cast:
             ref or keyword or lacking
             or (usages[0].value if usages else "")
             or (",".join(a.value for a in actions_) if actions_ else "")
+            # **A weapon-only refusal would otherwise have a blank
+            # subject**, which is the fault the `action` branch above
+            # records: an effect whose label names nothing is unreadable
+            # in a log and in `c.end_effect(against=)`.
+            or (",".join(arms) if arms else "")
         )
         label = (f"{self.ref} forbids "
                  f"{subject}"
@@ -14986,6 +15012,17 @@ class Cast:
             added = tuple(a for a in actions_ if a not in held)
             held.update(added)
             undo.append(lambda: held.difference_update(added))
+        if arms:
+            # On `Gear`, not `Powers`: the restriction is about the thing
+            # in hand and not about a row. Same only-what-this-call-added
+            # discipline as the two above.
+            gear = self.world.get(who, Gear)
+            if gear is not None:
+                fresh_arms = tuple(w for w in arms if w not in gear.barred)
+                gear.barred.update(fresh_arms)
+                undo.append(
+                    lambda g=gear, f=fresh_arms: g.barred.difference_update(f)
+                )
         standing: set[str] = set()
         if lacking is not None:
             # What is already running is exempt, read **now** rather than when
