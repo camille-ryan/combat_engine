@@ -88512,11 +88512,44 @@ def a_mount_uses_its_riders_numbers(out: Result) -> None:
     out.that(not REGISTRY[FEAT].unfinished,
              f"{FEAT} carries no marker: both of its halves are written",
              f"{REGISTRY[FEAT].unfinished}")
-    out.that(REGISTRY[HORSE].unfinished == ("c.forbid(action=)",),
-             "while the horse is RE-POINTED rather than cleared -- its"
-             " check clause is written and the riderless action ban is"
-             " not, which is a different axis and `m5948a5` waits on the"
-             " same symbol",
+    # -- the riderless restriction, which was marked and is written ---------
+    # **The marker was stale.** `c.forbid(action=)` exists and this row
+    # already called it; what the note said -- that `c.forbid` takes
+    # rows away "by ref, keyword or usage" and that an action category
+    # is a different axis -- was true when written and is not now.
+    # **A fresh board**, because the arm above ended every effect this
+    # row laid on the horse to build its without-the-loan control --
+    # including this one. Measured: the list came back empty.
+    w8, me8, _ = _board(HORSE, 1)
+    had8 = set(w8.having(Stats))
+    REGISTRY[HORSE].body(Cast(world=w8, me=me8, ref=HORSE))
+    nag8 = next((e for e in sorted(set(w8.having(Stats)) - had8)
+                 if (w8.get(e, Ident) or Ident(ref="")).ref == "x10_17"),
+                None)
+    barred = [e for e in w8.effects.of(nag8 or -1)
+              if "forbids" in str(e.label) and e.by == HORSE]
+    out.that(barred,
+             "the summoned mount is barred from the actions its card"
+             " does not allow -- *'the only actions that the horse can"
+             " take while riderless are move actions and free actions'*",
+             f"{[e.label for e in w8.effects.of(nag8 or -1)]}")
+    named = str(barred[0].label) if barred else ""
+    out.that(all(word in named for word in
+                 ("standard", "minor", "immediate_interrupt",
+                  "immediate_reaction", "opportunity")),
+             "and it is an ALLOW-LIST read backwards: five categories"
+             " barred, which is every one but move and free",
+             f"{named}")
+    out.that("none" not in named.split("forbids ")[-1].split(","),
+             "**`ActionType.NONE` is deliberately absent.** That is how a"
+             " standing trait is declared, and forbidding it would switch"
+             " off the creature's own traits -- the card restricts what"
+             " the mount does, not what it is",
+             f"{named}")
+
+    out.that(not REGISTRY[HORSE].unfinished,
+             "and the horse carries no marker: its check clause and its"
+             " riderless restriction are both written",
              f"{REGISTRY[HORSE].unfinished}")
 
 

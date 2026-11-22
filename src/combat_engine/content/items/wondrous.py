@@ -2580,7 +2580,6 @@ _NOT_RIDERLESS = (
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    dropped=("c.forbid(action=)",),
 )
 def i1662p1(c: Cast) -> None:
     """The mount is `x10_17`, an **associate** block, so it does not spawn
@@ -2631,8 +2630,11 @@ def i1662p1(c: Cast) -> None:
     the card prints and a `Dropped` watch can see -- `once=True` because
     the creature only falls the once.
 
-    `dropped=("c.forbid(action=)",)` is the one remaining gap: the
-    riderless restriction,
+    **The riderless restriction is written and its marker was stale.**
+    It said `c.forbid` "takes rows away by ref, keyword or usage" and
+    that an action category is a different axis -- true when written.
+    `c.forbid(action=)` takes a sequence of `ActionType` now, so the
+    restriction is
     *"the only actions it can take while riderless are move actions and
     free actions"*. That is an action-category ban and there is no verb
     for one -- `c.forbid` takes rows away by ref, keyword or usage, and
