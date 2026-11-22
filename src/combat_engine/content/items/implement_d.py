@@ -1853,21 +1853,27 @@ def i2908x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with a primal implement power using this totem",
     on=HIT_BY_ME,
-    dropped=("c.untargetable(keyword=)",),
 )
 def i2908p1(c: Cast) -> None:
-    """Barring a whole keyword *is* said: `c.forbid(keyword=)` refuses every
-    row the creature has that carries the keyword, which is the first half
-    of the printed line.
+    """*"The enemy cannot use teleportation powers or be the target of
+    teleportation powers (save ends)."*
 
-    The second half is a different sentence and is still missing -- being
-    the *target* of somebody else's teleportation power. `c.forbid` takes
-    rows away from the creature it sits on, so it cannot refuse an ally's
-    power that names this creature."""
+    **Two sentences and two calls, which the old note had right.**
+    `c.forbid(keyword=)` refuses every row *the creature itself* has that
+    carries the keyword -- *"cannot use"* exactly -- and cannot touch an
+    ally's power that names this creature, because the row being refused
+    is not the creature's own.
+
+    `c.untargetable(keyword=)` is the other half and is a property of the
+    target: `dsl.candidates` does not offer a creature holding it to a
+    row carrying the keyword. Both are `save ends`, which is the one
+    duration the card gives the pair."""
     foe = _struck(c)
     if foe is None:
         return
     c.forbid(keyword=Keyword.TELEPORTATION, on=foe, until=When.SAVE_ENDS)
+    c.untargetable(keyword=Keyword.TELEPORTATION, on=foe,
+                   until=When.SAVE_ENDS)
 
 
 @power(

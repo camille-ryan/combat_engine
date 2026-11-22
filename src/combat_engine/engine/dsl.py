@@ -4714,10 +4714,36 @@ def candidates(
         return bool(waived and mine is not None and mine.total(
             "ignore_line_of_effect", {"attacker": actor, "target": aim}) > 0)
 
+    # **"The enemy cannot ... be the target of teleportation powers."**
+    # `c.forbid(keyword=)` is the other half of that sentence and takes
+    # *rows away from the creature it sits on*, so it cannot refuse
+    # somebody else's power that names this one. This is that half:
+    # a creature may hold `no_target:<keyword>` and is then not offered
+    # to a row carrying it.
+    #
+    # Computed **once** rather than per candidate: `keywords_of` walks
+    # the caster's granted keywords, and this function is on the
+    # targeting hot path. An empty set is the ordinary case and costs a
+    # set build.
+    said = {
+        str(getattr(k, "value", k)).lower()
+        for k in keywords_of(world, actor, p)
+    }
+
+    def refuses(aim: int) -> bool:
+        theirs = world.get(aim, Mods)
+        if theirs is None or not said:
+            return False
+        return any(
+            theirs.total(f"no_target:{word}", {"attacker": actor}) > 0
+            for word in said
+        )
+
     return [
         c
         for c in pool
         if can_aim(c)
+        and not refuses(c)
         and squares(world, c) & area
         and (unblocked(c)
              or any(line_of_effect(world, eye, c) for eye in eyes))

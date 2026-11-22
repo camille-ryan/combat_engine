@@ -571,6 +571,11 @@ CATEGORIES: dict[str, dict] = {
                 "forgo_second_wind", "refuses_forced_attack",
                 "shares_feat_bonus",
                 "counts_as_keyword",
+                # Beside `forbid` for the reason that verb's own entry
+                # gives: this is the same printed sentence answered from
+                # the other side. `forbid` takes a creature's own rows
+                # away; this stops somebody else's row naming it. #1341.
+                "untargetable",
                 # Beside `counts_as_keyword` and not under gear: both say
                 # a named thing COUNTS AS something it is not, for one
                 # creature and for a while. `c.sheathed` and `c.wielding`

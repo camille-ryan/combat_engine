@@ -118,7 +118,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Can be behind blocking terrain or otherwise out of line of
 - `c.ignores_long_range(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "You take no penalty to attack rolls for attacking at long range."
-- `c.invisible(self, *, to: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.SONT: "start of source's next turn">) -> 'Effect | None'`
+- `c.invisible(self, *, to: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.SONT: "start of source's next turn">, how: 'str' = 'invisible') -> 'Effect | None'`
   - Cannot be seen -- by one creature, or by everybody.
 - `c.no_advantage(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None, gains: 'bool' = False) -> 'Effect | None'`
   - "You do not grant combat advantage to any of your enemies."
@@ -214,6 +214,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You cannot be forced to attack an ally under any circumstances."
 - `c.shares_feat_bonus(self, *refs: 'str', on: 'int | None' = None) -> 'None'`
   - Select arena weapons: a feat bonus for one reaches the others.
+- `c.untargetable(self, *, keyword: 'Keyword', on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
+  - *"The enemy cannot ... be the target of teleportation powers
 - `c.waive(self, condition: 'Condition', *what: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Switch off part of what a condition costs, without lifting it.
 

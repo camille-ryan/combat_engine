@@ -37,6 +37,7 @@ from combat_engine.engine import (
     SELF,
     ActionType,
     Cast,
+    EffectApplied,
     Gear,
     SkillCheck,
     When,
@@ -158,17 +159,40 @@ def f1284(c: Cast) -> None:
 
 
 @power("f1785", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_invisible()",))
+       reach=PERSONAL, target=SELF)
 def f1785(c: Cast) -> None:
-    """A free Stealth check to hide whenever you turn invisible.
+    """*"Whenever you become invisible, you can make a Stealth check to
+    hide as a free action."*
 
-    Hiding is real -- rolled against the watchers' passive Perception in
-    five places in the tree -- so this is not a narrative row. What is
-    missing is the moment. `c.hide` *is* `c.invisible`: it calls it, on
-    the same `HIDDEN_FROM` relation with the same `f"{ref} unseen"`
-    label, so the one event announcing either cannot say which happened
-    -- and a row that fired on hiding would answer by hiding again.
+    **The old note had the gap exactly and the fix is one word.** It
+    said `c.hide` *is* `c.invisible` -- the same relation, the same
+    label -- so nothing announcing either could say which happened, and
+    a row firing on a hide would answer by hiding again.
+
+    `c.invisible(how=)` writes that word into the effect's label:
+    `unseen:invisible` against `unseen:hidden`, which `c.hide` passes on
+    both of its arms. So the gate below reads the first and the hide it
+    makes in reply lays the second, which is what closes the loop rather
+    than a guard counting how many times it has run.
+
+    Nothing in the tree reads this label's text -- every reader goes
+    through `query.unseen_by` or the relation itself -- so it was a free
+    place to put the word, and `EffectApplied` already carries it.
+
+    `check=True`, because the card says *a Stealth check*: the roll is
+    against the watchers' passive Perception, which is what
+    `_stealth_hide` does and what makes this more than a second way of
+    saying the same state.
     """
+    def went_unseen(ev: Any) -> None:
+        if getattr(ev, "target", None) != c.me:
+            return
+        if not str(getattr(ev, "label", "")).endswith("unseen:invisible"):
+            return
+        if c.may("make a Stealth check to hide"):
+            c.hide(check=True)
+
+    c.watch(EffectApplied, went_unseen, until=When.ENCOUNTER, on=c.me)
 
 
 @power("f1981", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

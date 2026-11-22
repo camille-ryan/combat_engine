@@ -2636,6 +2636,7 @@ class Cast:
         to: int | None = None,
         on: int | None = None,
         until: When = When.SONT,
+        how: str = "invisible",
     ) -> Effect | None:
         """Cannot be seen -- by one creature, or by everybody.
 
@@ -2645,6 +2646,20 @@ class Cast:
         `on` is *who* is unseen, and defaults to the caster. It hid the
         caster and nobody else, so "the creature **or one of its allies** is
         invisible to the target" had to set the relation by hand.
+
+        **`how` is the one thing that told invisibility from hiding, and
+        before it nothing did.** `c.hide` goes through this verb -- same
+        relation, same duration machinery -- and laid the identical
+        label, so a row watching for *"whenever you become invisible"*
+        answered a hide as well, and the hide it then made announced
+        itself and answered again. `f1785` is that card and its own
+        marker said so.
+
+        Written into the label as `unseen:<how>` rather than as a new
+        event or a flag on the effect: nothing in the tree reads this
+        label's text -- every reader goes through `query.unseen_by` or
+        the `HIDDEN_FROM` relation -- so it is a free place to put a
+        word, and `EffectApplied` already carries it.
         """
         who = on or self.me
         watchers = [to] if to is not None else self.enemies()
@@ -2652,8 +2667,8 @@ class Cast:
         if not pairs:
             return None
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} unseen", relations=pairs,
-            by=self.ref,
+            who, self.me, until, label=f"{self.ref} unseen:{how}",
+            relations=pairs, by=self.ref,
         )
 
     def hide(
@@ -2723,7 +2738,10 @@ class Cast:
             return None
         if check:
             return self._stealth_hide(from_=from_, until=until, skill=skill)
-        return self.invisible(to=from_, until=until)
+        # `how="hidden"`, which is what keeps a row watching for *"whenever
+        # you become invisible"* from answering a hide -- and from
+        # answering the hide it makes in reply. See `c.invisible`.
+        return self.invisible(to=from_, until=until, how="hidden")
 
     def _stealth_hide(
         self, *, from_: int | None, until: When, skill: str = "stealth"
@@ -2813,7 +2831,11 @@ class Cast:
             known = self.world.get(self.me, Powers) or self.world.add(
                 self.me, Powers())
             known.charges[STEALTH_RESULT] = int(last.total)
-        return self.invisible(to=from_, until=until)
+        # `how="hidden"` for the same reason the branch above passes it:
+        # a row watching for *"whenever you become invisible"* must not
+        # answer the roll-and-hide form either, and this is the arm
+        # `f1785` itself uses in reply.
+        return self.invisible(to=from_, until=until, how="hidden")
 
     def counts_as_nearest(
         self,
@@ -10551,6 +10573,42 @@ class Cast:
             who, self.me, until, label=self.ref, by=self.ref,
             reshape=into, reshape_when=gate, reshape_optional=optional,
             retarget=retarget,
+        )
+
+    def untargetable(
+        self, *, keyword: Keyword, on: int | None = None,
+        until: When = When.SAVE_ENDS,
+    ) -> Effect | None:
+        """*"The enemy cannot ... be the target of teleportation powers
+        (save ends)."*
+
+        **The other half of a sentence `c.forbid` says only half of.**
+        That verb takes rows away from the creature it sits on -- it
+        refuses every row *that creature* has carrying the keyword --
+        which is *"cannot use teleportation powers"* exactly. It cannot
+        touch an ally's power that names this creature, because the row
+        being refused is not the creature's own.
+
+        So this is a property of the **target**, read in
+        `dsl.candidates`: a creature holding `no_target:<keyword>` is
+        not offered to a row carrying it. The two halves of `i2908p1`
+        are therefore two calls, which is what the card is.
+
+        Held as an ordinary modifier keyed by the keyword's own word,
+        rather than one term with the keyword in its value: `Mods.total`
+        sums a term, and summing "which keyword" is not a question. The
+        same reasoning as `skill:<name>`.
+
+        Theirs, so it defaults to the **target**, the way every other
+        imposition on this class does.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.bonus(
+            f"no_target:{str(getattr(keyword, 'value', keyword)).lower()}",
+            1, on=who, until=until,
+            label=f"{self.ref} no target",
         )
 
     def lend_defences(

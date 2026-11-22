@@ -87217,6 +87217,147 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def becoming_invisible_is_not_hiding(out: Result) -> None:
+    """Two cards about being unseen, and both needed something the
+    engine could not say.
+
+    * `f1785`: *"whenever you become invisible, you can make a Stealth
+      check to hide as a free action"*. `c.hide` **is** `c.invisible` --
+      the same `HIDDEN_FROM` relation, the same label -- so nothing
+      announcing either could say which happened, and a row firing on a
+      hide would answer by hiding again. Its own marker said so.
+    * `i2908p1`: *"the enemy cannot use teleportation powers **or be the
+      target of** teleportation powers"*. `c.forbid(keyword=)` is the
+      first half exactly; it takes rows away from the creature it sits
+      on, so it cannot refuse an ally's power that names this one.
+
+    **`c.invisible(how=)` is one word in a label nothing reads.** Every
+    reader of this state goes through `query.unseen_by` or the relation
+    itself, so the text was free to carry `unseen:invisible` against
+    `unseen:hidden` -- and that is what closes `f1785`'s loop, rather
+    than a guard counting how many times it has run.
+
+    **`c.untargetable(keyword=)` is a property of the TARGET**, read in
+    `dsl.candidates`, which is the only side of the question
+    `c.forbid` cannot reach.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, candidates
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import EffectApplied, Hit, SkillCheck
+    from combat_engine.engine.types import Keyword
+
+    FEAT, TOTEM = "f1785", "i2908p1"
+
+    # -- the label tells the two apart --------------------------------------
+    world, me, _ = _board(FEAT, 1)
+    seen: list[str] = []
+    world.bus.on(EffectApplied, lambda e: seen.append(str(e.label)))
+    Cast(world=world, me=me, ref="drv").invisible(until=When.EONT)
+    out.that(any(x.endswith("unseen:invisible") for x in seen),
+             "going invisible announces `unseen:invisible`",
+             f"{[x for x in seen if 'unseen' in x]}")
+    seen.clear()
+    Cast(world=world, me=me, ref="drv").hide(until=When.ENCOUNTER)
+    out.that(any(x.endswith("unseen:hidden") for x in seen)
+             and not any(x.endswith("unseen:invisible") for x in seen),
+             "and hiding announces `unseen:hidden` and NOT the other --"
+             " the two were one label, which is the whole of what the"
+             " feat below could not read",
+             f"{[x for x in seen if 'unseen' in x]}")
+
+    # -- the feat answers one and not the other -----------------------------
+    w2, me2, _ = _board(FEAT, 1)
+    # Stripped before arming, for the same reason the control below is:
+    # the board arms this row, so running the body again left TWO
+    # watches and one invisibility rolled two Stealth checks.
+    for eff in list(w2.effects.of(me2)):
+        if eff.by == FEAT:
+            w2.effects.end(eff)
+    REGISTRY[FEAT].body(Cast(world=w2, me=me2, ref=FEAT))
+    rolls: list[str] = []
+    w2.bus.on(SkillCheck, lambda e: rolls.append(str(e.skill)))
+    Cast(world=w2, me=me2, ref="drv").invisible(until=When.EONT)
+    out.that(rolls.count("stealth") == 1,
+             "with the feat, becoming invisible rolls ONE Stealth check"
+             " -- the free action the card gives",
+             f"{rolls}")
+
+    before = len(rolls)
+    Cast(world=w2, me=me2, ref="drv").hide(check=True)
+    out.that(rolls.count("stealth") - before <= 1,
+             "**and hiding does not re-trigger it.** The reply the feat"
+             " makes is itself a hide, so a gate reading the shared"
+             " label would answer its own answer -- once per hide here,"
+             " which is the hide that was asked for and nothing else",
+             f"{rolls}")
+
+    w3, me3, _ = _board(FEAT, 1)
+    # **The board arms `f1785` itself** -- it is `action=NONE` -- so a
+    # control measured on the board as dealt has the watch already
+    # standing and rolls a Stealth check. Measured: `['stealth']` where
+    # the arm wanted nothing. The row's own effect is stripped first.
+    for eff in list(w3.effects.of(me3)):
+        if eff.by == FEAT:
+            w3.effects.end(eff)
+    bare: list[str] = []
+    w3.bus.on(SkillCheck, lambda e: bare.append(str(e.skill)))
+    Cast(world=w3, me=me3, ref="drv").invisible(until=When.EONT)
+    out.that("stealth" not in bare,
+             "and WITHOUT the feat armed, going invisible rolls nothing --"
+             " measured on the same board, so the line above is the row",
+             f"{bare}")
+
+    # -- the totem's second half --------------------------------------------
+    w4, me4, _ = _board(TOTEM, 1)
+    cast4 = Cast(world=w4, me=me4, ref="drv")
+    foe = sorted(cast4.enemies())[0]
+    port = next((r for r in REGISTRY.values()
+                 if Keyword.TELEPORTATION in (r.keywords or ())
+                 and r.reach is not None and r.reach.kind == "ranged"
+                 and r.target is not None and r.target.side == "enemy"),
+                None)
+    out.that(port is not None,
+             "premise: there is a ranged teleportation power that aims at"
+             " an enemy, which is the shape the card forbids",
+             f"{port and port.ref}")
+    if port is None:
+        return
+    out.that(foe in candidates(w4, me4, port),
+             "premise: the enemy is a legal target of it before anything"
+             " is laid",
+             f"{foe} in {len(candidates(w4, me4, port))}")
+
+    # **The ROW, not the verb.** Calling `c.untargetable` here directly
+    # left the plant that deletes the row's call green -- the rule was
+    # measuring the facility and saying nothing about the card. The row
+    # reads its victim off `c.trigger`, which is a hit it made.
+    REGISTRY[TOTEM].body(Cast(
+        world=w4, me=me4, ref=TOTEM,
+        trigger=Hit(attacker=me4, target=foe, power="mba", critical=False),
+    ))
+    out.that(foe not in candidates(w4, me4, port),
+             "with the totem's second half the enemy cannot BE TARGETED"
+             " by it -- which `c.forbid` could not say, because the row"
+             " being refused is not the creature's own",
+             f"{sorted(candidates(w4, me4, port))}")
+    plain = next((r for r in REGISTRY.values()
+                  if Keyword.TELEPORTATION not in (r.keywords or ())
+                  and r.reach is not None and r.reach.kind == "ranged"
+                  and r.target is not None and r.target.side == "enemy"),
+                 None)
+    out.that(plain is not None and foe in candidates(w4, me4, plain),
+             "and a power WITHOUT the keyword still finds it -- the"
+             " refusal is by keyword, not a blanket",
+             f"{plain and plain.ref}")
+
+    for ref in (FEAT, TOTEM):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_heal_comes_out_maximum(out: Result) -> None:
     """*"Until the end of this turn, your healing powers restore the
     maximum number of hit points possible"* -- the third of `i3167p1`'s
@@ -121054,6 +121195,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "invisible_is_not_hidden": (
+        becoming_invisible_is_not_hiding,
+        "`f1785` answers becoming invisible and not hiding, and "
+        "`i2908p1` makes a creature untargetable by a keyword (#1341)",
     ),
     "heal_comes_out_maximum": (
         a_heal_comes_out_maximum,
