@@ -87244,6 +87244,135 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_second_elemental_manifestation(out: Result) -> None:
+    """*"Select a new `r33` elemental manifestation"*, and *"you can take
+    this feat multiple times"* -- `f604`. And `f1848`, which pays *"the
+    temporary hit points increase by 5 if you have two or more elemental
+    manifestations."*
+
+    **A character could not hold two.** `RaceLine.granted` picked exactly
+    one of the thirteen "choose one" rows, so `f1848` had nothing to ask
+    and `f604` nothing to grant -- which is what both notes said.
+
+    `granted(extra=)` deals the extra pick and
+    `chargen.MORE_MANIFESTATIONS` counts the feat. A table in `chargen`
+    rather than a header field, deliberately: the thing being widened is
+    a **race line**, chargen's own object, so a header field would have
+    content declaring a fact about a table only chargen reads.
+
+    **`f1848` reads `Powers.all` on ITSELF and not `c.knows`.** That verb
+    answers who *on the board* has a row, and would be true for a
+    character standing next to somebody else's manifestation --
+    `features.racial._holds` draws the same distinction in the same
+    words.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.content.feats.general_k import R33
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import PowerUsed
+
+    PICK, PAYS = "f604", "f1848"
+
+    # -- the extra pick ------------------------------------------------------
+    line = chargen._races_from_the_book().get("r33")
+    out.that(line is not None and len(line.one_of or ()) > 2,
+             "premise: the race prints a 'choose one' list longer than two,"
+             " so there is something for a second pick to come out of",
+             f"{len(line.one_of or ()) if line else 0} options")
+    if line is None:
+        return
+
+    one = [r for r in line.granted(Random(5)) if r in line.one_of]
+    two = [r for r in line.granted(Random(5), extra=1) if r in line.one_of]
+    out.that(len(one) == 1,
+             "one manifestation without the feat, which is the printed"
+             " 'choose one'",
+             f"{one}")
+    out.that(len(two) == 2,
+             "and TWO with it",
+             f"{two}")
+    # **Distinctness over forty seeds, not one.** With thirteen options a
+    # single seed draws two different rows even when the draw can
+    # repeat, so the plant replacing `rng.sample` with two independent
+    # `rng.choice` calls passed. Measured.
+    repeats = [
+        got for seed in range(40)
+        if len(got := [r for r in line.granted(Random(seed), extra=1)
+                       if r in line.one_of]) != len(set(got))
+    ]
+    out.that(not repeats,
+             "and distinct on every one of forty seeds -- `rng.sample`,"
+             " so a second pick cannot be the same row twice. One seed"
+             " cannot say this: with thirteen options two independent"
+             " draws usually differ anyway",
+             f"{repeats[:3]}")
+    out.that(set(one) <= set(two),
+             "and the first pick is still among them: the feat adds a"
+             " manifestation rather than redrawing the character's",
+             f"{one} vs {two}")
+
+    many = [r for r in line.granted(Random(5), extra=99) if r in line.one_of]
+    out.that(len(many) == len(line.one_of),
+             "capped at the list, so a feat held more times than the race"
+             " has options grants what there is rather than raising",
+             f"{len(many)} of {len(line.one_of)}")
+
+    out.that(PICK in chargen.MORE_MANIFESTATIONS,
+             f"and {PICK} is what the dealer counts -- a table in"
+             " `chargen` rather than a header field, because a race line"
+             " is chargen's own object",
+             f"{sorted(chargen.MORE_MANIFESTATIONS)}")
+
+    # -- what f1848 pays -----------------------------------------------------
+    def temp_after(held: int) -> int:
+        world, me, _ = _board(PAYS, 1)
+        # **Every manifestation stripped first, then exactly `held` put
+        # back.** The board deals one of its own, so adding two on top
+        # gave three and the arm read the right number for the wrong
+        # reason.
+        known = must(world.get(me, Powers), "the character has powers")
+        known.known[:] = [r for r in known.known if r not in R33]
+        for ref in list(R33)[:held]:
+            known.known.append(ref)
+        vital = must(world.get(me, Health), "the character has hit points")
+        vital.temp = 0
+        REGISTRY[PAYS].body(Cast(
+            world=world, me=me, ref=PAYS,
+            trigger=PowerUsed(actor=me, power=R33[0], targets=()),
+        ))
+        return vital.temp
+
+    with_one = temp_after(1)
+    with_two = temp_after(2)
+    out.that(with_one == 5,
+             f"{PAYS} pays its printed 5 with ONE manifestation at heroic"
+             " tier",
+             f"{with_one}")
+    out.that(with_two == 10,
+             "**and 5 more with two**, which is the clause that was"
+             " dropped: 'the temporary hit points increase by 5 if you"
+             " have two or more elemental manifestations'",
+             f"{with_two}")
+
+    out.that(not REGISTRY[PAYS].unfinished,
+             f"{PAYS} carries no marker",
+             f"{REGISTRY[PAYS].unfinished}")
+    out.that(not REGISTRY[PICK].unfinished,
+             f"and {PICK} carries none either: its pick is written, and"
+             " adopting one manifestation instead of the other at a rest"
+             " is an ISSUE rather than a symbol. `lint.py` refuses"
+             " `dropped=` on a row whose body does nothing -- that"
+             " category means *plays, with one clause missing* -- and"
+             " `todo=` would mean *refused in play*, which the character"
+             " is not: it really does get its second manifestation",
+             f"{REGISTRY[PICK].unfinished}")
+
+
 def a_multiclass_swap_pays_power_points(out: Result) -> None:
     """Two multiclass swap feats move power points, by the same printed
     table read from opposite sides.
@@ -122990,6 +123119,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "second_manifestation": (
+        a_second_elemental_manifestation,
+        "`f604` deals a second elemental manifestation and `f1848` pays "
+        "5 more for holding two (#914)",
     ),
     "swap_pays_power_points": (
         a_multiclass_swap_pays_power_points,

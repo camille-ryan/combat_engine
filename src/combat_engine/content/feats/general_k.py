@@ -732,7 +732,6 @@ def f1836(c: Cast) -> None:
 
 @power("f1848", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=("chargen.RaceLine.granted(second=)",),
        trigger="you use a r33 racial power",
        on=Trigger(PowerUsed, _used_any(*R33), "you use a r33 racial power"))
 def f1848(c: Cast) -> None:
@@ -751,6 +750,23 @@ def f1848(c: Cast) -> None:
     from 11th level on. The numbers are the printed ones rather than a
     multiple derived from 5."""
     gain = 15 if c.level >= 21 else 10 if c.level >= 11 else 5
+    # **"The temporary hit points increase by 5 if you have two or more
+    # elemental manifestations."** A character can hold two now --
+    # `chargen.MORE_MANIFESTATIONS` counts `f604` and
+    # `RaceLine.granted(extra=)` deals the extra pick -- so the clause
+    # is readable: how many of the race's thirteen "choose one" rows
+    # this creature knows.
+    # **`Powers.all` on THIS creature, not `c.knows`.** That verb
+    # answers who *on the board* has a row and is true for a character
+    # standing next to somebody else's manifestation --
+    # `features.racial._holds` draws the same distinction in the same
+    # words.
+    from combat_engine.engine.components import Powers as _Powers
+
+    held = c.world.get(c.me, _Powers)
+    mine = sum(1 for ref in R33 if held is not None and ref in held.all)
+    if mine >= 2:
+        gain += 5
     c.temp_hp(gain, on=c.me)
 
 

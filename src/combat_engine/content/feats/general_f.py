@@ -509,11 +509,44 @@ def f602(c: Cast) -> None:
 
 
 @power("f604", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.RaceLine.granted(second=)",))
+       reach=PERSONAL, target=SELF)
 def f604(c: Cast) -> None:
-    """Learns a second elemental manifestation and lets a rest switch
-    between them. The manifestation is a racial choice, and there is no
-    race on a character to hold one."""
+    """*"Select a new `r33` elemental manifestation. When you take a
+    short rest or an extended rest, you can adopt this new elemental
+    manifestation instead of the one you had been exhibiting."* And
+    *"you can take this feat multiple times."*
+
+    **The second manifestation is written.** The old note said there is
+    no race on a character to hold one, and that was never the gap:
+    `RaceLine.granted` picked exactly **one** of the thirteen "choose
+    one" rows, so a character holding two could not be built.
+    `granted(extra=)` deals the extra pick and
+    `chargen.MORE_MANIFESTATIONS` is what counts this feat.
+
+    A table in `chargen` rather than a header field, deliberately: the
+    thing being widened is a **race line**, which is chargen's own
+    object, so a header field would have content declaring a fact about
+    a table only chargen reads. `ARMS_IN_THE_HAND` is the same shape.
+
+    `f1848` is the row that pays for holding two and is written with
+    this.
+
+    **Adopting one instead of the other at a rest is NOT written, and
+    it carries no marker.** `lint.py` refuses `dropped=` on a row whose
+    body does nothing -- rightly: that category means *plays, with one
+    clause missing*, and this row has no board behaviour at all to play.
+    `todo=` would be worse, because it means *refused in play* and the
+    character really does get its second manifestation.
+
+    So the remaining clause is `#1446` rather than a symbol, the same
+    way `#1445` holds the page that would offer
+    `chargen.retrain_on_rest`. It is a rest-time re-tune of a **racial**
+    pick, where that function flips a *feat's* swap off two records on
+    the sheet, and a manifestation is not recorded that way.
+
+    **An empty body, and `KNOWN_SILENT` says why.** The whole effect is
+    settled when the character is built; the hand is already dealt by
+    the time a `Cast` opens."""
 
 
 # -- the bard's virtues -----------------------------------------------------

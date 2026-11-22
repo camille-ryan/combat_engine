@@ -1565,6 +1565,26 @@ ORIGINAL = "original"
 #: once -- `#851`'s exact bug, introduced by the guard against it.
 _FEATURE_SUB_OPTION = re.compile(r"-f\d+s\d+$")
 
+#: Feats that buy one more pick from a race's "choose one" list.
+#:
+#: `f604` is the only card: *"select a new `r33` elemental
+#: manifestation. When you take a short rest or an extended rest, you can
+#: adopt this new elemental manifestation instead of the one you had been
+#: exhibiting."* -- and *"you can take this feat multiple times"*.
+#:
+#: **A table here rather than a header field**, which is the opposite of
+#: `Power.skill_powers`' call and for a stated reason: the thing being
+#: widened is a **race line**, not a power pool, and `RaceLine` is
+#: chargen's own object -- a header field would have content declaring a
+#: fact about a table only chargen reads. `ARMS_IN_THE_HAND` below is the
+#: same shape for the same reason.
+#:
+#: The swap-at-a-rest half of that card is not here: adopting one
+#: manifestation *instead of* another is a rest-time re-tune, which is
+#: `chargen.retrain_on_rest`'s territory and a different sentence.
+MORE_MANIFESTATIONS: frozenset[str] = frozenset({"f604"})
+
+
 #: Forks whose chosen arm is a row the character **holds**, rather than one
 #: its parent hands over or never grants at all.
 #:
@@ -2035,13 +2055,24 @@ class RaceLine:
             key=_sub_option_order,
         )
 
-    def granted(self, pick: Random | None = None) -> list[str]:
+    def granted(self, pick: Random | None = None,
+                extra: int = 0) -> list[str]:
         """The rows a character of this race carries into a fight.
 
         Its traits, and its racial powers -- or **one** of them where the
         block says to choose, which is the difference between a race that
         prints two powers and one that prints thirteen manifestations and
         asks for one.
+
+        **`extra` is how many MORE of a "choose one" list the character
+        may carry**, and one feat prints it: `f604` -- *"select a new
+        elemental manifestation"*, and *"you can take this feat multiple
+        times"*. `MORE_MANIFESTATIONS` is what the dealer counts it
+        from.
+
+        Capped at the list, so a feat held by a race with nothing left to
+        choose grants nothing rather than raising, and `0` is every
+        character that does not hold it.
 
         **A manifestation is one choice with two halves**, so the chosen
         sub-option *trait* comes in beside the chosen *power* rather than
@@ -2086,7 +2117,11 @@ class RaceLine:
         options = [m for m in self.one_of if m in REGISTRY]
         if not options:
             return [*self.traits, *written]
-        chosen = options[:1] if pick is None else [pick.choice(options)]
+        want = min(1 + max(extra, 0), len(options))
+        chosen = (
+            options[:want] if pick is None
+            else sorted(pick.sample(options, want))
+        )
         # **And the legs not taken come off.** A trait leg is in `traits`
         # and would otherwise be handed over beside the power that was
         # chosen instead -- which is what the tree works around today, with
@@ -8428,8 +8463,14 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
     # changes -- that is the point, and #680 accepts the fixture re-record
     # it costs -- but it changes through the hand rather than through the
     # roll order. #680.
+    # **`extra` is the feats that buy another "choose one" pick.** One
+    # card prints it -- `f604`, *"select a new elemental manifestation"*,
+    # *"you can take this feat multiple times"* -- and a sheet's feat
+    # list holds it once, so this counts one per held feat in the table.
+    # See `MORE_MANIFESTATIONS` and `RaceLine.granted`.
     racial = race.granted(
-        Random(f"{world.rng.seed}:{who.race}:racial")
+        Random(f"{world.rng.seed}:{who.race}:racial"),
+        extra=sum(1 for f in who.feats if f in MORE_MANIFESTATIONS),
     ) if race is not None else []
     # Proficiency is the same kind of sentence, and it has to be settled
     # before the shield is, because what is in the other hand decides

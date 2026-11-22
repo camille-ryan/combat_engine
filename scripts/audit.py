@@ -143,6 +143,25 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **A feat whose whole effect is a second racial pick**, settled when
+    # the character is built. `f604` prints *"select a new elemental
+    # manifestation"*, and `chargen.MORE_MANIFESTATIONS` plus
+    # `RaceLine.granted(extra=)` is where that happens -- the hand is
+    # already dealt by the time a `Cast` opens, so the body has nothing
+    # to do.
+    #
+    # Measured: `RaceLine.granted` for `r33` deals one manifestation
+    # without the feat and two with it, out of a thirteen-row list.
+    #
+    # It keeps a marker for the other half of its card -- adopting one
+    # manifestation instead of the other at a rest -- so this entry is
+    # about the half that landed.
+    #
+    # `drivers.a_second_elemental_manifestation` is the proof and
+    # measures the pick both ways, plus `f1848`'s payout for holding
+    # two.
+    "f604": "deals a second racial pick at build time; nothing to do on "
+            "a board -- see `drivers.a_second_elemental_manifestation`",
     # **Two feats whose whole effect is which skill powers a character
     # may choose**, which is settled when the hand is dealt.
     #
