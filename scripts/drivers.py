@@ -38491,7 +38491,7 @@ def a_row_may_grant_a_second_action_row(out: Result) -> None:
     from combat_engine.engine import actions as _actions
     from combat_engine.engine.components import Health, Position, Powers
     from combat_engine.engine.dsl import REGISTRY, use
-    from combat_engine.engine.query import distance_between, enemies
+    from combat_engine.engine.query import bloodied, distance_between, enemies
     from combat_engine.engine.types import ActionType
 
     def offers(world: object, who: int, ref: str) -> list[str]:
@@ -38581,8 +38581,22 @@ def a_row_may_grant_a_second_action_row(out: Result) -> None:
              f"{[(d4, left) for _, d4, _, left in standing]}")
 
     # ---- p13621c0: the stance, AND something bloodied to close on ------
+    # **Every enemy healed first, because the board deals one already
+    # bloodied.** Without this the "nothing bloodied" premise is simply
+    # false -- measured, creature 2 arrives at half hit points -- and
+    # both assertions below then report the board rather than the row:
+    # the refusal never happens, and the shift closes on *that* creature
+    # instead of the one this rule wounds, so the distance to the
+    # intended quarry does not move.
     world, me, _ = _audit.board("p13621", 1)
+    for other in enemies(world, me):
+        whole = world.need(other, Health)
+        whole.hp = whole.max_hp
     use(world, me, "p13621", targets=[me], spend=False)
+    out.that(not any(bloodied(world, e) for e in enemies(world, me)),
+             "premise: nothing is bloodied, which the board does not"
+             " give for free",
+             f"{[e for e in sorted(enemies(world, me)) if bloodied(world, e)]}")
     out.that(not offers(world, me, "p13621c0"),
              "**p13621c0 is refused with the stance up and nothing"
              " bloodied** -- its Requirement is declared, so the move is"
