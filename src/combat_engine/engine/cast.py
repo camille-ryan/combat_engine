@@ -6983,6 +6983,8 @@ class Cast:
         toward: int | None = None,
         beside: int | None = None,
         in_zone: int | None = None,
+        bloodied_ally: bool = False,
+        once_a_round: bool = False,
         on: int | None = None,
         until: When = When.STANCE,
     ) -> Effect | None:
@@ -7051,6 +7053,32 @@ class Cast:
         # what "toward" means there. Its own guard only accepts `toward`
         # and `beside`, so a separate word is invisible to it and says what
         # it means. `actions._granted_zone` is the reader.
+        # **Two narrowings that are not anchors**, riding the same
+        # companion-modifier carrier for the same reason `in_zone` does:
+        # the word is what a reader looks for, and a word nobody reads is
+        # a grant that costs nothing and does nothing (#583).
+        #
+        # `f3535` prints both of them on one line -- *"once per round, you
+        # can use the aid defense action as a minor action, but only if
+        # the chosen ally is bloodied"* -- and neither is expressible at
+        # the *offer* alone. `_manoeuvres` offers aid per adjacent enemy
+        # and the ally is chosen when it resolves, deliberately: the cross
+        # product of enemies and allies would put a dozen near-identical
+        # entries on one menu. So the condition on the **ally** has to
+        # reach the resolution, and the condition on the **round** has to
+        # reach the offer, and they are read in two places.
+        #
+        # They narrow the CHEAP cost only. Aid is still a standard action
+        # for everybody, unconditionally -- which is what makes this a
+        # narrowing of a granted option rather than a change to the
+        # printed manoeuvre.
+        for word, flag in (("bloodied_ally", bloodied_ally),
+                           ("once_a_round", once_a_round)):
+            if flag:
+                self.bonus(
+                    f"{what} as {cost.value} {word}", 1, on=who,
+                    until=until, kind=self.ref,
+                )
         for word, anchor in (("toward", toward), ("beside", beside),
                              ("in_zone", in_zone)):
             if anchor is not None:

@@ -72892,6 +72892,144 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_cheaper_aid_narrowed_to_a_bloodied_ally(out: Result) -> None:
+    """*"Once per round, you can use the aid defense action as a minor
+    action, but only if the chosen ally is bloodied"* -- `f3535`. #1470.
+
+    **Two narrowings on a granted option, and they land in two different
+    places.** `_manoeuvres` offers aid per adjacent **enemy** and the ally
+    is chosen when it resolves -- deliberately, because the cross product
+    of enemies and allies would put a dozen near-identical entries on one
+    menu. So:
+
+    * *"once per round"* is a gate on the **offer**. An option taken once
+      and still listed is strictly more generous than the card.
+    * *"only if the chosen ally is bloodied"* reaches the **resolution**,
+      because that is where the ally is picked. The offer can only ask
+      whether such an ally exists -- offering a minor with nobody to help
+      would be an option that cannot be taken.
+
+    **A latch, not a count on the grant**, which is `move_companion`'s
+    recorded call one screen up in the same file: `c.grant_action` carries
+    squares rather than uses, so `Powers.latched` is the one store for
+    "has this been spent".
+
+    **Carried as companion modifiers**, the way `toward`, `beside` and
+    `in_zone` are -- `"aid_defence as minor bloodied_ally"`. A flag rather
+    than a value, which is the one difference: those three hold an entity
+    id `+1` because `Mods` holds ints and 0 is a legal id, and there is
+    nothing to carry here.
+
+    **The printed standard action is never taken away**, which is the arm
+    that makes this a narrowing of the feat's extra option rather than a
+    change to the manoeuvre everybody has. With no bloodied ally the menu
+    falls back to the standard, and the same after the round's use is
+    spent.
+
+    Why the marker was `actions.aid_defence(requires=bloodied)` and why
+    that was the wrong shape: a parameter on the resolution function
+    cannot stop the option being *offered*, and a condition on the option
+    cannot know which ally was chosen. It needed both ends.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions as _A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import allies as _allies
+    from combat_engine.engine.query import bloodied as _bloodied
+    from combat_engine.engine.turns import Encounter
+
+    ROW = "f3535"
+
+    def staged(hurt: int | None) -> tuple:
+        """The feat armed, every ally at full, then one of them bloodied.
+
+        **Every ally healed first, and the board is why.** It deals a
+        bloodied ally of its own, so the negative arm below cannot be
+        posed without this -- measured, both arms read one bloodied ally
+        and the gate looked dead.
+        """
+        world, me, _ = _board(ROW, 1)
+        REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+        mates = sorted(_allies(world, me))
+        for mate in mates:
+            whole = world.get(mate, Health)
+            if whole is not None:
+                whole.hp = whole.max_hp
+        if hurt is not None and hurt < len(mates):
+            sore = must(world.get(mates[hurt], Health), "the ally has hp")
+            sore.hp = max(1, sore.max_hp // 3)
+        return world, me, mates, Encounter(world)
+
+    def costs(world, enc, me: int) -> list[str]:        # noqa: ANN001
+        return sorted({o.cost.value for o in _A.legal(world, enc, me)
+                       if o.kind == "aid_defence"})
+
+    # -- the premises ------------------------------------------------------
+    world, me, mates, enc = staged(0)
+    out.that(len(mates) >= 2,
+             "premise: the caster has at least two allies, so 'the chosen"
+             " ally' is a real choice rather than the only one available",
+             f"{mates}")
+    out.that(_bloodied(world, mates[0])
+             and not any(_bloodied(world, a) for a in mates[1:]),
+             "premise: exactly one of them is bloodied",
+             f"{[(a, _bloodied(world, a)) for a in mates]}")
+
+    # -- the offer ---------------------------------------------------------
+    out.that(costs(world, enc, me) == ["minor"],
+             "with a bloodied ally on the board the feat's cheaper aid is"
+             " offered",
+             f"{costs(world, enc, me)}")
+    dry, me2, _mates2, enc2 = staged(None)
+    out.that(costs(dry, enc2, me2) == ["standard"],
+             "and with NO bloodied ally it is not -- the menu falls back"
+             " to the printed standard action, which is the arm that"
+             " makes this a narrowing of the feat's option rather than a"
+             " change to the manoeuvre everybody has",
+             f"{costs(dry, enc2, me2)}")
+
+    # -- once a round ------------------------------------------------------
+    w3, me3, _m3, enc3 = staged(0)
+    cheap = next(o for o in _A.legal(w3, enc3, me3)
+                 if o.kind == "aid_defence" and o.cost.value == "minor")
+    out.that(_A.perform(w3, enc3, me3, cheap),
+             "premise: the cheaper aid can be taken",
+             "taken")
+    out.that(costs(w3, enc3, me3) == ["standard"],
+             "and once taken it is gone for the round, with the standard"
+             " still there -- an option taken once and still listed is"
+             " strictly more generous than *'once per round'*",
+             f"{costs(w3, enc3, me3)}")
+
+    # -- the resolution picks the bloodied one, whichever it is -----------
+    for which in (0, 1):
+        w4, me4, m4, enc4 = staged(which)
+        before = {a: len(list(w4.effects.of(a))) for a in m4}
+        pick = next((o for o in _A.legal(w4, enc4, me4)
+                     if o.kind == "aid_defence" and o.cost.value == "minor"),
+                    None)
+        if pick is None:
+            out.that(False, f"the cheap aid is offered with ally {which}"
+                            " bloodied", "absent")
+            continue
+        _A.perform(w4, enc4, me4, pick)
+        helped = [a for a in m4 if len(list(w4.effects.of(a))) > before[a]]
+        out.that(helped == [m4[which]],
+                 "the cheaper aid lands on the BLOODIED ally and not"
+                 " merely on the first one -- asked for each of the two"
+                 " in turn, because a resolution that always took"
+                 " `friends[0]` would pass whichever arm happened to"
+                 " bloody that ally",
+                 f"bloodied {m4[which]}, aided {helped}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker: its initiative half was"
+             " already written and these two clauses were the rest",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def deep_liquid_is_crossed_or_paid_for(out: Result) -> None:
     """`Grid.liquid`: squares you would go *through*, and the permission
     to walk on them. `i1322x1`, `i3110x1`, `i3199p2`, `m4356a5`. #1449.
@@ -127853,6 +127991,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "cheap_aid": (
+        a_cheaper_aid_narrowed_to_a_bloodied_ally,
+        "f3535's cheaper aid is once a round and only for a bloodied"
+        " ally, narrowed at the offer and at the resolution (#1470)",
     ),
     "deep_liquid": (
         deep_liquid_is_crossed_or_paid_for,

@@ -2096,6 +2096,80 @@ def _granted_zone(
     return -1
 
 
+def _cheap_aid_open(
+    world: World, actor: int, what: str, cost: ActionType
+) -> bool:
+    """Is the **cheaper** aid still available, per the card that granted it?
+
+    `f3535`: *"once per round, you can use the aid defense action as a
+    minor action, but only if the chosen ally is bloodied."* Two
+    narrowings on one granted option, and only one of them belongs here.
+
+    **"Once per round" belongs at the offer**, because an option taken
+    once and still listed is strictly more generous than the card. It is
+    a latch, not a count on the grant -- `c.grant_action` carries squares
+    rather than uses, which is the call `_shift_offers`' own note records
+    for `move_companion` one screen up, so there is one answer to "has
+    this been spent" rather than a second.
+
+    **"Only if the chosen ally is bloodied" belongs at the offer too, but
+    only as *satisfiability*.** Aid is offered per adjacent **enemy** and
+    the ally is chosen when it resolves -- `_manoeuvres` says why, and it
+    is deliberate: the cross product would put a dozen near-identical
+    entries on one menu. So the honest gate here is "is there anybody
+    this could legally help", and `execute` is what holds the choice to a
+    bloodied ally. Offering the minor with no bloodied ally on the board
+    would be an option that cannot be taken.
+
+    The standard action is untouched either way. Both narrowings are on
+    the granted cost, which is what keeps this a narrowing of an option
+    rather than a change to the printed manoeuvre. `#1470`.
+    """
+    from .cast import Cast as _CastFor
+    from .query import allies as _allies
+    from .query import bloodied as _bloodied
+
+    asker = _CastFor(world=world, me=actor, ref=f"actions:{what}")
+    if _granted_flag(world, actor, what, cost, "once_a_round") and (
+        asker.latched(f"{what} as {cost.value}")
+    ):
+        return False
+    if _granted_flag(world, actor, what, cost, "bloodied_ally"):
+        return any(
+            alive(world, a) and _bloodied(world, a)
+            for a in _allies(world, actor)
+        )
+    return True
+
+
+def _granted_flag(
+    world: World, actor: int, what: str, cost: ActionType, word: str
+) -> bool:
+    """Does a granted action carry this narrowing? `#1470`.
+
+    `c.grant_action(bloodied_ally=, once_a_round=)` lays a companion
+    modifier keyed `"<what> as <cost> <word>"`, the way `toward`,
+    `beside` and `in_zone` lay theirs; this reads the flag back.
+
+    **A flag rather than a value**, which is the one difference from
+    `_anchored` and `_granted_zone`: those carry an entity id `+1`
+    because `Mods` holds ints and 0 is a legal id. There is nothing to
+    carry here, so the modifier is 1 and its presence is the answer.
+
+    `granted_actions` partitions its key on `" as "`, so the cost half
+    arrives as `"minor bloodied_ally"` -- invisible to `_granted`, which
+    is what keeps the narrowing from reading as a second grant at a cost
+    nobody prints.
+    """
+    from .query import granted_actions
+
+    want = f"{cost.value} {word}"
+    for (key, half), raw in granted_actions(world, actor).items():
+        if key == what and half == want and raw > 0:
+            return True
+    return False
+
+
 def _granted(world: World, actor: int) -> dict[tuple[str, ActionType], int]:
     """`query.granted_actions`, with the cost as an `ActionType`."""
     from .query import granted_actions
@@ -3021,6 +3095,7 @@ def _manoeuvres(world: World, encounter: Encounter, actor: int) -> list[Action]:
         if what in ("aid_attack", "aid_defence")
         and cost is not ActionType.STANDARD
         and encounter.can_spend(actor, cost)
+        and _cheap_aid_open(world, actor, what, cost)
     }
     standard = encounter.can_spend(actor, ActionType.STANDARD)
     if not standard and not cheap:
@@ -3649,12 +3724,36 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # this creature can usefully take, so it is refused rather than
         # spending a standard action on nothing.
         friends = [a for a in _allies(world, actor) if alive(world, a)]
+        # **A card that granted the cheaper aid may have narrowed WHO it
+        # helps, and this is the only place that can hold it.** `f3535`
+        # prints *"only if the chosen ally is bloodied"*, and the ally is
+        # chosen here rather than at offer time -- see `_manoeuvres`. The
+        # offer checks only that such an ally exists; this is what stops
+        # the minor action aiding a healthy one.
+        #
+        # **Scoped to the granted cost.** Paying the printed standard
+        # action aids anybody, which is the rule for everybody; the
+        # narrowing rides the option the feat added.
+        from .query import bloodied as _bloodied_for_aid
+        cheap_cost = action.cost is not ActionType.STANDARD
+        if cheap_cost and _granted_flag(
+            world, actor, action.kind, action.cost, "bloodied_ally"
+        ):
+            friends = [a for a in friends if _bloodied_for_aid(world, a)]
         if not friends:
             return False
         ally = cast.choose(friends, "which ally to aid") or friends[0]
         if action.kind == "aid_attack":
-            return cast.aid_attack(foe, ally) is not None
-        return cast.aid_defence(foe, ally) is not None
+            took = cast.aid_attack(foe, ally) is not None
+        else:
+            took = cast.aid_defence(foe, ally) is not None
+        # **The latch is spent on the use, not on the offer**, so an aid
+        # that refused costs nothing. `_cheap_aid_open` is the reader.
+        if took and cheap_cost and _granted_flag(
+            world, actor, action.kind, action.cost, "once_a_round"
+        ):
+            cast.latch(f"{action.kind} as {action.cost.value}")
+        return took
 
     if action.kind == "stabilise":
         # **No row, so no ref**, the same as a manoeuvre: nothing declares

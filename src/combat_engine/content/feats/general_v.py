@@ -1594,8 +1594,7 @@ def f3534(c: Cast) -> None:
 
 
 @power("f3535", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("actions.aid_defence(requires=bloodied)",))
+       reach=PERSONAL, target=SELF)
 def f3535(c: Cast) -> None:
     """"Once per round, you can use the aid defense action as a minor
     action, but only if the chosen ally is bloodied. Also, you gain a +2
@@ -1622,7 +1621,22 @@ def f3535(c: Cast) -> None:
     from combat_engine.engine.types import ActionType
 
     c.initiative(2, on=c.me)
+    # **Both narrowings are on the GRANTED cost**, which is what the
+    # card says: the printed aid defence is a standard action for
+    # everybody and this feat adds a cheaper option with two strings on
+    # it. `#1470` has the mechanism -- the offer checks that a bloodied
+    # ally exists and that the round's use is unspent, and
+    # `actions.execute` holds the choice to a bloodied ally and spends
+    # the latch.
+    #
+    # "Only if the chosen ally is bloodied" could not be a condition on
+    # the *option* alone: aid is offered per adjacent enemy and the ally
+    # is chosen when it resolves, deliberately, so the condition has to
+    # reach the resolution. That is why the marker named
+    # `actions.aid_defence(requires=bloodied)` and why the answer is not
+    # a parameter on that function.
     c.grant_action("aid_defence", ActionType.MINOR, on=c.me,
+                   bloodied_ally=True, once_a_round=True,
                    until=When.ENCOUNTER)
 
 

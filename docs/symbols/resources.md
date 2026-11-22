@@ -108,7 +108,7 @@ Things a creature spends, and the budget it spends them from.
   - "You can take an extra move action."
 - `c.extra_turn(self, at: 'int') -> 'bool'`
   - Act again this round, at that initiative count. Solos do this.
-- `c.grant_action(self, what: 'str', cost: 'ActionType', *, squares_: 'int' = 1, toward: 'int | None' = None, beside: 'int | None' = None, in_zone: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.STANCE: 'stance'>) -> 'Effect | None'`
+- `c.grant_action(self, what: 'str', cost: 'ActionType', *, squares_: 'int' = 1, toward: 'int | None' = None, beside: 'int | None' = None, in_zone: 'int | None' = None, bloodied_ally: 'bool' = False, once_a_round: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.STANCE: 'stance'>) -> 'Effect | None'`
   - Let a creature do an ordinary thing for a different action.
 - `c.grant_action_point(self, count: 'int' = 1, *, on: 'int | None' = None) -> 'int'`
   - "The target gains 1 action point", outside the encounter's limit.
