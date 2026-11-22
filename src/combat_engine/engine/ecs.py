@@ -229,7 +229,7 @@ class World:
 
     def reachable_paths(
         self, eid: int, budget: int, kind: str = "walk", share: bool = False,
-        by: str = "",
+        by: str = "", granted_by: int = -1,
     ) -> dict[Any, list[Any]]:
         from .movement import reachable
 
@@ -237,7 +237,11 @@ class World:
         # `movement.may_enter`'s gate can narrow on it -- three cards say
         # "when a <class> power allows you to shift". Empty for a move
         # nobody attributed.
-        return reachable(self, eid, budget, kind=kind, share=share, by=by)
+        # `granted_by` is WHO asked, beside `by`'s which row -- see
+        # `Movement.ignores_shift_granted_by` for why a ref cannot answer
+        # the card that wants it.
+        return reachable(self, eid, budget, kind=kind, share=share, by=by,
+                         granted_by=granted_by)
 
     def reachable_squares(
         self, eid: int, budget: int, kind: str = "walk", share: bool = False
@@ -321,7 +325,8 @@ class World:
             return True
         return bool(kinds_of(self, eid) & wanted)
 
-    def difficult(self, for_: int | None = None, kind: str = "walk") -> set[Any]:
+    def difficult(self, for_: int | None = None, kind: str = "walk",
+                  *, granted_by: int = -1) -> set[Any]:
         """Terrain that costs extra, from the map and from any live zone.
 
         With `for_`, the squares that cost extra **for that creature** --
@@ -345,6 +350,14 @@ class World:
         if moves is None:
             return set(rough)
         ignored = moves.ignores | moves.ignores_when.get(kind, set())
+        # **A waiver keyed on who granted the move.** `f2424` gives allies
+        # the exemption only for a shift one of *its holder's* powers
+        # allowed, so the test is the grantor's id rather than a label or
+        # a move kind. An empty set -- every creature on every board until
+        # a row says otherwise -- costs one membership test. #1461.
+        if (granted_by >= 0 and kind == "shift"
+                and granted_by in moves.ignores_shift_granted_by):
+            return set()
         if "*" in ignored:
             # **A blanket waiver takes the imposed squares with it**, and
             # that is a ruling rather than an accident of line order. A
@@ -475,7 +488,8 @@ class World:
             return {}
         return dict(heights)
 
-    def crossing(self, for_: int, kind: str = "walk") -> Callable[[Any, Any], int]:
+    def crossing(self, for_: int, kind: str = "walk",
+                 *, granted_by: int = -1) -> Callable[[Any, Any], int]:
         """What one step of a move costs this creature, step by step.
 
         Returns a function of `(from_square, to_square)` giving the squares
@@ -514,7 +528,7 @@ class World:
         """
         from .grid import distance as _distance
 
-        rough = self.difficult(for_, kind)
+        rough = self.difficult(for_, kind, granted_by=granted_by)
         taxes = self._taxes_on(for_)
         toward = self._taxes_toward(for_)
         # **In the fast path's condition as well as the closure**, because a

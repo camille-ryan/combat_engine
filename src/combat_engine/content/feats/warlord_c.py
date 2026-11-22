@@ -744,12 +744,41 @@ def f2436(c: Cast) -> None:
 
 
 @power("f2424", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_granted_shift()",))
+       reach=PERSONAL, target=SELF)
 def f2424(c: Cast) -> None:
-    """Allies ignore difficult terrain during a shift one of your powers
-    let them make. `c.ignores_difficult` says the benefit; what is
-    missing is knowing that a row granted a shift, which is a fact about
-    somebody else's body and not about any event."""
+    """*"Whenever you use a power that lets your allies shift, they ignore
+    difficult terrain during the shift."*
+
+    **Written, and the old note's last clause was the thing to re-read.**
+    It said the missing half was *"knowing that a row granted a shift,
+    which is a fact about somebody else's body and not about any
+    event"* -- and it is not an event: `Cast.shift` has passed
+    `by=self.ref` into the move search all along, *"so
+    `movement.may_enter`'s gate can narrow on the row that asked for the
+    shift"*. The grant was already travelling with the move.
+
+    What a ref could not answer is **this** card, which says *"a power
+    that lets your allies shift"* -- any of one character's rows, and a
+    ref carries no caster. So `Cast.shift` passes `granted_by=self.me`
+    beside it and `Movement.ignores_shift_granted_by` keys on the id.
+    #1461.
+
+    **Laid at arming, on every ally, and not on a trigger.** The waiver
+    has to be standing *before* the shift is measured: the search prices
+    the whole route in one pass, so a watcher firing on the move would
+    arrive after the squares had been costed. That is the same ordering
+    `c.ignores_difficult`'s own docstring records about a one-square
+    shift -- the exemption is the difference between an option being
+    offered and not.
+
+    **The sixth narrowing rather than `kind="shift"`.** That one is every
+    shift the creature makes, which is a row stronger than this card: an
+    ally shifting on its own turn gets nothing here.
+    """
+    for mate in c.allies():
+        if mate != c.me:
+            c.ignores_difficult(granted_by=c.me, on=mate,
+                                until=When.ENCOUNTER)
 
 
 @power("f2430", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -3271,6 +3271,7 @@ class Cast:
         kind: str = "",
         *,
         made_by: str = "",
+        granted_by: int = -1,
         unlit: bool = False,
         while_near: tuple[int, int] | None = None,
         squares: int = 0,
@@ -3362,6 +3363,42 @@ class Cast:
         A budget waives the **surcharge** and never the step, so more
         waivers than there is rough ground on a path buys nothing.
         """
+        if granted_by >= 0:
+            # **A waiver for a shift somebody else's power allowed**, keyed
+            # on who allowed it. `f2424` is the card -- *"whenever you use
+            # a power that lets your allies shift, they ignore difficult
+            # terrain during the shift"* -- and the five narrowings beside
+            # this one cannot say it: `kind="shift"` is every shift the
+            # creature makes, and `made_by` is about who made the *ground*.
+            #
+            # Written and torn down the way `made_by` below is, including
+            # `on_suspend` rather than `on_end`, so the waiver comes off
+            # exactly once whether the hold expires or is lifted. #1461.
+            from .components import Movement as _Moves
+
+            who = self._who(on) if on is not None else self.me
+            if who is None:
+                return None
+            moves = self.world.get(who, _Moves) or self.world.add(
+                who, _Moves())
+            if granted_by in moves.ignores_shift_granted_by:
+                return None
+            moves.ignores_shift_granted_by = (
+                moves.ignores_shift_granted_by | {granted_by})
+
+            def drop_grant() -> None:
+                moves.ignores_shift_granted_by = (
+                    moves.ignores_shift_granted_by - {granted_by})
+
+            def restore_grant() -> None:
+                moves.ignores_shift_granted_by = (
+                    moves.ignores_shift_granted_by | {granted_by})
+
+            return self.world.effects.apply(
+                who, self.me, until, label=f"{self.ref} ignores shift rough",
+                by=self.ref, on_suspend=[drop_grant],
+                on_resume=[restore_grant],
+            )
         from .components import Movement
 
         who = on if on is not None else self.me
@@ -6670,8 +6707,13 @@ class Cast:
         # row that asked for the shift -- "when a <class> power allows you
         # to shift" is three cards, and the gate saw only the two
         # creatures before.
+        # `granted_by=self.me` beside `by=self.ref`: which row asked, and
+        # **who**. `f2424` prints *"whenever you use a power that lets your
+        # allies shift"* -- any of one character's rows -- and a ref
+        # carries no caster, so the id is what answers it. #1461.
         routes = self.world.reachable_paths(mover, squares_, kind="shift",
-                                            share=share, by=self.ref)
+                                            share=share, by=self.ref,
+                                            granted_by=self.me)
         if not routes:
             return False
         options = self._nearest_first(list(routes), toward, away_from, mover)

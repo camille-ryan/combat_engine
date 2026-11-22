@@ -478,6 +478,21 @@ class Movement:
     #: movement over every sort of rough going anywhere, which is a much
     #: bigger card.
     ignores_unlit: bool = False
+    #: **Creatures whose granted shifts cross rough going for free**, by
+    #: id. `f2424` is the card: *"whenever you use a power that lets your
+    #: allies shift, they ignore difficult terrain during the shift."*
+    #:
+    #: The sixth narrowing beside `ignores`, `ignores_when`,
+    #: `ignores_made_by`, `ignores_unlit` and `ignores_near`, and it keys
+    #: on the **grantor** rather than on a row ref. The ref would not
+    #: answer this card: it says *"a power that lets your allies shift"*,
+    #: meaning any of one character's rows, and a ref carries no caster.
+    #: `Cast.shift` knows both and passes the id.
+    #:
+    #: Empty for every creature nothing has given one, which is every
+    #: creature on every board until a row says so -- the same bargain
+    #: the five siblings strike. #1461.
+    ignores_shift_granted_by: frozenset[int] = frozenset()
     #: Rough going is free, but only in squares **near a named creature** --
     #: `(anchor, squares)` pairs. `f1887` prints *"you and your allies
     #: ignore difficult terrain while adjacent to your spirit

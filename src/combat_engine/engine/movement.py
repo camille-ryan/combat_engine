@@ -1474,6 +1474,7 @@ def _forced_square(
 def reachable(
     world: World, eid: int, budget: int, *, mode: str | None = None,
     kind: str = "walk", share: bool = False, by: str = "",
+    granted_by: int = -1,
 ) -> dict[Square, list[Square]]:
     """Every square reachable within `budget`, with a path to each.
 
@@ -1508,7 +1509,7 @@ def reachable(
     # difference is read -- hoisted out of the loop, since it resolves the
     # waivers and the taxing zones once for the whole search and leaves a
     # membership test per step.
-    price = world.crossing(eid, kind)
+    price = world.crossing(eid, kind, granted_by=granted_by)
     # Ground that refuses this kind of move outright, which is a different
     # question from what it costs -- see `World.barred`.
     shut = world.barred(eid, kind)

@@ -72792,6 +72792,109 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def allies_cross_rough_ground_on_a_granted_shift(out: Result) -> None:
+    """*"Whenever you use a power that lets your allies shift, they ignore
+    difficult terrain during the shift"* -- `f2424`. #1461.
+
+    **The grant was already travelling with the move.** The row's note
+    said the missing half was *"knowing that a row granted a shift, which
+    is a fact about somebody else's body and not about any event"* -- and
+    it is not an event: `Cast.shift` has passed `by=self.ref` into the
+    move search all along, *"so `movement.may_enter`'s gate can narrow on
+    the row that asked for the shift"*.
+
+    What a **ref** cannot answer is this card. It says *"a power that lets
+    your allies shift"* -- any of one character's rows -- and a ref
+    carries no caster. So `Cast.shift` passes `granted_by=self.me` beside
+    it and `Movement.ignores_shift_granted_by` keys on the id: the sixth
+    narrowing beside `ignores`, `ignores_when`, `ignores_made_by`,
+    `ignores_unlit` and `ignores_near`.
+
+    **Not `kind="shift"`**, which is every shift the creature makes and
+    would be a row stronger than its card -- an ally shifting on its own
+    turn gets nothing from this feat. That arm is below and is the one
+    the whole field exists for.
+
+    **The measurement is which squares a one-square shift can reach**,
+    which is where the exemption is actually spent: rough ground costs
+    two, so a one-square shift cannot enter it at all and the waiver is
+    the difference between four options and none. `c.ignores_difficult`'s
+    own docstring records that reading.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement, Position
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW = "f2424"
+
+    def options(*, feat: bool, grantor: bool) -> int:
+        """Squares a one-square shift can reach, through mud."""
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref="drv")
+        mate = sorted(a for a in cast.allies() if a != me)[0]
+        # **The board arms every `action=NONE` row including the one under
+        # test**, so the waiver is already standing before anything here
+        # runs -- the control arm read four squares either way until this
+        # was stripped. Measured.
+        for who in (me, mate):
+            moves = world.get(who, Movement)
+            if moves is not None:
+                moves.ignores_shift_granted_by = frozenset()
+        seat = must(world.get(mate, Position), "the ally has a position").square
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                sq = (seat[0] + dx, seat[1] + dy)
+                if sq != seat and world.grid.inside(sq):
+                    world.grid.difficult[sq] = "mud"
+        if feat:
+            REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+        routes = world.reachable_paths(
+            mate, 1, kind="shift", by="p1",
+            granted_by=me if grantor else mate)
+        return len(set(routes) - {seat})
+
+    out.that(options(feat=False, grantor=True) == 0,
+             "premise: ringed by mud, a one-square shift reaches NOTHING"
+             " -- rough ground costs two, so the waiver is the difference"
+             " between an option being offered and not",
+             f"{options(feat=False, grantor=True)}")
+    out.that(options(feat=True, grantor=True) > 0,
+             "with the feat, a shift the holder's power granted crosses"
+             " it: the ally has somewhere to go",
+             f"{options(feat=True, grantor=True)} squares")
+    out.that(options(feat=True, grantor=False) == 0,
+             "and a shift the ALLY itself asked for still costs full --"
+             " the card is about a power *you* use, and this is the arm"
+             " a `kind` of shift could not have made: that waives every"
+             " shift the creature makes",
+             f"{options(feat=True, grantor=False)}")
+
+    # -- the waiver is laid on allies, not on the holder --------------------
+    world, me, _ = _board(ROW, 1)
+    cast = Cast(world=world, me=me, ref="drv")
+    for who in [me, *cast.allies()]:
+        moves = world.get(who, Movement)
+        if moves is not None:
+            moves.ignores_shift_granted_by = frozenset()
+    REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+    mates = [a for a in cast.allies() if a != me]
+    out.that(mates and all(
+                 me in must(world.get(a, Movement), "movement"
+                            ).ignores_shift_granted_by for a in mates),
+             "every ally carries the waiver, keyed on the holder's id",
+             f"{len(mates)} allies, each keyed on {me}")
+    mine = world.get(me, Movement)
+    out.that(mine is not None and me not in mine.ignores_shift_granted_by,
+             "and the holder does NOT -- the card says *your allies*, so a"
+             " warlord shifting itself through mud is not what this buys",
+             f"{sorted(mine.ignores_shift_granted_by) if mine else '-'}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def no_sound_crosses_a_silenced_zone(out: Result) -> None:
     """*"No sound can be made in the zone, and no noise from outside the
     zone can be heard in it or through it"* -- `i3470p1`. #1460.
@@ -126371,6 +126474,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        allies_cross_rough_ground_on_a_granted_shift,
         no_sound_crosses_a_silenced_zone,
         a_feat_offers_shedding_light_as_an_action,
         the_sixth_fighter_style_is_an_untrained_weapon,
@@ -126770,6 +126874,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "granted_shift_terrain": (
+        allies_cross_rough_ground_on_a_granted_shift,
+        "allies ignore rough going on a shift the holder's power granted"
+        " (#1461)",
     ),
     "silenced_zone": (
         no_sound_crosses_a_silenced_zone,
