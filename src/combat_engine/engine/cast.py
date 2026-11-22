@@ -6190,7 +6190,7 @@ class Cast:
 
     def max_hp(
         self, amount: int, *, on: int | None = None,
-        until: When = When.ENCOUNTER,
+        until: When = When.ENCOUNTER, absolute: bool = False,
     ) -> Effect | None:
         """"You gain 5 additional hit points."
 
@@ -6215,6 +6215,21 @@ class Cast:
         effect, which is what every other `action=NONE` feat is. A
         character carried between fights re-arms the trait on the next
         board and `_wear`'s clamp makes the two agree.
+
+        **`absolute` SETS the maximum instead of raising it**, which is a
+        different printed sentence and not a convenience. `f1707b`'s
+        familiar *"becomes a Small creature **with** hit points equal to
+        your healing surge value"* -- a pool the card states outright,
+        where every other caller states a gain. Added rather than left to
+        the row because *"with N hit points"* cannot be written as a
+        delta without first reading the number it is replacing, and a row
+        doing that arithmetic is a row that gets it wrong when the
+        creature is hurt.
+
+        The current total is set to the same number, not clamped to it:
+        the card gives the familiar that many hit points, so it arrives
+        whole. Restoring is the same undo either way -- the old maximum
+        and a current total clamped to it.
         """
         from .components import Health
 
@@ -6224,10 +6239,25 @@ class Cast:
         whole = self.world.get(who, Health)
         if whole is None:
             return None
-        whole.max_hp += amount
-        whole.hp += amount
+        was = (whole.max_hp, whole.hp)
+        if absolute:
+            whole.max_hp = amount
+            whole.hp = amount
+        else:
+            whole.max_hp += amount
+            whole.hp += amount
 
         def give_back() -> None:
+            if absolute:
+                # **The maximum it had, and the total clamped to it.** A
+                # creature hurt while it wore the borrowed pool must not
+                # come back fuller than it went in, and one that spent the
+                # window at a *smaller* maximum must not come back above
+                # the old one either -- which is the same clamp the
+                # relative branch needs for the same reason.
+                whole.max_hp = was[0]
+                whole.hp = min(whole.hp, whole.max_hp)
+                return
             whole.max_hp -= amount
             # Clamped, because the creature may have been hurt since: a
             # bare subtraction would leave it above a maximum it no
@@ -6235,8 +6265,10 @@ class Cast:
             # answer wrongly.
             whole.hp = min(whole.hp, whole.max_hp)
 
+        label = (f"{self.ref} max hp = {amount}" if absolute
+                 else f"{self.ref} max hp +{amount}")
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} max hp +{amount}",
+            who, self.me, until, label=label,
             on_suspend=[give_back], by=self.ref,
         )
 
@@ -12323,6 +12355,7 @@ class Cast:
         ref: str = "",
         until: When = When.EONT,
         critical: bool = False,
+        dice: int = 0,
     ) -> Effect | None:
         """The next damage this creature rolls comes out maximum.
 
@@ -12331,6 +12364,26 @@ class Cast:
         `DamageRolled` carries the rolled total rather than the dice.
         Setting `critical` instead would pay out every crit rider, which is
         not what the line says.
+
+        **`dice` is "maximize the results of **up to four** of the dice
+        you roll"** -- `i3230p4` -- which is a strictly smaller sentence
+        than this verb's default and had no way to be said. Without it
+        the row is generous rather than absent: every die comes out
+        maximum where the card buys four.
+
+        Which dice is **decided, not asked**: the lowest `n` are raised.
+        That is the pick a player makes every time -- the card says "up
+        to", so taking fewer is never better -- and `_roll_damage_dice`
+        has the faces in hand and nobody to put a menu in front of.
+
+        **The `DamageRolled` listener is NOT armed for a capped
+        sparing**, and the asymmetry is deliberate rather than an
+        oversight. That listener exists for a **monster**, whose damage
+        is a header line it can look up and replace wholesale; it never
+        sees individual dice, so it cannot honour a cap. A capped call
+        lays the modifier alone, which is read inside
+        `_roll_damage_dice` where the dice actually are. The one card
+        printing a cap is a character's.
         """
         from .dsl import get
         from .events import DamageRolled
@@ -12371,10 +12424,22 @@ class Cast:
             ev.amount = max(ev.amount, topped)
             spent.append(True)
 
-        held = self.watch(
-            DamageRolled, top_up, until=until, window=Window.BEFORE, on=who,
-            label=f"{self.ref} maximum damage",
+        held = (
+            None if dice else self.watch(
+                DamageRolled, top_up, until=until, window=Window.BEFORE,
+                on=who, label=f"{self.ref} maximum damage",
+            )
         )
+        if dice:
+            # The modifier alone, and it needs an effect to hang on so the
+            # duration still owns it. `c.watch`'s own effect is what every
+            # other branch here uses; this is the same thing without a
+            # subscription, because there is nothing a listener could do
+            # with a cap. See the docstring.
+            held = self.world.effects.apply(
+                who, self.me, until, by=self.ref,
+                label=f"{self.ref} maximum on {dice} dice",
+            )
         # And the same thing again as a modifier, because the listener above
         # can only work for a **monster**: it reads the rolling row's header
         # damage line, and a character's damage is rolled in the body where
@@ -12384,7 +12449,11 @@ class Cast:
         # actually in hand, and is spent there.
         if held is not None:
             mods = self.world.get(who, Mods) or self.world.add(who, Mods())
-            mod = Mod("maximise", 1, kind="untyped", label=f"{self.ref} maximum damage")
+            mod = Mod(
+                "maximise_dice" if dice else "maximise",
+                dice or 1, kind="untyped",
+                label=f"{self.ref} maximum damage",
+            )
             mods.items.append(mod)
             held.mods.append((who, mod))
         if critical and held is not None:
@@ -19905,6 +19974,22 @@ class Cast:
         # fixed it; the dice are in hand at this point and nowhere else.
         if self._take_maximum():
             return _max_of(dice), None
+        # **A cap on how many dice come out maximum**, which the whole-roll
+        # branch above cannot express. Asked second, so a creature holding
+        # both gets the stronger line. The `Roll` is handed back rather
+        # than `None`, unlike the branch above: dice really were rolled
+        # here, and a row rerolling them has faces to work with.
+        topped = self._take_maximum_dice()
+        if topped > 0:
+            rolled = self.world.rng.roll(dice)
+            faces = _faces_of(dice)
+            if faces > 1 and rolled.dice:
+                # The lowest first, which is the pick a player makes every
+                # time -- "up to" means taking fewer is never better.
+                for i in sorted(range(len(rolled.dice)),
+                                key=lambda n: rolled.dice[n])[:topped]:
+                    rolled.dice[i] = faces
+            return rolled.total, rolled
         floor = self._reroll_floor()
         if floor > 1:
             rolled = self._rolled_above(dice, floor)
@@ -20001,6 +20086,24 @@ class Cast:
                 tries += 1
             rolled.dice[i] = face
         return rolled
+
+    def _take_maximum_dice(self) -> int:
+        """How many single dice a "maximize up to N of the dice" hold
+        buys, spending it if one is waiting.
+
+        `_take_maximum` beside this is the whole-roll form and is asked
+        first: a creature carrying both gets the stronger one, which is
+        the same precedence `_rolled_above` and `_rolled_pick` settle
+        between themselves.
+        """
+        mods = self.world.get(self.me, Mods)
+        if mods is None:
+            return 0
+        for m in mods.items:
+            if m.what == "maximise_dice":
+                mods.items.remove(m)
+                return int(m.value)
+        return 0
 
     def _take_maximum(self) -> bool:
         """Is a "deals maximum damage" hold waiting, and spend it if so.

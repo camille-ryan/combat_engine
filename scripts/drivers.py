@@ -87217,6 +87217,179 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_pool_set_and_four_dice_maximised(out: Result) -> None:
+    """Two cards state a number outright where every verb beside them
+    states a change.
+
+    * `i3230p4`: *"maximize the results of **up to four** of the dice you
+      roll"*. `c.maximise` maxes the whole roll, so a six-die line came
+      out at 36 where the card buys four of them -- generous rather than
+      absent, which is why the row carried `dropped=`.
+    * `f1707b`: the familiar *"becomes a Small creature **with** hit
+      points equal to your healing surge value"*. `c.max_hp` raises a
+      maximum by a delta, which is every other card's sentence; a pool
+      stated outright cannot be written as a delta without first reading
+      the number it replaces.
+
+    **Neither row is reachable on the audit board** -- `i3230p4`'s
+    Requirement is seven souls and `f1707b`'s is an active familiar -- so
+    this rule is their only cover, which is why both bodies are run here
+    rather than only their verbs.
+
+    **Which dice are maximised is decided, not asked**: the lowest four.
+    *"Up to"* means taking fewer is never better, and
+    `_roll_damage_dice` has the faces in hand and nobody to ask.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.feats.artificer_b import _familiar_active
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+
+    # **`Rng.loaded` forces a d20 and NOTHING else**, which its own
+    # docstring says: it exists for the audit's critical and fumble
+    # branches. A first draft loaded it to 1 and read 35 off six d6.
+    # So the dice are pinned by re-seeding instead, and every arm below
+    # compares two rolls of the same expression from the **same seed** --
+    # which is also a stronger claim than an absolute number, because it
+    # names exactly which faces moved.
+    def pinned(world, seed: int = 7) -> None:  # noqa: ANN001
+        from combat_engine.engine.rng import Rng
+
+        world.rng = Rng(seed=seed)
+
+    # -- i3230p4: four dice, not six ----------------------------------------
+    world, me, _ = _board("i3230p4", 1)
+    pinned(world)
+    faces = list(world.rng.roll("6d6").dice)
+    want = sorted(faces)
+    topped = sum(want[4:]) + 4 * 6
+    out.that(len(faces) == 6 and len(set(faces)) > 1,
+             "premise: the pinned seed rolls six dice that are not all the"
+             " same face, or 'the lowest four' is not a claim about"
+             " anything",
+             f"{faces}")
+
+    pinned(world)
+    REGISTRY["i3230p4"].body(Cast(world=world, me=me, ref="i3230p4"))
+    capped = Cast(world=world, me=me, ref="drv")._roll_damage("6d6")
+    out.that(capped == topped,
+             "with the row, exactly FOUR of the six come out maximum and"
+             " the other two keep the faces they rolled -- not the whole"
+             " roll, which is what the uncapped verb gives",
+             f"{faces} -> {capped}, wanted {topped}")
+    out.that(capped < 36,
+             "and it is strictly less than the whole roll maximised,"
+             " which is the direction the old row was wrong in",
+             f"{capped} vs 36")
+
+    pinned(world)
+    again = Cast(world=world, me=me, ref="drv")._roll_damage("6d6")
+    out.that(again == sum(faces),
+             "the NEXT roll gets nothing: the card says 'your next damage"
+             " roll', and the hold is spent where it is read",
+             f"{again} vs {sum(faces)}")
+
+    # -- the live Roll comes back -------------------------------------------
+    w2, me2, _ = _board("i3230p4", 1)
+    REGISTRY["i3230p4"].body(Cast(world=w2, me=me2, ref="i3230p4"))
+    pinned(w2)
+    amount, rolled = Cast(world=w2, me=me2, ref="drv")._roll_damage_dice("6d6")
+    out.that(rolled is not None and sorted(rolled.dice) == sorted(
+                 [*want[4:], 6, 6, 6, 6]),
+             "and the live `Roll` comes back with the faces, where the"
+             " whole-roll branch hands back None: dice really were rolled"
+             " here, so a row rerolling them has something to work with",
+             f"{rolled and sorted(rolled.dice)}")
+    out.that(rolled is not None and amount == rolled.total,
+             "with the amount and the roll agreeing -- `Roll.total` is a"
+             " property over the faces, so writing into `dice` is the"
+             " whole of the change",
+             f"{amount} vs {rolled and rolled.total}")
+
+    # -- fewer dice than the cap --------------------------------------------
+    w3, me3, _ = _board("i3230p4", 1)
+    REGISTRY["i3230p4"].body(Cast(world=w3, me=me3, ref="i3230p4"))
+    pinned(w3)
+    small = Cast(world=w3, me=me3, ref="drv")._roll_damage("2d6")
+    out.that(small == 12,
+             "a roll of fewer dice than the cap maximises all of them --"
+             " 'up to four', so two dice are two sixes and not an error",
+             f"{small}")
+
+    # -- the whole-roll form is unchanged -----------------------------------
+    w4, me4, _ = _board("i3230p4", 1)
+    Cast(world=w4, me=me4, ref="drv").maximise(on=me4, until=When.EONT)
+    pinned(w4)
+    out.that(Cast(world=w4, me=me4, ref="drv")._roll_damage("6d6") == 36,
+             "while an uncapped `c.maximise` still maxes everything -- the"
+             " cap is a new sentence beside it and not a narrowing of it",
+             "36")
+
+    # -- f1707b: a pool stated outright -------------------------------------
+    w5, me5, _ = _board("f1707b", 1)
+    cast5 = Cast(world=w5, me=me5, ref="f1707b")
+    # **The board deals no familiar**, so one is called here. Measured:
+    # `_familiar_active` came back None on the board as dealt, and the
+    # row's printed Requirement is exactly that creature -- so without
+    # this every arm below reads the board rather than the row.
+    if _familiar_active(cast5) is None:
+        cast5.call_companion(kind="familiar")
+    fam = _familiar_active(Cast(world=w5, me=me5, ref="f1707b"))
+    out.that(fam is not None,
+             "premise: the character has an active familiar, which is the"
+             " row's printed Requirement",
+             f"{fam}")
+    if fam is None:
+        return
+    vital = must(w5.get(fam, Health), "the familiar has hit points")
+    surge = Cast(world=w5, me=me5, ref="drv").surge_value()
+    # **The called familiar's own maximum happens to BE the caster's surge
+    # value on this board** -- both read 7 -- so the arm below could not
+    # tell "set to the surge value" from "left alone". Moved off it
+    # deliberately rather than asserted around.
+    vital.max_hp = surge + 5
+    vital.hp = vital.max_hp
+    before = (vital.max_hp, vital.hp)
+    out.that(surge > 0 and surge != before[0],
+             "premise: the CASTER's surge value is a different number from"
+             " the familiar's own maximum, so the line below is the card's"
+             " and not a coincidence",
+             f"surge {surge}, familiar {before[0]}")
+
+    REGISTRY["f1707b"].body(Cast(world=w5, me=me5, ref="f1707b"))
+    out.that(vital.max_hp == surge,
+             "the familiar's maximum is SET to the caster's healing surge"
+             " value -- 'with hit points equal to', which a delta cannot"
+             " say without first reading what it replaces",
+             f"{before[0]} -> {vital.max_hp}, surge {surge}")
+    out.that(vital.hp == surge,
+             "and it arrives WHOLE at that number rather than clamped to"
+             " it: the card gives it that many hit points",
+             f"{before[1]} -> {vital.hp}")
+
+    # -- and gets its own back ----------------------------------------------
+    vital.hp = max(1, surge // 2)
+    hurt = vital.hp
+    for eff in list(w5.effects.of(fam)):
+        if eff.by == "f1707b":
+            w5.effects.end(eff)
+    out.that(vital.max_hp == before[0],
+             "when the effect ends the familiar has its OWN maximum back",
+             f"{vital.max_hp} vs {before[0]}")
+    out.that(vital.hp == min(hurt, before[0]),
+             "with its current total clamped to it -- a creature hurt"
+             " while it wore the borrowed pool must not come back fuller"
+             " than the pool it is returning to",
+             f"{hurt} -> {vital.hp}, max {before[0]}")
+
+    for ref in ("i3230p4", "f1707b"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"and {ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_square_is_left_out_of_a_blast(out: Result) -> None:
     """*"You can omit one square adjacent to you from the area of effect of
     any arcane close blast or burst power you use"* -- `f3782` -- and *"you
@@ -120541,6 +120714,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "pool_set_and_dice_maximised": (
+        a_pool_set_and_four_dice_maximised,
+        "`i3230p4` maximises four dice of a roll and `f1707b` sets a "
+        "familiar's pool to the caster's surge value (#1341)",
     ),
     "square_left_out_of_a_blast": (
         a_square_is_left_out_of_a_blast,

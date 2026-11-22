@@ -299,7 +299,7 @@ def f1707(c: Cast) -> None:
 @power("f1707b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
-       dropped=("c.set_hp()",))
+)
 def f1707b(c: Cast) -> None:
     """The card of f1707: the familiar swells into a Small creature that
     can flank, then teleports home and goes passive when the effect ends.
@@ -312,15 +312,34 @@ def f1707b(c: Cast) -> None:
     makes the teleport and the passive mode part of the same effect
     rather than a second clock that could outlive it.
 
-    Dropped: hit points equal to your healing surge value. `c.surge_value`
-    knows the number and nothing sets a creature's maximum to it; the
-    familiar keeps the hit points it had, which is the only reading that
-    cannot invent a pool the card does not print.
+    **Written: hit points equal to your healing surge value.**
+    `c.surge_value` always knew the number and nothing *set* a maximum to
+    it -- `c.max_hp` raises one by a delta, which is every other card's
+    sentence. `absolute=True` is this one's: *"with* hit points equal to"
+    states the pool outright.
+
+    The familiar arrives whole at that number rather than clamped to it,
+    which is what *"with N hit points"* says, and gets its own maximum
+    back when the effect ends -- clamped, because it may have been hurt
+    while it wore the borrowed pool.
+
+    **The surge value is the CASTER's**, not the familiar's: *"your
+    healing surge value"*. `c.surge_value()` with no argument reads the
+    caster -- it defaults there rather than to `c.target`, which its own
+    docstring records paying for once -- and a familiar's own
+    quarter-of-max would be a different and much smaller number.
+
+    It is a **method**, so the bound one read as an `int` would have gone
+    in as a truthy object and `max_hp` would have set the pool to
+    something that is not a number. Caught before it landed; said here
+    because `Health.surge_value` beside it really is a property and the
+    two spellings sit one layer apart.
     """
     fam = _familiar_active(c)
     if fam is None:
         return
     grown = c.resize(Size.SMALL, on=fam, until=When.SONT)
+    c.max_hp(c.surge_value(), on=fam, until=When.SONT, absolute=True)
     c.can_flank(on=fam, until=When.SONT)
     c.cannot_attack(on=fam, until=When.SONT)
     if grown is None:

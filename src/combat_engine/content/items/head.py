@@ -638,11 +638,25 @@ def i3230p3(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        requires=lambda world, eid: _souls(world, eid) >= 7,
        requires_text="all seven gems must hold a soul",
-       dropped=("c.maximise_dice()",))
+)
 def i3230p4(c: Cast) -> None:
-    """`c.maximise` maxes the whole roll; "up to four of the dice" is the
-    half that has no verb, so this is generous rather than absent."""
-    c.maximise(on=c.me, until=When.EONT)
+    """*"On your next damage roll, maximize the results of up to four of
+    the dice you roll. All seven gems then release their souls."*
+
+    **The old note was right about the direction of the error, which is
+    why this was `dropped=` and not `todo=`.** `c.maximise` with no cap
+    maxes the whole roll, so a 6d6 line came out 36 where the card buys
+    four dice of it.
+
+    `c.maximise(dice=4)` is that cap. Which four is decided rather than
+    asked -- the lowest, because *"up to"* means taking fewer is never
+    better -- and it is read inside `_roll_damage_dice`, which is the one
+    place the individual faces are in hand.
+
+    The Requirement and the release are unchanged: seven souls to use it,
+    and all seven spent whether the roll ever comes or not, which is what
+    *"then"* says."""
+    c.maximise(on=c.me, until=When.EONT, dice=4)
     _gems(c, -7)
 
 
