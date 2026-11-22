@@ -1945,7 +1945,6 @@ def m815a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("compendium.attack_line",),
 )
 def m815a3(c: Cast) -> None:
     """The two holds play and are exact. What is missing is the attack line
@@ -1969,6 +1968,24 @@ def m815a3(c: Cast) -> None:
 
     "Speed becomes 2" is what `c.slowed` is; the opportunity-attack penalty is
     gated on the attack context, which carries `opportunity`.
+
+    **Not a marker any more. Camille's ruling on `#1395`, asked directly,
+    2026-11-21, verbatim:**
+
+    > *"Yeah do this mismarked ones. The other three can be labeled
+    > defect."*
+
+    `#1395` measured eight rows naming a `compendium.*` symbol and found
+    three of them -- this one, `m2245a0` and `m2783a3` -- to be one
+    pattern repeated rather than a source gap: the page prints a complete
+    effect and prints no attack roll, and the row plays exactly what the
+    page says. So the auto-hit reading above is the **finished** row and
+    not a clause standing in for one, and the symbol it carried could
+    never have arrived.
+
+    The three stand or fall together, which is `#1395`'s own correction to
+    itself: an earlier comment grouped them as two different kinds and
+    they are one kind three times.
     """
     victim = c.target
     if victim is None:

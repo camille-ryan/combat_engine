@@ -1332,7 +1332,6 @@ def m2243a4(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON, Keyword.MELEE],
     damage=Damage("1d12", 5),
-    dropped=("compendium.attack_line",),
 )
 def m2245a0(c: Cast) -> None:
     """No attack bonus survived extraction at all -- the same defect as
@@ -1342,7 +1341,26 @@ def m2245a0(c: Cast) -> None:
 
     `compendium.attack_line` rather than `etl.monster.attack_line()`: the
     line is absent from the stored spec, not lost in parsing. See this
-    file's header."""
+    file's header.
+
+    **Not a marker any more. Camille's ruling on `#1395`, asked directly,
+    2026-11-21, verbatim:**
+
+    > *"Yeah do this mismarked ones. The other three can be labeled
+    > defect."*
+
+    `#1395` measured eight rows naming a `compendium.*` symbol and found
+    three of them -- this one, `m2245a0` and `m2783a3` -- to be one
+    pattern repeated rather than a source gap: the page prints a complete
+    effect and prints no attack roll, and the row plays exactly what the
+    page says. So the auto-hit reading above is the **finished** row and
+    not a clause standing in for one, and the symbol it carried could
+    never have arrived.
+
+    The three stand or fall together, which is `#1395`'s own correction to
+    itself: an earlier comment grouped them as two different kinds and
+    they are one kind three times.
+    """
     c.hit()
     victim = c.target
     if victim is not None and c.size_of(on=victim) in NO_BIGGER_THAN_MEDIUM:
@@ -1519,7 +1537,6 @@ def m2783a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON, Keyword.MELEE],
     damage=Damage("1d10", 6),
-    dropped=("compendium.attack_line",),
 )
 def m2783a3(c: Cast) -> None:
     """No attack line survived extraction -- the same defect `m2245a0`
@@ -1527,7 +1544,26 @@ def m2783a3(c: Cast) -> None:
 
     Measured against its own siblings: `m2783a0`, `m2783a2` and `m2783a4`
     each carry an attack line in `monster_power.spec` and this one carries
-    none, which is what rules the parser out."""
+    none, which is what rules the parser out.
+
+    **Not a marker any more. Camille's ruling on `#1395`, asked directly,
+    2026-11-21, verbatim:**
+
+    > *"Yeah do this mismarked ones. The other three can be labeled
+    > defect."*
+
+    `#1395` measured eight rows naming a `compendium.*` symbol and found
+    three of them -- this one, `m2245a0` and `m2783a3` -- to be one
+    pattern repeated rather than a source gap: the page prints a complete
+    effect and prints no attack roll, and the row plays exactly what the
+    page says. So the auto-hit reading above is the **finished** row and
+    not a clause standing in for one, and the symbol it carried could
+    never have arrived.
+
+    The three stand or fall together, which is `#1395`'s own correction to
+    itself: an earlier comment grouped them as two different kinds and
+    they are one kind three times.
+    """
     c.hit()
     c.slowed(until=When.SAVE_ENDS)
 

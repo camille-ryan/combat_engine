@@ -301,7 +301,8 @@ def _holding_somebody(world: World, eid: int) -> bool:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d10", 4),
-    dropped=("compendium.forced_distance",),
+    defect="the pull prints no distance, and no parser recovers a number"
+           " the page does not carry",
 )
 def m1107a0(c: Cast) -> None:
     """The pull has no distance on the page, so there is nothing to write
@@ -331,6 +332,26 @@ def m1107a0(c: Cast) -> None:
     The branch is read before the swing, because the reach is 2 and the
     extra die is for a creature that was *already* next to it, which pulling
     would have made true of everybody.
+
+    **`defect=` now, on Camille's ruling, and this note used to argue the
+    other way.** `#1395`, asked directly, 2026-11-21, verbatim:
+
+    > *"Yeah do this mismarked ones. The other three can be labeled
+    > defect."*
+
+    The argument the paragraphs above make -- that the row plays, so
+    `content/CLAUDE.md`'s *"only when nothing survives"* test keeps it at
+    `dropped=` -- was put to her in `#1395`'s plain version, with the cost
+    named: `loader.defective` derives the whole entry from one defective
+    row, so this retires the creature. She ruled anyway, which is the
+    2026-10-15 widening applied rather than overridden:
+
+    > *"I mean that the ENTIRE compendium entry should be dropped if any
+    > part of it is defective."*
+
+    Kept above rather than deleted because the reasoning is still the
+    reasoning; what changed is whose call it is. No symbol, because
+    `defect=` takes plain words -- there is nothing to wait for.
     """
     was_adjacent = c.adjacent(c.target)
     if c.strike():

@@ -1607,7 +1607,8 @@ def _any_challenge_ended(world: World, me: int, ev: Any) -> bool:
     target=NO_TARGET,
     trigger="a skill challenge ends",
     on=Trigger(SkillChallengeEnded, _any_challenge_ended, "a skill challenge ends"),
-    dropped=("compendium.insubstantial_trait",),
+    defect="the clause removes two traits the page never grants, so the"
+           " printed sentence contradicts its own stat block",
 )
 def m5581a6(c: Cast) -> None:
     """The phase change, hung on a challenge resolving. Five printed clauses,

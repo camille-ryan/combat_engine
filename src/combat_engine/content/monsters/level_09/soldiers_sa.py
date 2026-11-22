@@ -1681,7 +1681,8 @@ def m4004a2(c: Cast) -> None:
 
 @power(
     "m4004a3", level=9, usage=AT_WILL, action=MINOR, reach=Melee(1), target=ONE_CREATURE,
-    dropped=("compendium.vulnerable_amount",),
+    defect="the vulnerability prints no amount; the page names the"
+           " mechanic and stops",
 )
 def m4004a3(c: Cast) -> None:
     """The vulnerability is printed with no number at all. Read off the page
@@ -1701,7 +1702,28 @@ def m4004a3(c: Cast) -> None:
     `dropped=` and not `defect=`: the row plays. `defect=` is for when
     nothing survives, and on a monster it defects the whole stat block
     through `loader.defective` and takes m4004 out of `pick` -- over one
-    missing number, with the immobilise clause working."""
+    missing number, with the immobilise clause working.
+
+    **`defect=` now, on Camille's ruling, and this note used to argue the
+    other way.** `#1395`, asked directly, 2026-11-21, verbatim:
+
+    > *"Yeah do this mismarked ones. The other three can be labeled
+    > defect."*
+
+    The argument the paragraphs above make -- that the row plays, so
+    `content/CLAUDE.md`'s *"only when nothing survives"* test keeps it at
+    `dropped=` -- was put to her in `#1395`'s plain version, with the cost
+    named: `loader.defective` derives the whole entry from one defective
+    row, so this retires the creature. She ruled anyway, which is the
+    2026-10-15 widening applied rather than overridden:
+
+    > *"I mean that the ENTIRE compendium entry should be dropped if any
+    > part of it is defective."*
+
+    Kept above rather than deleted because the reasoning is still the
+    reasoning; what changed is whose call it is. No symbol, because
+    `defect=` takes plain words -- there is nothing to wait for.
+    """
     victim = c.target
     if victim is None:
         return
