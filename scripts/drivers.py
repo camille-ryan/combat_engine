@@ -67579,11 +67579,42 @@ def declaring_an_essentials_chassis_does_not_cost_the_plain_one(out: Result) -> 
     plain = {r for r in chargen.loadout("bard", level=1, build=build,
                                         who_chassis=chargen.ORIGINAL)
              if r.startswith("cf:bard-f")}
-    out.that(len(plain) >= 8,
-             "a plain bard keeps its own ladder -- 8 features, where "
-             "declaring the skald without `ORIGINAL` would have left it "
-             "with the skald's and none of its own",
-             f"{len(plain)}: {sorted(plain)}")
+    # **A count was the wrong assertion and `#1429` is what exposed it.**
+    # This read `>= 8`, written when every leg of the fork was dealt every
+    # arm. The arms carry their own leg gate now, so a bard holds its
+    # seven-row base ladder plus the one arm its leg took -- 7 on `f1s0`
+    # and `f1s2`, 8 on `f1s1`. The count moved and the rule went red on a
+    # true statement about the tree, which is the same stale-premise shape
+    # `chosen_weapon` had.
+    #
+    # What this rule is actually about is **whose** ladder, not how long
+    # it is, so that is what it asks now.
+    base = {f"cf:bard-f{n}" for n in range(7)}
+    out.that(base <= plain,
+             "a plain bard keeps its own ladder -- every rung of it, "
+             "where declaring the skald without `ORIGINAL` would have "
+             "left it with the skald's and none of its own",
+             f"{sorted(plain)}")
+    out.that(not {r for r in plain if r.startswith("cf:bard-skald")},
+             "and none of the skald's, which is the half the count could "
+             "not distinguish: a bard holding both would also have been "
+             "'at least 8'",
+             f"{sorted(plain)}")
+
+    # **The fork arm follows its leg, and one leg is unreachable.**
+    # `cf:bard-f1s1` is gated on leg `f1s1`, and no bard draw produces
+    # that leg -- `#1444`. So the arm is written, correct, and dealt to
+    # nobody. Asserted through `build_of`, which answers for a named leg
+    # whether or not the dealer ever picks it, so this rule says what is
+    # true of the ladder rather than what the dealer happens to reach.
+    armed = {r for r in chargen.loadout(
+        "bard", level=1, build=chargen.build_of("bard", "f1s1"),
+        who_chassis=chargen.ORIGINAL) if r.startswith("cf:bard-f")}
+    out.that("cf:bard-f1s1" in armed and "cf:bard-f1s1" not in plain,
+             "the fork arm is dealt on its own leg and on no other -- "
+             "which is `#1429`'s gate working, and is why the count this "
+             "assertion used to make had moved",
+             f"on f1s1 {sorted(armed - plain)}, on the default {sorted(plain)}")
 
     # -- while the skald gets its own, and the ONE shared row -----------
     skald = {r for r in chargen.loadout("bard", level=1, build=build,
