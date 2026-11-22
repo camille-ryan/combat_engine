@@ -190,6 +190,20 @@ def _reach_is(*kinds: str):  # noqa: ANN202
     return gate
 
 
+def _swimming(ctx: dict[str, Any]) -> bool:
+    """An Athletics check made **to swim**, and not any other.
+
+    `movement.walk` is the one caller that says what its check is for --
+    `check(world, eid, "athletics", dc, purpose="swim")` -- so the printed
+    narrowing is sayable. `items/waist._swimming` is the same predicate for
+    the same printed phrase on `i2746x1`; duplicated rather than imported
+    because a content file reaching into another for a two-line context gate
+    couples two item slots for nothing, and `#1111`'s note is what records
+    that this `purpose` is the only one the engine rolls for swimming.
+    """
+    return ctx.get("purpose") == "swim"
+
+
 def _opportunity(ctx: dict[str, Any]) -> bool:
     return bool(ctx.get("opportunity"))
 
@@ -481,13 +495,44 @@ def i1281x1(c: Cast) -> None:
     c.as_weapon(damage="1d6", group="heavy blade", proficiency=3,
                 properties=frozenset({"off-hand"}))
 @power("i1322x1", level=1, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.water()",))
+       reach=PERSONAL, target=SELF, dropped=("grid.Grid.liquid",))
 def i1322x1(c: Cast) -> None:
-    """Swimming at your speed is a movement mode, which is the half that
-    plays. Floating on the surface, and the Athletics and Endurance checks
-    narrowed to swimming, are a water rule the board does not have."""
+    """Swim at your speed, and +3 to Athletics made to swim.
+
+    **The old note was wrong about the Athletics half and `i2746x1` had
+    already written it.** It said the checks *"narrowed to swimming"* were
+    *"a water rule the board does not have"*; they are a **purpose** on the
+    check, which `movement.walk` passes and `SkillCheck.purpose` carries.
+    `i2746x1` is the same printed phrase at +2 and carries no marker at
+    all, so the facility was not merely available -- a sibling was using
+    it. See `#1111` for the two earlier re-pointings of that row, which
+    are the same mistake twice before this one.
+
+    `kind="item"` because the card says *"item bonus"*, which is what
+    stops it stacking with another of the same source.
+
+    **Two clauses are left and neither is waiting for a symbol**, which is
+    why the marker names the map rather than a verb:
+
+    * *"You do not sink beneath the surface of any liquid"* has no axis to
+      not-sink along. `movement.walk`'s own docstring records the ruling --
+      a 2D plane, so *"sink 1 square"* has nowhere to go -- and that is an
+      in-code paraphrase of a chat turn rather than a quote, so it is cited
+      as the tree's record of the decision and not as Camille's words.
+    * *"+3 to Endurance checks to swim for an hour or more"* is hour-long
+      travel. `waist._holding_breath` measured which Endurance checks the
+      engine actually rolls -- one, for suffocation -- and the hour-long
+      ones are `#971` with no roll here.
+
+    What the marker does name is the per-square liquid map: *"the surface
+    of the water"* is a place, and `world.terrain` answers only whether the
+    **whole fight** is aquatic. `i3110x1`, `i3199p2` and `m4356a5` want the
+    same map for their own clauses.
+    """
     if c.terrain("aquatic"):
         c.mode("swim", c.speed_of(), on=c.me, until=When.ENCOUNTER)
+    c.bonus("skill:athletics", 3, kind="item", when=_swimming,
+            until=When.ENCOUNTER, on=c.me)
 
 
 # -- level 2 ----------------------------------------------------------------

@@ -1174,7 +1174,7 @@ def i2518p1(c: Cast) -> None:
 
 
 @power("i3016x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.surface()",))
+       reach=PERSONAL, target=SELF, dropped=("grid.Grid.facing",))
 def i3016x1(c: Cast) -> None:
     """Walking on walls is a climb speed equal to the walking one, which is
     what `i3016p1` below says and what `p13061` -- the same printed card,
@@ -1194,13 +1194,26 @@ def i3016x1(c: Cast) -> None:
     get the property back. `query.on_the_ground` is the printed test --
     height and how the creature is moving, not whether it has a fly speed.
 
-    **Dropped: the fall.** "If you are not on a horizontal surface
-    sufficient to bear your weight at the end of your move, you fall" has
-    nothing to read. What a square is made of and which way it faces is
-    recorded nowhere, which is the gap `f3719` and `m4356a5` already name,
-    so there is no square the grid would call unsupporting and no moment
-    the drop could fire. `p13061` drops the same clause carrying no marker
-    at all."""
+    **Dropped: the fall, and the marker is re-pointed to the half that is
+    still missing.** "If you are not on a horizontal surface sufficient to
+    bear your weight at the end of your move, you fall".
+
+    This used to say *"what a square is made of and which way it faces is
+    recorded nowhere"*. **The first half is no longer true** --
+    `Grid.material`, `Grid.ground` and `c.surface` landed with `f3719`, so
+    what a square is made of is readable now. The second half is the whole
+    of what is left, and it is a different fact: **which way a surface
+    faces.**
+
+    A grid square is a floor by construction here. Walking on walls is
+    modelled as a climb speed -- which is what `i3016p1` below and
+    `p13061`, the same printed card, both do -- so there is no square the
+    grid would call vertical, hence none it would call unsupporting and no
+    moment this drop could fire. Knowing a square is made of stone does
+    not say whether it is under the creature or beside it.
+
+    `p13061` drops the same clause carrying no marker at all, which is the
+    tree's own precedent for what this clause is worth."""
     def arm(ev: TurnStart) -> None:
         if ev.actor != c.me or not query.on_the_ground(c.world, c.me):
             return

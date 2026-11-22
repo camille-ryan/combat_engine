@@ -4129,13 +4129,33 @@ def i3199p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.water()",),
+    todo=("grid.Grid.liquid",),
 )
 def i3199p2(c: Cast) -> None:
     """The whole row measures a body of water: which squares are liquid,
     how many are contiguous, and which of them are empty. The map has no
     such feature, and `c.terrain` answers only what sort of place the
-    fight is in."""
+    fight is in.
+
+    **Re-pointed to the map rather than a verb.** `c.water()` named a
+    `Cast` verb; what is missing is a **per-square record of which squares
+    are liquid** -- `grid.Grid.liquid` -- because *"a liquid surface"* is a
+    place on the board and `world.terrain` answers only whether the whole
+    fight is aquatic. A verb reading a map nothing holds would be the
+    dead-gate shape `#598` measured, and `f3719` has just shown what the
+    honest version costs: the field, a vocabulary, a reader, and something
+    that fills it.
+
+    Four rows want this one map -- `i1322x1`, `i3110x1`, `i3199p2` and
+    `m4356a5` -- so they move together. `#1449`.
+
+    **This row is the one that needs the most of the map.** The other three
+    ask whether a square is liquid; this one needs the body's *geometry* --
+    `1 + enhancement` contiguous squares, only one of which must be
+    adjacent to the caster, and none of which may hold a creature. So it is
+    a flood fill over the map rather than a lookup, and it is the row that
+    decides the field is worth having rather than a bare `set`.
+    """
 
 
 @power(

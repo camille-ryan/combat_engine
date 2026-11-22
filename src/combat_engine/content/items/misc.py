@@ -3598,7 +3598,7 @@ def i3067p1(c: Cast) -> None:
 
 
 @power("i3110x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.water()",))
+       reach=PERSONAL, target=SELF, dropped=("grid.Grid.liquid",))
 def i3110x1(c: Cast) -> None:
     """Difficult terrain is exact.
 
@@ -3611,10 +3611,20 @@ def i3110x1(c: Cast) -> None:
     impassable liquid surface to cross, which is a terrain **kind** and not
     a `Cast` verb.
 
-    The marker is therefore pointed at the wrong layer, and it is **not
-    re-pointed here**: `i1322x1` and `i3199p2` wear the same symbol for the
-    same clause, and splitting one of the three off makes the group stop
-    meaning anything. Re-point all three together or not at all."""
+The marker named the wrong layer and all four are
+    re-pointed together now, which is what that note asked for.
+
+    **Re-pointed to the map rather than a verb.** `c.water()` named a
+    `Cast` verb; what is missing is a **per-square record of which squares
+    are liquid** -- `grid.Grid.liquid` -- because *"a liquid surface"* is a
+    place on the board and `world.terrain` answers only whether the whole
+    fight is aquatic. A verb reading a map nothing holds would be the
+    dead-gate shape `#598` measured, and `f3719` has just shown what the
+    honest version costs: the field, a vocabulary, a reader, and something
+    that fills it.
+
+    Four rows want this one map -- `i1322x1`, `i3110x1`, `i3199p2` and
+    `m4356a5` -- so they move together. `#1449`."""
     beast = _the_mount(c)
     if beast is not None:
         c.ignores_difficult(on=beast, until=When.ENCOUNTER)

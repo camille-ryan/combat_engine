@@ -3046,12 +3046,19 @@ def m4356a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.surface()",),
+    dropped=("grid.Grid.liquid",),
 )
 def m4356a5(c: Cast) -> None:
     """Rough ground is exact. Crossing liquid is the dropped clause: a board
     has no liquid surface, so there is nothing for a mode to be granted
-    over."""
+    over.
+
+    **The marker named `c.surface()` and that verb now exists**, which made
+    this read as satisfiable when nothing had changed for it. `c.surface`
+    answers what a square is made *of*; this clause needs to know which
+    squares are **liquid**, which is a different map. Re-pointed with the
+    three item rows that share the gap. `#1449`.
+    """
     c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
 
 
