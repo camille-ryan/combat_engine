@@ -1676,6 +1676,45 @@ class SkillPowers:
 
 
 @dataclass(frozen=True)
+class PowerChoice:
+    """What a feat does to the **attack powers** a character may choose.
+
+    Two cards, each opening one extra attack power from a class that is
+    not necessarily the character's own:
+
+    * `f3616`: *"choose one `c466` attack power of your level or lower.
+      You gain that power."* -- one assassin power, bought with one fewer
+      vial of assassin poison at an extended rest.
+    * `f3646`: *"you can take a `c126` attack power at any level where you
+      would normally gain an additional use of the `p15858` power. If you
+      do so, you do not gain the additional use."* -- one druid power,
+      bought with a use of the feature.
+
+    `SkillPowers` beside this is the same shape for the **utility** pool
+    and is where the argument for a header field rather than a body is
+    written out: the whole effect is settled when the character is built,
+    so a body would have nothing to do on a board, and `chargen.loadout`
+    is the one reader.
+
+    **`cls` may be the class word or its compendium ref**, because the
+    cards print the ref and `chargen.class_word` already answers both --
+    the same latitude `chargen.build_of` takes. Resolved once in
+    `loadout`.
+
+    **The printed COST is not here**, deliberately. Both cards pay for
+    the power with a resource at an extended rest -- a poison vial, a use
+    of a feature -- and neither resource is counted anywhere in this
+    tree, so a field for it would be a number nothing could spend. Each
+    row keeps a marker naming its own cost. #1453.
+    """
+
+    #: The class whose attack list this feat opens, by word or by ref.
+    cls: str = ""
+    #: How many of its attack powers the feat buys. One on both cards.
+    extra: int = 1
+
+
+@dataclass(frozen=True)
 class Swap:
     """The power a feat takes back in exchange for the card it hands over.
 
@@ -2384,6 +2423,9 @@ class Power:
     #: choose, when that is its whole effect. `chargen.loadout` is
     #: the one reader. See `SkillPowers`.
     skill_powers: SkillPowers | None = None
+    #: What this feat does to the attack powers a character may choose.
+    #: `chargen.loadout` is the one reader. See `PowerChoice`.
+    power_choice: PowerChoice | None = None
     #: The printed "Augment N" clauses this row honours by rewriting its
     #: own header -- a wider burst, a second target, a longer reach. The
     #: spend is settled before targeting and each affordable one is a
@@ -2848,6 +2890,7 @@ def power(
     grace_doubled: Iterable[str] = (),
     swap: Swap | None = None,
     skill_powers: SkillPowers | None = None,
+    power_choice: PowerChoice | None = None,
     augments: Iterable[Augment] = (),
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
@@ -3138,6 +3181,7 @@ def power(
             grace_doubled=tuple(grace_doubled),
             swap=swap,
             skill_powers=skill_powers,
+            power_choice=power_choice,
             augments=tuple(augments),
         )
         return body

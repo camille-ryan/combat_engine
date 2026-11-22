@@ -108,6 +108,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.basic import MELEE as BASIC_MELEE
 from combat_engine.engine.components import Health, Mods
+from combat_engine.engine.dsl import PowerChoice
 from combat_engine.engine.events import RowStored
 from combat_engine.engine.query import (
     creatures,
@@ -2159,12 +2160,40 @@ def f3615(c: Cast) -> None:
 
 @power("f3616", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.power_choice()",))
+       power_choice=PowerChoice(cls="c466"))
 def f3616(c: Cast) -> None:
-    """A daily power chosen at build time, paid for with a vial of poison
-    that is prepared during an extended rest. Both ends are `chargen`;
-    re-aimed off `c.apply_poison`, which is about a coated blade in a
-    fight and not about what is in the pack before one."""
+    """*"Choose one `c466` attack power of your level or lower. You gain
+    that power. You can prepare one fewer vial of assassin poison during
+    an extended rest."*
+
+    **The gain is written as a header field**, which is `SkillPowers`'
+    shape and for its reason: the whole of it is settled when the
+    character is built, so a body would have nothing to do on a board
+    and `chargen.loadout` is the one reader. `f2618` and `f3548` are the
+    precedent, and like them this row's body is a docstring.
+
+    `c466` is the assassin, resolved by `chargen.class_word` -- the cards
+    print the compendium ref and `PowerChoice.cls` takes either.
+
+    **Dropped: the cost.** *"One fewer vial of assassin poison"* is a
+    resource nothing counts. The assassin's vials are prepared at an
+    extended rest and no component holds a number for them -- which is a
+    different gap from `Gear.doses`, the pack of *printed* poisons that
+    landed with `#1452`: those are bought and carried, where a vial is
+    made at a rest and spent in a fight.
+
+    So the row is **stronger than its card** until that number exists,
+    which is the honest way round to say it.
+
+    **No marker, and that is `lint.py`'s rule rather than a choice.**
+    `dropped=` means *"plays, with one clause missing"* and the check
+    refuses it on a row whose body does nothing -- this body is a
+    docstring, because the whole effect is a header field. `f604` hit the
+    same wall earlier and took the same answer: the marker comes off and
+    the gap is recorded where a reader will find it, here and on `#1453`.
+    `f2618` and `f3548` are the two rows already in this position and
+    both are `KNOWN_SILENT` for it.
+    """
 
 
 @power("f3617", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -2781,13 +2810,32 @@ def f3645(c: Cast) -> None:
 
 @power("f3646", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("chargen.power_choice()",))
+       power_choice=PowerChoice(cls="c126"),
+       dropped=("chargen.LADDER_SKIPS(p15858)",))
 def f3646(c: Cast) -> None:
-    """The card printed beside the feat is `f3646b`, and it is the same
-    door `p5032` already is; the feat's own copy is what is handed over,
-    so the card is reachable rather than orphaned. The second sentence --
-    trading an extra use of the card for a daily attack power -- is a
-    build-time exchange."""
+    """*"You gain the `f3646b` power. Additionally, you can take a `c126`
+    attack power at any level where you would normally gain an additional
+    use of the `p15858` power. If you do so, you do not gain the
+    additional use."*
+
+    The card printed beside the feat is `f3646b`, and it is the same door
+    `p5032` already is; the feat's own copy is what is handed over, so the
+    card is reachable rather than orphaned.
+
+    **The druid power is written as a header field** -- `PowerChoice`,
+    read by `chargen.loadout`, the same shape `f3616` above takes and
+    `f2618`/`f3548` set. `c126` is the druid.
+
+    **Dropped: the trade, which is the half that cannot be said yet.**
+    *"You do not gain the additional use"* is a skipped rung on a
+    **feature's** ladder, and `chargen.LADDER_SKIPS` is keyed on a ref
+    whose *printed gains* are skipped -- it drops an attack or utility
+    slot, not an extra use of one named power. Nothing counts uses of
+    `p15858` per level at all, so there is no rung to take away.
+
+    The row is therefore stronger than its card by one use of that power,
+    which is stated here rather than left for a reader to find. #1453.
+    """
     c.grant_row("f3646b", on=c.me, until=When.ENCOUNTER)
 
 

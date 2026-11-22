@@ -72792,6 +72792,116 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_feat_buys_an_attack_power_from_another_class(out: Result) -> None:
+    """`f3616` takes an assassin power and `f3646` a druid one, and neither
+    character is of that class. #1453.
+
+    **A header field, not a body**, which is `SkillPowers`' shape and for
+    its stated reason: the whole effect is settled when the character is
+    built, so a body would have nothing to do on a board and
+    `chargen.loadout` is the one reader. `f2618` and `f3548` set the
+    precedent and both are `KNOWN_SILENT` for exactly this.
+
+    **The pool cannot be `mine`**, which is the character's own rows --
+    that is what makes this a new reader rather than another entry in
+    `EXTRA_GAINS`. `PowerChoice.cls` carries the class, by word or by the
+    compendium ref the cards print, and `chargen.class_word` answers
+    both.
+
+    **Read after the ladder**, so the bought power is an addition to a
+    full hand rather than something competing for a printed slot -- which
+    is what *"you gain that power"* says.
+
+    The assertion that matters is the **count of foreign-class rows**, not
+    the hand's size: holding any feat moves the draw's stream, so two or
+    three refs swap places either way and a size comparison alone would
+    be measuring the shuffle. Measured: zero rows of the named class
+    before, exactly one after.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY, PowerChoice
+
+    # (the feat, the class it buys from, a class that is NOT that one)
+    CASES = (("f3616", "assassin", "rogue"), ("f3646", "druid", "ranger"))
+
+    def hand(cls: str, *, feat: str = "") -> list[str]:
+        build = chargen.build_of(cls)
+        return list(chargen.dealt_hand(
+            seed=3, cls=cls, level=6, build=build,
+            feats=(feat,) if feat else ()))
+
+    def of_class(refs: list[str], word: str) -> list[str]:
+        return sorted(r for r in refs
+                      if r in REGISTRY and REGISTRY[r].cls == word)
+
+    for feat, word, cls in CASES:
+        grant = REGISTRY[feat].power_choice
+        out.that(isinstance(grant, PowerChoice)
+                 and chargen.class_word(grant.cls) == word,
+                 f"{feat} declares its purchase in the header, and the"
+                 f" compendium ref it prints resolves to {word}",
+                 f"{grant}")
+
+        base, bought = hand(cls), hand(cls, feat=feat)
+        out.that(not of_class(base, word),
+                 f"premise: a {cls} is dealt no {word} attack power"
+                 " without the feat -- which is what makes the line below"
+                 " about the feat and not about the class lists"
+                 " overlapping",
+                 f"{of_class(base, word)}")
+        got = of_class(bought, word)
+        out.that(len(got) == 1,
+                 "and exactly one with it. The COUNT is the assertion and"
+                 " not the hand's size: holding any feat moves the draw's"
+                 " stream, so a couple of refs swap either way and a size"
+                 " comparison would be measuring the shuffle",
+                 f"{got}")
+        out.that(len(bought) == len(base) + 1,
+                 "the hand does grow by exactly one as well, which is the"
+                 " other half -- the power is an ADDITION to a full hand"
+                 " rather than something taking a printed slot, because"
+                 " the reader runs after the ladder",
+                 f"{len(base)} -> {len(bought)}")
+        took = REGISTRY[got[0]]
+        out.that(took.attack is not None,
+                 "and what it bought is an ATTACK power -- both cards say"
+                 " so, and `Power.attack` is what tells one from a"
+                 " utility",
+                 f"{got[0]}: attack {took.attack is not None},"
+                 f" usage {took.usage}")
+        out.that(0 < took.level <= 6,
+                 "of the character's level or lower, which is the printed"
+                 " ceiling on both cards",
+                 f"level {took.level} at character level 6")
+
+    # -- the costs are dropped, and the markers say which --------------------
+    out.that(not REGISTRY["f3616"].unfinished,
+             "`f3616` carries NO marker, and that is `lint.py`'s rule"
+             " rather than a claim its card is finished: `dropped=` means"
+             " 'plays, with one clause missing' and the check refuses it"
+             " on a row whose body does nothing -- this one's body is a"
+             " docstring because the whole effect is a header field."
+             " `f604` hit the same wall and took the same answer, and the"
+             " cost is recorded in `audit.KNOWN_SILENT` and on #1453"
+             " instead",
+             f"{REGISTRY['f3616'].unfinished}")
+    from audit import KNOWN_SILENT as _SILENT
+
+    out.that("f3616" in _SILENT and "1453" in _SILENT["f3616"],
+             "and the gap is where a reader of the audit will meet it --"
+             " its `KNOWN_SILENT` entry names the issue, so the row's"
+             " silence is explained rather than merely allowed",
+             f"{_SILENT.get('f3616', '')[:70]}")
+    out.that(REGISTRY["f3646"].unfinished
+             == ("chargen.LADDER_SKIPS(p15858)",),
+             "and `f3646` for its trade: `LADDER_SKIPS` drops a printed"
+             " attack or utility slot, where this card gives up an extra"
+             " USE of one named power -- which nothing counts per level,"
+             " so there is no rung to take away",
+             f"{REGISTRY['f3646'].unfinished}")
+
+
 def a_dose_of_poison_goes_on_a_weapon(out: Result) -> None:
     """The seven heroic doses, the gloves that hold one, and `f1307`'s
     clause that smears one instead of moving. #1452.
@@ -125498,6 +125608,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_feat_buys_an_attack_power_from_another_class,
         a_dose_of_poison_goes_on_a_weapon,
         the_spiked_chain_feats_four_clauses,
         an_infusion_fired_from_the_familiars_square,
@@ -125889,6 +126000,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "bought_power": (
+        a_feat_buys_an_attack_power_from_another_class,
+        "a feat that buys an attack power from another class's list"
+        " (#1453)",
     ),
     "poison_dose": (
         a_dose_of_poison_goes_on_a_weapon,

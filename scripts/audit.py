@@ -176,6 +176,26 @@ KNOWN_SILENT = {
     # outside the caster's own Close burst 5, and shows the heal landing
     # on one of them -- which it cannot do unless the origin moved. It
     # also plants the mechanism out and goes red.
+    # **A feat whose whole effect is a header field read by the dealer.**
+    # `f3616` prints *"choose one `c466` attack power of your level or
+    # lower. You gain that power"*, and that is `Power.power_choice`,
+    # which `chargen.loadout` reads -- so the hand is already dealt by
+    # the time a `Cast` opens and the body is a docstring. Exactly the
+    # position `f2618` and `f3548` are in above, for the same reason.
+    #
+    # Measured rather than assumed: a level-6 rogue is dealt 34 powers
+    # and **no** assassin attack power, and 35 with the feat including
+    # exactly one. `drivers.bought_power` is the proof and plants the
+    # reader out.
+    #
+    # Its printed cost -- one fewer vial of assassin poison at an
+    # extended rest -- is a resource nothing counts, so the row is
+    # stronger than its card by that much. Recorded on `#1453`; it
+    # carries no marker because `lint.py` refuses `dropped=` on a row
+    # whose body does nothing, which is `f604`'s case.
+    "f3616": "buys an attack power at build time; nothing to do on a "
+             "board -- see `drivers.bought_power`, and #1453 for the "
+             "vial count its cost needs",
     "f1709b": "needs an active familiar, which the board cannot pose for "
               "a feat -- see the companion gate's +11/-4 measurement and "
               "`drivers.familiar_origin` for the proof",

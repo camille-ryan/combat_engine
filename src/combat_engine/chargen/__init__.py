@@ -3758,6 +3758,36 @@ def loadout(
         for usage, when, upto in CEILING_GAINS.get(ref, ()):
             if when <= level:
                 out += deal(upto, usage, 1, ceiling=True)
+
+    # **And a feat that buys an attack power from ANOTHER class's list.**
+    # `f3616` takes an assassin power and `f3646` a druid one, and neither
+    # character is necessarily of that class -- so the pool cannot come
+    # from `mine`, which is this character's own rows. `Power.power_choice`
+    # carries the class and the count; see `dsl.PowerChoice` for why this
+    # is a header field and not a body.
+    #
+    # Read **after** the ladder above, so the bought power is an addition
+    # to a full hand rather than something competing for a printed slot --
+    # which is what *"you gain that power"* says. `_best_of` ranks it the
+    # same way the ladder's own picks are ranked.
+    #
+    # `ref not in out` because a character of that very class may already
+    # have been dealt the row, and the card buys a power rather than a
+    # duplicate. #1453.
+    for ref in list(feats):
+        grant = REGISTRY[ref].power_choice if ref in REGISTRY else None
+        if grant is None or grant.extra <= 0:
+            continue
+        word = class_word(grant.cls)
+        theirs = sorted(
+            p.ref for p in REGISTRY.values()
+            # An **attack** power, which is what both cards print, and
+            # `Power.attack` is what distinguishes one from a utility.
+            if p.cls == word and 0 < p.level <= level
+            and p.attack is not None and p.ref not in out
+        )
+        if theirs:
+            out += _best_of(theirs, grant.extra, word, build, pick)
     for at in UTILITY_GAINS:
         if at <= level:
             out += deal(at, None, 1)
