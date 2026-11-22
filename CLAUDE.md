@@ -563,13 +563,14 @@ push is still affordable — but do not quote 25 minutes.
   HEAD on it put every new verb straight back into the fail-closed branch.
 
   **A full recording is 1.3 to 2.8 hours, not 83 minutes, and the spread
-  is bimodal rather than a trend.** Six completed pooled recordings in
-  `logs/launchd-nightly.out`:
+  is bimodal rather than a trend.** Seven completed pooled recordings,
+  six in `logs/launchd-nightly.out` and the seventh run by hand:
 
   ```
   10-25  9,487s  2.4 rows/s      10-30  4,788s  4.8 rows/s
   10-27 10,217s  2.3 rows/s      11-01  4,789s  4.8 rows/s
   11-03  9,208s  2.5 rows/s      11-05  8,555s  2.7 rows/s
+  11-22  8,229s  2.9 rows/s      <- 23,892 rows, the slow cluster
   ```
 
   Two clusters at a corpus that moves by 33 rows across the whole set, so
@@ -581,7 +582,24 @@ push is still affordable — but do not quote 25 minutes.
 
   Do not quote 1.0 rows/s either: that came from 1,800 rows at the front
   of an abandoned run, and the corpus is **sorted** with the expensive feat
-  and power families first. See *"a rate from the front of a sorted corpus
+  and power families first.
+
+  **The 11-22 run measured that front, and the spread is far wider than
+  "the expensive families are first" suggests.** Per 1,000-row block:
+
+  ```
+     200- 5,200   0.83-1.35 rows/s     the feat and power families
+   6,200- 7,200       11.5
+  14,200-15,200       30.3
+  21,200-23,892        6.2-6.5
+  ```
+
+  So the instrument's own ETA, computed from the rate so far, read
+  **~5 hours remaining at row 5,200** and the run finished 55 minutes
+  later. It is wrong by about 4x for the whole of the first fifth, and it
+  is the number a session watching the log will see. Read the block rate,
+  not the ETA, and do not act on either before row ~8,000. See *"a rate
+  from the front of a sorted corpus
   is not a rate"*. #1159.
 
   **And the map tops itself up, so nobody has to remember.** A clean
