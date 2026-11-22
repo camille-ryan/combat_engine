@@ -6401,6 +6401,34 @@ def _survive_provoking(world: World, actor: int, ref: str) -> bool:
                 actor=foe, provoker=actor, why=f"{ref} is a ranged power"
             )
             window.by = ref  # ty: ignore[unresolved-attribute]
+            # **And WHICH magic item was in hand**, which two rows ask
+            # for: *"opportunity attacks provoked by making a ranged
+            # attack with this weapon"* and *"an enemy hits you with an
+            # opportunity attack when you use a sorcerer ranged or area
+            # attack power through this dagger"*.
+            #
+            # A **set** of item refs and not one, because the engine has
+            # no notion of which implement a power went through -- the
+            # weapon of record is a parameter to `resolve.attack`,
+            # decided when the attack rolls, which is strictly later
+            # than this moment. So this says "in hand when the window
+            # opened", a row asks whether its own item is among them,
+            # and the reading is exact for a character holding one magic
+            # implement and wider than print by one case for a character
+            # holding two. That is the same hole `i1949p1` and `i3085p2`
+            # record, and it is a gap in the engine rather than in those
+            # rows.
+            #
+            # Attached rather than declared, for the reason `by` above
+            # is: this class is in 31 committed fixtures and
+            # `Event.wire` ships declared fields.
+            from .components import Gear as _Gear
+
+            arms = world.get(actor, _Gear)
+            window.through = frozenset(  # ty: ignore[unresolved-attribute]
+                w.item for w in (arms.held if arms is not None else ())
+                if w.item
+            )
             # Saved and restored rather than cleared, because windows nest
             # -- see `movement.step`, where the same plant found it.
             prior = world.provocation

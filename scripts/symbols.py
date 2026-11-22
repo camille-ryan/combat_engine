@@ -1188,6 +1188,24 @@ CTX_KEYS: dict[str, str] = {
         "non-empty, which means only that *some* row opened the window -- "
         "`c.provoke` opens one for arbitrary rows. #880."
     ),
+    "provoked_weapon": (
+        "which **magic items were in the provoker's hand** when the "
+        "window opened, as a frozenset of item refs. Two cards narrow on "
+        "it -- \"opportunity attacks provoked by making a ranged attack "
+        "with **this weapon**\" and \"when you use a sorcerer ranged or "
+        "area attack power **through this dagger**\".\n\n"
+        "A **set and not one ref**, because the weapon of record is a "
+        "parameter to `resolve.attack` and is decided when the attack "
+        "rolls -- strictly later than the use that opens the window. So "
+        "this says \"in hand at that moment\" and a row asks whether "
+        "its own item is among them: exact for a character holding one "
+        "magic implement, wider than print by one case for a character "
+        "holding two.\n\n"
+        "`dsl._survive_provoking` records it on the window and "
+        "`resolve.attack` carries it here and onto the `Hit`, beside "
+        "`provoked_by`, because a trigger has no ctx. Empty when a move "
+        "opened the window, so a gate narrowing on it fails closed. #880."
+    ),
     "origin": (
         "the squares this swing comes **from**, as a frozenset. Not the "
         "attacker's square: a ranged attack's origin moves with "

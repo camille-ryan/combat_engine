@@ -626,6 +626,15 @@ def attack(
             # opened this", and `c.provoke` opens one for arbitrary rows --
             # so the ranged-or-area question is narrower than "not a move"
             # and `f2565` prints the narrower one.
+            # **Which magic items were in the provoker's hand** when the
+            # window opened, as a frozenset of item refs. Two rows ask
+            # "with THIS weapon" / "through THIS dagger", and the weapon
+            # of record is a parameter to this function -- decided when
+            # the attack rolls, later than the use that opened the
+            # window. See `dsl._survive_provoking` for why it is a set.
+            "provoked_weapon": frozenset(
+                getattr(window, "through", frozenset()) or frozenset()
+            ) if window is not None else frozenset(),
             "provoked_reach": _reach_kind(
                 str(getattr(window, "by", "") or ""), 0, world,
                 getattr(window, "provoker", None),
@@ -846,6 +855,15 @@ def attack(
         # a real fix where blessing it would only hide the union.
         provoked = str(ctx["provoked_by"])
         rolled.provoked_by = provoked  # ty: ignore[unresolved-attribute]
+        # **And which magic items were in the provoker's hand**, for the
+        # two rows that print *"with this weapon"* / *"through this
+        # dagger"*. Attached beside `provoked_by` and for its reason: a
+        # trigger answering the `Hit` has no ctx to read.
+        through = ctx["provoked_weapon"]
+        rolled.provoked_weapon = (  # ty: ignore[unresolved-attribute]
+            frozenset(through) if isinstance(through, frozenset | set) else
+            frozenset()
+        )
         rolled.charge = charge
         # **Which swing this is, when one row makes two.** Hung on the event
         # the way `opportunity` and `charge` are. A row that grants a counter
@@ -929,6 +947,10 @@ def attack(
         landed.branch = branch
         landed.opportunity = opportunity
         landed.provoked_by = provoked  # ty: ignore[invalid-assignment]
+        # **And what was in the provoker's hand**, for the same reason:
+        # `i3085p1` answers a `Hit` and a trigger has no ctx to read.
+        landed.provoked_weapon = (  # ty: ignore[invalid-assignment]
+            rolled.provoked_weapon)
         landed.charge = charge
         landed.as_ = as_
         landed.granted_by = granted_by

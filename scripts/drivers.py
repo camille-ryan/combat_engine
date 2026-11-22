@@ -83369,10 +83369,13 @@ def what_provoked_the_opening_reaches_the_attack(out: Result) -> None:
                  f"{row.unfinished}")
     for ref in ("i2060x1", "i3085p1"):
         row = REGISTRY[ref]
-        out.that(row.dropped == ("resolve.ctx.provoked_weapon",),
-                 f"{ref} keeps a marker, re-pointed at the half that is"
-                 " genuinely unreachable -- the weapon of record does not"
-                 " exist until the attack rolls",
+        out.that(not row.unfinished,
+                 f"{ref} carries no marker either: the weapon of record"
+                 " still does not exist until the attack rolls, and"
+                 " `provoked_weapon` answers the printed question a"
+                 " different way -- what was in hand when the window"
+                 " opened. See"
+                 " `drivers.a_provoked_window_knows_what_was_in_hand`",
                  f"{row.unfinished}")
 
     # -- what the context carries, per emitter -------------------------
@@ -87221,6 +87224,226 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              "and the row carries no marker: the clause it was dropped"
              " for is the one asserted above",
              f"{REGISTRY[ROW].unfinished}")
+
+
+def a_provoked_window_knows_what_was_in_hand(out: Result) -> None:
+    """Two cards narrow an opportunity attack by the **weapon the
+    provoking power went through**.
+
+    * `i2060x1`: *"a +2 item bonus to AC against opportunity attacks
+      provoked by making a ranged attack with this weapon."*
+    * `i3085p1`: *"an enemy hits you with an opportunity attack when you
+      use a sorcerer ranged or area attack power through this dagger."*
+
+    **Both notes said the same thing and both were right about why.** The
+    weapon of record is a parameter to `resolve.attack`, decided when the
+    attack rolls -- strictly later than the use that opens the window --
+    so nothing knew which implement the provoking power went through.
+
+    `dsl._survive_provoking` records what was **in hand** at the moment
+    it opens the window, as a frozenset of item refs, and
+    `resolve.attack` carries it into the context as `provoked_weapon` and
+    attaches it to the `Hit` beside `provoked_by`.
+
+    **A set and not one ref, which is the honest shape**: exact for a
+    character holding one magic implement, wider than print by one case
+    for a character holding two. That is the same hole `i1949p1` and
+    `i3085p2` record and it is a gap in the engine rather than in these
+    rows.
+    """
+    from dataclasses import replace as _replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Position
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        _survive_provoking,
+    )
+    from combat_engine.engine.events import Hit as _Hit
+    from combat_engine.engine.events import Miss as _Miss
+    from combat_engine.engine.events import OpportunityWindow
+    from combat_engine.engine.resolve import attack as _resolve_attack
+    from combat_engine.engine.types import Defense as _Defense
+
+    ROW = "i2060x1"
+
+    # -- the window carries what was in hand --------------------------------
+    world, me, _ = _board(ROW, 1)
+    gear = must(world.get(me, Gear), "the character has gear")
+    # **A magic weapon on the belt as well as in hand**, so "held" and
+    # "carried" are different answers. Without it the plant reading
+    # `Gear.weapons` instead of `Gear.held` gave the same set and stayed
+    # green -- the card says *with this weapon*, which a sheathed one is
+    # not.
+    stowed = _replace(chargen.PRINTED["w3611"], ref="w-belt",
+                      item="i-belt", enhancement=1)
+    gear.weapons.append(stowed)
+    gear.stowed.add(stowed.ref)
+    mine = {w.item for w in gear.held if w.item}
+    out.that(mine and "i-belt" not in mine,
+             "premise: the character HOLDS at least one magic item and"
+             " has another on its belt, so held and carried are"
+             " different answers",
+             f"held {sorted(mine)}, all"
+             f" {sorted(w.item for w in gear.weapons if w.item)}")
+
+    # An enemy next door, so a ranged power really does provoke.
+    cast = Cast(world=world, me=me, ref="drv")
+    foe = sorted(cast.enemies())[0]
+    here = world.need(me, Position).square
+    movement.place(world, foe, (here[0] + 1, here[1]))
+    seen: list[object] = []
+    world.bus.on(OpportunityWindow, lambda e: seen.append(e))
+
+    shot = next(r for r in REGISTRY.values()
+                if r.reach is not None and r.reach.kind == "ranged"
+                and (r.level or 1) <= 10)
+    _survive_provoking(world, me, shot.ref)
+    out.that(seen,
+             "premise: using a ranged power opens an opportunity window",
+             f"{len(seen)}")
+    if not seen:
+        return
+    opened = seen[-1]
+    out.that(frozenset(getattr(opened, "through", ())) == frozenset(mine),
+             "and the window records every magic item that was in hand"
+             " -- a SET, because the weapon of record is decided when the"
+             " attack rolls and that is strictly later than this moment",
+             f"{sorted(getattr(opened, 'through', ()))} vs {sorted(mine)}")
+    out.that(str(getattr(opened, "by", "")) == shot.ref,
+             "beside the ref that provoked, which is the half that"
+             " already worked",
+             f"{getattr(opened, 'by', '')!r}")
+
+    # -- the attack carries it, end to end ----------------------------------
+    # **Driven rather than hand-built**, because the ctx arms below say
+    # nothing about `resolve.attack` wiring the key up: the plant that
+    # emptied the context entry stayed green against them. The window is
+    # parked on the world only for the duration of its own emit, which
+    # is why the swing is made from inside the handler -- that is also
+    # when it happens in play.
+    w1b, me1b, _ = _board(ROW, 1)
+    castb = Cast(world=w1b, me=me1b, ref="drv")
+    foeb = sorted(castb.enemies())[0]
+    hereb = w1b.need(me1b, Position).square
+    movement.place(w1b, foeb, (hereb[0] + 1, hereb[1]))
+    mineb = {w.item for w in must(w1b.get(me1b, Gear), "gear").held if w.item}
+    carried_on: list[frozenset] = []
+
+    def swing_back(ev: object) -> None:
+        # **`resolve.attack(opportunity=True)`, which is the narrow
+        # door.** `resolve` reads `world.provocation` only `if
+        # opportunity` -- that is how this engine costs an opportunity
+        # attack -- so a `c.basic` from inside the handler saw the
+        # parked window and still carried an empty `provoked_by`, which
+        # is what the first draft of this arm measured. Going through
+        # `dsl.use` instead refused the swing outright: the foe does not
+        # know `mba` and has no opportunity action to spend, which is a
+        # fact about the board rather than about the wiring.
+        if getattr(ev, "actor", None) != foeb:
+            return
+        _resolve_attack(w1b, foeb, me1b, 30, _Defense.AC, "mba",
+                        opportunity=True)
+
+    for kind in (_Hit, _Miss):
+        w1b.bus.on(kind, lambda e: carried_on.append(
+            frozenset(getattr(e, "provoked_weapon", ()) or ())))
+    w1b.bus.on(OpportunityWindow, swing_back)
+    w1b.rng.loaded = 20
+    _survive_provoking(w1b, me1b, shot.ref)
+    out.that(carried_on,
+             "premise: the opportunity attack really came back",
+             f"{len(carried_on)}")
+    out.that(carried_on and carried_on[-1] == frozenset(mineb),
+             "and the BLOW carries what was in the provoker's hand --"
+             " attached to the `Hit` beside `provoked_by`, which is what"
+             " `i3085p1`'s trigger reads: a trigger has no ctx",
+             f"{[sorted(x) for x in carried_on]} vs {sorted(mineb)}")
+
+    # -- the row's gate reads it --------------------------------------------
+    w2, me2, _ = _board(ROW, 1)
+    REGISTRY[ROW].body(Cast(world=w2, me=me2, ref=ROW))
+    from combat_engine.engine.query import defence
+    from combat_engine.engine.types import Defense
+
+    plain = defence(w2, me2, Defense.AC, {"attacker": 2})
+    with_it = defence(w2, me2, Defense.AC, {
+        "attacker": 2, "opportunity": True, "provoked_reach": "ranged",
+        "provoked_weapon": frozenset({"i2060"}),
+    })
+    out.that(with_it - plain == 2,
+             "the row's +2 applies to an opportunity attack provoked by a"
+             " ranged power made with THIS weapon",
+             f"{plain} -> {with_it}")
+
+    other = defence(w2, me2, Defense.AC, {
+        "attacker": 2, "opportunity": True, "provoked_reach": "ranged",
+        "provoked_weapon": frozenset({"i9999"}),
+    })
+    out.that(other == plain,
+             "**and not to one provoked with a different weapon**, which"
+             " is the clause that was dropped: before this it paid on any"
+             " ranged provocation at all",
+             f"{plain} vs {other}")
+    none_said = defence(w2, me2, Defense.AC, {
+        "attacker": 2, "opportunity": True, "provoked_reach": "ranged",
+    })
+    out.that(none_said == plain,
+             "and not when nothing says what was in hand -- an absent key"
+             " reads as no weapon rather than as any weapon, which is the"
+             " safe direction for a narrowing",
+             f"{plain} vs {none_said}")
+    walked = defence(w2, me2, Defense.AC, {
+        "attacker": 2, "opportunity": True, "provoked_reach": "",
+        "provoked_weapon": frozenset({"i2060"}),
+    })
+    out.that(walked == plain,
+             "and not to an opening a MOVE gave, which the other half of"
+             " the gate already refused",
+             f"{plain} vs {walked}")
+
+    # -- the dagger's TRIGGER reads it too ----------------------------------
+    # Its own arm, because the gate arms above are `i2060x1`'s modifier
+    # and say nothing about `i3085p1`: the plant that made that trigger
+    # ignore the implement stayed green against them.
+    from combat_engine.content.items.weapon_b import _ranged_sorcery_provoked
+
+    SORC = "p16222"
+    out.that(REGISTRY[SORC].cls == "sorcerer"
+             and REGISTRY[SORC].reach is not None
+             and REGISTRY[SORC].reach.kind == "ranged",
+             "premise: a sorcerer ranged power, which is what the"
+             " dagger's card names",
+             f"{SORC}")
+
+    def came_back(items: frozenset) -> object:
+        blow = _Hit(attacker=2, target=me, power="mba", critical=False)
+        blow.provoked_by = SORC
+        blow.provoked_weapon = items
+        return blow
+
+    out.that(_ranged_sorcery_provoked(world, me, came_back(
+                 frozenset({"i3085"}))),
+             "the dagger's trigger fires when the provoking power went"
+             " through an implement including this one",
+             "fires")
+    out.that(not _ranged_sorcery_provoked(world, me, came_back(
+                 frozenset({"i9999"}))),
+             "**and not through a different one**, which is the clause"
+             " that was dropped -- *'through this dagger'*",
+             "withheld")
+    out.that(not _ranged_sorcery_provoked(world, me, came_back(
+                 frozenset())),
+             "and not when nothing says what was in hand",
+             "withheld")
+
+    for ref in (ROW, "i3085p1"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
 
 
 def only_the_bonded_wielder_uses_the_sword(out: Result) -> None:
@@ -122391,6 +122614,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "provoked_window_knows_the_hand": (
+        a_provoked_window_knows_what_was_in_hand,
+        "`i2060x1` and `i3085p1` narrow an opportunity attack by the "
+        "weapon the provoking power went through (#880)",
     ),
     "only_the_bonded_wielder": (
         only_the_bonded_wielder_uses_the_sword,

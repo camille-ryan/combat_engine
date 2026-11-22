@@ -263,8 +263,19 @@ def _provoked_by_a_ranged_power(ev: Any, cls: str = "") -> bool:
 
 
 def _ranged_sorcery_provoked(world: World, me: int, ev: Any) -> bool:
-    """The trigger half of the above, for `i3085p1`'s printed class."""
-    return _provoked_by_a_ranged_power(ev, "sorcerer")
+    """The trigger half of the above, for `i3085p1`'s printed class and
+    its printed implement.
+
+    *"...through this dagger"* is `ev.provoked_weapon`, the magic items
+    in the provoker's hand when the window opened. A **set**, because
+    the engine has no notion of which implement a power went through --
+    see `dsl._survive_provoking`, which records it -- so this asks
+    whether the dagger was among them. Exact for a sorcerer holding one
+    magic implement, wider by one case for a sorcerer holding two.
+    """
+    if not _provoked_by_a_ranged_power(ev, "sorcerer"):
+        return False
+    return "i3085" in frozenset(getattr(ev, "provoked_weapon", ()) or ())
 
 
 def _crit_by_me(world: World, me: int, ev: Any) -> bool:
@@ -1303,7 +1314,6 @@ def i2011p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("resolve.ctx.provoked_weapon",),
 )
 def i2060x1(c: Cast) -> None:
     """The openings a *move* gives no longer pay. `ctx["provoked_reach"]`
@@ -1311,20 +1321,29 @@ def i2060x1(c: Cast) -> None:
     is exact and walking away -- which carries no provoking row at all --
     is excluded by construction. #880.
 
-    **Still dropped, and the remaining half is narrower than it was**:
-    "with **this weapon**". The window knows the provoking *ref* and
-    nothing knows the weapon yet, because the weapon of record is a
-    parameter to `resolve.attack` and is decided when the attack rolls --
-    strictly later than the moment a ranged power's use opens the window.
-    So the residue is an opportunity attack provoked by a ranged attack
-    made with a *different* weapon, where it used to be any opportunity
-    attack at all.
+    **And *"with this weapon"* is asked too.**
+    `ctx["provoked_weapon"]` is the magic items that were in hand when
+    the window opened, recorded by `dsl._survive_provoking`.
+
+    A **set**, and the one place this is wider than print: the weapon of
+    record is a parameter to `resolve.attack`, decided when the attack
+    rolls -- strictly later than the use that opened the window -- so the
+    engine has no notion of which weapon a power went through. This asks
+    whether the weapon was among those in hand: exact for a character
+    holding one magic weapon, wider by one case for a character holding
+    two. The same hole `i1949p1` and `i3085p2` record.
     """
     def provoked_by_a_ranged_attack(ctx: dict[str, Any]) -> bool:
         if not ctx.get("opportunity"):
             return False
         shape = ctx.get("provoked_reach", "")
-        return shape == "ranged" or shape in AREA_OR_CLOSE
+        if not (shape == "ranged" or shape in AREA_OR_CLOSE):
+            return False
+        # *"...with this weapon"*, which is `provoked_weapon`: the magic
+        # items in hand when the window opened. A set, because nothing
+        # knows which one a power went through -- see
+        # `dsl._survive_provoking`.
+        return "i2060" in frozenset(ctx.get("provoked_weapon") or ())
 
     c.bonus(
         AC,
@@ -4878,19 +4897,25 @@ def i3056p1(c: Cast) -> None:
         both(targets_me, by_opportunity, _ranged_sorcery_provoked),
         "an opportunity attack provoked by a ranged or area power hits you",
     ),
-    dropped=("resolve.ctx.provoked_weapon",),
 )
 def i3085p1(c: Cast) -> None:
-    """The `Hit` named only the swing that came back; it carries
-    `provoked_by` now, so the printed Trigger's two askable halves are
-    asked: the opening was given by a ranged or area row, and that row
-    belongs to the class the card names. #880.
+    """*"Trigger: an enemy hits you with an opportunity attack when you
+    use a sorcerer ranged or area attack power through this dagger."*
 
-    **Still dropped**: "through **this** item". The weapon of record is a
-    parameter to `resolve.attack`, decided when the attack rolls, which is
-    later than the use that opened the window -- so nothing knows which
-    implement the provoking power went through. The residue is the same
-    ranged power used through a different one.
+    All three halves of that are asked now. `provoked_by` gives the row
+    that opened the window and its class and shape; `provoked_weapon`
+    gives the magic items that were in the provoker's hand at that
+    moment, which is the *"through this dagger"* half.
+
+    **A set, and the one place this is wider than print.** The weapon of
+    record is a parameter to `resolve.attack`, decided when the attack
+    rolls -- strictly later than the use that opened the window -- so the
+    engine has no notion of which implement a power went through.
+    `dsl._survive_provoking` records what was in hand instead, and this
+    asks whether the dagger was among them. Exact for a sorcerer holding
+    one magic implement; wider by one case for a sorcerer holding two,
+    which is the same hole `i1949p1` and `i3085p2` record and is a gap in
+    the engine rather than in this row.
     """
     c.flat(5)
 
