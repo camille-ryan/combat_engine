@@ -2581,7 +2581,7 @@ def f1334b(c: Cast) -> None:
     )
 
 
-@_trait("f1336", todo=("actions.move_companion()",))
+@_trait("f1336")
 def f1336(c: Cast) -> None:
     """Moves the familiar for a minor action instead of a move action.
 
@@ -2606,7 +2606,26 @@ def f1336(c: Cast) -> None:
     say `c.grant_action` "understands `shift` and `stand` and silently
     eats anything else", which was #583's fault and is fixed -- an
     unrecognised word now **raises**, naming the set. So nothing here
-    could have been half-written into a word nobody reads."""
+    could have been half-written into a word nobody reads.
+
+    **Written. The offer and the word landed together**, which is the
+    rule `GRANTABLE` exists for: `move_companion` is in that set, the
+    menu offers one entry per square the companion could walk to, and
+    `execute` walks it through `movement.walk` rather than writing a
+    `Position`.
+
+    *"Once per turn"* is **not** a count on the grant -- `c.grant_action`
+    carries squares, not uses -- so it is `Powers.latched` with
+    `per_turn=True`, which is the store every other once-a-turn payout
+    here uses. The latch is spent only when the companion actually
+    moved, so a walk with nowhere to go does not burn the turn's use.
+
+    `When.ENCOUNTER` rather than a stance: the card names no end, and
+    the offer is harmless once the familiar is gone because the reader
+    asks `c.companion()` live and offers nothing when there is none --
+    the same argument `f970b`'s `pull_grabbed` grant records."""
+    c.grant_action("move_companion", ActionType.MINOR, on=c.me,
+                   until=When.ENCOUNTER)
 
 
 @_trait("f1337")

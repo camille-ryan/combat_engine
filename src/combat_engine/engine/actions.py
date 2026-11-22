@@ -1636,6 +1636,54 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
                                   ref="move_in_zone", dest=dest,
                                   path=(dest,)))
 
+    # **Walking the companion, which nothing offered at all.** `f1336`
+    # prints *"once per turn, you can move your familiar with a minor
+    # action instead of a move action"*, and its marker had been pointed
+    # at `c.grant_action(familiar=)` -- a keyword on the verb that
+    # **re-prices** a menu line. There was no line to re-price: a
+    # companion walks only when a row calls `c.move_companion`, which is
+    # a body and not an action. `f2726`'s `mount` grant is the worked
+    # case of the opposite error, where the action was already offered
+    # and the grant was close to a no-op.
+    #
+    # So the word and its reader land together, which is what `GRANTABLE`
+    # exists to enforce. One option per destination, because which square
+    # the companion walks to is the owner's choice -- the same reasoning
+    # the pull below records.
+    #
+    # **"Once per turn" is a latch and not a count on the grant.**
+    # `c.grant_action` carries squares, not uses, and a menu that offered
+    # the move again after it was taken would be strictly more generous
+    # than the card. `Powers.latched` with `per_turn=True` is the store
+    # every other once-a-turn payout in this tree uses, so there is one
+    # answer to the question rather than a second.
+    from .cast import Cast as _CastFor
+
+    for (what, cost), far in _granted(world, actor).items():
+        if what != "move_companion":
+            continue
+        if not encounter.can_spend(actor, cost):
+            continue
+        asker = _CastFor(world=world, me=actor, ref="actions:move_companion")
+        if asker.latched("move_companion", per_turn=True):
+            continue
+        standing = asker.companion()
+        if standing is None:
+            continue
+        here = world.get(standing, Position)
+        if here is None:
+            continue
+        # The companion's own speed, which is what walks it -- `far` is
+        # the grant's square count and is 1 by default, so a card naming
+        # no distance must not shrink the move to one square.
+        steps = max(far, speed(world, standing))
+        for dest in sorted(
+            reachable(world, standing, steps, kind="walk").keys()
+            - here.squares
+        ):
+            out.append(Action(kind="move_companion", cost=cost,
+                              targets=(standing,), dest=dest, path=(dest,)))
+
     # **Dragging what you already hold, which is a granted action and not a
     # flag on the grab.** `f970b` prints "while you have the target grabbed
     # you can pull it 1 square as a minor action", and the marker for it
@@ -1766,6 +1814,13 @@ GRANTABLE = frozenset({
     "aid_attack", "aid_defence", "command", "dismount", "escape",
     "instinctive", "mount", "move_zone", "pull_grabbed", "second_wind",
     "shift",
+    # **`move_companion` arrived with its reader**, which is the rule
+    # this set exists to enforce. `f1336` prints "once per turn, you can
+    # move your familiar with a minor action instead of a move action",
+    # and nothing offered moving a companion at all -- so unlike `mount`
+    # there was no line to re-price. The offer and the `execute` branch
+    # are both in this file; the once-a-turn half is `Powers.latched`.
+    "move_companion",
     # **`move_in_zone` moves the CREATURE; `move_zone` moves the zone.**
     # Two words because they are opposite operations that read alike:
     # `move_zone` is the monster line "as a minor action it can move the
@@ -3670,6 +3725,25 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
                 world.effects.end(eff, "stood up")
         world.bus.emit(Note(text=f"{actor} stands"))
         return True
+
+    if action.kind == "move_companion":
+        # The grant says a square and `Cast.move` is what walks anybody,
+        # so this goes through it rather than writing a `Position` by
+        # hand -- a direct write leaves `Grid.occupants` stale, which is
+        # the fault the pull below records.
+        from .cast import Cast as _Cast
+        from .movement import walk as _walk
+
+        walker = _Cast(world=world, me=actor, ref="move-companion")
+        standing = walker.companion()
+        if standing is None:
+            return False
+        moved = _walk(world, standing, [action.dest])
+        if moved:
+            # **Spent only when it moved**, so a walk that was refused --
+            # no room, a condition -- does not burn the turn's one use.
+            walker.latch("move_companion", per_turn=True)
+        return bool(moved)
 
     if action.kind == "pull_grabbed":
         # The grant says a square; `forced` is what moves anybody, so the

@@ -85784,6 +85784,143 @@ def every_attack_gains_a_keyword(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_companion_walked_for_a_minor_action(out: Result) -> None:
+    """*"Once per turn, you can move your familiar with a minor action
+    instead of a move action"* -- `f1336`.
+
+    **There was no menu line to re-price, which is the whole finding.**
+    The row's marker had been pointed at `c.grant_action(familiar=)`, a
+    keyword on the verb that changes what an *existing* action costs. A
+    companion walks only when a row calls `c.move_companion` -- a body,
+    not an action -- so nothing in `engine/actions.py` offered moving one
+    at all. `f2726`'s `mount` grant is the opposite error in the same
+    family: the action was already offered, so the grant was close to a
+    no-op.
+
+    So the word and its reader land together, which is what `GRANTABLE`
+    exists to enforce: `move_companion` in the set, one offer per square
+    the companion could reach, and a `perform` branch that walks it
+    through `movement.walk` rather than writing a `Position` -- a direct
+    write leaves `Grid.occupants` stale.
+
+    **"Once per turn" is a latch, not a count on the grant.**
+    `c.grant_action` carries squares, not uses, so a menu that offered
+    the move again after it was taken would be strictly more generous
+    than print. `Powers.latched` with `per_turn=True` is the store every
+    other once-a-turn payout here uses, and it is spent only when the
+    companion actually moved.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.actions import GRANTABLE, legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import allies
+
+    ROW = "f1336"
+
+    def staged(
+        *, armed: bool, pet: bool = True,
+    ) -> tuple[Any, int, int, list[Any]]:
+        world, me, _ = _board(ROW, 1)
+        mate = sorted(allies(world, me))[0]
+        if pet:
+            world.add(mate, Companion(owner=me, kind="familiar"))
+        # **The board arms this feat on its own dealt character**, so the
+        # "without it" arm has to be made rather than found.
+        mods = world.get(me, Mods)
+        if not armed and mods is not None:
+            mods.items = [
+                m for m in mods.items
+                if not str(m.what).startswith("move_companion")
+            ]
+        if armed:
+            REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+        world.turn = me
+        offers = [a for a in legal(world, world.encounter, me)
+                  if a.kind == "move_companion"]
+        return world, me, mate, offers
+
+    # -- the premises ------------------------------------------------------
+    out.that("move_companion" in GRANTABLE,
+             "premise: the word is in `GRANTABLE`, which is the set whose"
+             " whole purpose is that every member has a reader",
+             f"{'move_companion' in GRANTABLE}")
+    w0, me0, pet0, none_offered = staged(armed=False)
+    out.that(Cast(world=w0, me=me0, ref="drv").companion() == pet0,
+             "premise: the character has a familiar -- the board deals"
+             " none, so this is made rather than found",
+             f"{Cast(world=w0, me=me0, ref='drv').companion()}")
+
+    # -- the control -------------------------------------------------------
+    out.that(not none_offered,
+             "with no grant, moving the companion is offered NOWHERE --"
+             " which is the state the row's marker described and the"
+             " reason a keyword on `c.grant_action` could not have worked",
+             f"{len(none_offered)}")
+
+    # -- the printed clause ------------------------------------------------
+    w1, me1, pet1, offered = staged(armed=True)
+    out.that(bool(offered),
+             "with the feat armed it is offered, one entry per square the"
+             " companion could walk to -- which square is the owner's"
+             " choice and the point of the line",
+             f"{len(offered)} offers")
+    out.that(all(a.cost.value == "minor" for a in offered),
+             "and at a MINOR action, which is what the card trades for a"
+             " move action",
+             f"{sorted({a.cost.value for a in offered})}")
+    out.that({a.targets[0] for a in offered if a.targets} == {pet1},
+             "and every offer names the familiar rather than the"
+             " character -- the body moves somebody else, which is the"
+             " commonest single mistake in this tree",
+             f"{sorted({a.targets[0] for a in offered if a.targets})}")
+
+    # -- it actually walks --------------------------------------------------
+    # **Guarded, because two plants crashed here instead of failing.**
+    # `offered[0]` on an empty list raises out of the rule and the run
+    # printed no tally at all -- a rule that dies reads as neither red
+    # nor green, which is worse than a red one. The emptiness is already
+    # an assertion above, so this skips rather than raising and the
+    # failures below are reported as failures.
+    was = must(w1.get(pet1, Position), "the familiar stands").square
+    taken = offered[0] if offered else None
+    out.that(taken is not None and perform(w1, w1.encounter, me1, taken),
+             "performing it succeeds", f"{taken}")
+    now = must(w1.get(pet1, Position), "the familiar stands").square
+    out.that(taken is not None and now == taken.dest and now != was,
+             "and the familiar is standing where the offer said -- walked"
+             " through `movement.walk`, so the grid index moves with it",
+             f"{was} -> {now}, offered {taken.dest if taken else None}")
+    out.that(w1.grid.occupant(now) == pet1 and w1.grid.occupant(was) != pet1,
+             "with the grid agreeing, which a hand-written `Position`"
+             " would have left stale",
+             f"{w1.grid.occupant(was)} / {w1.grid.occupant(now)}")
+
+    # -- once per turn ------------------------------------------------------
+    w1.turn = me1
+    out.that(not [a for a in legal(w1, w1.encounter, me1)
+                  if a.kind == "move_companion"],
+             "and it is not offered again this turn -- 'once per turn',"
+             " held as a latch rather than as a count on the grant, which"
+             " carries squares and not uses",
+             f"{[a.kind for a in legal(w1, w1.encounter, me1) if a.kind == 'move_companion']}")
+
+    # -- no companion, no offer ---------------------------------------------
+    _, _, _, orphan = staged(armed=True, pet=False)
+    out.that(not orphan,
+             "a character with the grant and NO companion is offered"
+             " nothing, because the reader asks `c.companion()` live --"
+             " the same argument `pull_grabbed` records for a grab that"
+             " has ended",
+             f"{len(orphan)}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: it was `todo=`, refused in"
+             " play, and is written",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -121555,6 +121692,9 @@ DRIVERS = {
     "every_attack_gains_a_keyword": (
         every_attack_gains_a_keyword,
         "every attack gains a keyword"),
+    "a_companion_walked_for_a_minor_action": (
+        a_companion_walked_for_a_minor_action,
+        "a companion walked for a minor action"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,
