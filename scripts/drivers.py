@@ -84536,6 +84536,42 @@ def a_waiver_that_is_narrowed_rather_than_removed(out: Result) -> None:
              " the unbounded verb would have reached Gargantuan",
              f"{raised}")
 
+    # -- a permission narrowed to one KIND of move ------------------------
+    #
+    # `i3441x1` permits a *shift* through an enemy's space and the verb
+    # permits movement of any kind. Two layers of that row's note said
+    # the kind could not be reached; it is in the context
+    # `movement.may_enter` builds -- `{"mover", "occupant", **move}` with
+    # `move` carrying `{"kind", "squares", "by"}` from `reachable`'s own
+    # parameters -- so the card is a `when=` on one key.
+    #
+    # **Read on a board that lays no other permission.** `audit.board`
+    # arms this row, so on its own board every kind comes back True from
+    # the ungated lay and the gate cannot be seen: measured that way
+    # first, all three read True before anything was laid.
+    from combat_engine.engine.durations import When as _When
+    from combat_engine.engine.movement import may_enter as _may_enter
+    from combat_engine.engine.query import enemies as _enemies
+
+    world, me, _n = A.board("m1092a0", 1)
+    foe = sorted(_enemies(world, me))[0]
+    c = Cast(world=world, me=me, ref="drivers:shift", target=me)
+    kinds = ("shift", "walk", "run")
+    bare = {k: _may_enter(world, me, foe, move={"kind": k}) for k in kinds}
+    out.that(not any(bare.values()),
+             "nothing may enter an enemy's space on this board to begin"
+             " with -- the premise, and the reason it is not read on the"
+             " row's own board",
+             f"{bare}")
+    c.may_enter(side="enemy", on=me, until=_When.ENCOUNTER,
+                when=lambda ctx: ctx.get("kind") == "shift")
+    gated = {k: _may_enter(world, me, foe, move={"kind": k}) for k in kinds}
+    out.that(gated == {"shift": True, "walk": False, "run": False},
+             "and a permission gated on the kind lets a SHIFT through and"
+             " nothing else -- which is the card, and one word rather"
+             " than the mechanism two layers of its note asked for",
+             f"{gated}")
+
 
 def a_riderless_mount_takes_two_kinds_of_action(out: Result) -> None:
     """"The only actions the horse can take while riderless are move and free."

@@ -3396,7 +3396,6 @@ def i3352x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.may_enter(kind=)",),
 )
 def i3441x1(c: Cast) -> None:
     """The escape bonus is not a skill bonus: `escape.attempt` sums an
@@ -3415,27 +3414,26 @@ def i3441x1(c: Cast) -> None:
     `Cast.shift` walks its path, so it governs a shift too. `i2137x1`'s
     docstring records making this exact mistake.
 
-    What is still missing is one word of narrowing. The card permits a
-    *shift* through an enemy's space; `may_enter` is a permission on
-    movement of any kind, and nothing can narrow it to one kind: the
-    context it gates on carries `mover` and `occupant` and no word for how
-    the creature is travelling, and `_clear` takes no `kind`. A `when=`
-    reading a flag set at `MoveStart` would be worse than wrong -- the
-    shift's options are computed by `reachable_paths` *before* `MoveStart`
-    fires, so the gate would be False exactly when the move is being
-    offered and the row would audit green and never work. So the
-    permission is laid as written and reads one word wider than the page.
+    **The one word of narrowing is already there, and two layers of this
+    note said it was not.** The first said *"nothing can narrow it to one
+    kind: the context it gates on carries `mover` and `occupant` and no
+    word for how the creature is travelling"*; the second corrected that
+    to "a thread plus a key, not a mechanism from nothing". Both are
+    spent: `movement.may_enter` builds its context as `{"mover",
+    "occupant", **move}`, and `move` is `{"kind", "squares", "by"}`
+    handed down from `reachable`'s own parameters. Its code comment says
+    so in as many words -- *"`kind` and `squares` come free"* -- and names
+    the two rows that needed it.
 
-    **"Nothing can narrow it" overstates the work, and the correction
-    narrows the symbol rather than moving it.** The kind is in scope two
-    frames above the refusal: `movement.step` takes a `kind` and is handed
-    `"shift"` by the shift walker, and `movement.reachable` takes one and
-    threads it to `world.difficult` -- so the pricing of a step already
-    knows what sort of going it is, and only `_clear`, called between
-    them, does not. `Movement.ignores_when` is the precedent, a waiver
-    keyed by the kind a move is made with, which is this exact shape for
-    the opposite sign. So `c.may_enter(kind=)` is a thread plus a key in
-    the context `may_enter` gates on, not a mechanism from nothing.
+    So the card is a `when=` on one key. Measured on a board that lays no
+    other permission: `shift` comes back True and `walk` and `run` False.
+
+    The old worry about a `MoveStart` flag does not apply and is worth
+    keeping as a warning, because it is a real trap for the next reader
+    of this verb: the options are computed by `reachable_paths` *before*
+    `MoveStart` fires, so a gate reading a flag set there would be False
+    exactly when the move is being offered. The kind here comes from the
+    walker's own parameter instead, which is why it is in scope at all.
 
     The one-at-a-time clause is not an omission here. `i3438x1`, the first
     of the four blocks printing it, rules it "a carrying rule rather than a
@@ -3455,7 +3453,14 @@ def i3441x1(c: Cast) -> None:
     """
     c.set_origin("elemental", until=When.ENCOUNTER)
     c.bonus("escape", 5, on=c.me, until=When.ENCOUNTER, kind="item")
-    c.may_enter(side="enemy", on=c.me, until=When.ENCOUNTER)
+    # **Narrowed to a shift, which is what the card permits.** The ctx
+    # `movement.may_enter` gates on carries the move's own facts --
+    # `{"mover", "occupant", **move}` where `move` is
+    # `{"kind", "squares", "by"}` from `reachable`'s own parameters -- so
+    # one word is all this needs. Measured on a board that lays no other
+    # permission: only `shift` comes back True.
+    c.may_enter(side="enemy", on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx: ctx.get("kind") == "shift")
 
     def crossed(ev: Moved) -> None:
         if ev.actor != c.me or ev.kind_ != "shift":
