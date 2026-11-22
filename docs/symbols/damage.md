@@ -33,7 +33,7 @@ Points off and points back on, and the dice behind them.
   - "You take only half damage from the attack."
 - `c.high_crit(self, *, ref: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "<this row> gains the high crit quality until ..."
-- `c.maximise(self, *, on: 'int | None' = None, ref: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, critical: 'bool' = False, dice: 'int' = 0) -> 'Effect | None'`
+- `c.maximise(self, *, on: 'int | None' = None, ref: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, critical: 'bool' = False, dice: 'int' = 0, heals: 'bool' = False) -> 'Effect | None'`
   - The next damage this creature rolls comes out maximum.
 - `c.no_miss_damage(self, *, half: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "The creature takes no damage from an attack that misses."

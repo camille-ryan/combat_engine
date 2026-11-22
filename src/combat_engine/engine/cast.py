@@ -1989,7 +1989,26 @@ class Cast:
         `c.damage` was the only documented way to turn dice into a total and
         it also deals them, so a power wanting a number for something else
         had to reach past the API.
+
+        **"Your healing powers restore the maximum number of hit points
+        possible"** is read here, and here is the only place it could be:
+        a heal's dice are rolled in a **body** -- `c.heal(c.roll("2d6"))`,
+        `c.surge(bonus=c.roll(...))` -- where `c.damage`'s own maximum is
+        read in `_roll_damage_dice`. There is no event carrying healing
+        dice to listen for.
+
+        Gated on the **rolling row** carrying `Keyword.HEALING`, so a
+        creature under this does not also maximise an attack's dice
+        rolled through the same door in the same turn. Not spent: the
+        card's window is the limit it states. `c.maximise(heals=True)`.
         """
+        from .dsl import get as _get
+
+        mods = self.world.get(self.me, Mods)
+        if mods is not None and mods.total("maximise_heal", {}) > 0:
+            row = _get(self.ref)
+            if row is not None and Keyword.HEALING in (row.keywords or ()):
+                return _max_of(dice)
         return self.world.rng.roll(dice).total
 
     def marked(self, on: int | None = None, *, by: int | None = None,
@@ -12448,6 +12467,7 @@ class Cast:
         until: When = When.EONT,
         critical: bool = False,
         dice: int = 0,
+        heals: bool = False,
     ) -> Effect | None:
         """The next damage this creature rolls comes out maximum.
 
@@ -12476,6 +12496,20 @@ class Cast:
         lays the modifier alone, which is read inside
         `_roll_damage_dice` where the dice actually are. The one card
         printing a cap is a character's.
+
+        **`heals` is the same word about the other pool**, and it is a
+        different sentence rather than a flag on this one by accident.
+        `i3167p1` prints *"until the end of this turn, your healing
+        powers restore the maximum number of hit points possible"* --
+        every healing power the creature uses in the window, where the
+        damage form is "the next roll".
+
+        So it is **not spent on first use** and it carries no cap: the
+        window is the limit the card states. Read in `Cast.roll`, which
+        is where a row turns dice into a number for anything that is not
+        damage, and gated on the rolling row carrying `Keyword.HEALING`
+        -- a creature under this does not maximise the damage of an
+        attack it makes in the same turn.
         """
         from .dsl import get
         from .events import DamageRolled
@@ -12522,6 +12556,23 @@ class Cast:
                 on=who, label=f"{self.ref} maximum damage",
             )
         )
+        if heals:
+            # **No listener and no spending.** See the docstring: this is
+            # a window rather than a one-shot, and healing dice are
+            # rolled through `Cast.roll` in a body rather than announced
+            # on `DamageRolled` at all.
+            held = self.world.effects.apply(
+                who, self.me, until, by=self.ref,
+                label=f"{self.ref} maximum healing",
+            )
+            if held is not None:
+                mods = self.world.get(who, Mods) or self.world.add(
+                    who, Mods())
+                mod = Mod("maximise_heal", 1, kind="untyped",
+                          label=f"{self.ref} maximum healing")
+                mods.items.append(mod)
+                held.mods.append((who, mod))
+            return held
         if dice:
             # The modifier alone, and it needs an effect to hang on so the
             # duration still owns it. `c.watch`'s own effect is what every

@@ -87217,6 +87217,118 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_heal_comes_out_maximum(out: Result) -> None:
+    """*"Until the end of this turn, your healing powers restore the
+    maximum number of hit points possible"* -- the third of `i3167p1`'s
+    three benefits, and the last of them to be writable.
+
+    **Nothing maximised a heal and `c.maximise` is not it.** That verb is
+    about a damage roll and is read in `_roll_damage_dice`, where a
+    heal's dice are rolled in a **body** -- `c.heal(c.roll("2d6"))`,
+    `c.surge(bonus=c.roll(...))` -- and announced on no event at all. So
+    the listener half of `c.maximise` has nothing to hear and its
+    modifier half is read somewhere a heal never goes.
+
+    `c.maximise(heals=True)` is read in `Cast.roll`, which is the door a
+    body turns dice into a number through. Three things make it the
+    card's sentence rather than a bigger one: it is **not spent** on
+    first use, it is **uncapped**, and it is gated on the **rolling
+    row** carrying `Keyword.HEALING` -- so a creature under it does not
+    also maximise an attack it makes in the same turn.
+
+    **The row is a choice of three and this rule drives all three**, by
+    `c.choose`'s own menu, because a benefit the menu cannot reach is a
+    benefit nobody gets.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.types import Keyword
+
+    ROW = "i3167p1"
+    HEAL, ATTACK = "p10273", "p10187"
+
+    out.that(Keyword.HEALING in REGISTRY[HEAL].keywords
+             and Keyword.HEALING not in (REGISTRY[ATTACK].keywords or ()),
+             "premise: one of the two rows below is a healing power and"
+             " the other is not, which is the gate this turns on",
+             f"{HEAL}, {ATTACK}")
+
+    world, me, _ = _board(ROW, 1)
+    plain = Cast(world=world, me=me, ref=HEAL).roll("4d6")
+    out.that(4 <= plain <= 24,
+             "premise: four d6 roll somewhere in range before anything is"
+             " armed",
+             f"{plain}")
+
+    Cast(world=world, me=me, ref="drv").maximise(
+        on=me, until=When.EOT, heals=True)
+    out.that(Cast(world=world, me=me, ref=HEAL).roll("4d6") == 24,
+             "with the benefit, a HEALING row's dice come out maximum",
+             f"{Cast(world=world, me=me, ref=HEAL).roll('4d6')}")
+    out.that(Cast(world=world, me=me, ref=HEAL).roll("4d6") == 24,
+             "and again, because the card's window is a turn and not one"
+             " roll -- the damage form beside it is 'the next roll' and"
+             " is spent where it is read",
+             "24")
+
+    # -- what it must NOT touch ---------------------------------------------
+    swings = [Cast(world=world, me=me, ref=ATTACK).roll("4d6")
+              for _ in range(6)]
+    out.that(any(n != 24 for n in swings),
+             "**an attack row rolling through the same door is left"
+             " alone.** Six rolls, and a maximum on every one of them"
+             " would be the gate not working -- the keyword is read off"
+             " the row that is rolling, not off the one that armed this",
+             f"{swings}")
+    damage = [Cast(world=world, me=me, ref=HEAL)._roll_damage("4d6")
+              for _ in range(6)]
+    out.that(any(n != 24 for n in damage),
+             "and so is a healing row's DAMAGE, which goes through"
+             " `_roll_damage_dice` rather than here: the card says what"
+             " its healing restores",
+             f"{damage}")
+
+    # -- the row's own menu reaches it --------------------------------------
+    w2, me2, _ = _board(ROW, 1)
+    for eff in list(w2.effects.of(me2)):
+        if eff.by == ROW:
+            w2.effects.end(eff)
+    mods = w2.get(me2, Mods)
+    if mods is not None:
+        mods.items[:] = [m for m in mods.items
+                         if m.what != "maximise_heal"]
+    cast = Cast(world=w2, me=me2, ref=ROW)
+    # **The menu is steered rather than guessed at.** `c.choose` picks
+    # by policy, so a rule that wanted the third benefit and took
+    # whatever the policy liked would measure the policy.
+    asked: list[tuple] = []
+
+    def pick(options: list, _why: str = "", **_kw: object) -> object:
+        asked.append(tuple(options))
+        return next((o for o in options
+                     if str(o).startswith("maximum healing")), options[0])
+
+    cast.choose = pick
+    REGISTRY[ROW].body(cast)
+    out.that(asked and len(asked[0]) == 3,
+             "premise: the row offers THREE benefits, which is what the"
+             " card prints -- two of them were all it could offer before",
+             f"{asked}")
+    out.that(Cast(world=w2, me=me2, ref=HEAL).roll("4d6") == 24,
+             "and the ROW reaches it: the benefit is one of three on"
+             " `c.choose`'s menu, and one the menu cannot reach is one"
+             " nobody gets",
+             f"{Cast(world=w2, me=me2, ref=HEAL).roll('4d6')}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"{ROW} carries no marker: all three printed benefits are"
+             " written",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_mount_uses_its_riders_numbers(out: Result) -> None:
     """Two cards lend a creature its rider's numbers.
 
@@ -120942,6 +121054,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "heal_comes_out_maximum": (
+        a_heal_comes_out_maximum,
+        "`i3167p1`'s third benefit maximises a healing power's dice for "
+        "the turn, and nothing else the caster rolls (#1341)",
     ),
     "mount_uses_riders_numbers": (
         a_mount_uses_its_riders_numbers,

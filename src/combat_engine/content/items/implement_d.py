@@ -2644,7 +2644,6 @@ def i3018p1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=SELF,
-    dropped=("c.heal_bonus()",),
 )
 def i3167p1(c: Cast) -> None:
     """"Choose one of the following benefits", and two of the three can now
@@ -2662,8 +2661,17 @@ def i3167p1(c: Cast) -> None:
     attack power**, **mine**, **once** -- and `When.EONT` is "before the end
     of your next turn".
 
-    Still `dropped`: nothing maximises a heal. That is `c.heal_bonus()` and
-    it is a different sentence from either of these.
+    **All three are written now.** The last was *"until the end of this
+    turn, your healing powers restore the maximum number of hit points
+    possible"*, and nothing maximised a heal: `c.maximise` is about a
+    damage roll and is read in `_roll_damage_dice`, where a heal's dice
+    are rolled in a **body** through `c.roll` and announced on no event
+    at all.
+
+    `c.maximise(heals=True)` is that window -- not spent on first use and
+    uncapped, because the card's limit is the turn it names -- and it is
+    gated on the rolling row carrying `Keyword.HEALING`, so a creature
+    under it does not also maximise an attack it makes in the same turn.
     """
     def missed_divine(ev: Any) -> None:
         if getattr(ev, "attacker", None) != c.me:
@@ -2686,13 +2694,19 @@ def i3167p1(c: Cast) -> None:
         c.watch(AttackRolled, missed_divine, until=When.EONT, on=c.me,
                 once=True, label=c.ref)
 
+    def maximum_healing() -> None:
+        c.maximise(on=c.me, until=When.EOT, heals=True)
+
     picked = c.choose(["a saving throw for you and each ally within 5",
+                       "maximum healing from your powers this turn",
                        "a reroll of your next miss with a divine power"],
                       "which benefit")
     if picked is None or picked.startswith("a saving throw"):
         # The default is the first benefit, which is what the row did
         # before there was anything to choose between.
         saves()
+    elif picked.startswith("maximum healing"):
+        maximum_healing()
     else:
         bank_reroll()
 
