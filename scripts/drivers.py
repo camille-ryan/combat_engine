@@ -8345,10 +8345,15 @@ def a_whole_usage_category_can_be_barred(out: Result) -> None:
              "both rows carry no marker now",
              f"{REGISTRY['m5559a4'].unfinished}"
              f" {REGISTRY['m5719a5'].unfinished}")
-    out.that(REGISTRY["m5948a5"].unfinished == ("c.forbid(action=)",),
-             "and m5948a5 still carries its own, re-pointed at the axis it"
-             " actually wants -- which is the proof the two were never one"
-             " capability",
+    # **This pinned `("c.forbid(action=)",)`, which was the proof the two
+    # were never one capability -- and that symbol has landed.** The
+    # re-pointing is still the finding; what it cannot be asserted
+    # through any more is a live marker.
+    out.that(not REGISTRY["m5948a5"].unfinished,
+             "and m5948a5 carries none either: the axis it was"
+             " re-pointed at is written, so all three rows are finished"
+             " and the split is recorded in their notes rather than in a"
+             " marker",
              f"{REGISTRY['m5948a5'].unfinished}")
 
 
@@ -43089,23 +43094,24 @@ def a_retype_can_name_one_row_and_one_victim(out: Result) -> None:
     # So what is still asserted is the useful half: each row waits on the
     # symbol somebody *measured* it onto, and a future re-merge of two
     # unlike needs still reds this.
-    left = {
-        "f2179": ("c.deals(may=)",),
-    }
+    # **`left` is empty now and `f2179` has moved into the list below.**
+    # It pinned `("c.deals(may=)",)`, and that symbol has landed -- so
+    # the useful half is no longer "each row waits on the symbol somebody
+    # measured onto it" but "all four are finished". A re-merge of two
+    # unlike needs is still caught, by the split being recorded in each
+    # row's own note rather than in a marker nobody can read any more.
     for ref, why in (
         ("f1488", "the two-type retype, the fire keyword and the save"
                   " penalty all play (#706)"),
         ("cf:warlock-f1s1", "the pact's retype is offered when the power is"
                             " used, which is Camille's ruling, so the"
                             " `may=` it was pinned on is spent (#711)"),
+        ("f2179", "the per-victim half it was pinned on is written, which"
+                  " is what emptied `left` above"),
     ):
         out.that(not REGISTRY[ref].unfinished,
                  f"{ref} carries no marker: {why}",
                  f"{REGISTRY[ref].unfinished}")
-    for ref, want in left.items():
-        out.that(REGISTRY[ref].unfinished == want,
-                 f"{ref} waits on {want[0]} and not on the parameter that"
-                 f" landed", f"{REGISTRY[ref].unfinished}")
     out.that("c.deals(ref=)" not in str(REGISTRY["f2877"].unfinished),
              "and f2877 waits only on which racial power was chosen",
              f"{REGISTRY['f2877'].unfinished}")
@@ -43274,8 +43280,13 @@ def a_marks_penalty_is_the_markers_to_set(out: Result) -> None:
         stale = [w for w in REGISTRY[ref].unfinished if "mark" in w]
         out.that(not stale,
                  f"{ref} no longer waits on a mark symbol", f"{stale}")
-    out.that(REGISTRY["f2440"].unfinished == ("c.change_amount(compute=)",),
-             "and f2440 waits only on a figure decided at read time",
+    # **This pinned `("c.change_amount(compute=)",)` and the symbol
+    # landed.** A rule that pins a marker tuple goes red the day the row
+    # is finished, which is the cost this suite's own notes record about
+    # un-marking a row -- so it asserts the finished state instead.
+    out.that(not REGISTRY["f2440"].unfinished,
+             "and f2440 carries no marker: the figure its clause needed"
+             " at read time is written",
              f"{REGISTRY['f2440'].unfinished}")
 
     # **Posed on an unrelated row, because `audit.board` arms the row it is
@@ -45021,6 +45032,21 @@ UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
     # The payout above it is deliberately NOT inside the gate: the damage is
     # `p9400`'s own and the feat only changes whether the count survives it.
     "p9400": ("f3636",),
+    # **Three feats colour ONE bonus the power lays either way.** `p8278`
+    # builds a set of damage types -- necrotic always, plus cold, fire or
+    # a build-time choice as `f1639`, `f1659` and `f1646` are held -- and
+    # then lays a single `c.bonus(..., dtype=tuple(sorted(types)))`.
+    #
+    # So there is nothing separable to credit. A `c.credit` block round
+    # that bonus would hand the whole of `p8278`'s own damage to whichever
+    # feat the block named, and the three cannot have a block each: it is
+    # one effect carrying all their words at once. Written per `#550` on
+    # 2026-11-21 and listed the same day.
+    #
+    # The `f1652` clause below it in the same body is the contrast and is
+    # NOT listed: that one lays a bonus of its own, so it opens a block
+    # and is credited.
+    "p8278": ("f1639", "f1646", "f1659"),
     # **`f1303` picks which pool, and the branch lays nothing at all.**
     # `p620` reads `c.feat("f1303")` to choose between two candidate sets
     # -- `c.within(2, side="ally")` against `_beside(c, c.target)` -- and
@@ -67273,159 +67299,89 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
 
 
 def a_trait_fires_when_the_skill_challenge_it_waits_on_ends(out: Result) -> None:
-    """#905. `m5581a6` is a phase change hung on a challenge resolving.
+    """#905. `m5581a6` was a phase change hung on a challenge resolving,
+    and **the row it was driven through has been retired.**
 
-    `#911` built the shared board for this and its own docstring named this
-    row as the case -- *"a creature losing its regeneration when the
-    challenge ends is on the board the whole time"*. What was missing was
-    the event: subscription is by class, so the class has to be in
-    `engine/events.py` for a `content/` row to name it without inverting
-    the seam.
+    Camille's ruling on `#1395`, 2026-11-21, asked directly:
 
-    **The before/after pair is the rule, not the after.** Every clause here
-    is an effect that could have been laid at arming rather than on the
-    trigger, and a row that lays its phase change too early looks identical
-    in the after-state. So the controls read the same five things *while the
-    challenge is still running* and require them absent.
+    > *"Yeah do this mismarked ones. The other three can be labeled
+    > defect."*
 
-    The regeneration assertion is the one that has already caught something:
-    the first draft of the row matched the effect label `"m5581a0"` where
-    `c.regeneration` lays `"m5581a0 regeneration"`, so she kept regenerating
-    through the phase change while the other four clauses landed and nothing
-    reported it. This rule reads the effect list rather than a tally, which
-    is what makes that visible.
+    `m5581a6` is one of those three: its printed clause removes two
+    traits the page never grants the creature, so the sentence
+    contradicts its own stat block. `defect=` drops the **whole
+    compendium entry** -- Camille's 2026-10-15 widening -- so the
+    creature leaves `pick`, its traits never arm, and every behavioural
+    assertion this rule used to make became a statement about a creature
+    that is not in the game.
+
+    **And it was the only reader.** Measured over all 23,883 declared
+    rows: `m5581a6` is the one body in the tree that watches
+    `SkillChallengeEnded`. So the mechanism `#905` built -- a challenge
+    resolving reaching a content row -- now has no live exerciser, and
+    there is nothing to re-point this rule at.
+
+    So it is a **named emptiness**, which is the shape this suite uses
+    for a retired facility elsewhere ("`Powers.per_encounter(extra=)` is
+    retired -- no row waits on it. Asserted as an emptiness, so a new row
+    reaching for the old symbol reds here"). The day somebody writes a
+    second reader, or the compendium gains the trait grant that would
+    un-defect this entry, this reds and the behavioural assertions it
+    replaced should come back -- they are in the history at `0e6e7163~1`.
+
+    What is **not** asserted here any more, and is the cost of the
+    ruling: that the phase change is laid on the trigger rather than at
+    arming, that the regeneration really ends, that every defence takes
+    the -2 rather than only the lowest, and that both named powers are
+    taken away. All five were live and green before the entry was
+    dropped.
     """
-    from combat_engine import chargen
+    import combat_engine.content  # noqa: F401
     from combat_engine.content import loader
-    from combat_engine.engine import Bus, Grid, Rng, World
-    from combat_engine.engine.components import Mods, Team
-    from combat_engine.engine.dsl import get, usable
-    from combat_engine.engine.events import SkillChallengeEnded
-    from combat_engine.engine.scaling import PRESETS
-    from combat_engine.engine.turns import Encounter
-    from combat_engine.engine.types import DEFENCES
-    from combat_engine.story import Party
-    from combat_engine.story import challenge as ch
-    from combat_engine.story import table as tbl
-    from combat_engine.story.module import Scene
+    from combat_engine.engine.dsl import REGISTRY
 
-    was_drawn, chargen.SCORED_CHOICES = chargen.SCORED_CHOICES, False
+    ROW, ENTRY = "m5581a6", "m5581"
+
+    readers = sorted(
+        ref for ref, p in REGISTRY.items()
+        if "SkillChallengeEnded" in _source_of(p)
+    )
+    out.that(readers == [ROW],
+             "`m5581a6` is still the ONLY row in the tree that watches"
+             " `SkillChallengeEnded` -- so a second one arriving reds"
+             " here and says the behavioural assertions can come back",
+             f"{readers}")
+    out.that(bool(REGISTRY[ROW].defect),
+             "and it is marked `defect=`, which is why this rule can no"
+             " longer drive it: the clause removes two traits the page"
+             " never grants",
+             f"{REGISTRY[ROW].defect!r}")
+    out.that(loader.defective(ENTRY),
+             "and the whole entry is dropped, not just the row -- the"
+             " 2026-10-15 widening, which is what takes the creature out"
+             " of `pick` and its traits off every board",
+             f"{loader.defective(ENTRY)}")
+    out.that(not REGISTRY[ROW].unfinished,
+             "and it carries no symbol beside the defect: `defect=`"
+             " cannot be combined with another marker, and there is no"
+             " symbol to wait for when the source is what is missing",
+             f"{REGISTRY[ROW].unfinished}")
+
+
+def _source_of(p: object) -> str:
+    """A row's body source, or `""` where it cannot be read.
+
+    Lifted out so the emptiness check above reads as one comprehension.
+    `inspect.getsource` raises for a body defined in a factory whose
+    source has moved, and a row this cannot read is a row that does not
+    mention the class either.
+    """
+    import inspect
+
     try:
-        world = World(Grid(14, 12), Rng(5), Bus())
-        world.scaling = PRESETS["full"]
-        party = Party.of(level=8, seed=7)
-        for slot, sheet in enumerate(party.sheets):
-            chargen.spawn(world, chargen.Character(sheet.cls, 8, []), (2 + slot, 2))
-        # **Adjacent to the party, deliberately.** `m5581a4` is melee 1, so
-        # standing her across the board makes `usable` refuse it for range
-        # whatever the phase change did -- which is how the first run of
-        # this rule failed, reporting `'nearest is 7 squares away'` and
-        # saying nothing either way about the unlock it exists to check.
-        her = loader.spawn(world, "m5581", (6, 2), team=Team.ENEMY)
-        encounter = Encounter(world)
-        encounter.start()
-        table = tbl.borrow(world, encounter, party)
-
-        def labels() -> list[str]:
-            return [e.label for e in world.effects.of(her)]
-
-        def defences() -> dict[str, int]:
-            mods = world.need(her, Mods)
-            return {d.value: (mods.total(d.value, {"actor": her}) if mods else 0)
-                    for d in DEFENCES}
-
-        # -- the controls: the trait has not fired, so nothing is laid -----
-        out.that(
-            "m5581a0 regeneration" in labels(),
-            "the regeneration trait is live before the challenge ends",
-            f"{[s for s in labels() if 'regen' in s]}",
-        )
-        out.that(
-            not any("twisted" in s for s in labels()),
-            "and the phase change is not laid at arming time",
-            f"{labels()}",
-        )
-        out.that(
-            all(v == 0 for v in defences().values()),
-            "and no defence is penalised yet",
-            f"{defences()}",
-        )
-        # `must`, not a bare `get`: `get` answers `Power | None` and reading
-        # straight through it is the fault that helper's docstring is about.
-        unlocked = must(get("m5581a4"), "the power m5581a6 unlocks")
-        before_a4 = usable(world, her, unlocked)
-        out.that(
-            not before_a4[0] and "m5581a6" in before_a4[1],
-            "and the power it unlocks is refused, for the requirement itself",
-            f"{before_a4}",
-        )
-
-        scene = Scene(id="backlash", kind="skill_challenge", name="B",
-                      complexity=1, level=8, primary=("athletics", "endurance"))
-        run = ch.play(scene, table, party_level=8)
-
-        # **`isinstance`, not `e.kind ==`.** The log is `list[Event]`, so a
-        # string test leaves `.scene` unknown to the type checker -- which
-        # it said, and it is right: a `kind` that no longer matches would
-        # read as "nothing emitted" rather than as a broken assertion.
-        ended = [e for e in world.bus.log if isinstance(e, SkillChallengeEnded)]
-        out.that(
-            run.over and len(ended) == 1,
-            "a finished challenge announces SkillChallengeEnded exactly once",
-            f"over={run.over} emitted={len(ended)} "
-            f"{[str(e) for e in ended]}",
-        )
-        out.that(
-            bool(ended) and ended[0].scene == "backlash",
-            "and it carries the scene it ended, which is the narrowing hook",
-            f"{ended[0].scene if ended else 'nothing emitted'}",
-        )
-        used = [e for e in world.bus.log
-                if getattr(e, "power", "") == "m5581a6"]
-        out.that(
-            bool(used),
-            "the trait fires on it",
-            f"{[str(e)[:60] for e in used]}",
-        )
-
-        # -- the five clauses, read off the board -------------------------
-        now = labels()
-        out.that(
-            "m5581a0 regeneration" not in now,
-            "she loses the regeneration trait",
-            f"{[s for s in now if 'regen' in s] or 'gone'}",
-        )
-        out.that(
-            any("twisted" in s for s in now),
-            "the phase change is laid",
-            f"{[s for s in now if 'twisted' in s]}",
-        )
-        out.that(
-            sum("forbids" in s for s in now) == 2,
-            "and both named powers are taken away",
-            f"{[s for s in now if 'forbids' in s]}",
-        )
-        after = defences()
-        out.that(
-            all(v == -2 for v in after.values()),
-            "every defence takes the -2, not just the lowest",
-            f"{after}",
-        )
-        mods = world.get(her, Mods)
-        out.that(
-            (mods.total("attack", {"actor": her}) if mods else 0) == 2,
-            "and she gains the +2 to attack rolls",
-            f"{mods.total('attack', {'actor': her}) if mods else 0:+d}",
-        )
-        after_a4 = usable(world, her, unlocked)
-        out.that(
-            after_a4[0],
-            "and the power it unlocks is offered afterwards",
-            f"{after_a4}",
-        )
-    finally:
-        chargen.SCORED_CHOICES = was_drawn
-
+        return inspect.getsource(p.body)
+    except Exception:
+        return ""
 
 def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     """#911. The challenge's bus and the fight's bus were different objects.
@@ -72485,8 +72441,13 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
                    if "chargen.power_choice()" in (p.unfinished or ()))
     rows_ = [r for r in still if r.startswith("cf:")]
     feats = [r for r in still if not r.startswith("cf:")]
-    # **No chassis row carries it now; four feats still do.** The count
-    # has run 31 and 4, then 22 and 14, then 6 and 4, and now 0 and 4.
+    # **No chassis row carries it now; two feats still do.** The count
+    # has run 31 and 4, then 22 and 14, then 6 and 4, then 0 and 4, and
+    # now 0 and 2: `f3582` and `f3588` went when their shared clause --
+    # one use of a named power traded for another's -- was written
+    # against `c.fewer_uses` and `c.raise_grant`, which is a resource
+    # question and not the family-from-a-keyword one this symbol is
+    # about.
     # Every row that went read *one additional <family>*, and every one
     # of those families turned out to be an existing fork's own printed
     # list -- `chargen.EXTRA_PICKS` adds a pick to it rather than a
@@ -72502,14 +72463,14 @@ def three_facilities_the_chassis_wave_asked_for(out: Result) -> None:
     # reader concludes the feats were done too.** They are not: a feat's
     # family is a keyword the data does not record, which is a different
     # gap from a chassis fork's printed list.
-    out.that(not rows_ and len(feats) == 4,
-             "and NO chassis row carries the symbol any more, while four "
-             "feats still do -- 0 and 4, down from 31 and 4 through 22 "
-             "and 14 and 6 and 4. `#1269` has the split",
+    out.that(not rows_ and len(feats) == 2,
+             "and NO chassis row carries the symbol any more, while two "
+             "feats still do -- 0 and 2, down from 31 and 4 through 22 "
+             "and 14, 6 and 4, and 0 and 4. `#1269` has the split",
              f"{len(rows_)} rows, {len(feats)} feats: {feats}")
-    out.that(sorted(feats) == ["f3582", "f3588", "f3616", "f3646"],
-             "and they are exactly those four feats, which is the half a "
-             "count cannot say: four going while four others arrived "
+    out.that(sorted(feats) == ["f3616", "f3646"],
+             "and they are exactly those two feats, which is the half a "
+             "count cannot say: two going while two others arrived "
              "would read identically",
              f"{sorted(feats)}")
 
