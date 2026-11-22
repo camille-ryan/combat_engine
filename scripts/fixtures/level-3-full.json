@@ -1491,6 +1491,7 @@
   "ActionSpent(actor=2, cost=<ActionType.IMMEDIATE_REACTION: 'immediate_reaction'>)",
   "PowerUsed(actor=2, power='p13944', targets=[5], trigger=Dropped#1338)",
   "EffectApplied(source=2, target=1, duration=\"end of source's next turn\", label='p13944 attack+2')",
+  "TempHP(source=2, target=1, amount=5, power='p13944', swallowed=True)",
   "EffectApplied(source=2, target=2, duration=\"end of source's next turn\", label='p13944 attack+2')",
   "TempHP(source=2, target=2, amount=5, power='p13944')",
   "EffectApplied(source=2, target=3, duration=\"end of source's next turn\", label='p13944 attack+2')",
