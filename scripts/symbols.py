@@ -613,6 +613,10 @@ CATEGORIES: dict[str, dict] = {
                 "total", "total_defence", "weapon_dice", "weapon_group",
                 "gains_proficiency", "improvised", "shares_magic",
                 "weapon_of", "weapon_proficiency",
+                # Beside `wielding`, which is its opposite: that one
+                # asks what is in hand and this one what was put
+                # away, and only the second can say WHICH.
+                "sheathed",
                 "weapon_range", "wearing", "wielding", "wis_", "wis_mod",
             ]),
             # `c.chosen_weapons` and `c.with_a_chosen_weapon` are here and

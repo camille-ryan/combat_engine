@@ -2563,6 +2563,17 @@ class Gear:
     armour: str = "cloth"
     #: What is on the belt rather than in the hands, by weapon ref.
     stowed: set[str] = field(default_factory=set)
+    #: The weapon most recently put away, by ref.
+    #:
+    #: *"The weapon most recently sheathed in the scabbard"* --
+    #: `i2361p1` and `i2400p1`, which both had to recolour whatever was
+    #: in hand because `stowed` is an unordered `set[str]` and says only
+    #: *that* a weapon is away, never *when*.
+    #:
+    #: Written by `wield`, which is the one place a weapon goes from
+    #: held to stowed, and read by `Cast.sheathed`. Empty for a creature
+    #: that has never put one away, which is most of them.
+    last_sheathed: str = ""
     #: What may not be **swung**, by weapon ref, while still being held.
     #:
     #: *"While grabbing the target, you cannot make attacks with the
@@ -2977,10 +2988,12 @@ class Gear:
             # the axe. It costs no hand (`hands_free`) and `melee`
             # withholds it while both hands are full, so holding it is
             # free and correct. `#1276`.
-            self.stowed |= {
+            going = {
                 w.ref for w in self.weapons
                 if w.ref != weapon.ref and not w.natural
             }
+            self._note_sheathed(going)
+            self.stowed |= going
             return
         keep = [weapon]
         for other in self.held:
@@ -2991,10 +3004,29 @@ class Gear:
         # that can be put down. It takes no hand either -- see
         # `hands_free` -- so keeping it cannot crowd out a real weapon, and
         # `melee` is what withholds it when both hands are full.
-        self.stowed = {
+        going = {
             w.ref for w in self.weapons
             if w not in keep and not w.natural
         }
+        self._note_sheathed(going)
+        self.stowed = going
+
+    def _note_sheathed(self, going: set[str]) -> None:
+        """Remember which weapon was put away, if any newly was.
+
+        **Only what is NEWLY stowed**, which is the whole care: `wield`
+        rewrites the set every time it is called, so a weapon that was
+        already on the belt is in `going` on every later call and would
+        keep re-claiming "most recently sheathed" for a creature that
+        put nothing away.
+
+        Ties break by ref, so the same hand sheathing two weapons at
+        once is reproducible rather than set-ordered -- and no card
+        distinguishes them, since both went away in the same motion.
+        """
+        fresh = sorted(going - self.stowed)
+        if fresh:
+            self.last_sheathed = fresh[0]
 
     @property
     def main(self) -> Weapon | None:

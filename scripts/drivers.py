@@ -86825,6 +86825,179 @@ def a_feat_raises_a_maximum_rather_than_healing(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def the_weapon_most_recently_sheathed(out: Result) -> None:
+    """*"Use this power when you attack with the weapon most recently
+    sheathed in the scabbard ... with that weapon"* -- `i2361p1`, a +1 to
+    damage, and `i2400p1`, a recolour to radiant.
+
+    **`Gear.stowed` says only THAT a weapon is away, never when.** It is
+    an unordered `set[str]`, so both rows fired on any attack and paid
+    out on whatever the next roll happened to use -- wider than their
+    cards in both halves at once.
+
+    `Gear.last_sheathed` is the record, written by `Gear.wield` -- the
+    one place a weapon goes from held to stowed -- and only for a weapon
+    that was **newly** put away. That narrowing is the care worth
+    asserting: `wield` rewrites the whole set on every call, so a weapon
+    already on the belt is in the outgoing set every time and would keep
+    re-claiming "most recently sheathed" for a creature that put nothing
+    away.
+
+    **Two halves and both read it.** The trigger compares the swing's own
+    weapon against the scabbard's, so the row is not offered on a blow
+    the card says nothing about and does not spend its encounter use on
+    one; the payout gates on `ctx["weapon"]`, so a later swing with
+    something else gets nothing. Each is asserted on its own, because
+    either alone leaves the row wider than print.
+    """
+    from dataclasses import replace as _replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.content.items.wondrous import _swinging_the_sheathed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackDeclared
+    from combat_engine.engine.types import DamageType, Keyword
+
+    ROWS = ("i2361p1", "i2400p1")
+
+    def two_weapons(ref: str) -> tuple[Any, int, Gear, str]:
+        """A character holding one weapon with a second on the belt."""
+        world, me, _ = _board(ref, 1)
+        gear = must(world.get(me, Gear), "the character has gear")
+        gear.weapons.append(
+            _replace(chargen.PRINTED["w3610"], ref="w-second"))
+        held = gear.weapons[0]
+        gear.wield(held)
+        return world, me, gear, held.ref
+
+    # -- the record ---------------------------------------------------------
+    world, me, gear, in_hand = two_weapons(ROWS[0])
+    out.that(gear.last_sheathed == "w-second",
+             "sheathing a weapon records WHICH one -- the thing"
+             " `Gear.stowed` could not say, being a set",
+             f"{gear.last_sheathed!r}, stowed {sorted(gear.stowed)}")
+    # Guarded rather than `must`, so a plant that records nothing fails
+    # here instead of raising out of the rule -- a rule that dies reads
+    # as neither red nor green.
+    got = Cast(world=world, me=me, ref="drv").sheathed()
+    out.that(got is not None and got.ref == "w-second",
+             "and `c.sheathed()` hands back that weapon",
+             f"{got}")
+
+    # **Re-wielding what is already in hand sheathes nothing new.**
+    was = gear.last_sheathed
+    gear.weapons.append(_replace(chargen.PRINTED["w3610"], ref="w-third"))
+    gear.wield(next(w for w in gear.weapons if w.ref == in_hand))
+    out.that(gear.last_sheathed == "w-third",
+             "putting a THIRD weapon away moves the record to it",
+             f"{was!r} -> {gear.last_sheathed!r}")
+    gear.wield(next(w for w in gear.weapons if w.ref == in_hand))
+    out.that(gear.last_sheathed == "w-third",
+             "and wielding the same weapon again moves it nowhere -- only"
+             " a NEWLY stowed weapon counts, or everything already on the"
+             " belt would re-claim this on every call",
+             f"{gear.last_sheathed!r}, stowed {sorted(gear.stowed)}")
+
+    # -- an empty scabbard --------------------------------------------------
+    bare, who, _ = _board(ROWS[0], 1)
+    out.that(must(bare.get(who, Gear), "gear").last_sheathed == "",
+             "premise: a character that has put nothing away has an empty"
+             " scabbard, which the board gives for free",
+             f"{must(bare.get(who, Gear), 'gear').last_sheathed!r}")
+    out.that(Cast(world=bare, me=who, ref="drv").sheathed() is None,
+             "and `c.sheathed()` is None there -- the printed Requirement,"
+             " not an edge case",
+             f"{Cast(world=bare, me=who, ref='drv').sheathed()}")
+
+    # -- the trigger --------------------------------------------------------
+    def declared(world: Any, me: int, weapon: str) -> AttackDeclared:
+        ev = AttackDeclared(attacker=me, target=2, power="mba", vs=None)
+        ev.ctx = {"weapon": weapon}
+        return ev
+
+    out.that(_swinging_the_sheathed(world, me, declared(world, me, "w-third")),
+             "the trigger fires on a swing with the sheathed weapon",
+             "fires")
+    out.that(not _swinging_the_sheathed(world, me,
+                                        declared(world, me, in_hand)),
+             "and NOT on a swing with the one in hand -- without this the"
+             " row answers any attack and spends its encounter use on a"
+             " blow the card says nothing about",
+             "withheld")
+    out.that(not _swinging_the_sheathed(bare, who,
+                                        declared(bare, who, "w-second")),
+             "and not at all with an empty scabbard, whatever is swung",
+             "withheld")
+    # **Both headers are wired to it**, which the three lines above do
+    # not say: they call the predicate directly, so a row pointed back
+    # at a bare `by_me` leaves them green. Measured by a plant that did
+    # exactly that.
+    out.that(all(getattr(REGISTRY[r].on, "when", None)
+                 is _swinging_the_sheathed for r in ROWS),
+             "and both rows declare THAT predicate rather than a bare"
+             " 'you attack' -- the half the three lines above cannot"
+             " see, since they call the function themselves",
+             f"{[getattr(REGISTRY[r].on, 'when', None) for r in ROWS]}")
+
+    # -- the payout, narrowed to that weapon --------------------------------
+    for ref, key in ((ROWS[0], "damage"), (ROWS[1], "")):
+        world2, me2, gear2, held2 = two_weapons(ref)
+        REGISTRY[ref].body(Cast(world=world2, me=me2, ref=ref))
+        if key:
+            mods = must(world2.get(me2, Mods), "the character has mods")
+            on_it = mods.total(key, {"weapon": "w-second", "actor": me2})
+            on_other = mods.total(key, {"weapon": held2, "actor": me2})
+            out.that(on_it == 1 and on_other == 0,
+                     f"{ref} pays out on the sheathed weapon and on no"
+                     " other -- 'with that weapon', which the old row"
+                     " could not say and paid on whatever rolled next",
+                     f"sheathed {on_it}, in hand {on_other}")
+        else:
+            # **Asked of `_retyped`, not of the label.** A `c.deals`
+            # effect is labelled positionally -- `deals:radiant|weapon|...`
+            # -- and the gate rides the effect object as `deals_when`, so
+            # the label says nothing about which weapon it covers. The
+            # first draft matched on the label and could not have failed
+            # for the right reason.
+            #
+            # `ref="mba"` on the probe because `_swung_weapon` answers
+            # only for a row carrying the weapon keyword -- a probe named
+            # anything else reads `""`, both arms come back None, and
+            # that is the board rather than the row.
+            seen = {}
+            for using in ("w-second", held2):
+                gear2.swinging = using
+                seen[using] = Cast(
+                    world=world2, me=me2, ref="mba",
+                )._retyped([Keyword.WEAPON], DamageType.UNTYPED)
+            out.that(seen["w-second"] == (DamageType.RADIANT,)
+                     and seen[held2] is None,
+                     f"{ref} recolours the sheathed weapon's blow and"
+                     " leaves the one in hand alone -- 'the next attack"
+                     " you make with THAT weapon'",
+                     f"{seen}")
+
+    # -- and neither lays anything with an empty scabbard --------------------
+    for ref in ROWS:
+        empty, nobody, _ = _board(ref, 1)
+        REGISTRY[ref].body(Cast(world=empty, me=nobody, ref=ref))
+        out.that(not [e for e in empty.effects.of(nobody)
+                      if e.label and e.label.startswith(ref)],
+                 f"{ref} lays nothing when nothing has been sheathed --"
+                 " the body returns rather than gating on a weapon that"
+                 " does not exist",
+                 f"{[e.label for e in empty.effects.of(nobody)]}")
+
+    for ref in ROWS:
+        out.that(not REGISTRY[ref].unfinished,
+                 f"and {ref} carries no marker: both were waiting on this"
+                 " one record",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -122635,6 +122808,9 @@ DRIVERS = {
     "a_feat_raises_a_maximum": (
         a_feat_raises_a_maximum_rather_than_healing,
         "a feat raises a maximum rather than healing"),
+    "the_weapon_most_recently_sheathed": (
+        the_weapon_most_recently_sheathed,
+        "the weapon most recently sheathed"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

@@ -120,6 +120,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - The raw ability score -- 15, 18 -- not its modifier or bonus.
 - `c.shares_magic(self, weapon: 'Weapon', *, from_: 'Weapon', on: 'int | None' = None) -> 'bool'`
   - "Your `cf:warlock-hexblade-f3` shares your implement's bonus,
+- `c.sheathed(self, *, on: 'int | None' = None) -> 'Weapon | None'`
+  - The weapon most recently put away, or None.
 - `c.stats`
   - `self.me`'s abilities. **Assumes `me` is a creature**, and that
 - `c.str_`

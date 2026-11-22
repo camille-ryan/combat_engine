@@ -6120,6 +6120,38 @@ class Cast:
         if who is not None:
             temp_hp(self.world, self.me, who, amount, self.ref)
 
+    def sheathed(self, *, on: int | None = None) -> Weapon | None:
+        """The weapon most recently put away, or None.
+
+        *"The weapon most recently sheathed in the scabbard"* --
+        `i2361p1` and `i2400p1`. `Gear.stowed` is an unordered set and
+        says only *that* a weapon is away, never *when*, so both rows
+        had to pay out on whatever was in hand -- wider than their cards,
+        which name one weapon.
+
+        `Gear.last_sheathed` is written by `Gear.wield`, the one place a
+        weapon goes from held to stowed, and only for a weapon that was
+        **newly** put away: `wield` rewrites the whole set on every call,
+        so a weapon already on the belt would otherwise re-claim this on
+        a move that put nothing away.
+
+        Yours, so it defaults to the caster -- the scabbard is the
+        wearer's.
+
+        **None where nothing has been sheathed**, which a card using this
+        must handle: a character that has drawn one weapon and never put
+        it away has an empty scabbard, and the printed Requirement is
+        exactly that there is a weapon in it.
+        """
+        from .components import Gear as _Gear
+
+        who = on if on is not None else self.me
+        gear = self.world.get(who, _Gear)
+        if gear is None or not gear.last_sheathed:
+            return None
+        return next(
+            (w for w in gear.weapons if w.ref == gear.last_sheathed), None)
+
     def max_hp(
         self, amount: int, *, on: int | None = None,
         until: When = When.ENCOUNTER,
@@ -24701,6 +24733,17 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 "target": self.target,
                 "power": self.ref,
                 "ranged": self.ranged,
+                # **Which weapon the blow is coming through**, added for
+                # `i2400p1`: *"the next attack you make with THAT
+                # weapon"*, where "that" is the one last sheathed. The
+                # paragraph above says this context answers "who is
+                # swinging, at whom, through which row, and whether it
+                # is ranged" -- the weapon is the fifth thing `self` can
+                # answer honestly, through the same `_swung_weapon` the
+                # damage path already uses, and without it a card naming
+                # one weapon had no key to read and its gate was
+                # silently False.
+                "weapon": self._swung_weapon(),
             }):
                 continue
             # **A set, comma-joined, and any of them matches.** One card

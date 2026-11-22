@@ -1554,6 +1554,39 @@ def i2361x1(c: Cast) -> None:
     the engine charges for."""
 
 
+def _with_the_sheathed(ref: str):  # noqa: ANN202
+    """A gate on the swing being made with that weapon.
+
+    `ctx["weapon"]` is the ref the blow came through, set beside the
+    roll -- so this is the same question `c.weapon_of` asks of an event,
+    asked of a modifier's context instead.
+    """
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return str(ctx.get("weapon", "")) == ref
+
+    return gate
+
+
+def _swinging_the_sheathed(world: World, me: int, ev: Any) -> bool:
+    """*"When you attack with the weapon most recently sheathed."*
+
+    The scabbard's weapon, compared against the one this blow is being
+    made with. False where nothing has been sheathed, which is the
+    printed Requirement rather than an edge case: an empty scabbard has
+    no "most recently sheathed" weapon.
+    """
+    from combat_engine.engine.components import Gear as _Gear
+
+    if getattr(ev, "attacker", None) != me:
+        return False
+    gear = world.get(me, _Gear)
+    if gear is None or not gear.last_sheathed:
+        return False
+    ctx = getattr(ev, "ctx", None) or {}
+    return str(ctx.get("weapon", "")) == gear.last_sheathed
+
+
 @power(
     "i2361p1",
     level=5,
@@ -1563,13 +1596,41 @@ def i2361x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you attack with the weapon most recently sheathed",
-    on=Trigger(AttackDeclared, by_me, "you attack"),
-    dropped=("c.sheathed()",),
+    on=Trigger(AttackDeclared, _swinging_the_sheathed,
+               "you attack with the weapon last sheathed"),
 )
 def i2361p1(c: Cast) -> None:
-    """Which weapon was last in the scabbard is not recorded anywhere, so
-    the bonus is given to the next damage roll whatever is in hand."""
-    c.bonus("damage", 1, on=c.me, until=When.EONT, kind="power", once=True)
+    """A +1 to the next damage roll with the weapon last sheathed.
+
+    **Written. `c.sheathed()` is the weapon and `ctx["weapon"]` is what
+    narrows the payout to it.** The old note was exact -- *"which weapon
+    was last in the scabbard is not recorded anywhere"* -- and
+    `Gear.last_sheathed` records it now, written by `Gear.wield` for a
+    weapon that was **newly** put away.
+
+    Two halves, and both read the same weapon:
+
+    * the **trigger** is *"when you attack with the weapon most recently
+      sheathed"*, so the predicate compares the swing's own weapon
+      against the scabbard's rather than firing on any attack;
+    * the **payout** is *"with that weapon"*, so the gate reads
+      `ctx["weapon"]` and a later swing with something else gets
+      nothing.
+
+    Both are needed. Without the first the row fires on a swing the card
+    says nothing about and spends its encounter use; without the second
+    it pays out on whichever weapon the next roll happens to use, which
+    is what it did before.
+
+    **None when the scabbard is empty**, which a character that has
+    drawn one weapon and never put another away is: the predicate is
+    then False and the row is not offered, which is the printed
+    Requirement."""
+    blade = c.sheathed()
+    if blade is None:
+        return
+    c.bonus("damage", 1, on=c.me, until=When.EONT, kind="power", once=True,
+            when=_with_the_sheathed(blade.ref))
 
 
 @power(
@@ -4009,8 +4070,8 @@ def i2400x1(c: Cast) -> None:
     target=SELF,
     keywords=[Keyword.RADIANT],
     trigger="you attack with the weapon most recently sheathed",
-    on=Trigger(AttackDeclared, by_me, "you attack"),
-    dropped=("c.sheathed()",),
+    on=Trigger(AttackDeclared, _swinging_the_sheathed,
+               "you attack with the weapon last sheathed"),
 )
 def i2400p1(c: Cast) -> None:
     """One of the two clauses landed. `c.deals(once=True)` is "**the next**
@@ -4028,7 +4089,11 @@ def i2400p1(c: Cast) -> None:
     `Gear.stowed` is an unordered `set[str]` and no extended rest is
     modelled -- so the recolour reaches whatever is in hand, as in
     `i2361p1`. `c.sheathed()` is the symbol that row already waits on."""
-    c.deals(DamageType.RADIANT, on=c.me, until=When.EONT, once=True)
+    blade = c.sheathed()
+    if blade is None:
+        return
+    c.deals(DamageType.RADIANT, on=c.me, until=When.EONT, once=True,
+            when=_with_the_sheathed(blade.ref))
 
 
 @power("i2487x1", level=10, cls=ITEM, action=ActionType.NONE,
