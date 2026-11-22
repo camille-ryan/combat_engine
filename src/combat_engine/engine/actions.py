@@ -1412,24 +1412,53 @@ def _shift_offers(world: World, encounter: Encounter, actor: int) -> list[Action
     out: list[Action] = []
     if not can_shift(world, actor):
         return out
-    offers = {ActionType.MOVE: 1}
+    granted: dict[ActionType, int] = {}
     for (what, cost), squares_ in _granted(world, actor).items():
         if what != "shift":
             continue
-        offers[cost] = max(offers.get(cost, 0), squares_)
+        granted[cost] = max(granted.get(cost, 0), squares_)
     mode = mode_of(world, actor, None)
-    for cost in sorted(offers, key=lambda a: a.value):
+    seen: set[tuple[ActionType, Square]] = set()
+    costs = {**dict.fromkeys(granted, 0), ActionType.MOVE: 0}
+    for cost in sorted(costs, key=lambda a: a.value):
         if not encounter.can_spend(actor, cost):
             continue
-        # Priced as a shift, to match `Cast.shift` and `execute`. A
-        # creature exempt from difficult terrain only while shifting was
-        # offered the same squares as one that is not.
-        step = reachable(
-            world, actor, offers[cost],
-            mode="walk" if mode in OVERHEAD else None, kind="shift",
-        )
-        for dest in sorted(step):
-            out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
+        # **The ordinary move-action shift and a granted one are offered
+        # separately**, and they used to be one `max()`. The baseline is
+        # every creature's and no grant narrows it; a grant may name where
+        # it has to end. Merging them handed the grant's reach to the
+        # baseline *and* -- once `beside=` reached this menu -- would have
+        # handed the baseline the grant's restriction, which is the worse
+        # direction: a creature that may always shift one square would
+        # have been refused every square but one.
+        #
+        # `_anchored` is `_teleports`' reader and it was its ONLY reader.
+        # `c.grant_action(beside=)` has existed since `p3464` and a
+        # granted shift ignored it, so `f3249`'s *"shift to a square
+        # adjacent to the enemy"* was laid wide -- the whole ring within
+        # one square rather than the squares beside the creature just
+        # hit. The parameter was there; one of its two kinds of going
+        # never asked.
+        want: list[tuple[int, Callable[[Square], bool]]] = []
+        if cost is ActionType.MOVE:
+            want.append((1, lambda _dest: True))
+        if granted.get(cost):
+            want.append((granted[cost], _anchored(world, actor, "shift", cost)))
+        for squares_, allowed in want:
+            # Priced as a shift, to match `Cast.shift` and `execute`. A
+            # creature exempt from difficult terrain only while shifting was
+            # offered the same squares as one that is not.
+            step = reachable(
+                world, actor, squares_,
+                mode="walk" if mode in OVERHEAD else None, kind="shift",
+            )
+            for dest in sorted(step):
+                if not allowed(dest) or (cost, dest) in seen:
+                    continue
+                seen.add((cost, dest))
+                out.append(
+                    Action(kind="shift", cost=cost, dest=dest, path=(dest,))
+                )
     return out
 
 
@@ -1825,6 +1854,15 @@ def _anchored(
     `c.grant_action(toward=, beside=)` lays the anchor as a companion
     modifier holding the creature's entity id `+1`; this is the reader.
     Returns a predicate, so the destination loop above stays one `if`.
+
+    **And `_shift_offers` is the second caller**, which it was not for as
+    long as this existed. The anchor was written for a granted teleport
+    and nothing else asked, so `c.grant_action("shift", ..., beside=)`
+    could be laid, read back perfectly by `granted_actions`, and offer
+    the whole ring within one square anyway. `f3249` is the row that
+    found it -- *"shift to a square adjacent to the enemy"* -- and its
+    marker named `actions.shift(must_end_adjacent=)`, a parameter that
+    had been here all along pointed at one of the two kinds of going.
 
     No anchor is every square, which is what every other granting row
     prints and means this is a narrowing rather than a new rule.

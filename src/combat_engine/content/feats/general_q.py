@@ -2070,8 +2070,7 @@ _F3249 = ("p2104", "p4369", "p620")
 
 
 @power("f3249", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("actions.shift(must_end_adjacent=)",))
+       reach=PERSONAL, target=SELF)
 def f3249(c: Cast) -> None:
     """**The spec carries the Associated Powers line now**, same as
     `f3218` and `f3230`, so the shift has something to ride on.
@@ -2081,12 +2080,31 @@ def f3249(c: Cast) -> None:
     them apart. `c.grant_action` follows `c.target`, so the offer is
     aimed at `c.me` by hand.
 
-    Dropped, and **not** the same gap `f3206b` had: that row calls
-    `c.shift` itself and now names the creature to close on. Here the
-    shift is taken later, by whoever the minor action was granted to, and
-    `c.grant_action` carries a cost and a count and nothing about where
-    the step may end -- so "to a square adjacent to the enemy" has no
-    channel to travel down, whatever `c.shift` learns to take.
+    **Written, and the paragraph this replaces is quoted below because
+    every premise in it is now false in an instructive way.**
+    `c.grant_action(beside=)` is the channel, it has existed since
+    `p3464`, and the grant carries it as a companion modifier holding the
+    creature's entity id -- so "to a square adjacent to the enemy" is
+    `beside=ev.target`, read off the blow that triggered the feat.
+
+    What was really missing was a **reader**. `actions._anchored` turns
+    that modifier into a destination filter and `_teleports` was its only
+    caller, so a granted *shift* could be anchored, read back perfectly
+    by `query.granted_actions`, and still offer the whole ring within one
+    square. `_shift_offers` asks it now, and that change had to separate
+    the ordinary move-action shift from a granted one: the two used to be
+    merged by a `max()`, which would have handed the baseline this feat's
+    restriction -- a creature that may always shift one square refused
+    every square but the ones beside its victim.
+
+    The stale version, kept because it is the shape of the mistake:
+
+    > *Dropped, and not the same gap `f3206b` had: that row calls
+    > `c.shift` itself and now names the creature to close on. Here the
+    > shift is taken later, by whoever the minor action was granted to,
+    > and `c.grant_action` carries a cost and a count and nothing about
+    > where the step may end -- so "to a square adjacent to the enemy"
+    > has no channel to travel down, whatever `c.shift` learns to take.*
 
     **Re-pointed off `c.grant_action(toward=)`, which is a parameter that
     cannot exist.** The gap is structural rather than a missing keyword:
@@ -2105,12 +2123,11 @@ def f3249(c: Cast) -> None:
     off `Relation.SUBJECT_OF` -- and both are written now as granted words.
 
     This row wants no victim at all. The `shift` it grants is of **its own
-    holder**, and what is missing is a filter on where that shift may
-    **end** -- "to a square adjacent to the enemy". The grant above is
-    laid and correct; it is simply wider than the card, because every
-    square within 1 is offered rather than only those beside the creature
-    just hit. Hence `actions.shift(must_end_adjacent=)`, which is a
-    narrowing of a reader rather than a new word.
+    holder**, and what was missing is a filter on where that shift may
+    **end**. `actions.shift(must_end_adjacent=)` named that correctly --
+    "a narrowing of a reader rather than a new word" -- and pointed one
+    layer too high: the narrowing existed, and the reader was the half
+    nobody had written for this kind of going.
 
     #1219, #1305."""
     c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER,
@@ -2119,7 +2136,12 @@ def f3249(c: Cast) -> None:
     def close(ev: Any) -> None:
         if c.size_of(on=ev.target).order <= c.size_of(on=c.me).order:
             return
-        c.grant_action("shift", MINOR, on=c.me, until=When.EOT)
+        # `beside=ev.target` is the printed "to a square adjacent to the
+        # enemy", and the enemy is the one this blow just landed on --
+        # read off the event rather than off `c.target`, which is the
+        # caster's own and is None on an `action=NONE` trait.
+        c.grant_action("shift", MINOR, on=c.me, until=When.EOT,
+                       beside=ev.target)
 
     _on_hit_with(c, _F3249, close)
 

@@ -84931,6 +84931,194 @@ def a_stand_in_offered_after_its_use_is_gone(out: Result) -> None:
              f"{REGISTRY[ROW].todo}, {REGISTRY[ROW].dropped}")
 
 
+def a_granted_shift_that_must_end_beside_somebody(out: Result) -> None:
+    """*"...you can shift as a minor action to a square adjacent to the
+    enemy"* -- `f3249`, after a blow lands on a creature larger than you.
+
+    **The parameter existed and one of its two readers was never
+    written.** `c.grant_action(beside=)` has been here since `p3464` --
+    *"to a space adjacent to you"* on a granted teleport -- and it lays
+    the anchor as a companion modifier holding the creature's entity id
+    `+1`, which `query.granted_actions` hands back under the key
+    `("shift", "minor beside")`. `actions._anchored` turns that into a
+    destination filter, and `_teleports` was its only caller. So a
+    granted **shift** could be anchored, read back perfectly, and offer
+    the whole ring within one square anyway.
+
+    `f3249`'s marker said `actions.shift(must_end_adjacent=)` and called
+    itself *"a narrowing of a reader rather than a new word"*, which was
+    exactly right and pointed one layer too high.
+
+    **The separation is the half that could have gone wrong quietly.**
+    `_shift_offers` used to merge the ordinary move-action shift with
+    every granted one under a single `max()`. Reading the anchor off that
+    merged entry would have applied this feat's restriction to the
+    baseline -- a creature that may always shift one square refused every
+    square but the ones beside its victim, which is a loss and not a gain
+    and which nothing in the menu would have announced. Asserted
+    directly, in both directions.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.actions import _shift_offers
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.grid import distance as _grid_distance
+    from combat_engine.engine.query import enemies, granted_actions, spread
+    from combat_engine.engine.types import ActionType, Size
+
+    ROW = "f3249"
+    #: One of the three powers the feat's Associated Powers line
+    #: names, which is what `_on_hit_with` matches on.
+    _F3249_POWER = "p2104"
+
+    def offered(anchor: str = "", away: int = 0) -> tuple:
+        """The shift menu, with the grant anchored `beside`, `toward` or not.
+
+        `away` stands the enemy that many squares off first, which the
+        `toward` arm needs and the `beside` arm must not have: adjacent,
+        *"closer than the start"* is satisfied by no square at all -- the
+        only one nearer is the enemy's own, and that is occupied. The
+        first draft of this rule read the resulting empty set as a broken
+        reader.
+        """
+        world, me, _ = _board(ROW, 1)
+        foe = sorted(enemies(world, me))[0]
+        if away:
+            here = must(world.get(me, Position), "the caster stands").square
+            spot = must(world.get(foe, Position), "the enemy stands")
+            world.grid.lift(foe)
+            spot.square = (here[0] + away, here[1])
+            world.grid.place(foe, spot.squares)
+        cast = Cast(world=world, me=me, ref=ROW)
+        cast.grant_action(
+            "shift", ActionType.MINOR, on=me, until=When.EOT,
+            **({anchor: foe} if anchor else {}),
+        )
+        world.turn = me
+        menu = _shift_offers(world, world.encounter, me)
+        minor = {a.dest for a in menu if a.cost is ActionType.MINOR}
+        move = {a.dest for a in menu if a.cost is ActionType.MOVE}
+        theirs = must(world.get(foe, Position), "the enemy stands").squares
+        return minor, move, spread(theirs, 1) - theirs, world, me, foe
+
+    # -- the premises ------------------------------------------------------
+    loose, base, ring, *_rest = offered()
+    out.that(bool(loose) and bool(base),
+             "premise: the creature is offered both a granted minor shift"
+             " and its ordinary move-action one, so the two can be told"
+             " apart below",
+             f"minor {sorted(loose)}, move {sorted(base)}")
+    stray = sorted(loose - ring)
+    out.that(bool(stray),
+             "premise: unanchored, the granted shift offers at least one"
+             " square that is NOT beside the enemy -- without that this"
+             " board could not tell a narrowing from a no-op",
+             f"{stray} outside {sorted(ring)}")
+
+    # -- the printed clause ------------------------------------------------
+    tight, base_after, ring2, *_ = offered("beside")
+    out.that(tight and tight <= ring2,
+             "with `beside=` every granted destination is in the enemy's"
+             " ring -- 'to a square adjacent to the enemy', asked of the"
+             " menu rather than of the verb",
+             f"{sorted(tight)} vs ring {sorted(ring2)}")
+    out.that(not (tight & set(stray)),
+             "and the square that was outside the ring is gone, which is"
+             " the narrowing rather than a reshuffle",
+             f"dropped {stray}, kept {sorted(tight)}")
+
+    # -- the separation ----------------------------------------------------
+    out.that(base_after == base,
+             "while the ordinary MOVE-cost shift is untouched -- the half"
+             " a single merged offer would have broken, by handing the"
+             " baseline this feat's restriction",
+             f"{sorted(base_after)} vs {sorted(base)}")
+
+    # -- the other kind of anchor ------------------------------------------
+    nearer, _, _, w3, me3, foe3 = offered("toward", away=3)
+    here = must(w3.get(me3, Position), "the caster stands").squares
+    theirs = must(w3.get(foe3, Position), "the enemy stands").squares
+    was = min(_grid_distance(s, t) for s in here for t in theirs)
+    out.that(nearer and all(
+        min(_grid_distance(d, t) for t in theirs) < was for d in nearer),
+             "and `toward=` narrows the same menu its own way -- every"
+             " granted destination is closer than the start. So the"
+             " reader is anchor-aware rather than `beside`-aware, which"
+             " is what `_teleports` already had",
+             f"{sorted(nearer)}, was {was}")
+
+    # -- a grant at the BASELINE's own cost --------------------------------
+    # The arm above cannot see a merge, and a plant proved it: this rule's
+    # grant is at MINOR, so folding the baseline back together with
+    # `max()` changes nothing at MOVE and the assertion stayed green. An
+    # anchored grant at MOVE cost is the case where the two really meet.
+    w5, me5, _ = _board(ROW, 1)
+    foe5 = sorted(enemies(w5, me5))[0]
+    Cast(world=w5, me=me5, ref=ROW).grant_action(
+        "shift", ActionType.MOVE, on=me5, until=When.EOT, beside=foe5)
+    w5.turn = me5
+    at_move = {a.dest for a in _shift_offers(w5, w5.encounter, me5)
+               if a.cost is ActionType.MOVE}
+    theirs5 = must(w5.get(foe5, Position), "the enemy stands").squares
+    ring5 = spread(theirs5, 1) - theirs5
+    out.that(bool(at_move - ring5),
+             "a grant anchored at the MOVE cost does NOT narrow the"
+             " ordinary move-action shift: squares outside the enemy's"
+             " ring are still offered, because the baseline is every"
+             " creature's and no grant takes it away",
+             f"{sorted(at_move)} vs ring {sorted(ring5)}")
+    out.that(bool(at_move & ring5),
+             "premise: and the ring overlaps the offer at all, so the"
+             " line above is a square surviving rather than a menu this"
+             " rule mis-read",
+             f"{sorted(at_move & ring5)}")
+
+    # -- the row lays it, through its own hit ------------------------------
+    def after_a_hit(big: bool) -> tuple:
+        """Run `f3249`'s body, then land one of its powers on an enemy."""
+        world, me, _ = _board(ROW, 1)
+        REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+        foe = sorted(enemies(world, me))[0]
+        spot = must(world.get(foe, Position), "the enemy stands")
+        if big:
+            world.grid.lift(foe)
+            spot.size = Size.LARGE
+            world.grid.place(foe, spot.squares)
+        world.bus.emit(
+            Hit(attacker=me, target=foe, power=_F3249_POWER, critical=False)
+        )
+        return dict(granted_actions(world, me)), foe
+
+    keys, foe4 = after_a_hit(big=True)
+    out.that(("shift", "minor beside") in keys
+             and keys[("shift", "minor beside")] == foe4 + 1,
+             "the ROW lays the anchor, on its own hit against a larger"
+             " creature, as its own key holding that creature's id plus"
+             " one -- which is why `_granted` cannot see it and"
+             " `_anchored` can, and is the carrier the row's old note"
+             " said did not exist",
+             f"{keys}")
+    out.that(("shift", "minor") in keys,
+             "premise: the shift itself is granted too, so the line above"
+             " is about the anchor rather than about the grant",
+             f"{keys}")
+    small, _ = after_a_hit(big=False)
+    out.that(not small,
+             "and nothing at all is granted when the creature hit is no"
+             " larger than the holder -- the printed gate, and the"
+             " control that stops the arm above passing for a row that"
+             " grants unconditionally",
+             f"{small}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: the clause it was dropped"
+             " for is the one asserted above",
+             f"{REGISTRY[ROW].todo}, {REGISTRY[ROW].dropped}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -120684,6 +120872,9 @@ DRIVERS = {
     "a_stand_in_offered_after_its_use_is_gone": (
         a_stand_in_offered_after_its_use_is_gone,
         "a stand-in offered after its use is gone"),
+    "a_granted_shift_that_must_end_beside_somebody": (
+        a_granted_shift_that_must_end_beside_somebody,
+        "a granted shift that must end beside somebody"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,
