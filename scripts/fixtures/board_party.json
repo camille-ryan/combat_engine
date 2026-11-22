@@ -531,7 +531,6 @@
     "race": "r36",
     "race2": "",
     "skills": [
-     "arcana",
      "athletics",
      "heal",
      "streetwise"
@@ -997,9 +996,9 @@
      "arcana",
      "diplomacy",
      "heal",
-     "history",
      "insight",
-     "religion"
+     "religion",
+     "streetwise"
     ],
     "worships": "x1_139"
    },
@@ -1171,6 +1170,7 @@
      "diplomacy",
      "heal",
      "insight",
+     "nature",
      "religion"
     ],
     "worships": "x1_56"
