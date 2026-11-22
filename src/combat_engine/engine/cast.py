@@ -3712,6 +3712,16 @@ class Cast:
         gear = self.world.get(self.me, Gear)
         if gear is None:
             return None
+        # The same override `_swinging` reads, and both because the two
+        # answer different halves of one swing: that one the dice and the
+        # weapon of record, this one proficiency and enhancement. A named
+        # weapon honoured in only one of them would roll the claw's dice
+        # at the sword's enhancement.
+        if gear.swinging:
+            named = next(
+                (w for w in gear.weapons if w.ref == gear.swinging), None)
+            if named is not None:
+                return named
         p = self._declared()
         if p is not None and p.reach.alt is not None:
             ranged = self.ranged
@@ -3850,6 +3860,17 @@ class Cast:
         gear = self.world.get(self.me, Gear)
         if gear is None:
             return None
+        # **A named weapon overrides the hand**, which is what
+        # `Cast.basic(with_=)` sets and why `Gear.swinging` exists: the
+        # claw those two cards swing is filed stowed, so every hand-based
+        # answer is the wrong one. Before the `hand`/`ranged` branch below
+        # because the card names the weapon outright and there is nothing
+        # left to decide.
+        if gear.swinging:
+            named = next(
+                (w for w in gear.weapons if w.ref == gear.swinging), None)
+            if named is not None:
+                return named
         weapon = gear.off if hand == "off" else gear.main
         p = self._declared()
         # The branch is the better answer where there is one: a row printing
@@ -4995,6 +5016,7 @@ class Cast:
         who: int | None = None,
         ranged: bool = False,
         window: str = "",
+        with_: str = "",
     ) -> bool:
         """Make a basic attack -- whichever row that creature's actually is.
 
@@ -5008,6 +5030,28 @@ class Cast:
         `c.as_basic` for that window is offered beside the ordinary
         swing. A grant that names no window -- most of them -- still
         picks up the stand-ins written with no window of their own.
+
+        **`with_` names the weapon to swing, overriding what is in
+        hand.** Two cards print it -- `f977` and `i1261p1` -- and the
+        weapon they name is filed **stowed** on purpose, so every
+        hand-based answer was the wrong one and each blow was struck with
+        whatever the wearer happened to be holding.
+
+        It is deliberately not `hand=`: that picks main or off out of
+        what is already *held*. Wielding the weapon instead would
+        silently disarm the wearer, since `Gear.wield` puts away whatever
+        cannot share the grip, and rolling the swing longhand through
+        `c.attack` would stop it being a **basic** attack -- the word the
+        card prints, and what every rider keyed on one reads.
+
+        Written as `Gear.swinging`, set around this one `use` and cleared
+        in a `finally`, and read by both weapon pickers: `_swinging` for
+        the dice, the high-crit die and the weapon of record, `_wielded`
+        for proficiency and enhancement. Honouring it in one of the two
+        would roll the named weapon's dice at the held one's enhancement.
+
+        On the **swinger** rather than the caster, because `who=` lends
+        the swing and the weapon belongs to whoever makes it.
         """
         from .basic import MELEE, RANGED
         from .components import Powers
@@ -5075,17 +5119,34 @@ class Cast:
         ).kind in ("area_burst", "wall"):
             there = sorted(_squares(self.world, target))
             origin = there[0] if there else None
-        if origin is not None:
+        # **`with_` is set around the one `use` and cleared in a
+        # `finally`.** It overrides what is in hand for this swing only --
+        # see `Gear.swinging` -- and a swing that raised with the override
+        # still standing would hand the next basic attack the wrong
+        # weapon, silently.
+        #
+        # On the **swinger**, not the caster: `c.basic(who=)` lends the
+        # swing, and the weapon the card names belongs to whoever is
+        # swinging it.
+        arming = self.world.get(attacker, Gear) if with_ else None
+        was = arming.swinging if arming is not None else ""
+        if arming is not None:
+            arming.swinging = with_
+        try:
+            if origin is not None:
+                return use(
+                    self.world, attacker, ref, origin=origin, spend=False,
+                    trigger=self.trigger,
+                    granted_by=self.me, granted_via=self.ref,
+                )
             return use(
-                self.world, attacker, ref, origin=origin, spend=False,
+                self.world, attacker, ref, targets=[target], spend=False,
                 trigger=self.trigger,
                 granted_by=self.me, granted_via=self.ref,
             )
-        return use(
-            self.world, attacker, ref, targets=[target], spend=False,
-            trigger=self.trigger,
-            granted_by=self.me, granted_via=self.ref,
-        )
+        finally:
+            if arming is not None:
+                arming.swinging = was
 
     def _origin_squares(self, swinger: int) -> frozenset[Square]:
         """Which squares this swing originates from.

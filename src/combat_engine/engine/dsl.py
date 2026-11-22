@@ -2554,6 +2554,33 @@ class Power:
         if gear is None or not any(w.group != "implement" for w in gear.weapons):
             return True
         kind = self.reach_of(branch).kind
+        # **A swing that NAMED its weapon is gated on THAT weapon**, not on
+        # what happens to be in hand. `Cast.basic(with_=)` is the only
+        # writer -- see `Gear.swinging` -- and this is the gate `f977`'s
+        # clause needed: *"forgo the damage to make a ranged basic attack
+        # with a heavy thrown weapon"*, where `basic.rba` declares
+        # `Ranged(10)` and no `thrown_by_hand`, so the branch below asks
+        # for `gear.ranged` and refuses every character the clause is
+        # printed for -- each of them carrying a thrown *melee* weapon.
+        #
+        # Scoped as tightly as the override is: only a named weapon
+        # reaches here, and a named one still has to be able to make the
+        # kind of attack asked for. The throw count is checked for the
+        # same reason the `thrown_by_hand` branch below checks it -- a
+        # thrown weapon is spent when thrown, so the sixth throw of five
+        # has nothing left to throw.
+        named = (
+            next((w for w in gear.weapons if w.ref == gear.swinging), None)
+            if gear.swinging else None
+        )
+        if named is not None:
+            if kind != "ranged":
+                return True
+            if named.thrown is not None:
+                from .query import ready_to_throw
+
+                return ready_to_throw(world, actor)
+            return named.ranged is not None
         if kind == "ranged":
             # Unless it is thrown by hand, in which case a melee weapon is
             # exactly what it wants.

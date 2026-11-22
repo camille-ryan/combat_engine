@@ -3474,8 +3474,7 @@ def i1261x1(c: Cast) -> None:
 
 
 @power("i1261p1", level=7, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
-       reach=CloseBurst(1), target=EACH_ENEMY,
-       dropped=("c.basic(with_=)",))
+       reach=CloseBurst(1), target=EACH_ENEMY)
 def i1261p1(c: Cast) -> None:
     """Re-aimed, because the half it was waiting on landed and a narrower
     half did not. The claw now exists -- `i1261x1` above puts the profile in
@@ -3497,7 +3496,7 @@ def i1261p1(c: Cast) -> None:
     the word the card prints and what every rider keyed on one reads.
     `i2122p1` waits on the same gap under `Cast.basic(hand=)`; `f977`
     shares this symbol, which is the larger group of the two."""
-    c.basic()
+    c.basic(with_="i1261x1")
 
 
 @power("i1598p1", level=7, cls=ITEM, usage=DAILY, action=REACTION,

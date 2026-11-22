@@ -2585,6 +2585,31 @@ class Gear:
     #: the moment of the read instead, which is `Cast.struck_by_property`.
     scoped: list[tuple[str, str, Callable[[int], bool]]] = field(
         default_factory=list)
+    #: The weapon the swing **in flight** is made with, by ref, overriding
+    #: what is in hand -- and `""` for every swing that is not one of
+    #: these.
+    #:
+    #: Two cards print it: *"make a basic attack with the claw"* (`f977`,
+    #: `i1261p1`), where the claw is filed **stowed** on purpose. `Gear`
+    #: answered "what is in hand" and nothing else, so each blow was
+    #: struck with whatever the wearer happened to be holding.
+    #:
+    #: **Not `hand=`, and not putting it in hand.** `hand=` picks main or
+    #: off out of what is already held, which a stowed weapon is not, and
+    #: wielding it would silently disarm the wearer -- `Gear.wield` puts
+    #: away whatever cannot share the grip. Rolling the swing longhand
+    #: through `c.attack` would stop it being a *basic* attack, which is
+    #: the word the card prints and what every rider keyed on one reads.
+    #:
+    #: Read by **both** pickers, which is the care this needs: `_swinging`
+    #: answers the dice, the high-crit die and the weapon of record, and
+    #: `_wielded` answers proficiency and enhancement. One field, two
+    #: readers, because the two already existed.
+    #:
+    #: Set and cleared around one `use` by `Cast.basic(with_=)`, in a
+    #: `finally`, so a swing that raises cannot leave the override
+    #: standing for the next one.
+    swinging: str = ""
     #: This creature's **arena weapons**, by ref.
     #:
     #: `cf:fighter-weaponmaster-f3s0` prints *"you select two weapons as

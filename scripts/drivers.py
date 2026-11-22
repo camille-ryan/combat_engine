@@ -84407,6 +84407,182 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_basic_attack_names_its_weapon(out: Result) -> None:
+    """"Make a basic melee attack using the claw granted by this armor."
+
+    `c.basic` answered *"whichever row that creature's basic attack is"*
+    and took `on`, `who`, `ranged` and `window` -- nothing saying **with
+    what**. Two cards need that and both named `c.basic(with_=)`:
+    `i1261p1`, whose claw `i1261x1` files **stowed** on purpose, and
+    `f977`'s clause on `p992`, which throws a heavy thrown weapon as a
+    *ranged* basic attack.
+
+    `Gear.swinging` is the override, set around one `use` and cleared in a
+    `finally`. Three readers honour it and all three had to:
+
+    * `_swinging` -- the dice, the high-crit die and the weapon of record;
+    * `_wielded` -- proficiency and enhancement. Honouring one and not the
+      other would roll the named weapon's dice at the held weapon's
+      enhancement;
+    * `Power.can_branch` -- the gate. `basic.rba` is `Ranged(10)` with no
+      `thrown_by_hand`, so it asked for `gear.ranged` and refused every
+      character `f977`'s clause is printed for. That refusal is asserted
+      below as the premise, because it is the whole reason the row was
+      marked.
+
+    **Not `hand=` and not wielding it.** `hand=` picks main or off out of
+    what is already held, which a stowed weapon is not; `Gear.wield`
+    would put away whatever cannot share the grip and silently disarm the
+    wearer; and rolling the swing longhand through `c.attack` would stop
+    it being a **basic** attack, which is the printed word and what every
+    rider keyed on one reads.
+    """
+    import audit as A
+    from audit import board as posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Gear, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled
+
+    def ready(world, me: int) -> None:  # noqa: ANN001
+        A._revive_everyone(world, except_=())
+        budget = world.get(me, Budget)
+        if budget is not None:
+            budget.refresh()
+
+    # -- i1261p1: a stowed claw, swung ------------------------------------
+    world, me, _start = posed("i1261p1", 1)
+    ready(world, me)
+    gear = world.get(me, Gear)
+    out.that("i1261x1" in gear.stowed
+             and any(w.ref == "i1261x1" for w in gear.weapons),
+             "the claw is in the wearer's gear and filed STOWED -- the"
+             " premise, and the reason `hand=` could never have answered"
+             " this card",
+             f"held {[w.ref for w in gear.held]}, stowed"
+             f" {sorted(gear.stowed)}")
+    claw = next(w for w in gear.weapons if w.ref == "i1261x1")
+    other = next((w for w in gear.held if w.ref != "i1261x1"), None)
+    out.that(other is not None and other.damage != claw.damage,
+             "and the wearer holds something with DIFFERENT dice, so the"
+             " weapon of record below is not right by coincidence",
+             f"claw {claw.damage}, held"
+             f" {other.damage if other else None}")
+
+    foe = sorted(e for e in world.entities if e != me)[0]
+    mark = len(world.bus.log)
+    REGISTRY["i1261p1"].body(
+        Cast(world=world, me=me, ref="i1261p1", target=foe))
+    rolls = [e for e in world.bus.log[mark:] if isinstance(e, AttackRolled)]
+    out.that(bool(rolls),
+             "i1261p1 swings at all",
+             f"{len(rolls)} attack roll(s)")
+    stamped = {str(getattr(getattr(r, "result", None), "weapon", ""))
+               for r in rolls}
+    out.that(stamped == {"i1261x1"},
+             "and every blow's weapon of record is the CLAW, not what the"
+             " wearer is holding",
+             f"{sorted(stamped)}")
+    out.that(not gear.swinging,
+             "the override is cleared afterwards -- it is set around one"
+             " `use` in a `finally`, so a swing that raised could not"
+             " leave the next basic attack holding the wrong weapon",
+             f"{gear.swinging!r}")
+
+    # -- the OTHER picker, which the weapon of record does not exercise ---
+    #
+    # `_swinging` answers the dice and the stamp above; `_wielded` answers
+    # proficiency and enhancement. Honouring one and not the other rolls
+    # the claw's dice at the held weapon's enhancement -- correct in
+    # every event anybody logs, and wrong in the number. Asserted
+    # directly because no public reader separates the two.
+    probe = Cast(world=world, me=me, ref="drivers:picker", target=foe)
+    bare = probe._wielded()
+    gear.swinging = "i1261x1"
+    named_by = probe._wielded()
+    gear.swinging = ""
+    out.that(bare is not None and bare.ref != "i1261x1",
+             "without the override the second picker answers what is in"
+             " hand -- the premise",
+             f"{bare.ref if bare else None!r}")
+    out.that(named_by is not None and named_by.ref == "i1261x1",
+             "and with it, the claw: proficiency and enhancement come off"
+             " the weapon the card names, not off the one being held",
+             f"{named_by.ref if named_by else None!r}")
+
+    # -- f977 on p992: the gate was the gap -------------------------------
+    THROWN = "w3640"
+    world, me, _s = posed("p992", 1, arm=THROWN)
+    ready(world, me)
+    gear = world.get(me, Gear)
+    out.that(gear.ranged is None and any(
+                 w.thrown is not None and "heavy thrown" in w.properties
+                 for w in gear.melee),
+             "this character carries a heavy thrown MELEE weapon and no"
+             " ranged one -- which is every character `f977`'s clause is"
+             " printed for, and the case the gate refused",
+             f"ranged={gear.ranged}, melee"
+             f" {[(w.ref, sorted(w.properties)[:2]) for w in gear.melee]}")
+    rba = REGISTRY.get("rba")
+    out.that(rba is not None and not rba.can_branch(world, me),
+             "and `rba` is refused to it with no weapon named -- the"
+             " premise, and the measurement the row was marked on",
+             f"can_branch={rba.can_branch(world, me) if rba else None}")
+    gear.swinging = THROWN
+    out.that(rba is not None and rba.can_branch(world, me),
+             "naming the weapon opens the branch, because the named"
+             " weapon is a thrown one and there are throws left",
+             f"can_branch={rba.can_branch(world, me) if rba else None}")
+    gear.swinging = ""
+
+    known = world.get(me, Powers)
+    for feat in ("f977", "f993"):
+        while feat in known.known:
+            known.known.remove(feat)
+
+    def thrown_rolls(*, hold_the_feat: bool) -> list:
+        """Fire `p992` with the feat held or not, consenting to the may."""
+        if hold_the_feat and "f977" not in known.known:
+            known.known.append("f977")
+        if not hold_the_feat:
+            while "f977" in known.known:
+                known.known.remove("f977")
+
+        def decide(who: int, kind: str, pool: list, what: str = ""):  # noqa: ANN202
+            # The printed clause asks `c.may(..., default=False)`, so a
+            # decider that does not answer declines and the arm below
+            # would read the same either way.
+            if kind == "may":
+                return next((o for o in pool if "yes" in str(o).lower()),
+                            pool[0])
+            return pool[0]
+
+        world.decider = decide
+        at = len(world.bus.log)
+        REGISTRY["p992"].body(
+            Cast(world=world, me=me, ref="p992",
+                 target=sorted(e for e in world.entities if e != me)[0]))
+        return [e for e in world.bus.log[at:]
+                if isinstance(e, AttackRolled) and e.power == "rba"]
+
+    with_feat = thrown_rolls(hold_the_feat=True)
+    out.that(bool(with_feat),
+             "with `f977` held the clause makes its ranged basic attack --"
+             " the clause that could not fire at all before, because the"
+             " swing could not name the weapon it throws",
+             f"{len(with_feat)} rba roll(s)")
+    out.that(all(str(getattr(getattr(r, "result", None), "weapon", ""))
+                 == THROWN for r in with_feat),
+             "and it is thrown with the heavy thrown weapon, which is both"
+             " what passed the gate and what rolled the dice",
+             f"{[str(getattr(getattr(r, 'result', None), 'weapon', '')) for r in with_feat]}")
+    without = thrown_rolls(hold_the_feat=False)
+    out.that(not without,
+             "without the feat there is no throw -- the clause is the"
+             " feat's and not the power's",
+             f"{len(without)} rba roll(s)")
+
+
 def a_defence_against_what_the_attack_would_do(out: Result) -> None:
     """"+2 to all defences against any attack that WOULD immobilize you."
 
@@ -119148,6 +119324,9 @@ DRIVERS = {
     "a_defence_against_what_the_attack_would_do": (
         a_defence_against_what_the_attack_would_do,
         "a defence against what an attack would do"),
+    "a_basic_attack_names_its_weapon": (
+        a_basic_attack_names_its_weapon,
+        "a basic attack names its weapon"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

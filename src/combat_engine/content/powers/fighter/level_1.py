@@ -228,19 +228,26 @@ def _thrown_instead_of_the_splash(c: Cast, arena: str) -> bool:
     ranged basic attack: a creature further off is not a legal target for
     the swing, so offering it would be a menu entry that cannot be taken.
 
-    **The throw happens before the trade is counted, and the return is the
-    swing's own**, which is `f977`'s `dropped=("c.basic(with_=)",)` showing
-    up in the code. `engine/basic.py`'s `rba` declares `reach=Ranged(10)`
-    and no `thrown_by_hand=True`, so `Power.can_branch` asks for
-    `gear.ranged` and refuses the swing to a character carrying only a
-    thrown melee weapon -- which is every character this clause is printed
-    for. Measured on `audit.board('p992', 1, arm=<a heavy thrown weapon>)`:
-    `c.basic(ranged=True)` returns False and emits nothing. Written the
-    obvious way round -- forgo, then throw -- that would cost the splash
-    and give nothing back, and a row that takes a price for no benefit is
-    worse than one that does not fire. This way the printed splash lands
-    whenever the throw could not be made, and the clause goes live the day
-    the swing can name its weapon.
+    **The throw names its weapon, and that is what made the clause
+    fire.** `engine/basic.py`'s `rba` declares `reach=Ranged(10)` and no
+    `thrown_by_hand=True`, so `Power.can_branch` asked for `gear.ranged`
+    and refused the swing to a character carrying only a thrown melee
+    weapon -- which is every character this clause is printed for.
+    Measured then: `c.basic(ranged=True)` returned False and emitted
+    nothing, which is `f977`'s `dropped=("c.basic(with_=)",)` showing up
+    in the code.
+
+    `c.basic(with_=)` gates on the **named** weapon instead of on what is
+    in hand, and rolls its dice and its enhancement -- so the heavy thrown
+    weapon the card names is both what passes the gate and what is
+    thrown.
+
+    The ordering is unchanged and still deliberate: the throw happens
+    before the trade is counted, so the printed splash lands whenever the
+    throw could not be made. Written the obvious way round -- forgo, then
+    throw -- it would cost the splash and give nothing back, and a row
+    that takes a price for no benefit is worse than one that does not
+    fire.
     """
     if arena != "f977" or not c.wielding("heavy thrown"):
         return False
@@ -253,9 +260,26 @@ def _thrown_instead_of_the_splash(c: Cast, arena: str) -> bool:
     who = c.choose(far, f"{c.ref}: who to throw at")
     if who is None:
         return False
+    # **The swing names the weapon it throws**, which is what makes this
+    # clause fire at all: `basic.rba` declares `Ranged(10)` and no
+    # `thrown_by_hand`, so `Power.can_branch` asks for `gear.ranged` and
+    # refuses every character this is printed for -- each carrying a
+    # thrown *melee* weapon and no bow. `c.basic(with_=)` gates on the
+    # named weapon instead, and rolls its dice and its enhancement.
+    #
+    # The heaviest thrown weapon held, so a character carrying two throws
+    # the one the card means rather than whichever sorts first.
+    gear = c.world.get(c.me, Gear)
+    arm = max(
+        (w for w in (gear.melee if gear is not None else [])
+         if w.thrown is not None and "heavy thrown" in w.properties),
+        key=lambda w: (w.damage, w.ref), default=None,
+    )
+    if arm is None:
+        return False
     quiet = c.no_provoke(on=c.me, until=When.EOT, when=_a_ranged_row)
     try:
-        return c.basic(ranged=True, on=who)
+        return c.basic(ranged=True, on=who, with_=arm.ref)
     finally:
         if quiet is not None:
             c.end_effect(quiet, why="the throw is over")
