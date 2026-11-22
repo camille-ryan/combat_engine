@@ -161,7 +161,8 @@ KNOWN_SILENT = {
     # measures the pick both ways, plus `f1848`'s payout for holding
     # two.
     "f604": "deals a second racial pick at build time; nothing to do on "
-            "a board -- see `drivers.a_second_elemental_manifestation`",
+            "a board -- see `drivers.a_second_elemental_manifestation`, "
+            "and #1446 for its rest-time half",
     # **Two feats whose whole effect is which skill powers a character
     # may choose**, which is settled when the hand is dealt.
     #
