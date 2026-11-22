@@ -3376,7 +3376,25 @@ def sees_through(world: World, watcher: int, who: int) -> bool:
     if mods.total(f"truesight:{who}", {}) > 0:
         return True
     reach = mods.total("truesight", {})
-    return reach > 0 and distance_between(world, watcher, who) <= reach
+    if reach > 0 and distance_between(world, watcher, who) <= reach:
+        return True
+    # **A radius around somebody ELSE**, which neither key above can say:
+    # `truesight` measures from the watcher and `truesight:<eid>` names
+    # one creature. *"You can see any invisible creatures adjacent to
+    # your spirit companion"* -- `i2923x1` -- measures from a third
+    # creature, so the key carries the anchor and the reach is read per
+    # anchor. `Cast.see_invisible(within=, of=)` is the writer.
+    for mod in mods.items:
+        key = getattr(mod, "what", "")
+        if not key.startswith("truesight_near:"):
+            continue
+        anchor = key.split(":", 1)[1]
+        if not anchor.isdigit():
+            continue
+        near = mods.total(key, {})
+        if near > 0 and distance_between(world, int(anchor), who) <= near:
+            return True
+    return False
 
 
 def sight_capped(world: World, watcher: int, who: int) -> bool:

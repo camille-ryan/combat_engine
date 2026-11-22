@@ -66,7 +66,7 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
 
 ## how far, and what stops it
 
-- `c.any_size_manoeuvre(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.any_size_manoeuvre(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, within: 'int' = 0) -> 'Effect | None'`
   - "You can bull rush targets of any size."
 - `c.blocks_entry(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "An enemy cannot enter this creature's space by any means."

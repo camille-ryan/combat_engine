@@ -8104,20 +8104,51 @@ class Cast:
         theirs = self.size_of(who)
         if mine is None or theirs is None:
             return True
-        return order.index(theirs) - order.index(mine) <= self._MANOEUVRE_REACH
+        # **A raised ceiling, which is not the same as a waived one.**
+        # *"You can attempt to bull rush or grab a target up to two sizes
+        # larger than you"* -- `i1455x1` -- and the only thing that could
+        # be said was `_ANY_SIZE`, which reaches a Gargantuan creature the
+        # card does not. `Cast.any_size_manoeuvre(within=)` is the writer.
+        #
+        # The **larger** of the printed ceiling and whatever is allowed,
+        # not a sum: the card names a ceiling rather than a bonus, so two
+        # such items do not reach four sizes up.
+        from .components import Mods as _Mods
+
+        mods = self.world.get(self.me, _Mods)
+        allowed = (mods.total("manoeuvre_reach", {})
+                   if mods is not None and mods.items else 0)
+        ceiling = max(self._MANOEUVRE_REACH, allowed)
+        return order.index(theirs) - order.index(mine) <= ceiling
 
     def any_size_manoeuvre(
-        self, *, on: int | None = None, until: When = When.ENCOUNTER
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+        within: int = 0,
     ) -> Effect | None:
         """"You can bull rush targets of any size."
 
         Waives the printed size rule for this creature, which two feats
         grant and which `_manoeuvrable` is the one reader of. A labelled hold
         rather than a flag, so it suspends and lapses with everything else.
+
+        **`within=` raises the ceiling instead of removing it**, which is
+        a different printed sentence: *"you can attempt to bull rush or
+        grab a target up to two sizes larger than you"* (`i1455x1`).
+        Writing the unbounded waiver for that card would let its wearer
+        grab a Gargantuan creature, which is what left the clause marked.
+
+        The number is a **ceiling**, not a bonus on the printed one, so
+        `within=2` is "two sizes larger" and two such items do not reach
+        four. `_manoeuvrable` takes the larger of the two.
         """
         who = self._who(on)
         if who is None:
             return None
+        if within:
+            return self.bonus(
+                "manoeuvre_reach", within, on=who, until=until,
+                kind=self.ref,
+            )
         return self.effect(_ANY_SIZE, on=who, until=until)
 
     def payment_window(self, *, per_turn: bool = False) -> object:
@@ -11187,7 +11218,8 @@ class Cast:
         )
 
     def see_invisible(
-        self, *, on: int | None = None, until: When = When.EONT
+        self, *, on: int | None = None, until: When = When.EONT,
+        within: int = 0, of: int | None = None,
     ) -> Effect | None:
         """"You can see invisible creatures and objects."
 
@@ -11200,9 +11232,44 @@ class Cast:
         for anything that needs line of sight -- nothing in the engine asks
         that question yet -- so a row wanting *only* the targeting half is
         still not sayable.
+
+        **`within=` narrows it to a radius, and `of=` says around
+        whom.** The bare grant is all or nothing, so a card naming a
+        region -- *"any invisible creatures adjacent to your spirit
+        companion"* -- could only be written as seeing every invisible
+        creature on the board. Written as `truesight_near:<anchor>`,
+        which `query.sees_through` reads per anchor; `truesight` measures
+        from the watcher and `truesight:<eid>` names one creature, so
+        neither could say a region around a third.
+
+        The marker named `within=` alone and the anchor is the other
+        half: every card using this so far measures from somebody else,
+        and a radius with no anchor would silently measure from the
+        watcher.
         """
+        who = on if on is not None else self.me
+        if within:
+            # **A radius around somebody else, which the bare grant
+            # cannot narrow.** *"You can see any invisible creatures
+            # adjacent to your spirit companion"* -- `i2923x1` -- and the
+            # unqualified grant sees every invisible creature on the
+            # board, which is strictly more than the card gives.
+            #
+            # `query.sees_through` reads the anchor out of the key, so
+            # the reach is per anchor and two of these do not merge. The
+            # existing keys could not say it: `truesight` measures from
+            # the **watcher** and `truesight:<eid>` names one creature.
+            #
+            # `of` defaults to the watcher, which is what a printed
+            # "within 5 squares of you" would want -- and every card
+            # using it so far names somebody else, so it is passed.
+            anchor = of if of is not None else who
+            return self.bonus(
+                f"truesight_near:{anchor}", within, on=who,
+                until=until, kind=self.ref,
+            )
         return self.bonus(
-            "see_invisible", 1, on=on if on is not None else self.me,
+            "see_invisible", 1, on=who,
             until=until, kind=self.ref,
         )
 

@@ -1383,8 +1383,7 @@ def i1152p1(c: Cast) -> None:
 
 
 @power("i1455x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.any_size_manoeuvre(within=)",))
+       reach=PERSONAL, target=SELF)
 def i1455x1(c: Cast) -> None:
     """"+2 item bonus on Strength attacks to bull rush or grab a target."
 
@@ -1398,14 +1397,19 @@ def i1455x1(c: Cast) -> None:
 
     **Re-aimed.** The old marker named an escape check, and this card has
     no escape clause at all. Its second sentence is the size allowance, and
-    `c.any_size_manoeuvre` is nearly it: the verb exists and waives
+    `c.any_size_manoeuvre` takes a bound now. The verb waived
     `_manoeuvrable`'s size rule outright, where the card raises the
-    ceiling by two steps. Writing the unbounded waiver would let the
-    wearer grab a Gargantuan creature its card does not reach, so the
-    allowance waits on the verb taking a bound.
+    ceiling by two steps -- so writing the unbounded waiver would have
+    let the wearer grab a Gargantuan creature its card does not reach,
+    which is what kept the clause marked.
+
+    `within=2` is read as a **ceiling** rather than a bonus on the
+    printed one, so two such items do not reach four sizes up:
+    `_manoeuvrable` takes the larger of the two.
     """
     c.bonus("attack", 2, kind="item", on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: ctx.get("as_") in ("bull_rush", "grab"))
+    c.any_size_manoeuvre(on=c.me, until=When.ENCOUNTER, within=2)
 
 
 @power("i2163x1", level=9, cls=ITEM, action=ActionType.NONE,

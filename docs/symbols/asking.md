@@ -254,7 +254,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - "The target loses blindsight and tremorsense."
 - `c.low_light(self, radius: 'int' = 0, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You have low-light vision." Dim light does not conceal from you.
-- `c.see_invisible(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+- `c.see_invisible(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, within: 'int' = 0, of: 'int | None' = None) -> 'Effect | None'`
   - "You can see invisible creatures and objects."
 - `c.see_unseen(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, revert: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'Effect | None'`
   - Trade one sight for the other: the unseen are seen and the rest

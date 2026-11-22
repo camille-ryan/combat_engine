@@ -84407,6 +84407,136 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_waiver_that_is_narrowed_rather_than_removed(out: Result) -> None:
+    """Two cards narrow an all-or-nothing waiver, and could not say so.
+
+    `i2923x1` sees invisible creatures *"adjacent to your spirit
+    companion"* and `i1455x1` grabs *"a target up to two sizes larger
+    than you"*. Both verbs existed and both were unbounded, so writing
+    either clause gave strictly more than the card: every invisible
+    creature on the board, and a Gargantuan target.
+
+    `c.see_invisible(within=, of=)` lays `truesight_near:<anchor>`, which
+    `query.sees_through` reads **per anchor** -- the existing keys could
+    not say it, because `truesight` measures from the watcher and
+    `truesight:<eid>` names one creature, and this card measures from a
+    third. `c.any_size_manoeuvre(within=)` lays `manoeuvre_reach`, read
+    by `Cast._manoeuvrable` as the larger of it and the printed ceiling:
+    a **ceiling**, not a bonus on one, so two such items do not reach
+    four sizes up.
+
+    **Size lives on `Position`, not `Stats`**, which is what the second
+    half's first staging got wrong: setting `Stats.size` left
+    `c.size_of` answering `small` and every arm read True, before and
+    after, for a reason that had nothing to do with the clause.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import sees_invisible, sees_through
+    from combat_engine.engine.types import Size
+
+    # -- a radius around a THIRD creature --------------------------------
+    world, me, _start = A.board("i2923x1", 1)
+    reader = Cast(world=world, me=me, ref="drivers", target=me)
+    spirit = reader.companion()
+    out.that(spirit is not None,
+             "the posed shaman has a spirit companion -- the premise, and"
+             " the row lays nothing without one",
+             f"{spirit}")
+    if spirit is None:
+        return
+    REGISTRY["i2923x1"].body(
+        Cast(world=world, me=me, ref="i2923x1", target=me))
+    out.that(not sees_invisible(world, me),
+             "the UNLIMITED answer stays False -- which is the over-reach"
+             " this row was marked for: the bare grant sees every"
+             " invisible creature on the board",
+             f"sees_invisible={sees_invisible(world, me)}")
+    anchored = [m.what for m in (world.get(me, Mods).items or [])
+                if m.what.startswith("truesight_near:")]
+    out.that(anchored and all(str(spirit) in k for k in anchored),
+             "and the key names the COMPANION as the anchor, not the"
+             " wearer -- the radius is measured from a third creature,"
+             " which neither existing key could say",
+             f"{sorted(set(anchored))}")
+
+    here = world.need(spirit, Position).square
+    others = sorted(e for e in world.entities if e not in (me, spirit))
+    out.that(len(others) >= 2,
+             "two creatures to place, one beside the companion and one"
+             " away from it -- the premise for the pair below",
+             f"{others[:4]}")
+    if len(others) < 2:
+        return
+    seen = {}
+    for who, (label, dx) in zip(others[:2], (("beside", 1), ("away", 6)),
+                                strict=False):
+        pos = world.need(who, Position)
+        world.grid.lift(who)
+        pos.square = (here[0] + dx, here[1])
+        world.grid.place(who, frozenset({pos.square}))
+        seen[label] = sees_through(world, me, who)
+    out.that(seen.get("beside") is True,
+             "a creature beside the companion is seen",
+             f"{seen}")
+    out.that(seen.get("away") is False,
+             "and one away from it is not -- the narrowing, and the half"
+             " the unbounded grant could not express",
+             f"{seen}")
+
+    # -- a ceiling raised rather than removed -----------------------------
+    #
+    # **The baseline is read on a NEUTRAL board**, because `audit.board`
+    # arms every `action=NONE` row -- including this item -- so measuring
+    # "before" on its own board measures the clause already in effect.
+    # Read that way first: the printed ladder came out reaching two sizes
+    # up, which looked like the printed rule being wrong.
+    def ladder(ref: str, *, undo: bool = False) -> tuple[dict, object]:
+        world, me, _b = A.board(ref, 1)
+        foe = sorted(e for e in world.entities if e != me)[0]
+        c = Cast(world=world, me=me, ref="drivers", target=foe)
+        if undo:
+            # **The baseline is the same board with the clause ended**,
+            # because `audit.board` arms every `action=NONE` row --
+            # including this item -- so there is no "before" to read on
+            # it otherwise. Selected by the laying row rather than by a
+            # label fragment.
+            for eff in [e for e in world.effects.of(me) if e.by == ref]:
+                world.effects.end(eff, "drivers")
+        seat = world.need(foe, Position)
+
+        def reach(size) -> bool:  # noqa: ANN001
+            # **`Position.size`, not `Stats.size`** -- `c.size_of` reads
+            # the first, and staging the second left every answer True.
+            seat.size = size
+            return c._manoeuvrable(foe)
+
+        return ({s.name: reach(s) for s in
+                 (Size.LARGE, Size.HUGE, Size.GARGANTUAN)}, c.size_of(me))
+
+    raised, wearer = ladder("i1455x1")
+    out.that(wearer is Size.MEDIUM,
+             "the wearer is Medium, so the ladder counts from a known"
+             " rung -- the premise, and a Large creature reaches Huge on"
+             " the printed rule alone, which is how the first attempt at"
+             " this baseline read two sizes up and looked like the"
+             " printed rule being wrong",
+             f"{wearer}")
+    printed, _again = ladder("i1455x1", undo=True)
+    out.that(printed == {"LARGE": True, "HUGE": False, "GARGANTUAN": False},
+             "with the clause ended, the printed rule reaches one size up"
+             " and no further -- the baseline the card raises, read on"
+             " the same board so the two ladders are the same creature",
+             f"{printed}")
+    out.that(raised == {"LARGE": True, "HUGE": True, "GARGANTUAN": False},
+             "with the item it reaches TWO sizes up and stops -- a"
+             " ceiling rather than a waiver, which is the whole clause:"
+             " the unbounded verb would have reached Gargantuan",
+             f"{raised}")
+
+
 def a_riderless_mount_takes_two_kinds_of_action(out: Result) -> None:
     """"The only actions the horse can take while riderless are move and free."
 
@@ -119648,6 +119778,9 @@ DRIVERS = {
     "a_riderless_mount_takes_two_kinds_of_action": (
         a_riderless_mount_takes_two_kinds_of_action,
         "a riderless mount's two action types"),
+    "a_waiver_that_is_narrowed_rather_than_removed": (
+        a_waiver_that_is_narrowed_rather_than_removed,
+        "a waiver narrowed rather than removed"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

@@ -1913,13 +1913,29 @@ def i2920p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.see_invisible(within=)",),
 )
 def i2923x1(c: Cast) -> None:
-    """`c.see_invisible` is all or nothing, so "adjacent to your spirit
-    companion" cannot narrow it and the caster sees every invisible
-    creature."""
-    c.see_invisible(on=c.me, until=When.ENCOUNTER)
+    """"You can see any invisible creatures adjacent to your spirit
+    companion."
+
+    `c.see_invisible` was all or nothing, so the clause could only be
+    written as seeing **every** invisible creature on the board --
+    strictly more than the card gives, and silently.
+
+    `within=1, of=<the companion>` is the narrowing. The radius is around
+    a *third* creature, which is why neither existing key could say it:
+    `truesight` measures from the watcher and `truesight:<eid>` names one
+    creature. `query.sees_through` reads the anchor out of the key.
+
+    **Nothing is laid without a companion**, which is the honest
+    direction: `c.companion()` answers None for a shaman who has not
+    called one, and the printed sentence has no region then. Granting the
+    unqualified sight instead is exactly the over-reach this row was
+    marked for."""
+    spirit = c.companion()
+    if spirit is None:
+        return
+    c.see_invisible(on=c.me, until=When.ENCOUNTER, within=1, of=spirit)
 
 
 @power(
