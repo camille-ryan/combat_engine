@@ -2618,7 +2618,7 @@ def i1494p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.set_origin(beneficial_only=)",),
+
 )
 def i1536x1(c: Cast) -> None:
     """The increase is written as an increase: `c.resist` adds to whatever
@@ -2631,11 +2631,27 @@ def i1536x1(c: Cast) -> None:
     monster alike -- which is also the reader `dsl.candidates` narrows a
     target line with, so "one devil" finds the wielder.
 
-    Still dropped, and narrower than the old marker: the word is written
-    unconditionally, where the card gives it only "for the purpose of any
-    **beneficial** effect". Nothing grades an effect that way, so a row
-    that picks a devil out to hurt it now finds the wielder too."""
-    c.set_origin("devil", on=c.me, until=When.ENCOUNTER)
+    **Written, and the old note's diagnosis stands as the reason for the
+    shape.** It read: *"the word is written unconditionally, where the
+    card gives it only 'for the purpose of any beneficial effect'.
+    Nothing grades an effect that way, so a row that picks a devil out
+    to hurt it now finds the wielder too."* Both halves are true -- the
+    engine marks no effect as helping or hurting, and that was the harm.
+
+    `beneficial_only=True` lays the word under `kindorigin:`, which
+    `query.kinds_of` reads back only when asked with `friendly=True`,
+    and `dsl.candidates` asks that way for a target line looking for an
+    ally, a team-mate or itself. So an anti-devil attack no longer finds
+    the wielder and an ally's devil-helping line still does.
+
+    **A proxy rather than the printed grading, and the gap is named in
+    `c.set_origin`.** An ally's harmful line aimed at a devil would
+    still find the wielder; an enemy's beneficial one would not. No card
+    in this tree prints either shape, so this is closer to print than
+    the unconditional word in every printed case and wrong only where
+    nothing prints."""
+    c.set_origin("devil", on=c.me, until=When.ENCOUNTER,
+                 beneficial_only=True)
     d = c.world.get(c.me, Defences)
     if d is not None and d.resist.get(DamageType.FIRE, 0) > 0:
         c.resist(5, DamageType.FIRE, on=c.me)

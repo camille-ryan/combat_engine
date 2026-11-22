@@ -5094,6 +5094,24 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
     return bool(candidates(world, actor, p, None, branch, augment))
 
 
+#: The `side` words a card's *"for the purpose of any beneficial
+#: effect"* is read as friendly. `self`, `ally` and `team` are the three
+#: a row uses to help somebody; `enemy` is the one the clause exists to
+#: keep a creature out of, and `any`/`other` are deliberately **not**
+#: friendly -- they include enemies, so admitting the word there would
+#: hand an anti-devil attack the free target the card withholds.
+#:
+#: See `Cast.set_origin(beneficial_only=)` for what this proxy does and
+#: does not cover. Named here rather than inline because two call sites
+#: in `_stands_right` ask it.
+FRIENDLY_SIDES = frozenset({"self", "ally", "team"})
+
+
+def _friendly(aim: Target) -> bool:
+    """Is this target line one that helps whoever it finds?"""
+    return aim.side in FRIENDLY_SIDES
+
+
 def _pool_for(world: World, actor: int, side: str, aim: Target) -> list[int]:
     """The creatures (or scenery) a target line's `side` word names.
 
@@ -5346,7 +5364,7 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
     if aim.kinds or aim.kinds_without:
         from .query import kinds_of
 
-        words = kinds_of(world, target)
+        words = kinds_of(world, target, friendly=_friendly(aim))
         # `kinds_without` is an exclusion and compounds even under
         # `kind_or_ident`: "any ally of that sort, but never an undead
         # one" means
@@ -5425,7 +5443,8 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
             # miss on both is the only refusal.
             from .query import kinds_of
 
-            if not (kinds_of(world, target) & aim.kinds):
+            if not (kinds_of(world, target, friendly=_friendly(aim))
+                    & aim.kinds):
                 return False
     return True
 

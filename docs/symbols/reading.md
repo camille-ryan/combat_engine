@@ -43,7 +43,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.kind_waived(world: 'World', asker: 'int', target: 'int', word: 'str', ref: 'str' = '') -> 'bool'`
   - Does `asker` get to treat `target` as `word` although it is not?
-- `query.kinds_of(world: 'World', eid: 'int') -> 'frozenset[str]'`
+- `query.kinds_of(world: 'World', eid: 'int', *, friendly: 'bool' = False) -> 'frozenset[str]'`
   - A creature's type words: undead, goblin, beast, natural, and so on.
 - `query.level_term(world: 'World', eid: 'int', scale: 'str') -> 'int'`
   - What this creature's level is worth, under the current setting.

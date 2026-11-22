@@ -86072,6 +86072,106 @@ def cover_ignored_and_what_is_left_capped(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_type_word_that_only_helps(out: Result) -> None:
+    """*"You are considered a devil for the purpose of any **beneficial**
+    effect"* -- `i1536x1`.
+
+    **Nothing in this engine grades an effect as helping or hurting**,
+    which is what the row's old note said and is still true. Written
+    unconditionally the word is a liability: a row that picks a devil out
+    to hurt it finds the wielder too, which is the harm the printed
+    qualifier exists to prevent.
+
+    So the proxy is the **asker's side**. `c.set_origin(beneficial_only=)`
+    lays the word under `kindorigin:` instead of `origin:`,
+    `query.kinds_of` reads that marker back only when asked
+    `friendly=True`, and `dsl._stands_right` asks that way for a target
+    line whose side is in `dsl.FRIENDLY_SIDES` -- `self`, `ally`, `team`.
+
+    `any` and `other` are deliberately **not** friendly and that is the
+    assertion worth having: both include enemies, so admitting the word
+    there would hand an anti-devil attack exactly the free target the
+    card withholds.
+
+    The gap the proxy leaves is named in `c.set_origin` and is not
+    asserted here because nothing produces it: an ally's *harmful* line,
+    or an enemy's *beneficial* one. No card in this tree prints either.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import (
+        FRIENDLY_SIDES,
+        REGISTRY,
+        Target,
+        _stands_right,
+    )
+    from combat_engine.engine.query import kinds_of
+
+    ROW, WORD = "i1536x1", "devil"
+
+    world, me, _ = _board(ROW, 1)
+    cast = Cast(world=world, me=me, ref=ROW)
+    REGISTRY[ROW].body(cast)
+    foe = sorted(cast.enemies())[0]
+    mate = sorted(cast.allies())[0]
+    wanted = frozenset({WORD})
+
+    def finds(side: str, asker: int) -> bool:
+        return _stands_right(world, asker, Target(
+            side=side, count=1, kinds=wanted), me)
+
+    # -- the premises ------------------------------------------------------
+    out.that(frozenset({"self", "ally", "team"}) == FRIENDLY_SIDES,
+             "premise: the sides counted friendly are the three that look"
+             " for somebody to help, pinned here rather than read off the"
+             " module so that narrowing it reds this line",
+             f"{sorted(FRIENDLY_SIDES)}")
+    out.that(WORD not in kinds_of(world, me),
+             "asked the ordinary way the wielder is NOT a devil, which is"
+             " the whole difference from the unconditional word and the"
+             " control for everything below",
+             f"{sorted(kinds_of(world, me))}")
+    out.that(WORD in kinds_of(world, me, friendly=True),
+             "and asked as a friendly effect, it is",
+             f"{sorted(kinds_of(world, me, friendly=True))}")
+
+    # -- the printed clause, through the targeting layer --------------------
+    out.that(not finds("enemy", foe),
+             "so an enemy's line looking for a devil does not find the"
+             " wielder -- the harm the printed qualifier exists to"
+             " prevent, and what the unconditional word was handing out",
+             f"{finds('enemy', foe)}")
+    out.that(finds("ally", mate),
+             "while an ally's line looking for a devil does, which is the"
+             " benefit the card is bought for",
+             f"{finds('ally', mate)}")
+    out.that(finds("team", mate),
+             "and so does a team line -- the other friendly word, which"
+             " the printed sentence does not distinguish from an ally",
+             f"{finds('team', mate)}")
+
+    # -- the two words that are NOT friendly --------------------------------
+    out.that(not finds("any", foe) and not finds("other", foe),
+             "`any` and `other` are withheld, deliberately: both include"
+             " enemies, so admitting the word there would hand an"
+             " anti-devil attack the free target the card withholds",
+             f"any {finds('any', foe)}, other {finds('other', foe)}")
+
+    # -- the ordinary unconditional word still works ------------------------
+    plain, who, _ = _board(ROW, 1)
+    Cast(world=plain, me=who, ref="drv").set_origin("fey", on=who)
+    out.that("fey" in kinds_of(plain, who)
+             and "fey" in kinds_of(plain, who, friendly=True),
+             "and a word laid WITHOUT the qualifier is unchanged -- read"
+             " both ways, which is every other caller of this verb",
+             f"{sorted(kinds_of(plain, who))}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "so the row carries no marker: the clause it was dropped for"
+             " is the one asserted above",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -106227,6 +106327,18 @@ UNNAMED_KINDS_OWED = frozenset(
         # inside it is worth more than the squares suggest -- and pricing
         # that is the deferred capability `#293` is about.
         "move_in_zone",
+        # **`move_companion` is owed on exactly the same standing ruling**,
+        # and it arrived here the day it landed -- which is this list
+        # working rather than a lapse. `f1336` prints *"once per turn, you
+        # can move your familiar with a minor action instead of a move
+        # action"*, and what the move is worth is a question about a body
+        # that has no turn of its own: the familiar's position matters for
+        # flanking, for line of effect to a row that measures from it, and
+        # for keeping it out of a burst. Pricing a minor action against
+        # those is the deferred capability `#293` is about, and a guessed
+        # number would pre-empt Camille's call. A declared 0.0 would be
+        # worse still, by `#1098`'s rule: it claims a decision nobody made.
+        "move_companion",
         # **Here by Camille's call on `#1098`, not by never having been
         # priced.** It *was* priced -- `is_disable` at -0.5 with a
         # `trap_in_the_way` predicate paying +2.0 -- and both numbers were
@@ -121849,6 +121961,9 @@ DRIVERS = {
     "cover_ignored_and_what_is_left_capped": (
         cover_ignored_and_what_is_left_capped,
         "cover ignored and what is left capped"),
+    "a_type_word_that_only_helps": (
+        a_type_word_that_only_helps,
+        "a type word that only helps"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

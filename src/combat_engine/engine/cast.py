@@ -1480,6 +1480,7 @@ class Cast:
         on: int | None = None,
         until: When = When.ENCOUNTER,
         instead_of: str = "",
+        beneficial_only: bool = False,
     ) -> Effect | None:
         """"You are considered a fey creature for the purpose of effects
         that relate to creature origin."
@@ -1501,6 +1502,25 @@ class Cast:
         both; nothing else can take a word off a stat block.
 
         Yours, so it defaults to the **caster**.
+
+        **`beneficial_only` is the half the engine cannot grade.**
+        `i1536x1` prints *"you are considered a devil for the purpose of
+        any beneficial effect"*, and nothing here marks an effect as
+        helping or hurting. Written unconditionally, the word hands
+        every anti-devil attack a free target -- which is the harm the
+        printed qualifier exists to prevent.
+
+        So the proxy is the **asker's side**: `dsl.candidates` knows
+        whether a target line is looking for an ally, a team-mate or
+        itself, and `dsl.FRIENDLY_SIDES` is that list. `any` and `other`
+        are deliberately excluded, because they include enemies.
+
+        **What the proxy does not cover, said plainly.** An ally's
+        harmful line aimed at a devil would still find the wielder, and
+        an enemy's beneficial one would not. No card in this tree prints
+        either shape, so this is closer to print than the unconditional
+        word in every printed case and wrong only in cases nothing
+        prints. The day a card prints one, this is the line to re-read.
         """
         who = on if on is not None else self.me
         held: Effect | None = None
@@ -1519,10 +1539,16 @@ class Cast:
                 label=f"{self.ref} unorigin:{instead_of.strip().lower()}",
                 by=self.ref,
             )
+        # **`kindorigin:` rather than `origin:` for the conditional
+        # form**, read back only by `query.kinds_of(friendly=True)`. A
+        # distinct marker and not a flag beside the word, because the
+        # reader walks effect **labels** and there is nowhere else to put
+        # one -- `unorigin:` set that convention.
+        marker = "kindorigin" if beneficial_only else "origin"
         for word in words:
             held = self.world.effects.apply(
                 who, self.me, until,
-                label=f"{self.ref} origin:{word.strip().lower()}",
+                label=f"{self.ref} {marker}:{word.strip().lower()}",
                 by=self.ref,
             )
         return held

@@ -1911,7 +1911,9 @@ def on_build(world: World, eid: int, choice: str) -> bool:
     return held is not None and want in held.choices
 
 
-def kinds_of(world: World, eid: int) -> frozenset[str]:
+def kinds_of(
+    world: World, eid: int, *, friendly: bool = False
+) -> frozenset[str]:
     """A creature's type words: undead, goblin, beast, natural, and so on.
 
     Lifted out of `Cast` so `dsl.candidates` can ask it. A target line reading
@@ -1922,6 +1924,15 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
     Off the stat block's own type line, plus anything `c.set_origin` has written
     on and minus anything that took one away. A character has no type line, and
     nineteen races print a sentence that gives one a word anyway.
+
+    **`friendly` admits the words a card gives only where the effect
+    helps.** `i1536x1` prints *"you are considered a devil for the
+    purpose of any beneficial effect"*, and the engine grades no effect
+    that way -- so the proxy is the **asker's side**, which `dsl.candidates`
+    has and this function does not. False by default, so every existing
+    caller is unchanged and a conditional word is withheld unless
+    somebody asks for it: the safe direction, since the harm the clause
+    guards against is being picked out as a target.
     """
     words: set[str] = set()
     gone: set[str] = set()
@@ -1934,6 +1945,19 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
         tag = eff.label
         if "unorigin:" in tag:
             gone.add(tag.split("unorigin:", 1)[1])
+        elif "kindorigin:" in tag:
+            # **A word the creature counts as only where the effect
+            # helps it.** `i1536x1` prints *"you are considered a devil
+            # for the purpose of any beneficial effect"*, and written
+            # unconditionally it hands anti-devil attacks a free target.
+            # `friendly` is the asker's side -- see `set_origin
+            # (beneficial_only=)` for what that proxy does and does not
+            # cover.
+            #
+            # Tested before the bare `origin:` for the same reason
+            # `unorigin:` is: both contain it as a substring.
+            if friendly:
+                words.add(tag.split("kindorigin:", 1)[1])
         elif "origin:" in tag:
             words.add(tag.split("origin:", 1)[1])
     row = stat_block(world, eid)
