@@ -1411,13 +1411,44 @@ def i2926x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.origin_of()",),
 )
 def i2927x1(c: Cast) -> None:
-    """Swapping which square a "melee spirit" power originates from cannot
-    be said: `Range.from_` is a column on the power and no body moves
-    it."""
+    """*"When you use this weapon as an implement for a power that has a
+    range of 'Melee spirit', you can choose to use your square as the
+    origin square of the power."*
+
+    **The gap was in `dsl.measured_from`, not in a missing verb.** A
+    "Melee spirit" line is `Melee(1, from_="companion")`, and that
+    function short-circuited on `from_` before it ever asked whether
+    anything had been lent -- so a borrow filed against such a line was
+    stored and never read. `c.cast_from(companion=True)` is the word that
+    reaches it.
+
+    **It filters both ways, which is the half the card depends on.** A
+    borrow carrying `companion` answers a companion-measured line and
+    **nothing else**, so this does not quietly move the origin of every
+    ordinary melee swing its holder makes. `melee=True` is still wanted
+    beside it: the printed range is a melee one, and which kinds may
+    borrow is a separate question from whose square the line starts in.
+
+    **`optional`, because the card says *"you can choose"*.** The spirit
+    stays the default -- `measured_from` still answers it -- and
+    `dsl.origins` offers the shaman's own square as a second entry, so
+    the choice is made per attack at the menu rather than taken once by
+    the item. A plain borrow would have replaced the spirit for as long
+    as it was held, which is a different and stronger sentence.
+
+    The lender is the **caster itself**, which is the unusual shape here
+    and the exact one the card names: the relation is filed from the
+    holder to the holder, and the board-and-sight proviso in
+    `dsl._lenders` is trivially true of one's own square.
+
+    `c.as_implement` is the other printed half and is unchanged."""
     c.as_implement(on=c.me)
+    c.cast_from(
+        c.me, optional=True, companion=True, melee=True,
+        until=When.ENCOUNTER,
+    )
 
 
 @power(

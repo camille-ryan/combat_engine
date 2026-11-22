@@ -3926,6 +3926,10 @@ def _lenders(world: World, actor: int, r: Range,
         optional   the borrowed square is an ALTERNATIVE rather than a
                    replacement, so `origins` offers the actor's own too
         melee      a melee line may borrow as well
+        kinds:a+b  the allowed set is EXACTLY these, replacing the three
+                   below -- the only narrowing word among them
+        companion  the borrow answers a line measured from a COMPANION,
+                   and ONLY such a line
 
     **`melee` is a per-relation word and not a widening of the gate**, and
     that is the row's own reasoning rather than a choice made here:
@@ -3952,6 +3956,21 @@ def _lenders(world: World, actor: int, r: Range,
     the restriction exists to narrow and a borrow nobody can check is the
     wide reading.
 
+    **`companion` is a filter in BOTH directions, which is the half a
+    one-way reading gets wrong.** `i2927x1` prints *"when you use this
+    weapon as an implement for a power that has a range of 'Melee
+    spirit', you can choose to use your square as the origin"* -- so the
+    borrow reaches a line `Range.from_` sends to the shaman's spirit,
+    and reaches **nothing else**. A word that only opened the companion
+    family would also have left the borrow answering every ordinary
+    melee line the holder swings, which the card does not mention.
+
+    So a borrow carrying `companion` is skipped on a line measured from
+    the caster, and a borrow without it is skipped on a line measured
+    from a companion. `melee` is still needed beside it, because the
+    printed range *is* a melee one and the kind gate is a separate
+    question from whose square it starts in.
+
     The rest of the proviso is unchanged: on the board, and in line of
     effect.
     """
@@ -3976,7 +3995,27 @@ def _lenders(world: World, actor: int, r: Range,
         # wide as their cards.
         if "blast" in words:
             allowed = (*allowed, "close_blast")
+        # **`kinds:` NARROWS where every other word widens**, and that
+        # asymmetry is the whole reason it exists. `melee` and `blast`
+        # add a family to `ranged`, `area_burst` and `wall`, which is
+        # right for cards printing *"your ranged and area attacks"* and
+        # wrong for one that prints a family and no others: `i3085p2`
+        # says *"the next sorcerer **close attack power** you use"*, and
+        # an additive word would have left every ranged attack the
+        # holder makes borrowing an origin the card never offers.
+        # Measured on the first draft -- the sorcerer's ranged at-will
+        # took the square and spent the one use the card gives.
+        named = {
+            k
+            for w in words if w.startswith("kinds:")
+            for k in w.split(":", 1)[1].split("+")
+        }
+        if named:
+            allowed = tuple(named)
         if r.kind not in allowed:
+            continue
+        # The companion filter, both ways round: see the docstring.
+        if ("companion" in words) != (r.from_ == "companion"):
             continue
         if not (world.get(lender, _Position)
                 and line_of_effect(world, actor, lender)):
@@ -4017,6 +4056,12 @@ def _lenders(world: World, actor: int, r: Range,
                 continue
             said = {str(getattr(k, "value", k)).lower() for k in (p.keywords or ())}
             said.add(str(getattr(p.usage, "value", p.usage)).lower())
+            # **And the row's class**, which is a third thing a printed
+            # line narrows by and which neither of the other two can
+            # stand in for: `i3085p2` says *"the next **sorcerer** close
+            # attack power"*, and a sorcerer's close powers carry the
+            # arcane keyword that every wizard power carries too.
+            said.add(str(getattr(p.cls, "value", p.cls) or "").lower())
             # **Each group is an OR and the groups are an AND**, which is
             # the printed sentence's shape rather than a convenience:
             # `p10265` says "your **divine** ranged or area **at-will or
@@ -4052,12 +4097,20 @@ def measured_from(world: World, actor: int, r: Range,
     whose spirit has been dismissed is simply out of reach rather than
     throwing from inside `legal()`.
     """
+    # A square lent by another creature -- `c.cast_from`. `_lenders`
+    # holds the terms: which range kinds may borrow, whose line they
+    # answer, and the proviso that the lender is on the board and in
+    # sight.
+    lent = _lenders(world, actor, r, p)
     if r.from_ != "companion":
-        # A square lent by another creature -- `c.cast_from`. `_lenders`
-        # holds the terms: which range kinds may borrow, and the proviso
-        # that the lender is on the board and in sight.
-        lent = _lenders(world, actor, r, p)
         return lent[0] if lent else actor
+    # **A companion line, and an OPTIONAL borrow does not take it over.**
+    # `i2927x1` prints *"you **can choose** to use your square"*, so the
+    # spirit stays the default and the caster's square is the second
+    # entry `origins` offers. A plain borrow does replace it, which is
+    # what "rather than" says on every other card using this.
+    if lent and not _borrow_is_optional(world, actor, lent):
+        return lent[0]
     from .components import Companion, Position
 
     for eid in world.having(Companion):
@@ -4069,7 +4122,9 @@ def measured_from(world: World, actor: int, r: Range,
         if (world.need(eid, Companion).owner == actor
                 and world.get(eid, Position)):
             return eid
-    return actor
+    # No spirit on the board. A borrow that named this family is then the
+    # only square there is, and the caster's own is the last resort.
+    return lent[0] if lent else actor
 
 
 def origins(world: World, actor: int, r: Range,
@@ -4114,6 +4169,16 @@ def origins(world: World, actor: int, r: Range,
         if (world.need(eid, Companion).owner == actor
             and world.get(eid, Position))
     ]
+    # **A borrow that named the companion family.** Optional, it is an
+    # extra square beside every spirit -- *"you can choose to use your
+    # square as the origin"*, which is a menu entry and not a move.
+    # Plain, it replaces them, the same way it replaces the caster's own
+    # square above.
+    lent = _lenders(world, actor, r, p)
+    if lent:
+        if _borrow_is_optional(world, actor, lent):
+            return [*mine, *lent] if mine else list(lent)
+        return list(lent)
     return mine or [actor]
 
 

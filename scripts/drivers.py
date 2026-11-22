@@ -87217,6 +87217,190 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_borrowed_origin_reaches_the_lines_its_card_names(out: Result) -> None:
+    """Two cards move a power's point of origin and `dsl._lenders` reached
+    neither of their families.
+
+    * `i2927x1`: *"when you use this weapon as an implement for a power
+      that has a range of 'Melee spirit', you can choose to use your
+      square as the origin square"* -- a `Melee(1, from_="companion")`
+      line, which `measured_from` sent to the shaman's spirit without
+      ever asking whether anything had been lent.
+    * `i3085p2`: *"the next sorcerer close attack power you use through
+      this dagger ... treats a square adjacent to that enemy as its
+      origin square"* -- a close family `_lenders` did not admit, a
+      **square** rather than a creature, and one use rather than the
+      encounter.
+
+    **Every one of those is a word on the relation rather than a new
+    verb**, which is the finding worth keeping: `c.cast_from_square` has
+    been here since `p10203` and the three missing pieces were `kinds`,
+    `only` by class, and `once`.
+
+    **`kinds` is the one word on this relation that NARROWS**, and the
+    first draft got it wrong in the direction that matters. An additive
+    `close` left `ranged` in the allowed set, so the sorcerer's ranged
+    at-will both took the borrowed square and spent the single use the
+    card gives. Two arms below are that measurement.
+
+    **`companion` filters BOTH ways and that is the assertion that earns
+    its place.** A word that only opened the companion family would have
+    left `i2927x1`'s borrow answering every ordinary melee swing its
+    holder makes -- a benefit the card never mentions, on every weapon
+    attack, for the whole encounter.
+
+    **And an optional companion borrow does not take the line over.**
+    *"You can choose"* is a menu entry: `measured_from` still answers the
+    spirit, and `origins` offers both squares.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        Melee,
+        Ranged,
+        measured_from,
+        origins,
+    )
+    from combat_engine.engine.events import PowerUsed
+
+    SPIRIT, DAGGER = "i2927x1", "i3085p2"
+
+    # -- i2927x1: a line measured from a companion -------------------------
+    from combat_engine.engine.components import Companion
+
+    world, me, _ = _board(SPIRIT, 1)
+    here = world.need(me, Position).square
+    # **The board may already deal this character a companion**, and a
+    # second one spawned here made the origin list three long -- read as
+    # a bug in the verb on the first run. Measured, not assumed.
+    mine = [e for e in world.having(Companion)
+            if world.need(e, Companion).owner == me and world.get(e, Position)]
+    if not mine:
+        spirit = world.spawn(Position(square=(here[0] + 3, here[1])))
+        world.add(spirit, Companion(owner=me))
+        mine = [spirit]
+    spirit = mine[0]
+
+    spirit_line = Melee(1, from_="companion")
+    plain_melee = Melee(1)
+    # **This is NOT a before-state and must not be read as one.**
+    # `i2927x1` is `action=NONE`, so `audit.board` has already armed it
+    # -- the borrow is in place on the line below. It reads the same as
+    # an unarmed board for exactly the reason the card gives, which is
+    # the clause asserted next, and planting a non-optional borrow reds
+    # this arm together with that one.
+    out.that(measured_from(world, me, spirit_line) == spirit,
+             "a 'Melee spirit' line is measured from the spirit and not"
+             " from the shaman -- which is what refused these rows long"
+             " before any body ran",
+             f"{measured_from(world, me, spirit_line)} vs spirit {spirit}")
+
+    REGISTRY[SPIRIT].body(Cast(world=world, me=me, ref=SPIRIT))
+    out.that(measured_from(world, me, spirit_line) == spirit,
+             "with the item, the spirit is STILL the default -- the card"
+             " says 'you can choose', so the borrow adds a square rather"
+             " than taking the line over",
+             f"{measured_from(world, me, spirit_line)}")
+    out.that(sorted(origins(world, me, spirit_line))
+             == sorted([*mine, me]),
+             "and the shaman's own square is offered beside EVERY spirit"
+             " it has, which is the whole of what the card gives",
+             f"{sorted(origins(world, me, spirit_line))}, "
+             f"spirits {sorted(mine)}, me {me}")
+
+    # -- the filter, the other way round ------------------------------------
+    out.that(measured_from(world, me, plain_melee) == me
+             and origins(world, me, plain_melee) == [me],
+             "**and an ordinary melee line is untouched.** The borrow"
+             " carries `companion`, so it answers a companion-measured"
+             " line and nothing else -- without this the item moves the"
+             " origin of every weapon swing its holder makes",
+             f"{measured_from(world, me, plain_melee)},"
+             f" {origins(world, me, plain_melee)}, me {me}")
+    out.that(measured_from(world, me, Ranged(10)) == me,
+             "and so is a ranged one, for the same reason",
+             f"{measured_from(world, me, Ranged(10))}, me {me}")
+
+    # -- i3085p2: a square, a close family, and one use ---------------------
+    world2, me2, _ = _board(DAGGER, 1)
+    cast = Cast(world=world2, me=me2, ref=DAGGER)
+    foe = sorted(cast.enemies())[0]
+    there = world2.need(foe, Position).square
+    mine = world2.need(me2, Position).square
+    if abs(there[0] - mine[0]) + abs(there[1] - mine[1]) > 10:
+        movement.place(world2, foe, (mine[0] + 2, mine[1]))
+        there = world2.need(foe, Position).square
+
+    # **A real row on each side of every narrowing**, because `only:`
+    # fails closed on a caller that cannot name the row and an arm
+    # passing none would read "refused" as "narrowed".
+    SORC_BURST, SORC_BLAST = REGISTRY["p16228"], REGISTRY["p16229"]
+    WIZ_BURST, SORC_RANGED = REGISTRY["p16291"], REGISTRY["p16222"]
+    burst = SORC_BURST.reach
+    before = measured_from(world2, me2, burst, SORC_BURST)
+    out.that(before == me2,
+             "premise: a close burst is measured from its caster",
+             f"{before}, me {me2}")
+
+    REGISTRY[DAGGER].body(Cast(world=world2, me=me2, ref=DAGGER,
+                               target=foe))
+    lent = measured_from(world2, me2, burst, SORC_BURST)
+    out.that(lent != me2,
+             "a sorcerer close BURST now originates somewhere else --"
+             " `kinds=`, where `_lenders` admitted neither burst nor"
+             " blast before",
+             f"{lent}, me {me2}")
+    out.that(measured_from(world2, me2, SORC_BLAST.reach, SORC_BLAST)
+             == lent,
+             "and so does a close BLAST -- 'close attack power' is both,"
+             " and `kinds=` names both where the older `blast` word is"
+             " one",
+             f"{measured_from(world2, me2, SORC_BLAST.reach, SORC_BLAST)}")
+    out.that(measured_from(world2, me2, WIZ_BURST.reach, WIZ_BURST) == me2,
+             "**a WIZARD's close burst does not borrow it**, which no"
+             " keyword could have said: a sorcerer's close powers carry"
+             " arcane and so does every wizard power. `only:` reads"
+             " `Power.cls` now",
+             f"{measured_from(world2, me2, WIZ_BURST.reach, WIZ_BURST)},"
+             f" me {me2}")
+    out.that(measured_from(world2, me2, SORC_RANGED.reach, SORC_RANGED)
+             == me2,
+             "and neither does the sorcerer's own RANGED power: the card"
+             " says close, and the family gate is asked separately from"
+             " the class one",
+             f"{measured_from(world2, me2, SORC_RANGED.reach, SORC_RANGED)}")
+    spot = world2.need(lent, Position).square
+    out.that(spot != there
+             and max(abs(spot[0] - there[0]), abs(spot[1] - there[1])) == 1,
+             "and it is a square ADJACENT TO THE ENEMY rather than the"
+             " enemy's own -- which is where the card puts it, and the"
+             " one square a creature cannot stand in",
+             f"{spot} beside {there}")
+    # -- "the next", spent on one use --------------------------------------
+    world2.bus.emit(PowerUsed(actor=me2, power=SORC_RANGED.ref,
+                              targets=(foe,)))
+    out.that(measured_from(world2, me2, burst, SORC_BURST) == lent,
+             "a power that could NOT have used the borrow does not spend"
+             " it -- the watch asks `_lenders` rather than keeping a"
+             " second copy of which rows qualify",
+             f"{measured_from(world2, me2, burst, SORC_BURST)}")
+    world2.bus.emit(PowerUsed(actor=me2, power=SORC_BURST.ref,
+                              targets=(foe,)))
+    out.that(measured_from(world2, me2, burst, SORC_BURST) == me2,
+             "and the NEXT sorcerer close power spends it: 'the next' is"
+             " a window, where `until=` only bounds the other side at the"
+             " end of the encounter",
+             f"{measured_from(world2, me2, burst, SORC_BURST)}, me {me2}")
+
+    for ref in (SPIRIT, DAGGER):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"and {ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_shooter_that_fills_the_off_hand(out: Result) -> None:
     """*"You can treat the hand crossbow as an off-hand weapon"* --
     `f826`, whose other half fires it free on a critical hit.
@@ -120142,6 +120326,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "borrowed_origin_reaches": (
+        a_borrowed_origin_reaches_the_lines_its_card_names,
+        "`i2927x1` and `i3085p2` move a power's origin onto the line "
+        "their cards name and onto no other (#1341)",
     ),
     "two_hands_buys_an_attack": (
         two_hands_under_one_power_buys_an_extra_attack,

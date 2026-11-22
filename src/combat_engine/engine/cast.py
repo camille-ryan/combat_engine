@@ -20122,6 +20122,10 @@ class Cast:
     def cast_from_square(
         self, square: Square, *, on: int | None = None,
         until: When = When.EONT,
+        optional: bool = False, melee: bool = False, blast: bool = False,
+        once: bool = False, kinds: Sequence[str] = (), within: int = 0,
+        only: Sequence[Sequence[str]] = (),
+        rows: Sequence[str] = (),
     ) -> Effect | None:
         """"You can treat that square as the point of origin of your
         attacks."
@@ -20149,29 +20153,44 @@ class Cast:
 
         Despawned when the hold ends, so the board does not silt up with
         old vantage points.
+
+        **Every narrowing word `c.cast_from` takes is taken here too, and
+        by delegating rather than by a second copy.** The marker is this
+        verb's whole job; which range kinds may borrow it, which rows
+        may, how far, and whether it is spent on one use are the same
+        questions about the same relation, and `i3085p2` -- *"the next
+        sorcerer close attack power you use through this dagger ...
+        treats a square adjacent to that enemy as its origin square"* --
+        asks three of them at once about a bare square. A borrow laid
+        here with none of them available moved the origin of every
+        ranged and area attack its holder made for the rest of the
+        encounter, which is the direction of error this tree marks
+        rather than ships.
         """
         from .components import Ident, Position
-        from .types import Relation
 
         borrower = on if on is not None else self.me
         marker = self.world.spawn(
             Position(square=square),
             Ident(ref=f"{self.ref}:origin"),
         )
-        self.world.relations.set(Relation.CASTS_FROM, borrower, marker)
-
-        def undo() -> None:
-            self.world.relations.clear(Relation.CASTS_FROM, borrower, marker)
-            self.world.despawn(marker)
-
-        return self.world.effects.apply(
-            borrower, self.me, until, label=f"{self.ref} origin square",
-            on_end=[undo], by=self.ref,
+        held = self.cast_from(
+            marker, on=borrower, until=until, optional=optional,
+            melee=melee, blast=blast, once=once, kinds=kinds,
+            within=within, only=only, rows=rows,
         )
+        if held is not None:
+            # The marker is this verb's own, so it goes when the borrow
+            # does -- `cast_from`'s `on_end` clears the relation and
+            # knows nothing about a spawned stand-in.
+            held.on_end.append(lambda: self.world.despawn(marker))
+        return held
 
     def cast_from(
         self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER,
         optional: bool = False, melee: bool = False, blast: bool = False,
+        companion: bool = False, once: bool = False,
+        kinds: Sequence[str] = (),
         within: int = 0,
         only: Sequence[Sequence[str]] = (),
         rows: Sequence[str] = (),
@@ -20303,6 +20322,61 @@ class Cast:
         lines. `close_burst` is deliberately **not** included -- no card
         asks for it, and a burst measured from somebody else's square is a
         different sentence from a blast fired from one.
+
+        **`kinds` NARROWS where `melee` and `blast` widen, and that
+        asymmetry is why it is a separate word rather than a third
+        flag.** Both of those add a family to the default `ranged`,
+        `area_burst` and `wall`, which is right for the cards printing
+        *"your ranged and area attacks"*. `i3085p2` prints *"the next
+        sorcerer **close attack power** you use through this dagger ...
+        treats a square adjacent to that enemy as its origin square"* --
+        a family **and no others**, so an additive word leaves every
+        ranged attack the holder makes borrowing a square the card never
+        offers.
+
+        That was measured rather than reasoned: the first draft added
+        `close_burst` and `close_blast` to the default three, and the
+        sorcerer's ranged at-will both took the origin and spent the one
+        use the card gives.
+
+        Given, `kinds` **replaces** the allowed set: `dsl._lenders` reads
+        `kinds:a+b` and uses exactly those. `melee` and `blast` are
+        unchanged and stay exactly as wide as the rows that printed
+        them.
+
+        **`companion` answers a line measured from a COMPANION, and only
+        such a line.** `i2927x1` prints *"when you use this weapon as an
+        implement for a power that has a range of 'Melee spirit', you can
+        choose to use your square as the origin square of the power"* --
+        a `Melee(1, from_="companion")` range, which `dsl.measured_from`
+        sent straight to the shaman's spirit without ever consulting a
+        borrow.
+
+        The word filters **both ways**, which is the half that matters: a
+        borrow carrying it is skipped on an ordinary melee line, so the
+        card does not quietly move the origin of every weapon swing its
+        holder makes. `melee` is still wanted beside it, because the
+        printed range is a melee one and the kind gate is a separate
+        question from whose square the line starts in.
+
+        That card is also why `optional` grew a companion branch: *"you
+        **can** choose"*, so the spirit stays the default and the
+        caster's square is a second entry `dsl.origins` offers. A plain
+        companion borrow replaces the spirit, which is what "rather
+        than" says everywhere else this verb is used.
+
+        **`once` is "the next"**, and it is a window rather than a
+        duration: the borrow ends the first time a row that may actually
+        use it is used. `until=` still bounds it on the other side --
+        *"before the end of the encounter"* on the one card printing it
+        -- so a holder who never uses a qualifying power simply loses it
+        when the encounter does.
+
+        Enforced with a `PowerUsed` watch here rather than inside
+        `dsl._lenders`, because `_lenders` is asked **while** a row is
+        being aimed -- several times per use, on the targeting hot path
+        -- so a reader that spent the borrow would spend it on the first
+        menu the page drew rather than on the attack.
         """
         borrower = on if on is not None else self.me
         self.world.relations.set(
@@ -20312,9 +20386,11 @@ class Cast:
                     word for word, on_ in (
                         ("optional", optional), ("melee", melee),
                         ("blast", blast),
+                        ("companion", companion), ("once", once),
                     )
                     if on_
                 ]
+                + ([f"kinds:{'+'.join(kinds)}"] if kinds else [])
                 + ([f"within:{within}"] if within else [])
                 + ([f"rows:{'+'.join(rows)}"] if rows else [])
                 + [
@@ -20327,10 +20403,31 @@ class Cast:
         def undo() -> None:
             self.world.relations.clear(Relation.CASTS_FROM, borrower, who)
 
-        return self.world.effects.apply(
+        held = self.world.effects.apply(
             borrower, self.me, until, label=f"{self.ref} origin", on_end=[undo],
             by=self.ref,
         )
+        if once and held is not None:
+            # **"The next ... power you use", spent on a row that could
+            # actually have used the borrow.** `_lenders` is the one
+            # place the terms live, so the watch asks it rather than
+            # re-reading `only`/`rows`/the kind here -- a second copy of
+            # that proviso is exactly the drift `_lenders`' own docstring
+            # records paying for once.
+            from .dsl import REGISTRY as _REGISTRY
+            from .dsl import _lenders as _terms
+
+            def spend(ev: object) -> None:
+                if getattr(ev, "actor", None) != borrower:
+                    return
+                row = _REGISTRY.get(getattr(ev, "power", "") or "")
+                if row is None or row.reach is None:
+                    return
+                if who in _terms(self.world, borrower, row.reach, row):
+                    self.world.effects.end(held)
+
+            self.watch(PowerUsed, spend, on=borrower, until=until)
+        return held
 
     # -- a condition held in abeyance ----------------------------------------
 

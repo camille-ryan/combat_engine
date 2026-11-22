@@ -4850,52 +4850,73 @@ def i3085p1(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.origin_of()",),
 )
 def i3085p2(c: Cast) -> None:
-    """Moves the origin square of the **next** close attack power of one
-    printed class, used through this item, to a square beside a chosen
-    enemy.
+    """*"Choose one enemy within 10 squares of you that you can see. The
+    next sorcerer close attack power you use through this dagger before
+    the end of the encounter treats a square adjacent to that enemy as
+    its origin square."*
 
-    **The body was removed, because it paid a benefit the card does not
-    print and none of the benefit the card does.** It called
-    `c.cast_from(foe, until=When.ENCOUNTER)`, and the old note beside it
-    said "the borrow lands in the right place and covers the wrong
-    family". Only the second half was true, and the first half is three
-    things:
+    **Written, and the old note had the three gaps located exactly.** It
+    said a `c.cast_from(foe)` borrow "lands in the right place and covers
+    the wrong family", and the first half was false in three ways at
+    once: the lender was the **creature**, so the square was the enemy's
+    own rather than one beside it; `dsl._lenders` admitted only `ranged`,
+    `area_burst` and `wall`, so a **close** power never consulted the
+    borrow at all; and it stood for the whole encounter over every ranged
+    and area power the holder had, where the card gives **one** use of
+    one class's close powers.
 
-    * `dsl.measured_from` reads a lent square **only** for
-      `ranged`, `area_burst` and `wall`, and says so in its own comment.
-      A close power never consults it, so the printed clause did nothing.
-    * The lender is a **creature**, so the square was the enemy's own and
-      not one beside it -- which is where the card puts it, and the one
-      square a creature cannot stand in.
-    * It stood for the **whole encounter** over **every** ranged and area
-      power the holder has, where the card gives one use of one close
-      power. So a holder's ranged attacks all originated at a distant
-      enemy for the rest of the fight: strictly stronger than print, and
-      the stronger half was the only half that worked.
+    All three are parameters now and none of them is a new verb.
+    `c.cast_from_square` was already here -- `p10203` picks *"a square
+    adjacent to the target"* and files the relation against a marker
+    standing in it -- and it takes the narrowing words `c.cast_from`
+    takes:
 
-    `todo=` rather than `dropped=` for that reason, and **the symbol is
-    deliberately unchanged**: the row has one printed clause and nothing
-    of it can be delivered, so there is no clause left to play. The marker
-    stays `c.origin_of()` because `items.implement_a.i1832x1`'s note holds
-    the argument for it -- that symbol was split off `Hit.origin` to be
-    the *writer* side, shared with `i2927x1`, and the two should go green
-    together. Re-pointing it at `c.cast_from(close=, square=)` would
-    describe this row's two missing arguments exactly and leave `i2927x1`
-    alone on a symbol nothing else asks for.
+    * `kinds=("close_burst", "close_blast")` is *"close attack power"*
+      -- a burst and a blast, **and no other family**. It is the one
+      narrowing word on this relation and had to be: `melee` and `blast`
+      widen a default of `ranged`, `area_burst` and `wall`, so an
+      additive word left the sorcerer's ranged at-will borrowing the
+      square too, and spending the single use the card gives. Measured
+      on the first draft, not reasoned;
+    * `only=(("sorcerer",),)` is the class, matched off `Power.cls`. A
+      keyword could not have said it -- a sorcerer's close powers carry
+      arcane, and so does every wizard power the holder might also know;
+    * `once=True` is *"the next"*: the borrow ends the first time a row
+      that could actually have used it is used, with `until=` bounding
+      the other side at the encounter.
 
-    What such a writer owes, so it is written down once: the lent origin
-    has to reach the **close** family, and it has to be a **square**
-    rather than a creature. `c.cast_from(ref=)` (`f2025`, `i2339p1`) and
-    `c.cast_from(melee=)` (`p11769`) are the per-argument markers on the
-    same verb and are worth reading beside this.
+    **The one printed qualifier not enforced is "through this dagger".**
+    Nothing ties a power's use to the implement it was used through --
+    `c.as_implement` says a weapon *may* be one and no event records
+    which was picked -- so a sorcerer holding this and casting a close
+    power barehanded gets the borrow too. That is wider than print by
+    exactly one case, it is the same gap every "through this weapon"
+    item in the tree has, and it is a hole in the engine rather than in
+    this row. Said here rather than marked, because the row's own clause
+    is delivered.
 
-    No chargen cost to the change: `choices.py` reads `carries_a_marker`
-    and `refused_in_play` off feats and powers, and an item block is scored
-    by neither, so the draw does not move.
+    The square is a **choice** among those adjacent to the enemy, which
+    is what the card says: it names a square beside the target, not the
+    target's own, and the one square a creature cannot stand in is its
+    own.
     """
+    foe = c.target
+    there = c.there
+    if foe is None or there is None:
+        return
+    spots = sorted(
+        sq for sq in spread({there}, 1)
+        if c.world.grid.inside(sq) and sq != there
+    )
+    spot = c.choose(spots, f"{c.ref}: the new point of origin")
+    if spot is None:
+        return
+    c.cast_from_square(
+        spot, kinds=("close_burst", "close_blast"), once=True,
+        only=(("sorcerer",),), until=When.ENCOUNTER,
+    )
 
 
 @power(
