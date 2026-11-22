@@ -628,9 +628,44 @@ def p87(c: Cast) -> None:
     if c.first and (doom or hunts_undead or unseen
                     or arena in ("f977", "f985", "f989")):
         _p87_both_swings(c, arena, doom, hunts_undead, unseen)
+    # **`f1237`'s shift, offered in all three printed windows and taken at
+    # most once** (#550). *"You can shift 1 square before, between, or
+    # after the two attacks."* The latch is what makes it one shift rather
+    # than three: `c.may` is consent and not a resource test, so a bare
+    # offer at each window would hand out three squares of movement.
+    #
+    # `c.feat`, not `c.declare` and not `arena`: `f1237` prints no
+    # bracketed category, so it is never a chain member. `p2104` carries
+    # the identical clause and the same helper.
+    chained = c.feat("f1237") and any(
+        w.ref == "w3623" for w in c.held(on=c.me))
+
+    def chain_shift() -> None:
+        # **The latch lives on the creature, not in this closure.** `p87`
+        # and `p2104` can have their bodies run **once per swing** --
+        # `c.first`/`c.last`/`c.branch` are what tell one call from the
+        # next -- so a `shifted = [False]` local is re-created each time
+        # and the card's one shift became two. Measured: 2 squares on
+        # `p87`, 1 on `p2104`, which is why the driver rule asserts the
+        # distance and not merely that something moved.
+        #
+        # `strikers.extra_damage` records the same correction in its own
+        # words: the latch moved out of a closure so it could be asked
+        # from outside.
+        if not chained or c.latched("f1237 shift", per_turn=True):
+            return
+        if not c.may("shift 1 square (f1237)"):
+            return
+        c.latch("f1237 shift", per_turn=True)
+        with c.credit("f1237"):
+            c.shift(1)
+
     shots = 2 if (c.first and c.last) else 1
     landed: list[int] = []
     for swing in range(shots):
+        # Before the first swing and between the two, which is two of the
+        # card's three windows; the third is after the loop.
+        chain_shift()
         hand = "off" if (swing and c.branch == 0) else "main"
         hit = c.strike()
         if (arena == "f978" and c.first and swing == 0
@@ -672,6 +707,7 @@ def p87(c: Cast) -> None:
         if foe is not None and c.feat("f1306") and _surprise_round(c):
             with c.credit("f1306"):
                 c.flat(c.dex_mod if c.ranged else c.str_mod, on=foe)
+    chain_shift()                       # after
     if (arena == "f974" and len(landed) == 2 and landed[0] == landed[1]
             and _both_hands(c, "spear", "flail")):
         with c.credit("f974"):

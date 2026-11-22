@@ -38,6 +38,7 @@ from combat_engine.engine import (
     Attack,
     Cast,
     CloseBurst,
+    DamageType,
     Event,
     Gear,
     Keyword,
@@ -499,7 +500,37 @@ def p4541(c: Cast) -> None:
     if foe is None or not c.may("swing at the warlord", who=foe):
         return
     c.grants_advantage(on=c.me, to=foe, once=True)
-    if not c.grant_attack(foe, on=c.me):
+    # **`f1237`'s clause, and it has to watch the grant rather than ask
+    # afterwards** (#550). *"If your target hits you with the attack
+    # granted by this power and you are wielding a spiked chain, the
+    # target takes necrotic damage equal to your Strength modifier."*
+    # `c.grant_attack` reports that a swing went off, not that it
+    # connected -- `_granted_hit` above exists for exactly that gap, and
+    # cannot be reused here because it makes the grant itself and this
+    # line already needs the return value to decide whether to go on.
+    #
+    # `c.feat`, not `c.declare`: `f1237` prints no bracketed category
+    # (`feat.category` is `''`), so it is never a member of a chain --
+    # the same shape as `f1304` below. Its old marker named
+    # `c.declare(f1237)`, which could not have come true.
+    chained = c.feat("f1237") and any(
+        w.ref == "w3623" for w in c.held(on=c.me))
+    bitten: list[int] = []
+
+    def _bit(ev: Hit) -> None:
+        if ev.attacker == foe and ev.target == c.me:
+            bitten.append(ev.attacker)
+
+    watch = c.world.bus.on(Hit, _bit, owner=c.me) if chained else None
+    try:
+        took = c.grant_attack(foe, on=c.me)
+    finally:
+        if watch is not None:
+            c.world.bus.off(watch)
+    if chained and bitten:
+        with c.credit("f1237"):
+            c.flat(c.str_mod, dtype=DamageType.NECROTIC, on=foe)
+    if not took:
         return
     if arena == "f983":
         # "It grants combat advantage to one ally within 5 squares until

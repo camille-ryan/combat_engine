@@ -239,10 +239,49 @@ def p2104(c: Cast) -> None:
     """
     arena = c.declare("Arena Fighting", "f982", "f988", "f989")
     offered = _reroll_against_the_unsighted(c) if arena == "f982" else None
+    # **`f1237`'s shift, offered in all three printed windows and taken at
+    # most once** (#550). *"You can shift 1 square before, between, or
+    # after the two attacks."* The latch is what makes it one shift rather
+    # than three: `c.may` is consent and not a resource test, so a bare
+    # offer at each window would hand out three squares of movement.
+    #
+    # `c.feat`, not `c.declare`: `f1237` prints no bracketed category, so
+    # it is never a chain member and must not be read off `arena`. Its own
+    # marker named `c.declare(f1237)`, which could not have come true.
+    #
+    # The two-weapon half of the same card is in `f1237`'s own body --
+    # `c.split_weapon` -- because this row's `requires=two_melee` is read
+    # *before* any body runs, so a split laid here would come too late to
+    # let the row be used at all.
+    chained = c.feat("f1237") and any(
+        w.ref == "w3623" for w in c.held(on=c.me))
+
+    def chain_shift() -> None:
+        # **The latch lives on the creature, not in this closure.** `p87`
+        # and `p2104` can have their bodies run **once per swing** --
+        # `c.first`/`c.last`/`c.branch` are what tell one call from the
+        # next -- so a `shifted = [False]` local is re-created each time
+        # and the card's one shift became two. Measured: 2 squares on
+        # `p87`, 1 on `p2104`, which is why the driver rule asserts the
+        # distance and not merely that something moved.
+        #
+        # `strikers.extra_damage` records the same correction in its own
+        # words: the latch moved out of a closure so it could be asked
+        # from outside.
+        if not chained or c.latched("f1237 shift", per_turn=True):
+            return
+        if not c.may("shift 1 square (f1237)"):
+            return
+        c.latch("f1237 shift", per_turn=True)
+        with c.credit("f1237"):
+            c.shift(1)
+
+    chain_shift()                       # before
     primary = c.target
     first_landed = c.strike()
     if first_landed:
         c.damage(c.w(1))
+    chain_shift()                       # between
     others = sorted(e for e in c.within(1, side="enemy") if e != c.target)
     second = c.choose(others, "who the off-hand catches") if others else None
     second_landed = second is not None and c.attack(c.str_, AC, on=second)
@@ -252,6 +291,7 @@ def p2104(c: Cast) -> None:
         c.instead_of("off_damage",
                      lambda: c.damage(c.w(1, hand="off"), on=second),
                      on=second)
+    chain_shift()                       # after
     # Both swings are over, so the one reroll this use offered is spent or
     # declined either way.
     if offered is not None:

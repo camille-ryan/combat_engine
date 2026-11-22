@@ -25570,6 +25570,18 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         once** -- see `c.deals(dtypes=)`. Everything else here answers with
         a tuple of one, and the two callers pass a longer one straight on
         to `resolve.deal_damage` as its `dtypes`.
+
+        **It deliberately does not carry `c.damage`'s `detail`, and that
+        was tried.** A gate wanting to know *which contribution* of a
+        blow is being rolled looks like it needs the key -- `f1237`'s
+        clause on `p971` recolours a striker's dice and not the weapon
+        damage beside them. It does not: `c.deals(ref=)` already
+        distinguishes them, because `strikers.pay_extra` is handed the
+        **feature's** `Cast`, so the sneak dice are rolled under
+        `cf:rogue-scoundrel-f4` and the weapon damage under `p971`. The
+        threading was written, the row was made to work off `ref=`
+        instead, and it was taken out rather than left as a parameter
+        with no caller. #1451.
         """
         p = self._declared()
         # `None` is a blow with no row behind it -- a hazard, a fall. It

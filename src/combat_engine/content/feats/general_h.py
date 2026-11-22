@@ -1719,7 +1719,7 @@ def f1295b(c: Cast) -> None:
 # -- the rows ---------------------------------------------------------------
 
 
-@_trait("f1237", dropped=("c.declare(f1237)",))
+@_trait("f1237")
 def f1237(c: Cast) -> None:
     """*"`p2104`/`p87`: if you are wielding a spiked chain, you can treat
     it as though you are wielding two melee weapons (the spiked chain is
@@ -1743,18 +1743,37 @@ def f1237(c: Cast) -> None:
     weapon, one per hand. Both need a second entry in `Gear.melee` and
     they do not want the same thing in it.
 
-    **Still dropped, and the marker names what for.** The three remaining
-    clauses are each a rider on one named row -- `p971`'s walk and
-    necrotic recolour, `p2104`/`p87`'s shift between the two attacks,
-    `p4541`'s necrotic rider on the granted basic -- and `#550`'s
-    convention puts a feat's clause in the body of the power it names,
-    read off `c.declare` rather than off `c.feat`. All three of those
-    rows already run a declare chain and this feat is not in any of them;
-    adding it is four power files this wave does not own.
+    **Finished: the four clauses are written, each in the body of the row
+    it names** (#550). What was missing was never a verb, and it was not
+    a declaration either.
 
-    So what is missing is **the declaration**, not a verb: `c.split_
-    weapon` is here and the rest is a chain entry in somebody else's
-    file."""
+    * `p971` -- the chain satisfies the Requirement, a move *after* the
+      attack, and the striker's dice recoloured necrotic
+    * `p2104` and `p87` -- a shift of 1 in any one of three windows
+    * `p4541` -- necrotic equal to Strength when the target hits you with
+      the granted swing
+
+    **The marker named `c.declare(f1237)` and that could never have come
+    true.** `feat.category` for this row is `''` -- no printed brackets --
+    so it is never a member of a declare chain, and the convention for an
+    unbracketed feat is `c.feat` beside whichever chain feat paid.
+    `f1296` and `f1304` are read exactly that way in two of the same four
+    bodies, so the pattern was already there to copy. A ref-shaped marker
+    on a chain this feat cannot join is a hard False for ever, silent in
+    both directions, which is `#581`'s shape.
+
+    *"Four power files this wave does not own"* was the real blocker and
+    it is a fact about a **parallel content agent**, not about the tree:
+    an agent lints only its own file and must not touch another's. The
+    main session owns all four.
+
+    Two readings worth keeping. `p971`'s recolour is gated on the damage
+    context's `"power"`, which carries `strikers._pay`'s `detail=label`,
+    so it retypes the striker's contribution and leaves the weapon damage
+    alone -- `when=` and never `ref=`, which is `f1639`'s recorded trap.
+    And the shift is offered in all three printed windows behind one
+    latch, because `c.may` is consent rather than a resource test and
+    three bare offers would hand out three squares."""
     chain = next((w for w in c.held(on=c.me) if w.ref == "w3623"), None)
     if chain is None:
         return

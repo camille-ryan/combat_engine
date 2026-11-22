@@ -72792,6 +72792,206 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def the_spiked_chain_feats_four_clauses(out: Result) -> None:
+    """`f1237` pays on four named rows, and `#550` puts each clause in the
+    body of the row it names.
+
+    **The marker read `c.declare(f1237)` and that could never have come
+    true.** `feat.category` for this row is `''` -- no printed brackets --
+    so it is never a member of a `c.declare` chain, and the convention for
+    an unbracketed feat is `c.feat` beside whichever chain feat paid.
+    `f1296` and `f1304` are read exactly that way in two of these four
+    bodies, so the pattern was there to copy. A ref-shaped marker on a
+    chain the feat cannot join is a hard False for ever, silent in both
+    directions, which is `#581`'s shape.
+
+    What really held it was its own note's last line -- *"four power files
+    this wave does not own"* -- and that is a fact about a **parallel
+    content agent**, which lints only its own file and must not touch
+    another's. The main session owns all four.
+
+    **Every arm here is run twice, with the feat and without**, because
+    each clause is a gated rider on a row that does plenty by itself: an
+    arm that only checked the paid-out state would pass on a board where
+    the row's own printed effect did the work.
+    """
+    from dataclasses import replace as _replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.db import game
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, get, usable, use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import DamageApplied, Hit
+    from combat_engine.engine.types import DamageType
+
+    CHAIN = "w3623"
+
+    def armed(ref: str, *, feat: bool = True, chain: bool = True) -> tuple:
+        """The row's board, with the chain in hand and the feat taken."""
+        world, me, _ = _board(ref, 1)
+        gear = must(world.get(me, Gear), "the character has gear")
+        if chain:
+            gear.weapons.append(
+                _replace(chargen.PRINTED[CHAIN], ref=CHAIN))
+            gear.wield(next(w for w in gear.weapons if w.ref == CHAIN))
+        if feat:
+            must(world.get(me, Powers), "the character has powers").known.append(
+                "f1237")
+            REGISTRY["f1237"].body(Cast(world=world, me=me, ref="f1237"))
+        return world, me
+
+    # -- the premise the marker got wrong ----------------------------------
+    row = game().execute(
+        "SELECT category FROM feat WHERE ref='f1237'").fetchone()
+    out.that(row is not None and not (row["category"] or ""),
+             "premise: `f1237` prints no bracketed category, so it can"
+             " never be a member of a `c.declare` chain -- which is what"
+             " its marker named for three re-pointings",
+             f"category {row and row['category']!r}")
+
+    # -- the two-weapon half, which is in the feat's own body --------------
+    world, me = armed("p2104")
+    gear = must(world.get(me, Gear), "gear")
+    out.that(gear.two_weapon and gear.off is not None
+             and gear.off.ref.startswith(CHAIN),
+             "the chain counts as both hands -- `c.split_weapon` in the"
+             " feat's own body, which is the one place it can be:"
+             " `p2104`'s `requires=two_melee` is read BEFORE any body"
+             " runs, so a split laid in the power would come too late to"
+             " let the row be used at all",
+             f"two_weapon {gear.two_weapon}, off {gear.off and gear.off.ref}")
+
+    # -- p971: the Requirement opens --------------------------------------
+    opened, who = armed("p971")
+    refused, nobody = armed("p971", feat=False)
+    card = must(get("p971"), "p971 is declared")
+    # **`usable` returns `(bool, why)`**, so the `why` is the evidence and
+    # a bare truthiness test on the tuple would pass either way.
+    yes, _ = usable(opened, who, card)
+    no, why = usable(refused, nobody, card)
+    out.that(yes,
+             "`p971` is usable with a spiked chain when the feat is held --"
+             " the printed Requirement is a crossbow, a light blade or a"
+             " sling, and this is the clause that widens it",
+             "usable")
+    out.that(not no,
+             "and refused with the same chain and no feat, which is what"
+             " makes the widening the feat's rather than the board's",
+             f"refused: {why}")
+
+    # -- p971: the striker's dice turn necrotic ---------------------------
+    def sneak(**kw: bool) -> list[tuple[str, int, str]]:
+        world2, me2 = armed("p971", **kw)
+        # The striker feature has to be armed, and combat advantage is what
+        # makes it pay -- asked of the board at the moment of the hit.
+        REGISTRY["cf:rogue-scoundrel-f4"].body(
+            Cast(world=world2, me=me2, ref="cf:rogue-scoundrel-f4"))
+        cast = Cast(world=world2, me=me2, ref="drv")
+        for foe in cast.enemies():
+            cast.grants_advantage(on=foe, to=me2, until=When.ENCOUNTER)
+        seen: list[tuple[str, int, str]] = []
+        world2.bus.on(DamageApplied, lambda e: seen.append(
+            (str(getattr(e, "detail", "")), e.amount, str(e.dtype))))
+        world2.rng.loaded = 20
+        use(world2, me2, "p971")
+        return seen
+
+    # **The control holds a LIGHT BLADE, not the chain.** Without the feat
+    # the chain fails `p971`'s printed Requirement outright, so a
+    # `feat=False, chain=True` arm cannot use the row at all and its
+    # striker dice never land -- which reads as "the recolour did nothing"
+    # when the truth is that nothing happened. Measured, on the first
+    # draft of this rule.
+    with_feat, without = sneak(), sneak(feat=False, chain=False)
+
+    def striker_types(rows: list[tuple[str, int, str]]) -> set[str]:
+        return {t for d, _, t in rows if d.startswith("cf:rogue")}
+
+    out.that(striker_types(without) and "necrotic" not in striker_types(without),
+             "premise: without the feat the striker's dice land as some"
+             " other type, so the line below is a change and not the"
+             " board's own colour",
+             f"{[(d, t) for d, _, t in without if d.startswith('cf:rogue')]}")
+    out.that("necrotic" in striker_types(with_feat),
+             "with it, the striker's contribution is necrotic -- narrowed"
+             " by `c.deals(ref=)`, which matches the row being ROLLED."
+             " `strikers.pay_extra` is handed the feature's own `Cast`, so"
+             " the sneak dice come out under"
+             " `cf:rogue-scoundrel-f4` and the weapon damage under"
+             " `p971`, and naming the feature separates them. It is also"
+             " what gets past the keyword gate: `c.deals` otherwise"
+             " speaks only for WEAPON rows and the strikers carry only"
+             " MARTIAL",
+             f"{[(d, t) for d, _, t in with_feat if d.startswith('cf:rogue')]}")
+    out.that("necrotic" not in {t for d, _, t in with_feat
+                                if not d.startswith("cf:rogue")},
+             "and the WEAPON damage is untouched -- 'your sneak-attack"
+             " damage', not the whole blow, which is what an"
+             " unconditional `c.deals` would have got wrong",
+             f"{[(d, t) for d, _, t in with_feat if not d.startswith('cf:rogue')]}")
+
+    # -- p2104 and p87: one shift, offered in three windows ----------------
+    from combat_engine.engine.grid import distance as _apart
+
+    for ref in ("p2104", "p87"):
+        gone = []
+        for feat in (True, False):
+            world3, me3 = armed(ref, feat=feat)
+            before = must(world3.get(me3, Position), "a position").square
+            world3.rng.loaded = 20
+            use(world3, me3, ref)
+            after = must(world3.get(me3, Position), "a position").square
+            gone.append(_apart(before, after))
+        out.that(gone[0] and not gone[1],
+                 f"{ref} shifts the character with the feat and not"
+                 " without it",
+                 f"with {gone[0]}, without {gone[1]}")
+        # **Exactly one square, which is what tests the latch.** The clause
+        # is offered in all three printed windows and `c.may` is consent
+        # rather than a resource test, so three bare offers would move the
+        # character three squares and an arm that only asked "did it move"
+        # could not tell that apart.
+        out.that(gone[0] == 1,
+                 "and by EXACTLY one square -- the offer is made in all"
+                 " three printed windows behind a single latch, and this"
+                 " is the arm that can see the latch missing",
+                 f"{gone[0]} square(s)")
+
+    # -- p4541: necrotic when the target hits back -------------------------
+    def bitten(**kw: bool) -> list[int]:
+        world4, me4 = armed("p4541", **kw)
+        got: list[int] = []
+        world4.bus.on(DamageApplied, lambda e: got.append(e.amount)
+                      if e.dtype == DamageType.NECROTIC else None)
+        world4.rng.loaded = 20
+        use(world4, me4, "p4541")
+        return got
+
+    paid, unpaid, no_chain = bitten(), bitten(feat=False), bitten(chain=False)
+    out.that(paid,
+             "`p4541` bites back when the target hits the warlord with the"
+             " swing it was handed -- `c.grant_attack` reports that a"
+             " swing went off and not that it connected, so the clause"
+             " watches `Hit` across the grant",
+             f"{paid}")
+    out.that(not unpaid and not no_chain,
+             "and pays nothing without the feat, or with the feat and no"
+             " chain in hand -- both halves of 'you are wielding a spiked"
+             " chain'",
+             f"no feat {unpaid}, no chain {no_chain}")
+
+    out.that(not REGISTRY["f1237"].unfinished,
+             "and `f1237` carries no marker: all four clauses are written"
+             " in the bodies of the rows they name",
+             f"{REGISTRY['f1237'].unfinished}")
+    # Hit is imported for the reader's benefit -- the clause it documents
+    # watches it inside `p4541`.
+    _ = Hit
+
+
 def an_infusion_fired_from_the_familiars_square(out: Result) -> None:
     """*"You use `cf:artificer-f2`, but your familiar is the origin square
     for the effect"* -- `f1709b`.
@@ -125076,6 +125276,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        the_spiked_chain_feats_four_clauses,
         an_infusion_fired_from_the_familiars_square,
         what_the_floor_is_made_of,
         a_feature_ref_the_hand_holds_under_its_other_name,
@@ -125465,6 +125666,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "spiked_chain": (
+        the_spiked_chain_feats_four_clauses,
+        "f1237's four clauses, each in the body of the row it names"
+        " (#550)",
     ),
     "familiar_origin": (
         an_infusion_fired_from_the_familiars_square,

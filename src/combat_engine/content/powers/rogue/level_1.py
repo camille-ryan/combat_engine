@@ -29,10 +29,12 @@ from combat_engine.engine import (
     Attack,
     Cast,
     Condition,
+    DamageType,
     Gear,
     Keyword,
     Melee,
     MeleeOrRanged,
+    Powers,
     When,
     World,
     power,
@@ -54,9 +56,28 @@ def _light_blade(world: World, eid: int) -> bool:
 
 
 def _rogue_weapon(world: World, eid: int) -> bool:
-    """"A crossbow, a light blade, or a sling" -- the rogue's own three."""
+    """"A crossbow, a light blade, or a sling" -- the rogue's own three.
+
+    **Plus the spiked chain, for a character holding `f1237`.** *"You can
+    use a spiked chain with this power"* is the first of that feat's three
+    clauses on `p971`, and it is a widening of the printed **Requirement**
+    rather than anything a body can do: `requires=` is read before any
+    body runs, so a permission laid inside one would come too late to let
+    the row be used at all. Same ordering argument `f1237`'s own note
+    makes about `c.split_weapon` and `p2104`'s `two_melee`.
+
+    `Powers.known` because a `requires=` gate is handed `(world, eid)` and
+    has no `Cast` to ask -- a feat is an ordinary row in that list, which
+    `c.feats`' own docstring records.
+    """
     gear = world.get(eid, Gear)
-    return bool(gear and gear.main and gear.main.group in ROGUE_GROUPS)
+    if not (gear and gear.main):
+        return False
+    if gear.main.group in ROGUE_GROUPS:
+        return True
+    known = world.get(eid, Powers)
+    return (gear.main.ref == "w3623"
+            and known is not None and "f1237" in known.all)
 
 
 #: The four holds `f1300`'s clause on `p704` names together. Written here
@@ -77,6 +98,13 @@ _HELD_FAST = (
 #: same tuple is in `powers/ranger/level_1.py` beside that feat's clause on
 #: `p87`.
 _NAMED_KINDS = ("demon", "drow", "orc", "spider")
+
+#: The two striker features `f1237`'s clause on `p971` names together --
+#: the scoundrel's and the thief's sneak attack. Passed to
+#: `c.deals(ref=)`, which matches the row being **rolled**: `pay_extra`
+#: is handed the feature's own `Cast`, so these are the refs its dice
+#: come out under.
+_SNEAK_LABELS = ("cf:rogue-scoundrel-f4", "cf:rogue-thief-f2")
 
 
 def _is_named_kind(c: Cast, who: int) -> bool:
@@ -556,6 +584,49 @@ def p971(c: Cast) -> None:
             ):
                 with c.credit("f1296"):
                     c.grants_advantage(on=victim, to=c.me, until=When.SONT)
+    # **`f1237`'s other two clauses** (#550). *"If you are wielding a
+    # spiked chain, you can move 2 squares before or after making the
+    # attack, and you can treat your `cf:rogue-scoundrel-f4`/
+    # `cf:rogue-thief-f2` damage as necrotic damage for this attack."*
+    #
+    # `c.feat`, not the `c.declare` chain above: `f1237` prints no
+    # bracketed category, so the printed rule is "any number apply" and it
+    # stacks with whichever Arena Fighting feat paid -- the same reading
+    # `f1296` above records, off the column rather than assumed. Its old
+    # marker named `c.declare(f1237)`, which could never have come true.
+    chained = c.feat("f1237") and any(
+        w.ref == "w3623" for w in c.held(on=c.me))
+    if chained:
+        # **`ref=` is the narrowing, and it is the striker's row rather
+        # than this one.** `f1639`'s note warns that `c.deals(ref=)`
+        # compares its ref against the row being **rolled** -- which is
+        # exactly why it is right here and was wrong there.
+        # `strikers.pay_extra` is handed the *feature's* `Cast`, so the
+        # sneak dice are rolled with `c.ref == "cf:rogue-scoundrel-f4"`
+        # and the weapon damage with `p971`. Naming the feature therefore
+        # recolours the striker's contribution and leaves the weapon
+        # damage alone, which is what "your sneak-attack damage" says.
+        #
+        # **And a named row is what gets past the keyword gate.**
+        # `c.deals` otherwise speaks only for `Keyword.WEAPON` rows and
+        # the striker features carry only `MARTIAL`, so an unnamed retype
+        # is silently skipped for the one blow this clause is about --
+        # measured, before `ref=`. `_retyped` says it outright: a named
+        # row is its own narrowing and `through` steps aside for it,
+        # which is `f1488`'s recorded case.
+        #
+        # One per feature the character actually holds, because the card
+        # names both and a rogue has one.
+        known = c.world.get(c.me, Powers)
+        held = known.all if known is not None else ()
+        for striker in _SNEAK_LABELS:
+            if striker in held:
+                with c.credit("f1237"):
+                    # `once=True` and `When.EOT` for "for this attack":
+                    # spent by the first matching roll, and gone by the end
+                    # of the turn if no sneak attack happens at all.
+                    c.deals(DamageType.NECROTIC, ref=striker,
+                            once=True, until=When.EOT)
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
         # "If you score a critical hit with this exploit, you can shift 1
@@ -563,6 +634,13 @@ def p971(c: Cast) -> None:
         if arena == "f990" and c.crit and c.may("shift after the attack"):
             with c.credit("f990"):
                 c.shift(1)
+    # The "or after" half of the same sentence. The printed card offers the
+    # move **before** the attack only -- `c.instead_of("move", ...)` above
+    # -- so this is the window the feat adds, and it is offered rather than
+    # taken because the card says "you can".
+    if chained and c.may("move 2 squares after the attack (f1237)"):
+        with c.credit("f1237"):
+            c.move(c.squares_for(c.ref, 2))
 
 
 @power(
