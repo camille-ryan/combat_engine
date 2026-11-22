@@ -2284,6 +2284,55 @@ class EffectApplied(Event):
 
 
 @dataclass
+class ChargeSpent(Event):
+    """One of a per-encounter charge was spent, and by which row.
+
+    `Cast.spend_charge` increments `Powers.charges[key]` and returned a
+    bool and nothing else -- `c.restore_charge` beside it wrote a
+    `Note`, so a charge coming **back** was readable and a charge going
+    **out** was not. `i2324x1` is the card: *"when you spend your fell
+    might on an arcane attack power while using this rod, you gain
+    temporary hit points equal to twice the rod's enhancement bonus."*
+
+    `key` is the charge's own name -- `features.warlock.FELL` and its
+    kind -- and `by` is the ref of the row that spent it, which is what
+    *"on an arcane attack power"* is asked of.
+
+    A plain `Event` and not a `Decision`: no card refuses a spend, and a
+    cancel nothing reads is the shape the `Bus` docstring warns about.
+    """
+
+    actor: int
+    key: str
+    by: str = ""
+
+
+@dataclass
+class Despawned(Event):
+    """A creature left the board without being killed.
+
+    `Dropped` is being killed and four rows answer it; being **dismissed**
+    is `Cast.dismiss_companion`, which despawned the body and announced
+    nothing -- so *"when your spirit companion disappears as a result of
+    one of your shaman attack powers, one ally adjacent to the companion
+    **before it disappears** can shift 1 square"* (`f3238`) had no moment
+    to hang on and nothing to read the adjacency at.
+
+    **Emitted BEFORE the despawn**, which that card's own wording
+    demands: a listener reading `query.adjacent_to` after the entity is
+    gone finds nobody.
+
+    `by` is the ref of the row that dismissed it, so *"as a result of one
+    of your shaman attack powers"* is askable; `owner` is whose companion
+    it was, which the entity no longer answers once it is off the board.
+    """
+
+    actor: int
+    by: str = ""
+    owner: int = -1
+
+
+@dataclass
 class Aided(Event):
     """One creature helped another: aid another, aid attack or aid defence.
 

@@ -14627,10 +14627,31 @@ class Cast:
         return self.within(reach, of=who, side=side) if reach else []
 
     def dismiss_companion(self) -> bool:
-        """"Your spirit companion disappears." An Effect line on ~20 rows."""
+        """"Your spirit companion disappears." An Effect line on ~20 rows.
+
+        **Announced, and BEFORE the despawn.** `f3238` prints *"when
+        your spirit companion disappears as a result of one of your
+        shaman attack powers, one ally adjacent to the companion
+        **before it disappears** can shift 1 square as a free action"* --
+        so a listener has to be able to read the adjacency, and after
+        `world.despawn` there is nobody to be adjacent to.
+
+        `Dropped` is the other way a companion leaves and four rows
+        answer it; this is the dismissal, which announced nothing at all.
+        `Despawned` carries `by` -- this row's ref -- and `owner`, which
+        the entity stops answering once it is off the board.
+        """
+        from .components import Companion
+        from .events import Despawned
+
         standing = self.companion()
         if standing is None:
             return False
+        kin = self.world.get(standing, Companion)
+        self.world.bus.emit(Despawned(
+            actor=standing, by=self.ref,
+            owner=kin.owner if kin is not None else self.me,
+        ))
         self.world.despawn(standing)
         return True
 
@@ -15675,8 +15696,19 @@ class Cast:
         paying for -- and that False **is** the printed "if you spend" on
         every card of this shape. A row ignoring the answer has bought
         something for nothing, which is why this is not a bare increment.
+
+        **Announced, which it was not.** `c.restore_charge` beside this
+        wrote a `Note` when a charge came back and this wrote nothing
+        when one went out, so a card reading *"when you spend your fell
+        might on an arcane attack power"* had no moment at all.
+        `ChargeSpent` carries the key and `self.ref`, which is what
+        *"on an arcane attack power"* is asked of.
+
+        **After the increment**, so a listener asking how many are left
+        sees the spend it is answering.
         """
         from .components import Powers
+        from .events import ChargeSpent
 
         who = self.me if on is None else on
         known = self.world.get(who, Powers)
@@ -15684,6 +15716,7 @@ class Cast:
             return False
         known = known if known is not None else self.world.add(who, Powers())
         known.charges[key] = known.charges.get(key, 0) + 1
+        self.world.bus.emit(ChargeSpent(actor=who, key=key, by=self.ref))
         return True
 
     def restore_charge(self, key: str, *, on: int | None = None) -> bool:

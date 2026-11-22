@@ -63,6 +63,7 @@ from combat_engine.engine import (
     Cast,
     Companion,
     Condition,
+    Despawned,
     Dropped,
     Effect,
     ForcedMove,
@@ -619,14 +620,49 @@ def f3060(c: Cast) -> None:
 
 
 @power("f3238", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Despawned.actor",))
+       reach=PERSONAL, target=SELF)
 def f3238(c: Cast) -> None:
-    """A free shift for an ally when one of your own attack powers sends
+    """*"When your spirit companion disappears as a result of one of your
+    shaman attack powers, one ally adjacent to the companion before it
+    disappears can shift 1 square as a free action."*
+
+    **The moment is announced now.** `c.dismiss_companion` despawned the
+    body and said nothing, which is what the old note said -- and the
+    fix had to go in before the despawn, not after it: *"adjacent to the
+    companion **before** it disappears"*, and after `world.despawn`
+    there is nobody to be adjacent to.
+
+    `Despawned.by` is the row that dismissed it, so *"as a result of one
+    of your shaman attack powers"* is read off the dismissing row's
+    class rather than guessed. `Despawned.owner` is whose companion it
+    was, which the entity stops answering once it is gone.
+
+    The old note, kept because it located the gap exactly:
+
+    A free shift for an ally when one of your own attack powers sends
     the spirit away. Being *killed* is `Dropped` and the four rows above
     answer it -- but being dismissed is `c.dismiss_companion`, which
     despawns the body and announces nothing at all, so there is no
     moment to hang this on and no "before it disappears" to read the
     adjacency at."""
+    def sent_away(ev: Any) -> None:
+        if getattr(ev, "owner", -1) != c.me:
+            return
+        row = get(str(getattr(ev, "by", "") or ""))
+        if row is None or row.cls != "shaman" or row.attack is None:
+            return
+        beside = [
+            mate for mate in c.allies()
+            if c.adjacent_to(mate, getattr(ev, "actor", -1))
+        ]
+        if not beside:
+            return
+        who = c.choose(sorted(beside), f"{c.ref}: who shifts")
+        if who is not None:
+            c.shift(1, who=who)
+
+    c.watch(Despawned, sent_away, until=When.ENCOUNTER)
+
 
 
 @power("f3236", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

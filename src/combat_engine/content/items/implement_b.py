@@ -130,6 +130,7 @@ from combat_engine.engine import (
     Attack,
     AttackDeclared,
     Cast,
+    ChargeSpent,
     CloseBlast,
     CloseBurst,
     Condition,
@@ -2523,10 +2524,27 @@ def i2312p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("events.ChargeSpent",),
 )
 def i2324x1(c: Cast) -> None:
-    """**Re-aimed: the feature is modelled, the moment is not announced.**
+    """*"When you spend your fell might on an arcane attack power while
+    using this rod, you gain temporary hit points equal to twice the
+    rod's enhancement bonus."*
+
+    **The moment is announced now.** `c.spend_charge` incremented
+    `Powers.charges[key]` and said nothing, where `c.restore_charge`
+    beside it wrote a `Note` -- so a charge coming back was readable and
+    a charge going out was not. `ChargeSpent` carries the charge's key
+    and the ref of the row that spent it, which is what *"on an arcane
+    attack power"* is asked of.
+
+    *"While using this rod"* is the qualifier not enforced, and it is
+    the same hole every "through this weapon" item has: nothing ties a
+    power's use to the implement it was used through. Said rather than
+    marked.
+
+    The old note, kept because it corrected two wrong symbols:
+
+    **Re-aimed: the feature is modelled, the moment is not announced.**
 
     `c.fell_might()` was the wrong symbol -- the boon's charge exists, as
     `c.spend_charge` on the key `features.warlock.FELL`, which is what
@@ -2554,6 +2572,24 @@ def i2324x1(c: Cast) -> None:
     This card is also wider than that one -- any arcane attack power the
     boon is spent on, which includes the warlock rows that spend it
     through `powers/warlock/shared.py`."""
+    def spent(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me:
+            return
+        if getattr(ev, "key", "") != FELL:
+            return
+        row = get(str(getattr(ev, "by", "") or ""))
+        if row is None or row.attack is None:
+            return
+        # **`row.keywords`, not this file's `_keywords_of`**, which takes
+        # a damage *context* rather than a ref -- a different question
+        # with a similar name. The printed line is "an arcane attack
+        # power", which is the row's own declared keyword.
+        if Keyword.ARCANE not in (row.keywords or ()):
+            return
+        c.temp_hp(2 * c.enhancement, on=c.me)
+
+    c.watch(ChargeSpent, spent, until=When.ENCOUNTER)
+
 
 
 @power(

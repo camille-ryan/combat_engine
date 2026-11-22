@@ -87244,6 +87244,187 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def two_moments_the_engine_passed_over(out: Result) -> None:
+    """Two cards answer a moment the engine went through in silence.
+
+    * `f3238`: *"when your spirit companion disappears as a result of one
+      of your shaman attack powers, one ally adjacent to the companion
+      **before it disappears** can shift 1 square as a free action."*
+      `c.dismiss_companion` despawned the body and announced nothing.
+    * `i2324x1`: *"when you spend your fell might on an arcane attack
+      power while using this rod, you gain temporary hit points equal to
+      twice the rod's enhancement bonus."* `c.spend_charge` incremented
+      a counter and announced nothing -- where `c.restore_charge` beside
+      it wrote a `Note`, so a charge coming **back** was readable and
+      one going **out** was not.
+
+    **`Despawned` is emitted BEFORE the despawn**, which that card's own
+    wording demands: a listener reading the adjacency after
+    `world.despawn` finds nobody. That is the one ordering fact in this
+    rule and it has its own arm.
+
+    Both carry the ref of the row that caused them -- `by` -- which is
+    what *"as a result of one of your shaman attack powers"* and *"on an
+    arcane attack power"* are asked of.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.features.warlock import FELL
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import ChargeSpent, Despawned
+
+    SHIFT, HEAL = "f3238", "i2324x1"
+    # **Real refs, checked.** `p3298` was invented and is not in the
+    # registry -- `KeyError` -- and `p10187` carries the arcane keyword
+    # with **no attack line**, so the row's own "arcane attack power"
+    # gate refused it and the arm read 0.
+    _SHAMAN, _ARCANE = "p12865", "p10189"
+
+    # -- the dismissal announces, and in time --------------------------------
+    world, me, _ = _board(SHIFT, 1)
+    cast = Cast(world=world, me=me, ref="drv")
+    beast = cast.companion()
+    if beast is None:
+        cast.call_companion(kind="spirit")
+        beast = Cast(world=world, me=me, ref="drv").companion()
+    out.that(beast is not None,
+             "premise: the shaman has a companion on the board",
+             f"{beast}")
+    if beast is None:
+        return
+
+    said: list[tuple] = []
+    world.bus.on(Despawned, lambda e: said.append(
+        (e.actor, e.by, e.owner, world.get(e.actor, Position) is not None)))
+    Cast(world=world, me=me, ref=_SHAMAN).dismiss_companion()
+    out.that(said and said[-1][0] == beast,
+             "dismissing it announces `Despawned` naming the creature --"
+             " `Dropped` is being killed and four rows answer that; this"
+             " is the dismissal, which said nothing",
+             f"{said}")
+    out.that(said and said[-1][1] == _SHAMAN,
+             "with the ref of the row that dismissed it, so 'as a result"
+             " of one of your shaman attack powers' is read rather than"
+             " guessed",
+             f"{said}")
+    out.that(said and said[-1][2] == me,
+             "and whose companion it was, which the entity stops"
+             " answering once it is off the board",
+             f"{said}")
+    out.that(said and said[-1][3],
+             "**and the companion is still ON THE BOARD when the event"
+             " fires.** The card says 'adjacent to the companion before"
+             " it disappears', so a listener reading the adjacency after"
+             " `world.despawn` finds nobody",
+             f"still placed: {said and said[-1][3]}")
+
+    # -- the feat shifts an ally --------------------------------------------
+    w2, me2, _ = _board(SHIFT, 1)
+    cast2 = Cast(world=w2, me=me2, ref="drv")
+    pet = cast2.companion() or (cast2.call_companion(kind="spirit")
+                                and Cast(world=w2, me=me2,
+                                         ref="drv").companion())
+    if pet is None:
+        return
+    mate = sorted(cast2.allies())[0]
+    here = w2.need(pet, Position).square
+    movement.place(w2, mate, (here[0] + 1, here[1]))
+    was = w2.need(mate, Position).square
+    REGISTRY[SHIFT].body(Cast(world=w2, me=me2, ref=SHIFT))
+    Cast(world=w2, me=me2, ref=_SHAMAN).dismiss_companion()
+    out.that(w2.need(mate, Position).square != was,
+             "with the feat armed, an ally adjacent to the companion"
+             " shifts when it is dismissed",
+             f"{was} -> {w2.need(mate, Position).square}")
+
+    # -- and not for somebody else's row ------------------------------------
+    w3, me3, _ = _board(SHIFT, 1)
+    cast3 = Cast(world=w3, me=me3, ref="drv")
+    pet3 = cast3.companion() or (cast3.call_companion(kind="spirit")
+                                 and Cast(world=w3, me=me3,
+                                          ref="drv").companion())
+    if pet3 is None:
+        return
+    mate3 = sorted(cast3.allies())[0]
+    spot = w3.need(pet3, Position).square
+    movement.place(w3, mate3, (spot[0] + 1, spot[1]))
+    stood = w3.need(mate3, Position).square
+    REGISTRY[SHIFT].body(Cast(world=w3, me=me3, ref=SHIFT))
+    # A wizard row, which is not "one of your shaman attack powers".
+    Cast(world=w3, me=me3, ref="p1169").dismiss_companion()
+    out.that(w3.need(mate3, Position).square == stood,
+             "**and nobody shifts when the dismissal came from another"
+             " class's row** -- the printed narrowing, read off"
+             " `Despawned.by`",
+             f"{stood} -> {w3.need(mate3, Position).square}")
+
+    # -- the charge announces ------------------------------------------------
+    w4, me4, _ = _board(HEAL, 1)
+    spends: list[tuple] = []
+    w4.bus.on(ChargeSpent, lambda e: spends.append((e.actor, e.key, e.by)))
+    out.that(Cast(world=w4, me=me4, ref=_ARCANE).spend_charge(FELL),
+             "premise: the charge is there to spend",
+             f"{spends}")
+    out.that(spends and spends[-1] == (me4, FELL, _ARCANE),
+             "spending it announces `ChargeSpent` with the key and the"
+             " ref of the row that spent it -- the increment said"
+             " nothing before, where `c.restore_charge` beside it wrote"
+             " a `Note`",
+             f"{spends}")
+
+    # -- the rod pays on an arcane attack and not otherwise -----------------
+    def temp_after(ref: str) -> int:
+        world5, me5, _ = _board(HEAL, 1)
+        REGISTRY[HEAL].body(Cast(world=world5, me=me5, ref=HEAL))
+        vital = must(world5.get(me5, Health), "the character has hit points")
+        vital.temp = 0
+        Cast(world=world5, me=me5, ref=ref).spend_charge(FELL)
+        return vital.temp
+
+    arcane = temp_after(_ARCANE)
+    out.that(arcane == 2 * Cast(world=w4, me=me4, ref=HEAL).enhancement,
+             "the rod pays twice its enhancement when the charge is"
+             " spent on an ARCANE attack power",
+             f"{arcane}")
+    # **A row with an ATTACK and no arcane keyword**, which is the
+    # discriminating control. A first draft used `p9400`: shadow, and
+    # `attack is None`, so it was refused by the *attack* half of the
+    # gate and the plant removing the keyword half stayed green.
+    plain = temp_after("p10469")
+    out.that(plain == 0,
+             "**and nothing on an attack power that is not arcane**,"
+             " which is the printed narrowing -- read off the spending"
+             " row's own keywords rather than this file's"
+             " `_keywords_of`, which takes a damage context and is a"
+             " different question with a similar name",
+             f"{plain}")
+    no_swing = temp_after("p7639")
+    out.that(no_swing == 0,
+             "and nothing on an arcane row with no attack line either --"
+             " 'an arcane attack power' is two conditions, and each one"
+             " has its own control here",
+             f"{no_swing}")
+
+    # -- and not for another charge -----------------------------------------
+    w6, me6, _ = _board(HEAL, 1)
+    REGISTRY[HEAL].body(Cast(world=w6, me=me6, ref=HEAL))
+    vital6 = must(w6.get(me6, Health), "the character has hit points")
+    vital6.temp = 0
+    Cast(world=w6, me=me6, ref=_ARCANE).spend_charge("some:other:charge")
+    out.that(vital6.temp == 0,
+             "**and not when some OTHER charge is spent**, which the key"
+             " on the event is for: the card names the fell might and"
+             " nothing else",
+             f"{vital6.temp}")
+
+    for ref in (SHIFT, HEAL):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_second_elemental_manifestation(out: Result) -> None:
     """*"Select a new `r33` elemental manifestation"*, and *"you can take
     this feat multiple times"* -- `f604`. And `f1848`, which pays *"the
@@ -123119,6 +123300,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "two_silent_moments": (
+        two_moments_the_engine_passed_over,
+        "`f3238` answers a dismissal and `i2324x1` a spent charge, two "
+        "moments nothing announced (#1341)",
     ),
     "second_manifestation": (
         a_second_elemental_manifestation,
