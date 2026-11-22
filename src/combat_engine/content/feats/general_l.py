@@ -90,6 +90,7 @@ from combat_engine.engine import (
     Relation,
     SavingThrow,
     Size,
+    SkillPowers,
     Swap,
     TotalDefence,
     Trigger,
@@ -908,9 +909,30 @@ def f2580(c: Cast) -> None:
 
 @power("f2618", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.skill_power_choice()",))
+       skill_powers=SkillPowers(extra=1))
 def f2618(c: Cast) -> None:
-    """Grants a utility power drawn from a trained skill. Not a swap and
+    """*"You gain a skill power of your level or lower from a skill in
+    which you are trained."*
+
+    **A header field and an empty body**, which is `swap=`'s shape and
+    for its reason: the whole effect is settled when the character is
+    built, so a body would have nothing to do on a board.
+    `chargen.loadout` is the one reader -- it already widens the utility
+    pool with the skill powers a character's training opens (`#1162`),
+    and `extra=1` buys one more slot out of that pool.
+
+    **Drawn from the pool the character's own training opens**, so a
+    character trained in nothing gains nothing: that is the printed
+    *"from a skill in which you are trained"* and it falls out of the
+    arrangement rather than needing a guard.
+
+    Added to the slot **count** rather than appended to the hand, so the
+    same chooser picks it and a duplicate cannot arise.
+
+    The old note is kept below because its measurement is what made this
+    writable.
+
+    Grants a utility power drawn from a trained skill. Not a swap and
     not a build fork -- it is a power picked out of a pool, and its own ref
     for that power is this feat, which is an ETL self-reference rather
     than a card.

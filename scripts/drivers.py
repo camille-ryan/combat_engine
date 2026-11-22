@@ -87226,6 +87226,126 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_feat_widens_the_skill_power_pool(out: Result) -> None:
+    """Two feats change which **skill powers** a character may choose,
+    and neither is skill training.
+
+    * `f2618`: *"you gain a skill power of your level or lower from a
+      skill in which you are trained"* -- one extra utility slot out of
+      the pool the character's own training opens.
+    * `f3548`: *"you can choose skill powers associated with Arcana,
+      Dungeoneering, History, Nature, and Religion **as if** you were
+      trained in those skills"* -- the eligible set widens and the
+      character is **not** trained.
+
+    **`as_trained` is deliberately not `Skills.trained`**, which is the
+    distinction `f3548`'s note drew and nothing could act on: the card
+    says *as if*, and adding to the training set would hand out the +5 a
+    trained skill carries. `#575`.
+
+    **Header fields with empty bodies**, which is `swap=`'s shape: the
+    whole effect is settled when the hand is dealt, so a body would have
+    nothing to do on a board. Both carry a `KNOWN_SILENT` entry naming
+    this rule.
+
+    **The "it is not training" claim is structural and two behavioural
+    drafts of it were weaker.** Parsing `inspect.getsource(loadout)`
+    raised `IndexError` under the plant that folded `as_trained` into
+    training -- no FAIL line, which reads as passing. Checking that the
+    handed-in `trained` list comes back unmutated passes whatever
+    `loadout` does to its own local, so that plant is unreachable too.
+    What is true is that `chargen.class_training` fills `Skills.trained`
+    and takes no feats, so no feat can reach it; the arm below asserts
+    that and a plant giving it a `feats` parameter reds it.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY
+
+    EXTRA, WIDER = "f2618", "f3548"
+    FIVE = ("arcana", "dungeoneering", "history", "nature", "religion")
+
+    # -- the headers --------------------------------------------------------
+    one = REGISTRY[EXTRA].skill_powers
+    five = REGISTRY[WIDER].skill_powers
+    out.that(one is not None and one.extra == 1 and not one.as_trained,
+             f"{EXTRA} declares one extra slot and widens nothing -- the"
+             " card says 'from a skill in which you are trained', so the"
+             " pool is the character's own",
+             f"{one}")
+    out.that(five is not None and five.extra == 0
+             and tuple(sorted(five.as_trained)) == tuple(sorted(FIVE)),
+             f"{WIDER} declares the five printed skills and buys no slot"
+             " -- it changes what may be chosen, not how much",
+             f"{five}")
+
+    # -- the extra slot ------------------------------------------------------
+    base = chargen.loadout("fighter", level=10, trained=("athletics",))
+    more = chargen.loadout("fighter", level=10, trained=("athletics",),
+                           feats=(EXTRA,))
+    out.that(len(more) - len(base) == 1,
+             f"{EXTRA} deals exactly ONE more power -- the card says 'a"
+             " skill power', not one per level, and this closure is"
+             " called once per utility level. Measured unlatched: 52"
+             " against 49 at level 10",
+             f"{len(base)} -> {len(more)}")
+
+    untrained = chargen.loadout("fighter", level=10, trained=(),
+                                feats=(EXTRA,))
+    out.that(len(untrained) == len(chargen.loadout("fighter", level=10,
+                                                   trained=())),
+             "and a character trained in NOTHING gains nothing from it --"
+             " the printed 'from a skill in which you are trained' falls"
+             " out of the arrangement rather than needing a guard",
+             f"{len(untrained)}")
+
+    # -- the wider pool ------------------------------------------------------
+    plain = chargen.loadout("fighter", level=10, trained=())
+    wide = chargen.loadout("fighter", level=10, trained=(), feats=(WIDER,))
+    came = [p for p in wide if p not in plain]
+    out.that(came,
+             f"{WIDER} changes the hand of an untrained character -- the"
+             " pool it widens really is drawn from",
+             f"in {came}, out {[p for p in plain if p not in wide]}")
+    out.that(all(REGISTRY[p].cls.lower() in FIVE for p in came),
+             "and what comes in is a skill power of one of the five"
+             " printed skills, which is what makes this the card rather"
+             " than a reshuffle",
+             f"{[(p, REGISTRY[p].cls) for p in came]}")
+    out.that(len(wide) == len(plain),
+             "while the hand is the same SIZE -- this card widens what"
+             " may be chosen and buys no slot, which is the other feat's"
+             " half",
+             f"{len(plain)} vs {len(wide)}")
+
+    # -- and it is not training ----------------------------------------------
+    # **Structural, and that is the strongest form available.** Two
+    # weaker drafts are recorded in this rule's docstring: parsing
+    # `inspect.getsource(loadout)` raised under a plant and left no FAIL
+    # line, and checking that the handed-in list is unmutated passes
+    # whatever `loadout` does to its own local.
+    #
+    # What is actually true is that the two live behind different doors:
+    # `chargen.class_training` is what fills `Skills.trained` and it
+    # takes no feats at all, so no feat can reach it. A plant giving it
+    # one reds this.
+    import inspect as _inspect
+    trains = _inspect.signature(chargen.class_training).parameters
+    out.that("feats" not in trains,
+             f"{WIDER} grants no skill BONUS, and it cannot:"
+             " `chargen.class_training` is what fills `Skills.trained`"
+             " and takes no feats, so `as_trained` reaches the power"
+             " pool and nothing else. The +5 a trained skill carries is"
+             " never handed out -- the distinction `#575` recorded and"
+             " nothing could act on",
+             f"{sorted(trains)}")
+
+    for ref in (EXTRA, WIDER):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_provoked_window_knows_what_was_in_hand(out: Result) -> None:
     """Two cards narrow an opportunity attack by the **weapon the
     provoking power went through**.
@@ -122614,6 +122734,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "skill_power_pool_widens": (
+        a_feat_widens_the_skill_power_pool,
+        "`f2618` buys an extra skill-power slot and `f3548` widens "
+        "which may be chosen, without training (#575, #1162)",
     ),
     "provoked_window_knows_the_hand": (
         a_provoked_window_knows_what_was_in_hand,

@@ -3483,6 +3483,7 @@ def second_card(ref: str) -> str:
 def loadout(
     cls: str, level: int = 1, build: Build | None = None, rng: Random | None = None,
     who_chassis: str = "", trained: Iterable[str] = (),
+    feats: Iterable[str] = (),
 ) -> list[str]:
     """What one character knows, drawn from the leg of the fork it took.
 
@@ -3503,6 +3504,24 @@ def loadout(
     **utility** pool with the skill powers those skills open. Empty is the
     honest default for a caller that has not settled training yet: it deals
     a class-only hand, which is what every caller got before `#1162`.
+
+    **`feats` is read for `Power.skill_powers` and nothing else.** Two
+    cards change which skill powers a character may choose and neither is
+    skill training:
+
+    * `f3548` -- *"you can choose skill powers associated with Arcana,
+      Dungeoneering, History, Nature, and Religion **as if** you were
+      trained in those skills"*. Those skills join the set that opens the
+      pool and do **not** join `Skills.trained`, which would hand out the
+      +5 the card never grants. `#575` recorded that distinction and
+      nothing could act on it.
+    * `f2618` -- *"you gain a skill power of your level or lower from a
+      skill in which you are trained"*. One extra utility slot, drawn from
+      the pool the character's own training already opens, so a character
+      trained in nothing gains nothing.
+
+    Empty by default, so every existing caller deals exactly the hand it
+    did. See `dsl.SkillPowers`.
     """
     # Imported for the side effect: this is what registers the rows.
     import combat_engine.content
@@ -3516,7 +3535,23 @@ def loadout(
     # is also what selects them here. A character holds none unless it is
     # trained in the skill, which is the printed gate and the first of the
     # four clauses on PHB3 p164.
-    opened = {s.lower() for s in trained}
+    # **The feats' own contribution, read off the header.** `as_trained`
+    # widens the pool without widening training; `extra` buys slots. See
+    # the docstring and `dsl.SkillPowers`.
+    said = [
+        REGISTRY[f].skill_powers for f in feats
+        if f in REGISTRY and REGISTRY[f].skill_powers is not None
+    ]
+    as_if = {
+        word.lower()
+        for grant in said if grant is not None
+        for word in grant.as_trained
+    }
+    spare_slots = sum(grant.extra for grant in said if grant is not None)
+    #: Spent once across the whole draw, not once per utility level --
+    #: see where it is read.
+    bought_extra: list[bool] = []
+    opened = {s.lower() for s in trained} | as_if
     by_skill = [p for p in REGISTRY.values() if p.cls.lower() in opened] if opened else []
     riders: dict[str, list[str]] = {}
     for p in list(mine):
@@ -3637,6 +3672,17 @@ def loadout(
         # an attack slot. `UTILITY_GAINS` is the only caller passing None.
         if usage is None:
             here = here + [p for p in by_skill if p.level <= at]
+            # **`f2618`'s extra slot, ONCE.** The card says *"you gain a
+            # skill power"* -- one, not one per utility level. This
+            # closure is called per level, so without the latch a
+            # level-10 character took three. Measured: 52 powers against
+            # 49, where the card buys one.
+            #
+            # Added to the count rather than appended to the hand, so
+            # the same chooser picks it and a duplicate cannot arise.
+            if spare_slots and by_skill and not bought_extra:
+                count += spare_slots
+                bought_extra.append(True)
         on_leg = [p for p in here if _fits(p, build)]
         pool = sorted(p.ref for p in (on_leg or here) if p.ref not in out)
         spare = sorted(p.ref for p in here if p.ref not in out and p.ref not in pool)
@@ -3685,7 +3731,8 @@ def loadout(
 
 def dealt_hand(seed: int | str, cls: str, level: int,
                build: Build, who_chassis: str = "", race: str = "",
-               trained: Iterable[str] | None = None) -> list[str]:
+               trained: Iterable[str] | None = None,
+               feats: Iterable[str] = ()) -> list[str]:
     """The hand a seed deals this class, **before** `power_swap` takes its
     card back. One derivation, for everybody who needs to predict it.
 
@@ -3730,7 +3777,7 @@ def dealt_hand(seed: int | str, cls: str, level: int,
         trained = class_training(cls, race, Random(f"{seed}:{cls}:skills"),
                                  chassis=who_chassis)
     return loadout(cls, level, build, Random(f"{seed}:{cls}:{build.name}"),
-                   who_chassis=who_chassis, trained=trained)
+                   who_chassis=who_chassis, trained=trained, feats=feats)
 
 
 def _best_of(
@@ -8129,9 +8176,16 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
     # `Party.of` recorded its training, and re-deriving it here would hand
     # the board a character trained in one set and holding powers opened by
     # another.
+    # **`feats=who.feats`, which two cards need read before the hand.**
+    # `f2618` buys an extra skill-power slot and `f3548` widens which
+    # skill powers may be chosen, and both are settled when the hand is
+    # dealt -- so a hand drawn in ignorance of the sheet's feats cannot
+    # honour either. The feats a *draw* would add are decided below and
+    # are not available here; a pinned character's own list is, which is
+    # every character `Party.of` deals. Same ordering lesson as `#1427`.
     powers = who.powers or dealt_hand(
         world.rng.seed, who.cls, who.level, build, who_chassis=who.chassis,
-        race=who.race, trained=before_feats,
+        race=who.race, trained=before_feats, feats=who.feats,
     )
     # **The options the HAND implies, drawn before the feats and handed to
     # them.** 166 written, unmarked heroic feats print a prerequisite naming

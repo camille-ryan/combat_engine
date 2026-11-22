@@ -143,6 +143,35 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **Two feats whose whole effect is which skill powers a character
+    # may choose**, which is settled when the hand is dealt.
+    #
+    # `f2618` buys one extra utility slot out of the pool the
+    # character's training opens; `f3548` widens that pool to five named
+    # skills *"as if you were trained"*. Both are `Power.skill_powers`
+    # header fields read by `chargen.loadout`, and neither has anything
+    # to do on a board -- the hand is already in hand by the time a
+    # `Cast` opens.
+    #
+    # Measured rather than assumed: `loadout` deals 49 powers to a
+    # level-10 fighter, 50 with `f2618`, and with `f3548` the same 49
+    # with a nature skill power in place of a fighter one. So the effect
+    # is real and is entirely upstream of the board.
+    #
+    # **Not given a body to make them observable.** `f2441`'s precedent
+    # -- `c.grant_row` on what the swap drew -- does not transfer:
+    # `loadout` adds to a slot *count* rather than naming one power as
+    # the feat's, and `f3548` has nothing to hand over at all. Teaching
+    # the dealer to name one would be bookkeeping invented for the
+    # harness.
+    #
+    # `drivers.a_feat_widens_the_skill_power_pool` is the proof and
+    # measures the hand both ways for each.
+    "f2618": "buys an extra skill-power slot at deal time; nothing to do "
+             "on a board -- see `drivers.a_feat_widens_the_skill_power_pool`",
+    "f3548": "widens which skill powers may be chosen at deal time; "
+             "nothing to do on a board -- see "
+             "`drivers.a_feat_widens_the_skill_power_pool`",
     # **A weapon that splits in two, on a board that hands it a
     # greataxe.** `i2011p1` prints *"split the weapon into two identical
     # weapons, one in your primary hand and one in your off-hand"*, so

@@ -62,6 +62,7 @@ from .dsl import (
     Pick,
     Power,
     Ranged,
+    SkillPowers,
     Summon,
     Swap,
     Target,

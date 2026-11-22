@@ -1643,6 +1643,39 @@ class Damage:
 
 
 @dataclass(frozen=True)
+class SkillPowers:
+    """What a feat does to the **skill powers** a character may choose.
+
+    Two cards, and neither is skill training:
+
+    * `f2618`: *"you gain a skill power of your level or lower from a
+      skill in which you are trained"* -- one extra utility slot, drawn
+      from the pool the character's training already opens. `extra=1`.
+    * `f3548`: *"you can choose skill powers associated with Arcana,
+      Dungeoneering, History, Nature, and Religion **as if** you were
+      trained in those skills"* -- the eligible set widens and the
+      character is **not** trained. `as_trained=(...)`.
+
+    **A header field rather than a body**, which is `Swap`'s shape and
+    for its reason: the whole effect is settled when the character is
+    built, so a body would have nothing to do on a board and
+    `chargen.loadout` is the one reader. `f2441` and its three siblings
+    are the precedent -- a `swap=` row whose body is a docstring.
+
+    **`as_trained` is deliberately not `Skills.trained`.** The card says
+    *as if*, and adding to the training set would hand out the +5 a
+    trained skill carries, which this card never grants. `#575` recorded
+    that distinction and nothing could act on it.
+    """
+
+    #: How many extra skill powers this feat buys, beyond the slots the
+    #: class table gives.
+    extra: int = 0
+    #: Skills whose powers become choosable **without** training.
+    as_trained: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Swap:
     """The power a feat takes back in exchange for the card it hands over.
 
@@ -2330,6 +2363,10 @@ class Power:
     #: card is handed over by the body; this is the half that goes back,
     #: and `chargen.power_swap` is what applies it.
     swap: Swap | None = None
+    #: What this row does to the skill powers a character may
+    #: choose, when that is its whole effect. `chargen.loadout` is
+    #: the one reader. See `SkillPowers`.
+    skill_powers: SkillPowers | None = None
     #: The printed "Augment N" clauses this row honours by rewriting its
     #: own header -- a wider burst, a second target, a longer reach. The
     #: spend is settled before targeting and each affordable one is a
@@ -2793,6 +2830,7 @@ def power(
     proficiency: Iterable[str] = (),
     grace_doubled: Iterable[str] = (),
     swap: Swap | None = None,
+    skill_powers: SkillPowers | None = None,
     augments: Iterable[Augment] = (),
 ) -> Callable[[Body], Body]:
     """Declare one power or one monster ability.
@@ -3082,6 +3120,7 @@ def power(
             proficiency=tuple(proficiency),
             grace_doubled=tuple(grace_doubled),
             swap=swap,
+            skill_powers=skill_powers,
             augments=tuple(augments),
         )
         return body

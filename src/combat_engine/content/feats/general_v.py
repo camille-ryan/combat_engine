@@ -88,6 +88,7 @@ from combat_engine.engine import (
     SavingThrow,
     SecondWind,
     Size,
+    SkillPowers,
     SurgeSpent,
     Swap,
     Target,
@@ -1847,9 +1848,30 @@ def f3547(c: Cast) -> None:
 
 @power("f3548", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.skill_power_choice()",))
+       skill_powers=SkillPowers(as_trained=(
+           "arcana", "dungeoneering", "history", "nature", "religion")))
 def f3548(c: Cast) -> None:
-    """Which skill powers a character may choose is settled when it is
+    """*"You can choose skill powers associated with Arcana,
+    Dungeoneering, History, Nature, and Religion as if you were trained
+    in those skills."*
+
+    **A header field and an empty body**, which is `swap=`'s shape: the
+    whole effect is settled when the character is built, so a body would
+    have nothing to do on a board. `chargen.loadout` is the one reader.
+
+    **`as_trained` and NOT `Skills.trained`**, which is the distinction
+    the old note drew and nothing could act on. The card says *as if*;
+    adding to the training set would hand out the +5 a trained skill
+    carries, which this card never grants. `#575`.
+
+    The five skills are the printed list and are not a name: they are
+    skill words the engine already uses as keys -- `skill:arcana` and
+    its four siblings -- which is what makes them writable here.
+
+    The old note is kept below because its measurement is what made this
+    writable.
+
+    Which skill powers a character may choose is settled when it is
     built, and counting as trained for that choice is the whole benefit.
 
     **Re-pointed, because this is not skill training.** It shared a symbol
