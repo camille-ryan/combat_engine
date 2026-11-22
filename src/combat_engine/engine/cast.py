@@ -25606,6 +25606,46 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         return self.bonus("flank_alone", 1, on=who, until=until,
                           stacks=False)
 
+    def flanks_from_reach(
+        self, *, within: int = 1, on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"You are considered to occupy a square you can reach, to flank."
+
+        A reach weapon touches a creature a body cannot stand beside, so
+        the card lends its wielder an unoccupied square *within* that many
+        squares of itself and adjacent to the target, and asks the flank
+        from there.
+
+        **The number is how far the lent square may be, not the reach of
+        the weapon.** `within=1` is a reach weapon's gap square -- the one
+        between you and a creature two away -- which is every printed case
+        this exists for.
+
+        Read by `query.flanked_by`, which means it answers every form of
+        the question at once: the +2, `Target(flanked=True)`, and a row
+        printing *"an enemy you flank"*. A row laying it by hand through
+        `c.gains_advantage` gets only the first, which is what `f2609`
+        used to do and why its clause stayed marked.
+
+        The printed narrowing *"a target that is not adjacent to you"* is
+        enforced by the reader, not here -- see `_flank_stand_ins`. What
+        belongs on `when=` is the condition the **card** names, which is
+        usually the weapon.
+
+        **`when=` is handed an empty context**, because the reader asks
+        about a pair of creatures and has no swing to describe. So a gate
+        that reads a key off the context can only ever be False; what
+        works is a closure over `c`, asking what is true of the holder at
+        the moment the question is put -- `lambda _: c.wielding("polearm")`
+        is the shape, and it is re-asked on every read rather than frozen
+        at arming.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("flank_from_reach", within, on=who, until=until,
+                          when=when, stacks=False)
+
     def occupy_also(
         self, square: Square, *, keep_choice: bool = False,
         on: int | None = None, until: When = When.SONT,

@@ -84530,6 +84530,237 @@ def a_weapon_standing_in_for_an_implement(out: Result) -> None:
              f"{getattr(REGISTRY['f1128'], 'dropped', ())}")
 
 
+def a_flank_from_a_square_nobody_stands_in(out: Result) -> None:
+    """*"You are considered to occupy that square for the purpose of
+    determining if you flank"* -- `f2609`, a reach weapon reaching past the
+    square a body would have to stand in.
+
+    **The row already answered this and answered it in one place only.**
+    Its whole predicate lived in a `c.gains_advantage` gate, which is read
+    by `query.has_combat_advantage` and by nothing else -- so the +2 landed
+    and *"an enemy you flank"* did not. `Target(flanked=True)`, the thirty-
+    odd content rows that call `query.flanked_by`, and `has_combat_
+    advantage`'s own last line all ask the same function, and it was
+    answering about a body two squares away.
+
+    So the lent square is read inside `flanked_by` now, off a
+    `flank_from_reach` modifier, the way `flank_alone` already is. Every
+    form of the question gets one answer and the +2 falls out of it.
+
+    The four assertions that are not the happy path are the ones worth
+    having:
+
+    * **the gate is the weapon**, and it is re-asked on every read rather
+      than frozen when the trait was armed;
+    * **"unoccupied" is printed**, so a creature standing in the gap square
+      takes it away;
+    * **"a target that is not adjacent to you"** is enforced by the reader.
+      Without it the lent square is a *second* vantage: standing beside the
+      target with an ally on a square that does not oppose you, a lent
+      square could be chosen to oppose the ally, which is stronger than the
+      card and would never look like a failure;
+    * and an **unflankable** creature is still unflankable. The old route
+      had to read that key itself, because `has_combat_advantage` consults
+      `gains_ca_when` *above* its `unflankable` branch -- 43 content rows
+      lay the modifier. Coming through `flanked_by` puts the branch above
+      this feat instead, so the two answers separate: flanked, and no
+      combat advantage for it.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen as _chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.ecs import World  # noqa: F401  -- see below
+    from combat_engine.engine.query import (
+        allies,
+        enemies,
+        flanked_by,
+        has_combat_advantage,
+        squares,
+        unseen_by,
+    )
+
+    # `World` above is used only in the nested annotations here, which
+    # `from __future__ import annotations` leaves as strings -- ruff
+    # resolves those against module scope and cannot see a function-local
+    # import in one. The annotation is real; the noqa is about the reader.
+    ROW = "f2609"
+    # A board built for somebody else, deliberately: `audit.board` arms
+    # every `action=NONE` row including the one under test, so this row's
+    # own board has no "before" to compare against.
+    HOST = "p13051"
+
+    def place(world: World, who: int, where: tuple[int, int]) -> None:
+        spot = must(world.get(who, Position), "the creature stands")
+        world.grid.lift(who)
+        spot.square = where
+        world.grid.place(who, spot.squares)
+
+    def stage(
+        *, polearm: bool, feat: bool, block_gap: bool = False,
+        beside: bool = False, unflankable: bool = False,
+    ) -> tuple[World, int, int, int, tuple[int, int]]:
+        """me -- gap -- foe -- ally, in a row, with everyone else moved off."""
+        world, me, _ = _board(HOST, 1)
+        here = must(world.get(me, Position), "the caster stands").square
+        # A foe that can SEE me, because `unseen_by` is the branch above
+        # every flanking route in `has_combat_advantage` -- the first enemy
+        # on this board has me hidden from it, and picking that one would
+        # have made the combat-advantage assertions true for a reason this
+        # rule is not about.
+        seen = [f for f in sorted(enemies(world, me))
+                if not unseen_by(world, f, me)]
+        foe = seen[0]
+        mate = sorted(allies(world, me))[0]
+        gap = (here[0] + 1, here[1])
+        if beside:
+            # Adjacent, and the ally on a square that does not oppose me --
+            # so ordinary flanking says no and only a lent square could
+            # say yes.
+            place(world, foe, gap)
+            place(world, mate, (gap[0], gap[1] + 1))
+        else:
+            place(world, foe, (here[0] + 2, here[1]))
+            place(world, mate, (here[0] + 3, here[1]))
+        # Everybody not in the arrangement goes far away, so no stray
+        # occupant takes the gap square or stands in as a second flanker.
+        parked = here[1] + 12
+        for n, other in enumerate(
+            [*enemies(world, me), *allies(world, me)]
+        ):
+            if other not in (foe, mate):
+                place(world, other, (here[0] + n, parked))
+        if block_gap:
+            spare = [e for e in enemies(world, me) if e != foe]
+            place(world, spare[0], gap)
+        if unflankable:
+            Cast(world=world, me=foe, ref=HOST).bonus(
+                "unflankable", 1, on=foe, until=When.ENCOUNTER)
+        c = Cast(world=world, me=me, ref=ROW)
+        # **The board has already armed this feat.** `audit.board` fires
+        # every `action=NONE` trait the dealt character holds, and the
+        # character it deals on this board holds this one -- so a board
+        # built for another row is not a board without it, and a "before"
+        # has to be made rather than found.
+        if not feat:
+            worn = world.get(me, Mods)
+            if worn is not None:
+                worn.items = [m for m in worn.items
+                              if m.what != "flank_from_reach"]
+        if polearm:
+            gear = must(world.get(me, Gear), "the caster has gear")
+            gear.weapons.clear()
+            from dataclasses import replace as _replace
+            arm = _replace(_chargen.POLEARM)
+            gear.weapons.append(arm)
+            gear.wield(arm)
+        if feat:
+            c.ref = ROW
+            REGISTRY[ROW].body(c)
+        return world, me, foe, mate, gap
+
+    # -- the premises, which decide what every answer below is about -----
+    world, me, foe, mate, gap = stage(polearm=True, feat=False)
+    out.that(len(squares(world, me)) == 1 and len(squares(world, foe)) == 1
+             and len(squares(world, mate)) == 1,
+             "all three creatures stand in one square, so the geometry is"
+             " the printed one and not a Large creature's footprint",
+             f"me {len(squares(world, me))}, foe {len(squares(world, foe))},"
+             f" ally {len(squares(world, mate))}")
+    out.that(world.grid.passable(gap) and world.grid.occupant(gap) is None,
+             "the gap square is empty and passable -- 'choose an unoccupied"
+             " square' has one to choose",
+             f"passable {world.grid.passable(gap)},"
+             f" occupant {world.grid.occupant(gap)}")
+    mods = world.get(me, Mods)
+    out.that(mods is None or not mods.items
+             or mods.total("flank_from_reach", {}) == 0,
+             "and nothing on this board has already lent the caster a"
+             " square -- the control the row's own board could not give,"
+             " since the harness arms every trait on it",
+             f"{None if mods is None else mods.total('flank_from_reach', {})}")
+    out.that(_chargen.POLEARM.group != "polearm"
+             and "polearm" in _chargen.POLEARM.properties,
+             "the weapon the gate is about is a polearm in its PROPERTIES"
+             " and not in its group column, which is why the gate reads"
+             " `c.wielding` -- a `group ==` test would pay out for nobody",
+             f"group {_chargen.POLEARM.group},"
+             f" properties {sorted(_chargen.POLEARM.properties)}")
+
+    # -- the negative control --------------------------------------------
+    out.that(not flanked_by(world, foe, me),
+             "with no feat, a creature two squares away flanks nothing --"
+             " there is no square it stands in that opposes the ally",
+             f"{flanked_by(world, foe, me)}")
+
+    # -- the printed clause ----------------------------------------------
+    w2, me2, foe2, _, _ = stage(polearm=True, feat=True)
+    out.that(flanked_by(w2, foe2, me2),
+             "with the feat and a polearm in hand it DOES flank, from the"
+             " empty square between them -- which is the sentence, asked"
+             " through the function every other reader asks",
+             f"{flanked_by(w2, foe2, me2)}")
+    out.that(has_combat_advantage(w2, me2, foe2),
+             "and the +2 follows from that rather than being the only"
+             " thing delivered: `has_combat_advantage` ends on"
+             " `flanked_by`, so one read serves both",
+             f"{has_combat_advantage(w2, me2, foe2)}")
+
+    # -- the gate ---------------------------------------------------------
+    w3, me3, foe3, _, _ = stage(polearm=False, feat=True)
+    out.that(not flanked_by(w3, foe3, me3),
+             "the same character with the trait armed and NO polearm in"
+             " hand flanks nothing -- the gate is the weapon, re-asked on"
+             " every read rather than frozen when the trait was armed",
+             f"{flanked_by(w3, foe3, me3)}")
+
+    # -- "an unoccupied square" -------------------------------------------
+    w4, me4, foe4, _, gap4 = stage(polearm=True, feat=True, block_gap=True)
+    out.that(w4.grid.occupant(gap4) is not None,
+             "premise: somebody really is standing in the gap square",
+             f"{w4.grid.occupant(gap4)}")
+    out.that(not flanked_by(w4, foe4, me4),
+             "and with the square taken there is nothing to be considered"
+             " to occupy -- 'unoccupied' is printed, and the lent square is"
+             " the only route this arrangement has",
+             f"{flanked_by(w4, foe4, me4)}")
+
+    # -- "a target that is not adjacent to you" ---------------------------
+    w5, me5, foe5, mate5, _ = stage(polearm=True, feat=True, beside=True)
+    out.that(not flanked_by(w5, foe5, me5),
+             "standing BESIDE the target, the lent square is withheld --"
+             " otherwise it would be a second vantage, chosen to oppose an"
+             " ally that the real square does not oppose, which is stronger"
+             " than the card",
+             f"{flanked_by(w5, foe5, me5)}")
+    out.that(not flanked_by(w5, foe5, mate5),
+             "and the ally, who has no feat, does not flank either -- so"
+             " the arrangement really is one ordinary flanking cannot"
+             " answer, rather than one nothing could",
+             f"{flanked_by(w5, foe5, mate5)}")
+
+    # -- unflankable, which the old route got wrong -----------------------
+    w6, me6, foe6, _, _ = stage(polearm=True, feat=True, unflankable=True)
+    out.that(flanked_by(w6, foe6, me6),
+             "an unflankable creature is still flanked as a matter of"
+             " geometry -- the modifier is about what flanking BUYS",
+             f"{flanked_by(w6, foe6, me6)}")
+    out.that(not has_combat_advantage(w6, me6, foe6),
+             "and it hands this feat no combat advantage, because the"
+             " branch sits above `flanked_by` instead of below the gate the"
+             " row used to lay -- the hand-written `unflankable` read in"
+             " the old body is unnecessary now rather than merely moved",
+             f"{has_combat_advantage(w6, me6, foe6)}")
+
+    # -- and the row is the thing that lays it ----------------------------
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: the clause it was dropped for"
+             " is the one asserted above",
+             f"{REGISTRY[ROW].todo}, {REGISTRY[ROW].dropped}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -120277,6 +120508,9 @@ DRIVERS = {
     "a_weapon_standing_in_for_an_implement": (
         a_weapon_standing_in_for_an_implement,
         "a weapon standing in for an implement"),
+    "a_flank_from_a_square_nobody_stands_in": (
+        a_flank_from_a_square_nobody_stands_in,
+        "a flank from a square nobody stands in"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

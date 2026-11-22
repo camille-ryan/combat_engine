@@ -2634,11 +2634,70 @@ def _near(world: World, eid: int, space: frozenset[Square]) -> bool:
     Same body, including the link read -- a link makes two squares adjacent
     for melee, and `flanked_by` is a melee question.
     """
-    mine = squares(world, eid)
+    return _near_space(world, squares(world, eid), space)
+
+
+def _near_space(
+    world: World, mine: frozenset[Square], space: frozenset[Square]
+) -> bool:
+    """`_near`, asked of a square set rather than of a creature.
+
+    Split out because a creature lent a square it is not standing in is
+    next to things its body is not -- see `_flank_stand_ins`. Everything
+    `_near` did is here; that function is now one line over it.
+    """
     if spread(mine, 1) & space:
         return True
     return bool(
         world.grid.links and linked_spread(world.grid.links, mine, 1) & space
+    )
+
+
+def _flank_stand_ins(
+    world: World, attacker: int, mine: frozenset[Square],
+    space: frozenset[Square],
+) -> frozenset[Square]:
+    """Squares a reach weapon lets its wielder count as standing in.
+
+    *"Choose an unoccupied square within reach of you and adjacent to the
+    target; you are considered to occupy that square for the purpose of
+    determining if you flank."* `c.flanks_from_reach` lays the flag and
+    its number is how far the lent square may be from the body.
+
+    **Read here rather than in the row, which is the whole point.** The
+    row that prints this had the question answered its own way, through
+    `c.gains_advantage`, and that route reaches `has_combat_advantage`
+    only -- so the +2 arrived and *"an enemy you flank"* did not.
+    `Target(flanked=True)` and the thirty-odd content rows that call
+    `flanked_by` all come through here, so one read serves every one of
+    them.
+
+    **The printed gate is "a target that is not adjacent to you"** and it
+    is enforced here, not left to the row. Without it the lent square is a
+    second vantage for a creature that already has one: standing beside
+    the target with an ally on a square that does not oppose you, the lent
+    square could be made to oppose the ally, which is stronger than the
+    card and would never show up as a failure.
+
+    The square has to be empty and passable -- "unoccupied" is printed --
+    and choosing one is read as *"is there one"*: it costs no action, no
+    movement and no duration, so a player who has a qualifying square
+    always takes it and the existential answer is what optimal play
+    produces.
+    """
+    mods = world.get(attacker, Mods)
+    if mods is None or not mods.items:
+        return frozenset()
+    gap = mods.total("flank_from_reach", {})
+    if gap <= 0 or _near_space(world, mine, space):
+        return frozenset()
+    grid = world.grid
+    return frozenset(
+        stand
+        for stand in spread(mine, gap) & spread(space, 1)
+        if stand not in mine
+        and grid.passable(stand)
+        and grid.occupant(stand) is None
     )
 
 
@@ -2664,6 +2723,14 @@ def flanked_by(
     the old square and the flank from the new one would be a third
     position nobody is in.
 
+    **A square the attacker is lent rather than standing in** comes from
+    `_flank_stand_ins`, which is the other half of the same idea and is
+    read off the creature instead of passed in. `at=` could be a parameter
+    because one caller asks about one move; the reach-weapon case is a
+    standing fact about the wielder, and its readers -- `Target(flanked=
+    True)`, `has_combat_advantage`, thirty-odd content rows -- do not know
+    the feat exists and should not have to.
+
     Written here rather than in the row for the reason a hand-rolled read
     always wants: `world.grid.flanks(a, b, space)` over two nested square
     loops, plus `can_act` on both flankers and the `#1299` bar, is this
@@ -2680,11 +2747,19 @@ def flanked_by(
         space = footprint(at, there.size) if there is not None else frozenset()
     else:
         space = squares(world, target)
-    if not _near(world, attacker, space) or not can_act(world, attacker):
+    if not can_act(world, attacker):
         return False
     # The near side of the same clause. `flankers` drops a barred ally out
     # of the partner list; this is the barred creature's own swing. #1299.
     if _barred_from_flanking(world, attacker):
+        return False
+    # A reach weapon's lent square, which the attacker counts as occupying
+    # without standing in it -- so it widens the adjacency test below and
+    # the pairs the flank loop walks, and nothing else. Empty for every
+    # creature that has not been given one, which is all but one feat.
+    mine = squares(world, attacker)
+    mine |= _flank_stand_ins(world, attacker, mine, space)
+    if not _near_space(world, mine, space):
         return False
     # **"You can flank from either square and can flank with yourself."**
     # `p13051` prints it, and it is the one case where the two flankers are
@@ -2695,13 +2770,20 @@ def flanked_by(
     # **Gated on a modifier and not on spanning**, which is the whole care
     # needed here: a Large creature covers four squares and does *not*
     # flank by itself. Only a row that prints the permission lays the flag.
-    if len(squares(world, attacker)) > 1:
+    #
+    # **A lent square is deliberately not one of the two**, which is why
+    # this reads the body and `mine` above does not: a lent square plus a
+    # real one would let a Medium creature flank itself, and the card that
+    # prints self-flanking is about a creature standing in two squares at
+    # once. Combining them is an interaction neither card prints.
+    body = squares(world, attacker)
+    if len(body) > 1:
         mods = world.get(attacker, Mods)
         if mods is not None and mods.items \
                 and mods.total("flank_alone", {}) > 0:
-            mine = sorted(squares(world, attacker))
-            for n, a in enumerate(mine):
-                for b in mine[n + 1:]:
+            pair = sorted(body)
+            for n, a in enumerate(pair):
+                for b in pair[n + 1:]:
                     if world.grid.flanks(a, b, space):
                         return True
     for mate in flankers(world, attacker):
@@ -2716,7 +2798,7 @@ def flanked_by(
             world, mate, space
         ):
             continue
-        for a in squares(world, attacker):
+        for a in mine:
             for b in squares(world, mate):
                 if world.grid.flanks(a, b, space):
                     return True

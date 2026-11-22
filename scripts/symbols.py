@@ -533,6 +533,12 @@ CATEGORIES: dict[str, dict] = {
                 # takes a creature out of it, this one lets a
                 # creature in two squares be both flankers.
                 "flanks_alone",
+                # And the third: this one lends a square the creature is
+                # not standing in, so one body flanks from a reach a
+                # neighbour of the target would need. All three are read
+                # inside `query.flanked_by`, which is why they sit
+                # together rather than with movement.
+                "flanks_from_reach",
                 # And beside both for the same reason: `cannot_flank` is
                 # about joining a flank, this is about laying a mark, and
                 # a creature forbidden one is not forbidden the other.

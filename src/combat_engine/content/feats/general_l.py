@@ -103,9 +103,8 @@ from combat_engine.engine import (
     hits_me,
     power,
     query,
-    spread,
 )
-from combat_engine.engine.components import Health, Mods
+from combat_engine.engine.components import Health
 from combat_engine.engine.events import (
     PowerResolved,
     PowerUsed,
@@ -113,14 +112,10 @@ from combat_engine.engine.events import (
     SecondWind,
 )
 from combat_engine.engine.query import (
-    adjacent,
     alive,
     allies,
-    can_act,
     distance_between,
-    flankers,
     holding,
-    squares,
     team,
 )
 
@@ -3379,8 +3374,7 @@ def f2607(c: Cast) -> None:
 
 
 @power("f2609", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("query.flanked_by(from_square=)",))
+       reach=PERSONAL, target=SELF)
 def f2609(c: Cast) -> None:
     """Flanking a target a reach weapon can touch and a body cannot.
 
@@ -3389,119 +3383,70 @@ def f2609(c: Cast) -> None:
     somewhere it is not standing, and `query.flanked_by` reads positions
     only" -- true of that function and not of the board: `Grid.flanks(a, b,
     space)` takes **two squares** and has never read a creature at all.
-    `flanked_by` is the thing that fills them in from where people are
-    standing, so loaning one square needs no new engine verb, only a caller
-    that passes a different one. `powers/cleric/level_7_b._flankers_from`
-    is the existing proof -- the same question asked of a square a creature
-    has not reached yet.
 
-    So the benefit is laid as a gated `gains_ca_when`, which is the one
-    route into `query.has_combat_advantage` that is asked **per swing**:
-    the square has to be chosen against the board as it is when the blow
-    lands, and a modifier laid at arming time could not know where anybody
-    would be standing.
+    **This row was then written the wrong way round, and the second marker
+    is what found it.** The whole predicate lived here, in a
+    `c.gains_advantage` gate -- which is a correct read of the board and
+    reaches exactly one caller, `query.has_combat_advantage`. The card does
+    not say "you gain combat advantage"; it says you are considered to
+    occupy the square *"for the purpose of determining if you flank"*, and
+    flanking is asked by `Target(flanked=True)`, by rows printing *"an
+    enemy you flank"*, and by about thirty content rows that call
+    `query.flanked_by` directly. All of those were still answering about a
+    body two squares away.
 
-    **Four narrowings, and each one is a thing that would otherwise be
-    wrong.**
+    So the read moved into `query.flanked_by` -- `_flank_stand_ins`, read
+    off a `flank_from_reach` modifier the way `flank_alone` already is --
+    and the row is the one line that lays it. Every form of the question
+    now gets the same answer, and the +2 falls out rather than being the
+    only thing delivered.
 
-    *The swing is a melee attack.* `get(ctx["power"]).reach.kind` is the
-    header read, the way `themes/batch_g.p16058` asks the same question.
-    `power` is `""` for the sixty-odd callers asking about a pair of
-    creatures rather than a blow, and `get("")` is `None`, so those are
-    correctly False rather than accidentally true.
+    **Two of the four narrowings moved with it and two stayed.**
 
-    *The weapon is a polearm, asked as `c.wielding` and not as a group.*
-    This is the half that would have been silently dead. Polearm
-    membership is **not** one column: a weapon printed in two groups keeps
-    the first in `Weapon.group` and the second among `Weapon.properties`,
-    and of the 8 weapons that are polearms only 4 answer
-    `group == "polearm"`. `chargen.POLEARM` is one of the other four -- its
-    group is a different one entirely -- so the weapon a character is
-    actually dealt would have failed a `group ==` test and this feat would
-    have paid out for nobody. `c.wielding` tests group, category and
-    properties across every weapon held. #724 is where that split was
-    found, in the other direction.
+    *The weapon is a polearm, asked as `c.wielding` and not as a group,* and
+    that is `when=`. Polearm membership is **not** one column: a weapon
+    printed in two groups keeps the first in `Weapon.group` and the second
+    among `Weapon.properties`, and of the 8 weapons that are polearms only
+    4 answer `group == "polearm"`. `chargen.POLEARM` is one of the other
+    four -- its group is a different one entirely -- so the weapon a
+    character is actually dealt would have failed a `group ==` test and this
+    feat would have paid out for nobody. `c.wielding` tests group, category
+    and properties across every weapon held. #724.
 
-    *Which weapon swung is not read, and here it does not have to be.*
-    `f2610` below is right that `c.wielding` asks the hand rather than the
-    attack, and the usual answer is `c.weapon_of(ev)` -- but a modifier gate
-    gets a context, not an event, so that is not available. It costs
-    nothing here: all **8** polearms are two-handed, so a character holding
-    one holds nothing else to have swung with, and the board narrows it
-    again anyway -- a *melee* attack landing on a creature two squares away
-    was made with a reach weapon or it was not legal. Which is also why the
-    gate does not test reach: 7 of the 8 have it and the eighth could never
-    make the attack this card is about, so the legality check already says
-    so and a second test here would only duplicate it.
+    The gate is a closure rather than a context read, because the reader
+    hands `when=` an empty context: it is asking about a pair of creatures
+    and has no swing to describe. That re-asks the hand on every read,
+    which is what a standing permission should do.
 
-    *An unflankable target is still unflankable.* `has_combat_advantage`
-    reads `gains_ca_when` **before** the `unflankable` branch, so a creature
-    whose card says enemies cannot gain combat advantage by flanking it
-    would have handed this feat the +2 anyway -- 43 content rows lay that
-    modifier, so the hole is reachable rather than theoretical. The gate
-    reads the key itself, with the same context the engine would have used.
+    *"A target that is not adjacent to you", the unoccupied square and the
+    empty-passable test* all moved into `_flank_stand_ins`, where they
+    belong -- they are what the lent square **is**, not conditions this
+    feat adds, and leaving them here would have meant every other reader
+    getting the lent square without them.
 
-    **"Choose an unoccupied square" is read as "is there one", and that is
-    not a strengthening.** Choosing costs nothing and forecloses nothing --
-    no movement, no action, no duration -- so a player who has a qualifying
-    square always picks it, and the existential answer is what optimal play
-    produces. There is nothing to prompt for from inside a modifier gate in
-    any case.
+    *The melee-attack test is gone and nothing is lost.* It existed because
+    a modifier gate on combat advantage fires per swing and a ranged attack
+    would have taken the +2. Flanking is not a property of a swing, so
+    there is no swing to test; `has_combat_advantage` reaching
+    `flanked_by` at all already means the question was asked about this
+    pair, and the printed rule that flanking is a melee arrangement is the
+    adjacency the reader enforces.
 
-    **Still `dropped=`, for the clause the modifier route cannot reach.**
-    Combat advantage is what flanking is *for* and it is delivered, but the
-    card says you are considered to occupy the square "for the purpose of
-    determining if you flank", and two other readers ask that question
-    directly: `Target(flanked=True)`, which decides whether a row may even
-    aim at the creature, and any row printing "an enemy you flank". Both go
-    through `query.flanked_by`, which has no way to be told to substitute a
-    square -- hence the re-pointed symbol, which names the parameter rather
-    than a verb that does not need inventing.
+    *The `unflankable` hand-patch is gone and that is a fix, not a loss.*
+    The old gate had to read the key itself, because `has_combat_advantage`
+    consults `gains_ca_when` **before** its `unflankable` branch -- so a
+    creature whose card says enemies cannot gain combat advantage by
+    flanking it would have been handed the +2 anyway, and 43 content rows
+    lay that modifier. Coming through `flanked_by` instead, the branch is
+    above this row rather than below it and the duplicate read is
+    unnecessary.
+
+    #724.
     """
-    me = c.me
-
-    def flanking_through_the_gap(ctx: dict[str, Any]) -> bool:
-        row = get(ctx.get("power", ""))
-        if row is None or row.reach.kind != "melee":
-            return False
-        if not c.wielding("polearm"):
-            return False
-        victim = ctx.get("target")
-        world = c.world
-        if victim is None or not alive(world, victim):
-            return False
-        # "A target that is not adjacent to you" is the printed gate, and it
-        # is also what makes the feat mean anything: standing next to the
-        # creature, ordinary flanking already answers.
-        if adjacent(world, me, victim):
-            return False
-        denied = world.get(victim, Mods)
-        if denied is not None and denied.items and denied.total("unflankable", ctx) > 0:
-            return False
-        space = squares(world, victim)
-        # The partner's side of the line, gathered once. `flankers` rather
-        # than `c.allies` so a companion told it may flank counts and an
-        # ordinary one does not, and `can_act` because a stunned ally in the
-        # right square is furniture -- both are `flanked_by`'s own rules and
-        # neither is optional.
-        mates = [
-            square
-            for mate in flankers(world, me)
-            if mate != victim
-            and can_act(world, mate)
-            and adjacent(world, mate, victim)
-            for square in squares(world, mate)
-        ]
-        if not mates:
-            return False
-        return any(
-            world.grid.passable(stand)
-            and world.grid.occupant(stand) is None
-            and any(world.grid.flanks(stand, b, space) for b in mates)
-            for stand in spread(squares(world, me), 1) & spread(space, 1)
-        )
-
-    c.gains_advantage(flanking_through_the_gap, until=When.ENCOUNTER, on=me)
+    c.flanks_from_reach(
+        within=1, on=c.me, until=When.ENCOUNTER,
+        when=lambda _ctx: c.wielding("polearm"),
+    )
 
 
 @power("f2610", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
