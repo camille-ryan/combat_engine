@@ -103,6 +103,7 @@ from combat_engine.engine import (
     Usage,
     When,
     Window,
+    World,
     about_me,
     both,
     by_charge,
@@ -1068,10 +1069,61 @@ def f2117b(c: Cast) -> None:
 _granted("f2151", "f2151b", swap=Swap(6, utility=True))
 
 
+def _a_one_on_my_area_damage(world: World, me: int, ev: Any) -> bool:
+    """A 1 showing on a damage die this creature rolled for an area or
+    close attack power.
+
+    `ev.roll` is the live `Roll` `#703` put on `DamageRolled` so a row
+    answering a damage roll could see the faces -- `ev.amount` is the
+    finished total and says nothing about any one die.
+
+    The shape is read off the rolling row's `Range.kind`, which is
+    `#644`'s vocabulary, rather than off a keyword: *"an area or close
+    attack power"* is a shape and not a word.
+    """
+    if getattr(ev, "source", None) != me:
+        return False
+    rolled = getattr(ev, "roll", None)
+    if rolled is None or 1 not in getattr(rolled, "dice", ()):
+        return False
+    row = get(str(getattr(ev, "detail", "") or ""))
+    if row is None or row.attack is None:
+        return False
+    return row.reach_of(0).kind in AREA_OR_CLOSE
+
+
 @power("f2151b", level=1, cls="", usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("events.DieRolled",))
+       reach=PERSONAL, target=SELF,
+       trigger="you roll a 1 on any damage die when you hit with an area "
+               "or close attack power",
+       on=Trigger(DamageRolled, _a_one_on_my_area_damage,
+                  "you roll a 1 on a damage die of an area or close "
+                  "attack power"))
 def f2151b(c: Cast) -> None:
-    """**The marker is right and this note was half wrong, which is worth
+    """*"Trigger: you roll a 1 on any damage die when you hit with an
+    area or close attack power. Effect: you reroll any result of 1 or 2
+    on a damage die until the die roll is something other than 1 or 2."*
+
+    **The marker was stale and the note's own second half said why
+    without noticing.** It read *"`DamageRolled` carries a total with no
+    dice behind it"* -- true before `#703`, which carries the live `Roll`
+    on the event expressly so a row answering a damage roll can see the
+    faces. `ev.roll.dice` is the trigger, measured: a `4d6` announced
+    `[6, 4, 2, 1]`.
+
+    The effect half was already named: `c.reroll_ones(below=3)` is
+    *"1 or 2 ... until the die roll is something other"* exactly -- the
+    threshold is exclusive, the loop rather than `pick=`, and `f2099` in
+    this file cites the same verb for the same reading.
+
+    **The trigger asks about the power's SHAPE, not the row's keywords.**
+    *"An area or close attack power"* is `Range.kind`, which is how
+    `#644` settled that vocabulary, so the gate reads the rolling row's
+    reach rather than hunting for a word.
+
+    The old note, kept for its correction of the half before this one:
+
+    **The marker is right and this note was half wrong, which is worth
     correcting rather than leaving for the next reader to re-derive.**
 
     It said both halves want the same missing thing. The *effect* half does
@@ -1093,6 +1145,8 @@ def f2151b(c: Cast) -> None:
     the page gives, which is the direction to refuse. `Hit` with an
     area-or-close reach is not the printed trigger either: it would spend
     the daily on any such hit rather than on a 1 coming up."""
+    c.reroll_ones(below=3, on=c.me, until=When.EOT)
+
 
 
 _granted("f2152", "f2152b", swap=Swap(6, utility=True))

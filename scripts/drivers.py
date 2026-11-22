@@ -87244,6 +87244,110 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_one_on_an_area_damage_die(out: Result) -> None:
+    """*"Trigger: you roll a 1 on any damage die when you hit with an area
+    or close attack power. Effect: you reroll any result of 1 or 2 on a
+    damage die until the die roll is something other than 1 or 2."* --
+    `f2151b`.
+
+    **The marker was stale and the row's own note said why without
+    noticing.** It read *"`DamageRolled` carries a total with no dice
+    behind it"* -- true before `#703`, which carries the live `Roll` on
+    the event expressly so a row answering a damage roll can see the
+    faces.
+
+    The effect half was already named: `c.reroll_ones(below=3)` is *"1
+    or 2 ... until the die roll is something other"* exactly -- the
+    threshold is exclusive and the loop rather than `pick=`.
+
+    **The trigger asks about the power's SHAPE**, which is `Range.kind`
+    and `#644`'s vocabulary, rather than hunting for a keyword: *"an
+    area or close attack power"* is a shape and not a word.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.feats.general_n import (
+        _a_one_on_my_area_damage,
+    )
+    from combat_engine.engine import AREA_OR_CLOSE
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.rng import Roll
+    from combat_engine.engine.types import DamageType as _DT
+
+    ROW = "f2151b"
+    _UNTYPED = _DT.UNTYPED
+
+    # -- the dice really are on the event -----------------------------------
+    world, me, _ = _board(ROW, 1)
+    foe = sorted(Cast(world=world, me=me, ref="drv").enemies())[0]
+    faces: list[list[int]] = []
+    world.bus.on(DamageRolled, lambda e: faces.append(
+        list(getattr(getattr(e, "roll", None), "dice", ()) or ())))
+    Cast(world=world, me=me, ref="mba").damage("4d6", on=foe)
+    out.that(faces and len(faces[-1]) == 4,
+             "`DamageRolled` carries the live `Roll` and its four faces --"
+             " which is what the marker said it did not, and what `#703`"
+             " put there",
+             f"{faces}")
+
+    # -- the trigger reads one face -----------------------------------------
+    area = next(r for r in REGISTRY.values()
+                if r.attack is not None and r.reach is not None
+                and r.reach.kind in AREA_OR_CLOSE and (r.level or 1) <= 10)
+    melee = next(r for r in REGISTRY.values()
+                 if r.attack is not None and r.reach is not None
+                 and r.reach.kind == "melee" and (r.level or 1) <= 10)
+
+    def rolled(ref: str, dice: list[int], who: int) -> object:
+        ev = DamageRolled(source=who, target=foe, amount=sum(dice),
+                          dtype=_UNTYPED, detail=ref)
+        ev.roll = Roll(expr="4d6", dice=list(dice), bonus=0)
+        return ev
+
+    out.that(_a_one_on_my_area_damage(
+                 world, me, rolled(area.ref, [1, 4, 5, 6], me)),
+             "a 1 among the faces of an AREA power's damage fires it",
+             "fires")
+    out.that(not _a_one_on_my_area_damage(
+                 world, me, rolled(area.ref, [2, 4, 5, 6], me)),
+             "and no 1 does not -- the card says a 1, where its *effect*"
+             " rerolls 1s and 2s alike. Two different thresholds in one"
+             " sentence, which is the thing to get wrong here",
+             "withheld")
+    out.that(not _a_one_on_my_area_damage(
+                 world, me, rolled(melee.ref, [1, 4, 5, 6], me)),
+             "**and a MELEE power's 1 does not**, which is the printed"
+             " narrowing read off `Range.kind` rather than a keyword",
+             "withheld")
+    mate = sorted(Cast(world=world, me=me, ref="drv").allies())[0]
+    out.that(not _a_one_on_my_area_damage(
+                 world, me, rolled(area.ref, [1, 4, 5, 6], mate)),
+             "and somebody ELSE's 1 does not -- `ev.source`, which is the"
+             " commonest single mistake in this tree",
+             "withheld")
+
+    # -- the effect rerolls 1s AND 2s ----------------------------------------
+    w2, me2, _ = _board(ROW, 1)
+    REGISTRY[ROW].body(Cast(world=w2, me=me2, ref=ROW))
+    low: list[int] = []
+    for seed in range(12):
+        from combat_engine.engine.rng import Rng
+        w2.rng = Rng(seed=seed)
+        _, got = Cast(world=w2, me=me2, ref="drv")._roll_damage_dice("8d6")
+        REGISTRY[ROW].body(Cast(world=w2, me=me2, ref=ROW))
+        low += [f for f in (got.dice if got else ()) if f < 3]
+    out.that(not low,
+             "with the row armed, no damage die comes out 1 or 2 across"
+             " twelve seeds of 8d6 -- `c.reroll_ones(below=3)`, the loop"
+             " rather than one retry",
+             f"{low[:6]}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"{ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def two_moments_the_engine_passed_over(out: Result) -> None:
     """Two cards answer a moment the engine went through in silence.
 
@@ -123300,6 +123404,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "one_on_an_area_die": (
+        a_one_on_an_area_damage_die,
+        "`f2151b` answers a 1 on an area power's damage die and rerolls "
+        "1s and 2s (#703)",
     ),
     "two_silent_moments": (
         two_moments_the_engine_passed_over,
