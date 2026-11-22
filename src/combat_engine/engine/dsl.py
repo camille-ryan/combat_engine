@@ -4870,6 +4870,19 @@ def usable(
             if (p.usage in powers.forbidden_attack_usages
                     and p.attack is not None):
                 return False, f"cannot use {p.usage.value} attack powers"
+        # **An action type, which is the same shape one category over.**
+        # *"The only actions that the horse can take while riderless are
+        # move actions and free actions"* -- `i1662p1`. The printed
+        # sentence is an allow-list, so the row inverts it and this reads
+        # what is left. `conditions.Rules` covers the condition-derived
+        # cases -- `no_standard`, `one_action`, `cannot_act` -- and has no
+        # entry for a minor, so nothing could lay this and nothing read
+        # it.
+        #
+        # Here rather than in `actions.legal`: that path offers what this
+        # allows, so one test covers the menu and every other caller.
+        if powers.forbidden_actions and p.action in powers.forbidden_actions:
+            return False, f"cannot take {p.action.value} actions"
         # Checked for every usage, because **every printed "1/round" rider
         # is on an at-will** -- and this lived inside the not-at-will branch,
         # so the guard was unreachable and the header field was decoration.

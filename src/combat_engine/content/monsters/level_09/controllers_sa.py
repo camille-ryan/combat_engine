@@ -3353,11 +3353,14 @@ def m5948a4(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.forbid(action=)",),
 )
 def m5948a5(c: Cast) -> None:
-    """Insubstantial and phasing are written; "cannot take standard actions"
-    has no action-category ban.
+    """All three clauses are written; the ban was the last one.
+
+    *"Cannot take standard actions"* is `c.forbid(action=)`, and the
+    parameter did not exist -- `c.forbid` could refuse a ref, a keyword,
+    a `Usage` category or everything-but-a-list, and `conditions.Rules`
+    covers only the condition-derived cases.
 
     **Re-pointed, and the old marker was wrong about which gap.** It said
     `c.forbid(usage=)` and called this "the identical missing capability" as
@@ -3371,8 +3374,16 @@ def m5948a5(c: Cast) -> None:
     me = c.me
     phase = c.phasing(on=me, until=When.ENCOUNTER)
     c.insubstantial(on=me, until=When.ENCOUNTER)
+    # **The ban ends with the phasing**, which is the printed *"this
+    # effect lasts until she ends it as a free action"*: one sentence, so
+    # one moment. Hung on the phasing effect's own `on_end` rather than
+    # given its own clock, or ending the shape early would leave her
+    # unable to take a standard action for the rest of the fight.
+    ban = c.forbid(action=ActionType.STANDARD, on=me, until=When.ENCOUNTER)
     if phase is not None:
         c.endable(phase, cost=FREE)
+        if ban is not None:
+            phase.on_end.append(lambda: c.end_effect(ban, on=me))
 
 
 @power(

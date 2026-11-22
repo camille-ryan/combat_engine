@@ -84407,6 +84407,168 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_riderless_mount_takes_two_kinds_of_action(out: Result) -> None:
+    """"The only actions the horse can take while riderless are move and free."
+
+    `i1662p1` carried `c.forbid(action=)` for it, and the marker named
+    the right shape: `c.forbid` could refuse a **ref**, a keyword, a
+    `Usage` category or everything-but-a-list, and not an action type.
+    `conditions.Rules` covers the condition-derived cases --
+    `no_standard`, `one_action`, `cannot_act` -- and has no entry for a
+    minor, so there was nothing to lay and nothing to read.
+
+    `Powers.forbidden_actions` is the set, written by
+    `c.forbid(action=)` and read in `dsl.usable` beside the usage sets,
+    so `actions.legal` follows without learning anything: it offers what
+    `usable` allows.
+
+    **The printed sentence is an allow-list, so the row lays its
+    inverse** -- and `ActionType.NONE` is deliberately not in it, because
+    that is how a standing trait is declared and forbidding it would
+    switch off the creature's own traits. The card restricts what the
+    mount *does*, not what it is.
+
+    **Laid and lifted on the mount's own turn**, not on a mounting event:
+    `relations.set` emits nothing a watch could answer, and a turn is
+    when actions are taken. It is also laid at the moment the mount
+    arrives, since it appears riderless and its first turn is a round
+    away.
+    """
+    import audit as A
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.relations import Relation
+    from combat_engine.engine.types import ActionType
+
+    # -- the parameter itself, on a creature that holds a bit of everything
+    world, me, _start = A.board("p1333", 1)
+    known = world.get(me, Powers)
+    by_kind: dict = {}
+    for ref in known.all:
+        row = REGISTRY.get(ref)
+        if row is not None:
+            by_kind.setdefault(row.action, []).append(ref)
+    wanted = (ActionType.STANDARD, ActionType.MINOR, ActionType.MOVE,
+              ActionType.FREE)
+    out.that(all(by_kind.get(k) for k in wanted),
+             "the posed character holds a row of each action type this"
+             " asserts over -- the premise, since a missing kind would"
+             " make its arm vacuous",
+             f"{ {k.value: len(v) for k, v in by_kind.items()} }")
+    if not all(by_kind.get(k) for k in wanted):
+        return
+
+    def offered(kind) -> bool:  # noqa: ANN001
+        return dsl.usable(world, me, REGISTRY[by_kind[kind][0]],
+                          spent_ok=True)[0]
+
+    out.that(all(offered(k) for k in wanted),
+             "all four are usable to begin with -- the baseline",
+             f"{ {k.value: offered(k) for k in wanted} }")
+    c = Cast(world=world, me=me, ref="drivers:restrict")
+    laid = c.forbid(action=(ActionType.STANDARD, ActionType.MINOR),
+                    on=me, until=When.ENCOUNTER)
+    out.that(laid is not None and "standard" in laid.label,
+             "the effect's label NAMES the action types -- an action-only"
+             " refusal came out as '<ref> forbids ' with nothing"
+             " after it, which is unreadable in a log and in"
+             " `c.end_effect(against=)`",
+             f"{laid.label if laid else None!r}")
+    out.that(not offered(ActionType.STANDARD)
+             and not offered(ActionType.MINOR),
+             "the two named types are refused",
+             f"standard={offered(ActionType.STANDARD)},"
+             f" minor={offered(ActionType.MINOR)}")
+    out.that(offered(ActionType.MOVE) and offered(ActionType.FREE),
+             "and the two unnamed ones are untouched -- the control, and"
+             " the whole point of a category rather than `cannot_act`",
+             f"move={offered(ActionType.MOVE)},"
+             f" free={offered(ActionType.FREE)}")
+    reason = dsl.usable(world, me, REGISTRY[by_kind[ActionType.STANDARD][0]],
+                        spent_ok=True)[1]
+    out.that("standard" in reason,
+             "and the refusal says which kind, so the interface can grey"
+             " the card and say why",
+             f"{reason!r}")
+    c.end_effect(laid, on=me)
+    out.that(all(offered(k) for k in wanted),
+             "ending it releases exactly what it took -- only what this"
+             " call added comes back out, the discipline the usage sets"
+             " already keep",
+             f"{ {k.value: offered(k) for k in wanted} }")
+
+    # -- and the row: a mount restricted while riderless ------------------
+    world, me, _s = A.board("i1662p1", 1)
+    A._revive_everyone(world, except_=())
+    before = set(world.entities)
+    world.decider = lambda who, kind, pool, what="": pool[0]
+    REGISTRY["i1662p1"].body(
+        Cast(world=world, me=me, ref="i1662p1", target=None))
+    fresh = sorted(set(world.entities) - before)
+    out.that(bool(fresh),
+             "the row summons its mount -- the premise for everything"
+             " below",
+             f"{fresh}")
+    if not fresh:
+        return
+    beast = fresh[0]
+    theirs = world.get(beast, Powers)
+    out.that(ActionType.STANDARD in theirs.forbidden_actions
+             and ActionType.MOVE not in theirs.forbidden_actions
+             and ActionType.FREE not in theirs.forbidden_actions,
+             "it arrives riderless and already restricted, with move and"
+             " free left to it -- the printed pair",
+             f"{sorted(a.value for a in theirs.forbidden_actions)}")
+    out.that(ActionType.NONE not in theirs.forbidden_actions,
+             "and its standing traits are untouched: `ActionType.NONE` is"
+             " how one is declared, so forbidding it would switch the"
+             " creature off rather than restrict what it does",
+             f"NONE in set: {ActionType.NONE in theirs.forbidden_actions}")
+    world.relations.set(Relation.RIDDEN_BY, me, beast)
+    world.bus.emit(TurnStart(actor=beast, round=2))
+    out.that(not theirs.forbidden_actions,
+             "mounted, the restriction lifts on its turn -- which is"
+             " where it is read, since `relations.set` emits nothing a"
+             " watch could answer",
+             f"{sorted(a.value for a in theirs.forbidden_actions)}")
+
+    # -- the monster row on the same parameter, whose lifetime differs ----
+    #
+    # `m5948a5` waited on the same symbol and `todo.py` reds the moment a
+    # wanted thing lands, so it is written with the parameter rather than
+    # left behind it. Its ban ends with the **shape** -- one printed
+    # sentence, so one moment -- where the mount's is re-decided each
+    # turn.
+    world, hers, _m = A.board("m5948a5", 1)
+    mine_ = world.get(hers, Powers)
+    out.that(not mine_.forbidden_actions,
+             "nothing is banned before the row runs -- the baseline",
+             f"{sorted(a.value for a in mine_.forbidden_actions)}")
+    REGISTRY["m5948a5"].body(
+        Cast(world=world, me=hers, ref="m5948a5", target=hers))
+    out.that(mine_.forbidden_actions == {ActionType.STANDARD},
+             "it bans standard actions and nothing else -- the printed"
+             " sentence, and a minor-action power is still hers",
+             f"{sorted(a.value for a in mine_.forbidden_actions)}")
+    shape = [e for e in world.effects.of(hers) if "phas" in e.label.lower()]
+    out.that(bool(shape),
+             "the phasing effect is there to end -- the premise for the"
+             " lifetime assertion below",
+             f"{[e.label for e in shape]}")
+    for eff in shape:
+        world.effects.end(eff, "drivers")
+    out.that(not mine_.forbidden_actions,
+             "and ending the shape takes the ban with it: one printed"
+             " sentence, one moment. Given its own clock it would leave"
+             " her unable to take a standard action for the rest of the"
+             " fight after she had dropped the shape",
+             f"{sorted(a.value for a in mine_.forbidden_actions)}")
+
+
 def a_retype_that_is_offered_each_use(out: Result) -> None:
     """"You CAN choose to have that power deal your affinity's type."
 
@@ -119483,6 +119645,9 @@ DRIVERS = {
     "a_retype_that_is_offered_each_use": (
         a_retype_that_is_offered_each_use,
         "a retype offered on each use"),
+    "a_riderless_mount_takes_two_kinds_of_action": (
+        a_riderless_mount_takes_two_kinds_of_action,
+        "a riderless mount's two action types"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

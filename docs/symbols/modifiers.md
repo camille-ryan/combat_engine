@@ -174,7 +174,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Your <row> is considered an arcane attack power."
 - `c.flanks_alone(self, *, on: 'int | None' = None, until: 'When' = <When.SONT: "start of source's next turn">) -> 'Effect | None'`
   - "You can flank with yourself."
-- `c.forbid(self, ref: 'str' = '', *, keyword: 'Keyword | None' = None, lacking: 'Keyword | None' = None, usage: 'Usage | Sequence[Usage] | None' = None, only: 'str | Sequence[str]' = (), attacks_only: 'bool' = False, ran_out: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
+- `c.forbid(self, ref: 'str' = '', *, keyword: 'Keyword | None' = None, lacking: 'Keyword | None' = None, usage: 'Usage | Sequence[Usage] | None' = None, action: 'ActionType | Sequence[ActionType] | None' = None, only: 'str | Sequence[str]' = (), attacks_only: 'bool' = False, ran_out: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - Take a row away for a while. "Loses the ability to use ..."
 - `c.forgo_second_wind(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You gain no benefit from using your second wind."

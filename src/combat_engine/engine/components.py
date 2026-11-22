@@ -1759,6 +1759,21 @@ class Powers:
     #: encounter powers until the end of its next turn"* -- a whole category
     #: rather than one ref, which `forbidden` could not say.
     forbidden_usages: set[Usage] = field(default_factory=set)
+    #: **Action types whose rows this creature cannot use.** The same shape
+    #: as `forbidden_usages` one line up and for the same reason: a whole
+    #: category rather than a number of refs, which `forbidden` cannot say.
+    #:
+    #: *"The only actions that the horse can take while riderless are move
+    #: actions and free actions"* -- `i1662p1`, and the printed sentence is
+    #: an **allow**-list, so the row inverts it: everything but move and
+    #: free goes in here. `conditions.Rules` has `no_standard`,
+    #: `one_action` and `cannot_act` for the condition-derived cases and no
+    #: entry for a minor, so there was nothing to lay and nothing to read.
+    #:
+    #: Read in `dsl.usable` beside the usage sets, so `actions.legal`
+    #: follows without learning anything -- it offers what `usable`
+    #: allows.
+    forbidden_actions: set[ActionType] = field(default_factory=set)
     #: **The only attack rows this creature may reach**, by ref, when it is
     #: not empty. *"When it attacks, the target can only make a melee basic
     #: attack"* and *"dominated … but can use only basic attacks"* are the

@@ -2493,6 +2493,24 @@ def i1655x1(c: Cast) -> None:
     c.watch(SurgeSpent, surged, until=When.ENCOUNTER)
 
 
+#: What a riderless mount may NOT do: *"the only actions that the horse
+#: can take while riderless are move actions and free actions"*, which is
+#: an allow-list, so this is its inverse.
+#:
+#: `ActionType.NONE` is deliberately absent -- that is how a standing
+#: trait is declared, and forbidding it would switch off the creature's
+#: own traits. The card restricts what the mount *does*, not what it is.
+#: `OPPORTUNITY` is in, because an opportunity attack is an action it
+#: takes and the card leaves it out of the two it allows.
+_NOT_RIDERLESS = (
+    ActionType.STANDARD,
+    ActionType.MINOR,
+    ActionType.IMMEDIATE_INTERRUPT,
+    ActionType.IMMEDIATE_REACTION,
+    ActionType.OPPORTUNITY,
+)
+
+
 @power(
     "i1662p1",
     level=8,
@@ -2501,7 +2519,7 @@ def i1655x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    dropped=("c.forbid(action=)", "c.lend_checks()"),
+    dropped=("c.lend_checks()",),
 )
 def i1662p1(c: Cast) -> None:
     """The mount is `x10_17`, an **associate** block, so it does not spawn
@@ -2610,6 +2628,41 @@ def i1662p1(c: Cast) -> None:
             c.spend_surge(on=c.me)
 
     c.watch(Dropped, fell, until=When.ENCOUNTER, once=True)
+
+    # **"The only actions it can take WHILE RIDERLESS are move actions
+    # and free actions."** An allow-list, so what is laid is everything
+    # else -- and not `ActionType.NONE`, which is how a standing trait is
+    # declared: forbidding that would switch off the creature's own
+    # traits, and the card restricts what it *does* rather than what it
+    # is.
+    #
+    # Laid and lifted on the mount's own `TurnStart` rather than on a
+    # mounting event, because a turn is when actions are taken and
+    # `Relation.RIDDEN_BY` is the state to read -- `relations.set` emits
+    # nothing a watch could answer. Checked at the start of its turn, so
+    # a rider who mounts and dismounts gets the right answer each round.
+    held: list[object] = []
+
+    def riderless(ev: TurnStart) -> None:
+        if ev.actor != beast:
+            return
+        from combat_engine.engine.relations import Relation
+
+        ridden = bool(c.world.relations.sources(Relation.RIDDEN_BY, beast))
+        if ridden and held:
+            c.end_effect(held.pop(), on=beast)
+        elif not ridden and not held:
+            laid = c.forbid(action=_NOT_RIDERLESS, on=beast,
+                            until=When.ENCOUNTER)
+            if laid is not None:
+                held.append(laid)
+
+    c.watch(TurnStart, riderless, until=When.ENCOUNTER)
+    # It appears riderless, so the restriction is on from the moment it
+    # arrives rather than from its first turn.
+    first = c.forbid(action=_NOT_RIDERLESS, on=beast, until=When.ENCOUNTER)
+    if first is not None:
+        held.append(first)
 
 
 @power("i1663p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,

@@ -14657,6 +14657,7 @@ class Cast:
         keyword: Keyword | None = None,
         lacking: Keyword | None = None,
         usage: Usage | Sequence[Usage] | None = None,
+        action: ActionType | Sequence[ActionType] | None = None,
         only: str | Sequence[str] = (),
         attacks_only: bool = False,
         ran_out: bool = False,
@@ -14682,6 +14683,22 @@ class Cast:
         They are kept as two arguments and two sets rather than one inverted
         into the other, because **both can be true of one creature at once**
         and a single set could not say which direction each entry meant.
+
+        **`action=` is a whole action type, which is the same shape
+        `usage=` is one category over.** *"The only actions that the horse
+        can take while riderless are move actions and free actions"* --
+        `i1662p1`, and the printed sentence is an **allow**-list, so the
+        row inverts it and names what is left. `conditions.Rules` covers
+        the condition-derived cases -- `no_standard`, `one_action`,
+        `cannot_act` -- and has no entry for a minor, so nothing could lay
+        this and nothing read it.
+
+        Written to `Powers.forbidden_actions` and read in `dsl.usable`
+        beside the usage sets, so `actions.legal` follows without learning
+        anything: it offers what `usable` allows. Only what this call added
+        comes back out when it ends, the same discipline the usages keep,
+        so a second restriction over the first does not release the
+        first's categories.
 
         `lacking=` also writes the printed exception: *"although you can
         sustain such powers"*. Every row the creature currently has standing
@@ -14736,14 +14753,28 @@ class Cast:
             () if usage is None else
             (usage,) if isinstance(usage, Usage) else tuple(usage)
         )
+        actions_ = (
+            () if action is None else
+            (action,) if isinstance(action, ActionType) else tuple(action)
+        )
         kept = (only,) if isinstance(only, str) and only else tuple(only)
         if (not ref and keyword is None and lacking is None
-                and not usages and not kept):
+                and not usages and not actions_ and not kept):
             return None
 
         undo: list[Callable[[], None]] = []
+        # **`action` is in the label, and the omission was visible.** An
+        # action-only refusal came out as `"<ref> forbids "` with nothing
+        # after it -- an effect whose subject is blank is unreadable in a
+        # log and in `c.end_effect(against=)`, which matches a label
+        # fragment.
+        subject = (
+            ref or keyword or lacking
+            or (usages[0].value if usages else "")
+            or (",".join(a.value for a in actions_) if actions_ else "")
+        )
         label = (f"{self.ref} forbids "
-                 f"{ref or keyword or lacking or (usages[0].value if usages else '')}"
+                 f"{subject}"
                  f"{'' if not kept else 'all but ' + ','.join(kept)}")
         if kept:
             # **`k=known` captures the narrowing.** `known` is guarded
@@ -14776,6 +14807,14 @@ class Cast:
             # it ends, which `discard` of the whole tuple would do.
             fresh = tuple(u for u in usages if u not in barred)
             undo.append(lambda: barred.difference_update(fresh))
+        if actions_:
+            # Same discipline as the usages above: only what this call
+            # added comes back out, so a second restriction standing over
+            # the first does not release the first's categories.
+            held = known.forbidden_actions
+            added = tuple(a for a in actions_ if a not in held)
+            held.update(added)
+            undo.append(lambda: held.difference_update(added))
         standing: set[str] = set()
         if lacking is not None:
             # What is already running is exempt, read **now** rather than when
