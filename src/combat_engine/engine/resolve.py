@@ -2204,11 +2204,21 @@ def temp_hp(
     # The non-stacking rule is applied *after* the term, so a raised pool
     # can beat a standing one -- checking first would have thrown the
     # bonus away whenever the unraised number happened to tie.
-    if amount <= health.temp:
-        return
-    health.temp = amount
+    # **Announced either way, which it was not.** A grant no bigger than
+    # the standing pool used to return here in silence -- so a row whose
+    # whole observable act is the pool spent its round and said nothing,
+    # and a card paying for *using* the feature never fired. `f3781` is
+    # that card and `TempHP.swallowed` is what tells the two cases
+    # apart.
+    #
+    # The pool itself is still left alone: temporary hit points do not
+    # stack and the larger wins. Only the announcement changed.
+    eaten = amount <= health.temp
+    if not eaten:
+        health.temp = amount
     world.bus.emit(
-        TempHP(source=source, target=target, amount=amount, power=power)
+        TempHP(source=source, target=target, amount=amount, power=power,
+               swallowed=eaten)
     )
 
 

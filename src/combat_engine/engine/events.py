@@ -1083,6 +1083,24 @@ class TempHP(Event):
     #: trait" -- and this event said only who gave how many to whom.
     #: `""` when nothing named it. Same contract as `Healed.power`.
     power: str = ""
+    #: **The grant happened and the pool did not move**, because a
+    #: standing pool was as big or bigger -- temporary hit points do not
+    #: stack and the larger wins.
+    #:
+    #: `resolve.temp_hp` used to return at that test *without emitting*,
+    #: so a use whose whole observable act is the pool spent its round
+    #: and announced nothing. `f3781` is the card: *"when you use your
+    #: bard virtue, you and each ally adjacent to you can shift 1
+    #: square"* -- the virtue's only act is the pool, so a virtue
+    #: swallowed by a standing one granted no shift either.
+    #:
+    #: So the emit is unconditional and this flag is what tells the two
+    #: apart. A row that pays for *using* the feature reads the event; a
+    #: row that pays for the points themselves checks this first.
+    #:
+    #: `amount` is what the grant was worth either way, which is the
+    #: number the card names.
+    swallowed: bool = False
 
 
 @dataclass

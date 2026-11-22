@@ -1056,6 +1056,15 @@ def _paid_an_ally(c: Cast, ev: TempHP) -> int | None:
     sentence rather than an approximation of it. `TempHP` names no row,
     which is the one thing this cannot ask.
     """
+    # **A grant the standing pool swallowed is not a GAIN**, and all
+    # four of these cards say *"when an ally **gains** temporary hit
+    # points"*. `resolve.temp_hp` announces every grant now -- it used
+    # to return in silence when the new pool was no bigger, which left
+    # `f3781`'s bard virtue paying nothing at all -- so the four rows
+    # whose trigger is the gain read the flag and the ones whose trigger
+    # is the *granting* (`f470`, `i2466x1`) do not.
+    if getattr(ev, "swallowed", False):
+        return None
     if ev.source != c.me or ev.target == c.me:
         return None
     return ev.target if ev.target in c.allies() else None

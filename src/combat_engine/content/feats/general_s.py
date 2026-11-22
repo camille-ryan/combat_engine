@@ -2614,7 +2614,7 @@ def f3780(c: Cast) -> None:
 
 
 @power("f3781", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("TempHP.swallowed",))
+       reach=PERSONAL, target=SELF)
 def f3781(c: Cast) -> None:
     """A shift for the bard and for everybody standing next to it.
 
@@ -2628,12 +2628,22 @@ def f3781(c: Cast) -> None:
     the difference here is that **this row is written and plays**, so what
     the marker should name is the one clause that does not pay.
 
-    That clause is the paragraph below: `resolve.temp_hp` returns at
-    `amount <= health.temp` **without emitting**, so a use of the virtue
-    swallowed by a standing pool spends the round and announces nothing,
-    and no shift is granted. The fix is the event saying the use happened
-    -- a flag on `TempHP` and an unconditional emit -- which is why the
-    marker names the field rather than this file.
+    **That clause is written and the fix was entirely upstream.**
+    `resolve.temp_hp` returned at `amount <= health.temp` *without
+    emitting*, so a use of the virtue swallowed by a standing pool spent
+    the round and announced nothing. The emit is unconditional now and
+    `TempHP.swallowed` is the flag that tells the two cases apart. This
+    row's body did not change: its handler was already right and simply
+    never heard.
+
+    **Which watchers that moves is the cost of the change, and it was
+    checked row by row.** Ten rows watch `TempHP`. The four artificer
+    feats say *"when an ally **gains** temporary hit points"*, so a
+    swallowed grant is not their trigger and `_paid_an_ally` reads the
+    flag for all four. `f470` and `i2466x1` say *"grant"*, which
+    happened either way. `f2936`'s own comment already reasoned about
+    the case, and `f2912` and `i2168x1` key on the granted number
+    rather than on the pool moving.
 
     **The gate names the holder, and "it would catch every virtue it
     writes" was the wrong half.** `features/leaders_sb.py`'s `bard_virtue`
@@ -2646,11 +2656,11 @@ def f3781(c: Cast) -> None:
     is the one load-bearing reading here.** The old note wanted a
     `PowerUsed` on the sub-option. There is no such use: the virtue is a
     printed "you can" asked inside `reward`, capped by `once_this_round`,
-    and its whole observable act is the pool. One honest hole follows from
-    that and is recorded rather than papered over -- `resolve.temp_hp`
-    returns without emitting when the new pool is no larger than a
-    standing one, so a use swallowed by a bigger pool spends the round and
-    grants no shift. The fix for that belongs to the event, not here.
+    and its whole observable act is the pool -- which is exactly why the
+    silent emit above was fatal to this row and merely invisible to the
+    other nine watchers. Reading the pool is the only way to hear the
+    feature, so a grant that announced nothing was a round spent for
+    nothing.
 
     **The eligible allies are collected before anybody moves** -- "each
     ally adjacent to you" is the board at the moment the virtue pays --

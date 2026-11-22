@@ -3861,6 +3861,35 @@ def feat_slots(level: int, race: str = "") -> int:
 HUMAN = "r7"
 
 
+_FEATURE_ALIAS: dict[str, str] | None = None
+
+
+def feature_alias() -> dict[str, str]:
+    """Each class-feature ref that is really another row, by `duplicate_of`.
+
+    The importer records this when a `cf:` ref and a `p` ref are **one
+    printed card**: `cf:paladin-f1c0` and `p805` are the same power, the
+    feature granting it and the card itself. A character is dealt the
+    card, so a prerequisite naming the feature side is asking a question
+    the hand answers under the other name.
+
+    Read once and cached, the shape `feat_gates` uses and for its reason.
+    """
+    global _FEATURE_ALIAS
+
+    if _FEATURE_ALIAS is None:
+        from combat_engine.db import game
+
+        _FEATURE_ALIAS = {
+            row["ref"]: row["duplicate_of"]
+            for row in game().execute(
+                "SELECT ref, duplicate_of FROM class_feature"
+                " WHERE duplicate_of IS NOT NULL AND duplicate_of != ''"
+            )
+        }
+    return _FEATURE_ALIAS
+
+
 def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     """Does this character satisfy a printed prerequisite?
 
@@ -3909,7 +3938,23 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
         # for the other 45 races.
         return node["race"] in (who.race, who.race2)
     if "ref" in node:
-        return node["ref"] in powers
+        # **A ref the hand holds under its other name.** `duplicate_of`
+        # marks a `cf:` row that is the same printed card as a `p` row --
+        # `cf:paladin-f1c0` is `p805` -- and the dealer hands out the card,
+        # so a prerequisite naming the feature side was a hard False for a
+        # character who demonstrably has the power. Three feats are blocked
+        # by nothing else and their alias is in the hand, measured through
+        # `dealt_hand`. #1447.
+        #
+        # **Only the recorded alias, never the ref's shape.** A `cf:...sN`
+        # leg is a *build* fork, and granting it from its parent would hand
+        # a bard on one leg a feat printed for another -- so the 38 feats
+        # gated on one wait for `#235`'s axis rather than being let in
+        # here. A wrongly dealt feat fires its clauses.
+        if node["ref"] in powers:
+            return True
+        alias = feature_alias().get(node["ref"], "")
+        return bool(alias) and alias in powers
     # **Armour and shields, which used to arrive as `weapon_prof` and be
     # answered against weapons.** `#568`. A class's printed Armor
     # Proficiencies line is cumulative -- *"Cloth, leather, hide,

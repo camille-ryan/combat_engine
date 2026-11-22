@@ -685,9 +685,32 @@ def f470(c: Cast) -> None:
 
     **Dropped: the feat still cannot be dealt**, and that is not a clause
     here. Its printed prerequisite is `{"ref": "cf:bard-f1s2"}`, which
-    `chargen.meets` answers against the dealt list, and no row declares
-    the sub-option -- #416's inline-leg gap, whose comments refuse
-    declaring the legs because it would put the same card in a menu twice.
+    `chargen.meets` answers against the dealt list, and no dealt hand ever
+    holds a leg ref -- measured through `chargen.dealt_hand` over class x
+    declared_chassis x build: the 29 leg refs a feat prerequisite names are
+    dealt 0 times and their 22 parent features 22 of 22. #1447.
+
+    **Re-pointed from #416, which is closed**, and the correction narrows
+    this rather than restating it. #416 was about recording that a leg's
+    work is paid by its parent; it refused declaring the legs because that
+    would put one card in a menu twice, and this row's note inherited that
+    as the whole answer. Two things it got wrong:
+
+    * The atom is only decisive because it sits in an `all`. For **45 of
+      the 87** feats naming a leg the importer puts it in an `any` beside
+      the declared parent, so the undealt ref costs them nothing. This
+      row is one of the 42 where it bites.
+    * The fix is **not** deriving the parent from the ref. That was
+      written, measured against a control, and moved **zero** rows -- the
+      `any` had already covered everything it could reach. What landed is
+      narrower: `meets` reads `class_feature.duplicate_of`, which recovers
+      three feats whose leg is another name for a card the hand holds.
+
+    `cf:bard-f1s2` is an `fNsM` **build leg**, which is a fork and not
+    another name for one card, so the alias cannot answer it and must not:
+    granting it from `cf:bard-f1` would hand a bard on `f1s0` a feat
+    printed for `f1s2`. That is `#235`'s axis and this row waits for it.
+
     `dropped=` rather than `todo=` for `f1009`'s reason: the row plays if
     it is ever held, and `legal_feats` refuses a `todo=` row outright.
     """

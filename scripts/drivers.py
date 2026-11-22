@@ -72792,6 +72792,124 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_feature_ref_the_hand_holds_under_its_other_name(out: Result) -> None:
+    """`chargen.meets` reads `class_feature.duplicate_of`, so a prerequisite
+    naming the feature side of a card the character demonstrably holds stops
+    being a hard False. #1447.
+
+    **The headline this came from was wrong and the correction is the
+    useful part.** `#1447` was filed claiming 87 feats are undealable
+    because their prerequisite names a `cf:` leg ref no dealt hand holds.
+    The leg refs are indeed never dealt -- measured through
+    `chargen.dealt_hand` over class x chassis x build -- but for **45 of
+    the 87 the ETL already put the leg inside an `any` beside the declared
+    parent**, so the atom was never decisive. Reading a prerequisite's
+    *shape* rather than evaluating it is what produced the 87.
+
+    Of the 42 that remain, 38 name an `fNsM` **build leg** and genuinely
+    wait on `#235`. Four name an `fNcM` ref carrying a recorded
+    `duplicate_of`, and that is what this rule is about.
+
+    **Only the recorded alias, never the ref's shape.** The first draft of
+    this fix derived the parent from the ref (`cf:ranger-f1c0` ->
+    `cf:ranger-f1`) and granted the leg whenever the parent was held. It
+    was measured against a control and **moved nothing** -- all 24 feats
+    it could have recovered were already legal through the ETL's `any` --
+    so it was reverted rather than landed as a code path with no effect.
+    The alias is narrower and does move: three feats, named below, each
+    blocked by nothing else.
+
+    A build leg must **not** be granted this way, and the three negative
+    arms are the load-bearing half: a bard on one leg taking a feat
+    printed for another would fire its clauses.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.chargen import choices
+
+    # (feat, class, race) -- the race is part of each printed gate, so
+    # dropping it makes all three unreachable for a reason that is not
+    # this one.
+    RECOVERED = (("f2786", "ardent", "r46", "cf:ardent-f0c1"),
+                 ("f2789", "psion", "r46", "cf:psion-f0c4"),
+                 ("f2796", "warden", "r4", "cf:warden-f2c1"))
+    # Blocked by a second ref atom (`p11738`) as well, so it is the
+    # control that stops "the alias fixed its whole family" being read
+    # into the three above.
+    ALSO_BLOCKED = ("f3480", "shaman", "r50")
+    # Each gated on an `fNsM` build leg in an `all`, which the alias map
+    # does not carry and must not invent.
+    LEGS = (("f470", "bard"), ("f1009", "barbarian"), ("f2804", "sorcerer"))
+
+    def legal(ref: str, cls: str, race: str, *, aliases: bool) -> bool:
+        """Does the dealer's own pool offer this feat to such a character?"""
+        real = chargen.feature_alias
+        if not aliases:
+            chargen.feature_alias = lambda: {}
+        choices._legal_feats.cache_clear()
+        try:
+            for chassis in (chargen.declared_chassis(cls) or ("",)):
+                builds = chargen.BUILDS.get(cls) or (chargen.build_of(cls),)
+                for build in builds:
+                    for level in (1, 4, 8):
+                        try:
+                            hand = chargen.dealt_hand(
+                                seed=1, cls=cls, level=level, build=build,
+                                who_chassis=chassis, race=race)
+                        except Exception:
+                            continue
+                        if ref in choices.legal_feats(
+                                cls, level, build, race, taken=hand):
+                            return True
+            return False
+        finally:
+            chargen.feature_alias = real
+            choices._legal_feats.cache_clear()
+
+    # -- the map itself -----------------------------------------------------
+    aliases = chargen.feature_alias()
+    out.that(len(aliases) > 0,
+             "premise: `class_feature.duplicate_of` records some refs that"
+             " are really another row -- without this the rule below"
+             " passes vacuously, which is how the shape-based draft read"
+             " green",
+             f"{len(aliases)} aliases")
+    out.that(all(v for v in aliases.values()),
+             "and none of them is blank, so the lookup cannot answer True"
+             " by matching an empty string against a hand",
+             f"{sum(1 for v in aliases.values() if not v)} blank")
+
+    # -- the three the alias recovers ---------------------------------------
+    for ref, cls, race, leg in RECOVERED:
+        alias = must(aliases.get(leg), f"{leg} has a recorded alias")
+        out.that(not legal(ref, cls, race, aliases=False),
+                 f"premise: without the alias map {ref} reaches no"
+                 f" {cls}'s pool -- its gate names {leg}, which no dealt"
+                 " hand holds",
+                 "refused")
+        out.that(legal(ref, cls, race, aliases=True),
+                 f"and with it {ref} IS offered: the hand carries"
+                 f" {alias}, which is the same printed card",
+                 "offered")
+
+    # -- the one it does not, which keeps the three above honest ------------
+    ref, cls, race = ALSO_BLOCKED
+    out.that(not legal(ref, cls, race, aliases=True),
+             f"while {ref} is still refused with the map in place -- its"
+             " gate names a second ref atom the hand does not hold, so"
+             " this is three feats recovered and not a family",
+             "refused")
+
+    # -- a build leg is never granted ---------------------------------------
+    for ref, cls in LEGS:
+        out.that(not legal(ref, cls, "", aliases=True),
+                 f"{ref} stays refused: it gates on an `fNsM` build leg,"
+                 " which is a fork rather than another name for one card."
+                 " Granting it from the parent would hand a character a"
+                 " feat printed for the leg it did not take",
+                 "refused")
+
+
 def a_build_time_option_is_drawn_and_both_halves_are_dealt(out: Result) -> None:
     """`BUILD_OPTIONS` is **drawn** now, not fixed at `options[0]`. `#1085`.
 
@@ -124651,6 +124769,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_feature_ref_the_hand_holds_under_its_other_name,
         a_build_time_option_is_drawn_and_both_halves_are_dealt,
         "a build-time option is drawn rather than fixed at the first, so"
         " both halves of the artificer's pair are dealt and its exclusion"
@@ -125037,6 +125156,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "feature_alias": (
+        a_feature_ref_the_hand_holds_under_its_other_name,
+        "a prerequisite naming the feature side of a card the hand holds"
+        " (#1447)",
     ),
     "deal_legs": (
         every_build_leg_can_be_dealt,
