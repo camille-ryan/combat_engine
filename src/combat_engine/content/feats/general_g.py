@@ -2054,7 +2054,7 @@ def f1101(c: Cast) -> None:
 
 
 @power("f1063", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.as_basic(spent=True)",))
+       reach=PERSONAL, target=SELF)
 def f1063(c: Cast) -> None:
     """`c.as_basic(window="opportunity")` is the verb that files a stand-in
     for a granted swing -- `Powers.instead`, not `Powers.opportunity` --
@@ -2063,12 +2063,20 @@ def f1063(c: Cast) -> None:
     `opportunity` as a plain attribute, which is the only place the
     window is legible from a watcher.
 
-    Dropped: "even if you have used it this encounter".
-    `dsl.basic_options` runs each stand-in past `usable`, which refuses
-    a spent encounter power, so the option is missing for the one swing
-    before this row has handed a use back."""
+    **"Even if you have used it this encounter" is `spent=True`, and it
+    is a different beat from the hand-back below.** The two sentences
+    read alike and are not: `c.restore_use` is "without expending it",
+    which happens *after* the swing, and this one is about whether the
+    swing was ever offered. `dsl.basic_options` runs every stand-in past
+    `usable`, so a spent encounter power was simply absent from the
+    opportunity menu -- and the one swing the card exists for is the one
+    taken when the use is already gone.
+
+    The waiver is `usable(..., spent_ok=True)`, which drops the usage
+    limits and nothing else, so `p2480` not being held, or the holder
+    being unable to act, still refuses."""
     me = c.me
-    c.as_basic("p2480", window="opportunity", on=me)
+    c.as_basic("p2480", window="opportunity", spent=True, on=me)
 
     def unspend(ev: Any) -> None:
         if (

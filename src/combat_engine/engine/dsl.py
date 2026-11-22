@@ -4341,7 +4341,16 @@ def basic_options(world: World, actor: int, window: str, own: str = "") -> list[
         # An associated-powers list names rows the character may not
         # possess, and `usable` is what says so -- along with refusing a
         # spent encounter power and an unfinished one.
-        if p is None or not usable(world, actor, p)[0]:
+        #
+        # **Except where the card waives the spent half**, which is the
+        # one thing a row cannot do for itself: *"even if you have
+        # already used it this encounter"* is about whether the option
+        # EXISTS, and a body handing the use back runs after the swing is
+        # chosen. `spent_ok` waives the usage limits alone, so everything
+        # else on that list still refuses. `c.as_basic(spent=True)`.
+        if p is None or not usable(
+            world, actor, p, spent_ok=ref in known.instead_when_spent,
+        )[0]:
             continue
         (free if p.usage is Usage.AT_WILL else costly).append(ref)
     return list(dict.fromkeys([*free, *([own] if own else []), *costly]))

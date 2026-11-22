@@ -12592,6 +12592,7 @@ class Cast:
         self,
         *refs: str,
         window: str = "",
+        spent: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -12613,6 +12614,21 @@ class Cast:
         the swing is offered rather than at the moment the feat is armed,
         which is when a borrowed row could still arrive.
 
+        **`spent=True` is "even if you have already used it this
+        encounter"**, and without it that sentence cannot be played at
+        all. `dsl.basic_options` runs every stand-in past `usable`, which
+        refuses a spent encounter power -- correctly, for the ordinary
+        card -- so a row printing the waiver is simply missing from the
+        menu on the one swing it was taken for. `f1063` is the worked
+        case: it hands the use back on the `Hit`, which is a beat too
+        late, because the offer had to exist before the swing.
+
+        It becomes `usable(..., spent_ok=True)`, which waives the usage
+        limits **and only those**. A row the character does not hold,
+        cannot act with, or has not finished is refused exactly as
+        before -- so this is narrower than it reads, and deliberately:
+        the printed sentence waives one thing.
+
         Yours, so it defaults to the caster.
         """
         from .components import Powers
@@ -12625,12 +12641,18 @@ class Cast:
         known.instead[window] = tuple(
             dict.fromkeys((*known.instead.get(window, ()), *refs))
         )
+        # Only the refs this call added, so an effect ending cannot take
+        # away a waiver some other row laid on the same ref.
+        waived = {ref for ref in refs
+                  if spent and ref not in known.instead_when_spent}
+        known.instead_when_spent |= waived
 
         def restore() -> None:
             if was is None:
                 known.instead.pop(window, None)
             else:
                 known.instead[window] = was
+            known.instead_when_spent -= waived
 
         return self.world.effects.apply(
             who, self.me, until,

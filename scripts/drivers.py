@@ -84761,6 +84761,176 @@ def a_flank_from_a_square_nobody_stands_in(out: Result) -> None:
              f"{REGISTRY[ROW].todo}, {REGISTRY[ROW].dropped}")
 
 
+def a_stand_in_offered_after_its_use_is_gone(out: Result) -> None:
+    """*"...even if you have already used it this encounter"* -- `f1063`,
+    on the row it files as a stand-in for a granted opportunity swing.
+
+    **Two sentences on this card read alike and are a beat apart**, which
+    is why one of them was written and the other was dropped. *"Without
+    expending it"* is the hand-back, and the row already does it: a watch
+    on `Hit`/`Miss` calls `c.restore_use` the moment the swing spends the
+    power. *"Even if you have already used it"* is about whether the
+    swing was ever **offered**, and `dsl.basic_options` builds that menu
+    before anything is swung -- running every stand-in past `usable`,
+    which refuses a spent encounter power. So the option was missing on
+    exactly the swing the card exists for, and the hand-back had nothing
+    to hand back.
+
+    `c.as_basic(spent=True)` is the waiver and it is `usable(...,
+    spent_ok=True)` -- the usage limits and **nothing else**. The three
+    assertions that are not the happy path are about that word: a row the
+    creature does not hold is still refused, a creature that cannot act
+    is still refused, and a stand-in filed *without* the waiver still
+    drops out of the menu the moment it is spent.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conditions, Powers
+    from combat_engine.engine.dsl import REGISTRY, basic_options, usable
+    from combat_engine.engine.types import Condition, Usage
+
+    ROW, STAND_IN = "f1063", "p2480"
+
+    def armed(
+        *, waived: bool = True, spend: bool = True,
+    ) -> tuple[Any, int, Powers]:
+        world, me, _ = _board(ROW, 1)
+        known = must(world.get(me, Powers), "the character knows powers")
+        if not waived:
+            # The board arms this feat on its own dealt character, so the
+            # waiver is already laid -- the "without it" arm has to be
+            # made rather than found.
+            known.instead_when_spent.discard(STAND_IN)
+        if spend:
+            known.note_use(STAND_IN, world.round)
+        else:
+            # **The board has already spent it**, which is the trap this
+            # rule walked into once: the "use still in hand" control read
+            # green with the waiver on and red with it off, because the
+            # power was expended in both arms and only the waiver was
+            # doing anything. `audit.board` plays the row it arms.
+            known.unuse(STAND_IN)
+        return world, me, known
+
+    # -- the premises -----------------------------------------------------
+    world, me, known = armed(spend=False)
+    row = REGISTRY[STAND_IN]
+    out.that(row.usage is not Usage.AT_WILL,
+             "the stand-in is a use-limited power, so 'you have already"
+             " used it' is a thing that can happen to it",
+             f"{row.usage}")
+    out.that(STAND_IN in known.all,
+             "the character holds it -- the waiver below is about its use"
+             " being gone, not about the row being absent",
+             f"{STAND_IN in known.all}")
+    out.that(STAND_IN in known.instead.get("opportunity", ()),
+             "and the feat has filed it as a stand-in for the opportunity"
+             " window, which is the half that already worked",
+             f"{known.instead.get('opportunity', ())}")
+    out.that(usable(world, me, row)[0],
+             "premise: with the use handed back the power itself says yes"
+             " -- the board had already spent it, so this control has to"
+             " be made rather than found",
+             f"{usable(world, me, row)}")
+    world.get(me, Powers).instead_when_spent.discard(STAND_IN)
+    out.that(STAND_IN in basic_options(world, me, "opportunity"),
+             "and then it is offered with NO waiver in play -- the control"
+             " that says the menu can see this row at all, and that the"
+             " clause below is about the use being gone rather than about"
+             " the stand-in never having been filed",
+             f"{basic_options(world, me, 'opportunity')}")
+
+    # -- the printed clause ------------------------------------------------
+    w2, me2, _ = armed()
+    out.that(not usable(w2, me2, row)[0],
+             "premise: once used, the power itself refuses -- 'expended',"
+             " which is correct and is what the card is waiving",
+             f"{usable(w2, me2, row)}")
+    out.that(STAND_IN in basic_options(w2, me2, "opportunity"),
+             "and it is STILL offered where a swing is granted, which is"
+             " the sentence: the option exists before the swing, so a"
+             " hand-back after the swing could never have supplied it",
+             f"{basic_options(w2, me2, 'opportunity')}")
+
+    # -- the negative control ----------------------------------------------
+    w3, me3, _ = armed(waived=False)
+    out.that(STAND_IN not in basic_options(w3, me3, "opportunity"),
+             "without the waiver the same spent row drops out of the same"
+             " menu -- so the offer above is this feat's doing and not the"
+             " menu being generous",
+             f"{basic_options(w3, me3, 'opportunity')}")
+
+    # -- the waiver is only about the use ----------------------------------
+    w4, me4, known4 = armed()
+    # `Powers.all` is a property over `known`, so the row comes out of
+    # the store it is really in.
+    known4.known = [r for r in known4.known if r != STAND_IN]
+    out.that(STAND_IN not in basic_options(w4, me4, "opportunity"),
+             "a row the character does not hold is refused with the waiver"
+             " on -- `spent_ok` drops the usage limits and nothing else,"
+             " and an associated-powers list names rows nobody has",
+             f"{basic_options(w4, me4, 'opportunity')}")
+
+    w5, me5, _ = armed()
+    conds = must(w5.get(me5, Conditions), "the character has conditions")
+    conds.add(Condition.STUNNED)
+    out.that(STAND_IN not in basic_options(w5, me5, "opportunity"),
+             "and so is a creature that cannot act -- the other half of"
+             " the same narrowness, and the one a blanket waiver would"
+             " have got wrong",
+             f"{basic_options(w5, me5, 'opportunity')}")
+    out.that(basic_options(w5, me5, "opportunity") == ["mba"],
+             "premise: the menu is not empty -- the plain basic is still"
+             " listed, since `basic_options` appends it without asking"
+             " `usable` -- so the line above is one row being refused and"
+             " not a list this rule mis-read as a refusal",
+             f"{basic_options(w5, me5, 'opportunity')}")
+
+    # -- the waiver comes off with the effect ------------------------------
+    # Added because a plant that REMOVED the cleanup still passed: four
+    # plants reddened an assertion and this one reddened nothing, which
+    # is a finding about the rule rather than about the code.
+    w6, me6, known6 = armed()
+    other = known6.basic
+    held = Cast(world=w6, me=me6, ref="drv").as_basic(
+        other, window="opportunity", spent=True, on=me6)
+    out.that(held is not None and other in known6.instead_when_spent,
+             "premise: a second row laid with the waiver is in the set"
+             " beside the feat's own",
+             f"{held is not None}, {sorted(known6.instead_when_spent)}")
+    Cast(world=w6, me=me6, ref="drv").end_effect(held)
+    out.that(other not in known6.instead_when_spent,
+             "and ending that effect takes its waiver back -- the half"
+             " nothing asserted until a plant removing it stayed green",
+             f"{sorted(known6.instead_when_spent)}")
+    out.that(STAND_IN in known6.instead_when_spent,
+             "while the feat's own waiver survives it -- the second call"
+             " took back only what it added",
+             f"{sorted(known6.instead_when_spent)}")
+    # **The arm above cannot see the over-broad cleanup**, and a plant is
+    # what said so: giving back `set(refs)` instead of only the refs this
+    # call ADDED is the same set when the ref was not already waived. The
+    # difference shows only on a ref somebody else has waived first.
+    again = Cast(world=w6, me=me6, ref="drv").as_basic(
+        STAND_IN, window="opportunity", spent=True, on=me6)
+    out.that(again is not None and STAND_IN in known6.instead_when_spent,
+             "premise: a second row waives a ref the feat has already"
+             " waived, which changes nothing while both stand",
+             f"{again is not None}, {sorted(known6.instead_when_spent)}")
+    Cast(world=w6, me=me6, ref="drv").end_effect(again)
+    out.that(STAND_IN in known6.instead_when_spent,
+             "and when THAT one ends the feat's waiver is still there --"
+             " a cleanup discarding every ref it named would have taken"
+             " away a permission it never granted",
+             f"{sorted(known6.instead_when_spent)}")
+
+    # -- and the row carries no marker -------------------------------------
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row is finished: the clause it was dropped for is"
+             " the one asserted above",
+             f"{REGISTRY[ROW].todo}, {REGISTRY[ROW].dropped}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -120511,6 +120681,9 @@ DRIVERS = {
     "a_flank_from_a_square_nobody_stands_in": (
         a_flank_from_a_square_nobody_stands_in,
         "a flank from a square nobody stands in"),
+    "a_stand_in_offered_after_its_use_is_gone": (
+        a_stand_in_offered_after_its_use_is_gone,
+        "a stand-in offered after its use is gone"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

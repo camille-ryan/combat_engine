@@ -1693,6 +1693,16 @@ class Powers:
     #: possess, and one of those in `all` would be offered on an ordinary
     #: turn as well. `dsl.basic_options` is the read.
     instead: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    #: Of those, the ones still offered when their own use is gone --
+    #: *"even if you have already used it this encounter"*. Not keyed by
+    #: window, because the waiver is about the row's usage and not about
+    #: where the swing came from, and a card printing it names one row.
+    #:
+    #: `dsl.basic_options` turns this into `usable(..., spent_ok=True)`,
+    #: which waives the usage limits **alone** -- so a row the character
+    #: does not hold, cannot act with, or has not finished is still
+    #: refused. `c.as_basic(spent=True)` is what fills it.
+    instead_when_spent: set[str] = field(default_factory=set)
     #: The ranged basic attack, for a creature that has one. Separate from
     #: `basic`, which is the melee one: pointing `basic` at a ranged row
     #: would hand it to the opportunity window too. Empty for a monster,
