@@ -2202,6 +2202,15 @@ class Cast:
                     granted_by=self.me,
                 )
             )
+            # **Refusing it is not the same as failing it**, which is
+            # `durations.save`'s own wording and its own behaviour -- and
+            # this branch did not share it. `SavingThrow` is a `Decision`
+            # and this read only `saved`, so a cancel was promised and
+            # did nothing: exactly the shape `Bus`'s docstring warns
+            # about. Nothing is shaken off and nothing escalates, because
+            # a bare save has no effect to escalate.
+            if ev.cancelled:
+                return False
             return ev.saved
         from .durations import keywords_of as _keywords_of
         from .query import is_trap
@@ -10573,6 +10582,46 @@ class Cast:
             who, self.me, until, label=self.ref, by=self.ref,
             reshape=into, reshape_when=gate, reshape_optional=optional,
             retarget=retarget,
+        )
+
+    def forgo_save(
+        self, *, on: int | None = None, until: When = When.EONT,
+    ) -> Effect | None:
+        """*"You can forgo the saving throw to deal extra damage."*
+
+        **Declining a throw, which is not failing one.** `c.unsave` makes
+        a save that is happening come out a failure -- which spends the
+        effect's chance and escalates an ongoing burn -- where the card
+        says the throw is not taken at all.
+
+        `SavingThrow` is a `Decision` and `durations.save` already reads
+        `cancelled` back: *"a cancelled save never happened: the effect
+        stays and nothing escalates, where a failed one worsens"*. So
+        this is a one-shot refusal armed in the `BEFORE` window, and the
+        machinery to honour it was there for the non-bare path already.
+        `Cast.save`'s **bare** branch read only `saved` and now reads
+        both, so the two spellings of the same question agree.
+
+        `once=True`, because the printed trade is one throw for one
+        payout -- and `until=` bounds the other side, since a refusal
+        armed for a throw that never comes must not sit waiting for the
+        next one.
+
+        Returns the hold, so a row that has to know whether the throw was
+        actually declined can watch it; the refusal itself is silent by
+        design, the way every other interrupt on a `Decision` is.
+        """
+        from .events import SavingThrow
+
+        who = self._who(on) or self.me
+
+        def decline(ev: SavingThrow) -> None:
+            if getattr(ev, "actor", None) == who:
+                ev.cancel()
+
+        return self.watch(
+            SavingThrow, decline, until=until, window=Window.BEFORE,
+            on=who, once=True, label=f"{self.ref} forgo save",
         )
 
     def range_to(

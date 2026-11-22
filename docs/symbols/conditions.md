@@ -90,6 +90,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Take standing conditions off a creature. Returns what actually went.
 - `c.escape(self, *, on: 'int | None' = None, bonus: 'int' = 0, skill: 'str' = '', auto: 'bool' = False) -> 'bool'`
   - Make one escape attempt now. True if the grab is broken.
+- `c.forgo_save(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+  - *"You can forgo the saving throw to deal extra damage."*
 - `c.ignore_condition(self, *conditions: 'Condition', on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'Effect | None'`
   - "You take your turn as though you were not stunned, dazed or
 - `c.immune(self, *conditions: 'Condition', until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None, dtype: 'DamageType | Sequence[DamageType]' = (), keyword: 'Keyword | Sequence[Keyword]' = ()) -> 'Effect | None'`

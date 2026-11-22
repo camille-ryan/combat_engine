@@ -287,6 +287,11 @@ CATEGORIES: dict[str, dict] = {
             # `cf:warden-f0` adds a second one and leaves the first. #671.
             ("getting out, and not getting out", [
                 "cure", "escape", "immune", "ignore_condition", "save",
+                # Beside `unsave` because it is the distinction
+                # that verb does NOT draw: failing a throw spends
+                # the effect's chance and escalates a burn, where
+                # declining one means it never happened. #1341.
+                "forgo_save",
                 "save_early", "unsave",
             ]),
             ("dying and after", [

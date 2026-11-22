@@ -87217,6 +87217,210 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_saving_throw_is_declined_not_failed(out: Result) -> None:
+    """*"You can forgo the saving throw to deal extra damage equal to the
+    weapon's enhancement bonus to the first target of the attack"* --
+    `i3074p1`, triggered by the chaos sorcerer's odd attack roll.
+
+    **Declining a throw is not failing one, and that is the whole of the
+    card.** `c.unsave` makes a throw that is happening come out a
+    failure, which spends the effect's chance and escalates an ongoing
+    burn. `durations.save` already said the right thing about the other
+    case -- *"a cancelled save never happened: the effect stays and
+    nothing escalates, where a failed one worsens"* -- and had no caller.
+
+    **`Cast.save`'s bare branch read only `saved`**, so a cancel was
+    promised there and did nothing: a `Decision` whose refusal is
+    ignored, which is the exact shape the `Bus` docstring warns about.
+    Both branches read both now and this rule asserts them separately.
+
+    **The trigger is the attack ROLL, not the throw.** The throw is what
+    is being declined, so the refusal has to be standing before the
+    feature rolls it -- which is why the row declares
+    `Trigger(AttackRolled, ...)` and not a watch on `SavingThrow`.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import AttackRolled, SavingThrow
+    from combat_engine.engine.types import Condition
+
+    ROW, HOLD = "i3074p1", "drv-daze"
+
+    def dazed() -> tuple:
+        """A character carrying one save-ends condition.
+
+        **Labelled, and every save below names it.** The board deals an
+        `"audit:setup hold"` that is also `When.SAVE_ENDS`, and
+        `c.save` takes whichever it finds first -- so an unnamed throw
+        shook off the board's hold and left the daze standing, which
+        read as the save not working.
+        """
+        world, me, _ = _board(ROW, 1)
+        Cast(world=world, me=me, ref=HOLD).condition(
+            Condition.DAZED, on=me, until=When.SAVE_ENDS)
+        return world, me
+
+    def still_held(world, who: int) -> bool:  # noqa: ANN001
+        from combat_engine.engine.query import is_
+        return is_(world, who, Condition.DAZED)
+
+    # -- a throw that is taken ----------------------------------------------
+    world, me = dazed()
+    out.that(still_held(world, me),
+             "premise: the character is dazed, save ends",
+             "dazed")
+    world.rng.loaded = 20
+    took = Cast(world=world, me=me, ref="drv").save(on=me, against=HOLD)
+    out.that(took and not still_held(world, me),
+             "a loaded 20 shakes it off, which is the throw happening",
+             f"{took}")
+
+    # -- a throw that is declined -------------------------------------------
+    w2, me2 = dazed()
+    Cast(world=w2, me=me2, ref="drv").forgo_save(on=me2, until=When.EOT)
+    w2.rng.loaded = 20
+    out.that(not Cast(world=w2, me=me2, ref="drv").save(
+                 on=me2, against=HOLD),
+             "with the refusal standing, the save returns False even on a"
+             " loaded 20",
+             "declined")
+    out.that(still_held(w2, me2),
+             "**and the condition is STILL THERE.** A declined throw never"
+             " happened, where a failed one spends the chance -- which is"
+             " the distinction `c.unsave` gets wrong for this card",
+             "dazed")
+    # **Read off the LOG, not off a listener.** A plain `bus.on` fires
+    # in the AFTER window, which a cancelled `Decision` never reaches,
+    # and one registered BEFORE runs ahead of the refusal and sees
+    # `cancelled` still False. The logged event is the same object the
+    # interrupt mutated.
+    thrown = [e for e in w2.bus.log if isinstance(e, SavingThrow)]
+    out.that(thrown and thrown[-1].cancelled,
+             "and the throw was announced and CANCELLED rather than"
+             " never announced, so a row counting throws still sees one",
+             f"{[(e.actor, e.cancelled) for e in thrown]}")
+
+    # -- one throw, not every throw -----------------------------------------
+    w2.rng.loaded = 20
+    out.that(Cast(world=w2, me=me2, ref="drv").save(on=me2, against=HOLD),
+             "the NEXT throw is taken: the printed trade is one throw for"
+             " one payout, and the refusal is `once`",
+             "taken")
+
+    # -- somebody else's throw is not declined ------------------------------
+    w6, me6 = dazed()
+    mate = sorted(Cast(world=w6, me=me6, ref="drv").allies())[0]
+    Cast(world=w6, me=me6, ref=HOLD).condition(
+        Condition.DAZED, on=mate, until=When.SAVE_ENDS)
+    Cast(world=w6, me=me6, ref="drv").forgo_save(on=me6, until=When.EOT)
+    w6.rng.loaded = 20
+    out.that(Cast(world=w6, me=mate, ref="drv").save(on=mate, against=HOLD),
+             "**an ALLY's throw is untouched.** The refusal reads"
+             " `ev.actor`, and a handler that cancelled whatever it saw"
+             " would decline every save on the board for the rest of the"
+             " turn",
+             "taken")
+    out.that(not Cast(world=w6, me=me6, ref="drv").save(on=me6,
+                                                        against=HOLD),
+             "while the holder's own is still declined, so the arm above"
+             " is the narrowing and not the refusal having expired",
+             "declined")
+
+    # -- the bare branch reads the cancel too --------------------------------
+    w3, me3 = dazed()
+    Cast(world=w3, me=me3, ref="drv").forgo_save(on=me3, until=When.EOT)
+    w3.rng.loaded = 20
+    out.that(not Cast(world=w3, me=me3, ref="drv").save(
+                 on=me3, bare=True, avoiding=(Condition.PRONE,)),
+             "**a BARE save honours the refusal as well.** That branch"
+             " read only `saved`, so a cancel was promised and did"
+             " nothing -- the two spellings of one question disagreeing"
+             " by branch",
+             "declined")
+
+    # -- the row ------------------------------------------------------------
+    w4, me4, _ = _board(ROW, 1)
+    foe = sorted(Cast(world=w4, me=me4, ref="drv").enemies())[0]
+    hurt = must(w4.get(foe, Health), "the enemy has hit points")
+    whole = hurt.hp
+    odd = AttackRolled(attacker=me4, target=foe, power="mba", natural=7,
+                       total=20, vs=None, bonus=0, defence=10,
+                       advantage=False)
+    REGISTRY[ROW].body(Cast(world=w4, me=me4, ref=ROW, trigger=odd))
+    out.that(hurt.hp < whole,
+             "the row deals its extra damage to the enemy the attack was"
+             " aimed at",
+             f"{whole} -> {hurt.hp}")
+    # **Asserted as a DIFFERENCE, because the board adds damage of its
+    # own.** The enhancement is 1 here and the blow lands for 2, so an
+    # arm comparing the total against `c.enhancement` fails for the
+    # right behaviour. Raising the weapon's bonus and measuring again
+    # says the printed amount is what is being paid, whatever else the
+    # board is adding.
+    w4b, me4b, _ = _board(ROW, 1)
+    foe_b = sorted(Cast(world=w4b, me=me4b, ref="drv").enemies())[0]
+    hurt_b = must(w4b.get(foe_b, Health), "the enemy has hit points")
+    gear = must(w4b.get(me4b, Gear), "the character has gear")
+    for weapon in gear.weapons:
+        weapon.enhancement += 2
+    was_b = hurt_b.hp
+    REGISTRY[ROW].body(Cast(
+        world=w4b, me=me4b, ref=ROW,
+        trigger=AttackRolled(attacker=me4b, target=foe_b, power="mba",
+                             natural=7, total=20, vs=None, bonus=0,
+                             defence=10, advantage=False)))
+    out.that((was_b - hurt_b.hp) - (whole - hurt.hp) == 2,
+             "and the amount is the WEAPON'S ENHANCEMENT BONUS: two more"
+             " on the weapon is two more damage, measured as a"
+             " difference because the board adds damage of its own",
+             f"{whole - hurt.hp} -> {was_b - hurt_b.hp}")
+
+    w5, me5, _ = _board(ROW, 1)
+    foe5 = sorted(Cast(world=w5, me=me5, ref="drv").enemies())[0]
+    hurt5 = must(w5.get(foe5, Health), "the enemy has hit points")
+    was5 = hurt5.hp
+    even = AttackRolled(attacker=me5, target=foe5, power="mba", natural=8,
+                        total=20, vs=None, bonus=0, defence=10,
+                        advantage=False)
+    REGISTRY[ROW].body(Cast(world=w5, me=me5, ref=ROW, trigger=even))
+    out.that(hurt5.hp == was5,
+             "and an EVEN roll pays nothing -- that branch of the feature"
+             " buys a point of AC and hands over no throw, so there is"
+             " nothing to decline",
+             f"{was5} -> {hurt5.hp}")
+
+    # **The ROW arms the refusal**, which none of the arms above say:
+    # they all call `c.forgo_save` directly, so the plant deleting the
+    # row's call stayed green.
+    w7, me7, _ = _board(ROW, 1)
+    Cast(world=w7, me=me7, ref=HOLD).condition(
+        Condition.DAZED, on=me7, until=When.SAVE_ENDS)
+    foe7 = sorted(Cast(world=w7, me=me7, ref="drv").enemies())[0]
+    REGISTRY[ROW].body(Cast(
+        world=w7, me=me7, ref=ROW,
+        trigger=AttackRolled(attacker=me7, target=foe7, power="mba",
+                             natural=7, total=20, vs=None, bonus=0,
+                             defence=10, advantage=False)))
+    w7.rng.loaded = 20
+    out.that(not Cast(world=w7, me=me7, ref="drv").save(on=me7,
+                                                        against=HOLD),
+             "after the ROW runs, the next throw is declined -- the"
+             " refusal is the card's and not this rule's",
+             "declined")
+
+    out.that(REGISTRY[ROW].on is not None and bool(REGISTRY[ROW].trigger),
+             "the row declares its printed trigger on `AttackRolled`"
+             " rather than watching for the throw: the refusal has to be"
+             " standing before the feature rolls it",
+             f"{REGISTRY[ROW].trigger}")
+    out.that(not REGISTRY[ROW].unfinished,
+             f"{ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_resistance_lasts_an_extra_round(out: Result) -> None:
     """*"Affects artificers only. Resistance granted by your artificer
     powers that lasts until the end of your next turn instead lasts an
@@ -121504,6 +121708,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "save_declined_not_failed": (
+        a_saving_throw_is_declined_not_failed,
+        "`i3074p1` declines a saving throw rather than failing it, and "
+        "pays the weapon's enhancement instead (#1341)",
     ),
     "resist_lasts_an_extra_round": (
         a_resistance_lasts_an_extra_round,

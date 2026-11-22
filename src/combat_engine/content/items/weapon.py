@@ -58,6 +58,7 @@ from combat_engine.engine import (
     ActionType,
     Attack,
     AttackDeclared,
+    AttackRolled,
     Bloodied,
     Cast,
     CloseBlast,
@@ -1566,6 +1567,19 @@ def i3069p1(c: Cast) -> None:
         )
 
 
+def _my_odd_roll(world: World, me: int, ev: Any) -> bool:
+    """An odd natural on this creature's own attack roll.
+
+    The card's trigger is *"your chaos burst feature would give you a
+    saving throw"*, and that feature's own condition is this: it watches
+    `AttackRolled` and branches on `natural % 2`. Read here rather than
+    waited for, because the throw is what is being declined -- a refusal
+    armed after it has been rolled is too late.
+    """
+    return (getattr(ev, "attacker", None) == me
+            and getattr(ev, "natural", 0) % 2 == 1)
+
+
 @power(
     "i3074p1",
     level=2,
@@ -1574,23 +1588,50 @@ def i3069p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.forgo_save()",),
+    trigger="your chaos burst feature would give you a saving throw "
+            "because of an odd attack roll",
+    on=Trigger(AttackRolled, _my_odd_roll,
+               "you roll an odd number on an attack roll"),
 )
 def i3074p1(c: Cast) -> None:
-    """Trades a saving throw one class feature would hand you for extra
-    damage.
+    """*"Use this power when your chaos sorcerer chaos burst feature
+    would give you a saving throw because of an odd attack roll. You can
+    forgo the saving throw to deal extra damage equal to the weapon's
+    enhancement bonus to the first target of the attack."*
 
-    The feature **is** modelled -- the old docstring said otherwise and
-    was wrong. `powers/sorcerer/souls._chaos_burst` is the wild soul's
-    half of `cf:sorcerer-f0`: it watches `AttackRolled` and, on an odd
-    natural, calls `c.save(on=me)`.
+    **The feature is modelled and the refusal is where the gap was.**
+    `powers/sorcerer/souls._chaos_burst` watches `AttackRolled` and, on
+    an odd natural, calls `c.save(on=me)`.
 
-    What is missing is declining it. `c.save` picks the first save-ends
-    effect and rolls; `SavingThrow` is announced, but only in the `bare`
-    branch and the caller ignores its `cancelled` either way, so an
-    interrupt could not stop the throw and a free action certainly
-    cannot. `c.unsave` fails a save that is happening, which spends the
-    effect's chance rather than keeping it."""
+    `c.forgo_save` is that refusal: a one-shot interrupt on
+    `SavingThrow`, which is a `Decision` whose cancel `durations.save`
+    already honours -- *"a cancelled save never happened: the effect
+    stays and nothing escalates, where a failed one worsens"*. That is
+    the distinction the card turns on, and `c.unsave` is the wrong verb
+    for it: failing a throw spends the effect's chance.
+
+    **The trigger is the attack roll, not the throw**, because the throw
+    is what is being declined: the refusal has to be standing before the
+    feature rolls it. `AttackRolled` in the `BEFORE` window is the one
+    moment that is true, and the odd natural is the card's own
+    condition.
+
+    **`c.damage()` with no amount, which is the printed one.** That verb
+    adds `self._enhancement()` to every blow it deals, so
+    `c.damage(c.enhancement)` pays the bonus **twice** -- measured: a +1
+    weapon dealt 2, and raising it to +3 dealt 6 where the card says 3.
+    The floor of a bare call is exactly the enhancement, which is what
+    *"extra damage equal to the weapon's enhancement bonus"* asks for.
+
+    `c.target` is the first target of the attack -- the one this row's
+    trigger carries, which is what *"the first target"* comes to on a row
+    used in answer to a single roll."""
+    roll = c.trigger
+    foe = getattr(roll, "target", None)
+    if foe is None or getattr(roll, "natural", 0) % 2 == 0:
+        return
+    c.forgo_save(on=c.me, until=When.EOT)
+    c.damage(on=foe)
 
 
 @power(
