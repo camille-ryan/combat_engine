@@ -72792,6 +72792,88 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_borrowed_power_rolls_on_charisma(out: Result) -> None:
+    """*"When you use any attack power gained through a multiclass feat ...
+    you can use Charisma for the power's attack rolls"* -- `f1120`. #1457.
+
+    **The premise its marker rested on was stale twice over**, and that
+    is the finding. The note said the provenance mechanism *"exists and
+    is empty ... because the three rows that would populate it (`f2697`,
+    `f2698`, `f2732`) are blocked on `dsl.augmentable`"*. Measured:
+
+    * all three carry **no marker** -- that verb landed, and each row's
+      own docstring says so;
+    * and the record is populated. A fighter who multiclasses into an
+      ardent and holds `f2698` gets `option:f2698:p13780` on its
+      `Build.choices`, which is the feat-and-power pair this card wants.
+
+    So a chain described as "two rows deep" was closed at both ends and
+    nothing re-read the far end. Worth asserting the near end here, so
+    the next pass does not have to take this note's word for it either.
+
+    **Derived from the registry, not listed.** The feats whose trade
+    draws its incoming card from the multiclassed class are the ones
+    declaring `Swap.pool == "multiclass"`, and asking the registry
+    cannot go stale the way a tuple of three refs in the row would.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW, FEAT, CARD = "f1120", "f2698", "p13780"
+
+    # -- the near end of the chain, asserted rather than believed -----------
+    swaps = sorted(
+        ref for ref, row in REGISTRY.items()
+        if getattr(getattr(row, "swap", None), "pool", "") == "multiclass"
+    )
+    out.that(len(swaps) == 3 and FEAT in swaps,
+             "three feats draw their incoming card from the class a"
+             " character multiclassed into, found by asking the registry"
+             " rather than by a list in the row",
+             f"{swaps}")
+    out.that(all(not REGISTRY[r].unfinished for r in swaps),
+             "and none of the three carries a marker -- the note that"
+             " kept this row marked said all three were blocked on"
+             " `dsl.augmentable`, which landed",
+             f"{[(r, REGISTRY[r].unfinished) for r in swaps]}")
+
+    def played(*, feat: bool, recorded: bool) -> list[str]:
+        world, me, _ = _board(ROW, 1)
+        known = must(world.get(me, Powers), "the character has powers")
+        if feat and FEAT not in known.all:
+            known.known.append(FEAT)
+        build = world.get(me, Build) or world.add(me, Build())
+        if recorded:
+            build.choices.add(f"option:{FEAT}:{CARD}")
+        REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+        return [e.label for e in world.effects.of(me)
+                if CARD in (e.label or "")]
+
+    out.that(played(feat=True, recorded=True),
+             "with the feat held and its pick recorded, the borrowed"
+             " power is rewritten to attack on Charisma",
+             f"{played(feat=True, recorded=True)}")
+    out.that(not played(feat=True, recorded=False),
+             "with the feat and no recorded pick, nothing -- the row"
+             " rewrites the power the BUILD named and does not guess at"
+             " one",
+             "nothing")
+    out.that(not played(feat=False, recorded=True),
+             "and with the record but not the feat, nothing either: the"
+             " arm that makes this the feat's clause rather than"
+             " something every multiclassed character gets",
+             "nothing")
+
+    out.that(REGISTRY[ROW].unfinished == ("chargen.paragon_multiclass",),
+             "`f1120` keeps a marker for the two routes the card names"
+             " that nothing records: paragon multiclassing, which this"
+             " tree does not model at all, and the racial feature, whose"
+             " grant is not recorded as having come from it either",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_form_ended_from_outside_it(out: Result) -> None:
     """*"Reverts to its natural form **and** cannot use powers that have
     the polymorph keyword (save ends)"* -- `i2459p1`. #1456.
@@ -125964,6 +126046,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_borrowed_power_rolls_on_charisma,
         a_form_ended_from_outside_it,
         a_creature_takes_a_different_stat_block,
         the_hexblade_boon_taken_from_a_new_moment,
@@ -126359,6 +126442,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "borrowed_ability": (
+        a_borrowed_power_rolls_on_charisma,
+        "a multiclassed power rolls on Charisma, off the provenance the"
+        " build recorded (#1457)",
     ),
     "form_ended": (
         a_form_ended_from_outside_it,

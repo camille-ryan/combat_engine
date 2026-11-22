@@ -50,6 +50,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import allies, line_of_effect, unseen_by
+from combat_engine.engine.types import Ability
 
 #: The ref the prerequisite column gives for the heal three rows modify.
 WORD = "p2339"
@@ -361,35 +362,61 @@ def f2926(c: Cast) -> None:
 
 @power("f1120", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.multiclass_powers()",))
+       dropped=("chargen.paragon_multiclass",))
 def f1120(c: Cast) -> None:
-    """Attacks with a borrowed power roll on Charisma instead.
+    """*"When you use any attack power gained through a multiclass feat,
+    paragon multiclassing, or the `r6`'s `rt:r6-t3` racial feature, you
+    can use Charisma for the power's attack rolls rather than the ability
+    score normally used to make the attack."*
 
-    **One hold now, not two.** `c.rolls_with` exists, so rewriting which
-    ability a row attacks with is no longer the problem -- but the verb takes
-    a ref and this card names no rows at all. "Gained through a multiclass
-    feat" is a provenance `Powers.known` does not keep: a row is in the list
-    or it is not, and the list does not say how it got there.
+    **Written, and the premise the old marker rested on is stale twice
+    over.** That note said the provenance mechanism *"exists and is
+    empty ... because the three rows that would populate it (`f2697`,
+    `f2698`, `f2732`) are blocked on `dsl.augmentable`"*. Measured today:
 
-    So the swap is one line the moment that provenance exists, and the marker
-    names only the thing actually missing. Dropping the arrived symbol is not
-    progress on the row and is not claimed as any.
+    * all three carry **no marker** -- `dsl.augmentable` landed and each
+      of the three says so in its own docstring;
+    * and the record is populated. A fighter who multiclasses into an
+      ardent and holds `f2698` gets `option:f2698:p13780` on its
+      `Build.choices`, which is exactly the feat-and-power pair this card
+      needs.
 
-    **`#1161` landed and this row is still blocked, which is that
-    distinction arriving in practice.** `Character.multiclass` records
-    *which class* was multiclassed into and `Swap.pool == "multiclass"`
-    draws from it. Neither says *which powers* came in that way, and that
-    is what this card needs.
+    So the chain the note described as *"two rows deep"* is closed at
+    both ends and this row is one loop over what the build recorded.
 
-    The mechanism that would carry it exists and is empty:
-    `chargen.power_swap`'s `record=` set writes `option:<feat>:<power>`
-    for every pool swap -- feat and power together, which is exactly this
-    provenance. Nothing populates it for a multiclass feat yet, because
-    the three rows that would (`f2697`, `f2698`, `f2732`) are blocked on
-    `dsl.augmentable`. The chain is two rows deep and this is the far end
-    of it.
+    **Derived from the registry, not listed.** The feats whose trade
+    draws its incoming card from the multiclassed class are the ones
+    declaring `Swap.pool == "multiclass"` -- three today -- and asking
+    the registry cannot go stale the way a tuple of three refs here
+    would. `chargen.power_swap` is the only thing that writes the
+    record, and it writes it for exactly those rows.
+
+    **Dropped: paragon multiclassing, and the racial feature with it.**
+    The card names three routes and only one is recorded. Nothing in this
+    tree models paragon multiclassing at all -- no ref carries the word,
+    `Character` has no field for it, and the printed option replaces a
+    paragon path -- so there is no set of powers for it to name.
+    `rt:r6-t3` is declared, but what it grants is not recorded as having
+    come from it either: the same provenance question one route over, and
+    it rides on the same answer.
+
+    `until=When.ENCOUNTER` because the swap is a property of the
+    character rather than of one use, and `turns.arm_traits` re-lays it
+    every fight. #1457.
     """
+    from combat_engine.engine.dsl import REGISTRY as _ROWS
 
+    swapped = sorted(
+        ref for ref, row in _ROWS.items()
+        if getattr(getattr(row, "swap", None), "pool", "") == "multiclass"
+    )
+    for feat in swapped:
+        if not c.feat(feat):
+            continue
+        for card in c.chosen_options(feat):
+            # `card`, not `power`: that name is the row decorator imported
+            # at the top of this file and shadowing it is a ruff error.
+            c.rolls_with(card, Ability.CHA, on=c.me, until=When.ENCOUNTER)
 
 @power("f1144", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,

@@ -193,6 +193,20 @@ KNOWN_SILENT = {
     # stronger than its card by that much. Recorded on `#1453`; it
     # carries no marker because `lint.py` refuses `dropped=` on a row
     # whose body does nothing, which is `f604`'s case.
+    # **A feat whose whole effect reads what the BUILD recorded.**
+    # `f1120` rewrites the ability a borrowed power attacks with, and
+    # which powers were borrowed is `option:<feat>:<power>` on
+    # `Build.choices` -- written by `chargen.power_swap` for the three
+    # feats declaring `Swap.pool == "multiclass"`, which are themselves
+    # `KNOWN_SILENT` above for the same kind of reason.
+    #
+    # The board poses neither the feat nor a recorded pick, so the row
+    # reads SILENT for the harness's reason. `drivers.borrowed_ability`
+    # stages both and measures all three arms -- feat and record, feat
+    # alone, record alone. #1457.
+    "f1120": "rewrites a borrowed power's ability off what the build "
+             "recorded; the board poses no multiclass swap -- see "
+             "`drivers.borrowed_ability`",
     "f3616": "buys an attack power at build time; nothing to do on a "
              "board -- see `drivers.bought_power`, and #1453 for the "
              "vial count its cost needs",
