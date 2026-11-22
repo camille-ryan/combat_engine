@@ -19513,15 +19513,35 @@ def denying_immediate_attacks_spares_other_immediates(out: Result) -> None:
 
     world, me, _ = _board(attacker, 1)
     known = world.get(me, Powers)
-    for ref in (attacker, healer):
-        if ref not in known.all:
-            known.known.append(ref)
 
     def offered(ref: str) -> bool:
+        if ref not in known.all:
+            known.known.append(ref)
         return dsl.usable(world, me, dsl.REGISTRY[ref], spent_ok=True)[0]
 
+    # **The non-attacking row is chosen for being USABLE on this board,
+    # not for sorting first.** Picking by sort order alone went red: the
+    # first immediate non-attacking row with no marker was
+    # `cf:bard-f1s1`, refused for *"requirement not met"* -- nothing to
+    # do with immediate attacks -- so the baseline failed and the control
+    # below measured a row that was never offered in the first place.
+    #
+    # Fragile rather than wrong when written: the subject drifts with the
+    # corpus, because any row losing a marker can become the new first
+    # pick. Choosing on the board is what stops that, and the assertion
+    # being made is unchanged.
+    if not offered(healer):
+        healer = next(
+            (ref for ref, row in sorted(dsl.REGISTRY.items())
+             if row.action in immediate and not row.unfinished
+             and row.attack is None and offered(ref)),
+            healer,
+        )
     out.that(offered(attacker) and offered(healer),
-             "both are usable to begin with -- the baseline", "both")
+             "both are usable to begin with -- the baseline, and the"
+             " non-attacking one is picked for being offered rather than"
+             " for sorting first",
+             f"{attacker} / {healer}")
     c = Cast(world=world, me=me, ref="drivers:probe")
     c.no_immediate(on=me, until=When.ENCOUNTER, attacks=True)
     out.that(not offered(attacker),
