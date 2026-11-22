@@ -652,14 +652,80 @@ def items(
     written as refs. The other 229 are waived or absent.
     """
     scores: list[float] = []
+    # **Every item's name to its ref, for `_set_members` only.** Built
+    # from the whole `Item` table rather than the filtered query below,
+    # because a set page names members of every tier and the filter keeps
+    # heroic -- a map built from the filtered rows would silently drop a
+    # paragon member and read as a set with fewer items than it prints.
+    # Lives for the length of the build and reaches no column.
+    by_name: dict[str, str] = {}
+    for ident, label in source.execute("SELECT ID, Name FROM Item"):
+        if label:
+            by_name.setdefault(label.strip().lower(), f"i{ident}")
     for row in source.execute(
         "SELECT ID, Name, Category, Rarity, LevelSort, Source, Txt FROM Item "
         "WHERE (LevelSort BETWEEN 1 AND ?) OR Category = 'Equipment' "
         "ORDER BY ID",
         (MAX_ITEM_LEVEL,),
     ):
-        scores.append(_one_item(dict(row), out, report, names))
+        scores.append(_one_item(dict(row), out, report, names, by_name))
     report.scores["item"] = sum(scores) / max(1, len(scores))
+
+
+#: A member card embedded in a set page, and the span that carries its
+#: level and rarity rather than its name. **`milevel`, not `level`** -- the
+#: power pages use the second and these use the first, and stripping the
+#: wrong one leaves the level glued to the name so **0 of 212** members
+#: resolve instead of 205.
+_MEMBER_HEAD = re.compile(r"<h1[^>]*>(.*?)</h1>", re.S)
+_MEMBER_SPAN = re.compile(r"<span[^>]*>.*?</span>", re.S)
+
+
+def _set_members(
+    body: str,
+    set_ref: str,
+    by_name: dict[str, str],
+    out: sqlite3.Connection,
+) -> int:
+    """Which items a set page says belong to it. `#1430`.
+
+    A set page embeds its members' **whole pages** as further `<h1>`
+    cards -- which `_one_item` already knew and used as a reason *not* to
+    parse past the first heading, since every member is its own `Item`
+    row. Those headings are the membership.
+
+    **Resolved by name to the member's own id, so the table holds refs.**
+    The page gives no `href` for a member -- measured, 0 across the first
+    six sets -- so this component's "prefer the id to the name" rule has
+    nothing to prefer and the name is the only key available. The *name*
+    goes nowhere: what is written is `i<id>`, and `by_name` is built once
+    by the caller and thrown away with the build.
+
+    Measured over all 41 set pages: **212 member cards, 205 resolve**
+    (96%). The 7 that do not are left out rather than guessed at, which
+    is this component's "parse, or store nothing" rule -- a membership
+    row naming a ref that is not an item would read as a set with a
+    member the game does not have.
+
+    **Membership only. The set's tiered bonuses are NOT imported**, and
+    saying so is half the point: a set page also prints its "two items /
+    four items" rungs, the four rows this unblocks do not need them, and
+    a table holding membership while looking complete would be worse than
+    an obviously partial one. `item.spec` still carries the printed
+    benefit text for a reader.
+    """
+    found = 0
+    for ord_, head in enumerate(_MEMBER_HEAD.findall(body)[1:], 1):
+        label = text(_MEMBER_SPAN.sub("", head)).strip()
+        ref = by_name.get(label.lower()) if label else None
+        if ref is None:
+            continue
+        out.execute(
+            "INSERT OR IGNORE INTO item_set VALUES (?,?,?)",
+            (set_ref, ref, ord_),
+        )
+        found += 1
+    return found
 
 
 def _one_item(
@@ -667,6 +733,7 @@ def _one_item(
     out: sqlite3.Connection,
     report: Any,
     names: dict[str, dict[str, str]],
+    by_name: dict[str, str] | None = None,
 ) -> float:
     ref = f"i{row['ID']}"
     name = (row["Name"] or "").strip()
@@ -688,6 +755,7 @@ def _one_item(
         # is the set's own benefit table, which exists nowhere else.
         report.sets_skipped += 1
         spec = scrub(_set_benefits(body), {name: ref})
+        report.set_members += _set_members(body, ref, by_name or {}, out)
     else:
         spec = item_spec(head, ref, name)
 

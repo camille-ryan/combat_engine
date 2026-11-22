@@ -343,6 +343,23 @@ CREATE TABLE item_block (
 );
 CREATE INDEX item_block_owner ON item_block(item_ref);
 
+-- **Which items belong to which set.** Four heroic rows are marked on
+-- `c.item_set()` and every one needs the same thing: how many items of a
+-- set the creature is carrying. `game.db` could not answer it at all --
+-- no table, no column, no row anywhere saying a given item is in a given
+-- set. #1430.
+--
+-- **A join and not a column on `item`**, because a set has several
+-- members and an item could in principle appear in more than one.
+--
+-- `ord` is the order the set page prints its members in, which is the
+-- only ordering the source gives.
+CREATE TABLE item_set (
+  set_ref TEXT, member_ref TEXT, ord INTEGER,
+  PRIMARY KEY (set_ref, member_ref)
+);
+CREATE INDEX item_set_member ON item_set(member_ref);
+
 -- Feats. `prereq` is a JSON expression tree of atoms and never prose --
 -- see `feat.py`, and note that `unparsed` counts the atoms that could not
 -- be structured rather than keeping their text, because the text is a
@@ -530,7 +547,22 @@ CREATE TABLE weapon (
   ref TEXT PRIMARY KEY, id INTEGER, category TEXT, hands TEXT,
   melee INTEGER, damage TEXT, proficiency INTEGER, grp TEXT,
   reach INTEGER, range_short INTEGER, range_long INTEGER, properties TEXT,
-  slug TEXT, priced INTEGER
+  slug TEXT, priced INTEGER,
+  -- **The primary end this weapon is the second half of.** A double
+  -- weapon's two ends are two `Item` rows in the compendium and nothing
+  -- related them, so a row holding one could not find the other --
+  -- `components.Weapon` carries one `damage` and one `properties`, the
+  -- primary's. `f951` and `f1252` print a different die and different
+  -- properties per end and were refused in play for it. #1433.
+  --
+  -- NULL on a primary and on every ordinary weapon, which is 117 of the
+  -- 128: the same bargain the per-square maps in `Grid` strike.
+  --
+  -- Filled by `_double_ends` **off the slug**, not off a name: a
+  -- secondary end's printed name is its primary's plus a fixed suffix,
+  -- so the join is slug arithmetic and no name enters the code. 11 of
+  -- 11 resolve that way.
+  secondary_of TEXT
 );
 CREATE INDEX weapon_group ON weapon(grp, category);
 
@@ -1275,6 +1307,7 @@ class Report:
     item_blocks: int = 0
     item_steps: int = 0
     sets_skipped: int = 0
+    set_members: int = 0
     feats: int = 0
     feat_cards: int = 0
     races: int = 0
@@ -1379,6 +1412,7 @@ class Report:
             f"  blocks      {self.item_blocks:6d}  (a Property or a Power: the work unit)",
             f"  ladder rungs{self.item_steps:6d}  (level, plus and price)",
             f"  sets skipped{self.sets_skipped:6d}  (their members are their own rows)",
+            f"  set members {self.set_members:6d}  (which item belongs to which set)",
             f"feats         {self.feats:6d}",
             f"  power cards {self.feat_cards:6d}  (a feat that prints a whole power)",
             f"  unparsed    {self.unparsed:6d}  (prerequisite clauses left opaque)",
@@ -2394,7 +2428,8 @@ def _weapons(
         # whitespace rather than NULL when absent.
         priced = int(bool((row["Cost"] or "").strip()))
         out.execute(
-            "INSERT OR REPLACE INTO weapon VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO weapon VALUES "
+            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 # **The id, not the name.** This was `f"w:{_slug(row['Name'])}"`
                 # -- a ref minted by slugifying a printed name, with the
@@ -2421,6 +2456,12 @@ def _weapons(
                 # Whether the page prints a price -- see the schema note. The
                 # column is whitespace rather than NULL when absent.
                 priced,
+                # **`secondary_of` is filled afterwards, not here.** The
+                # primary may be written after its secondary end -- the
+                # loop is ordered by id and the pairs are not adjacent --
+                # so resolving it in the loop would miss half of them.
+                # `_double_ends` does it once every weapon is in.
+                None,
             ),
         )
         # The printed name, where every other printed name lives.
@@ -2433,7 +2474,53 @@ def _weapons(
     # block on the build's own write lock -- which it did, for ten minutes at
     # 0.0% CPU. Same arrangement as `set_races` and `set_classes`.
     sanitise.set_weapons(frozenset(minted))
+    _double_ends(out)
     return written
+
+
+#: The suffix the compendium gives the second half of a double weapon,
+#: slugified. A secondary end's printed name is its primary's plus this, so
+#: the pair can be joined **without a name entering the code**: strip the
+#: suffix from the slug and the remainder is the primary's slug.
+_SECOND_END = "-secondary-end"
+
+
+def _double_ends(out: sqlite3.Connection) -> int:
+    """Point each secondary end at its primary. `#1433`.
+
+    A double weapon's two ends are two `Item` rows in the compendium and
+    nothing related them, so a row holding one could not find the other.
+    `components.Weapon` carries one `damage` and one `properties` -- the
+    primary's -- and `f951` and `f1252` print a different die and
+    different properties per end.
+
+    **Joined on `slug`, never on a name.** The secondary end is named for
+    its primary plus a fixed suffix, so this is string arithmetic over a
+    column that already holds the slugified name. Measured: **11 of 11**
+    resolve, and every one of the 11 carries the suffix with a consistent
+    separator.
+
+    **The count is 11 and this issue said 13.** Re-counted off the
+    source: 11 `Item` rows are named a secondary end, under three
+    spellings of the search (`secondary end`, `secondary`, ` - secondary`)
+    which all agree, and `second end` matches nothing. The issue also
+    recorded "12 double weapons carrying an off-hand property" against
+    those 13 and called the difference a possible dropped row. It is the
+    other way round: 11 of the 12 **are** these secondary ends, and the
+    twelfth is a primary double weapon that carries the property in its
+    own right. Nothing is missing.
+
+    Returns how many were linked, so a regression is a number.
+    """
+    linked = out.execute(
+        "UPDATE weapon SET secondary_of = ("
+        "  SELECT p.ref FROM weapon p"
+        "   WHERE p.slug = substr(weapon.slug, 1, length(weapon.slug) - ?)"
+        "     AND p.ref != weapon.ref"
+        ") WHERE slug LIKE ?",
+        (len(_SECOND_END), f"%{_SECOND_END}"),
+    ).rowcount
+    return linked
 
 
 #: A feature heading inside the class-features section: the page sets each
