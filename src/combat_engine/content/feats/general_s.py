@@ -1175,28 +1175,43 @@ def f3718(c: Cast) -> None:
 
 
 @power("f3719", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.surface()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind while on an earthen or stone surface",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3719(c: Cast) -> None:
-    """What the square is made of is not recorded anywhere: `c.terrain`
-    asks about the fight, not about the ground under one creature. Its
-    vocabulary is closed -- `cast.TERRAIN_WORDS`, seventeen words -- and
-    names no ground at all beyond `ice`, `snow` and `forest`, so a gate
-    spelled for this card's surface would **raise** rather than read
-    false.
+    """Resist 5 to everything for a turn, for taking a second wind with
+    the right stuff underfoot.
 
-    **The near-miss is `DIFFICULT_LABELS`, and it is a trap rather than an
-    answer.** That set does hold `earth`, `earthen construction`, `stone`
-    and `uneven stone` -- but it labels *rough going*, written only by
-    `c.zone(difficult=)`, and the five words anything writes today are
-    `forest`, `ice`, `rubble`, `water` and `web`. A plain stone floor
-    carries no label, so a read keyed on it would be False on every board
-    this engine builds and True only where some other row happened to lay
-    a difficult patch and name it: a gate that cannot be true for the case
-    the card is about, which is what `#598` measured on the 29 calls
-    naming words no square carries.
+    **The old note diagnosed the gap exactly and `Grid.material` is it.**
+    It said *"the gap is a per-square material, independent of whether
+    that square is hard going"*, and that is what was built -- a map of
+    what a square is made of, with `Grid.ground` for the board where no
+    square differs, read through `c.surface`.
 
-    So the gap is a per-square **material**, independent of whether that
-    square is hard going."""
+    **It also correctly refused the near-miss, which is why this row is
+    worth reading before writing another one like it.**
+    `DIFFICULT_LABELS` holds `earth`, `earthen construction`, `stone` and
+    `uneven stone`, so a gate keyed on it would have compiled and looked
+    right -- and it labels *rough going*, written only by
+    `c.zone(difficult=)`. A plain stone floor carries no entry, so the
+    gate would have been False on every board and True only where some
+    other row had laid a difficult patch and happened to name it the same
+    word: `#598`'s dead-gate shape, in the direction that is hardest to
+    notice. The two sets stay separate for that reason.
+
+    **All four spellings, because the card says "earthen or stone".**
+    Uneven stone is still stone and an earthen construction is still
+    earthen; asking for the two bare words would make the row weaker than
+    its card on a floor some other row had described more precisely.
+
+    `c.resist` with no damage type is resist-all, which is the printed
+    line. The 21st-level rung is carried because it costs one comparison
+    and the alternative is a row that is wrong above heroic tier.
+    """
+    if not c.surface("earth", "earthen construction", "stone",
+                     "uneven stone"):
+        return
+    c.resist(10 if c.level >= 21 else 5, until=When.EONT)
 
 
 @power("f3720", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

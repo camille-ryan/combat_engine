@@ -3353,6 +3353,19 @@ def _board(ref: str, seed: int, pose: bool = False,
         # and `ty` refuses the narrower type. Nothing here mutates it, so
         # immutability bought nothing worth a diagnostic.
         world.terrain = {terrain}
+    # **The floor is made of something**, for the same ordering reason as
+    # the weather above. `Grid.ground` is `""` on an undressed board, and
+    # `c.surface` is False on an unrecorded floor by design -- so a row
+    # gated on what is underfoot reads SILENT for the board's reason
+    # rather than its own, which is exactly the misreading
+    # `audit-unused-means-the-board-never-asked` is about. `f3719` is the
+    # row that found it.
+    #
+    # `stone` because it is the commonest word in `terrain._GROUND` and
+    # because a dungeon floor is what most of these cards assume. A row
+    # wanting a different material has to pose its own board; this is the
+    # default, not a claim about every card.
+    world.grid.ground = "stone"
     # **`REGISTRY[ref]`, not `get(ref)`.** `get` answers `Power | None`
     # and this function reads `declared.cls` and `declared.reach` in nine
     # places without a guard -- so a ref the registry does not hold used

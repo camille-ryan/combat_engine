@@ -206,6 +206,26 @@ def _corners(sq: Square) -> tuple[Point, Point, Point, Point]:
 # --------------------------------------------------------------------------
 
 
+#: What a floor may be made of, for `Grid.material`, `Grid.ground` and
+#: `Cast.surface`. Closed, and an unknown word raises there.
+#:
+#: **Closed for the reason `c.terrain`'s vocabulary is**, and the argument is
+#: stronger here: `ground` is `""` on a board nobody dressed, so a gate
+#: spelled `"earthen"` against a vocabulary holding `"earth"` is False for as
+#: long as the maps stay empty -- which reads exactly like a correct gate, and
+#: is the dead-gate shape `#598` measured over 29 calls naming words no square
+#: carries.
+#:
+#: Overlaps `DIFFICULT_LABELS` in four words (`earth`, `stone`, and the two
+#: construction spellings) and is deliberately a **separate** set: that one
+#: labels rough going, so its entries say a square is *hard to cross* and
+#: these say what it is *made of*. A stone floor is ordinary ground.
+SURFACE_WORDS = frozenset({
+    "earth", "earthen construction", "stone", "uneven stone",
+    "wood", "metal", "sand", "snow", "ice", "rubble", "water",
+})
+
+
 @dataclass
 class Grid:
     """Terrain, plus an index of who is standing where.
@@ -281,6 +301,33 @@ class Grid:
     #: than two sets because the levels have an order and
     #: `query.light_concealment` compares them.
     light: dict[Square, str] = field(default_factory=dict)
+    #: What the floor of a square is **made of**, where it differs from
+    #: `ground` below -- "stone", "earth", "wood", "metal". Absent means
+    #: the board's `ground`.
+    #:
+    #: Deliberately **not** `difficult` with a label. That map records
+    #: rough *going* and is written only by `c.zone(difficult=)`, so a
+    #: plain stone floor carries no entry there: a gate keyed on it would
+    #: be False on every board and True only where some other row happened
+    #: to lay a difficult patch and name it the same word. That is the
+    #: dead-gate shape `#598` measured over 29 calls, and `f3719`'s own
+    #: note had spotted the trap before this field existed.
+    #:
+    #: A material is independent of whether the square is hard going, and
+    #: of whether it blocks: a stone wall and a stone floor are the same
+    #: stuff.
+    material: dict[Square, str] = field(default_factory=dict)
+    #: What the floor is made of everywhere `material` does not say -- one
+    #: word for the whole board, because "an earthen or stone surface" is a
+    #: property of the *place* far more often than of a square.
+    #:
+    #: `""` means unrecorded rather than any particular stuff, so a gate
+    #: asking "is this stone" is **False** on a board that never said. Same
+    #: bargain `porous`, `climb_dc` and `locked` above strike, and stated
+    #: for the same reason: the reader lands with the model and costs
+    #: nothing until something fills it. `content.terrain.dress` fills it
+    #: for a dressed board.
+    ground: str = ""
     occupants: dict[Square, int] = field(default_factory=dict)
     #: Where the floor of a square is, in squares above or below the board's
     #: own level. Absent means 0, which is everywhere until something digs.

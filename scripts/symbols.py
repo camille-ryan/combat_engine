@@ -388,7 +388,17 @@ CATEGORIES: dict[str, dict] = {
                 # up -- rather than how any creature moves. `Grid.climb_dc`
                 # is scene state like `difficult` and `light`. #1300.
                 "climb_dc",
-                "floor", "grow", "scenery", "set_origin", "terraform",
+                "floor", "grow", "scenery", "set_origin",
+                # Beside `climb_dc` and for its stated reason: `surface`
+                # reads what a square is *made of*, which is scene state
+                # like `difficult` and `light` rather than anything about
+                # how a creature moves. It sits next to `terrain` because
+                # the two are the same question at different scales --
+                # the place versus the one square underfoot -- and
+                # keeping them distinct is what `f3719` spent a marker
+                # on.
+                "surface",
+                "terraform",
                 "terrain",
                 "unlit",
                 "wall", "zone",

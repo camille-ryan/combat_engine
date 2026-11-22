@@ -53,6 +53,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - *"You can omit one square adjacent to you from the area of
 - `c.spring_trap(self, trap: 'int', *, on: 'int | None' = None) -> 'bool'`
   - Set a trap off at somebody. True if its attack hit.
+- `c.surface(self, *words: 'str', on: 'int | None' = None) -> 'bool'`
+  - Is this creature standing on that sort of ground?
 - `c.terraform(self, square: 'Square | None' = None, *, raise_: 'int' = 0, sink: 'int' = 0) -> 'bool'`
   - Push one square of ground up, or pull it down.
 - `c.terrain(self, word: 'str') -> 'bool'`

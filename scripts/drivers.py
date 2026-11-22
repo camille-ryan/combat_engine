@@ -72792,6 +72792,163 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def what_the_floor_is_made_of(out: Result) -> None:
+    """*"When you use your second wind while on an earthen or stone
+    surface, you also gain resist 5 to all damage"* -- `f3719`.
+
+    **The row's own note had diagnosed this before the field existed** --
+    *"the gap is a per-square material, independent of whether that square
+    is hard going"* -- and the valuable half is what it refused.
+    `DIFFICULT_LABELS` already held `earth`, `earthen construction`,
+    `stone` and `uneven stone`, so a gate keyed on it would have compiled,
+    read correctly, and been **False on every board in the game**: that
+    map records rough *going*, written only by `c.zone(difficult=)`, and a
+    plain stone floor carries no entry at all. It would have been True
+    only where some other row had laid a difficult patch and happened to
+    name it the same word.
+
+    That is `#598`'s dead-gate shape in its least visible direction, so
+    this rule asserts the **separation** as well as the reading: a stone
+    floor must be ordinary ground, and difficult stone must not be the
+    only stone a row can find.
+
+    `Grid.ground` is the board-wide default and `Grid.material` overrides
+    it per square, which is the shape `light`, `porous` and `climb_dc`
+    already use -- absent means the default, and `""` means unrecorded
+    rather than any particular stuff, so the gate is weaker than its card
+    on a board nobody dressed and never stronger.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.terrain import _GROUND, dress
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SecondWind
+    from combat_engine.engine.grid import SURFACE_WORDS
+
+    ROW = "f3719"
+
+    # -- the vocabulary a dressed board draws from --------------------------
+    out.that(set(_GROUND) <= SURFACE_WORDS,
+             "every word a dressed board can give its floor is in the"
+             " surface vocabulary -- a word outside it would be a material"
+             " no gate could match, and `c.surface` validates what a ROW"
+             " asks for rather than what the board carries, so nothing"
+             " else would say a thing",
+             f"{sorted(set(_GROUND))} vs {len(SURFACE_WORDS)} words")
+
+    # -- the reading --------------------------------------------------------
+    world, me, _ = _board(ROW, 1)
+    cast = Cast(world=world, me=me, ref="drv")
+    world.grid.ground = ""
+    out.that(not cast.surface("stone"),
+             "premise: a board that never said what its floor is made of"
+             " answers False, not True -- the direction that makes a row"
+             " weaker than its card rather than stronger",
+             "unrecorded -> False")
+    world.grid.ground = "stone"
+    out.that(cast.surface("stone") and not cast.surface("wood"),
+             "a board-wide ground answers for every square on it, and"
+             " answers only its own word",
+             f"stone {cast.surface('stone')}, wood {cast.surface('wood')}")
+    out.that(cast.surface("wood", "stone"),
+             "and several words are one question -- every card that asks"
+             " this names two or three alternatives",
+             "either matches")
+
+    # **A per-square material overrides the board.**
+    where = sorted(world.grid.squares_of(me))
+    for square in where:
+        world.grid.material[square] = "wood"
+    out.that(cast.surface("wood") and not cast.surface("stone"),
+             "`Grid.material` overrides the board's ground for the squares"
+             " it names, which is the `light`/`porous` shape",
+             f"{where} -> wood")
+    for square in where:
+        del world.grid.material[square]
+
+    # -- the separation from difficult terrain ------------------------------
+    world.grid.ground = ""
+    for square in where:
+        world.grid.difficult[square] = "stone"
+    out.that(not cast.surface("stone"),
+             "a square labelled difficult `stone` is NOT a stone surface:"
+             " that map says the going is rough and this one says what the"
+             " stuff is, and conflating them is the gate the row's own note"
+             " refused",
+             "difficult stone -> still False")
+    world.grid.ground = "stone"
+    out.that(cast.surface("stone")
+             and world.grid.difficult.get(where[0]) == "stone",
+             "and stated the other way round: the square is stone ground"
+             " AND rough going at once, both readable, neither derived"
+             " from the other -- which is what makes them two maps rather"
+             " than one with two spellings",
+             f"surface {cast.surface('stone')},"
+             f" difficult {world.grid.difficult.get(where[0])!r}")
+    for square in where:
+        del world.grid.difficult[square]
+
+    # -- an unknown word refuses rather than reading false ------------------
+    try:
+        cast.surface("earthen")
+        raised = ""
+    except ValueError as exc:
+        raised = str(exc)
+    out.that("earthen" in raised and "vocabulary" in raised,
+             "a word outside the vocabulary RAISES and names itself --"
+             " `earthen` against a set holding `earth` would otherwise be"
+             " a gate indistinguishable from a correct one for as long as"
+             " the floor maps stay empty",
+             raised[:90] or "did not raise")
+
+    # -- the row ------------------------------------------------------------
+    def winded(ground: str) -> list[int]:
+        """The resist the row leaves after a second wind on that floor."""
+        w, who, _ = _board(ROW, 1)
+        w.grid.ground = ground
+        REGISTRY[ROW].body(Cast(world=w, me=who, ref=ROW))
+        w.bus.emit(SecondWind(actor=who, healed=0))
+        # **`on=who`, because `c.resistances()` follows `c.target`.** Its own
+        # docstring says so -- "theirs, so it follows `c.target`" -- and the
+        # first draft of this rule read the board's dummy target instead,
+        # getting `{}` on a floor where the row had plainly paid. Same trap
+        # `c.bloodied()` carries.
+        got = Cast(world=w, me=who, ref="drv").resistances(on=who)
+        # The row lays resist against every damage type at once, so the
+        # printed 5 is one number repeated rather than a set to search.
+        return sorted(set(got.values()))
+
+    on_stone, on_wood = winded("stone"), winded("wood")
+    out.that(5 in on_stone,
+             "on stone the second wind pays resist 5 to all damage --"
+             " `c.resist` with no damage type, which is the printed line",
+             f"{on_stone}")
+    out.that(not on_wood,
+             "and on a wooden floor it pays NOTHING, which is the whole"
+             " clause the row was marked for",
+             f"{on_wood}")
+    on_earth, on_sand = winded("earth"), winded("sand")
+    out.that(5 in on_earth and not on_sand,
+             "earth pays and sand does not -- the card says 'earthen or"
+             " stone', so BOTH halves of the printed alternation are"
+             " asserted rather than only the word the board deals, and"
+             " sand is the nearest word that must not qualify",
+             f"earth {on_earth}, sand {on_sand}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker: the per-square material its"
+             " note asked for is the one thing it was waiting on",
+             f"{REGISTRY[ROW].unfinished}")
+
+    # -- a dressed board has a floor ----------------------------------------
+    fresh, _, _ = _board(ROW, 1)
+    dress(fresh, seed=7)
+    out.that(fresh.grid.ground in SURFACE_WORDS,
+             "and a dressed board comes with a floor, so the row is"
+             " reachable in play rather than only on a posed board",
+             f"{fresh.grid.ground!r}")
+
+
 def a_feature_ref_the_hand_holds_under_its_other_name(out: Result) -> None:
     """`chargen.meets` reads `class_feature.duplicate_of`, so a prerequisite
     naming the feature side of a card the character demonstrably holds stops
@@ -124769,6 +124926,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        what_the_floor_is_made_of,
         a_feature_ref_the_hand_holds_under_its_other_name,
         a_build_time_option_is_drawn_and_both_halves_are_dealt,
         "a build-time option is drawn rather than fixed at the first, so"
@@ -125156,6 +125314,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "board_surface": (
+        what_the_floor_is_made_of,
+        "what the floor is made of, which is not what difficult terrain"
+        " labels say (#598)",
     ),
     "feature_alias": (
         a_feature_ref_the_hand_holds_under_its_other_name,

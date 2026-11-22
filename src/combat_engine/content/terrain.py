@@ -49,6 +49,17 @@ from combat_engine.engine.types import Size
 #: exception a row can be exempt from rather than the whole floor.
 _ROUGH = ("rubble", "rubble", "mud", "shallow water")
 
+#: What a dressed board's floor is made of, for `Grid.ground`. Stone and
+#: earth twice over because a dungeon or a field is what most fights are
+#: had on, and the two are what the cards asking about a surface name.
+#:
+#: Every word must be in `grid.SURFACE_WORDS` or the board's floor is a
+#: material no gate can match -- a silent dead gate rather than a raise,
+#: because `c.surface` validates the words a *row* asks for and not the one
+#: the board carries. `drivers.board_surface` asserts the containment, which
+#: is the half a reader of this tuple cannot check.
+_GROUND = ("stone", "stone", "earth", "earth", "wood", "sand")
+
 #: The word a trap block prints for what it attacks, to the enum. A block
 #: that names something else -- or names nothing, which 226 of them do -- is
 #: Reflex, which is what a trap attacks when the page does not say.
@@ -156,6 +167,17 @@ def dress(
                 arm(world, sq, level=level, pick=pick)
 
     world.bus.on(RoundStart, lay, once=True)
+
+    # **Its own keyed stream, drawn last, so no existing board moves.** A
+    # `pick.choice` here would shift every random decision made after it and
+    # re-roll the rough ground, the pillars and the trap on every board in
+    # the game -- the same argument the trap count above makes for drawing
+    # and then discarding. Keyed off the same seed, so a board is still
+    # reproducible from it.
+    #
+    # Proved rather than argued: `replay verify` is 8 of 8 across this
+    # change, and those fixtures are dressed boards.
+    world.grid.ground = Random(seed ^ 0x51DE_0C7A).choice(_GROUND)
 
 
 def printed_region(level: int = 1, pick: Random | None = None) -> dict | None:

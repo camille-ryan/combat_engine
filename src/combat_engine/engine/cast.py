@@ -8064,6 +8064,57 @@ class Cast:
             # method knows it.
             raise ValueError(f"{self.ref}: c.terrain({word!r}) -- {exc}") from exc
 
+    def surface(self, *words: str, on: int | None = None) -> bool:
+        """Is this creature standing on that sort of ground?
+        `c.surface("earth", "stone")`.
+
+        A property of **one square**, which is what separates it from
+        `c.terrain`: that asks what sort of place the fight is in, and
+        several cards ask what is underfoot instead. `f3719` is the
+        worked case -- *"while on an earthen or stone surface"* -- and its
+        own note had the diagnosis right before this existed: the
+        vocabulary it needed was *"a per-square material, independent of
+        whether that square is hard going"*.
+
+        Reads `Grid.material` for the square, falling back to the board's
+        `Grid.ground`. Several words because every card that asks names
+        two or three alternatives, and asking once per word would read
+        the same square three times.
+
+        **An unknown word raises**, for `c.terrain`'s reason and with a
+        sharper edge here. `Grid.ground` is `""` on an undressed board,
+        so a gate spelled `"earthen"` where the vocabulary says `"earth"`
+        is False for exactly as long as nobody dresses the floor -- which
+        is indistinguishable from the correct gate, and is the dead-gate
+        shape `#598` measured. The raise makes the misspelling a refusal
+        at import rather than a row that quietly never fires.
+
+        **False on an unrecorded floor, deliberately.** A board that
+        never said what its ground is answers False rather than True, so
+        a row gated on this is weaker than its card and never stronger --
+        `m5808a0`'s rule, and the same direction `DIFFICULT_LABELS` keeps
+        `shallow water` apart from `water` for.
+        """
+        from .grid import SURFACE_WORDS
+
+        bad = sorted(set(words) - SURFACE_WORDS)
+        if bad or not words:
+            raise ValueError(
+                f"{self.ref}: c.surface({bad or 'no word'}) -- not in the"
+                f" surface vocabulary; it holds {sorted(SURFACE_WORDS)}"
+            )
+        who = self.me if on is None else on
+        grid = self.world.grid
+        want = set(words)
+        held = grid.squares_of(who)
+        # **Any of its squares, not all of them.** A Large creature half on
+        # stone is standing on a stone surface in any plain reading of the
+        # printed line, and on a board whose `material` map is empty every
+        # square answers `ground` alike, so this only differs where a row
+        # has made the floor uneven on purpose.
+        return any((grid.material.get(sq) or grid.ground) in want
+                   for sq in held)
+
     def milestone(self) -> int:
         """How many milestones the party has reached today. `c.milestone()`.
 
