@@ -1312,7 +1312,8 @@ READERS: dict[str, list[str]] = {
         # moved. Both landed with `#1253`'s wave and neither was placed.
         "nearest_enemy", "counts_as_nearest",
         "displaced_this_action",
-        "concealment_waived", "cover_waived", "has_sense", "hidden_from",
+        "concealment_waived", "cover_capped", "cover_waived",
+        "has_sense", "hidden_from",
         "light_concealment",
         "light_level", "revealed", "sees_in", "sees_invisible",
         "sees_through",

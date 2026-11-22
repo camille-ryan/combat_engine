@@ -44,6 +44,7 @@ from .query import (
     concealment_of,
     concealment_waived,
     cover_between,
+    cover_capped,
     cover_waived,
     deals_half,
     defence,
@@ -253,7 +254,17 @@ def situational_attack(
         if from_concealment <= concealment_waived(
                 world, attacker, target, ctx):
             from_concealment = 0
-        situational -= max(from_cover, from_concealment)
+        worst = max(from_cover, from_concealment)
+        # **A cap, which the waiver above cannot express.** `f2354` prints
+        # "ignore cover and concealment and take only a -2 penalty against
+        # a target that has total concealment or superior cover": the
+        # ordinary grades are waived by the threshold above and what is
+        # left is capped rather than removed. Zero for every creature
+        # nothing has given a cap, so this costs one read.
+        cap = cover_capped(world, attacker, target, ctx)
+        if cap and worst > cap:
+            worst = cap
+        situational -= worst
     situational -= _long_range(world, attacker, target, power, branch, ctx)
     situational += _mark_penalty(world, attacker, among or (target,))
     situational += _underwater(world, attacker, target, power, ctx)

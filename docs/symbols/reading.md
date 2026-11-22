@@ -147,6 +147,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - The effect label that makes `eid` count among somebody's nearest.
 - `query.cover_between(world: 'World', attacker: 'int', target: 'int', *, ranged: 'bool' = False, ctx: 'dict | None' = None, target_at: 'Square | None' = None) -> 'Cover'`
   - The worst cover the target has, measured from the attacker's best square.
+- `query.cover_capped(world: 'World', attacker: 'int', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`
+  - The most this pairing can be penalised for cover or concealment.
 - `query.cover_gained_in_move(world: 'World', eid: 'int', against: 'int') -> 'bool'`
   - Did this creature gain cover from `against` during its own turn?
 - `query.cover_granters(world: 'World', attacker: 'int', target: 'int') -> 'list[int]'`

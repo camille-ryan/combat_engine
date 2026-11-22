@@ -85921,6 +85921,157 @@ def a_companion_walked_for_a_minor_action(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def cover_ignored_and_what_is_left_capped(out: Result) -> None:
+    """*"Your attacks with powers associated with this feat ignore cover
+    and concealment and take only a -2 penalty to attack rolls against a
+    target that has total concealment or superior cover"* -- `f2354`.
+
+    **Two sentences and only one of them was a waiver.**
+    `query.cover_waived` is a **threshold**: `resolve._situational`
+    zeroes a penalty the waiver reaches and leaves a bigger one whole, so
+    the only numbers it can say are "all of it" and "none of it". The
+    conservative half shipped -- `partial=True`, which drops the ordinary
+    -2 and leaves superior cover standing -- and the full waiver was
+    correctly refused, because it would have beaten superior cover for
+    free.
+
+    What the card actually prints is a **cap** on what is left.
+    `c.ignore_cover(cap=2)` lays `cover_cap`, `query.cover_capped` reads
+    it, and `resolve._situational` applies it after the threshold. So
+    partial cover costs nothing and superior cover costs 2 instead of 5.
+
+    **A cap and not a reduction**, which the marker's `reduce=` would
+    have been: the two are the same arithmetic on this card and different
+    rules on any other -- a reduction of 3 turns a -2 into nothing and a
+    -5 into -2, where a cap of 2 leaves a -2 exactly as it was.
+    """
+    from dataclasses import replace as _replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import cover_capped, cover_waived
+    from combat_engine.engine.resolve import situational_attack
+
+    ROW = "f2354"
+    #: One of the two rows on the feat's Associated Powers line, and a
+    #: ref it does not name -- the gate reads the power, so both are
+    #: needed to tell a narrowing from a blanket.
+    NAMED, OTHER = "p10766", "p999"
+
+    def armed(*, sling: bool = True) -> tuple[Any, int, int]:
+        world, me, _ = _board(ROW, 1)
+        if sling:
+            gear = must(world.get(me, Gear), "the character has gear")
+            arm = _replace(next(
+                w for w in chargen.PRINTED.values() if w.group == "sling"))
+            gear.weapons.append(arm)
+            gear.wield(arm)
+        cast = Cast(world=world, me=me, ref=ROW)
+        REGISTRY[ROW].body(cast)
+        return world, me, sorted(cast.enemies())[0]
+
+    def reads(world: Any, me: int, foe: int, power: str) -> tuple[int, int]:
+        ctx = {"power": power, "ranged": True}
+        return (cover_waived(world, me, foe, ctx),
+                cover_capped(world, me, foe, ctx))
+
+    # -- the premises ------------------------------------------------------
+    world, me, foe = armed()
+    out.that(REGISTRY.get(NAMED) is not None,
+             "premise: the row the feat's list names is a real one",
+             f"{NAMED}")
+    out.that(reads(world, me, foe, OTHER) == (0, 0),
+             "a power the feat does not name gets neither the waiver nor"
+             " the cap -- the gate, and the control that stops everything"
+             " below reading as a blanket",
+             f"{reads(world, me, foe, OTHER)}")
+
+    # -- the half that already worked --------------------------------------
+    waived, capped = reads(world, me, foe, NAMED)
+    out.that(waived == 2,
+             "on a named power the waiver is 2, which is the ordinary"
+             " cover grade -- `partial=True`, so partial cover is ignored"
+             " and superior cover is NOT waived",
+             f"{waived}")
+    out.that(waived < 5,
+             "and deliberately not 5: waiving superior cover outright is"
+             " the generous reading the printed sentence refuses, which"
+             " is why a second mechanism was needed rather than a bigger"
+             " number here",
+             f"{waived}")
+
+    # -- the half the marker named ------------------------------------------
+    out.that(capped == 2,
+             "and the cap is 2 -- 'take only a -2 penalty', which the"
+             " threshold could not say because its answers are all or"
+             " nothing",
+             f"{capped}")
+
+    # -- what the two produce together, asked of the ENGINE -----------------
+    # **Through `resolve.situational_attack`, not a local copy of its
+    # arithmetic.** The first draft of this rule computed the penalty
+    # itself -- threshold, then cap -- and a plant said why that is
+    # worthless: breaking `resolve`'s cap application left every
+    # assertion green, because the rule was checking its own copy. This
+    # reads the number the attack would actually take.
+    #
+    # Differences rather than absolutes, since the board contributes a
+    # constant of its own to every one of these and it cancels.
+    def shot(*, armed: bool, grade: str) -> int:
+        world, me, _ = _board(ROW, 1)
+        gear = must(world.get(me, Gear), "the character has gear")
+        arm = _replace(next(
+            w for w in chargen.PRINTED.values() if w.group == "sling"))
+        gear.weapons.append(arm)
+        gear.wield(arm)
+        cast = Cast(world=world, me=me, ref=ROW)
+        if armed:
+            REGISTRY[ROW].body(cast)
+        foe = sorted(cast.enemies())[0]
+        lay = Cast(world=world, me=me, ref="drv")
+        if grade == "superior":
+            lay.cover(superior=True, on=foe)
+        elif grade == "partial":
+            lay.cover(on=foe)
+        return situational_attack(
+            world, me, foe, NAMED, ctx={"power": NAMED, "ranged": True})
+
+    clear_off = shot(armed=False, grade="")
+    out.that(clear_off - shot(armed=False, grade="partial") == 2
+             and clear_off - shot(armed=False, grade="superior") == 5,
+             "premise: without the feat, partial cover costs 2 and"
+             " superior cover costs 5 -- the printed grades, read off the"
+             " engine rather than assumed",
+             f"clear {clear_off}, partial {shot(armed=False, grade='partial')},"
+             f" superior {shot(armed=False, grade='superior')}")
+
+    clear_on = shot(armed=True, grade="")
+    out.that(clear_on - shot(armed=True, grade="partial") == 0,
+             "with the feat, ordinary cover costs nothing at all: the"
+             " threshold reaches it",
+             f"clear {clear_on}, partial {shot(armed=True, grade='partial')}")
+    out.that(clear_on - shot(armed=True, grade="superior") == 2,
+             "and superior cover costs 2 rather than 5 -- the printed"
+             " sentence, which neither the threshold nor the cap says on"
+             " its own",
+             f"clear {clear_on}, superior {shot(armed=True, grade='superior')}")
+
+    # -- the weapon gate ----------------------------------------------------
+    bare, me2, foe2 = armed(sling=False)
+    out.that(reads(bare, me2, foe2, NAMED) == (0, 0),
+             "and without one of the printed weapons in hand the row lays"
+             " nothing at all -- the Benefit's own condition",
+             f"{reads(bare, me2, foe2, NAMED)}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "so the row carries no marker: the clause it was dropped for"
+             " is the one asserted above",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -121695,6 +121846,9 @@ DRIVERS = {
     "a_companion_walked_for_a_minor_action": (
         a_companion_walked_for_a_minor_action,
         "a companion walked for a minor action"),
+    "cover_ignored_and_what_is_left_capped": (
+        cover_ignored_and_what_is_left_capped,
+        "cover ignored and what is left capped"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

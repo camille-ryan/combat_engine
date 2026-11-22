@@ -658,7 +658,7 @@ def f2338(c: Cast) -> None:
 
 @power("f2354", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignore_cover(reduce=)",))
+)
 def f2354(c: Cast) -> None:
     """Cover and concealment do not count on the two shots this names.
 
@@ -666,23 +666,28 @@ def f2354(c: Cast) -> None:
     block sat between it and the benefit -- and it is there now, so the
     row is a gated `c.ignore_cover` and nothing more.
 
-    `partial=True` rather than the full waiver, which is the conservative
-    half of the printed sentence: the ordinary -2 goes and superior cover
-    stands. Turning the -5 into a -2 is not sayable, because
-    `query.cover_waived` is a **threshold** -- `resolve.attack` zeroes the
-    penalty when the waiver reaches it and otherwise leaves it whole --
-    so the only numbers available are "all of it" and "none of it", and
-    the full waiver would beat superior cover outright.
+    **Both halves now, and the old note's diagnosis was exact.** It read:
+    *"`partial=True` rather than the full waiver ... turning the -5 into
+    a -2 is not sayable, because `query.cover_waived` is a threshold ...
+    so the only numbers available are 'all of it' and 'none of it', and
+    the full waiver would beat superior cover outright."*
 
-    The marker names the argument that is missing rather than the reader
-    that is present: `query.cover_waived` exists, which made the marker
-    read as arrived the moment anybody looked at it. What no call can
-    say is *reduce this penalty by two*.
+    All of that is true of the waiver, and the missing word is a **cap**
+    rather than a reduction: the card says *"take only a -2 penalty"*,
+    which is a ceiling on what is left after the ordinary grades go.
+    `c.ignore_cover(cap=2)` lays it, `query.cover_capped` reads it, and
+    `resolve._situational` applies it after the threshold -- so partial
+    cover is ignored outright and superior cover costs 2 instead of 5.
+
+    The marker named `reduce=`, which would have been the same number by
+    arithmetic on this card and a different rule on any other: a
+    reduction of 3 turns a -2 into nothing and a -5 into -2, where the
+    cap leaves a -2 alone. The card prints the ceiling.
     """
     if not _holding(c, "crossbow", "bow", "sling"):
         return
     c.ignore_cover(
-        partial=True, on=c.me, until=When.ENCOUNTER,
+        partial=True, cap=2, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: (
             ctx.get("power") in ("p10766", "p10755") and bool(ctx.get("ranged"))
         ),

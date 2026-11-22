@@ -112,7 +112,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Go unseen, and stay that way until something gives you away.
 - `c.hides_with_cover(self, *, after_moving: 'int' = 0, ally: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Hide with any cover, if you moved far enough from where you were.
-- `c.ignore_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, once: 'bool' = False, concealment_only: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+- `c.ignore_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, once: 'bool' = False, concealment_only: 'bool' = False, cap: 'int' = 0, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "You ignore cover and concealment when attacking."
 - `c.ignore_line_of_effect(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, once: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "Can be behind blocking terrain or otherwise out of line of

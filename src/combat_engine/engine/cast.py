@@ -11534,6 +11534,7 @@ class Cast:
         partial: bool = False,
         once: bool = False,
         concealment_only: bool = False,
+        cap: int = 0,
         when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """"You ignore cover and concealment when attacking."
@@ -11572,10 +11573,30 @@ class Cast:
         size and this kind, which would have drifted the first time any
         of the three changed here.
         """
+        who = on if on is not None else self.me
+        # **`cap` is a different statement and gets its own modifier.**
+        # The waiver above is a THRESHOLD -- `query.cover_waived` zeroes a
+        # penalty it reaches and leaves a bigger one whole -- so the only
+        # numbers it can say are "all of it" and "none of it". `f2354`
+        # prints *"ignore cover and concealment and take only a -2 penalty
+        # against a target that has total concealment or superior cover"*,
+        # which is the ordinary grades waived and the severe one **capped**.
+        # Waiving the -5 outright would beat superior cover for free, which
+        # is the trade this tree refuses; a cap is the printed sentence.
+        #
+        # `query.cover_capped` reads it. `kind=` rather than
+        # `stacks=False`: `c.bonus` refuses both together, because a
+        # non-stacking bonus buckets under the row's own ref -- and a
+        # printed type is what this is. What two DIFFERENT caps should do
+        # is unprinted, and that reader says so rather than inventing an
+        # answer.
+        if cap:
+            self.bonus("cover_cap", cap, on=who, until=until,
+                       kind="cover cap", once=once, when=when)
         return self.bonus(
             "ignore_concealment" if concealment_only else "ignore_cover",
             2 if partial else 5,
-            on=on if on is not None else self.me,
+            on=who,
             until=until,
             kind="ignore concealment" if concealment_only else "ignore cover",
             once=once, when=when,

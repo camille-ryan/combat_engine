@@ -3959,6 +3959,37 @@ def cover_waived(
     )
 
 
+def cover_capped(
+    world: World, attacker: int, target: int, ctx: dict[str, Any] | None = None
+) -> int:
+    """The most this pairing can be penalised for cover or concealment.
+
+    *"...and take only a -2 penalty to attack rolls against a target that
+    has total concealment or superior cover"* -- `f2354`. A **cap**, and
+    `cover_waived` above could not say it: that one is a threshold, so
+    the only numbers available to it are "all of the penalty" and "none
+    of it", and waiving the -5 outright would beat superior cover for
+    free.
+
+    **One card prints this and the stacking question is therefore
+    unanswered.** `Mods.total` with a non-stacking `kind` hands back the
+    **largest** single cap, which is the loosest -- and a reader might
+    reasonably expect the tightest, since each is a limit. Neither is
+    printed anywhere, so the code does the ordinary thing the modifier
+    system already does and this paragraph says which rather than a
+    docstring claiming a rule the body does not implement. The day a
+    second card prints a cap, that is the question to settle.
+
+    `0` is no cap, which is every creature nothing has given one, so
+    `resolve` reads it and does nothing for all of them.
+    """
+    ctx = ctx or {}
+    mine = world.get(attacker, Mods)
+    if mine is None or not mine.items:
+        return 0
+    return max(0, mine.total("cover_cap", ctx))
+
+
 def concealment_waived(
     world: World, attacker: int, target: int, ctx: dict[str, Any] | None = None
 ) -> int:
