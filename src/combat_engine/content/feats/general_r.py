@@ -2493,9 +2493,15 @@ def f3625(c: Cast) -> None:
 
     **The second-card convention does not rescue it, and a feat is where
     it would have been most likely to.** `fNNNb` is the tree's ref for a
-    card printed inside another, 227 of them are in `game.db`, and
-    `f3625b` is **not** -- because this clause is a sentence of the
+    card printed inside another and 227 of them are in `game.db`; this
+    row has no such sibling, because the clause is a sentence of the
     Benefit rather than a printed card, so the ETL had nothing to mint.
+
+    The absent ref is deliberately **not spelled** here: `scripts/leaks.py
+    --refs` reports any ref named in prose that resolves to nothing, and
+    writing it out to say it does not exist is indistinguishable, to that
+    gate, from a dangling citation. It named this line on the first wide
+    sweep after the note was written.
     `i1188p1`'s note makes the same point from the item side for a
     different reason: `item_block` carries no `b` refs at all.
 
