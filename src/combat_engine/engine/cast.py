@@ -18,7 +18,14 @@ line and the unusual case still one line.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
@@ -8085,6 +8092,142 @@ class Cast:
             # The ref is what makes the refusal actionable, and only the
             # method knows it.
             raise ValueError(f"{self.ref}: c.terrain({word!r}) -- {exc}") from exc
+
+    def transform(
+        self,
+        into: str,
+        *,
+        on: int | None = None,
+        side: Team | None = None,
+    ) -> bool:
+        """Give a creature on the board a different stat block, in place.
+
+        *"The target becomes Large ... The creature has the same statistics
+        as a horse"* -- `i3364p1`. *"A failure ends the summon and it is
+        replaced with"* a hostile creature -- `i2714p1`. `m5787a0` prints
+        the third.
+
+        **The entity id does not change, and that is the whole point.**
+        Written as `c.kill` plus a fresh spawn it would be a different
+        sentence: every rider hung on the old creature dropping would pay
+        out, every relation pointing at it would be torn down by
+        `World.despawn`, and a summon *"replaced with"* something would
+        first have to die. All three notes said so independently.
+
+        So the block-derived components are **overwritten** and the rest
+        is left alone:
+
+            replaced   Ident, Stats, Defenses, Health, Movement,
+                       Defences, Initiative, Powers, and Position.size
+            kept       Position.square, Conditions, Mods, Side unless
+                       `side` is given, and every effect, relation and
+                       subscription naming the creature
+
+        `side` is for the one card that changes allegiance -- a summon
+        replaced by something hostile -- and is left alone otherwise,
+        because a beast grown into a mount is still nonhostile.
+
+        **The scratch spawn is how the new numbers are derived**, rather
+        than a second copy of `loader.spawn`'s 40 lines: the block is
+        spawned off the board, its components are moved across, and it is
+        despawned. `loader.spawn` is the only thing that knows how a
+        printed block becomes components -- scaling, the level term coming
+        out of every defence, surges by tier, the basic attacks -- and a
+        reimplementation here would be a second place for all of it to be
+        wrong.
+
+        Returns False for a ref that is not a monster block, so a row
+        naming something unspawnable refuses rather than half-changing a
+        creature.
+        """
+        from .components import (
+            Defences,
+            Defenses,
+            Health,
+            Ident,
+            Initiative,
+            Movement,
+            Position,
+            Powers,
+            Stats,
+        )
+        from .components import (
+            Side as _Side,
+        )
+        from .events import Transformed
+
+        who = self.me if on is None else on
+        seat = self.world.get(who, Position)
+        if seat is None:
+            return False
+        was = self.world.get(who, Ident)
+
+        # **A free square for the scratch spawn, and it is lifted at
+        # once.** `loader.spawn` places what it builds and
+        # `grid.place` refuses to overwrite, so it cannot be built on top
+        # of the creature being changed -- and leaving it standing would
+        # block movement and line of effect for as long as it existed.
+        from combat_engine.content.loader import spawn as _spawn
+
+        spare = next(
+            (sq for sq in self._free_scratch_squares()),
+            None,
+        )
+        if spare is None:
+            return False
+        keep = self.world.need(who, _Side).team
+        try:
+            made = _spawn(self.world, into, spare, team=side or keep)
+        except Exception:
+            # An unspawnable ref -- not a monster block, or one absent from
+            # the database -- refuses rather than half-changing the
+            # creature. `loader.load` raises on both.
+            return False
+        self.world.grid.lift(made)
+
+        for kind in (Ident, Stats, Defenses, Health, Movement, Defences,
+                     Initiative, Powers):
+            got = self.world.get(made, kind)
+            if got is not None:
+                self.world.add(who, got)
+        fresh = self.world.get(made, Position)
+        if fresh is not None:
+            # The size comes from the new block -- "the target becomes
+            # Large" is the printed half of this -- and the square does
+            # not: the creature has not moved.
+            seat.size = fresh.size
+        if side is not None:
+            self.world.need(who, _Side).team = side
+        self.world.despawn(made)
+        # Re-placed with the new size, so the occupancy index holds the
+        # right squares for a creature that just grew.
+        self.world.grid.lift(who)
+        # `movement.place`, which works out the squares a creature of this
+        # size covers -- `grid.place` takes the set and would need the
+        # geometry repeated here.
+        from .movement import place as _place
+
+        _place(self.world, who, seat.square)
+        self.world.bus.emit(Transformed(
+            actor=who, ref=into, was=(was.ref if was is not None else ""),
+            by=self.ref,
+        ))
+        return True
+
+    def _free_scratch_squares(self) -> Iterator[Square]:
+        """Squares nothing stands on, for a spawn that is about to be lifted.
+
+        Only `c.transform` wants this: `loader.spawn` places what it
+        builds, so deriving a new stat block needs somewhere the placement
+        will not refuse. Walked in order rather than sampled, so a
+        transform is reproducible from a seed.
+        """
+        grid = self.world.grid
+        for y in range(grid.height):
+            for x in range(grid.width):
+                sq = (x, y)
+                if grid.occupant(sq) is None and sq not in grid.blocking:
+                    yield sq
 
     def surface(self, *words: str, on: int | None = None) -> bool:
         """Is this creature standing on that sort of ground?

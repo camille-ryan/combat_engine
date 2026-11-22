@@ -2326,6 +2326,33 @@ class ChargeSpent(Event):
 
 
 @dataclass
+class Transformed(Event):
+    """A creature on the board took a different stat block, in place.
+
+    **Not a kill and a fresh spawn**, which is the whole reason this
+    exists: the entity id is unchanged, so every relation, effect and
+    subscription pointing at the creature keeps pointing at it. Three
+    rows print the sentence and all three are wrong if it is written the
+    other way -- `i2714p1`'s summon *"is replaced with"* a hostile
+    creature, and killing it first would pay out every rider hung on that
+    summon dropping.
+
+    `was` is the ref it carried before, because *"until your next
+    extended rest"* cards and anything undoing the change need to know
+    what to go back to, and the `Ident` has already been overwritten by
+    the time a listener runs.
+    """
+
+    actor: int = -1
+    #: The ref it now carries.
+    ref: str = ""
+    #: The ref it carried before.
+    was: str = ""
+    #: The row that did it.
+    by: str = ""
+
+
+@dataclass
 class Despawned(Event):
     """A creature left the board without being killed.
 

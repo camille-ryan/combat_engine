@@ -72792,6 +72792,143 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_creature_takes_a_different_stat_block(out: Result) -> None:
+    """*"The target becomes Large ... The creature has the same statistics
+    as"* a printed mount -- `i3364p1`. #1455.
+
+    **The entity id does not change, and that is the whole verb.** Three
+    rows print this substitution and all three said independently that
+    `c.kill` plus a fresh spawn is a different sentence: every rider hung
+    on the creature dropping would pay out, and `World.despawn` tears
+    down every relation and effect naming it. `i2714p1`'s summon is
+    *"replaced with"* something hostile and would have had to die first.
+
+    So the block-derived components are overwritten and the rest is left
+    alone -- the square, the conditions, the modifiers and anything
+    pointing at the creature. Both halves are asserted, because a verb
+    that replaced everything would look identical on the numbers and be
+    wrong about the thing it exists for.
+
+    **The new numbers come from `loader.spawn`**, via a scratch spawn that
+    is lifted and despawned, rather than a second copy of the 40 lines
+    that turn a printed block into components. Scaling, the level term
+    coming out of every defence, surges by tier, the basic attacks: one
+    place for all of it to be right.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import (
+        Conditions,
+        Health,
+        Ident,
+        Position,
+        Side,
+    )
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Transformed
+    from combat_engine.engine.types import Condition, Team
+
+    MOUNT = "m115928"          # the block `i3364p1` names, Large
+    HOSTILE = "m5584"          # the block `i2714p1` names
+
+    # -- the verb -----------------------------------------------------------
+    world, me, _ = _board("i3364p1", 1)
+    cast = Cast(world=world, me=me, ref="drv")
+    foe = sorted(cast.enemies())[0]
+    seat = must(world.get(foe, Position), "the creature has a position")
+    was = must(world.get(foe, Ident), "the creature has an ident").ref
+    before = (was,
+              must(world.get(foe, Health), "hit points").max_hp,
+              seat.square)
+    # Something to prove survives the change, and a relation too.
+    cast.condition(Condition.SLOWED, on=foe, until=When.ENCOUNTER)
+    cast.mark(on=foe, until=When.ENCOUNTER)
+    said: list[tuple] = []
+    world.bus.on(Transformed, lambda e: said.append((e.actor, e.ref, e.was)))
+
+    out.that(cast.transform(HOSTILE, on=foe, side=Team.ENEMY),
+             "a creature on the board takes a different block",
+             f"{before[0]} -> {HOSTILE}")
+    now = must(world.get(foe, Ident), "an ident").ref
+    out.that(now == HOSTILE and now != before[0],
+             "its `Ident` is the new ref",
+             f"{before[0]} -> {now}")
+    out.that(must(world.get(foe, Health), "hit points").max_hp != before[1],
+             "and its hit points are the new block's, which is what says"
+             " the components were really replaced rather than the ref"
+             " relabelled",
+             f"{before[1]} ->"
+             f" {must(world.get(foe, Health), 'hit points').max_hp}")
+    out.that(must(world.get(foe, Position), "a position").square == before[2],
+             "it has NOT moved -- the square is kept where the size is"
+             " taken from the block",
+             f"{before[2]}")
+    out.that(said and said[-1] == (foe, HOSTILE, before[0]),
+             "and the change is announced, carrying what it was before --"
+             " the `Ident` is already overwritten by the time a listener"
+             " runs, so a card undoing this has nowhere else to read it",
+             f"{said}")
+
+    # -- what must survive, which is the point of not killing it ------------
+    held = world.get(foe, Conditions)
+    out.that(held is not None and Condition.SLOWED in set(held.active),
+             "the condition laid before the change is STILL ON -- the"
+             " entity id never changed, so nothing tore it down. Written"
+             " as kill-and-respawn this is the assertion that would fail",
+             f"{sorted(x.value for x in Condition if x in set(held.active))}"
+             if held else "no Conditions")
+    out.that(cast.marked(on=foe),
+             "and so is the mark, which is a RELATION rather than an"
+             " effect -- `World.despawn` forgets both, and this verb"
+             " touches neither",
+             "mark survives")
+
+    # -- the refusal --------------------------------------------------------
+    w2, me2, _ = _board("i3364p1", 1)
+    c2 = Cast(world=w2, me=me2, ref="drv")
+    foe2 = sorted(c2.enemies())[0]
+    kept = must(w2.get(foe2, Ident), "an ident").ref
+    out.that(not c2.transform("m-no-such-block", on=foe2),
+             "a ref that is not a spawnable block is REFUSED",
+             "refused")
+    out.that(must(w2.get(foe2, Ident), "an ident").ref == kept,
+             "and the creature is untouched by the refusal -- a"
+             " half-changed creature would be worse than no verb",
+             f"{kept}")
+
+    # -- the side, which only one card changes ------------------------------
+    w3, me3, _ = _board("i3364p1", 1)
+    c3 = Cast(world=w3, me=me3, ref="drv")
+    mate = sorted(c3.allies())[0]
+    side_was = must(w3.get(mate, Side), "a side").team
+    c3.transform(MOUNT, on=mate)
+    out.that(must(w3.get(mate, Side), "a side").team == side_was,
+             "a transform with no `side=` leaves allegiance alone -- a"
+             " beast grown into a mount is still nonhostile, and only"
+             " `i2714p1`'s replacement turns hostile",
+             f"{side_was}")
+
+    # -- the row ------------------------------------------------------------
+    w4, me4, _ = _board("i3364p1", 1)
+    c4 = Cast(world=w4, me=me4, ref="i3364p1")
+    beast = sorted(c4.allies())[0]
+    c4.target = beast
+    REGISTRY["i3364p1"].body(c4)
+    out.that(must(w4.get(beast, Ident), "an ident").ref == MOUNT,
+             "`i3364p1` gives its chosen beast the printed mount's block",
+             f"{must(w4.get(beast, Ident), 'an ident').ref}")
+    out.that(must(w4.get(beast, Position), "a position").size.value == "large",
+             "and Large comes WITH the block rather than being laid"
+             " beside it -- two sources for one printed fact is how they"
+             " drift apart, and the card gives the size and the"
+             " statistics in one sentence",
+             f"{must(w4.get(beast, Position), 'a position').size.value}")
+    out.that(not REGISTRY["i3364p1"].unfinished,
+             "so the row carries no marker",
+             f"{REGISTRY['i3364p1'].unfinished}")
+
+
 def the_hexblade_boon_taken_from_a_new_moment(out: Result) -> None:
     """`f2759` takes the hexblade's boon early and pays with the curse;
     `i698x1` adds that moment as a second trigger. #1454.
@@ -125726,6 +125863,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_creature_takes_a_different_stat_block,
         the_hexblade_boon_taken_from_a_new_moment,
         a_feat_buys_an_attack_power_from_another_class,
         a_dose_of_poison_goes_on_a_weapon,
@@ -126119,6 +126257,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "stat_block_swap": (
+        a_creature_takes_a_different_stat_block,
+        "a creature takes a different stat block in place, keeping its"
+        " id (#1455)",
     ),
     "hexblade_boon": (
         the_hexblade_boon_taken_from_a_new_moment,

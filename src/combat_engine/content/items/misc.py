@@ -1921,8 +1921,7 @@ def i3336p1(c: Cast) -> None:
        reach=Ranged(5), target=Target(side="other", count=1,
                                       max_size=Size.TINY),
        requires=_something_tiny, requires_text="a Tiny beast within 5 squares",
-       keywords=[Keyword.POLYMORPH],
-       dropped=("c.transform(into=)",))
+       keywords=[Keyword.POLYMORPH])
 def i3364p1(c: Cast) -> None:
     """**Re-pointed off `defect=`, and the old marker had the card
     backwards.** It read *"the card defers the statistics and the entry
@@ -1965,26 +1964,37 @@ def i3364p1(c: Cast) -> None:
     keeps, and the encounter ending takes the board with it either way --
     `p13516`'s reading.
 
-    Dropped is the last clause: the target's statistics become a named
-    mount's. That is a whole stat block substituted for the creature's
-    own, on a creature that is not being killed, which is the one verb
-    `m5787a0` is waiting on. The beast keeps its own numbers until it
-    lands, and `c.resize` is deliberately not made to stand in for it --
-    growing is not restatting.
+**Written: the target's statistics become the printed mount's.**
+    `c.transform("m115928", on=beast)` substitutes the block the card
+    names, by ref -- the entity id does not change, so the creature keeps
+    its square, its conditions and anything pointing at it. The old note
+    had the diagnosis exactly right: *"a whole stat block substituted for
+    the creature's"*, and that is what the verb does.
 
-    **It reports UNUSED, and that is the board rather than the row.**
-    `audit.board` puts nothing Tiny on the map -- the only sizes it
-    spawns are Medium and one Large piece of scenery -- so both the
-    `max_size` filter and `_something_tiny` are unsatisfiable there and
-    no seed or pose reaches them. Proved on a board with a Tiny ally
-    added by hand: the row fires, the beast ends Large, and
-    `query.may_ride` goes **False to True** across it, with the same
-    pairing left Tiny as the negative control staying False.
+    **The size comes with the block** rather than being laid beside it.
+    `m115928` is Large, so `c.resize` is gone from this body -- two
+    sources for one printed fact is how they drift apart, and the card
+    gives the size and the statistics in one sentence.
+
+    `i2714p1` and `m5787a0` print the same substitution and share the
+    verb; `c.kill` plus a fresh spawn is not the same sentence, because
+    it pays out every rider hung on the creature dropping. #1455.
     """
     beast = c.target
     if beast is None:
         return
-    c.resize(Size.LARGE, on=beast, until=When.ENCOUNTER)
+    # **The stat block is the whole clause and it carries the size.**
+    # `c.transform` reads the printed block, so Large comes with it rather
+    # than being laid separately -- see the note above for why `c.resize`
+    # alone was the dropped half.
+    #
+    # `side=` is deliberately not passed: a beast grown into a mount is
+    # still nonhostile, and the one card that changes allegiance is
+    # `i2714p1`.
+    if not c.transform("m115928", on=beast):
+        # An unspawnable block refuses rather than half-changing the
+        # creature, so the printed size change is not laid either.
+        return
 
 
 @power("i3367p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
@@ -2301,7 +2311,7 @@ def i2408p1(c: Cast) -> None:
 
 @power("i2714p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(5), target=NO_TARGET, keywords=[Keyword.SUMMONING],
-       dropped=("c.transform(into=)",))
+       dropped=("components.Companion(on a spawn_associate summon)",))
 def i2714p1(c: Cast) -> None:
     """**Re-pointed off `defect=`, which was false about the source.** The
     old marker read *"the card defers the statistics and the entry prints
@@ -2341,13 +2351,30 @@ def i2714p1(c: Cast) -> None:
     What is dropped is the last clause: each round the character gives it
     no commands it owes a saving throw at the end of its turn, and a
     failure ends the summon and **replaces** it with a hostile `m5584`.
-    Both halves of the *question* already exist -- `Companion.commanded`
-    records the round an owner last spent an action on a summon, and
-    `c.save(bare=True)` rolls a throw against nothing -- so the gap is the
-    one verb `m5787a0` is already waiting on: swapping a creature on the
-    board for a different block, in place of killing it. Writing it as
-    `c.kill` plus a fresh spawn is not the same sentence; it would pay out
-    every rider hung on this summon dropping.
+
+    **The replacement half has landed and the marker is re-pointed to the
+    half the old note got wrong.** `c.transform(into=)` is written -- it
+    substitutes a stat block in place, keeping the entity id so every
+    relation and effect pointing at the creature survives, which is why
+    `c.kill` plus a fresh spawn is not the same sentence. `i3364p1` uses
+    it and `m5787a0` prints the same substitution. `#1455`.
+
+    The old note then said *"both halves of the question already exist --
+    `Companion.commanded` records the round an owner last spent an action
+    on a summon"*. **It does not exist for this summon.** Measured:
+    `spawn_associate` gives the creature a `Summon` and no `Companion`
+    at all, so `c.instinctive(..., fn=)` refuses it -- the loan is kept
+    on `Companion.lent_instinctive` -- and `turns._uncommanded`, which
+    walks `world.having(Companion)`, never sees it. There is nothing
+    recording whether this creature was commanded, so there is no moment
+    at which the saving throw is owed.
+
+    **Adding a `Companion` here was not done blind**, and that is why
+    this is marked rather than written: `_uncommanded` also pulls a
+    companion towards its owner (`_follows_its_owner`) and runs a block's
+    printed Instinctive Effect, neither of which this card prints. The
+    change wants measuring against the eleven other `spawn_associate`
+    callers rather than being made for one row.
     """
     from combat_engine.content.loader import spawn_associate
     from combat_engine.engine.components import Summon as SummonedFrom

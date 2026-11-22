@@ -106,6 +106,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
 
 - `c.resize(self, size: 'Size', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Take up more room, or less, and shove whoever is standing in it.
+- `c.transform(self, into: 'str', *, on: 'int | None' = None, side: 'Team | None' = None) -> 'bool'`
+  - Give a creature on the board a different stat block, in place.
 
 ## ending, suspending, watching
 

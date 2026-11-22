@@ -426,7 +426,13 @@ CATEGORIES: dict[str, dict] = {
                 "beast_independent", "call_beast", "call_companion",
                 "dismiss_companion", "summon", "summon_inline",
             ]),
-            ("size", ["resize"]),
+            # `c.transform` sits beside `resize` because the size is half
+            # of what it does -- it takes a printed block, and the block
+            # carries the size. The other half is the numbers, which is
+            # why it is not *under* `resize`: `i3364p1` prints "becomes
+            # Large" and "has the same statistics as" in one sentence and
+            # `c.resize` was the dropped half of it. #1455.
+            ("size", ["resize", "transform"]),
             ("ending, suspending, watching", [
                 "aftereffect", "arm_trigger", "cancel", "dispel", "end_effect",
                 "extend_effect",
