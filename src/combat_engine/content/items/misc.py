@@ -1025,16 +1025,28 @@ def i1700x1(c: Cast) -> None:
     So the gap is an action, the marker names it, and the recipe above is
     left here so whoever lands it does not have to re-derive the gate.
 
-    **The DC it would roll against is printed, and `#1471` has it read.**
-    `resources/Dungeon Master's Guide.pdf` pages 64-65 carry **three**
-    tables -- walls (a climb DC beside a break DC), doors, and
-    portcullises -- twelve rows, each with a **level** column except one
-    whose level is printed as a dash. That issue transcribes them as read
-    and names the trap: flattening three printed tables into one and
-    dropping the level column is `#988`'s recorded mistake.
-    `grid.CLIMB_DC` is **not** the climb half of that table -- it is the
-    PHB's generic Athletics surfaces, a different printed table, and
-    neither column of the DMG one is in the tree.
+    **The DC it would roll against is printed TWICE, differently, and
+    `#1471` is parked on which printing governs.** Two books carry these
+    tables and the compendium holds both: a wooden door is DC 16 in one
+    and 13 in the other, and the glossary contains **two portcullis
+    tables that disagree with each other** -- 23/28/33 against 21/28/35.
+    So the number is not a transcription job, it is a ruling, and
+    `CLAUDE.md`'s *"never a silent substitution"* is why it is a
+    `question` rather than a pick.
+
+    The first version of this note cited the PDF's numbers as *the*
+    source and was wrong to: the compendium glossary has the tables
+    structured, which is where `dc.py` gets its ninety numbers from, and
+    reaching for the PDF skipped the check my own note demands.
+
+    So the DC is a **second gap in a different component** -- an
+    extracted `rules_break`-style column, the way `#1001` built
+    `rules_dc` -- and this row's marker names the action, which is the
+    gap in this one.
+
+    `grid.CLIMB_DC` is **not** part of any of it: it holds the PHB's
+    generic Athletics surfaces, a different printed table, and neither
+    column of the DMG wall table is in the tree.
 
     Still not `narrative=`: that field is a closed `skill:<name>`
     vocabulary and a raw Strength check is not one of the seventeen
