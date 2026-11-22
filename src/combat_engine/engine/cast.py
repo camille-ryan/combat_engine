@@ -17397,8 +17397,17 @@ class Cast:
 
         The words are `Rules` field names, and only the four a printed
         waiver ever names are accepted -- `attack`, `halve_speed`,
-        `grants_ca`, `speed_cap`. `cannot_act` and the rest are not things a
-        card relaxes, and accepting them would invite a row to try. An
+        `grants_ca`, `speed_cap`.
+
+        **`cannot_act` is refused, and the reason here used to be wrong.**
+        It read *"`cannot_act` and the rest are not things a card
+        relaxes"*, and one card does: `i2656x1` prints *"you can take a
+        minor action during a round when you are surprised"*. What is
+        true is narrower -- no card relaxes it **wholesale**, and this set
+        is all-or-nothing per rule, so admitting the word would hand a
+        surprised character its whole turn rather than the one action its
+        card names. That clause wants `query.can_act` and a per-action
+        allowance instead, which is `#1473`. An
         unrecognised word is a `KeyError`, which is the answer `c.within`
         and `c.grants_advantage` both give. #508.
 

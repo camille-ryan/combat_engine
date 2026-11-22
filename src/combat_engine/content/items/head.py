@@ -602,7 +602,23 @@ def i2656x1(c: Cast) -> None:
     there. The two `actions.legal(free_despite_stun=)` rows want the
     general form of the same thing; this one wants a minor, and a symbol
     naming free actions and stun would report this row ready when it is
-    not."""
+    not.
+
+    **The second clause is `query.can_act`'s gate, not
+    `actions.legal`'s, and the marker names the symptom.** `#1473`
+    measured it: `legal` does open with a bare `end` for a creature that
+    cannot act, so that early return is the first thing you hit -- but
+    **every sub-offer tests `can_act` independently**, `dsl.usable`
+    among them, so a menu filtered after the fact is a menu that was
+    never populated. Built that way and measured: 391 options before the
+    condition, `[('end', 'none')]` after, with the allowance set and
+    read correctly. Reverted.
+
+    So it wants `can_act` to answer for a creature holding an allowance,
+    with the restriction expressed where `Powers.forbidden_actions`
+    already lives -- and that is a core predicate read in eight places,
+    which is its own batch and its own wide sweep.
+    """
     c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER,
             kind="item", when=lambda ctx: ctx.get("natural") is None)
 
