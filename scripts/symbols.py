@@ -146,6 +146,11 @@ CATEGORIES: dict[str, dict] = {
             ("undoing it", [
                 "half_healing", "heal", "regen_suppressed",
                 "regeneration", "resume_regeneration", "temp_hp",
+                # Beside `temp_hp` because the two are the pair a
+                # reader confuses: that one is a separate pool and
+                # this one moves the maximum itself, which nothing
+                # else here can do.
+                "max_hp",
             ]),
         ],
     },

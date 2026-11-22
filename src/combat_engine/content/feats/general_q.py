@@ -2475,15 +2475,47 @@ def f3312(c: Cast) -> None:
 
 
 @power("f3313", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.max_hp()",),
-       trigger="you use your second wind",
-       on=Trigger(SecondWind, about_me, "you use your second wind"))
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind")
 def f3313(c: Cast) -> None:
-    """Heroic tier, so 5. The hit points per tier are dropped -- nothing
-    raises a character's maximum."""
-    if c.points() >= 1 and c.may("spend a power point", who=c.me):
-        c.spend_points(1)
-        c.heal(5, on=c.me)
+    """Heroic tier, so 5 on the heal.
+
+    **Both halves now, and the row had to change shape to hold them.**
+    The hit points per tier were dropped because *"nothing raises a
+    character's maximum"*, which was true; `c.max_hp` is that verb.
+
+    **3 and not 5, which the two numbers in this row make easy to
+    confuse.** The card says *"you gain 3 additional hit points at each
+    tier of play"*, so heroic is 3 -- the 5 below is the second wind's
+    heal and is a different line. `f171`, which prints 5 hit points, is
+    the row this would otherwise be copied from.
+
+    **A `c.watch` and not a declared `on=`, which is the whole reason
+    the second half could not simply be added.** `content/CLAUDE.md`:
+    *"A row holds either a printed trigger or standing modifiers, not
+    both: declared `on=`, the body runs only when the trigger fires, so
+    modifiers laid there are never laid."* This row prints both -- a
+    standing pool of hit points and a triggered heal -- so with the
+    trigger declared the maximum would have been raised on each second
+    wind and never at arming, which is wrong twice over.
+
+    So the trigger moves into the body and `turns.arm_traits` runs this
+    once per fight: the maximum goes up there, and the watch pays the
+    heal when the second wind comes. `feats/invoker_b._on_hit_with`
+    records the same decision for the same reason -- *"a trait rather
+    than a declared trigger, because each of these feats also prints a
+    standing skill bonus"*.
+
+    `trigger=` stays as prose: it is what the page prints and what the
+    card shows, and the engine never reads it on its own."""
+    c.max_hp(3, on=c.me)
+
+    def winded(_ev: Any) -> None:
+        if c.points() >= 1 and c.may("spend a power point", who=c.me):
+            c.spend_points(1)
+            c.heal(5, on=c.me)
+
+    c.watch(SecondWind, winded, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3317", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

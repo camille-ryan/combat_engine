@@ -6120,6 +6120,58 @@ class Cast:
         if who is not None:
             temp_hp(self.world, self.me, who, amount, self.ref)
 
+    def max_hp(
+        self, amount: int, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You gain 5 additional hit points."
+
+        **A maximum, which nothing else here can raise.** `c.temp_hp` is
+        a separate pool that does not move the maximum, and `c.heal`
+        cannot exceed one -- so two feats printing this sentence had no
+        verb at all. `f171` prints 5 at heroic and `f3313` prints 3.
+
+        The current total goes up with the maximum, because the printed
+        line is *"you gain"* hit points rather than *"your maximum
+        increases"*: a character that takes the feat is at full and stays
+        at full, not five short of a bigger number.
+
+        **Three derived readings move with it and that is the point.**
+        `Health.bloodied` is half the maximum, `surge_value` is a
+        quarter, and `dying_at` is the negative of it -- all three are
+        properties over `max_hp`, so none of them has to be told.
+
+        **The sheet's own maximum is chargen's and is NOT raised here.**
+        `chargen` computes it from the class line, Constitution and
+        level, and reads no feat -- so this is the trait's board-time
+        effect, which is what every other `action=NONE` feat is. A
+        character carried between fights re-arms the trait on the next
+        board and `_wear`'s clamp makes the two agree.
+        """
+        from .components import Health
+
+        who = self._who(on)
+        if who is None or amount == 0:
+            return None
+        whole = self.world.get(who, Health)
+        if whole is None:
+            return None
+        whole.max_hp += amount
+        whole.hp += amount
+
+        def give_back() -> None:
+            whole.max_hp -= amount
+            # Clamped, because the creature may have been hurt since: a
+            # bare subtraction would leave it above a maximum it no
+            # longer has, which every reader of `bloodied` would then
+            # answer wrongly.
+            whole.hp = min(whole.hp, whole.max_hp)
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} max hp +{amount}",
+            on_suspend=[give_back], by=self.ref,
+        )
+
     def ongoing(
         self,
         amount: int,

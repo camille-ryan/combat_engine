@@ -86647,6 +86647,184 @@ def a_granted_swing_traded_for_a_standard_action(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_feat_raises_a_maximum_rather_than_healing(out: Result) -> None:
+    """*"You gain 5 additional hit points"* -- `f171` -- and *"you gain 3
+    additional hit points at each tier of play"* -- `f3313`.
+
+    **Nothing here could raise a maximum**, which is what both rows said.
+    `c.temp_hp` is a separate pool that does not move it and `c.heal`
+    cannot exceed one, so the sentence had no verb at all.
+
+    `c.max_hp` raises the maximum **and the current total together**,
+    because the printed line is *"you gain"* hit points rather than
+    *"your maximum increases"*: a character that takes the feat is at
+    full and stays at full rather than five short of a bigger number.
+
+    **Three derived readings move with it and none is told.**
+    `Health.bloodied` is half the maximum, `surge_value` is a quarter and
+    `dying_at` is its negative -- all properties over `max_hp` -- so this
+    asserts them rather than the field, which is the half a row writing
+    `max_hp` by hand would get right and a row writing a second field
+    would not.
+
+    **And `f3313` had to change shape to hold its second half.** It
+    declared `on=Trigger(SecondWind, ...)`, so its body ran only when the
+    second wind fired -- and `content/CLAUDE.md` is explicit that a row
+    holds a printed trigger *or* standing modifiers and not both. With
+    the trigger declared, the hit points would have been raised on every
+    second wind and never at arming. The trigger is a `c.watch` in the
+    body now and `turns.arm_traits` reaches the standing half, which is
+    `feats/invoker_b._on_hit_with`'s recorded decision for the same
+    reason.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, PowerPoints
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SecondWind
+
+    def armed(ref: str) -> tuple[Any, int, Any, tuple, tuple]:
+        """The board, and the four readings with the feat off and on.
+
+        **`audit.board` has already armed the row**, which is the trap
+        this helper walked into: running the body on top measures a
+        SECOND application, and since both are the same size the numbers
+        looked right for the wrong reason. The "before" is made by
+        ending the row's own effect -- which gives the maximum and the
+        current total back together -- and the "after" by letting it
+        arm again.
+        """
+        world, me, _ = _board(ref, 1)
+        whole = must(world.get(me, Health), "the character has hit points")
+        cast = Cast(world=world, me=me, ref=ref)
+        for eff in list(world.effects.of(me)):
+            if eff.label and eff.label.startswith(f"{ref} max hp"):
+                cast.end_effect(eff)
+        before = (whole.max_hp, whole.hp, whole.surge_value, whole.dying_at)
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        after = (whole.max_hp, whole.hp, whole.surge_value, whole.dying_at)
+        return world, me, whole, before, after
+
+    # -- the printed numbers ------------------------------------------------
+    for ref, gain in (("f171", 5), ("f3313", 3)):
+        _, _, _, before, after = armed(ref)
+        out.that(after[0] - before[0] == gain,
+                 f"{ref} raises the maximum by its printed heroic figure,"
+                 f" {gain}",
+                 f"{before[0]} -> {after[0]}")
+        out.that(after[1] - before[1] == gain,
+                 "and the current total rises with it -- 'you gain' hit"
+                 " points, so the character is not left short of a bigger"
+                 " maximum",
+                 f"{before[1]} -> {after[1]}")
+
+    # **5 and 3, not one number twice.** `f3313` prints 5 as well, on a
+    # different line -- the second wind's heal -- and `f171` is the row a
+    # careless copy would take 5 from.
+    _, _, _, b171, a171 = armed("f171")
+    _, _, _, b3313, a3313 = armed("f3313")
+    out.that((a171[0] - b171[0], a3313[0] - b3313[0]) == (5, 3),
+             "the two rows raise it by DIFFERENT amounts -- 5 and 3 --"
+             " which is the half a copied constant gets wrong and which"
+             " `f3313`'s own second-wind heal of 5 invites",
+             f"{a171[0] - b171[0]} and {a3313[0] - b3313[0]}")
+
+    # -- what moves with the maximum ----------------------------------------
+    _, _, _whole, before, after = armed("f171")
+    out.that(after[2] == after[0] // 4 and after[2] != before[2],
+             "a healing surge is worth more, because `surge_value` is a"
+             " quarter of the maximum and is a property rather than a"
+             " stored number",
+             f"{before[2]} -> {after[2]}, max {after[0]}")
+    out.that(after[3] == -(after[0] // 2) and after[3] != before[3],
+             "and the creature dies further down -- `dying_at` is minus"
+             " HALF the maximum, not a quarter: `surge_value` is the"
+             " quarter and reading one for the other is the mistake this"
+             " line was written with",
+             f"{before[3]} -> {after[3]}, max {after[0]}")
+
+    # -- the bloodied threshold, which is the one that can flip -------------
+    world, me, _ = _board("f171", 1)
+    hurt = must(world.get(me, Health), "the character has hit points")
+    off = Cast(world=world, me=me, ref="f171")
+    for eff in list(world.effects.of(me)):
+        if eff.label and eff.label.startswith("f171 max hp"):
+            off.end_effect(eff)
+    hurt.hp = hurt.max_hp // 2          # exactly bloodied
+    out.that(hurt.bloodied,
+             "premise: a character on exactly half its maximum is"
+             " bloodied, with the feat's own effect taken off first --"
+             " the board arms it, so there is no untouched 'before' to"
+             " find",
+             f"{hurt.hp}/{hurt.max_hp}")
+    REGISTRY["f171"].body(Cast(world=world, me=me, ref="f171"))
+    out.that(not hurt.bloodied,
+             "and five more hit points take it out of bloodied -- the"
+             " threshold is half the NEW maximum and the character"
+             " gained the points, so both sides of the comparison moved",
+             f"{hurt.hp}/{hurt.max_hp}")
+
+    # -- the undo clamps, which only a full creature can show ---------------
+    # **Added because a plant removing the clamp stayed green.** The
+    # board's character is at 18 of 34, so ending the effect lowers a
+    # maximum it was never near and the clamp has nothing to do. It
+    # bites only for a creature at or near full.
+    world3, me3, _ = _board("f171", 1)
+    full = must(world3.get(me3, Health), "the character has hit points")
+    full.hp = full.max_hp
+    raised = full.max_hp
+    off3 = Cast(world=world3, me=me3, ref="f171")
+    out.that(any(e.label and e.label.startswith("f171 max hp")
+                 for e in world3.effects.of(me3)),
+             "premise: the board has armed the feat, so there is an"
+             " effect to end",
+             f"{[e.label for e in world3.effects.of(me3)]}")
+    for eff in list(world3.effects.of(me3)):
+        if eff.label and eff.label.startswith("f171 max hp"):
+            off3.end_effect(eff)
+    out.that(full.max_hp == raised - 5,
+             "ending it gives the five back off the maximum",
+             f"{raised} -> {full.max_hp}")
+    out.that(full.hp == full.max_hp,
+             "and the current total is clamped to it rather than left"
+             " ABOVE a maximum that no longer exists -- every reader of"
+             " `bloodied` would answer wrongly on a creature holding more"
+             " hit points than it has",
+             f"{full.hp}/{full.max_hp}")
+
+    # -- `f3313`'s triggered half still pays --------------------------------
+    # **The body is NOT run here**, because the board has already armed
+    # it: running it again registers the watch twice and the second wind
+    # then spends two power points and heals twice. Measured -- 3 points
+    # to 1, and two `Healed` events for one card.
+    world2, me2, _ = _board("f3313", 1)
+    if world2.get(me2, PowerPoints) is None:
+        world2.add(me2, PowerPoints(points=3))
+    hurt2 = must(world2.get(me2, Health), "the character has hit points")
+    hurt2.hp = max(1, hurt2.max_hp // 3)
+    was = hurt2.hp
+    had = Cast(world=world2, me=me2, ref="drv").points()
+    world2.bus.emit(SecondWind(actor=me2, healed=0))
+    out.that(hurt2.hp > was,
+             "and the second wind still heals -- the trigger moved into"
+             " a `c.watch` so the standing half could be laid at arming,"
+             " and this is the half that move could have dropped",
+             f"{was} -> {hurt2.hp}")
+    out.that(had - Cast(world=world2, me=me2, ref="drv").points() == 1,
+             "spending exactly one power point, which is the printed"
+             " cost and what makes the heal the card's rather than the"
+             " ordinary second wind's. A DIFFERENCE, because the board"
+             " deals a pool of its own and an absolute asserts that"
+             " instead",
+             f"{had} -> {Cast(world=world2, me=me2, ref='drv').points()}")
+
+    for ref in ("f171", "f3313"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"and {ref} carries no marker: both were waiting on this"
+                 " one verb",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -122454,6 +122632,9 @@ DRIVERS = {
     "a_granted_swing_traded": (
         a_granted_swing_traded_for_a_standard_action,
         "a granted swing traded for a standard action"),
+    "a_feat_raises_a_maximum": (
+        a_feat_raises_a_maximum_rather_than_healing,
+        "a feat raises a maximum rather than healing"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

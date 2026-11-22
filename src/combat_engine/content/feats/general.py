@@ -472,10 +472,25 @@ def f166(c: Cast) -> None:
 
 
 @power("f171", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.max_hp()",))
+       reach=PERSONAL, target=SELF)
 def f171(c: Cast) -> None:
-    """5 more hit points, 10 at 11th and 15 at 21st. `c.temp_hp` is a
-    different thing and `c.heal` cannot raise a maximum."""
+    """5 more hit points, 10 at 11th and 15 at 21st.
+
+    **Written. `c.max_hp` is the verb and the old note named its two
+    near misses exactly:** `c.temp_hp` is a separate pool that does not
+    move the maximum, and `c.heal` cannot exceed one. Nothing else here
+    could raise a maximum at all.
+
+    **5 and not 10 or 15.** The card bands by tier and this row is
+    heroic, so the printed heroic figure is the one it carries -- a
+    level-banded number does not cross its tier boundary.
+
+    The current total rises with the maximum, which is the printed *"you
+    gain"* rather than *"your maximum increases"*: the character is at
+    full and stays at full. `Health.bloodied`, `surge_value` and
+    `dying_at` are all properties over `max_hp`, so the three readings
+    that matter move with it and none has to be told."""
+    c.max_hp(5, on=c.me)
 
 
 @power("f172", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

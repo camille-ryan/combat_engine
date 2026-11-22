@@ -58,6 +58,8 @@ Points off and points back on, and the dice behind them.
   - "The target regains half the normal hit points from healing."
 - `c.heal(self, amount: 'int', *, on: 'int | None' = None) -> 'int'`
   - Put hit points back. The row's own ref rides along on `Healed`.
+- `c.max_hp(self, amount: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You gain 5 additional hit points."
 - `c.regen_suppressed(self, *, on: 'int | None' = None) -> 'bool'`
   - Is this creature's regeneration switched off right now?
 - `c.regeneration(self, amount: 'int', *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, while_bloodied: 'bool' = False, unless: 'Callable[[], bool] | None' = None, unless_struck_by: 'str' = '', unless_damaged_by: 'tuple[DamageType, ...]' = ()) -> 'Effect'`
