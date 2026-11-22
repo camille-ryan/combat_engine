@@ -4438,6 +4438,20 @@ class Cast:
         Both are "X counts as Y", and they are separate verbs because they
         touch different state and are read in different places: that one is
         `Cast.wielding`, this one is 22 sites.
+
+        **`ref` takes two reserved words for the cards that name no row.**
+        `f1538` prints *"every attack you make gains the fear keyword"*,
+        which is about the creature: there is no ref to key it under and
+        no finite list of rows to loop over, since a borrowed or granted
+        row arrives later. So:
+
+            "*"        every row this creature uses
+            "*attack"  every row of its that declares an `Attack`
+
+        `dsl.keywords_of` reads both beside the per-ref set, and a ref
+        cannot collide with either because every ref starts with a letter.
+        Prefer `"*attack"`: the printed lines say *attack*, and `"*"`
+        would hand the keyword to a stance and a heal as well.
         """
         from .components import Powers
 

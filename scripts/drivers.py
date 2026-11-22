@@ -85676,6 +85676,114 @@ def a_miss_redirected_and_judged_again(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def every_attack_gains_a_keyword(out: Result) -> None:
+    """*"When you use your `p1628` racial power, all attacks you make
+    until the end of your next turn gain the fear keyword"* -- `f1538`.
+
+    **`Powers.granted_keywords` is keyed by ref and this card names no
+    row**, which is what the old marker meant by *"nothing adds one to
+    the rows a creature is about to use"*. Nor is there a finite list to
+    loop over: a row borrowed or granted later is still an attack this
+    character makes.
+
+    So `c.counts_as_keyword` takes two reserved words -- `"*"` for every
+    row and `"*attack"` for every row declaring an `Attack` -- read in
+    `dsl.keywords_of` beside the per-ref set. No ref can collide with
+    either, because every ref starts with a letter.
+
+    `"*attack"` and not `"*"` is the narrowing worth asserting: the card
+    says *attacks*, and the wider word would hand `fear` to a stance and
+    a heal as well. So the control here is a **trait**, which must not
+    gain it while an attack does.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, keywords_of
+    from combat_engine.engine.events import PowerResolved
+    from combat_engine.engine.types import Keyword
+
+    ROW, RACIAL = "f1538", "p1628"
+
+    world, me, _ = _board(ROW, 1)
+    REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+    attack = REGISTRY["mba"]
+    trait = next(
+        p for r, p in sorted(REGISTRY.items())
+        if p.attack is None and p.cls == "" and r.startswith("f")
+    )
+
+    def has_fear() -> tuple[bool, bool]:
+        return (Keyword.FEAR in keywords_of(world, me, attack),
+                Keyword.FEAR in keywords_of(world, me, trait))
+
+    # -- the premises ------------------------------------------------------
+    out.that(Keyword.FEAR not in (attack.keywords or ()),
+             "premise: the attack does not declare the keyword in its"
+             " header, so anything below is the grant and not the card",
+             f"{attack.ref}: {attack.keywords}")
+    out.that(trait.attack is None,
+             "premise: the control really is a row with no attack line --"
+             " which is what `\"*attack\"` is supposed to pass over",
+             f"{trait.ref}: attack {trait.attack}")
+    out.that(has_fear() == (False, False),
+             "before the racial power is used, neither has it",
+             f"{has_fear()}")
+
+    # -- the trigger is the named row --------------------------------------
+    world.bus.emit(PowerResolved(actor=me, power="p999", targets=()))
+    out.that(has_fear() == (False, False),
+             "and resolving some OTHER power changes nothing -- the card"
+             " names one racial power and the watch reads its ref",
+             f"{has_fear()}")
+
+    # -- the printed clause ------------------------------------------------
+    world.bus.emit(PowerResolved(actor=me, power=RACIAL, targets=()))
+    out.that(has_fear()[0],
+             "after the racial power resolves, an attack this character"
+             " makes carries the keyword -- without the row being named"
+             " anywhere, which is the whole of what the reserved word is"
+             " for",
+             f"{has_fear()}")
+    out.that(not has_fear()[1],
+             "and a row with no attack line does NOT -- `\"*attack\"`"
+             " rather than `\"*\"`, because the card says attacks and the"
+             " wider word would hand it to a stance and a heal",
+             f"{has_fear()}")
+
+    # -- somebody else is untouched ----------------------------------------
+    other, them, _ = _board(ROW, 1)
+    REGISTRY[ROW].body(Cast(world=other, me=them, ref=ROW))
+    other.bus.emit(PowerResolved(actor=them + 1, power=RACIAL, targets=()))
+    out.that(Keyword.FEAR not in keywords_of(other, them, attack),
+             "and the same racial power resolved by somebody ELSE does"
+             " nothing for this character -- the handler reads"
+             " `ev.actor`, which is what carries this rather than the"
+             " watch's own `on=`; a plant removing the scope alone left"
+             " this green and a plant removing the actor test reds it",
+             f"{sorted(k.value for k in keywords_of(other, them, attack))}")
+
+    # -- the wider reserved word, which no row uses yet --------------------
+    # Asserted because a plant said nothing read it: `"*"` is documented
+    # beside `"*attack"` and this row takes the narrow one, so without an
+    # arm here the wide key is a permission nothing consults -- which is
+    # this component's commonest bug.
+    wide, who, _ = _board(ROW, 1)
+    Cast(world=wide, me=who, ref="drv").counts_as_keyword(
+        "*", Keyword.FEAR, on=who)
+    out.that(Keyword.FEAR in keywords_of(wide, who, trait)
+             and Keyword.FEAR in keywords_of(wide, who, attack),
+             "`\"*\"` reaches BOTH -- a row with an attack line and a row"
+             " without -- which is the difference from `\"*attack\"` and"
+             " the reason the card's word was the narrow one",
+             f"attack {Keyword.FEAR in keywords_of(wide, who, attack)},"
+             f" trait {Keyword.FEAR in keywords_of(wide, who, trait)}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: it was `todo=`, refused in"
+             " play, and is written",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -121444,6 +121552,9 @@ DRIVERS = {
     "a_miss_redirected_and_judged_again": (
         a_miss_redirected_and_judged_again,
         "a miss redirected and judged again"),
+    "every_attack_gains_a_keyword": (
+        every_attack_gains_a_keyword,
+        "every attack gains a keyword"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

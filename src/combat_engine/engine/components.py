@@ -2049,6 +2049,13 @@ class Powers:
     #: That is the whole discipline here: there were 22 sites reading the
     #: header, and a grant honoured at 21 of them is a modifier nothing
     #: consults at the 22nd -- this component's commonest bug.
+    #: **Two keys are reserved and are not refs.** `"*"` is every row
+    #: this creature uses and `"*attack"` is every row of its that
+    #: declares an `Attack` -- *"every attack you make gains the fear
+    #: keyword"* is about the creature, so it had nowhere to live in a
+    #: store keyed by ref. `dsl.keywords_of` is where both are read, and
+    #: no ref can collide with them because every ref starts with a
+    #: letter.
     granted_keywords: dict[str, frozenset[Keyword]] = field(default_factory=dict)
     #: Clauses that may run *instead of* one named clause of a named row.
     #: Keyed `(ref, what)`, where `what` is the clause's own word --

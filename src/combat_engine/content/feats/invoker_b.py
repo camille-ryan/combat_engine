@@ -1080,12 +1080,38 @@ def f2997(c: Cast) -> None:
 
 
 @power("f1538", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("durations.keywords_of(creature)",))
+       reach=PERSONAL, target=SELF)
 def f1538(c: Cast) -> None:
-    """Every attack gains the fear keyword after `p1628`. The power is a
-    ref, so the whole hold is the keyword: nothing adds one to the rows a
-    creature is about to use -- `c.rattling` does it for exactly one
-    keyword and generalises to none."""
+    """Every attack gains the fear keyword after `p1628`.
+
+    **The old note was right about the shape and wrong that nothing
+    could hold it.** It said *"the power is a ref, so the whole hold is
+    the keyword: nothing adds one to the rows a creature is about to
+    use"* -- true of `Powers.granted_keywords`, which is keyed by ref,
+    and the card names no row. There is also no finite list to loop
+    over: a row borrowed or granted later is still an attack this
+    character makes.
+
+    So `counts_as_keyword` takes a reserved word, `"*attack"`, read in
+    `dsl.keywords_of` beside the per-ref set. `"*attack"` and not `"*"`
+    because the card says *attacks* -- the wider word would hand `fear`
+    to a stance and a heal as well.
+
+    `c.rattling` is the near miss the old note names and it stays that:
+    it is one modifier for one printed word, read in `c.damage`, where
+    this is the keyword system itself.
+
+    Hung on `PowerResolved` for the reason this file's header gives --
+    the clause is about what the racial power *did*, and the window is
+    `When.EONT`, which is the printed "until the end of your next
+    turn"."""
+    def rattled(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me or ev.power != "p1628":
+            return
+        c.counts_as_keyword("*attack", Keyword.FEAR, on=c.me,
+                            until=When.EONT)
+
+    c.watch(PowerResolved, rattled, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2983", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

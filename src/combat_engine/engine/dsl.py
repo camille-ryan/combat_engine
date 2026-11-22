@@ -4703,7 +4703,19 @@ def keywords_of(world: Any, actor: int | None, p: Any) -> frozenset[Keyword]:
     known = world.get(actor, Powers) if actor is not None else None
     if known is None:
         return declared
-    return declared | known.granted_keywords.get(p.ref, frozenset())
+    # **Two reserved keys say "every row" and "every attack row".**
+    # `f1538` prints *"every attack you make gains the fear keyword"*,
+    # which is about the creature and not about a named row -- and the
+    # store is keyed by ref, so without these the sentence had nowhere to
+    # live. `Powers.granted_keywords` documents the contract; a ref can
+    # never collide with them because every ref starts with a letter.
+    everything = known.granted_keywords.get("*", frozenset())
+    on_attacks = (
+        known.granted_keywords.get("*attack", frozenset())
+        if p.attack is not None else frozenset()
+    )
+    return (declared | known.granted_keywords.get(p.ref, frozenset())
+            | everything | on_attacks)
 
 
 def usable(
