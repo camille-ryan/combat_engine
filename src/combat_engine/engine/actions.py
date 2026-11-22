@@ -1684,6 +1684,31 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
             out.append(Action(kind="move_companion", cost=cost,
                               targets=(standing,), dest=dest, path=(dest,)))
 
+    # **Shedding light, which is an action and not a standing effect.**
+    # `f2117`'s card gives the character the *option*; a row that simply
+    # called `c.light` would light the board for the whole encounter and
+    # never ask. The radius is the grant's square count, so the card's
+    # "out to 4 squares" is `c.grant_action("shed_light", MINOR,
+    # squares_=4)` and this does not restate it.
+    #
+    # Offered only while the light is not already shed, because the hold
+    # is what the free action ends and two of them would want two
+    # endings.
+    for (what, cost), far in _granted(world, actor).items():
+        if what != "shed_light":
+            continue
+        if not encounter.can_spend(actor, cost):
+            continue
+        if any(e.label == _SHED for e in world.effects.of(actor)):
+            continue
+        # **The radius is not carried on the `Action`.** That dataclass
+        # has thirteen fields and none of them means a distance of this
+        # kind; `execute` re-reads the grant with the same `_granted`
+        # call, which is one lookup and keeps the menu entry the same
+        # shape as every other granted word.
+        del far
+        out.append(Action(kind="shed_light", cost=cost))
+
     # **Dragging what you already hold, which is a granted action and not a
     # flag on the grab.** `f970b` prints "while you have the target grabbed
     # you can pull it 1 square as a minor action", and the marker for it
@@ -1810,6 +1835,10 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
 #: `Cast.recast` deliberately does **not** come through `grant_action`: its
 #: `what` is a power's ref, not a word, so it builds the same carrier by
 #: hand and this set does not constrain it.
+#: The label the shed-light hold carries, so the offer can tell whether
+#: the light is already out and `_dropping` has one thing to end.
+_SHED = "shed light"
+
 GRANTABLE = frozenset({
     "aid_attack", "aid_defence", "command", "dismount", "escape",
     "instinctive", "mount", "move_zone", "pull_grabbed", "second_wind",
@@ -1821,6 +1850,18 @@ GRANTABLE = frozenset({
     # there was no line to re-price. The offer and the `execute` branch
     # are both in this file; the once-a-turn half is `Powers.latched`.
     "move_companion",
+    # **`shed_light` arrived with its reader**, which is this set's one
+    # rule. `f2117` prints *"as a minor action, you can shed bright light
+    # out to 4 squares until you end the light as a free action"*, and the
+    # row's own comment had already worked out why `c.light` alone is the
+    # wrong answer: *"writing it here would shed the light permanently,
+    # which is a different and better feat."*
+    #
+    # So the offer and the `execute` branch are both in this file, and the
+    # ending is the hold's own `drop_cost` -- `actions._dropping` already
+    # offers a free action to end a hold that names one, so "until you end
+    # it as a free action" needs no second word. #1459.
+    "shed_light",
     # **`move_in_zone` moves the CREATURE; `move_zone` moves the zone.**
     # Two words because they are opposite operations that read alike:
     # `move_zone` is the monster line "as a minor action it can move the
@@ -3744,6 +3785,30 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             # no room, a condition -- does not burn the turn's one use.
             walker.latch("move_companion", per_turn=True)
         return bool(moved)
+
+    if action.kind == "shed_light":
+        # `Cast.light` is what the 15 printed rows use, so the radius
+        # resolves one way for all of them. The hold carries a free
+        # `drop_cost`, which is the printed *"until you end the light as a
+        # free action"* -- `_dropping` above offers that ending already,
+        # so no second granted word is needed.
+        from .cast import Cast as _Cast
+
+        lighter = _Cast(world=world, me=actor, ref=_SHED)
+        radius = max(
+            (far for (what, _), far in _granted(world, actor).items()
+             if what == "shed_light"),
+            default=0,
+        )
+        if not radius:
+            return False
+        held = lighter.light(radius, on=actor, until=When.ENCOUNTER)
+        if held is None:
+            return False
+        held.label = _SHED
+        held.drop_cost = ActionType.FREE
+        world.bus.emit(Note(text=f"{actor} sheds light {radius}"))
+        return True
 
     if action.kind == "pull_grabbed":
         # The grant says a square; `forced` is what moves anybody, so the

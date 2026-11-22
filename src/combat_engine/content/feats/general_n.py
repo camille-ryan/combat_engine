@@ -1041,12 +1041,32 @@ def f2108b(c: Cast) -> None:
     c.watch(Hit, follow_up, on=me, until=When.ENCOUNTER)
 
 
-# The light is an *action* the feat grants -- "as a minor action, you can
-# shed bright light out to 4 squares until you end it as a free action" --
-# not a standing effect. `c.light` exists now and writing it here would
-# shed the light permanently, which is a different and better feat.
-_granted("f2117", "f2117b", swap=Swap(2, utility=True),
-         dropped=("actions.shed_light()",))
+# **The light is an *action* the feat grants, and that is why it is not a
+# `c.light` call here.** The comment that used to stand on this line had
+# the diagnosis right -- *"writing it here would shed the light
+# permanently, which is a different and better feat"* -- and the answer is
+# `actions.GRANTABLE`, whose one rule is that a word arrives with its
+# reader. `shed_light` has an offer and an `execute` branch in
+# `engine/actions.py` now, so the card's *"as a minor action, you can shed
+# bright light out to 4 squares"* is the grant below and the radius is its
+# square count.
+#
+# *"Until you end the light as a free action"* needed no second word:
+# `actions._dropping` already offers a free action to end a hold that
+# names one, so the branch sets `drop_cost` on the hold it lays. #1459.
+
+
+@power("f2117", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, swap=Swap(2, utility=True))
+def f2117(c: Cast) -> None:
+    """Hands over `f2117b`, and offers the light as a minor action.
+
+    Both printed clauses, and the second is a granted action rather than a
+    standing effect -- see the note above this row.
+    """
+    c.grant_row("f2117b", on=c.me, until=When.ENCOUNTER)
+    c.grant_action("shed_light", MINOR, squares_=4, on=c.me,
+                   until=When.ENCOUNTER)
 
 
 @power("f2117b", level=1, cls="", usage=ENCOUNTER, action=FREE,

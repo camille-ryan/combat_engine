@@ -72792,6 +72792,100 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_feat_offers_shedding_light_as_an_action(out: Result) -> None:
+    """*"As a minor action, you can shed bright light out to 4 squares
+    until you end the light as a free action"* -- `f2117`. #1459.
+
+    **The row's own comment had the diagnosis and declined the easy
+    answer**, which is why this is written the way it is:
+
+    > *"The light is an action the feat grants, not a standing effect.
+    > `c.light` exists now and writing it here would shed the light
+    > permanently, which is a different and better feat."*
+
+    So `actions.GRANTABLE` is the mechanism, and its one rule is that a
+    word arrives with its reader -- the offer and the `execute` branch are
+    both in `engine/actions.py`, the way `move_companion`,
+    `move_in_zone` and `bull_rush` each arrived.
+
+    **The ending needed no second word.** `actions._dropping` already
+    offers a free action to end a hold that names one, so the branch sets
+    `drop_cost` on the hold it lays and *"until you end the light as a
+    free action"* falls out of machinery that was there.
+
+    **The radius rides on the grant, not on the `Action`.** That
+    dataclass has thirteen fields and none means a distance of this kind,
+    so `execute` re-reads `query.granted_actions` -- one lookup, and the
+    menu entry stays the same shape as every other granted word.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import granted_actions, light_level
+
+    ROW = "f2117"
+
+    world, me, _ = _board(ROW, 1)
+    # The board arms every `action=NONE` row including the one under test,
+    # so the grant is already standing -- asserted rather than assumed,
+    # because the offer below is meaningless without it.
+    out.that(("shed_light", "minor") in granted_actions(world, me),
+             "the feat grants shedding light as a MINOR action, with the"
+             " card's 4 squares as the grant's own count",
+             f"{sorted(k for k in granted_actions(world, me) if k[0] == 'shed_light')}")
+    out.that(granted_actions(world, me).get(("shed_light", "minor")) == 4,
+             "and the radius is the printed 4 rather than"
+             " `c.grant_action`'s default of 1",
+             f"{granted_actions(world, me).get(('shed_light', 'minor'))}")
+
+    offered = [a for a in _actions.legal(world, world.encounter, me)
+               if a.kind == "shed_light"]
+    out.that(len(offered) == 1 and offered[0].cost.value == "minor",
+             "it reaches the action menu, once, priced as a minor --"
+             " which is the half a `c.light` call in the body could not"
+             " do: that sheds the light for the whole encounter and never"
+             " asks",
+             f"{[(a.kind, a.cost.value) for a in offered]}")
+
+    # -- what the light does, on a board dark enough to show it -------------
+    here = sorted(world.grid.squares_of(me))[0]
+    near = (here[0] + 2, here[1])
+    for sq in (here, near):
+        world.grid.light[sq] = "dark"
+    out.that(light_level(world, near) == "dark",
+             "premise: a square two away is dark, so the line below is"
+             " the light doing something rather than the board already"
+             " being bright -- `c.light`'s own docstring says it is inert"
+             " in daylight",
+             f"{light_level(world, near)}")
+    out.that(_actions.perform(world, world.encounter, me, offered[0]),
+             "the action is taken",
+             "performed")
+    out.that(light_level(world, near) == "bright",
+             "and the square is bright: the radius is carried on the"
+             " creature, so the light moves with it",
+             f"{light_level(world, near)}")
+
+    # -- once, and endable for free ----------------------------------------
+    out.that(not [a for a in _actions.legal(world, world.encounter, me)
+                  if a.kind == "shed_light"],
+             "it is not offered again while the light is already shed --"
+             " two holds would want two endings",
+             "withheld")
+    endings = [a for a in _actions.legal(world, world.encounter, me)
+               if a.kind == "drop" and a.cost.value == "free"]
+    out.that(endings,
+             "and ending it is offered as a FREE action, which is the"
+             " printed clause and comes from `_dropping` reading the"
+             " hold's own `drop_cost` -- no second granted word",
+             f"{[(a.kind, a.cost.value) for a in endings][:3]}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"so {ROW} carries no marker: both printed clauses are"
+             " written",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def the_sixth_fighter_style_is_an_untrained_weapon(out: Result) -> None:
     """*"+1 damage with the weapon style chosen for a class feature"* --
     `f1970`, whose sixth leg pays on an **improvised** weapon. #1458.
@@ -126181,6 +126275,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_feat_offers_shedding_light_as_an_action,
         the_sixth_fighter_style_is_an_untrained_weapon,
         a_borrowed_power_rolls_on_charisma,
         a_form_ended_from_outside_it,
@@ -126578,6 +126673,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "shed_light": (
+        a_feat_offers_shedding_light_as_an_action,
+        "a feat offers shedding light as a minor action, ended for free"
+        " (#1459)",
     ),
     "arena_style": (
         the_sixth_fighter_style_is_an_untrained_weapon,
