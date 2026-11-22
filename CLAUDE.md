@@ -730,6 +730,39 @@ push is still affordable — but do not quote 25 minutes.
   agent, `logs/NIGHTLY-FAILED`, `logs/nightly-latest.log`,
   `logs/nightly-heartbeat`, and `check.py`'s `_nightly_state`, `_stale_net`,
   `_clear_red`, `_moved`, `_skipped` and `_tree_clean`.
+* **`drivers.py --tries 40` once per BATCH, not once per push**, and this is
+  the one cadence rule in this file that was bought with a measurement
+  rather than reasoned out. Nothing in the narrow gate set runs the rule
+  suite: `ruff`, `lint <file>`, `audit <refs>`, `replay`, `leaks`,
+  `symbols` and `todo` all pass while a `drivers` rule is red, and
+  `drivers` is only reached by `check.py` or by naming it.
+
+  Measured on 2026-11-22, after 18 commits of narrow gating. The suite
+  **could not start at all** — one `DRIVERS` entry had absorbed 18 rules
+  into its tuple, so `fn, what = DRIVERS[name]` raised, and every
+  `drivers.py <name>` run passed because each rule did also get a correct
+  key. When it was repaired it was red in **17 rules, 35 arms**.
+
+  **Every one was a correct later commit invalidating an older rule's
+  assertion** — a marker cleared, a mechanism moved layers, a census
+  moved, an event that began announcing a case it used to swallow. Not
+  one rule was wrong when written, which is exactly why no narrow gate
+  could see it: each commit was individually right.
+
+  Three of the 35 were right about something real — a tome whose printed
+  pick count cannot be filled from the compendium, a gate saved only by a
+  class check that happens to exclude the one row that would defeat it,
+  and a party fixture stale since before the blind window. Those are the
+  payoff; the other 32 were maintenance that compounded because nobody
+  paid it.
+
+  ~15 minutes at `--tries 40`, against ~35 for a wide sweep. #1465, #1466.
+
+  And **adding a rule means running the suite, not the rule.** A new
+  rule's own key passing says nothing about the registry it was added to;
+  that is what the 18 commits proved. `DRIVERS` refuses a malformed entry
+  at import now, naming the key, so a single-rule run catches that
+  particular fault — but not the class of fault.
 * **`--calls` is the per-commit evidence for a new verb**, and it is the thing
   five wide sweeps in one session were paid for instead.
   `audit.py --calls 'c.light()'` is seconds. `_changed` widens to all 21,304
