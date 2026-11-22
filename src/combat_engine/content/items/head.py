@@ -1101,10 +1101,43 @@ def i3470x1(c: Cast) -> None:
 
 @power("i3470p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(3), target=NO_TARGET, keywords=[Keyword.ZONE],
-       todo=("c.silence()",))
+       dropped=("query.can_hear(through a zone)",))
 def i3470p1(c: Cast) -> None:
-    """A zone whose only content is that no sound crosses it. Sound is not
-    modelled, so the zone would be an empty shape."""
+    """*"The burst creates a zone that lasts until the end of your next
+    turn and moves with you. No sound can be made in the zone, and no
+    noise from outside the zone can be heard in it or through it."*
+
+    **Written, and the old note's premise was wrong.** It read *"sound is
+    not modelled, so the zone would be an empty shape"*. Hearing **is**
+    modelled: `query.can_hear` composes `Condition.DEAFENED`,
+    `query.sealed` asked of both parties, and `c.cannot_speak`, and three
+    cards already read it. What was missing was a region that silences,
+    which is `Zone.silences` and the fourth thing that reader consults.
+
+    **Two of the three clauses fall out of one membership test.** A
+    speaker inside the zone is unheard (*"no sound can be made in the
+    zone"*) and a listener inside it hears nothing from outside (*"no
+    noise from outside the zone can be heard in it"*) -- the same
+    arrangement `query.sealed` has there, and for the reason that
+    function states: a speaker nobody can hear and a listener who can
+    hear nobody are the same answer.
+
+    **"Moves with you" is `aura=`**, which is what a zone centred on its
+    owner and recomputed as it moves already means -- `Zone.aura` says so
+    in its own comment, and a burst laid as fixed squares would stay
+    behind the first time the wearer stepped.
+
+    **Dropped: "or through it."** That is a line, and `query.can_hear` is
+    deliberately **not** a line-of-effect test -- its docstring says
+    sound goes round corners and that using one would make a shout
+    through a doorway fail. So the third clause cannot be written without
+    contradicting the reader's own design, and the marker names that
+    rather than a verb. #1460.
+    """
+    # `sustain=MINOR` on the zone and not in the header: `power()` takes
+    # no such argument, and the printed *"Sustain Minor"* is a property of
+    # the region rather than of the row -- `Zones.aura` is what reads it.
+    c.aura(3, label=c.ref, until=When.EONT, sustain=MINOR, silences=True)
 
 
 @power("i693x1", level=8, cls=ITEM, action=ActionType.NONE,

@@ -72792,6 +72792,102 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def no_sound_crosses_a_silenced_zone(out: Result) -> None:
+    """*"No sound can be made in the zone, and no noise from outside the
+    zone can be heard in it or through it"* -- `i3470p1`. #1460.
+
+    **The old note's premise was wrong.** It read *"sound is not modelled,
+    so the zone would be an empty shape"*. Hearing **is** modelled:
+    `query.can_hear` composes `Condition.DEAFENED`, `query.sealed` asked
+    of both parties, and `c.cannot_speak`, and three cards already read
+    it. What was missing was a region that silences -- `Zone.silences`,
+    the fourth thing that reader consults.
+
+    **Two of the three clauses fall out of one membership test**, which is
+    the arrangement `sealed` already has there and for the reason it
+    states: a speaker nobody can hear and a listener who can hear nobody
+    are the same answer.
+
+    **"Or through it" is not written, and that is a design decision.**
+    `can_hear` is deliberately not a line-of-effect test -- its own
+    docstring says sound goes round corners and that using one would make
+    a shout through a doorway fail. A line crossing the zone therefore has
+    nothing to be tested against without contradicting the reader, so the
+    row carries a marker naming that rather than a verb.
+
+    **The membership test reads squares, not `Zones.occupants`.** That
+    index is refreshed *after* the entry events fire, so a reader asked
+    mid-emit sees the membership as it was. Hearing is asked from
+    anywhere, so live geometry is the only safe source.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import can_hear, squares
+
+    ROW = "i3470p1"
+
+    world, me, _ = _board(ROW, 1)
+    cast = Cast(world=world, me=me, ref=ROW)
+    mate = sorted(cast.allies())[0]
+    out.that(can_hear(world, mate, me),
+             "premise: the ally can hear the wearer before the zone is"
+             " laid -- without this the line below is about a board that"
+             " was already silent",
+             "heard")
+
+    REGISTRY[ROW].body(cast)
+    quiet = [z for _e, z in world.zones.all() if z.label == ROW]
+    out.that(len(quiet) == 1 and quiet[0].silences,
+             "the row lays one zone and it silences",
+             f"{[(z.label, z.silences) for z in quiet]}")
+    out.that(quiet[0].aura == 3,
+             "as an AURA of 3, because *'moves with you'* is what an aura"
+             " is -- a burst laid as fixed squares would stay behind the"
+             " first time the wearer stepped",
+             f"aura {quiet[0].aura}")
+    out.that(not can_hear(world, mate, me),
+             "and the ally no longer hears the wearer -- *'no sound can"
+             " be made in the zone'*",
+             "silent")
+    out.that(not can_hear(world, me, mate),
+             "nor the wearer the ally, which is the second printed clause"
+             " read off the same membership: a listener inside hears"
+             " nothing from outside",
+             "silent both ways")
+
+    # -- the control: two creatures with the zone nowhere near them ---------
+    inside = {s for z in quiet for s in z.squares}
+    pair = [f for f in sorted(cast.enemies()) if not (squares(world, f) & inside)]
+    if len(pair) < 2:
+        # **Moved rather than skipped.** A burst 3 covers 49 squares, so
+        # this board usually leaves one creature outside and an arm that
+        # silently skipped would make the whole rule one-sided.
+        spare = sorted(cast.enemies())[0]
+        seat = must(world.get(spare, Position), "the enemy has a position")
+        far = (world.grid.width - 2, world.grid.height - 2)
+        world.grid.lift(spare)
+        seat.square = far
+        world.grid.place(spare, frozenset({far}))
+        pair = [f for f in sorted(cast.enemies())
+                if not (squares(world, f) & inside)]
+    out.that(len(pair) >= 2,
+             "premise: two creatures stand outside the zone",
+             f"{pair[:2]}")
+    out.that(can_hear(world, pair[0], pair[1]),
+             "and they hear each other perfectly well -- the zone"
+             " silences its own squares and not the board, which is the"
+             " arm that makes every line above about the region",
+             "heard")
+
+    out.that(REGISTRY[ROW].unfinished == ("query.can_hear(through a zone)",),
+             "and the row's marker names the one clause that cannot be"
+             " written: *'or through it'* is a line, and `can_hear` is"
+             " deliberately not a line-of-effect test",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_feat_offers_shedding_light_as_an_action(out: Result) -> None:
     """*"As a minor action, you can shed bright light out to 4 squares
     until you end the light as a free action"* -- `f2117`. #1459.
@@ -126275,6 +126371,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        no_sound_crosses_a_silenced_zone,
         a_feat_offers_shedding_light_as_an_action,
         the_sixth_fighter_style_is_an_untrained_weapon,
         a_borrowed_power_rolls_on_charisma,
@@ -126673,6 +126770,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "silenced_zone": (
+        no_sound_crosses_a_silenced_zone,
+        "no sound crosses a silenced zone, read by the hearing model"
+        " (#1460)",
     ),
     "shed_light": (
         a_feat_offers_shedding_light_as_an_action,

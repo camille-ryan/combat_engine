@@ -19249,6 +19249,7 @@ class Cast:
         until: When = When.EONT,
         difficult: bool | str = False,
         blocks_sight: bool = False,
+        silences: bool = False,
         obscured: str = "",
         obscured_for: str = "",
         no_light: bool = False,
@@ -19365,6 +19366,7 @@ class Cast:
         return self.world.zones.create(
             self.me, label or self.ref, frozenset(area), until,
             difficult=difficult, blocks_sight=blocks_sight,
+            silences=silences,
             obscured=obscured, obscured_for=obscured_for,
             no_light=no_light, exempt=exempt, sustain=sustain,
             sustain_inside=sustain_inside,
@@ -19387,6 +19389,7 @@ class Cast:
         on: int | None = None,
         sustain: ActionType | None = None,
         difficult: bool | str = False,
+        silences: bool = False,
         obscured: str = "",
         obscured_for: str = "",
     ) -> int:
@@ -19417,6 +19420,7 @@ class Cast:
         return self.world.zones.aura(
             owner, label or self.ref, radius, until, sustain,
             difficult=difficult,
+            silences=silences,
             obscured=obscured,
             obscured_for=obscured_for,
         )

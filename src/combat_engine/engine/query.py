@@ -4578,6 +4578,34 @@ def can_hear(world: World, listener: int, speaker: int) -> bool:
     # Read here rather than as a second condition for the reason this
     # docstring already gives about `Condition.DEAFENED`: a state nobody
     # consults is inert, and hearing already has exactly one reader.
+    # **A zone that silences, asked of BOTH parties.** `i3470p1` prints
+    # *"no sound can be made in the zone, and no noise from outside the
+    # zone can be heard in it or through it"* -- so a speaker inside one
+    # is unheard and a listener inside one hears nothing from outside.
+    # Both fall out of one membership test, which is the arrangement
+    # `sealed` already has here and for the stated reason: a speaker
+    # nobody can hear and a listener who can hear nobody are the same
+    # answer.
+    #
+    # **"Or through it" is NOT written**, and that is a design decision
+    # rather than an omission: this function is deliberately not a
+    # line-of-effect test -- the paragraph above says sound goes round
+    # corners -- so a line crossing the zone has nothing to be tested
+    # against without contradicting it. `i3470p1` carries the marker.
+    #
+    # Skipped when neither creature is in a zone at all, which is every
+    # board that never makes one. #1460.
+    for _eid, zone in world.zones.all():
+        if not zone.silences:
+            continue
+        # **Squares, not `Zones.occupants`.** That index is refreshed
+        # after the entry events fire, so a reader asked mid-emit sees
+        # the membership as it was -- `refresh` assigns `inside[eid]`
+        # once the loop is done. Hearing is asked from anywhere, so the
+        # live geometry is the only safe source.
+        where = zone.squares
+        if squares(world, listener) & where or squares(world, speaker) & where:
+            return False
     mine = world.get(speaker, Mods)
     if mine is not None and mine.items and mine.total("cannot_speak") > 0:
         return False

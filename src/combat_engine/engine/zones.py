@@ -64,6 +64,22 @@ class Zone:
     #: False, True, or what sort of going it is -- see `Grid.difficult`.
     difficult: bool | str = False
     blocks_sight: bool = False
+    #: **No sound crosses this region.** `i3470p1` is the card: *"no sound
+    #: can be made in the zone, and no noise from outside the zone can be
+    #: heard in it or through it."*
+    #:
+    #: Read by `query.can_hear`, asked of **both** parties, which is the
+    #: arrangement `query.sealed` already has there and for the same
+    #: reason: a speaker nobody can hear and a listener who can hear
+    #: nobody are the same answer. Two of the card's three clauses fall
+    #: out of that membership test; the third -- *"or through it"* -- is a
+    #: line and is not written, because `can_hear` is deliberately not a
+    #: line-of-effect test and says so in its own docstring. #1460.
+    #:
+    #: Beside `blocks_sight` because it is the same shape of fact about a
+    #: region, and separate from it because sound and sight are different
+    #: senses: a silent zone is not dark and a dark one is not quiet.
+    silences: bool = False
     #: Damage a creature takes for being in these squares -- a dice
     #: expression, or `""` for a zone that does not hurt anybody.
     #:
@@ -411,6 +427,7 @@ class Zones:
         *,
         difficult: bool | str = False,
         blocks_sight: bool = False,
+        silences: bool = False,
         obscured: str = "",
         obscured_for: str = "",
         no_light: bool = False,
@@ -526,6 +543,7 @@ class Zones:
             squares=frozenset(squares_),
             difficult=difficult,
             blocks_sight=blocks_sight,
+            silences=silences,
             obscured=obscured,
             obscured_for=obscured_for,
             no_light=no_light,
@@ -662,6 +680,7 @@ class Zones:
         sustain: ActionType | None = None,
         *,
         difficult: bool | str = False,
+        silences: bool = False,
         obscured: str = "",
         obscured_for: str = "",
     ) -> int:
@@ -683,7 +702,8 @@ class Zones:
         in as many words. Passed through instead. #507-era triage.
         """
         zone = Zone(owner=owner, label=label, aura=radius,
-                    difficult=difficult, obscured=obscured,
+                    difficult=difficult, silences=silences,
+                    obscured=obscured,
                     obscured_for=obscured_for)
         zone.squares = spread(squares(self.world, owner), radius)
         return self._spawn(zone, when, sustain)
