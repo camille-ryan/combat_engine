@@ -546,30 +546,54 @@ def f1697(c: Cast) -> None:
 
 @power("f1704", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.intimidate()",), proficiency=("w3611",))
+       proficiency=("w3611",))
 def f1704(c: Cast) -> None:
     """Re-aimed from `todo` to `dropped`. The grant is header data and the
     damage half is writable -- the weapon table keys on the ref -- so
     refusing the whole row in play threw a working sentence away.
 
-    What is still missing is the advantage half, and the marker now names
-    it: `SkillCheck.target` landed and nothing *makes* an Intimidate
-    check, so there is no event to carry a target. Untyped is wrong here
-    for once -- the
-    card prints the word "feat".
+    Untyped is wrong here for once -- the card prints the word "feat".
 
-    **This card wants a trigger on the check, not a bonus to it**, which
-    is the half of `c.intimidate()` that is genuinely absent and the
-    reason this row stays blocked while `f2130b` -- the other holder of
-    the symbol -- did not. A bonus is writable: `engine/skills.py` totals
-    `skill:<name>` off `Mods` on every check. A *successful* check against
-    a named enemy is not: `actions.py` offers the Bluff feint and the
-    Perception spot in combat and no Intimidate action, and
-    `powers/skills/intimidate.py` says in its own first lines that nothing
-    there rolls one either. So the event the trigger would hang on is never
-    emitted, which is the inert-row shape rather than a missing field."""
+    **The advantage half is written, and the paragraph that stood here
+    went stale under it.** It read: *"actions.py offers the Bluff feint
+    and the Perception spot in combat and no Intimidate action, and
+    `powers/skills/intimidate.py` says in its own first lines that
+    nothing there rolls one either. So the event the trigger would hang
+    on is never emitted."*
+
+    All of that was true when it was written. `Cast.surrender` is the
+    Intimidate action now -- built on Camille's `#1341` ruling about the
+    surrendered condition -- and it rolls `c.check("skill:intimidate",
+    ...)` against the target's Will, so a `SkillCheck` carrying the
+    skill, the outcome and the creature is emitted on every attempt.
+
+    The last piece was the creature: `c.surrender` rolled the check
+    without `against=`, so `SkillCheck.target` was `None` and *"that
+    enemy"* still had nobody behind it. One argument.
+
+    **Combat advantage against THAT enemy and no other**, which is what
+    makes this a trigger rather than a bonus: `c.gains_advantage` is
+    read per swing with the pair in hand, so the gate compares
+    `ctx["target"]` against the creature the check named.
+
+    `When.EONT` is the printed clock, and the hold is laid per success --
+    intimidating a second enemy gives advantage against that one too,
+    which the card neither grants nor forbids and which falls out of
+    laying one hold per check rather than one per character."""
     c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
             when=lambda ctx: _wielding_ref(c, "w3611"))
+
+    def cowed(ev: Any) -> None:
+        if (ev.actor != c.me or ev.skill != "skill:intimidate"
+                or not ev.success or ev.target is None):
+            return
+        quarry = ev.target
+        c.gains_advantage(
+            lambda ctx: ctx.get("target") == quarry,
+            on=c.me, until=When.EONT,
+        )
+
+    c.watch(SkillCheck, cowed, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1751", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

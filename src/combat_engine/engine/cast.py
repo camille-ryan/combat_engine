@@ -16737,8 +16737,15 @@ class Cast:
                 "no_surrender", {}) > 0:
             return False
 
+        # **`against=foe`, so the check SAYS who was intimidated.** Two
+        # feats print *"when you succeed on an Intimidate check"* and
+        # name "the creature you intimidated", and `SkillCheck.target`
+        # is the field that answers it -- left `None` here, the event
+        # fired with nobody on it and both rows had a trigger with no
+        # creature behind it.
         if not self.check("skill:intimidate",
-                          _defence(self.world, foe, Defense.WILL)):
+                          _defence(self.world, foe, Defense.WILL),
+                          against=foe):
             # *"On a failure the same creature cannot be tried again for the
             # rest of the encounter."*
             self.bonus("no_surrender", 1, on=foe, until=When.ENCOUNTER,

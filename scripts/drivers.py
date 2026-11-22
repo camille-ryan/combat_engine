@@ -86998,6 +86998,129 @@ def the_weapon_most_recently_sheathed(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def an_intimidate_check_names_who_it_cowed(out: Result) -> None:
+    """*"If you successfully intimidate an enemy with an Intimidate skill
+    check, you gain combat advantage against that enemy until the end of
+    your next turn"* -- `f1704`.
+
+    **Both halves of what this waited on had landed and the note had
+    not.** It said *"`actions.py` offers the Bluff feint and the
+    Perception spot in combat and no Intimidate action, and
+    `powers/skills/intimidate.py` says in its own first lines that
+    nothing there rolls one either"* -- true when written.
+    `Cast.surrender` is the printed Intimidate action now, built on
+    Camille's `#1341` ruling about the surrendered condition, and it
+    rolls `c.check("skill:intimidate", ...)` against the target's Will.
+
+    What was genuinely missing was one argument. `c.surrender` rolled
+    that check without `against=`, so `SkillCheck.target` came out
+    `None` and *"that enemy"* had nobody behind it -- the field existed
+    and nothing filled it.
+
+    **A trigger and not a bonus**, which is the distinction the row's own
+    note draws: a `skill:` bonus is totalled off `Mods` on every check
+    and was always writable, where a *successful check against a named
+    enemy* needs an event carrying both the outcome and the creature.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.query import bloodied, has_combat_advantage
+
+    def staged() -> tuple[Any, int, int, int]:
+        """The feat armed, and two bloodied foes it has no advantage on."""
+        world, me, _ = _board("f1704", 1)
+        cast = Cast(world=world, me=me, ref="f1704")
+        REGISTRY["f1704"].body(cast)
+        # **Foes the caster has NO advantage on already**, because the
+        # board grants it against the first enemy for its own reasons --
+        # measured, and an arm picking that one reads True before and
+        # after and proves nothing.
+        plain = [f for f in sorted(cast.enemies())
+                 if not has_combat_advantage(world, me, f)]
+        for foe in plain[:2]:
+            hurt = must(world.get(foe, Health), "the enemy has hit points")
+            hurt.hp = max(1, hurt.max_hp // 3)
+        return world, me, plain[0], plain[1]
+
+    # -- the premises ------------------------------------------------------
+    world, me, cowed, other = staged()
+    out.that(bloodied(world, cowed) and bloodied(world, other),
+             "premise: both enemies are bloodied, which is what the"
+             " printed Intimidate action requires before it will roll at"
+             " all",
+             f"{cowed}, {other}")
+    out.that(not has_combat_advantage(world, me, cowed)
+             and not has_combat_advantage(world, me, other),
+             "and the caster has combat advantage on neither, so the"
+             " line below is this feat and not the board",
+             f"{[has_combat_advantage(world, me, f) for f in (cowed, other)]}")
+
+    # -- the check names the creature --------------------------------------
+    seen: list[tuple] = []
+    world.bus.on(SkillCheck, lambda e: seen.append(
+        (e.actor, e.skill, e.target, e.success)))
+    world.rng.loaded = 20
+    took = Cast(world=world, me=me, ref="drv").surrender(on=cowed)
+    out.that(took, "the Intimidate action succeeds on a loaded 20",
+             f"{took}")
+    out.that(seen and seen[-1][1] == "skill:intimidate"
+             and seen[-1][2] == cowed,
+             "and the check it rolled NAMES the creature it was made"
+             " against -- `SkillCheck.target`, which was `None` until"
+             " `c.surrender` passed `against=`",
+             f"{seen}")
+
+    # -- the printed clause -------------------------------------------------
+    out.that(has_combat_advantage(world, me, cowed),
+             "so the feat pays: combat advantage against the enemy that"
+             " was intimidated",
+             f"{has_combat_advantage(world, me, cowed)}")
+    out.that(not has_combat_advantage(world, me, other),
+             "and against that enemy ONLY -- the other bloodied one is"
+             " untouched, which is what makes this a trigger on a named"
+             " creature rather than a blanket",
+             f"{has_combat_advantage(world, me, other)}")
+
+    # -- a failed check pays nothing ----------------------------------------
+    w2, me2, foe2, _ = staged()
+    w2.rng.loaded = 1
+    out.that(not Cast(world=w2, me=me2, ref="drv").surrender(on=foe2),
+             "premise: a loaded 1 fails the check",
+             "failed")
+    out.that(not has_combat_advantage(w2, me2, foe2),
+             "and a failed Intimidate grants no advantage -- the card"
+             " says *successfully*, and the gate reads `success`",
+             f"{has_combat_advantage(w2, me2, foe2)}")
+
+    # -- somebody else's check pays nothing ---------------------------------
+    w3, me3, foe3, _ = staged()
+    w3.rng.loaded = 20
+    mate = sorted(Cast(world=w3, me=me3, ref="drv").allies())[0]
+    Cast(world=w3, me=mate, ref="drv").surrender(on=foe3)
+    out.that(not has_combat_advantage(w3, me3, foe3),
+             "and an ALLY intimidating the same enemy gives the feat's"
+             " holder nothing -- `on=c.me` on the watch and `ev.actor`"
+             " in the handler, which is the commonest single mistake in"
+             " this tree",
+             f"{has_combat_advantage(w3, me3, foe3)}")
+
+    out.that(not REGISTRY["f1704"].unfinished,
+             "and `f1704` carries no marker",
+             f"{REGISTRY['f1704'].unfinished}")
+    out.that(REGISTRY["f2130b"].unfinished == ("triggers.Trigger(events=)",),
+             "while `f2130b` is re-pointed rather than cleared: its card"
+             " triggers on an Intimidate check OR a hit, and `Trigger`"
+             " carries one event class. `either(...)` composes"
+             " predicates, not event types, and the `c.watch` escape"
+             " `f3313` took is shut here -- a DAILY spends its use when"
+             " the declared trigger fires, so a trait would change what"
+             " the row costs as well as when it runs",
+             f"{REGISTRY['f2130b'].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -122811,6 +122934,9 @@ DRIVERS = {
     "the_weapon_most_recently_sheathed": (
         the_weapon_most_recently_sheathed,
         "the weapon most recently sheathed"),
+    "an_intimidate_check_names_who_it_cowed": (
+        an_intimidate_check_names_who_it_cowed,
+        "an intimidate check names who it cowed"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

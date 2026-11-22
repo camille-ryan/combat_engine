@@ -1474,14 +1474,31 @@ _granted("f2130", "f2130b", swap=Swap(2, utility=True))
        reach=PERSONAL, target=SELF,
        trigger="you hit with an attack",
        on=Trigger(Hit, _i_hit, "you hit an enemy with an attack"),
-       dropped=("c.intimidate()",))
+       dropped=("triggers.Trigger(events=)",))
 def f2130b(c: Cast) -> None:
     """Half the printed trigger is declared; the attack half does fire.
 
-    `SkillCheck.target` landed and is not what this waits on: nothing
-    *makes* an Intimidate check, so "the creature you intimidated" has no
-    event behind it at all. That half of the trigger is what the marker
-    still names.
+    **Re-pointed, because `c.intimidate()` is spent and was never this
+    row's gap anyway.** The note here read *"nothing makes an Intimidate
+    check, so 'the creature you intimidated' has no event behind it at
+    all"* -- true when written, and false now: `Cast.surrender` is the
+    printed Intimidate action, it rolls `c.check("skill:intimidate",
+    ...)` against the target's Will, and the check names the creature it
+    was made against. `f1704`, the other holder of that symbol, is
+    written on exactly those two facts.
+
+    What actually blocks this row is narrower and is a **dispatcher**
+    limit: the card's trigger is *"you succeed on an Intimidate check
+    **or** hit with an attack"*, and `Trigger` carries one `event`
+    class. `either(...)` composes predicates, not event types, so a row
+    cannot declare both -- and the usual escape, moving the trigger into
+    a `c.watch` the way `f3313` does, is not open here: this is a DAILY
+    whose use is spent by the declared trigger firing, so a trait would
+    change what the row costs as well as when it runs.
+
+    So the attack half is declared and plays, and the Intimidate half
+    waits on `triggers.Trigger(events=)` -- a declared trigger that can
+    name more than one event class.
 
     The aftereffect is the same penalty again, for a turn, once the save
     lands -- `When.EOTNT`, because the card clocks it on the *target's* next
