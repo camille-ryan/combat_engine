@@ -84387,6 +84387,222 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_defence_against_what_the_attack_would_do(out: Result) -> None:
+    """"+2 to all defences against any attack that WOULD immobilize you."
+
+    `f2364` and `f2365` are the same printed clause one class apart and
+    both carried `dropped=("resolve.ctx.conditions",)`. The diagnosis in
+    `f2365`'s own note was exact: *"the saving-throw context carries
+    `conditions`; the attack context does not"*, so a defence -- settled
+    before the attacking body runs -- had nothing to test.
+
+    `query.power_conditions` reads it off the attacking row's **body**
+    with an `ast` walk, which is `query.power_moves`' technique and
+    `#1093`'s: no `Power` field says which conditions a row imposes
+    because they are all applied from the body. `resolve`'s attack
+    context carries it under the same key and `frozenset` type the
+    saving-throw one has always used.
+
+    **Writers only.** Three `Cast` members name a condition and apply
+    none -- `c.marked` and `c.shaped` return `bool`, `c.dying` is a
+    property -- so a walk keyed on the names alone would have reported
+    three conditions no body ever imposes. Asserted, because that is a
+    silent kind of wrong.
+
+    **A floor, by construction, and the direction is the safe one.** A
+    body applying a condition through a helper is invisible to the walk,
+    so this says a row immobilises and cannot prove one does not. For a
+    card granting a defence a miss loses a bonus that was owed, where a
+    false positive hands one out against an attack that was never going
+    to immobilise anybody.
+    """
+    from audit import board as posed
+    from combat_engine.engine import AC, FORT, REF, WILL, When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import power_conditions
+    from combat_engine.engine.types import Condition
+
+    WANTED = frozenset({Condition.IMMOBILIZED, Condition.RESTRAINED,
+                        Condition.SLOWED})
+
+    # -- the reader does not mistake a READER for a writer ----------------
+    #
+    # `c.marked` and `c.shaped` return `bool` and `c.dying` is a property.
+    # All three name a condition and apply none, so a walk keyed on the
+    # verb names alone would report conditions no body ever imposes --
+    # and silently, since every such row would simply gain a waiver.
+    #
+    # Tested on a row that calls the reader and names no literal: adding
+    # `"marked"` to `query._CONDITION_VERBS` reds this.
+    import ast
+    import inspect
+    import textwrap
+
+    def asks_marked(ref: str) -> bool:
+        """Does this body CALL `c.marked(...)` and name no MARKED literal?"""
+        declared = REGISTRY[ref]
+        if declared.body is None:
+            return False
+        try:
+            tree = ast.parse(
+                textwrap.dedent(inspect.getsource(declared.body)))
+        except (OSError, TypeError, SyntaxError):
+            return False
+        calls = reads = False
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "c"):
+                if node.func.attr == "marked":
+                    reads = True
+                if node.func.attr == "condition":
+                    calls = any(
+                        isinstance(a, ast.Attribute) and a.attr == "MARKED"
+                        for a in node.args)
+        return reads and not calls
+
+    asking = [ref for ref in REGISTRY if asks_marked(ref)]
+    out.that(bool(asking),
+             "there are rows that ASK whether something is marked and lay"
+             " no mark -- the premise for the assertion below",
+             f"{len(asking)} row(s), e.g. {asking[:3]}")
+    if asking:
+        wrong = [ref for ref in asking
+                 if Condition.MARKED in power_conditions(ref)]
+        out.that(not wrong,
+                 "and none of them is read as APPLYING a mark --"
+                 " `c.marked` is a `bool` reader, so a walk keyed on the"
+                 " verb names alone would have handed every one of them a"
+                 " condition it never imposes",
+                 f"{len(wrong)} misread: {wrong[:3]}")
+
+    census = {}
+    for ref in REGISTRY:
+        for cond in power_conditions(ref):
+            census[cond] = census.get(cond, 0) + 1
+    out.that(all(census.get(cond, 0) > 0 for cond in WANTED),
+             "all three conditions these cards name are applied by real"
+             " rows -- the premise, since a gate over an empty set would"
+             " read green for ever",
+             f"{ {c.name: census.get(c, 0) for c in WANTED} }")
+    out.that(census.get(Condition.DEAD, 0) == 0,
+             "and the walk invents nothing: no row 'applies' DEAD, which"
+             " has no writer verb and no literal in a `c.condition` call",
+             f"DEAD: {census.get(Condition.DEAD, 0)}")
+
+    # -- the two rows, each on its own board ------------------------------
+    #
+    # **The grip has to be staged, and on one of the two boards it was
+    # not.** Both cards gate on *"a two-handed axe, hammer or pick"*.
+    # `audit.board` deals `f2364`'s character a two-handed axe and
+    # `f2365`'s a one-handed heavy blade, so that row laid nothing and
+    # every defence read 0 -- measured, and it looked exactly like the
+    # engine half not working. Posed deliberately now, and asserted.
+    import dataclasses
+
+    from combat_engine.engine.components import Gear
+
+    holds = next((ref for ref in REGISTRY
+                  if Condition.IMMOBILIZED in power_conditions(ref)), "")
+    plain = next((ref for ref in REGISTRY
+                  if REGISTRY[ref].attack is not None
+                  and not power_conditions(ref)), "")
+    out.that(bool(holds) and bool(plain),
+             "the corpus has an attack that would immobilise and one that"
+             " would not -- both arms posed, or the comparison below is"
+             " between a number and itself",
+             f"{holds!r} vs {plain!r}")
+
+    def totals(mods, me: int, ref: str) -> dict:  # noqa: ANN001
+        ctx = {"attacker": 2, "target": me, "power": ref,
+               "conditions": power_conditions(ref)}
+        return {d: mods.total(d, ctx) for d in (AC, FORT, REF, WILL)}
+
+    for feat in ("f2364", "f2365"):
+        if not holds or not plain:
+            break
+        world, me, _start = posed(feat, 1)
+        gear = world.get(me, Gear)
+        if gear is not None and not any(
+                w.group in ("axe", "hammer", "pick") and w.two_handed
+                for w in gear.melee):
+            gear.weapons = [
+                # `Weapon.two_handed` reads `"two-handed" in
+                # properties`, and `hands` is a printed word rather than
+                # a count -- so the set is what to stage. Two wrong
+                # guesses before this one: `two_handed=` is not a field,
+                # and `hands=2` trips `__post_init__`'s `.lower()`.
+                dataclasses.replace(
+                    w, group="axe",
+                    properties=w.properties | {"two-handed"})
+                if w in gear.melee else w
+                for w in gear.weapons
+            ]
+        gear = world.get(me, Gear)
+        out.that(gear is not None and any(
+                     w.group in ("axe", "hammer", "pick") and w.two_handed
+                     for w in gear.melee),
+                 f"{feat}: its taker holds a two-handed axe, hammer or"
+                 " pick -- the printed gate, and the premise this row's"
+                 " whole body sits behind",
+                 f"{[(w.group, w.two_handed) for w in (gear.melee if gear else [])]}")
+        REGISTRY[feat].body(
+            Cast(world=world, me=me, ref=feat, target=me))
+        mods = world.get(me, Mods)
+        against_hold = totals(mods, me, holds)
+        against_plain = totals(mods, me, plain)
+        moved = {d: against_hold[d] - against_plain[d]
+                 for d in (AC, FORT, REF, WILL)}
+        out.that(all(v >= 2 for v in moved.values()),
+                 f"{feat}: every one of the four defences is at least +2"
+                 " against the attack that would hold them, and unchanged"
+                 " against the one that would not. All four, because the"
+                 " card says all and one of them passing proves one",
+                 f"{ {d.value: v for d, v in moved.items()} }")
+
+    # -- and `resolve` really puts the key in the attack context ---------
+    #
+    # **This rule built its own ctx dict at first and so proved nothing
+    # about `resolve`.** Removing `"conditions"` from the attack context
+    # left every assertion above green, because each one handed
+    # `Mods.total` a context it had assembled itself. Measured as a
+    # passing plant, which is the one kind that says the rule is wrong
+    # rather than the code.
+    #
+    # So this resolves a real attack and captures what the gate was
+    # actually shown.
+    from combat_engine.engine import resolve as _resolve
+    from combat_engine.engine.types import Defense as _Defense
+
+    world, me, _s = posed("f2364", 1)
+    foe = next(e for e in world.entities if e != me)
+    seen: list[frozenset] = []
+    Cast(world=world, me=me, ref="drivers:spy", target=me).bonus(
+        AC, 0, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: seen.append(
+            frozenset(ctx.get("conditions", frozenset()))) or False)
+    _resolve.attack(world, foe, me, 5, _Defense.AC, power=holds)
+    out.that(bool(seen),
+             "an attack resolved against this character asked the gate at"
+             " all -- the premise, since a gate nothing consults would"
+             " leave the list empty either way",
+             f"asked {len(seen)} time(s)")
+    out.that(any(WANTED & s_ for s_ in seen),
+             "and what it was shown includes the conditions the attacking"
+             " row would apply -- which is `resolve` filling the context,"
+             " not this rule assembling one",
+             f"{[sorted(c.name for c in s_) for s_ in seen[:2]]}")
+
+    out.that(not any(getattr(REGISTRY[f], "dropped", ()) or ()
+                     for f in ("f2364", "f2365")),
+             "and neither row carries a marker any more -- they shared the"
+             " symbol so they would land together, which is what happened",
+             f"{[getattr(REGISTRY[f], 'dropped', ()) for f in ('f2364', 'f2365')]}")
+
+
 def a_racial_fork_is_read_off_the_dealt_power(out: Result) -> None:
     """"Expend your rt:r16-t1 power to regain the use of your p9402."
 
@@ -118909,6 +119125,9 @@ DRIVERS = {
     "a_racial_fork_is_read_off_the_dealt_power": (
         a_racial_fork_is_read_off_the_dealt_power,
         "a racial fork read off the dealt power"),
+    "a_defence_against_what_the_attack_would_do": (
+        a_defence_against_what_the_attack_would_do,
+        "a defence against what an attack would do"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

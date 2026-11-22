@@ -108,6 +108,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Is this creature moving that way right now?
 - `query.on_the_ground(world: 'World', eid: 'int') -> 'bool'`
   - Is this creature in contact with the floor?
+- `query.power_conditions(ref: 'str') -> 'frozenset[Condition]'`
+  - Which conditions this row's body **applies**. `#1093`'s technique.
 - `query.power_moves(ref: 'str') -> 'bool'`
   - Does using this row let its **user** move? #1093's technique.
 - `query.prefers_range(world: 'World', eid: 'int') -> 'bool'`

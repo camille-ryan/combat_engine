@@ -1256,6 +1256,15 @@ READERS: dict[str, list[str]] = {
         # power let its user move". Read off the row's body as an `ast`
         # walk, since no `Power` field says it. `f2791` is the caller.
         "power_moves",
+        # **Beside `power_moves` and not under conditions**, because the
+        # two are the pair: both answer a question about a *row* by
+        # reading its **body** with an `ast` walk, since no `Power` field
+        # says either thing. Somebody who finds one should find the other
+        # -- the technique is the reusable part, and `#1093` is where it
+        # comes from. This one answers "which conditions would this
+        # attack apply", which `resolve`'s attack context carries for
+        # `f2364` and `f2365`.
+        "power_conditions",
         "prefers_range", "ran_this_action", "range_profile",
         "sealed", "speed", "squares", "telepathy_of", "terrain",
     ],

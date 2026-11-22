@@ -53,6 +53,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Cast,
+    Condition,
     Gear,
     Hit,
     Keyword,
@@ -100,6 +101,17 @@ RACIAL = ("c.racial_row()", "c.expend_row()")
 #: of this file as `MARK_KEY` so a content row spells it one way.
 
 _STUNNING = ("dazed", "stunned")
+
+#: The three conditions `f2364` and `f2365` buy a defence against, as
+#: `Condition` members, because that is what `resolve`'s attack context
+#: carries under `"conditions"` -- `query.power_conditions` reads them off
+#: the attacking row's own body.
+#:
+#: The printed sentence is *"any attack that would immobilize, restrain,
+#: or slow you"*, and these are the three members for exactly those words.
+_WOULD_HOLD = frozenset({
+    Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.SLOWED,
+})
 
 
 # -- reading the grip -------------------------------------------------------
@@ -356,26 +368,50 @@ def f2363(c: Cast) -> None:
 
 
 @power("f2364", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("resolve.ctx.conditions",))
+       reach=PERSONAL, target=SELF)
 def f2364(c: Cast) -> None:
-    """The substitution plays. The defence bonus does not: it is
-    "against any attack that **would** immobilize, restrain or slow
-    you", and the attack context carries the power's ref but nothing
-    about what its body is going to apply -- a defence cannot be gated
-    on an effect that has not happened.
+    """Both clauses play. The defence bonus is the one that was owed.
 
-    **Re-pointed, and this was never a parameter.** `c.bonus(against=)`
-    read as "let the bonus take a predicate about the attack", and
-    `c.bonus` has taken `when=` on the attack context all along -- so the
-    argument was the easy half and the hard half is that the context holds
-    nothing to test. `f2365` in `feats/warlord_c.py` is the *same printed
-    clause* -- the same two-handed grip, the same three conditions, the
-    greater feat of the same pair one class over -- and it already names
-    the gap where it lives: the saving-throw context carries `conditions`
-    and the attack context does not. One gap, one symbol, and the two rows
-    now go green or red together. `c.bonus(against=)` would also have gone
-    ARRIVED the day somebody added a keyword that could not satisfy it."""
+    *"A +2 bonus to all defences ... against any attack that **would**
+    immobilize, restrain or slow you"* -- a defence is settled before the
+    attacking body has run, so there is nothing on the board to test. The
+    marker named that precisely: the **saving-throw** context has carried
+    a `conditions` frozenset all along and the attack context did not.
+
+    `query.power_conditions` is the answer and it is read off the
+    attacking row's **body** with an `ast` walk, which is
+    `query.power_moves`' technique and `#1093`'s: no `Power` field says
+    which conditions a row imposes, because they are all applied from the
+    body. `resolve`'s attack context carries it under the same key and
+    type the saving-throw one uses. 3,300 of the declared rows name a
+    condition that way, 532 of them immobilising and 668 slowing, so the
+    gate has a real set to match.
+
+    **A floor rather than an answer, and that is the safe direction
+    here.** A body applying a condition through a *helper* is invisible
+    to the walk, so this can say a row immobilises and cannot prove one
+    does not -- a missed row loses a bonus it should have had, where the
+    other direction would hand one out against an attack that was never
+    going to immobilise anybody.
+
+    The grip is re-checked **in the gate** rather than only at arming:
+    the card reads *"when you are attacking with a two-handed axe..."*,
+    and a character who swaps weapons mid-fight should stop getting it.
+    That is also why the hold is `When.ENCOUNTER` rather than the printed
+    *"until the end of your next turn"* -- that window is relative to an
+    attack this trait cannot see from arming, and the grip gate is the
+    narrowing a standing trait can actually express. The substitution
+    below is laid standing under the same gate, so the two halves agree.
+
+    `f2365` in `feats/warlord_c.py` is the same printed clause one class
+    over and is written the same way; the two go green or red together,
+    which is what sharing the symbol was for."""
     if _grip(c, "axe", "hammer", "pick", hands=2):
+        for defence in (AC, FORT, REF, WILL):
+            c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER,
+                    when=lambda ctx: bool(
+                        _WOULD_HOLD & ctx.get("conditions", frozenset()))
+                    and _grip(c, "axe", "hammer", "pick", hands=2))
         c.as_basic("p622", "p608", window="challenge")
 
 

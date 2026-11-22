@@ -977,6 +977,100 @@ def power_moves(ref: str) -> bool:
     return False
 
 
+#: The `Cast` verbs that **lay** one named condition, by the member each
+#: lays. Writers only: `c.marked` and `c.shaped` return `bool` and are
+#: readers, and `c.dying` is a property -- all three name a condition and
+#: none of them applies one, so a reader built off the names alone would
+#: have reported three conditions no body ever imposes.
+_CONDITION_VERBS: dict[str, str] = {
+    "blinded": "BLINDED",
+    "cannot_shift": "CANNOT_SHIFT",
+    "dazed": "DAZED",
+    "immobilized": "IMMOBILIZED",
+    "insubstantial": "INSUBSTANTIAL",
+    "prone": "PRONE",
+    "slowed": "SLOWED",
+    "stunned": "STUNNED",
+    "unconscious": "UNCONSCIOUS",
+    "weakened": "WEAKENED",
+}
+
+
+@cache
+def power_conditions(ref: str) -> frozenset[Condition]:
+    """Which conditions this row's body **applies**. `#1093`'s technique.
+
+    *"You gain a +2 bonus to all defences against any attack that would
+    immobilize, restrain or slow you"* -- `f2364` and `f2365`, the same
+    printed clause one class apart -- and a defence is settled before the
+    attacking body has run, so there is nothing on the board yet to test.
+    `Power` carries 44 declared fields and not one says which conditions a
+    row imposes; they are all applied from the body.
+
+    So it is read off the body as an `ast` walk, which is what
+    `query.power_moves` and `chargen._does_more_than_damage` do for the
+    same kind of question. `resolve`'s attack context carries the answer
+    under `"conditions"`, the key name and the `frozenset` type the
+    **saving-throw** context has used all along -- `f2365`'s own note is
+    what pointed out that one context had it and the other did not.
+
+    Both doors are read: the ten verbs that each lay one named condition,
+    and `c.condition(Condition.X, ...)` for every literal member named in
+    one. Writers only -- `c.marked` and `c.shaped` are `bool` readers and
+    `c.dying` is a property, so a walk keyed on the names alone would
+    report conditions nothing imposes.
+
+    **The honest limit is `power_moves`', and the direction is the same.**
+    A body that applies a condition through a *helper* is invisible here,
+    because the walk sees `c.<verb>` and not what a helper does, and a
+    member reached through a variable rather than a literal is invisible
+    too. So this is a **floor**: it can say a row immobilises and cannot
+    prove that one does not. For a card granting a defence that is the
+    safe direction -- a missed row loses a bonus it should have had, where
+    a false positive hands one out against an attack that was never going
+    to immobilise anybody.
+
+    `on=c.me` is skipped: a body that dazes *itself* is not an attack that
+    would daze the target, and four rows do exactly that.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from .dsl import get
+
+    declared = get(ref)
+    if declared is None or declared.body is None:
+        return frozenset()
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(declared.body)))
+    except (OSError, TypeError, SyntaxError):
+        return frozenset()
+    found: set[Condition] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if not (isinstance(fn, ast.Attribute)
+                and isinstance(fn.value, ast.Name) and fn.value.id == "c"):
+            continue
+        on = next((k.value for k in node.keywords if k.arg == "on"), None)
+        if (isinstance(on, ast.Attribute) and on.attr == "me"
+                and isinstance(on.value, ast.Name) and on.value.id == "c"):
+            continue
+        if fn.attr in _CONDITION_VERBS:
+            found.add(Condition[_CONDITION_VERBS[fn.attr]])
+        elif fn.attr == "condition":
+            for arg in node.args:
+                if (isinstance(arg, ast.Attribute)
+                        and isinstance(arg.value, ast.Name)
+                        and arg.value.id == "Condition"):
+                    member = getattr(Condition, arg.attr, None)
+                    if member is not None:
+                        found.add(member)
+    return frozenset(found)
+
+
 def displaced_this_action(world: World, eid: int) -> int:
     """How far this creature has ENDED UP from where its move action began.
 

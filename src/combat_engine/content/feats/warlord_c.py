@@ -95,9 +95,25 @@ BASICS = (MELEE, RANGED, BEAST)
 #: Inspiring word, named by ref in three of these prerequisites.
 WORD = "p1590"
 
-#: The conditions f2365 and f2368 narrow themselves to.
-_HELD = ("immobilized", "restrained", "slowed")
+#: The conditions `f2368` narrows its save penalty to, as the lowercase
+#: strings that `Condition.value` yields -- which is how that row reads
+#: them, `str(x.value) in _STUNNING`.
 _STUNNING = ("dazed", "stunned")
+
+#: The three conditions `f2365` buys a defence against, and `f2364` one
+#: class over: *"any attack that would immobilize, restrain, or slow
+#: you"*.
+#:
+#: **Members, not the value strings `_STUNNING` uses**, and this replaces
+#: a dead `_HELD = ("immobilized", "restrained", "slowed")` that sat here
+#: described as *"the conditions f2365 and f2368 narrow themselves to"*
+#: and was read by neither -- `f2368` uses `_STUNNING` and `f2365` had no
+#: body for this clause to live in. Both contexts carry `Condition`
+#: members in a `frozenset`, so an intersection says it directly where
+#: the string form needs a `str(x.value)` on every element.
+_WOULD_HOLD = frozenset({
+    Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.SLOWED,
+})
 
 
 def _grip(c: Cast, *groups: str, hands: int) -> bool:
@@ -191,14 +207,35 @@ def f2357(c: Cast) -> None:
 
 
 @power("f2365", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("resolve.ctx.conditions",))
+       reach=PERSONAL, target=SELF)
 def f2365(c: Cast) -> None:
-    """The substitution plays. The defence bonus does not: it is
-    against attacks that would immobilize, restrain or slow, and the
-    attack context says who is swinging, with what and from where, and
-    nothing about what the row would *do* on a hit. The saving-throw
-    context carries `conditions`; the attack context does not."""
+    """Both clauses play, and this row's note is where the gap was found.
+
+    It said: *"the attack context says who is swinging, with what and
+    from where, and nothing about what the row would **do** on a hit. The
+    saving-throw context carries `conditions`; the attack context does
+    not."* That was the diagnosis and it was exact -- the attack context
+    carries it now, under the same key and the same `frozenset` type,
+    filled by `query.power_conditions` reading the attacking row's own
+    body with an `ast` walk.
+
+    `f2364` in `feats/fighter_c.py` is the same printed clause one class
+    over and carries the long account of the technique and its limits.
+    The two shared one symbol so they would go green together, which is
+    what has happened.
+
+    Written identically, including re-checking the grip **inside** the
+    gate: the card reads *"when you are attacking with a two-handed
+    axe..."*, so a character who swaps weapons mid-fight stops getting
+    it, and that gate is why the hold is `When.ENCOUNTER` rather than the
+    printed *"until the end of your next turn"* -- a window relative to
+    an attack a trait armed at the start of the fight cannot see."""
     if _grip(c, "axe", "hammer", "pick", hands=2):
+        for defence in (AC, FORT, REF, WILL):
+            c.bonus(defence, 2, on=c.me, until=When.ENCOUNTER,
+                    when=lambda ctx: bool(
+                        _WOULD_HOLD & ctx.get("conditions", frozenset()))
+                    and _grip(c, "axe", "hammer", "pick", hands=2))
         c.as_basic("p1413", "p2331", window="opportunity")
 
 

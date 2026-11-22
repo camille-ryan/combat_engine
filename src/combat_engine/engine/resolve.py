@@ -50,6 +50,7 @@ from .query import (
     has_combat_advantage,
     is_minion,
     light_concealment,
+    power_conditions,
     takes_half,
 )
 from .rng import Roll
@@ -695,6 +696,26 @@ def attack(
             # False, over a swing resolved with it True, hands the reroll
             # back a cover penalty that was never charged.
             "ignore_cover": ignore_cover,
+            # **What this attack's body is going to apply**, read off that
+            # body with an `ast` walk -- `query.power_conditions`.
+            #
+            # The one key here about something that has **not happened
+            # yet**, and two cards need exactly that: *"a +2 bonus to all
+            # defences against any attack that **would** immobilize,
+            # restrain or slow you"* (`f2364`, `f2365`). A defence is
+            # settled before the attacking body runs, so there was nothing
+            # on the board to test and both rows were marked for it.
+            #
+            # A `frozenset` under this name because the **saving-throw**
+            # context has carried `"conditions"` that way all along, which
+            # is what `f2365`'s note spotted: one context had it and the
+            # other did not.
+            #
+            # A floor rather than an answer -- a body applying a condition
+            # through a helper is invisible to the walk -- and that is the
+            # safe direction for a card granting a defence. See the
+            # reader's own note.
+            "conditions": power_conditions(power),
         }
 
         situational = situational_attack(
