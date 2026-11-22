@@ -85119,6 +85119,153 @@ def a_granted_shift_that_must_end_beside_somebody(out: Result) -> None:
              f"{REGISTRY[ROW].todo}, {REGISTRY[ROW].dropped}")
 
 
+def an_origin_lent_to_one_named_row(out: Result) -> None:
+    """*"Your `f2023b` can originate from your familiar"* -- `f2025` -- and
+    *"when you attack with your `p1448` ... treat the affected creature as
+    the origin square of the blast"* -- `i2339p1`.
+
+    **`c.cast_from` is a standing change about a creature, and both of
+    these cards are about one row.** It already narrowed by keyword and
+    usage (`only=`), which cannot pick one row out of the several sharing
+    both, so each of these moved the origin of *every* ranged or area
+    attack its holder makes for the whole window -- a benefit on rows the
+    card never mentions. `f2025` had its call **deleted** over exactly
+    that. `rows=` is the narrowing, matched against the row being
+    measured and failing closed where no row can be named, which is the
+    bargain `only=` already strikes.
+
+    **And `blast=True`, which is the finding rather than the feature.**
+    `dsl._lenders` allowed `ranged`, `area_burst` and `wall`. A **close
+    blast is none of the three** -- "area" sounds like it covers one and
+    `area_burst` is a different kind -- so `i2339p1`'s borrow was laid,
+    stored on the relation, and never once consulted. The clause read as
+    written and did nothing, on the one row the card names. Opened per
+    caller like `melee=`, so `close_burst` and the two rows already
+    borrowing are untouched.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion
+    from combat_engine.engine.dsl import REGISTRY, get, measured_from
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies
+    from combat_engine.engine.types import Relation
+
+    #: `p1448` is the close blast `i2339p1` names; `p1455` is a close
+    #: burst and `p1449` is personal -- the two controls that say the
+    #: opening is scoped to one kind rather than to "anything close".
+    #: And `p10069` is an ordinary RANGED row, which the allowed kinds
+    #: admit on their own -- so it is the control that `rows=` alone can
+    #: exclude. The burst cannot play that part: it is refused by kind
+    #: before `rows=` is reached, which a plant caught.
+    BLAST, BURST, FAR = "p1448", "p1455", "p10069"
+
+    def lent(**how: Any) -> tuple:
+        """A borrow laid by hand, and who each row would be measured from."""
+        world, me, _ = _board("i2339p1", 1)
+        mate = sorted(allies(world, me))[0]
+        Cast(world=world, me=me, ref="drv").cast_from(
+            mate, on=me, until=When.ENCOUNTER, **how)
+        seen = {}
+        for ref in (BLAST, BURST, FAR):
+            row = get(ref)
+            if row is not None:
+                seen[ref] = measured_from(world, me, row.reach, row)
+        return me, mate, seen, world
+
+    # -- the premises ------------------------------------------------------
+    me, mate, _, _ = lent()
+    out.that(me != mate, "premise: the lender is somebody else", f"{me} {mate}")
+    out.that(get(BLAST) is not None and get(BLAST).reach.kind == "close_blast",
+             "premise: the row the card names really is a close blast,"
+             " which is what the opening below is about",
+             f"{get(BLAST).reach.kind if get(BLAST) else None}")
+    out.that(get(BURST) is not None and get(BURST).reach.kind == "close_burst",
+             "premise: and the control is a close BURST -- a different"
+             " kind, so it can tell a scoped opening from a loose one",
+             f"{get(BURST).reach.kind if get(BURST) else None}")
+
+    # -- a close blast could not borrow at all -----------------------------
+    _, mate0, plain, _ = lent()
+    out.that(plain[BLAST] != mate0,
+             "with an ordinary borrow the blast is still measured from the"
+             " caster -- `ranged`, `area_burst` and `wall` are the allowed"
+             " kinds and a close blast is none of them, which is why this"
+             " row's clause did nothing while reading as written",
+             f"{plain}")
+
+    me1, mate1, opened, _ = lent(blast=True)
+    out.that(opened[BLAST] == mate1,
+             "`blast=True` opens it, and the blast is fired from the"
+             " lender's square -- the printed 'treat the affected creature"
+             " as the origin square'",
+             f"{opened}, lender {mate1}")
+    out.that(opened[BURST] == me1,
+             "while a close BURST is untouched: the opening is one kind,"
+             " not 'anything close', and no card asks for the other",
+             f"{opened}, caster {me1}")
+
+    # -- the named row, and only it ----------------------------------------
+    me2, mate2, named, _ = lent(blast=True, rows=(BLAST,))
+    out.that(named[BLAST] == mate2,
+             "with `rows=` naming it, the blast still borrows",
+             f"{named}, lender {mate2}")
+    out.that(opened[FAR] == mate1,
+             "premise: an ordinary RANGED row borrows on an unnamed"
+             " borrow, so it is a row `rows=` has to exclude by itself"
+             " rather than one the kind check was going to refuse anyway",
+             f"{opened}, lender {mate1}")
+    out.that(named[FAR] == me2,
+             "and with `rows=` naming only the blast, that ranged row"
+             " does NOT borrow -- which is the whole clause, since a"
+             " keyword-and-usage filter cannot pick one row out of the"
+             " several sharing both",
+             f"{named}, caster {me2}")
+    _, _, other, _ = lent(blast=True, rows=("p0",))
+    out.that(other[BLAST] != mate2,
+             "naming a DIFFERENT row withholds it from the blast, so the"
+             " line above is the ref being matched rather than `rows=`"
+             " being ignored whenever it is present",
+             f"{other}")
+
+    # -- failing closed ----------------------------------------------------
+    world3, me3, _ = _board("i2339p1", 1)
+    mate3 = sorted(allies(world3, me3))[0]
+    Cast(world=world3, me=me3, ref="drv").cast_from(
+        mate3, on=me3, until=When.ENCOUNTER, blast=True, rows=(BLAST,))
+    blast_row = must(get(BLAST), "the blast exists")
+    out.that(measured_from(world3, me3, blast_row.reach, None) == me3,
+             "and a caller that cannot say which row is being measured is"
+             " refused rather than allowed -- the restriction exists to"
+             " narrow, so a borrow nobody can check is the wide reading",
+             f"{measured_from(world3, me3, blast_row.reach, None)}")
+
+    # -- the rows lay it ---------------------------------------------------
+    w4, me4, _ = _board("f2025", 1)
+    pet = sorted(allies(w4, me4))[0]
+    w4.add(pet, Companion(owner=me4, kind="familiar"))
+    cast4 = Cast(world=w4, me=me4, ref="f2025")
+    out.that(cast4.familiar() == pet,
+             "premise: the character has a familiar -- the audit board"
+             " deals none, so this is made rather than found",
+             f"{cast4.familiar()}")
+    REGISTRY["f2025"].body(cast4)
+    out.that(w4.relations.via(Relation.CASTS_FROM, me4, pet) == "rows:f2023b",
+             "`f2025` lends the origin for the one row its card names and"
+             " for nothing else -- the call it had DELETED, because"
+             " unnarrowed it moved every ranged and area attack the"
+             " character owns",
+             f"{w4.relations.via(Relation.CASTS_FROM, me4, pet)!r}")
+
+    out.that(not REGISTRY["f2025"].unfinished,
+             "so `f2025` carries no marker",
+             f"{REGISTRY['f2025'].unfinished}")
+    out.that(REGISTRY["i2339p1"].unfinished == ("c.add_target(pending=)",),
+             "and `i2339p1` keeps exactly one -- its other clause names a"
+             " use that has not begun, which this change does not reach",
+             f"{REGISTRY['i2339p1'].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -120875,6 +121022,9 @@ DRIVERS = {
     "a_granted_shift_that_must_end_beside_somebody": (
         a_granted_shift_that_must_end_beside_somebody,
         "a granted shift that must end beside somebody"),
+    "an_origin_lent_to_one_named_row": (
+        an_origin_lent_to_one_named_row,
+        "an origin lent to one named row"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

@@ -31,7 +31,7 @@ Making an attack, and what the attack turns out to be.
   - Make a basic attack -- whichever row that creature's actually is.
 - `c.becomes_burst(self, size: 'int' = 1, *, vs: 'Defense | None' = None, damage: 'Callable[[Any], Any] | None' = None, ranged: 'bool' = True, on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'list[Effect]'`
   - The next basic attack becomes a burst centred on its target.
-- `c.cast_from(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, optional: 'bool' = False, melee: 'bool' = False, within: 'int' = 0, only: 'Sequence[Sequence[str]]' = ()) -> 'Effect | None'`
+- `c.cast_from(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, optional: 'bool' = False, melee: 'bool' = False, blast: 'bool' = False, within: 'int' = 0, only: 'Sequence[Sequence[str]]' = (), rows: 'Sequence[str]' = ()) -> 'Effect | None'`
   - "Determine line of sight and effect for your ranged and area
 - `c.cast_from_square(self, square: 'Square', *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "You can treat that square as the point of origin of your

@@ -2154,36 +2154,38 @@ def f2024(c: Cast) -> None:
 
 
 @power("f2025", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.cast_from(ref=)",))
+       reach=PERSONAL, target=SELF)
 def f2025(c: Cast) -> None:
-    """`c.cast_from` moves the origin of *every* ranged and area attack the
-    caster makes, and the card moves it for one row. So the dropped clause
-    is the narrowing -- `Relation.CASTS_FROM` is read in
-    `dsl.measured_from` when targets are chosen and carries no ref to gate
-    on, and `c.strike(from_=)` is the per-swing form, which a trait armed
-    at the start of the fight cannot reach.
+    """**The origin half is back, narrowed to the one row the card names.**
 
-    **The call itself is gone, and that is the fix rather than a loss.**
-    It applied to the creature and not to a row, so wherever a familiar
+    It had been **deleted**, and the note below records why: `c.cast_from`
+    applied to the creature and not to a row, so wherever a familiar
     exists every ranged and area power the character holds was measured
     from it for the whole encounter -- a benefit on every other row the
     character owns, none of which this card mentions. `m5808a0`'s rule
-    applies: a row stronger than its printed line is worse than an absent
-    one, and with the call out the `dropped=` marker is true instead of
-    describing a clause that was present and too wide.
+    applies, and a deletion was the right call at the time: a row stronger
+    than its printed line is worse than an absent one.
 
-    Two honest notes on the cost of taking it out. The audit board deals
-    no familiar -- `c.familiar()` is `None` there -- so the call never ran
-    under the instrument either way, and nothing measurable changed; and
-    `cf:wizard-familiar` is itself blocked on `chargen.BUILDS`, so a dealt
-    character may have no familiar at all today. The removal is therefore
-    free in both readings: inert if nobody has one, and correct if anybody
-    does.
+    `rows=("f2023b",)` is the narrowing the marker asked for.
+    `dsl._lenders` matches it against the row being measured and fails
+    **closed** where no row can be named, which is the same bargain
+    `only=` already strikes and for the same reason -- a borrow nobody can
+    check is the wide reading.
+
+    Two honest notes carried over from the deletion, because they still
+    bound what this is worth. The audit board deals no familiar --
+    `c.familiar()` is `None` there -- so the call does not run under the
+    instrument; and `cf:wizard-familiar` is itself blocked on
+    `chargen.BUILDS`, so a dealt character may have no familiar at all
+    today. The clause is correct for anybody who has one and inert for
+    everybody else, which is why it is written rather than left out.
 
     **The provoke waiver is written.** `c.no_provoke` takes a `when=`, and the
     row to be safe while using is named on the card, so the gate is an equality
     on the ref `ctx["why"]` carries."""
+    pet = c.familiar()
+    if pet is not None:
+        c.cast_from(pet, on=c.me, until=When.ENCOUNTER, rows=("f2023b",))
     c.no_provoke(
         on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: str(ctx.get("why", "")).split(" ", 1)[0] == "f2023b",

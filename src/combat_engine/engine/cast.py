@@ -19761,8 +19761,10 @@ class Cast:
 
     def cast_from(
         self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER,
-        optional: bool = False, melee: bool = False, within: int = 0,
+        optional: bool = False, melee: bool = False, blast: bool = False,
+        within: int = 0,
         only: Sequence[Sequence[str]] = (),
+        rows: Sequence[str] = (),
     ) -> Effect | None:
         """"Determine line of sight and effect for your ranged and area
         attacks from the target rather than from yourself."
@@ -19858,16 +19860,53 @@ class Cast:
         It fails **closed**: where a caller cannot say which row is being
         measured, an `only` borrow is refused. The restriction exists to
         narrow, so a borrow nobody can check is the wide reading.
+
+        **`rows` is the same narrowing by ref, and `only` could not say
+        it.** Two cards move the origin for **one named row** -- *"your
+        `f2023b` can originate from ..."*, *"when you attack with your
+        `p1448` ... treat the affected creature as the origin square"* --
+        and a keyword-and-usage filter cannot pick one row out of the
+        several that share both. Without it each of those two moved the
+        origin of *every* ranged or area attack its holder makes for the
+        whole window, which is a benefit on rows the card never mentions;
+        `f2025` had its call **deleted** over exactly that, on
+        `m5808a0`'s rule that a row stronger than its printed line is
+        worse than an absent one.
+
+        Carried as `rows:<ref>+<ref>` among the same `via` words, ANDed
+        with `only` and failing closed for the same reason: a borrow whose
+        row cannot be named is the wide reading. Refs are not lower-cased,
+        because a ref is a key rather than a word.
+
+        **`blast` opens a close blast to the borrow, and it is the same
+        shape as `melee` above and for the same reason.** `dsl._lenders`
+        allowed `ranged`, `area_burst` and `wall`, which is right for the
+        cards printing *"your ranged and area attacks"* -- and a **close
+        blast is none of those three**. `i2339p1` prints *"treat the
+        affected creature as the origin square of the blast"* about
+        `p1448`, a `close_blast`, so its borrow was laid, stored, and
+        never consulted: a modifier nothing reads, on the one row the card
+        is about.
+
+        Opened per caller rather than by widening the reader, so the two
+        rows already borrowing stay exactly as wide as their printed
+        lines. `close_burst` is deliberately **not** included -- no card
+        asks for it, and a burst measured from somebody else's square is a
+        different sentence from a blast fired from one.
         """
         borrower = on if on is not None else self.me
         self.world.relations.set(
             Relation.CASTS_FROM, borrower, who,
             via=",".join(
                 [
-                    word for word, on_ in (("optional", optional), ("melee", melee))
+                    word for word, on_ in (
+                        ("optional", optional), ("melee", melee),
+                        ("blast", blast),
+                    )
                     if on_
                 ]
                 + ([f"within:{within}"] if within else [])
+                + ([f"rows:{'+'.join(rows)}"] if rows else [])
                 + [
                     f"only:{'+'.join(str(w).lower() for w in group)}"
                     for group in only if group

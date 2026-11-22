@@ -2628,7 +2628,7 @@ def i2339x1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, by_keyword(Keyword.ARCANE)), "you hit with an arcane power"
     ),
-    dropped=("c.cast_from(ref=)", "c.add_target(pending=)"),
+    dropped=("c.add_target(pending=)",),
 )
 def i2339p1(c: Cast) -> None:
     """Re-aimed and written. `p1448` is declared, so the racial attack is
@@ -2637,16 +2637,31 @@ def i2339p1(c: Cast) -> None:
     `dsl.measured_from`, so the borrowed square decides what may be aimed
     at as well as where the line is traced.
 
-    Two clauses are dropped. `c.cast_from` is a standing change and takes
-    no ref, so it moves the origin of every area attack the wielder makes
-    in the window rather than only the breath's; and "the attack also
-    targets the affected creature" has to be said about a use that has
-    not begun -- `c.add_target` only reaches a power already running
-    underneath this one."""
+    **The origin is narrowed to `p1448`, which it was not.** This note
+    said `c.cast_from` "is a standing change and takes no ref, so it moves
+    the origin of every area attack the wielder makes in the window rather
+    than only the breath's" -- true, and the card says *"when you attack
+    with your `p1448`"*. `rows=` is that narrowing: `dsl._lenders` matches
+    it against the row being measured and fails closed where no row can be
+    named.
+
+    **And `blast=True`, without which the whole clause was inert.**
+    `_lenders` allowed `ranged`, `area_burst` and `wall`; `p1448` is a
+    `close_blast`, which is none of the three -- "area" sounds like it
+    covers a blast and `area_burst` is a different kind. So this row's
+    borrow was laid, stored on the relation and never once consulted: the
+    clause read as written and did nothing, on the one row the card names.
+    Found by probing the reader rather than the verb, after `rows=`
+    landed.
+
+    **One clause is still dropped.** "The attack also targets the affected
+    creature" has to be said about a use that has not begun --
+    `c.add_target` only reaches a power already running underneath this
+    one."""
     foe = _struck(c)
     if foe is None or not c.cursed(on=foe):
         return
-    c.cast_from(foe, on=c.me, until=When.EONT)
+    c.cast_from(foe, on=c.me, until=When.EONT, rows=("p1448",), blast=True)
 
 
 @power(

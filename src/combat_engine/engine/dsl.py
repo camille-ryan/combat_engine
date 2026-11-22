@@ -3967,6 +3967,15 @@ def _lenders(world: World, actor: int, r: Range,
         allowed = ("ranged", "area_burst", "wall")
         if "melee" in words:
             allowed = (*allowed, "melee")
+        # **A close blast is none of the three**, which is easy to miss
+        # because "area" sounds like it covers it and `area_burst` is a
+        # different kind. `i2339p1` prints "treat the affected creature as
+        # the origin square of the blast" about a `close_blast`, so its
+        # borrow was laid, stored and never consulted. Opened per caller,
+        # like `melee`, so the rows printing "ranged and area" stay as
+        # wide as their cards.
+        if "blast" in words:
+            allowed = (*allowed, "close_blast")
         if r.kind not in allowed:
             continue
         if not (world.get(lender, _Position)
@@ -3983,6 +3992,19 @@ def _lenders(world: World, actor: int, r: Range,
             0,
         )
         if band and _apart(world, actor, lender) > band:
+            continue
+        # **The named-row restriction.** `c.cast_from(rows=)`, written as
+        # `rows:<ref>+<ref>`. Two cards move the origin for one row they
+        # name, and `only:` below cannot pick one row out of the several
+        # sharing its keywords and usage. Fails closed for the same reason
+        # `only:` does: a borrow whose row cannot be named is the wide
+        # reading, and the restriction exists to narrow.
+        named = {
+            ref
+            for w in words if w.startswith("rows:")
+            for ref in w.split(":", 1)[1].split("+")
+        }
+        if named and (p is None or p.ref not in named):
             continue
         # The per-row restriction. Fails closed when the caller could not
         # name the row: see the docstring.
