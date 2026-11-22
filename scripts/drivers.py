@@ -72792,6 +72792,124 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def the_hexblade_boon_taken_from_a_new_moment(out: Result) -> None:
+    """`f2759` takes the hexblade's boon early and pays with the curse;
+    `i698x1` adds that moment as a second trigger. #1454.
+
+    **Both notes had stopped on a reading and declined to guess, and the
+    cards settle it.** `cf:warlock-hexblade-f1`'s own text is one line --
+    *"you gain a power associated with your pact"* -- and from that alone
+    three verbs are each right for one reading, which is why neither row
+    guessed. The two cards that *name* the ref disambiguate it:
+
+    * `f2759` -- *"you can choose to **gain** your [feature] when an enemy
+      you curse is first bloodied"*
+    * `i698x1` -- *"your [feature] **triggers** when an attack ... makes a
+      target ... bloodied"*
+
+    So on this chassis the boon is that row being **used**, and the row's
+    own body is a `c.grant_row` of whichever power the pact chose. Hence
+    `c.use_power` naming the ref the cards name -- and **not**
+    `warlock.pay_boon`, which dispatches whichever boon the character's
+    *pact leg* pays: a hexblade on the infernal leg would get temporary
+    hit points where the card says its hexblade feature triggers.
+
+    **The boon is still once an encounter**, which is the arm that keeps
+    this honest: `c.use_power` refuses an expended row, so both cards
+    move *when* the boon can be taken and neither buys a second one. The
+    board spends it during setup, which is why every arm here hands the
+    use back first and why the refusal is asserted on its own.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.features.warlock import BOONS
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Bloodied
+    from combat_engine.engine.types import Relation
+
+    BOON = "cf:warlock-hexblade-f1"
+
+    out.that(BOON in BOONS,
+             "the hexblade's boon is in `BOONS`, so a card trading 'your"
+             " pact boon' away has this one to trade too -- it was absent"
+             " while nothing fired it",
+             f"{BOON in BOONS}")
+
+    def staged(ref: str, *, cursed: bool = True, restore: bool = True) -> tuple:
+        world, me, _ = _board(ref, 1)
+        known = must(world.get(me, Powers), "the character has powers")
+        if BOON not in known.all:
+            known.known.append(BOON)
+        cast = Cast(world=world, me=me, ref=ref)
+        foe = sorted(cast.enemies())[0]
+        if cursed:
+            cast.curse(on=foe)
+        if restore:
+            # **The board spends the boon during setup**, so without this
+            # every arm below would be measuring an expended row rather
+            # than the card. Measured: `usable` answers "expended".
+            cast.restore_use(BOON)
+        return world, me, cast, foe
+
+    def spent(world, me: int) -> int:                   # noqa: ANN001
+        """How many uses of the boon have been SPENT.
+
+        `Powers.times` counts spends and not the allowance left, which
+        the first draft of this rule had the other way round -- so
+        "has a use left" read `== 1` and four arms failed on a row that
+        was working. Measured against `dsl.usable`, which answers
+        "expended" at 1.
+        """
+        known = must(world.get(me, Powers), "powers")
+        return known.times(BOON)
+
+    # -- f2759: the boon early, paid for with the curse ---------------------
+    world, me, cast, foe = staged("f2759")
+    out.that(world.relations.holds(Relation.CURSED_BY, me, foe)
+             and spent(world, me) == 0,
+             "premise: the enemy is under this warlock's curse and the"
+             " boon is unspent",
+             f"cursed, spends {spent(world, me)}")
+    REGISTRY["f2759"].body(cast)
+    world.bus.emit(Bloodied(actor=foe))
+    out.that(not world.relations.holds(Relation.CURSED_BY, me, foe),
+             "`f2759`: when a cursed enemy is first bloodied the curse"
+             " comes off -- the printed price, and the observable half of"
+             " the trade on a board that cannot pose a hexblade's pact"
+             " choice",
+             "curse lifted")
+    out.that(spent(world, me) == 1,
+             "and the boon is now SPENT, which is what says it was"
+             " actually taken rather than the curse merely being dropped",
+             f"spends {spent(world, me)}")
+
+    # -- and not on an uncursed enemy ---------------------------------------
+    w2, me2, cast2, foe2 = staged("f2759", cursed=False)
+    REGISTRY["f2759"].body(cast2)
+    w2.bus.emit(Bloodied(actor=foe2))
+    out.that(spent(w2, me2) == 0,
+             "while an enemy this warlock has NOT cursed pays nothing --"
+             " the card's own condition, and the arm that makes the line"
+             " above about the curse rather than about `Bloodied`",
+             f"spends {spent(w2, me2)}")
+
+    # -- the boon stays once an encounter -----------------------------------
+    w3, me3, cast3, foe3 = staged("f2759", restore=False)
+    out.that(spent(w3, me3) >= 1,
+             "premise: the board has already spent the boon during setup",
+             f"spends {spent(w3, me3)}")
+    before = w3.relations.holds(Relation.CURSED_BY, me3, foe3)
+    REGISTRY["f2759"].body(cast3)
+    w3.bus.emit(Bloodied(actor=foe3))
+    out.that(before and w3.relations.holds(Relation.CURSED_BY, me3, foe3),
+             "and with the boon expended the curse is KEPT -- `c.use_power`"
+             " refuses the row, so the card moves when the boon is taken"
+             " and does not buy a second one. Without this the feat would"
+             " pay its price for nothing",
+             "curse kept")
+
+
 def a_feat_buys_an_attack_power_from_another_class(out: Result) -> None:
     """`f3616` takes an assassin power and `f3646` a druid one, and neither
     character is of that class. #1453.
@@ -125608,6 +125726,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        the_hexblade_boon_taken_from_a_new_moment,
         a_feat_buys_an_attack_power_from_another_class,
         a_dose_of_poison_goes_on_a_weapon,
         the_spiked_chain_feats_four_clauses,
@@ -126000,6 +126119,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "hexblade_boon": (
+        the_hexblade_boon_taken_from_a_new_moment,
+        "the hexblade's boon taken early for the curse, and a second"
+        " trigger for it (#1454)",
     ),
     "bought_power": (
         a_feat_buys_an_attack_power_from_another_class,

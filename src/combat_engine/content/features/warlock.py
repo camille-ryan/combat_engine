@@ -165,6 +165,15 @@ BOONS = (
     # costs nothing and omitting it would make `f3444` silently miss the
     # one boon a feat pays. #1034.
     "f2035",
+    # **The hexblade's own boon, added with the two rows that fire it.**
+    # `cf:warlock-hexblade-f1` is *"you gain a power associated with your
+    # pact"* and its body is a `c.grant_row` -- so on that chassis the
+    # boon is this row being used, which is what `f2759` ("you can choose
+    # to **gain** your [feature]") and `i698x1` ("your [feature]
+    # **triggers**") both say. A card trading "your pact boon" away has
+    # this to trade too, and a registration against a row the character
+    # does not hold never fires. #1454.
+    "cf:warlock-hexblade-f1",
 )
 
 _A_CURSED_ENEMY_FALLS = "an enemy under your curse drops to 0 hit points"

@@ -4425,49 +4425,64 @@ def i630p2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("warlock.boon_for_a_hexblade()",),
 )
 def i698x1(c: Cast) -> None:
-    """Adds a second trigger to a class feature that is fully modelled.
+    """*"Your `cf:warlock-hexblade-f1` triggers when an attack you make with
+    this rod makes a target affected by your `cf:warlock-f4` bloodied. (It
+    still triggers when you reduce a target to 0 or fewer hit points.)"*
 
-    **Re-pointed off `warlock.boon_instead_of()`, which was two gaps under
-    one symbol.** That door landed -- each payout offers itself as the
-    clause `features.warlock.BOON` and `f3444` trades the boon away through
-    it -- and it does nothing for this row. A substitution replaces a
-    payout that is already firing; this card asks for the payout to fire on
-    an event it would not otherwise answer, which is the opposite
-    direction.
+    **Written, and the reading the old note declined to guess is settled
+    by the card.** That note said `cf:warlock-hexblade-f1`'s own text --
+    *"you gain a power associated with your pact"* -- left three verbs
+    each right for one reading, and it was right not to guess from the
+    feature alone. This card says the feature *"**triggers**"*, and
+    `f2759` says it is *"**gained**"* on an event, so on this chassis the
+    boon is that row being **used** -- and the row's body is a
+    `c.grant_row` of whichever power the pact chose.
 
-    So: **the boon's payout has to be callable.** Three of the five refs in
-    `features.warlock.BOONS` are rows, which `c.use_power` would reach, but
-    `cf:warlock-f1` pays its three legs inline inside the watcher it
-    installs -- using that row again installs a second watcher and pays
-    nothing. The door is a helper in `features/warlock.py` paying whichever
-    leg the character took, and it has to reach the payouts in
-    `features/strikers.py` and `powers/warlock/pacts.py` to be true for
-    every pact.
+    So `c.use_power` names the ref the card names. Not
+    `warlock.pay_boon`, which dispatches whichever boon the character's
+    *pact leg* pays: a hexblade on the infernal leg would get temporary
+    hit points where the card says its hexblade feature triggers.
 
-    `f2759` is the same gap and carries the same symbol -- it takes the
-    boon early off `Bloodied` where this one adds `Bloodied` as a second
-    trigger. #641.
-    
-    **The payout is callable now and this row is still marked, which is a
-    narrowing rather than a delay.** `features.warlock.pay_boon` exists:
-    the payout `cf:warlock-f1` kept in a closure inside its own watcher is
-    one function, it offers `BOON` so a trade still works, and it
-    dispatches to the later pacts whose boon is a row of its own. That is
-    what both notes asked for.
+    **"(It still triggers when you reduce a target to 0 or fewer hit
+    points.)"** is the parenthesis that makes this an **addition** rather
+    than a replacement, and nothing has to be written for it: the
+    feature's own drop trigger is untouched, so the only work here is the
+    second moment. A `c.pre_empt` would have been the wrong shape and the
+    old note said so.
 
-    What is left is what *this card's* ref means. It names
-    `cf:warlock-hexblade-f1`, whose printed text is "you gain a power
-    associated with your pact" -- so on that chassis the boon is a **power
-    gained**, where on the first book's three pacts it is a payout.
-    `pay_boon`, `c.restore_use` and `c.grant_row` are each right for one
-    reading and the card names one ref for all of them. Not guessed: one
-    chassis's reading of one ref, which is a smaller thing than the
-    missing payout was.
+    Two narrowings are written and the third is stated. The creature is
+    under **this** warlock's curse (`c.cursed`, relational for exactly
+    that reason), and the blow is the one that *crossed* the halfway line
+    rather than any hit on an already-bloodied creature
+    (`_just_bloodied`, which this file's other rows use).
+
+    *"With this rod"* is **not enforced**, and that is this file's
+    recorded position rather than a new decision: `i2324p1`'s note two
+    thousand lines up says it in full -- *"the same hole every 'through
+    this weapon' item has: nothing ties a power's use to the implement it
+    was used through. Said rather than marked."* `c.weapon_of` answers
+    which **weapon** a blow was swung with and `c.struck_with` prefers
+    whatever magic thing is held, and neither can say the attack went
+    *through this rod*. Written the same way here, so the row is wider
+    than its card by that qualifier and says so.
+
+    The boon is still once an encounter: `c.use_power` refuses an
+    expended row, so this moves **when** it can be taken and does not
+    buy a second one. #1454.
     """
+    me = c.me
 
+    def crossed(ev: Any) -> None:
+        foe = getattr(ev, "target", None)
+        if not isinstance(foe, int) or not _just_bloodied(c, ev):
+            return
+        if not c.cursed(foe):
+            return
+        c.use_power("cf:warlock-hexblade-f1")
+
+    c.watch(Hit, crossed, until=When.ENCOUNTER, on=me, label=c.ref)
 
 @power(
     "i719x1",

@@ -75,6 +75,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Health, Position
+from combat_engine.engine.events import Bloodied
 from combat_engine.engine.grid import spread
 
 #: The class feature that lays the curse, and the name its extra damage
@@ -916,58 +917,59 @@ def f1358(c: Cast) -> None:
 
 
 @power("f2759", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("warlock.boon_for_a_hexblade()",))
+       reach=PERSONAL, target=SELF)
 def f2759(c: Cast) -> None:
-    """Takes the boon early, when a cursed enemy is first bloodied,
-    and pays for it with the curse.
+    """*"You can choose to gain your `cf:warlock-hexblade-f1` when an enemy
+    you curse is first bloodied. If you do so, you remove your curse from
+    that enemy."*
 
-    Re-aimed, and the re-aim is the finding. `Dropped` plus `cursed_by_me`
-    is how a boon *announces itself*, and this row does not watch a boon --
-    it **causes** one, off `Bloodied`, which is the opposite operation and
-    was sitting under the same symbol. Both halves of the price are sayable
-    (the curse is a labelled hold `Effects.end` would lift); the thing
-    bought is not.
+    **Written, and the reading the old note declined to guess is settled
+    by the two cards that name the ref.** That note said
+    `cf:warlock-hexblade-f1`'s own text -- *"you gain a power associated
+    with your pact"* -- left three verbs each right for one reading, and
+    it was right not to guess from the feature alone. The cards
+    disambiguate it: this one says *"**gain** your [feature]"* on an
+    event and `i698x1` says it *"**triggers**"* on one, so on this
+    chassis the boon is that row being **used**, and the row's own body
+    is a `c.grant_row` of the power the pact chose.
 
-    **Re-pointed off `warlock.boon_instead_of()`, which was two gaps under
-    one symbol.** That door landed -- each payout now offers itself as the
-    clause `features.warlock.BOON` and `f3444` trades the boon away through
-    it -- and it does nothing for this row. A substitution replaces a
-    payout that is *already firing*; this card asks for the payout to fire
-    from an event of its own, which is the opposite direction and needs no
-    `c.pre_empt` anywhere in it.
+    So `c.use_power` is the verb, naming the ref the card names. Not
+    `warlock.pay_boon`: that dispatches whichever boon the character's
+    *pact leg* pays, and this card names one specific feature -- a
+    hexblade on the infernal leg would get temporary hit points from
+    `pay_boon` where the card says it gains its hexblade feature.
 
-    So: **the boon's payout has to be callable.** Three of the five refs in
-    `features.warlock.BOONS` are rows (`c.use_power` would reach those),
-    but `cf:warlock-f1` pays its three legs inline inside the watcher it
-    installs, so using that row again installs a second watcher and pays
-    nothing. A helper in `features/warlock.py` that pays whichever leg the
-    character took is what both rows waiting on this want, and it cannot
-    be written from here: `features/strikers.py` and
-    `powers/warlock/pacts.py` hold the payouts it would have to reach.
+    **The curse is the price and it is paid only if the boon is taken.**
+    `c.may` is the choice the card prints -- *"you can choose to"* -- and
+    the curse comes off after the payout rather than before, so a boon
+    that somehow does not happen does not cost the curse either.
 
-    `todo=` rather than `dropped=`: writing only the price -- removing the
-    curse -- would make the row strictly worse than not having it.
-
-    `i698x1` is the same gap and carries the same symbol. `i2305p1` is a
-    third thing again and carries `c.decline_boon()`. #641.
-    
-    **The payout is callable now and this row is still marked, which is a
-    narrowing rather than a delay.** `features.warlock.pay_boon` exists:
-    the payout `cf:warlock-f1` kept in a closure inside its own watcher is
-    one function, it offers `BOON` so a trade still works, and it
-    dispatches to the later pacts whose boon is a row of its own. That is
-    what both notes asked for.
-
-    What is left is what *this card's* ref means. It names
-    `cf:warlock-hexblade-f1`, whose printed text is "you gain a power
-    associated with your pact" -- so on that chassis the boon is a **power
-    gained**, where on the first book's three pacts it is a payout.
-    `pay_boon`, `c.restore_use` and `c.grant_row` are each right for one
-    reading and the card names one ref for all of them. Not guessed: one
-    chassis's reading of one ref, which is a smaller thing than the
-    missing payout was.
+    `Bloodied` and **first** bloodied: the event fires once per creature
+    by construction, which is what makes "first" need no latch here.
+    #1454.
     """
+    me = c.me
 
+    def bloodied(ev: Any) -> None:
+        foe = getattr(ev, "actor", None)
+        if foe is None or not c.cursed(foe):
+            return
+        if not c.may("take the hexblade boon early, losing the curse"):
+            return
+        if not c.use_power("cf:warlock-hexblade-f1"):
+            return
+        # **The curse comes off by ending the hold that carries it.**
+        # `c.curse` lays an `Effect` whose `relations` hold
+        # `Relation.CURSED_BY`, and `Effects.end` tears the relation down
+        # with it -- there is no `c.uncurse`, and clearing the relation
+        # by hand would leave the hold standing with nothing behind it.
+        # The old note had this right: *"the curse is a labelled hold
+        # `Effects.end` would lift"*.
+        for hold in list(c.world.effects.of(foe)):
+            if hold.source == me and (hold.label or "").endswith("curse"):
+                c.world.effects.end(hold, f"{c.ref} traded it for the boon")
+
+    c.watch(Bloodied, bloodied, until=When.ENCOUNTER, on=me, label=c.ref)
 
 @power("f2193", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
