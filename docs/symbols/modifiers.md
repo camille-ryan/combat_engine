@@ -214,6 +214,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You cannot be forced to attack an ally under any circumstances."
 - `c.shares_feat_bonus(self, *refs: 'str', on: 'int | None' = None) -> 'None'`
   - Select arena weapons: a feat bonus for one reaches the others.
+- `c.split_weapon(self, ref: 'str' = '', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - *"Split the weapon into two identical weapons, one in your
 - `c.untargetable(self, *, keyword: 'Keyword', on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - *"The enemy cannot ... be the target of teleportation powers
 - `c.waive(self, condition: 'Condition', *what: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

@@ -1236,11 +1236,52 @@ def i2007x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.split_weapon()",),
 )
 def i2011p1(c: Cast) -> None:
-    """One weapon becomes two, one per hand. `Gear` holds what is carried
-    and nothing divides an item, so the off-hand copy cannot be made."""
+    """*"Split the weapon into two identical weapons, one in your primary
+    hand and one in your off-hand. You can spend another minor action to
+    recombine the weapons into one. If you have the `f157` feat, you can
+    split or recombine the weapon as a free action."*
+
+    **`Gear` held what was carried and nothing divided an item**, which
+    is what the old note said. `c.split_weapon` appends a second
+    `Weapon` -- the same dataclass with a derived ref -- and wields both,
+    so every reader that counts what is in hand sees two and
+    `Gear.two_weapon` is true of the wielder.
+
+    **One row, both directions.** The card's recombine is another minor
+    action, so the row looks for its own split first and ends it rather
+    than splitting again: a second call with a split standing is the
+    recombine, which is what *"another minor action"* describes and what
+    keeps the pair from drifting into two rows.
+
+    **`c.my_weapon()` and not whatever is in hand.** The card is about
+    *this weapon*, and `Weapon.item` is what says which -- a character
+    carrying this and a second magic weapon splits the right one.
+
+    **`f157` is not written and is said rather than marked.** The printed
+    discount is an action cost -- minor to free -- and the header carries
+    one `action=`, which `dsl.use` spends before the body runs. That is a
+    gap in the action economy rather than in this row, it costs the
+    holder one minor action a fight, and no symbol here could reach it.
+    """
+    held = next(
+        (e for e in c.world.effects.of(c.me)
+         if str(e.label).startswith(f"{c.ref} split ")),
+        None,
+    )
+    if held is not None:
+        c.end_effect(held, on=c.me)
+        return
+    # **This item's own weapon, not whatever happens to be in hand.**
+    # `c.my_weapon` matches on `Weapon.item`, so a character carrying
+    # this and a second magic weapon splits the right one. Measured: on
+    # the audit board the character also holds a two-handed `w3612`, and
+    # a bare call found that one and refused -- a row that fired and did
+    # nothing.
+    mine = c.my_weapon()
+    c.split_weapon(mine.ref if mine is not None else "", on=c.me,
+                   until=When.ENCOUNTER)
 
 
 @power(

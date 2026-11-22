@@ -87217,6 +87217,150 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_weapon_splits_into_two(out: Result) -> None:
+    """*"Split the weapon into two identical weapons, one in your primary
+    hand and one in your off-hand. You can spend another minor action to
+    recombine the weapons into one."* -- `i2011p1`.
+
+    **`Gear` held what was carried and nothing divided an item**, which
+    is the row's own marker. `c.split_weapon` appends a second `Weapon`
+    -- the same dataclass with a derived ref -- and wields both.
+
+    **A derived ref and not the same one twice**, which is the care worth
+    asserting: `Gear.stowed` is a set of refs and `wield` compares by
+    ref, so two entries sharing one would be indistinguishable to both
+    and stowing the copy would stow the original with it.
+
+    **One row, both directions.** A second use with a split standing is
+    the printed recombine, not a second split.
+
+    **One plant here cannot be made red and it is a fact about the
+    code.** `c.split_weapon` calls `gear.wield(one)` after appending the
+    copy, and removing that call changes nothing measurable: `Gear.held`
+    is the weapons not in `stowed`, the copy is appended un-stowed, and
+    a two-hander -- the one case where `wield` would stow something --
+    is refused before the append. It is kept because an appended weapon
+    that `wield` has never seen is a state no other code path produces,
+    and the arm asserting both are in hand is still worth having.
+    """
+    from dataclasses import replace as _replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+
+    ROW = "i2011p1"
+
+    def holding_one() -> tuple:
+        """A character wielding a single one-handed weapon.
+
+        **The board deals this character one weapon and it is
+        two-handed** -- measured, `w3612` and nothing else -- so a
+        one-hander is added here. Without it the helper raised
+        `StopIteration` rather than failing, which is no FAIL line at
+        all.
+        """
+        world, me, _ = _board(ROW, 1)
+        gear = must(world.get(me, Gear), "the character has gear")
+        one = next((w for w in gear.weapons if not w.two_handed), None)
+        if one is None:
+            one = _replace(chargen.PRINTED["w3611"], ref="w-one")
+            gear.weapons.append(one)
+        gear.wield(one)
+        return world, me, gear, one
+
+    world, me, gear, one = holding_one()
+    out.that(len([w for w in gear.held if not w.natural]) == 1,
+             "premise: one real weapon in hand",
+             f"{[w.ref for w in gear.held]}")
+    out.that(not gear.two_weapon,
+             "and the wielder is not fighting with two",
+             f"{gear.two_weapon}")
+
+    # -- the split ----------------------------------------------------------
+    REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+    pair = [w for w in gear.held if not w.natural]
+    out.that(len(pair) == 2,
+             "after the row, TWO weapons are in hand",
+             f"{[w.ref for w in pair]}")
+    out.that(gear.two_weapon,
+             "and the wielder counts as fighting with two, which is what"
+             " 'one in your primary hand and one in your off-hand' comes"
+             " to for every row that reads it",
+             f"{gear.two_weapon}")
+    out.that({w.ref for w in pair} == {one.ref, f"{one.ref}:split"},
+             "**the copy carries a DERIVED ref**, not the original's."
+             " `Gear.stowed` is a set of refs and `wield` compares by"
+             " ref, so two entries sharing one would be"
+             " indistinguishable to both",
+             f"{sorted(w.ref for w in pair)}")
+    # Guarded rather than `next(...)`: under a plant that makes no copy
+    # a bare generator raises `StopIteration` here, which kills the rule
+    # instead of failing it -- no FAIL line, so the plant reads as
+    # passing on every arm below.
+    copy = next((w for w in pair if w.ref != one.ref), None)
+    out.that(copy is not None
+             and (copy.damage, copy.group, copy.two_handed)
+             == (one.damage, one.group, one.two_handed),
+             "and it is IDENTICAL otherwise -- the card says two"
+             " identical weapons, so the copy is the same dataclass with"
+             " one field changed",
+             f"{copy and copy.damage}/{copy and copy.group} vs"
+             f" {one.damage}/{one.group}")
+
+    # -- the recombine ------------------------------------------------------
+    REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+    after = [w for w in gear.held if not w.natural]
+    out.that(len(after) == 1 and after[0].ref == one.ref,
+             "a SECOND use recombines them rather than splitting again --"
+             " 'another minor action', one row in both directions",
+             f"{[w.ref for w in after]}")
+    out.that(not any(w.ref.endswith(":split") for w in gear.weapons),
+             "and the copy is gone from the whole inventory, not merely"
+             " stowed: a weapon that no longer exists must not come back"
+             " on the next `wield`",
+             f"{[w.ref for w in gear.weapons]}")
+
+    # -- a two-hander is refused --------------------------------------------
+    w2, me2, _ = _board(ROW, 1)
+    gear2 = must(w2.get(me2, Gear), "the character has gear")
+    big = next((w for w in gear2.weapons if w.two_handed), None)
+    if big is not None:
+        gear2.wield(big)
+        out.that(Cast(world=w2, me=me2, ref="drv").split_weapon(
+                     on=me2, until=When.ENCOUNTER) is None,
+                 "**a two-handed weapon is refused.** Split in two it is"
+                 " four hands' worth, and `Gear.wield` would stow one"
+                 " immediately -- a silent no-op where a refusal is an"
+                 " answer",
+                 "refused")
+        out.that(not any(w.ref.endswith(":split") for w in gear2.weapons),
+                 "and nothing was appended on the way to refusing",
+                 f"{[w.ref for w in gear2.weapons]}")
+
+    # -- the hold ends the split --------------------------------------------
+    w3, me3, gear3, _one3 = holding_one()
+    held = Cast(world=w3, me=me3, ref="drv").split_weapon(
+        on=me3, until=When.ENCOUNTER)
+    out.that(held is not None and len(
+                 [w for w in gear3.held if not w.natural]) == 2,
+             "premise: a split laid directly by the verb",
+             f"{[w.ref for w in gear3.held]}")
+    if held is not None:
+        w3.effects.end(held)
+    out.that(len([w for w in gear3.held if not w.natural]) == 1,
+             "and ending the HOLD rejoins them, so a split that runs out"
+             " with the encounter leaves no phantom weapon behind",
+             f"{[w.ref for w in gear3.held]}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"{ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_saving_throw_is_declined_not_failed(out: Result) -> None:
     """*"You can forgo the saving throw to deal extra damage equal to the
     weapon's enhancement bonus to the first target of the attack"* --
@@ -121708,6 +121852,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "weapon_splits_in_two": (
+        a_weapon_splits_into_two,
+        "`i2011p1` splits a one-handed weapon into two and recombines "
+        "them on a second use (#1341)",
     ),
     "save_declined_not_failed": (
         a_saving_throw_is_declined_not_failed,

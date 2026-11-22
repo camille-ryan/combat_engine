@@ -587,6 +587,11 @@ CATEGORIES: dict[str, dict] = {
                 # ask what is in hand; this changes what a hand's
                 # contents are taken for. #1341.
                 "as_off_hand",
+                # Beside `as_off_hand` because both answer what the
+                # hands hold and neither is about a number: that one
+                # admits a weapon to a slot it is not, this makes a
+                # second weapon out of one. #1341.
+                "split_weapon",
                 "forbid", "forgo_second_wind_heal",
                 # Beside `forbid` because it is the same question answered
                 # the other way: that one takes a named row away, this one

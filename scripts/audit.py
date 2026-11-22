@@ -143,6 +143,25 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **A weapon that splits in two, on a board that hands it a
+    # greataxe.** `i2011p1` prints *"split the weapon into two identical
+    # weapons, one in your primary hand and one in your off-hand"*, so
+    # `c.split_weapon` refuses a two-handed one: split in two it is four
+    # hands' worth, and `Gear.wield` would stow one of them immediately.
+    #
+    # Measured rather than assumed. The board attaches this item to
+    # `w3612`, a two-handed greataxe -- `Weapon.item == "i2011"` on that
+    # object and on nothing else -- so `c.my_weapon()` answers the axe
+    # and the row correctly does nothing. The printed item is a
+    # one-handed weapon; a splittable two-hander is not a case that
+    # exists in print.
+    #
+    # `drivers.a_weapon_splits_into_two` is the proof and stages a
+    # one-hander by hand, both directions, with the two-handed refusal
+    # as its own arm.
+    "i2011p1": "splits a one-handed weapon; the board attaches this item "
+               "to a two-handed greataxe -- see "
+               "`drivers.a_weapon_splits_into_two`",
     # **The three multiclass swap feats, on a board that deals no
     # multiclass.** Each one's whole effect is granting the power
     # `chargen.power_swap` drew from the class the character multiclassed

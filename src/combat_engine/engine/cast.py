@@ -10584,6 +10584,64 @@ class Cast:
             retarget=retarget,
         )
 
+    def split_weapon(
+        self, ref: str = "", *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """*"Split the weapon into two identical weapons, one in your
+        primary hand and one in your off-hand."*
+
+        **`Gear` holds what is carried and nothing divided an item**,
+        which is the row's own marker. A second `Weapon` is appended --
+        the same dataclass with a derived ref -- and both are wielded, so
+        every reader that counts what is in hand sees two.
+
+        A **derived ref**, `"<ref>:split"`, rather than the same one
+        twice: `Gear.stowed` is a set of refs and `wield` compares by
+        ref, so two entries sharing one would be indistinguishable to
+        both -- stowing the copy would stow the original with it.
+
+        Removed when the hold ends, which is the printed recombine:
+        *"you can spend another minor action to recombine the weapons
+        into one"*. A row calls `c.end_effect` on what this returns, so
+        the two halves are one effect rather than two rows that could
+        drift.
+
+        **Refused when the weapon needs both hands.** The card is about a
+        weapon going one per hand, and a two-hander split in two is a
+        creature holding four hands' worth -- `Gear.wield` would stow one
+        of them immediately, which is a silent no-op where a refusal is
+        an answer.
+        """
+        from dataclasses import replace as _replace
+
+        from .components import Gear
+
+        who = self._who(on) or self.me
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return None
+        one = next(
+            (w for w in gear.held if not ref or w.ref == ref),
+            None,
+        )
+        if one is None or one.two_handed or one.ref.endswith(":split"):
+            return None
+        copy = _replace(one, ref=f"{one.ref}:split")
+        gear.weapons.append(copy)
+        gear.wield(one)
+        gear.stowed.discard(copy.ref)
+
+        def rejoin() -> None:
+            gear.weapons[:] = [w for w in gear.weapons if w.ref != copy.ref]
+            gear.stowed.discard(copy.ref)
+            gear.counts_as_off.discard(copy.ref)
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} split {one.ref}",
+            on_end=[rejoin], by=self.ref,
+        )
+
     def forgo_save(
         self, *, on: int | None = None, until: When = When.EONT,
     ) -> Effect | None:
