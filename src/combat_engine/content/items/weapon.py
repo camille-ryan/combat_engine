@@ -1136,6 +1136,22 @@ def i2010p1(c: Cast) -> None:
         c.teleport(1 + c.enhancement, who=foe)
 
 
+def _melee_at_me(world: World, me: int, ev: Any) -> bool:
+    """A melee attack aimed at this creature, by somebody else.
+
+    Read off the rolling row's own range rather than off a keyword: a
+    melee attack is one whose `Range.kind` is melee, and the card says
+    nothing about what kind of power it is.
+    """
+    if getattr(ev, "target", None) != me:
+        return False
+    if getattr(ev, "attacker", None) == me:
+        return False
+    row = get(getattr(ev, "power", "") or "")
+    reach = row.reach_of(getattr(ev, "branch", 0)) if row is not None else None
+    return reach is not None and reach.kind == "melee"
+
+
 @power(
     "i2019p1",
     level=2,
@@ -1145,14 +1161,62 @@ def i2010p1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     trigger="an enemy makes a melee attack against you",
-    todo=("c.oppose_attack()", "c.basic(harmless=)"),
+    on=Trigger(AttackRolled, _melee_at_me,
+               "an enemy makes a melee attack against you"),
 )
 def i2019p1(c: Cast) -> None:
-    """A parry: swing back, and if your roll beats the roll against you the
-    attack misses. Two gaps -- nothing compares one attack roll with
-    another, and `c.basic` always deals its damage where this one must
-    not. `c.cancel` is an interrupt's verb and the printed action is a
-    reaction, so even the miss cannot be spelled here."""
+    """*"Make a melee basic attack against that enemy, with a power bonus
+    on your attack roll equal to this weapon's enhancement bonus; if your
+    result exceeds that of the attack roll against you, the enemy's
+    attack misses. The melee basic attack you make to block your enemy's
+    attack has no other effect and does not deal damage."*
+
+    **Two of the three things the old note called missing were already
+    here.** It said *"nothing compares one attack roll with another"* --
+    `AttackRolled` carries `total` and `Cast.result` is the swing this
+    row just made, so the comparison is two reads. And it said *"`c.cancel`
+    is an interrupt's verb and the printed action is a reaction, so even
+    the miss cannot be spelled"*: `c.hit_becomes(False)` is the verb for
+    that and its own docstring is explicit that it works in **both**
+    windows -- a row answering `AttackRolled` is earlier than the
+    recompute, and `AttackResult.turned` is the flag `settle` reads so
+    the write is not thrown away.
+
+    What was genuinely missing is `c.basic(harmless=)`: the blow is
+    rolled and lands and must deal nothing.
+
+    **Declared on `AttackRolled`, which is the window that makes the card
+    work.** `resolve.attack` announces it *before* `settle`, so a blow
+    turned aside here never becomes a hit; a row answering the `Hit`
+    would be turning a landed blow into a miss after the fact, which is a
+    different sentence and a different set of riders.
+
+    The bonus is a **power bonus**, which is the printed word and the
+    one that decides whether it stacks with the enhancement already on
+    the roll."""
+    blow = c.trigger
+    foe = getattr(blow, "attacker", None)
+    if foe is None:
+        return
+    c.bonus("attack", c.enhancement, on=c.me, until=When.EOT,
+            kind="power", once=True)
+    c.basic(on=foe, harmless=True)
+    # **The swing's result off the LOG, not off `c.result`.** `c.basic`
+    # goes through `dsl.use`, which builds its own `Cast` -- so the
+    # result of the blow this row just made is never written back here
+    # and `c.result` is None. `AttackRolled` is the only event carrying
+    # both the roller and the total.
+    mine = next(
+        (e for e in reversed(c.world.bus.log)
+         if isinstance(e, AttackRolled) and e.attacker == c.me),
+        None,
+    )
+    theirs = getattr(blow, "total", None)
+    if mine is None or theirs is None:
+        return
+    if mine.total > theirs:
+        c.hit_becomes(False, ev=blow)
+
 
 
 @power(

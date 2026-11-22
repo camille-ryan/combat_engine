@@ -87217,6 +87217,171 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_parry_turns_a_blow_aside(out: Result) -> None:
+    """*"Make a melee basic attack against that enemy ... if your result
+    exceeds that of the attack roll against you, the enemy's attack
+    misses. The melee basic attack ... does not deal damage."* --
+    `i2019p1`.
+
+    **Two of the three things its marker called missing were already
+    here.** `AttackRolled` carries `total` and `Cast.result` is the swing
+    the row just made, so comparing one roll with another is two reads;
+    and `c.hit_becomes(False)` turns a blow aside in **both** windows --
+    its own docstring says so, and `AttackResult.turned` is the flag
+    `settle` reads, which is why a write in the `AttackRolled` window is
+    not thrown away by the recompute.
+
+    What was genuinely missing is a swing that **deals no damage**.
+    `c.basic(harmless=True)` lays a one-shot hold spent in `Cast.damage`
+    -- the single funnel every blow's amount goes through -- rather than
+    threading a flag into the basic attack's body, because a basic attack
+    is whichever row that creature's actually is.
+
+    **Three arms, because the card has three outcomes**: a higher roll
+    turns the blow, a lower one does not, and the parry itself hurts
+    nobody either way.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled, DamageApplied
+    from combat_engine.engine.resolve import AttackResult
+
+    ROW = "i2019p1"
+
+    def swung_at(total: int) -> tuple:
+        """An enemy mid-swing at the holder, rolled to `total`."""
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref="drv")
+        foe = sorted(cast.enemies())[0]
+        here = world.need(me, Position).square
+        movement.place(world, foe, (here[0] + 1, here[1]))
+        blow = AttackRolled(
+            attacker=foe, target=me, power="mba", vs=None, natural=11,
+            bonus=0, total=total, defence=10, advantage=False,
+        )
+        blow.result = AttackResult(
+            hit=True, natural=11, total=total, target_defence=10,
+            target=me, rolls=[], rerolled_by=[],
+        )
+        return world, me, foe, blow
+
+    # -- a higher roll turns it ---------------------------------------------
+    world, me, _foe, blow = swung_at(5)
+    out.that(blow.result.hit and not blow.result.turned,
+             "premise: the enemy's blow is landing and nothing has turned"
+             " it",
+             f"hit {blow.result.hit}")
+    world.rng.loaded = 20
+    REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW, trigger=blow))
+    out.that(blow.result.turned and not blow.result.hit,
+             "with a better roll, the enemy's attack MISSES --"
+             " `AttackResult.turned`, which `settle` reads, so the write"
+             " survives the recompute that comes after this window",
+             f"turned {blow.result.turned}, hit {blow.result.hit}")
+
+    # -- a lower roll does not ----------------------------------------------
+    w2, me2, _foe2, blow2 = swung_at(99)
+    w2.rng.loaded = 1
+    REGISTRY[ROW].body(Cast(world=w2, me=me2, ref=ROW, trigger=blow2))
+    out.that(blow2.result.hit and not blow2.result.turned,
+             "**and a worse one does not.** 'If your result exceeds that"
+             " of the attack roll against you' is a comparison, not a"
+             " licence -- without the test the card turns every blow it"
+             " answers",
+             f"turned {blow2.result.turned}, hit {blow2.result.hit}")
+
+    # -- the parry deals no damage ------------------------------------------
+    w3, me3, foe3, blow3 = swung_at(5)
+    hurt = must(w3.get(foe3, Health), "the enemy has hit points")
+    whole = hurt.hp
+    dealt: list[tuple] = []
+    w3.bus.on(DamageApplied, lambda e: dealt.append((e.target, e.amount)))
+    w3.rng.loaded = 20
+    REGISTRY[ROW].body(Cast(world=w3, me=me3, ref=ROW, trigger=blow3))
+    out.that(hurt.hp == whole,
+             "**the parry deals no damage**, which the card says in as"
+             " many words -- the blow is rolled and lands and pays"
+             " nothing",
+             f"{whole} -> {hurt.hp}, {dealt}")
+    out.that(blow3.result.turned,
+             "while still turning the attack aside, so the arm above is"
+             " a harmless swing and not an absent one",
+             f"{blow3.result.turned}")
+
+    # -- the hold covers ONE swing, not the rest of the fight ---------------
+    # **Two boards, not two swings on one.** A second `c.basic` on the
+    # same board returns False -- the engine declines a repeat basic
+    # attack in the same turn -- so the "ordinary" arm has to be its own
+    # board. Measured: the enemy sat at 31 either way and the arm read
+    # as the hold leaking.
+    w4, me4, _foe4, blow4 = swung_at(5)
+    w4.rng.loaded = 20
+    REGISTRY[ROW].body(Cast(world=w4, me=me4, ref=ROW, trigger=blow4))
+    left = [mm.what for mm in must(w4.get(me4, Mods), "mods").items
+            if mm.what == "harmless_swing"]
+    out.that(not left,
+             "the hold is lifted when the swing is over, so it covers"
+             " one blow rather than the rest of the fight",
+             f"{left}")
+
+    w5, me5, foe5, _ = swung_at(5)
+    hurt5 = must(w5.get(foe5, Health), "the enemy has hit points")
+    was5 = hurt5.hp
+    w5.rng.loaded = 20
+    Cast(world=w5, me=me5, ref="drv").basic(on=foe5)
+    out.that(hurt5.hp < was5,
+             "and an ordinary basic attack on the same board DOES hurt --"
+             " the control that says the arms above are a harmless swing"
+             " and not a swing that never happened",
+             f"{was5} -> {hurt5.hp}")
+
+    # -- the printed bonus --------------------------------------------------
+    # **Asserted as a modifier, not through the outcome.** Every arm
+    # above loads the die, so the enhancement never decides anything and
+    # the plant deleting it stayed green. What the card names is a
+    # **power** bonus, which is the word that decides whether it stacks
+    # with the enhancement already on the roll.
+    def my_roll(world, who: int):  # noqa: ANN001, ANN202
+        return next(
+            (e for e in reversed(world.bus.log)
+             if isinstance(e, AttackRolled) and e.attacker == who),
+            None,
+        )
+
+    w6, me6, _foe6, blow6 = swung_at(5)
+    enh = Cast(world=w6, me=me6, ref=ROW).enhancement
+    w6.rng.loaded = 20
+    REGISTRY[ROW].body(Cast(world=w6, me=me6, ref=ROW, trigger=blow6))
+    parried = my_roll(w6, me6)
+
+    w7, me7, foe7, _ = swung_at(5)
+    w7.rng.loaded = 20
+    Cast(world=w7, me=me7, ref="drv").basic(on=foe7)
+    plain = my_roll(w7, me7)
+
+    out.that(enh > 0 and parried is not None and plain is not None
+             and parried.bonus - plain.bonus == enh,
+             "the parry's attack roll carries the weapon's enhancement as"
+             " an extra bonus -- measured against a plain basic attack on"
+             " the same board, because the hold is `once=True` and the"
+             " swing spends it before anything outside could read it",
+             f"enh {enh}, parry {parried and parried.bonus},"
+             f" plain {plain and plain.bonus}")
+
+    out.that(REGISTRY[ROW].on is not None,
+             "the row declares its trigger on `AttackRolled`, which is"
+             " the window that makes the card work: `resolve.attack`"
+             " announces it BEFORE `settle`, so a blow turned here never"
+             " becomes a hit",
+             f"{REGISTRY[ROW].on}")
+    out.that(not REGISTRY[ROW].unfinished,
+             f"{ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_weapon_splits_into_two(out: Result) -> None:
     """*"Split the weapon into two identical weapons, one in your primary
     hand and one in your off-hand. You can spend another minor action to
@@ -121852,6 +122017,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "parry_turns_a_blow": (
+        a_parry_turns_a_blow_aside,
+        "`i2019p1` parries with a harmless basic attack and turns the "
+        "blow aside when its roll is higher (#1341)",
     ),
     "weapon_splits_in_two": (
         a_weapon_splits_into_two,

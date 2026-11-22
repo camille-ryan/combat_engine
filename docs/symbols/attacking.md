@@ -27,7 +27,7 @@ Making an attack, and what the attack turns out to be.
   - Move this creature's attacks onto a different defence.
 - `c.autohit(self, ev: 'Any' = None) -> 'bool'`
   - Make the attack being answered simply hit. It cannot be rolled away.
-- `c.basic(self, *, on: 'int | None' = None, who: 'int | None' = None, ranged: 'bool' = False, window: 'str' = '', with_: 'str' = '') -> 'bool'`
+- `c.basic(self, *, on: 'int | None' = None, who: 'int | None' = None, ranged: 'bool' = False, window: 'str' = '', with_: 'str' = '', harmless: 'bool' = False) -> 'bool'`
   - Make a basic attack -- whichever row that creature's actually is.
 - `c.becomes_burst(self, size: 'int' = 1, *, vs: 'Defense | None' = None, damage: 'Callable[[Any], Any] | None' = None, ranged: 'bool' = True, on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'list[Effect]'`
   - The next basic attack becomes a burst centred on its target.

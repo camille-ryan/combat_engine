@@ -5253,6 +5253,7 @@ class Cast:
         ranged: bool = False,
         window: str = "",
         with_: str = "",
+        harmless: bool = False,
     ) -> bool:
         """Make a basic attack -- whichever row that creature's actually is.
 
@@ -5272,6 +5273,23 @@ class Cast:
         weapon they name is filed **stowed** on purpose, so every
         hand-based answer was the wrong one and each blow was struck with
         whatever the wearer happened to be holding.
+
+        **`harmless` is a swing that deals no damage**, which `i2019p1`
+        prints in as many words: *"the melee basic attack you make to
+        block your enemy's attack has no other effect and does not deal
+        damage"*. The swing still happens -- it is rolled, it hits or
+        misses, and the card's whole point is comparing that roll with
+        another -- so this is not "do not attack", it is "the blow lands
+        for nothing".
+
+        Held as a one-shot `harmless_swing` modifier on the attacker and
+        spent in `Cast.damage`, which is the single funnel every blow's
+        amount goes through. Not a flag threaded down into the basic
+        attack's body: a basic attack is *whichever row that creature's
+        actually is* -- a monster points `Powers.basic` at one of its own
+        abilities -- so there is no one body to thread it through.
+
+        One-shot rather than a window, because the card gives one swing.
 
         It is deliberately not `hand=`: that picks main or off out of
         what is already *held*. Wielding the weapon instead would
@@ -5297,6 +5315,21 @@ class Cast:
         target = self._who(on)
         if target is None:
             return False
+        harm: Mod | None = None
+        if harmless:
+            # **Held for the whole swing and lifted in a `finally`**, not
+            # spent by the first `c.damage` the blow reaches. Measured:
+            # a one-shot was eaten by `i2882p1`, a rider that fires
+            # before the weapon damage, and the swing's own 38 went
+            # through untouched. The card says the blow *has no other
+            # effect and does not deal damage*, so suppressing the
+            # riders with it is the printed reading rather than a
+            # workaround.
+            mods = self.world.get(attacker, Mods) or self.world.add(
+                attacker, Mods())
+            harm = Mod("harmless_swing", 1, kind="untyped",
+                       label=f"{self.ref} harmless")
+            mods.items.append(harm)
         known = self.world.get(attacker, Powers)
         ref = (known.basic if known else MELEE) or MELEE
         if ranged:
@@ -5383,6 +5416,13 @@ class Cast:
         finally:
             if arming is not None:
                 arming.swinging = was
+            # The harmless hold covers this swing and no later one. In a
+            # `finally` for the reason the weapon override above is: a
+            # body that raises must not leave the next blow silent.
+            if harm is not None:
+                mods = self.world.get(attacker, Mods)
+                if mods is not None and harm in mods.items:
+                    mods.items.remove(harm)
 
     def _origin_squares(self, swinger: int) -> frozenset[Square]:
         """Which squares this swing originates from.
@@ -5891,6 +5931,14 @@ class Cast:
         """
         who = self._who(on)
         if who is None:
+            return 0
+        # **A swing that deals no damage** -- `c.basic(harmless=True)`,
+        # spent here because this is the single funnel every blow's
+        # amount goes through. Nothing is rolled and nothing is
+        # announced: the card says the blow *does not deal damage*,
+        # which is not the same as dealing nought and letting every
+        # "when you deal damage" rider answer it.
+        if self._take_harmless():
             return 0
         roll: Roll | None = None
         if self.crit:
@@ -20427,6 +20475,22 @@ class Cast:
                 tries += 1
             rolled.dice[i] = face
         return rolled
+
+    def _take_harmless(self) -> bool:
+        """Is a "this swing deals no damage" hold standing?
+
+        **A read, not a spend**, which is the opposite of `_take_maximum`
+        beside it and the measurement is why. A one-shot was consumed by
+        the first `c.damage` the swing reached, and that was `i2882p1`'s
+        rider rather than the weapon damage -- so the rider was silenced
+        and the blow's own 38 went through. The card says the parry *has
+        no other effect and does not deal damage*, so the hold covers the
+        whole swing and `Cast.basic` lifts it in a `finally`.
+        """
+        mods = self.world.get(self.me, Mods)
+        if mods is None:
+            return False
+        return any(m.what == "harmless_swing" for m in mods.items)
 
     def _take_maximum_dice(self) -> int:
         """How many single dice a "maximize up to N of the dice" hold
