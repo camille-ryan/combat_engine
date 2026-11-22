@@ -87223,6 +87223,123 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def only_the_bonded_wielder_uses_the_sword(out: Result) -> None:
+    """*"During an extended rest, a creature possessing a sword of Tyr can
+    bond with the weapon, becoming its bonded wielder. Each sword can
+    have only one bonded wielder."* -- `i3411x1` and `i3412x1`, whose
+    powers belong to that wielder and to nobody else.
+
+    **A persisted field, not an `Effect`.** An extended rest is not a
+    board event, so a hold would expire with the encounter and the bond
+    would have to be re-formed every fight. `Gear.bonded` is a set of
+    **item** refs -- not weapon refs -- because an item may be a weapon
+    and `i3412x1`'s clause is psychic resistance rather than a swing.
+
+    **A `requires=` rather than a guard in the body**, so the page can
+    say why the row is refused and `usable` answers before the action is
+    spent.
+
+    **Possession, not wielding**, which is what `c.bond` asks for: the
+    resistance clause is a sheathed sword's too.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY, usable
+
+    WOUND, WARD = "i3411x1", "i3412x1"
+
+    # -- the dealer bonds what it deals -------------------------------------
+    world, me, _ = _board(WOUND, 1)
+    gear = must(world.get(me, Gear), "the character has gear")
+    out.that("i3411" in gear.bonded,
+             "the dealt character is the bonded wielder of the sword it"
+             " carries -- `chargen` deals a RESTED character, and"
+             " possession is the printed condition",
+             f"{sorted(gear.bonded)}")
+    out.that(usable(world, me, REGISTRY[WOUND])[0],
+             "so the row is usable",
+             f"{usable(world, me, REGISTRY[WOUND])}")
+
+    # -- and refuses a creature that is not bonded --------------------------
+    gear.bonded.discard("i3411")
+    allowed, why = usable(world, me, REGISTRY[WOUND])
+    out.that(not allowed,
+             "**with the bond gone the row is REFUSED**, which is the"
+             " printed gate: the sword's powers are the bonded wielder's",
+             f"{allowed}, {why!r}")
+    out.that("bonded" in why.lower(),
+             "and the refusal says why, which is what `requires_text` is"
+             " for -- a `requires=` with no text is invisible to every"
+             " board knob there is",
+             f"{why!r}")
+
+    # -- the bond is per ITEM, not per weapon --------------------------------
+    w2, me2, _ = _board(WARD, 1)
+    gear2 = must(w2.get(me2, Gear), "the character has gear")
+    out.that("i3412" in gear2.bonded,
+             "the second sword's own item ref is what its row asks for --"
+             " `Gear.bonded` is keyed by item, so `i3412x1` and a power"
+             " row on the same sword read one record",
+             f"{sorted(gear2.bonded)}")
+    out.that(usable(w2, me2, REGISTRY[WARD])[0],
+             "and its resistance row is usable",
+             f"{usable(w2, me2, REGISTRY[WARD])}")
+    # **The second row needs its own refusal arm.** Without it the plant
+    # that ungates `i3412x1` alone stayed green -- the row above was
+    # carrying the whole claim for both.
+    gear2.bonded.discard("i3412")
+    out.that(not usable(w2, me2, REGISTRY[WARD])[0],
+             "and REFUSED without the bond, asserted separately from the"
+             " first row: one gate per card, and a rule that checked"
+             " only one of them would pass with the other ungated",
+             f"{usable(w2, me2, REGISTRY[WARD])}")
+    gear2.bonded.add("i3412")
+
+    # -- c.bonded asks the same question from a body ------------------------
+    out.that(Cast(world=w2, me=me2, ref=WARD).bonded(),
+             "`c.bonded()` answers it from inside a body and defaults to"
+             " this row's own item, the way `c.my_weapon` and"
+             " `c.enhancement` do",
+             "bonded")
+    mate = sorted(Cast(world=w2, me=me2, ref="drv").allies())[0]
+    out.that(not Cast(world=w2, me=me2, ref=WARD).bonded(of=mate),
+             "and an ALLY is not the bonded wielder -- *'each sword can"
+             " have only one'*, and `of` defaults to the caster rather"
+             " than to `c.target`",
+             f"{Cast(world=w2, me=me2, ref=WARD).bonded(of=mate)}")
+
+    # -- c.bond needs possession --------------------------------------------
+    w3, me3, _ = _board(WARD, 1)
+    gear3 = must(w3.get(me3, Gear), "the character has gear")
+    gear3.bonded.clear()
+    out.that(Cast(world=w3, me=me3, ref=WARD).bond(),
+             "`c.bond()` forms the bond to an item the creature"
+             " possesses",
+             f"{sorted(gear3.bonded)}")
+    out.that(not Cast(world=w3, me=me3, ref=WARD).bond("i9999"),
+             "**and refuses an item it does not have.** *'A creature"
+             " POSSESSING a sword of Tyr can bond with the weapon'*, so"
+             " possession is the printed condition and a bond to"
+             " something you are not carrying is not a thing the card"
+             " allows",
+             f"{sorted(gear3.bonded)}")
+    out.that("i9999" not in gear3.bonded,
+             "and nothing was written on the way to refusing",
+             f"{sorted(gear3.bonded)}")
+
+    for ref in (WOUND, WARD):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+    out.that(REGISTRY["i2359x1"].unfinished == ("Gear.owned",),
+             "while `i2359x1` stays on `Gear.owned` and is NOT served by"
+             " this: *'any other creature takes a -2 penalty to attack"
+             " rolls with this weapon'* needs to know whose weapon is in"
+             " somebody else's hand, which is a different record",
+             f"{REGISTRY['i2359x1'].unfinished}")
+
+
 def a_swapped_power_goes_back_at_a_rest(out: Result) -> None:
     """*"You can substitute the original power back in after another
     extended rest."* -- the second clause on `f2441`, `f2443`, `f2445`
@@ -122274,6 +122391,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "only_the_bonded_wielder": (
+        only_the_bonded_wielder_uses_the_sword,
+        "`i3411x1` and `i3412x1` are the bonded wielder's and nobody "
+        "else's, off `Gear.bonded` (#1341)",
     ),
     "swap_goes_back_at_a_rest": (
         a_swapped_power_goes_back_at_a_rest,

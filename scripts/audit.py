@@ -3735,6 +3735,15 @@ def _board(ref: str, seed: int, pose: bool = False,
                     takes_it.item = magic.ref
                     takes_it.enhancement = max(
                         takes_it.enhancement, magic.plus)
+                    # **And the bond, which two rows gate on.** *"During
+                    # an extended rest, a creature possessing a sword of
+                    # Tyr can bond with the weapon"* -- `i3411x1` and
+                    # `i3412x1` are the bonded wielder's and refuse
+                    # anybody else, so a board that staged the item and
+                    # not the bond read "never usable here". The same
+                    # one-liner `chargen` does at the deal, and for the
+                    # same reason: this board is a rested character.
+                    gear.bonded.add(magic.ref)
             # **And the same for an implement-slot item, which is the
             # larger half and was not staged at all.** `implement` is the
             # biggest slot in the table -- 412 items against `weapon`'s

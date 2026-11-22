@@ -658,6 +658,11 @@ CATEGORIES: dict[str, dict] = {
                 # asks what is in hand and this one what was put
                 # away, and only the second can say WHICH.
                 "sheathed",
+                # `c.bonded` and `c.bond` here with `wielding` and
+                # `sheathed`: all four answer what this creature's
+                # relationship to a thing in its possession is, which is
+                # this page's question. A bond is not a number. #1341.
+                "bond", "bonded",
                 "weapon_range", "wearing", "wielding", "wis_", "wis_mod",
             ]),
             # `c.chosen_weapons` and `c.with_a_chosen_weapon` are here and

@@ -758,6 +758,22 @@ def i3145x1(c: Cast) -> None:
     c.watch(Hit, wound, until=When.ENCOUNTER)
 
 
+def _bonded_wielder(world: World, eid: int, item: str) -> bool:
+    """Is this creature the item's bonded wielder?
+
+    *"During an extended rest, a creature possessing a sword of Tyr can
+    bond with the weapon, becoming its bonded wielder."* -- the gate on
+    both of the sword's rows, read off `Gear.bonded`.
+
+    A `requires=` rather than a body guard, so the page can say why the
+    row is refused and `usable` answers before the action is spent.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = world.get(eid, Gear)
+    return gear is not None and item in gear.bonded
+
+
 @power(
     "i3411x1",
     level=8,
@@ -765,13 +781,28 @@ def i3145x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonded()",),
+    requires=lambda world, eid: _bonded_wielder(world, eid, "i3411"),
+    requires_text="you must be the sword's bonded wielder",
 )
 def i3411x1(c: Cast) -> None:
-    """The bonding, the scrying and the temporary hit points at the end of
-    a rest all happen out of the fight; the wound that will not close is
-    the one clause with a body. Who may use the weapon's powers is the
-    bonded wielder, and nothing records a bond.
+    """*"When you damage a creature with a weapon attack using this
+    weapon, that creature cannot regain hit points until the end of its
+    next turn."*
+
+    **The bond is recorded now.** `Gear.bonded` holds the item refs a
+    creature is the bonded wielder of -- a persisted field rather than
+    an `Effect`, because *"during an extended rest, a creature
+    possessing a sword of Tyr can bond with the weapon"* is not a board
+    event and a hold would expire with the encounter.
+
+    A `requires=` rather than a guard in the body, so the page can say
+    why the row is refused and `usable` answers before the action is
+    spent. `c.bonded` is the same question asked from inside a body and
+    `c.bond` is the writer.
+
+    The scrying and the rest-time temporary hit points stay out of
+    scope: they have no combat meaning, which is what the old note said
+    and is still true.
 
     **What `c.bonded()` needs, stated here once for both rows that carry
     it.** A bond is formed during an extended rest, is held by one creature
@@ -3204,13 +3235,19 @@ def i3142p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonded()",),
+    requires=lambda world, eid: _bonded_wielder(world, eid, "i3412"),
+    requires_text="you must be the sword's bonded wielder",
 )
 def i3412x1(c: Cast) -> None:
-    """The bonding, the scrying and the temporary hit points at the end of
-    a rest are all outside a fight, and nothing records a bond -- so the
-    gate on who may use the weapon's powers is dropped. One gap, two rows:
-    `i3411x1` carries the same symbol and holds what it needs."""
+    """*"You gain psychic resistance equal to 3 + twice the weapon's
+    enhancement bonus."*
+
+    Gated on the bond, which `Gear.bonded` records -- see `i3411x1`
+    above, which holds the reasoning for both rows.
+
+    **Possession and not wielding**, which is why `c.bond` asks for the
+    first: this clause is resistance, and a sheathed sword still gives
+    it."""
     c.resist(3 + 2 * c.enhancement, DamageType.PSYCHIC, on=c.me)
 
 

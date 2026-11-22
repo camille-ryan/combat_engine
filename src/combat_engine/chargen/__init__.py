@@ -8459,6 +8459,29 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
         ),
         Gear(
             weapons=carried,
+            # **Every magic item the character possesses is bonded**,
+            # which is the printed condition and nothing more: *"during
+            # an extended rest, a creature **possessing** a sword of Tyr
+            # can bond with the weapon"*, and `chargen` deals a rested
+            # character.
+            #
+            # Wider than the two cards that read it and harmlessly so:
+            # `Gear.bonded` is consulted only by a row whose own card
+            # asks about a bond, and an item that prints none never
+            # looks. The alternative -- bonding only the refs those two
+            # rows name -- would put content refs in the dealer, which
+            # is the coupling `#758` exists to avoid.
+            #
+            # **Weapons only, because this is where the weapons are.**
+            # `Gear.worn` and `Gear.carried` are filled elsewhere, so a
+            # bond to a non-weapon item has to be formed through
+            # `c.bond` -- and no card prints one. Both rows reading this
+            # are a weapon's.
+            #
+            # *"Each sword can have only one bonded wielder"* holds by
+            # construction: every character carries its own copy. That
+            # is the line to re-read the day two characters share one.
+            bonded={w.item for w in (*carried, *belt) if w.item},
             # **The kind, not merely whether.** `_shield_for` already
             # returns 0, 1 or 2 and this used to `bool()` it, which is where
             # nine rows' "your shield bonus" went missing. See `Gear.shield`.

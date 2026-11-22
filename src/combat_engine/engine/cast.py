@@ -10717,6 +10717,66 @@ class Cast:
             on_end=[rejoin], by=self.ref,
         )
 
+    def bonded(self, item: str = "", *, of: int | None = None) -> bool:
+        """Is that creature the bonded wielder of this item?
+
+        *"During an extended rest, a creature possessing a sword of Tyr
+        can bond with the weapon, becoming its bonded wielder. Each
+        sword can have only one bonded wielder."* -- `i3411x1` and
+        `i3412x1`, whose powers belong to the bonded wielder and to
+        nobody else.
+
+        **Defaults to this row's own item**, which `c.my_weapon` and
+        `c.enhancement` already do through `_my_item`: `i3411x1` and
+        `i3411p1` are both the same sword, so the question a row asks is
+        about the thing it is written on.
+
+        **`of` is the creature, and it defaults to the CASTER** rather
+        than to `c.target`. A bond is a fact about whose hand the weapon
+        is in, which is the same reasoning `c.my_weapon`'s docstring
+        records paying for once -- a bare call there returned 1 for a +2
+        axe in silence.
+
+        Read off `Gear.bonded`, a persisted set, because an extended
+        rest is not a board event. `c.bond` is the writer.
+        """
+        from .components import Gear
+
+        who = of if of is not None else self.me
+        gear = self.world.get(who, Gear)
+        return gear is not None and (item or self._my_item) in gear.bonded
+
+    def bond(self, item: str = "", *, on: int | None = None) -> bool:
+        """Form the bond, which the printed card does at an extended rest.
+
+        True when it was formed and False when the creature does not
+        possess the item -- *"a creature **possessing** a sword of Tyr
+        can bond with the weapon"*, so possession is the printed
+        condition and a bond to something you are not carrying is not a
+        thing the card allows.
+
+        Possession rather than wielding: the clause that gates
+        `i3412x1` is psychic resistance, which a sheathed sword still
+        gives, and `Gear.carried` is what the sheet records.
+
+        **Not undone by putting the item down**, which is the printed
+        reading: the bond lasts until another rest re-forms it, and
+        nothing in a fight breaks it. Writing it as an `Effect` would
+        have made it expire with the encounter.
+        """
+        from .components import Gear
+
+        who = on if on is not None else self.me
+        gear = self.world.get(who, Gear)
+        want = item or self._my_item
+        if gear is None or not want:
+            return False
+        held = {w.item for w in gear.weapons if w.item}
+        if want not in held and want not in set(gear.worn) | set(gear.carried):
+            return False
+        gear.bonded.add(want)
+        return True
+
     def forgo_save(
         self, *, on: int | None = None, until: When = When.EONT,
     ) -> Effect | None:

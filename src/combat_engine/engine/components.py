@@ -2886,6 +2886,32 @@ class Gear:
     #:
     #: Read by `ammunition.hurl`, laid by `Cast.returns_to_hand`.
     thrown_returns: bool = False
+    #: **Which magic items this creature is BONDED to**, by item ref.
+    #:
+    #: Two printed cards turn on it: *"during an extended rest, a
+    #: creature possessing a sword of Tyr can bond with the weapon,
+    #: becoming its bonded wielder. Each sword can have only one bonded
+    #: wielder"* -- `i3411x1` and `i3412x1`, whose powers are the bonded
+    #: wielder's and nobody else's.
+    #:
+    #: **On the creature and keyed by ITEM ref, not by weapon ref.** The
+    #: bond is to the item -- an item may be a weapon, and `i3412x1`'s
+    #: clause is about psychic resistance rather than about swinging --
+    #: so `Weapon.item` is what the rows ask with and
+    #: `Cast.bonded` defaults to the row's own item.
+    #:
+    #: Formed out of combat, which is why it is a persisted field rather
+    #: than an `Effect`: an extended rest is not a board event, and
+    #: `chargen` deals a rested character. "Each sword can have only one
+    #: bonded wielder" holds by construction here -- every character
+    #: carries its own copy of an item -- and is the thing to re-read the
+    #: day two characters can share one.
+    #:
+    #: `i2359x1` wants the **other** side of the same question and is
+    #: deliberately not served by this: *"any other creature takes a -2
+    #: penalty to attack rolls with this weapon"* needs to know whose
+    #: weapon is in somebody else's hand, which is `Gear.owned`.
+    bonded: set[str] = field(default_factory=set)
 
     def proficient_with(self, arm: Weapon) -> bool:
         """Does a recorded band or grant cover this weapon?

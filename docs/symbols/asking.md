@@ -90,6 +90,10 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Which ability a row's attack line rolls, for this creature.
 - `c.b_mod(self, a: 'Ability | None' = None) -> 'int'`
   - "Beast's Strength modifier" -- the companion's own, not its owner's.
+- `c.bond(self, item: 'str' = '', *, on: 'int | None' = None) -> 'bool'`
+  - Form the bond, which the printed card does at an extended rest.
+- `c.bonded(self, item: 'str' = '', *, of: 'int | None' = None) -> 'bool'`
+  - Is that creature the bonded wielder of this item?
 - `c.cha_`
   - (no docstring)
 - `c.cha_mod`
