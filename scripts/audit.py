@@ -204,6 +204,21 @@ KNOWN_SILENT = {
     # reads SILENT for the harness's reason. `drivers.borrowed_ability`
     # stages both and measures all three arms -- feat and record, feat
     # alone, record alone. #1457.
+    # **A row whose target is a wall the caster already cast.** `i526p1`
+    # is *"reshape one existing wall effect that you cast"*, and the
+    # board lays a zone of the caster's own but no **wall** -- the row
+    # correctly reaches for nothing and reports SILENT for the harness's
+    # reason.
+    #
+    # **Not posed, deliberately.** A wall writes into `Grid.blocking`,
+    # so putting one on every board would change what every other row
+    # can reach -- a far larger change than the floor and the poison
+    # dose above, which are facts nothing in the movement path reads.
+    # `drivers.reshaped_wall` lays one and measures the reshape, the
+    # blocking moving with it, and a water wall staying passable. #1462.
+    "i526p1": "reshapes a wall the caster cast; the board lays no wall "
+              "and one would change every row's pathing -- see "
+              "`drivers.reshaped_wall`",
     "f1120": "rewrites a borrowed power's ability off what the build "
              "recorded; the board poses no multiclass swap -- see "
              "`drivers.borrowed_ability`",

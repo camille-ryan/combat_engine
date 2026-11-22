@@ -536,37 +536,54 @@ def i526x1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.move_zone(reshape=)",),
 )
 def i526p1(c: Cast) -> None:
-    """`c.move_zone` carries a shape from one place to another; reshaping
-    one around a square that stays put is a different operation.
+    """*"Reshape one existing wall effect that you cast. At least one
+    square of the wall must remain stationary."*
 
-    **Re-pointed off `c.reshape_area()`, which was one symbol over two
-    mechanisms.** The other six rows on it all change the area a power
-    covers *as it is used* -- the header's shape, computed before the body
-    runs -- and all six say so in the same words. This row is the odd one:
-    it mutates a **wall already standing on the board**, with at least one
-    square pinned. Nothing about a header, and no overlap with the other
-    six beyond the English word "reshape".
+    **Written as `c.reshape_wall` and NOT as a parameter on
+    `c.move_zone`**, which is what the old marker named. This row's own
+    note drew the line and it held up: that verb *"translates and keeps
+    the shape, where this changes the shape and keeps a square"*, so one
+    name over two operations is what the marker would have bought. The
+    two verbs sit beside each other instead.
 
-    Named on `c.move_zone` rather than as a new verb, because that is the
-    facility this extends and `c.move_zone(with_me=)` already marks a
-    second gap on it. The difference from the existing call is exactly the
-    pinned square: `move_zone` translates and keeps the shape, where this
-    changes the shape and keeps a square. #614.
+    Everything else the note measured is where the work went, and all of
+    it is in the verb rather than here:
 
-    **Confirmed, and it is the cheap bucket.** `c.move_zone(zone, squares_,
-    *, to=)` exists, so this is one parameter on a live verb rather than a
-    facility nobody has started. Two things it owes beyond the pinned
-    square, both measured here: `Zone` carries no kind at all, so "a wall
-    effect" has to be identified through `zone.label` -- which leads with
-    the laying row's ref, whose `reach.kind` is `"wall"` -- and the
-    reshaped squares still have to form a legal wall of the same length.
-    Hand-rolling that here the way `p5052` writes zone squares would be a
-    geometry search with no owner; the verb is the owner.
+    * **"A wall effect" is read through `zone.label`**, because `Zone`
+      carries no kind at all. The label leads with the laying row's ref
+      and that row's `reach.kind` is `"wall"`, so a zone laid by anything
+      else is refused -- which is why this row offers only the walls.
+    * **The new squares still have to form a run of the same length.**
+      The note called hand-rolling that *"a geometry search with no
+      owner"*, and it was right: `c.reshape_wall` owns it, applying the
+      same two tests `c.wall` applies to its own run.
+    * **`Grid.blocking` and any `Barrier` move with the zone.** A wall is
+      three things at once and reshaping the zone alone would leave the
+      old squares stopping movement for ever.
+
+    The caster's own walls only, which is the card's *"that you cast"*.
+    #1462.
     """
+    from combat_engine.engine.dsl import get as _get
+    from combat_engine.engine.zones import Zone as _Zone
 
+    mine = [
+        eid
+        for eid, z in c.world.each(_Zone)
+        if z.owner == c.me and z.aura is None and len(z.squares) >= 2
+        and getattr(
+            getattr(_get((z.label or "").split()[0] if z.label else ""),
+                    "reach", None),
+            "kind", "") == "wall"
+    ]
+    if not mine:
+        return
+    which = mine[0] if len(mine) == 1 else c.choose(
+        sorted(mine), f"{c.ref}: which wall to reshape")
+    if which is not None:
+        c.reshape_wall(which)
 
 @power(
     "i704x1",

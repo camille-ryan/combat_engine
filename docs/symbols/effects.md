@@ -43,6 +43,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - the square an area was aimed at.
 - `c.reshape_area(self, into: 'Callable[[Range], Range]', *, ref: 'str' = '', kinds: 'Sequence[str]' = (), keyword: 'Keyword | None' = None, cls: 'str' = '', optional: 'bool' = False, retarget: 'Any' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Replace the **shape** of another row's area, for as long as this lasts.
+- `c.reshape_wall(self, zone: 'int', *, keeping: 'Square | None' = None) -> 'bool'`
+  - Re-lay a standing wall around one square that stays put.
 - `c.resize_aura(self, label: 'str' = '', *, plus: 'int' = 0, to: 'int' = 0, cap: 'int' = 0) -> 'int'`
   - Change a standing aura's radius in place, and say so.
 - `c.scenery(self, kind: 'str' = '', *, within: 'int' = 0, of: 'int | None' = None, loose: 'bool' = False) -> 'list[int]'`

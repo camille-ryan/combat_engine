@@ -72792,6 +72792,130 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_standing_wall_is_reshaped_around_one_square(out: Result) -> None:
+    """*"Reshape one existing wall effect that you cast. At least one
+    square of the wall must remain stationary"* -- `i526p1`. #1462.
+
+    **`c.reshape_wall` and NOT a parameter on `c.move_zone`**, which is
+    what the marker named. The row's own note drew the line and it held
+    up: that verb *"translates and keeps the shape, where this changes
+    the shape and keeps a square"*, so a parameter would have been one
+    name over two operations.
+
+    Three things the note measured, all of them in the verb:
+
+    * *"A wall effect"* is read through `zone.label`, because `Zone`
+      carries **no kind at all**. The label leads with the laying row's
+      ref and that row's `reach.kind` is `"wall"`.
+    * the new squares must form a run of the **same length**, which the
+      note called *"a geometry search with no owner"* -- the verb owns
+      it, applying the two tests `c.wall` applies to its own run.
+    * `Grid.blocking` moves with the zone. A wall is three things at
+      once, and reshaping the zone alone would leave the old squares
+      stopping movement for ever.
+
+    **Whether the wall was solid is read off the board, not assumed.**
+    `c.wall(solid=False)` lays one you can get through and writes nothing
+    into `blocking`, so a reshape that blocked unconditionally would make
+    every water wall solid.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.zones import Zone
+
+    ROW, WALLER = "i526p1", "p9438"
+
+    out.that(getattr(REGISTRY[WALLER].reach, "kind", "") == "wall",
+             f"premise: {WALLER} prints a WALL, which is what makes its"
+             " label identify one -- `Zone` has no kind field, so the ref"
+             " in the label is the only thing that can say",
+             f"{REGISTRY[WALLER].reach}")
+
+    def standing(*, solid: bool = True) -> tuple:
+        world, me, _ = _board(ROW, 1)
+        zid = Cast(world=world, me=me, ref=WALLER).wall(
+            4, solid=solid, until=When.ENCOUNTER)
+        return world, me, zid, frozenset(
+            must(world.get(zid, Zone), "the wall has a zone").squares)
+
+    world, me, zid, was = standing()
+    out.that(len(was) >= 2 and was <= world.grid.blocking,
+             "premise: a solid wall stands and its squares block",
+             f"{sorted(was)}")
+
+    REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+    now = frozenset(must(world.get(zid, Zone), "the wall has a zone").squares)
+    out.that(now != was,
+             "the row reshapes the wall it cast",
+             f"{sorted(was)} -> {sorted(now)}")
+    out.that(len(now) == len(was),
+             "to a run of the SAME length -- the card reshapes a wall"
+             " rather than shortening one, and a geometry search that"
+             " dropped a square would read as success",
+             f"{len(was)} -> {len(now)}")
+    out.that(was & now,
+             "keeping at least one square where it was, which is the"
+             " card's own proviso",
+             f"{sorted(was & now)}")
+    out.that(now <= world.grid.blocking,
+             "and the new squares block, so the wall still stops movement",
+             f"{sorted(now)}")
+    out.that(not ((was - now) & world.grid.blocking),
+             "while the squares it left no longer do -- a reshape that"
+             " moved only the zone would leave them stopping movement"
+             " for ever, which is the fault `c.wall`'s own note warns"
+             " about",
+             f"{sorted((was - now) & world.grid.blocking)}")
+    seat = world.get(zid, Position)
+    out.that(seat is None or seat.spans == now,
+             "and the wall's own `Position` follows it, so anything"
+             " aiming at the wall aims where it now stands",
+             f"{seat and sorted(seat.spans)}")
+
+    # -- a wall you can get through stays that way --------------------------
+    w2, me2, zid2, was2 = standing(solid=False)
+    out.that(not (was2 & w2.grid.blocking),
+             "premise: `solid=False` lays a wall that blocks nothing --"
+             " one printed wall is water",
+             f"{sorted(was2 & w2.grid.blocking)}")
+    REGISTRY[ROW].body(Cast(world=w2, me=me2, ref=ROW))
+    now2 = frozenset(must(w2.get(zid2, Zone), "a zone").squares)
+    out.that(not (now2 & w2.grid.blocking),
+             "and after reshaping it still blocks nothing -- solidity is"
+             " read off the board rather than assumed, which is the arm"
+             " that stops every water wall turning to stone",
+             f"{sorted(now2 & w2.grid.blocking)}")
+
+    # -- nothing to reshape -------------------------------------------------
+    w3, me3, _ = _board(ROW, 1)
+    from combat_engine.engine.dsl import get as _get
+
+    def _is_wall(z: Zone) -> bool:
+        lead = (z.label or "").split()[0] if z.label else ""
+        return getattr(getattr(_get(lead), "reach", None), "kind", "") == "wall"
+
+    owned = [(e, z.label) for e, z in w3.each(Zone) if z.owner == me3]
+    walls = [e for e, z in w3.each(Zone) if z.owner == me3 and _is_wall(z)]
+    out.that(owned and not walls,
+             "premise: the board lays a zone of the caster's own but NOT"
+             " a wall -- which is the sharper premise, and the first"
+             " draft asserted no zone at all and failed on"
+             " `audit:setup zone`",
+             f"owned {owned}, walls {walls}")
+    out.that(REGISTRY[ROW].body(Cast(world=w3, me=me3, ref=ROW)) is None,
+             "and the row returns quietly when there is nothing of its"
+             " own to reshape, rather than reaching for somebody else's"
+             " -- the card says *that you cast*",
+             "quiet")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_rod_pays_the_dark_pact_tally(out: Result) -> None:
     """*"When you hit an enemy affected by your `cf:warlock-f4` with a `c7`
     attack power using this rod, you deal extra damage equal to the value
@@ -126571,6 +126695,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_standing_wall_is_reshaped_around_one_square,
         a_rod_pays_the_dark_pact_tally,
         allies_cross_rough_ground_on_a_granted_shift,
         no_sound_crosses_a_silenced_zone,
@@ -126972,6 +127097,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "reshaped_wall": (
+        a_standing_wall_is_reshaped_around_one_square,
+        "a standing wall reshaped around one square that stays put"
+        " (#1462)",
     ),
     "pact_tally_rod": (
         a_rod_pays_the_dark_pact_tally,

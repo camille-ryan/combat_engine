@@ -22960,6 +22960,113 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         self.note(f"{self.ref}: zone {zone} moves to {min(z.squares)}")
         return True
 
+    def reshape_wall(self, zone: int, *, keeping: Square | None = None) -> bool:
+        """Re-lay a standing wall around one square that stays put.
+
+        *"Reshape one existing wall effect that you cast. At least one
+        square of the wall must remain stationary"* -- `i526p1`.
+
+        **Not `c.move_zone`, and the row's own note drew the line.**
+        That verb *"translates and keeps the shape, where this changes the
+        shape and keeps a square"* -- so a parameter on it would have been
+        two operations behind one name. The two sit beside each other
+        instead.
+
+        **A wall and not any zone**, identified the way the note worked
+        out: `Zone` carries no kind at all, so *"a wall effect"* is read
+        through `zone.label`, which leads with the laying row's ref, whose
+        `reach.kind` is `"wall"`. A zone laid by anything else is refused.
+
+        **The same length, which is the half that needs geometry rather
+        than bookkeeping.** The new run goes through the pinned square in
+        whichever of the two orientations the board can actually take --
+        `Grid.passable` and unoccupied, the same two tests `c.wall` applies
+        to its own run -- and the reshape is refused outright if neither
+        fits, rather than laying a shorter wall than the one that stood.
+
+        **`Grid.blocking` and the `Barrier` move with it.** A wall is three
+        things at once (see `c.wall`): blocking squares, a zone, and
+        optionally a creature with hit points. Reshaping the zone alone
+        would leave the old squares stopping movement for ever, which is
+        the shape of bug `c.wall`'s own note warns about.
+
+        Returns False for anything it will not reshape, so a row cannot
+        half-move a wall. #1462.
+        """
+        from .components import Barrier
+        from .dsl import get as _get
+        from .zones import Zone as _Zone
+
+        z = self.world.get(zone, _Zone)
+        if z is None or z.aura is not None or len(z.squares) < 2:
+            return False
+        # The laying row's ref leads the label -- `c.zone(label=label or
+        # self.ref)` -- and its printed range is what says "wall".
+        laid_by = _get((z.label or "").split()[0] if z.label else "")
+        if laid_by is None or getattr(laid_by.reach, "kind", "") != "wall":
+            return False
+
+        grid = self.world.grid
+        was = set(z.squares)
+        pinned = keeping if keeping in was else self.choose(
+            sorted(was), f"{self.ref}: which square stays put")
+        if pinned is None:
+            return False
+
+        size = len(was)
+        # Every run of the wall's own length through the pinned square, in
+        # both orientations. A plain loop rather than a comprehension: the
+        # first draft put a walrus inside an `all(...)` and the run it
+        # tested was not the run it kept.
+        runs: list[tuple[Square, ...]] = []
+        for step in ((1, 0), (0, 1)):
+            for start in range(-(size - 1), 1):
+                run = tuple(
+                    (pinned[0] + step[0] * (start + i),
+                     pinned[1] + step[1] * (start + i))
+                    for i in range(size)
+                )
+                if pinned not in run or set(run) == was:
+                    continue
+                # The same two tests `c.wall` applies to its own run, and a
+                # square the wall already holds counts as available: it is
+                # blocking because of this very wall.
+                if all(grid.inside(sq)
+                       and (sq in was
+                            or (grid.passable(sq)
+                                and grid.occupant(sq) is None))
+                       for sq in run):
+                    runs.append(run)
+        if not runs:
+            return False
+        fresh = self.choose(runs, f"{self.ref}: the wall's new run")
+        if not fresh:
+            return False
+        now = frozenset(fresh)
+
+        # **Was it a solid wall?** `c.wall(solid=False)` lays one you can
+        # get through and writes nothing into `blocking`, so the answer is
+        # read off the board rather than guessed -- and a wall that stopped
+        # movement has to go on stopping it in its new squares.
+        solid = bool(was & grid.blocking)
+        for sq in was - now:
+            grid.blocking.discard(sq)
+        if solid:
+            grid.blocking.update(now)
+        z.squares = now
+        spot = self.world.get(zone, Position)
+        if spot is not None:
+            spot.square = min(now)
+            spot.spans = now
+        # The barrier a wall with hit points spawned holds the same squares
+        # and would otherwise answer attacks aimed at where the wall was.
+        for _eid, barrier in list(self.world.each(Barrier)):
+            if barrier.zone == zone:
+                barrier.squares = now
+        self.world.zones.refresh()
+        self.note(f"{self.ref}: wall {zone} reshaped around {pinned}")
+        return True
+
     def jump(
         self,
         squares_: int,

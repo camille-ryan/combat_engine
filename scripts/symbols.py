@@ -388,7 +388,13 @@ CATEGORIES: dict[str, dict] = {
                 # up -- rather than how any creature moves. `Grid.climb_dc`
                 # is scene state like `difficult` and `light`. #1300.
                 "climb_dc",
-                "floor", "grow", "scenery", "set_origin",
+                "floor", "grow",
+                # Beside `wall`, which is the only thing that lays one:
+                # `c.reshape_wall` re-lays a standing wall around a
+                # pinned square, which is terrain rather than movement
+                # -- it changes what the squares *are*. #1462.
+                "reshape_wall",
+                "scenery", "set_origin",
                 # Beside `climb_dc` and for its stated reason: `surface`
                 # reads what a square is *made of*, which is scene state
                 # like `difficult` and `light` rather than anything about
