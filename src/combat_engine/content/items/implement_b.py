@@ -2322,12 +2322,53 @@ def i1997x1(c: Cast) -> None:
     target=SELF,
     trigger="you make an area or a close attack with a psionic power",
     on=Trigger(AttackDeclared, _area_by_me, "you make a close or area attack"),
-    todo=("c.exclude_squares()",),
+    dropped=("dsl.use(reaction_before_targeting)",
+             "dsl.area_of(spared_count)"),
     keywords=[Keyword.AUGMENTABLE],
 )
 def i1997p1(c: Cast) -> None:
-    """`c.widen_areas` grows a burst and nothing punches holes in one, so
-    the squares cannot be left out and the Augment has nothing to count."""
+    """*"You can exclude a number of squares from the attack's blast or
+    burst equal to your Wisdom modifier."*
+
+    **The hole in the area is written and two smaller things are not.**
+    `c.spare_squares` is the facility the old note asked for: it leaves
+    squares out of another row's blast or burst, narrowed here to a
+    psionic one by the same gate `c.reshape_area` uses.
+
+    **Re-pointed, because the marker named the wrong gap.** It said
+    "nothing punches holes in one", which is now false, and said nothing
+    about the two reasons the card is still not whole:
+
+    * `dsl.use` calls `_auto_targets` -- and through it `area_of` -- and
+      announces `PowerUsed` **afterwards**. This row's trigger is
+      `AttackDeclared`, later still, so by the time it can fire the
+      triggering attack's squares are settled. The allowance therefore
+      lands on the next qualifying psionic area or close attack of the
+      encounter rather than on the one that triggered it. Mechanically
+      that is the attack a player would be declaring this before; it is
+      off by one use in the case where they are not, and the fix is an
+      event before targeting rather than anything in this row.
+    * the **Augment 2** pays *"2 extra psychic damage for each square
+      excluded"*, and how many squares were actually left out is reported
+      nowhere. `area_of` is a query -- a renderer calls it per candidate
+      origin -- so it records nothing, and the realised count is
+      `min(Wisdom modifier, allies standing in the area)` rather than the
+      allowance. The allowance is knowable and the count is not, so the
+      Augment has nothing honest to multiply.
+
+    Both are `dropped=` rather than `todo=`: the row plays and its main
+    clause is delivered."""
+    c.spare_squares(
+        max(0, c.wis_mod), keyword=Keyword.PSIONIC,
+        # `AREA_OR_CLOSE` rather than the three words spelled out: it is
+        # the same set this row's own trigger gate reads, and spelling it
+        # omits `"wall"` -- `lint.py` refuses that by name. `area_of`
+        # applies a sparing only to a burst or a blast in any case, so
+        # the wider word costs nothing and keeps the two halves of the
+        # card asking one question.
+        kinds=tuple(sorted(AREA_OR_CLOSE)),
+        until=When.ENCOUNTER,
+    )
 
 
 @power(

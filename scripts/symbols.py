@@ -354,6 +354,12 @@ CATEGORIES: dict[str, dict] = {
                 # another row's area: that one changes a size, this one
                 # changes the shape. #614.
                 "reshape_area",
+                # Beside `reshape_area` because it is the same
+                # question one step narrower: that one replaces the
+                # printed shape, `c.bonus("blast_size")` grows it,
+                # and this leaves squares out of it. All three are
+                # read where the area is worked out. #1341.
+                "spare_squares",
                 # Beside `reshape_area` because it is the same kind of
                 # thing -- changing another named row's range line for as
                 # long as a hold lasts -- and because the two are easy to

@@ -295,6 +295,26 @@ class Effect:
     #: Read by `dsl.branches_for`, which turns each one in force into an
     #: extra branch index, and by `dsl.reach_of`, which resolves that index.
     reshape_optional: bool = False
+    #: **How many squares this creature may leave OUT of another row's
+    #: blast or burst**, and `dsl._spared` is the one reader. Beside the
+    #: reshape fields because it is the same arrangement one step
+    #: narrower: a reshape replaces the printed *shape*, an integer
+    #: `blast_size` grows it, and neither can punch a hole in it --
+    #: `Range` is a kind and a size, and the squares are worked out from
+    #: it afterwards.
+    #:
+    #: Two cards print it. `f3782` leaves out *"one square adjacent to
+    #: you"* from an arcane close blast or burst; `i1997p1` leaves out
+    #: *"a number of squares equal to your Wisdom modifier"* from a
+    #: psionic one.
+    spared: int = 0
+    #: Whether the squares left out must be **adjacent to the caster**,
+    #: which is `f3782`'s printed restriction and not `i1997p1`'s.
+    spared_adjacent: bool = False
+    #: What the sparing applies to, read exactly the way `reshape_when`
+    #: is: a keyword, a class, a named row, a printed kind. Without it a
+    #: feat about arcane close powers would punch holes in a ranged one.
+    spared_when: Callable[[dict[str, Any]], bool] | None = None
     #: **Who rolls the saving throw that ends this**, when that is not the
     #: creature the effect sits on. `0` means "the owner", which is every
     #: effect in the tree but one.
@@ -535,6 +555,9 @@ class Effects:
         reshape_when: Callable[[dict[str, Any]], bool] | None = None,
         retarget: Any = None,
         reshape_optional: bool = False,
+        spared: int = 0,
+        spared_adjacent: bool = False,
+        spared_when: Callable[[dict[str, Any]], bool] | None = None,
         by: str = "",
         via: str = "",
         weapon: str = "",
@@ -644,6 +667,9 @@ class Effects:
             reshape_when=reshape_when,
             retarget=retarget,
             reshape_optional=reshape_optional,
+            spared=spared,
+            spared_adjacent=spared_adjacent,
+            spared_when=spared_when,
             saver=saver,
         )
         # **The ref of the row that laid this, as a plain attribute.**

@@ -3263,7 +3263,16 @@ def area_of(
         out = spread(mine, _reach_of(world, actor, r, p.ref, stretch=stretch))
     else:
         out = frozenset(mine)
-    return frozenset(sq for sq in out if world.grid.inside(sq))
+    out = frozenset(sq for sq in out if world.grid.inside(sq))
+    # **A hole punched in the area, which no reshape and no size bonus
+    # could say.** Last, after the clip and after any reshape, because
+    # the squares have to exist before one can be left out of them.
+    spare, adjacent = _spared(
+        world, actor, {"power": p.ref, "range_kind": r.kind},
+    )
+    if spare and r.kind in ("close_burst", "close_blast", "area_burst"):
+        out = _without_spared(world, actor, out, spare, adjacent, mine)
+    return out
 
 
 def _reach_of(
@@ -3722,6 +3731,77 @@ def _offered(
             continue
         out.append(eff.reshape)
     return tuple(out)
+
+
+def _spared(
+    world: World, actor: int, ctx: dict[str, Any],
+) -> tuple[int, bool]:
+    """How many squares this creature may leave out of this area, and
+    whether they have to be next to it.
+
+    `_reshaped` beside this replaces the printed **shape** and
+    `_stretched` grows its **size**; neither can punch a hole in one,
+    because a `Range` is a kind and a size and the squares are worked out
+    from it afterwards. That is `f3782`'s whole marker, in its own words.
+
+    First match wins and the rest are ignored, the same way and for the
+    same reason as `_reshaped`: no card prints two sparings over one use,
+    and adding them would invent a rule no page states.
+
+    **A read with no side effect**, which matters more here than it does
+    for a reshape. `area_of` is a query -- the renderer calls it to
+    highlight squares and `_aimings` calls it once per candidate origin
+    -- so anything spent here would be spent drawing a preview.
+    """
+    for eff in world.effects.of(actor):
+        if not eff.spared or eff.suspended:
+            continue
+        gate = eff.spared_when
+        if gate is not None and not gate(ctx):
+            continue
+        return eff.spared, eff.spared_adjacent
+    return 0, False
+
+
+def _without_spared(
+    world: World, actor: int, out: frozenset[Square], n: int,
+    adjacent: bool, mine: set[Square],
+) -> frozenset[Square]:
+    """Drop up to `n` squares from an area, allies first.
+
+    **Which squares is a POLICY decision and it is made here rather than
+    asked**, because the two readers of `area_of` are a renderer and a
+    targeting loop and neither has anybody to ask. Both printed cards
+    exist to spare a friend caught in your own blast, so the candidates
+    are squares holding the caster's allies -- nothing else is dropped,
+    and an area with no ally in it is returned whole.
+
+    **The caster's own squares are never candidates.** A close burst
+    includes them, `candidates` already declines to aim a row at its own
+    user where the target line says so, and dropping them here would
+    change what the area *is* for every reader that draws it.
+
+    Sorted, so the answer is the same on two calls with the same board --
+    a renderer and the targeting pass must agree about which squares are
+    lit, and a set's iteration order is not a promise.
+
+    `adjacent` is `f3782`'s printed restriction: *"one square adjacent to
+    you"*. Without it the feat spares any square in the burst, which is a
+    wider card.
+    """
+    from .query import allies as _allies
+
+    friends = set(_allies(world, actor))
+    if not friends:
+        return out
+    near = spread(mine, 1) if adjacent else None
+    spare = sorted(
+        sq for sq in out
+        if sq not in mine
+        and (near is None or sq in near)
+        and any(sq in squares(world, who) for who in friends)
+    )
+    return out - frozenset(spare[:n])
 
 
 def _reshaped(

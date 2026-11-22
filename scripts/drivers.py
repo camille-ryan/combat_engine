@@ -87217,6 +87217,221 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_square_is_left_out_of_a_blast(out: Result) -> None:
+    """*"You can omit one square adjacent to you from the area of effect of
+    any arcane close blast or burst power you use"* -- `f3782` -- and *"you
+    can exclude a number of squares ... equal to your Wisdom modifier"* --
+    `i1997p1`, about a psionic one.
+
+    **Neither facility beside this could punch a hole in an area.**
+    `c.reshape_area` replaces the printed shape and `c.bonus("blast_size")`
+    grows its size; a `Range` is a kind and a size and `dsl.area_of` works
+    the squares out from it afterwards. `f3782`'s own marker said exactly
+    that and was right.
+
+    **The narrowing is the half worth asserting**, because an unnarrowed
+    sparing is a much bigger feat than the printed one: a wizard's arcane
+    close burst loses a square and the same character's **ranged** power
+    does not, and a close burst carrying neither keyword does not either.
+
+    **Which square is decided and not chosen**, and that limit is asserted
+    rather than assumed: a square holding an ally goes, the caster's own
+    never does, and an area with no friend standing in it comes back whole.
+
+    **Two plants here cannot be made red, and both are facts about the
+    code rather than weak assertions.**
+
+    * `dsl._without_spared`'s `sq not in mine` guard is belt-and-braces.
+      `query.allies` never includes the creature itself -- its own
+      docstring opens with that -- so the caster's square is not a
+      candidate whether the guard is there or not, and nor is a
+      companion's, companions being excluded from `allies` by the same
+      default. Removing the guard changes nothing measurable. It is kept
+      because `mine` is *every* origin square, which a second companion
+      or a lent origin can widen, and the arm asserting the caster's
+      square survives is still worth having against a future candidate
+      rule.
+    * sorting the candidates cannot be shown broken in one process. A
+      `list()` over the same set in the same interpreter comes out in the
+      same order, so the plant passes; what the sort buys is that a
+      renderer's call and the targeting pass agree, which is a promise
+      about two calls rather than about one.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, area_of
+    from combat_engine.engine.types import Keyword
+
+    FEAT, ORB = "f3782", "i1997p1"
+    ARCANE_BURST, PLAIN_BURST = "p10187", "p9400"
+    ARCANE_RANGED, PSIONIC_BURST = "p10189", "p10272"
+
+    def staged(ref: str) -> tuple:
+        """The caster, an ally beside it, and a second ally two away.
+
+        **The row's own effect is stripped first.** Both of these are
+        armed by `audit.board` -- `f3782` is `action=NONE` and the orb's
+        trigger is dispatched -- so a "before" measured on the board as
+        dealt already has the sparing in it. Measured on the first run:
+        the burst came back 120 squares with and without, and the arm
+        asserting the ally's square was inside it read False.
+        """
+        world, me, _ = _board(ref, 1)
+        for eff in list(world.effects.of(me)):
+            if eff.by == ref:
+                world.effects.end(eff)
+        here = world.need(me, Position).square
+        mates = sorted(Cast(world=world, me=me, ref="drv").allies())
+        must(mates, "the character has allies")
+        # **One ally adjacent, one two squares off on the LOW side**, and
+        # the arrangement is the assertion rather than scenery. The
+        # second square sorts *before* the first, so a sparing that
+        # forgot `adjacent=True` would take it instead -- with both
+        # allies on the high side the plant dropping that word spared the
+        # same square and passed.
+        movement.place(world, mates[0], (here[0] + 1, here[1]))
+        if len(mates) > 1:
+            movement.place(world, mates[1], (here[0] - 2, here[1]))
+        return world, me, here, mates
+
+    # -- the premises ------------------------------------------------------
+    world, me, here, mates = staged(FEAT)
+    beside = world.need(mates[0], Position).square
+    burst = area_of(world, me, REGISTRY[ARCANE_BURST])
+    out.that(beside in burst,
+             "premise: the ally's square is inside the caster's arcane"
+             " close burst, which is what the feat exists to get it out of",
+             f"{beside} in {len(burst)} squares")
+    out.that(Keyword.ARCANE in REGISTRY[ARCANE_BURST].keywords
+             and Keyword.ARCANE not in (REGISTRY[PLAIN_BURST].keywords or ()),
+             "premise: one of the two bursts below is arcane and the other"
+             " is not, which is what the printed gate turns on",
+             f"{ARCANE_BURST} vs {PLAIN_BURST}")
+
+    # -- the printed clause -------------------------------------------------
+    REGISTRY[FEAT].body(Cast(world=world, me=me, ref=FEAT))
+    after = area_of(world, me, REGISTRY[ARCANE_BURST])
+    out.that(beside not in after,
+             "with the feat, the ally's square is LEFT OUT of the burst --"
+             " a hole in the area, which neither a reshape nor a size"
+             " bonus could say",
+             f"{sorted(burst - after)}")
+    out.that(len(burst) - len(after) == 1,
+             "and exactly ONE square goes: the card says one, and the"
+             " allowance is a count rather than a blanket",
+             f"{len(burst)} -> {len(after)}")
+    out.that(here in after,
+             "while the caster's OWN square stays in it -- never a"
+             " candidate, or the area would change shape for every reader"
+             " that draws it",
+             f"{here}")
+
+    # -- the narrowing ------------------------------------------------------
+    plain = area_of(world, me, REGISTRY[PLAIN_BURST])
+    out.that(beside in plain,
+             "**a close burst that is not arcane keeps every square.** The"
+             " gate reads the row's keywords, and without it this feat"
+             " spares a square out of everything its holder throws",
+             f"{beside} in {len(plain)}")
+    shot = area_of(world, me, REGISTRY[ARCANE_RANGED])
+    out.that(beside in shot,
+             "and so does an ARCANE ranged power -- the card says close"
+             " blast or burst, and the kind is gated separately from the"
+             " keyword",
+             f"{beside} in {len(shot)}")
+
+    # -- no friend in the area, nothing spared ------------------------------
+    alone, who, _ = _board(FEAT, 1)
+    for eff in list(alone.effects.of(who)):
+        if eff.by == FEAT:
+            alone.effects.end(eff)
+    cast = Cast(world=alone, me=who, ref=FEAT)
+    for mate in cast.allies():
+        movement.place(alone, mate, (alone.grid.width - 1, alone.grid.height - 1))
+    whole = area_of(alone, who, REGISTRY[ARCANE_BURST])
+    REGISTRY[FEAT].body(Cast(world=alone, me=who, ref=FEAT))
+    out.that(area_of(alone, who, REGISTRY[ARCANE_BURST]) == whole,
+             "and with no ally standing in it the burst comes back WHOLE"
+             " -- the squares spared are the ones holding friends, which"
+             " is what both cards are for, and an empty allowance drops"
+             " nothing",
+             f"{len(whole)}")
+
+    # -- the allowance is a COUNT, which wants two candidates ---------------
+    # Both allies adjacent here, which `staged` deliberately does not do:
+    # with one candidate an allowance of 1 and an allowance of "every
+    # friend" give the same answer, and the plant ignoring `spare[:n]`
+    # passed.
+    w3, me3, here3, mates3 = staged(FEAT)
+    movement.place(w3, mates3[1], (here3[0], here3[1] + 1))
+    both = sorted(w3.need(m, Position).square for m in mates3)
+    full = area_of(w3, me3, REGISTRY[ARCANE_BURST])
+    out.that(all(sq in full for sq in both),
+             "premise: TWO allies are in the burst and both adjacent, so"
+             " the allowance has something to cap",
+             f"{both}")
+    Cast(world=w3, me=me3, ref="drv").spare_squares(
+        1, adjacent=True, keyword=Keyword.ARCANE,
+        kinds=("close_blast", "close_burst"),
+    )
+    one_gone = area_of(w3, me3, REGISTRY[ARCANE_BURST])
+    out.that(len(full) - len(one_gone) == 1,
+             "an allowance of 1 spares exactly one of the two -- the"
+             " count is a cap and not 'every friend in the area'",
+             f"{len(full)} -> {len(one_gone)},"
+             f" gone {sorted(full - one_gone)}")
+    out.that(sorted(full - one_gone) == both[:1],
+             "and it is the lower-sorted of the two, which is what makes"
+             " the answer the same on a renderer's call and the targeting"
+             " pass -- a set's iteration order is not a promise",
+             f"{sorted(full - one_gone)} vs {both}")
+
+    # -- the orb, which spares as many as its Wisdom ------------------------
+    w2, me2, here2, mates2 = staged(ORB)
+    cast2 = Cast(world=w2, me=me2, ref=ORB)
+    wis = cast2.wis_mod
+    psionic = area_of(w2, me2, REGISTRY[PSIONIC_BURST])
+    arcane_before = area_of(w2, me2, REGISTRY[ARCANE_BURST])
+    REGISTRY[ORB].body(Cast(world=w2, me=me2, ref=ORB))
+    left = area_of(w2, me2, REGISTRY[PSIONIC_BURST])
+    friends = sum(1 for m in mates2
+                  if w2.need(m, Position).square in psionic
+                  and w2.need(m, Position).square != here2)
+    out.that(len(psionic) - len(left) == min(max(0, wis), friends),
+             "the orb spares as many squares as the holder's Wisdom"
+             " modifier, capped by the friends actually standing in the"
+             " area -- a count, where the feat's is the printed 1",
+             f"wis {wis}, friends {friends},"
+             f" {len(psionic)} -> {len(left)}")
+    out.that(min(max(0, wis), friends) > 0,
+             "premise: that number is not zero, or the line above holds"
+             " for the wrong reason",
+             f"wis {wis}, friends {friends}")
+    out.that(area_of(w2, me2, REGISTRY[ARCANE_BURST]) == arcane_before,
+             "and the orb's gate is PSIONIC: the same holder's arcane"
+             " close burst is untouched, measured against the same area"
+             " before the body ran rather than against itself",
+             f"{len(arcane_before)} ->"
+             f" {len(area_of(w2, me2, REGISTRY[ARCANE_BURST]))}")
+
+    out.that(not REGISTRY[FEAT].unfinished,
+             f"{FEAT} carries no marker",
+             f"{REGISTRY[FEAT].unfinished}")
+    out.that(REGISTRY[ORB].unfinished
+             == ("dsl.use(reaction_before_targeting)",
+                 "dsl.area_of(spared_count)"),
+             "while the orb is RE-POINTED rather than cleared, at two"
+             " things its old marker did not name: `dsl.use` settles the"
+             " squares in `_auto_targets` before `PowerUsed` is announced,"
+             " so a reaction on `AttackDeclared` cannot reach the attack"
+             " that triggered it; and how many squares were actually left"
+             " out is reported nowhere, so the Augment has nothing honest"
+             " to multiply",
+             f"{REGISTRY[ORB].unfinished}")
+
+
 def a_borrowed_origin_reaches_the_lines_its_card_names(out: Result) -> None:
     """Two cards move a power's point of origin and `dsl._lenders` reached
     neither of their families.
@@ -120326,6 +120541,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "square_left_out_of_a_blast": (
+        a_square_is_left_out_of_a_blast,
+        "`f3782` and `i1997p1` leave squares out of a blast or burst, "
+        "narrowed to the keyword and kind their cards print (#1341)",
     ),
     "borrowed_origin_reaches": (
         a_borrowed_origin_reaches_the_lines_its_card_names,

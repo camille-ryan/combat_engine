@@ -10502,6 +10502,79 @@ class Cast:
             retarget=retarget,
         )
 
+    def spare_squares(
+        self,
+        n: int = 1,
+        *,
+        ref: str = "",
+        kinds: Sequence[str] = (),
+        keyword: Keyword | None = None,
+        cls: str = "",
+        adjacent: bool = False,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """*"You can omit one square adjacent to you from the area of
+        effect of any arcane close blast or burst power you use."*
+
+        **A hole in an area, which neither of the two facilities beside
+        this could say.** `c.reshape_area` replaces the printed *shape*
+        and `c.bonus("blast_size", n)` grows its *size*; a `Range` is a
+        kind and a size, and `dsl.area_of` works the squares out from it
+        afterwards -- so nothing between the header and the area could
+        lose one square of it. `f3782`'s own marker says exactly that and
+        was right.
+
+        Narrowed by the same four axes as `c.reshape_area`, read from the
+        same context by a gate built the same way, because the printed
+        restrictions are the same restrictions: `ref` for one named row,
+        `kinds` for the printed shapes, `keyword` for *"an arcane close
+        blast or burst power"*, `cls` for a class the keyword cannot
+        stand in for.
+
+        **`adjacent` is `f3782`'s printed limit and not `i1997p1`'s.**
+        That card says *"one square **adjacent to you**"*; the orb says
+        only *"a number of squares"*. Without the word the feat spares
+        any square in the burst, which is a wider card than the one
+        printed.
+
+        **Which squares are spared is decided, not asked, and that is a
+        deliberate limit worth stating.** `dsl._without_spared` drops
+        squares holding the caster's **allies**, nearest-first by sort
+        order, and nothing else -- so an area with no friend in it is
+        returned whole. Both printed cards exist to spare a friend caught
+        in your own blast, and `area_of`'s two callers are a renderer and
+        a targeting loop with nobody to put a menu in front of. The day a
+        card wants a square chosen for another reason, that is the line
+        to re-read.
+
+        Read in `dsl.area_of` after the clip and after any reshape: the
+        squares have to exist before one can be left out of them.
+        """
+        from .dsl import REGISTRY
+
+        who = on if on is not None else self.me
+
+        def gate(ctx: dict[str, Any]) -> bool:
+            if ref and ctx.get("power") != ref:
+                return False
+            if kinds and ctx.get("range_kind") not in kinds:
+                return False
+            if keyword is not None:
+                row = REGISTRY.get(str(ctx.get("power") or ""))
+                if row is None or keyword not in row.keywords:
+                    return False
+            if cls:
+                row = REGISTRY.get(str(ctx.get("power") or ""))
+                if row is None or row.cls != cls:
+                    return False
+            return True
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} spared", by=self.ref,
+            spared=n, spared_adjacent=adjacent, spared_when=gate,
+        )
+
     def extra_target(
         self,
         n: int = 1,

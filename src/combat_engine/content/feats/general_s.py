@@ -2693,20 +2693,32 @@ def f3781(c: Cast) -> None:
 
 
 @power("f3782", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.omit_square()",))
+       reach=PERSONAL, target=SELF)
 def f3782(c: Cast) -> None:
-    """Cutting one square out of a blast or burst. An area is computed
-    from the header when the power runs and nothing narrows it.
+    """*"You can omit one square adjacent to you from the area of effect
+    of any arcane close blast or burst power you use."*
 
-    **The gate is not the gap, and the near-miss is worth recording so it
-    is not re-derived.** `c.reshape_area` already narrows by exactly the
-    two axes this card prints -- `keyword=Keyword.ARCANE` and
-    `kinds=("close_blast", "close_burst")` -- and `optional=True` is the
-    printed "you can". What it cannot say is the square: `into` is a
-    callable on a `Range`, `Range` is a kind and a size and has no square
-    set in it, and `dsl.area_of` computes the squares from the shape
-    afterwards. So nothing between the header and the area can lose one
-    square of it, which is this marker and the whole of it."""
+    **The old note had the gap located exactly and it is closed by
+    adding the square, not a verb.** It said `c.reshape_area` already
+    narrows by the two axes this card prints and that what it could not
+    say was the square -- `into` is a callable on a `Range`, a `Range` is
+    a kind and a size, and `dsl.area_of` works the squares out from it
+    afterwards. `c.spare_squares` is that one missing thing and takes the
+    same four narrowing axes from the same context.
+
+    `adjacent=True` is the printed restriction, and it is the half that
+    keeps this feat the size of its card: without it the square spared is
+    any square in the burst.
+
+    **Which square is decided rather than chosen.** `dsl._without_spared`
+    spares a square holding an ally, which is what the feat is for, and
+    returns the area whole when no friend is standing in it. The limit is
+    stated in the verb's own docstring; `area_of` has a renderer and a
+    targeting loop for callers and neither can put a menu up."""
+    c.spare_squares(
+        1, adjacent=True, keyword=Keyword.ARCANE,
+        kinds=("close_blast", "close_burst"), until=When.ENCOUNTER,
+    )
 
 
 @power("f3783", level=1, cls="", usage=AT_WILL, action=FREE,
