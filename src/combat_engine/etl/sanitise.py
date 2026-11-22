@@ -1252,6 +1252,35 @@ _CLAUSE_END = re.compile(r"\s*(?:[,;.]|$)")
 #: Both apostrophes, because the compendium prints the curly one.
 _YOU_ARE = re.compile(r"(?i)\bif\s+you(?:\s+are|\s+were|['\u2019]re)\s+an?\s+$")
 
+#: And a race standing directly before **ally** or **allies**, which is the
+#: fourth position. *"While you have a drow ally within 10 squares"* --
+#: `i2406x1`, whose three clauses are the worked case: the middle one names
+#: a race whose printed name is not a dictionary word, so the general pass
+#: swapped it to a ref, and the other two are ordinary English words and
+#: were left standing. One card, two readings, split by nothing but what
+#: the race happens to be called -- which is the exact asymmetry `#311`
+#: added the third position for, in a different sentence shape.
+#:
+#: **Safe for the reason `_YOU_ARE` is safe, and measured rather than
+#: argued.** Over every spec table carrying a `ref` and a `spec`, this
+#: position matches **24 spans in 22 rows** and every one is a race
+#: naming a race -- *"a drow ally"*, *"each orc ally"*, *"dwarf allies"*,
+#: *"one kobold ally"*. Nothing on a card describes an ally by anything
+#: but its race or its type, and the two coincide for exactly the races
+#: this position exists to reach.
+#:
+#: **17 of the 22 are monster cards**, which is worth knowing before
+#: reading a brief: a monster row asking about such an ally wants
+#: `is_kind`, which takes the printed *type word*, where this position
+#: hands it a ref. The glossary `scripts/spec.py` appends gives the
+#: author the word beside the ref, so the card stays writable -- but a
+#: reader that answers "is this creature of this race **or** of its type"
+#: from one ref is the thing that would make it clean. Said here rather
+#: than guessed at. `#1449`-style: field first, reader named.
+#:
+#: Plural and singular, and `\b` on the end so *"allying"* is not one.
+_ALLY = re.compile(r"(?i)\s+all(?:y|ies)\b")
+
 
 @lru_cache(maxsize=4)
 def _race_pattern(names: frozenset[str]) -> re.Pattern[str] | None:
@@ -1284,9 +1313,10 @@ def named_races(context: str) -> list[tuple[int, int, str]]:
     cost 91 findings across the tree and 358 spec rows, and not one of
     them was a leak.
 
-    **Three** positions admit nothing but a name, which is `_named_powers`'
+    **Four** positions admit nothing but a name, which is `_named_powers`'
     argument one step over: directly before the word *racial*, alone in a
-    prerequisite clause, and as the object of "if you are a".
+    prerequisite clause, as the object of "if you are a", and directly
+    before *ally* or *allies*.
 
     The third was added for #311, where nine rows reached authors with a race
     printed in words while nine more carried the ref in the *same* sentence
@@ -1301,7 +1331,7 @@ def named_races(context: str) -> list[tuple[int, int, str]]:
         return []
     found: list[tuple[int, int, str]] = []
     for m in pattern.finditer(context):
-        if _RACIAL.match(context, m.end()):
+        if _RACIAL.match(context, m.end()) or _ALLY.match(context, m.end()):
             found.append((m.start(), m.end(), m.group(0)))
             continue
         start = context.rfind("\n", 0, m.start()) + 1
