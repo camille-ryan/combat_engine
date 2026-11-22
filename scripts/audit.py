@@ -146,8 +146,10 @@ KNOWN_SILENT = {
     # **A weapon that splits in two, on a board that hands it a
     # greataxe.** `i2011p1` prints *"split the weapon into two identical
     # weapons, one in your primary hand and one in your off-hand"*, so
-    # `c.split_weapon` refuses a two-handed one: split in two it is four
-    # hands' worth, and `Gear.wield` would stow one of them immediately.
+    # **the row** refuses a two-handed one. Not the verb: `f1237` prints
+    # the opposite about the same mechanism -- a two-handed spiked chain
+    # counting as both hands -- so one facility cannot hold both
+    # readings and the card is what decides.
     #
     # Measured rather than assumed. The board attaches this item to
     # `w3612`, a two-handed greataxe -- `Weapon.item == "i2011"` on that

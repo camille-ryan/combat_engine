@@ -10655,11 +10655,25 @@ class Cast:
         the two halves are one effect rather than two rows that could
         drift.
 
-        **Refused when the weapon needs both hands.** The card is about a
-        weapon going one per hand, and a two-hander split in two is a
-        creature holding four hands' worth -- `Gear.wield` would stow one
-        of them immediately, which is a silent no-op where a refusal is
-        an answer.
+        **A two-handed weapon is split too, and the refusal that used to
+        be here was wrong.** `f1237` prints the case in as many words --
+        *"if you are wielding a spiked chain, you can treat it as though
+        you are wielding two melee weapons"* -- and `w3623` is
+        two-handed. What a two-hander must **not** get is the re-wield:
+        `Gear.wield` gives both hands to one of them and stows the other,
+        so the copy would vanish the moment it was made. Measured: the
+        chain came back as the only weapon held and `two_weapon` stayed
+        False.
+
+        So the re-wield is for the one-handed case only, which is where
+        it earns its place -- a one-hander appended beside a two-hander
+        already in both hands needs `wield` to free a hand for it.
+
+        **The printed restriction belongs to the row, not here.**
+        `i2011p1` says *"one in your primary hand and one in your
+        off-hand"* and refuses a two-hander in its own body; `f1237` says
+        the opposite about the same mechanism. One verb cannot hold both
+        readings, and the card is what decides.
         """
         from dataclasses import replace as _replace
 
@@ -10673,11 +10687,24 @@ class Cast:
             (w for w in gear.held if not ref or w.ref == ref),
             None,
         )
-        if one is None or one.two_handed or one.ref.endswith(":split"):
+        if one is None or one.ref.endswith(":split"):
             return None
         copy = _replace(one, ref=f"{one.ref}:split")
         gear.weapons.append(copy)
-        gear.wield(one)
+        if not one.two_handed:
+            # See the docstring: a two-hander must not be re-wielded, or
+            # `Gear.wield` gives both hands to one of the pair and stows
+            # the other.
+            #
+            # **A plant removing this guard cannot be made red, and that
+            # is a fact about the line below rather than a weak test.**
+            # `wield` on a two-hander stows every other ref, the copy
+            # included -- and the `discard` on the next line takes it
+            # straight back out, so the pair comes out the same either
+            # way. The guard is kept because re-wielding is a reshuffle
+            # of the whole hand for no gain, and the discard is a
+            # narrower promise than "nothing was disturbed".
+            gear.wield(one)
         gear.stowed.discard(copy.ref)
 
         def rejoin() -> None:

@@ -1255,6 +1255,11 @@ def i2011p1(c: Cast) -> None:
     recombine, which is what *"another minor action"* describes and what
     keeps the pair from drifting into two rows.
 
+    **A two-handed weapon is refused here and not in the verb.** The
+    card says one per hand; `f1237` prints the opposite about the same
+    mechanism, so the restriction is the row's rather than the
+    facility's.
+
     **`c.my_weapon()` and not whatever is in hand.** The card is about
     *this weapon*, and `Weapon.item` is what says which -- a character
     carrying this and a second magic weapon splits the right one.
@@ -1280,8 +1285,15 @@ def i2011p1(c: Cast) -> None:
     # a bare call found that one and refused -- a row that fired and did
     # nothing.
     mine = c.my_weapon()
-    c.split_weapon(mine.ref if mine is not None else "", on=c.me,
-                   until=When.ENCOUNTER)
+    if mine is None or mine.two_handed:
+        # **The printed restriction, and it lives here rather than in the
+        # verb.** *"One in your primary hand and one in your off-hand"*
+        # is a one-handed weapon; `f1237` prints the opposite about the
+        # same mechanism -- a two-handed spiked chain counting as both
+        # hands -- so one verb cannot hold both readings and the card is
+        # what decides.
+        return
+    c.split_weapon(mine.ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

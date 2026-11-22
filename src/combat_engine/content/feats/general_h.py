@@ -1719,43 +1719,47 @@ def f1295b(c: Cast) -> None:
 # -- the rows ---------------------------------------------------------------
 
 
-@_trait("f1237", todo=("c.split_weapon()",))
+@_trait("f1237", dropped=("c.declare(f1237)",))
 def f1237(c: Cast) -> None:
-    """Re-aimed: the bracketed capitalised class no longer defeats the
-    label matcher and all four refs are in the spec, so the naming gap
-    that held this is closed and was never the whole of it.
+    """*"`p2104`/`p87`: if you are wielding a spiked chain, you can treat
+    it as though you are wielding two melee weapons (the spiked chain is
+    considered both your main hand and your off-hand weapon)."*
 
-    Not one of the four clauses is a rider on a hit. Two of them --
-    `p2104`'s and `p87`'s -- ask for one weapon to count as both hands
-    at once, and `p971`'s rewrites the movement its own row prints.
-    `p4541`'s is **no longer one of the holds**: the swing that row
-    hands over carries `granted_via` now, so "the attack granted by this
-    power" is readable.
+    **The both-hands clause is written here and not in those rows**,
+    which is the one place it can be: both of them carry
+    `requires=two_melee`, and a Requirement is read **before** the body
+    runs. A split laid inside either body would be laid after the row had
+    already been refused.
 
-    **The symbol stands and the sentence under it was wrong.** It ended
-    "all four clauses are still about a weapon the table does not carry":
-    the table carries `w3623` and the three sibling rows below gate on it
-    -- see the section comment. What remains is narrower and `c.split_
-    weapon()` names it exactly. One weapon counting as both hands means
-    `Gear.melee` holding two entries for one object, and `Gear.off` and
-    `Gear.two_weapon` are both `melee[1]`-shaped reads off that list, so
-    neither can be made true by one `w3623` in one pair of hands.
+    `c.split_weapon("w3623")` is that clause exactly: a second `Weapon`
+    with a derived ref, so `Gear.melee` holds two entries for one object
+    and `Gear.off` and `Gear.two_weapon` -- both `melee[1]`-shaped reads
+    off that list -- come out true. The old note said neither could be
+    made true by one chain in one pair of hands, and that was the gap.
 
-    **Checked before touching it, and the check is why it was not
-    touched.** `i2011p1` carries the same symbol for the same sentence --
-    "one weapon becomes two, one per hand ... nothing divides an item" --
-    so this is one gap across two rows and not a singleton. It is also
-    *not* `f951`/`f1252`'s `Weapon.double`, which is close enough to be
-    worth telling apart: that one wants a weapon with two **ends**, each
-    with its own die, group and properties, where this wants two copies of
-    one weapon, one per hand. Both need a second entry in `Gear.melee`;
+    **Not `Weapon.double`, which is close enough to be worth telling
+    apart.** `f951` and `f1252` want a weapon with two **ends**, each
+    with its own die, group and properties; this wants two copies of one
+    weapon, one per hand. Both need a second entry in `Gear.melee` and
     they do not want the same thing in it.
 
-    The other three clauses are writable and none of them is writable
-    *here*: per #550 each belongs in the body of the row it names --
-    `p971`, `p2104`, `p87`, `p4541` -- gated on `c.feat`, and this wave
-    owns none of those files. So the row stays a pointer with nothing
-    armed, which is `todo=` and not `dropped=`."""
+    **Still dropped, and the marker names what for.** The three remaining
+    clauses are each a rider on one named row -- `p971`'s walk and
+    necrotic recolour, `p2104`/`p87`'s shift between the two attacks,
+    `p4541`'s necrotic rider on the granted basic -- and `#550`'s
+    convention puts a feat's clause in the body of the power it names,
+    read off `c.declare` rather than off `c.feat`. All three of those
+    rows already run a declare chain and this feat is not in any of them;
+    adding it is four power files this wave does not own.
+
+    So what is missing is **the declaration**, not a verb: `c.split_
+    weapon` is here and the rest is a chain entry in somebody else's
+    file."""
+    chain = next((w for w in c.held(on=c.me) if w.ref == "w3623"), None)
+    if chain is None:
+        return
+    c.split_weapon(chain.ref, on=c.me, until=When.ENCOUNTER)
+
 
 
 @_trait("f1296", implemented_in=("p87", "p971"))

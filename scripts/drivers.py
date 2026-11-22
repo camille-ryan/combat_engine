@@ -87432,7 +87432,14 @@ def a_weapon_splits_into_two(out: Result) -> None:
         gear = must(world.get(me, Gear), "the character has gear")
         one = next((w for w in gear.weapons if not w.two_handed), None)
         if one is None:
-            one = _replace(chargen.PRINTED["w3611"], ref="w-one")
+            # **`item="i2011"` AND an enhancement, because the row
+            # splits `c.my_weapon()`.** That reads `Weapon.item` through
+            # `c.held(what="magic")`, and `query.holding` makes "magic"
+            # mean an enhancement bonus above zero -- so a staged weapon
+            # missing either is not this item's and the row returns
+            # before splitting anything. Measured twice, once for each.
+            one = _replace(chargen.PRINTED["w3611"], ref="w-one",
+                           item="i2011", enhancement=1)
             gear.weapons.append(one)
         gear.wield(one)
         return world, me, gear, one
@@ -87495,16 +87502,18 @@ def a_weapon_splits_into_two(out: Result) -> None:
     big = next((w for w in gear2.weapons if w.two_handed), None)
     if big is not None:
         gear2.wield(big)
-        out.that(Cast(world=w2, me=me2, ref="drv").split_weapon(
-                     on=me2, until=When.ENCOUNTER) is None,
-                 "**a two-handed weapon is refused.** Split in two it is"
-                 " four hands' worth, and `Gear.wield` would stow one"
-                 " immediately -- a silent no-op where a refusal is an"
-                 " answer",
-                 "refused")
+        REGISTRY[ROW].body(Cast(world=w2, me=me2, ref=ROW))
         out.that(not any(w.ref.endswith(":split") for w in gear2.weapons),
-                 "and nothing was appended on the way to refusing",
+                 "**a two-handed weapon is refused by the ROW**, which"
+                 " says one per hand -- and not by the verb, because"
+                 " `f1237` prints the opposite about the same mechanism:"
+                 " a two-handed spiked chain counting as both hands",
                  f"{[w.ref for w in gear2.weapons]}")
+        out.that(Cast(world=w2, me=me2, ref="drv").split_weapon(
+                     big.ref, on=me2, until=When.ENCOUNTER) is not None,
+                 "while the VERB splits it, which is what that feat"
+                 " needs",
+                 "split")
 
     # -- the hold ends the split --------------------------------------------
     w3, me3, gear3, _one3 = holding_one()
@@ -87521,9 +87530,47 @@ def a_weapon_splits_into_two(out: Result) -> None:
              " with the encounter leaves no phantom weapon behind",
              f"{[w.ref for w in gear3.held]}")
 
+    # -- the feat that splits a spiked chain --------------------------------
+    # **`f1237`'s clause is here and not in the rows it names**, which is
+    # the one place it can be: `p2104` and `p87` both carry
+    # `requires=two_melee`, and a Requirement is read BEFORE the body
+    # runs -- so a split laid inside either body would be laid after the
+    # row had already been refused.
+    w6, me6, gear6, _ = holding_one()
+    chain = _replace(chargen.PRINTED["w3623"], ref="w3623")
+    gear6.weapons.append(chain)
+    gear6.wield(chain)
+    out.that(any(w.ref == "w3623" for w in gear6.held)
+             and not gear6.two_weapon,
+             "premise: a spiked chain in hand, and the wielder is not"
+             " fighting with two weapons",
+             f"{[w.ref for w in gear6.held]}, two {gear6.two_weapon}")
+    REGISTRY["f1237"].body(Cast(world=w6, me=me6, ref="f1237"))
+    out.that(gear6.two_weapon,
+             "with the feat, the chain IS both hands -- `Gear.off` and"
+             " `Gear.two_weapon` are `melee[1]`-shaped reads off one"
+             " list, so neither could be made true by one chain in one"
+             " pair of hands",
+             f"{[w.ref for w in gear6.held]}, two {gear6.two_weapon}")
+
+    w7, me7, gear7, _ = holding_one()
+    REGISTRY["f1237"].body(Cast(world=w7, me=me7, ref="f1237"))
+    out.that(not any(w.ref.endswith(":split") for w in gear7.weapons),
+             "and WITHOUT a spiked chain it splits nothing -- the card"
+             " names one weapon, and a feat that split whatever was in"
+             " hand is a different and much larger one",
+             f"{[w.ref for w in gear7.weapons]}")
+
     out.that(not REGISTRY[ROW].unfinished,
              f"{ROW} carries no marker",
              f"{REGISTRY[ROW].unfinished}")
+    out.that(REGISTRY["f1237"].unfinished == ("c.declare(f1237)",),
+             "while `f1237` is RE-POINTED rather than cleared: its"
+             " both-hands clause is written and its three remaining ones"
+             " are riders in the bodies of the rows they name, which is"
+             " `#550`'s convention and four power files this wave does"
+             " not own",
+             f"{REGISTRY['f1237'].unfinished}")
 
 
 def a_saving_throw_is_declined_not_failed(out: Result) -> None:
