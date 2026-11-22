@@ -3756,6 +3756,18 @@ class Cast:
             return 0
         if p is not None and Keyword.IMPLEMENT in self.keywords_of(p):
             arm = gear.implement
+            if arm is None and gear.lends_enhancement:
+                # **A weapon standing in for an implement lends its
+                # enhancement**, which is a second printed fact and not a
+                # consequence of the first: *"you can use a longsword as
+                # an implement ... it adds its enhancement bonus to
+                # implement attack and damage rolls"* (`f1128`).
+                # `c.counts_as(enhancement=True)` is what opts in, so a
+                # row granting only the standing-in half does not get a
+                # bonus it does not print.
+                arm = next(
+                    (w for w in gear.held
+                     if w.group in gear.lends_enhancement), None)
         else:
             arm = self._wielded()
         if arm is None:
@@ -4077,6 +4089,7 @@ class Cast:
         holding: str | None = None,
         kind: str | None = None,
         keyword: Keyword | None = None,
+        enhancement: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -4143,6 +4156,17 @@ class Cast:
         if effect is None:
             return None
         gear.counts_as.append(pair)
+        if enhancement and holding is not None:
+            # **A second printed fact, opted into.** *"It adds its
+            # enhancement bonus to implement attack and damage rolls"* is
+            # not a consequence of standing in for one -- an implement's
+            # enhancement is read off the implement -- so a row granting
+            # only the first half does not get this.
+            gear.lends_enhancement.add(holding)
+            effect.on_suspend.append(
+                lambda: gear.lends_enhancement.discard(holding))
+            effect.on_resume.append(
+                lambda: gear.lends_enhancement.add(holding))
         # `on_suspend` only -- `Effects._lift` runs it on expiry too, which
         # is the whole point of its being the single list.
         effect.on_suspend.append(

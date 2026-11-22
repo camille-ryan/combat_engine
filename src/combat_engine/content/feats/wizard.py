@@ -300,7 +300,7 @@ def f1134(c: Cast) -> None:
 
 
 @power("f1128", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.counts_as(enhancement=)",))
+       reach=PERSONAL, target=SELF)
 def f1128(c: Cast) -> None:
     """A longsword as an implement for this class's powers.
 
@@ -309,14 +309,29 @@ def f1128(c: Cast) -> None:
     `c.as_implement`, which rewrites the weapon's group outright and would
     hand over the proficiency the card withholds.
 
-    **Two clauses are still missing and are named rather than implied.**
-    The longsword adding its enhancement bonus to implement attack and
-    damage rolls is a separate thing from counting as one -- an implement's
-    enhancement is read off the implement, not off whatever is standing in
-    for it -- and "you do not gain its proficiency bonus" is the withholding
-    this waiver does not perform.
+    **Both of the clauses that were named are written, and one of them
+    needed nothing.**
+
+    The enhancement is `enhancement=True`, a second word rather than a
+    consequence: an implement's enhancement is read off the implement,
+    so a weapon standing in for one lends its own only when the card
+    says so. `Gear.lends_enhancement` is where it lives and
+    `Cast._enhancement_of` reads it, for an implement power with no
+    implement in hand.
+
+    *"You do not gain its proficiency bonus"* holds **by
+    construction**, which is why it is not a second mechanism:
+    `Cast.attack_with` adds proficiency only for a row carrying
+    `Keyword.WEAPON`, and an implement power does not carry it. Measured
+    rather than assumed -- the withholding was already true the day the
+    marker was written.
     """
-    c.counts_as("implement", holding="longsword")
+    # **Two printed facts, both opted into.** Standing in for an
+    # implement is one; *"it adds its enhancement bonus to implement
+    # attack and damage rolls"* is the other, and an implement's
+    # enhancement is read off the implement rather than off whatever is
+    # standing in for it -- so it takes a second word.
+    c.counts_as("implement", holding="longsword", enhancement=True)
 @power("f276", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def f276(c: Cast) -> None:

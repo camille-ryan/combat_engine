@@ -2625,6 +2625,26 @@ class Gear:
     #: `finally`, so a swing that raises cannot leave the override
     #: standing for the next one.
     swinging: str = ""
+    #: Weapon **groups** whose enhancement bonus counts for an implement
+    #: power, when this creature is holding one and no implement.
+    #:
+    #: *"You can use a longsword as an implement ... it adds its
+    #: enhancement bonus to implement attack and damage rolls"* --
+    #: `f1128`. Counting as an implement and lending an enhancement are
+    #: two printed facts and the card states both, so `counts_as` grants
+    #: the first and `counts_as(enhancement=True)` the second: an
+    #: implement's enhancement is read off the implement, not off
+    #: whatever is standing in for it.
+    #:
+    #: Opt-in rather than following from `counts_as`, because a row that
+    #: only grants the standing-in half would otherwise get the bonus it
+    #: does not print.
+    #:
+    #: The proficiency half of that card needs nothing: `Cast.attack_with`
+    #: adds proficiency only for a row carrying `Keyword.WEAPON`, and an
+    #: implement power does not, so *"you do not gain its proficiency
+    #: bonus"* holds by construction.
+    lends_enhancement: set[str] = field(default_factory=set)
     #: This creature's **arena weapons**, by ref.
     #:
     #: `cf:fighter-weaponmaster-f3s0` prints *"you select two weapons as

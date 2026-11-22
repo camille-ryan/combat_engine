@@ -84407,6 +84407,129 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_weapon_standing_in_for_an_implement(out: Result) -> None:
+    """"Use a longsword as an implement ... it adds its enhancement."
+
+    `f1128` names two printed facts and they are not one: standing in for
+    an implement, and lending an enhancement. An implement's enhancement
+    is read off the implement, so a weapon standing in for one lends its
+    own only when the card says so -- which is why
+    `c.counts_as(enhancement=True)` is a second word rather than a
+    consequence of the first.
+
+    **And the third clause needed nothing, which is asserted rather than
+    claimed.** *"You do not gain its proficiency bonus"* holds by
+    construction: `Cast.attack_with` adds proficiency only for a row
+    carrying `Keyword.WEAPON`, and an implement power does not carry it.
+    The note said that was a missing withholding; it was already true.
+    """
+    import dataclasses
+
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.types import Keyword
+
+    world, me, _start = A.board("f1128", 1)
+    gear = world.get(me, Gear)
+    out.that(gear is not None,
+             "the taker carries gear to read", f"{gear is not None}")
+    if gear is None:
+        return
+
+    # A longsword with an enhancement on it, and **no implement in
+    # hand** -- which is the whole situation the card is about, and which
+    # the board does not pose: it deals this wizard an orb, so the
+    # fallback never fires and all three arms read the orb's own 1.
+    gear.weapons = [
+        # `as_implement=False` as well: `Gear.implement` has a "weapon
+        # serving as one" branch, and the board's sword arrives with the
+        # flag already set -- so without this the sword IS the implement,
+        # the fallback never fires, and the baseline reads 3 for a reason
+        # that has nothing to do with the feat.
+        dataclasses.replace(w, group="longsword", enhancement=3,
+                            as_implement=False)
+        if w in gear.melee else w
+        for w in gear.weapons
+        if w.group != "implement"
+    ]
+    out.that(gear.implement is None,
+             "no implement is in hand -- the premise, since the reader"
+             " only falls back to a stand-in when there is none",
+             f"{gear.implement}")
+    # **And the grant itself is cleared for the baseline**, because
+    # `audit.board` arms the row under test: without this the sword's
+    # enhancement is already readable before the feat is run and the
+    # baseline reads 3 rather than 0.
+    gear.lends_enhancement.clear()
+    sword = next((w for w in gear.held if w.group == "longsword"), None)
+    out.that(sword is not None and sword.enhancement == 3,
+             "and the longsword carries an enhancement worth reading",
+             f"{sword.enhancement if sword else None}")
+    if sword is None:
+        return
+
+    # An implement row of this class to measure through.
+    spell = next((ref for ref, row in REGISTRY.items()
+                  if row.attack is not None
+                  and Keyword.IMPLEMENT in row.keywords
+                  and Keyword.WEAPON not in row.keywords), "")
+    out.that(bool(spell),
+             "there is an implement row that is not also a weapon row --"
+             " the premise for both halves below",
+             f"{spell!r}")
+    if not spell:
+        return
+    c = Cast(world=world, me=me, ref=spell, target=me)
+    before = c._enhancement_of(get(spell))
+    out.that(before == 0,
+             "with nothing granted, an implement power reads NO"
+             " enhancement from the sword -- the baseline, and what the"
+             " card is about",
+             f"{before}")
+
+    REGISTRY["f1128"].body(Cast(world=world, me=me, ref="f1128", target=me))
+    after = c._enhancement_of(get(spell))
+    out.that(after == 3,
+             "with the feat, it reads the sword's -- the second printed"
+             " fact, which standing in for an implement does not give on"
+             " its own",
+             f"{after}")
+
+    # -- the withholding, which holds by construction ---------------------
+    row = get(spell)
+    out.that(row is not None and Keyword.WEAPON not in row.keywords,
+             "the implement row carries no weapon keyword -- which is"
+             " what withholds the proficiency, so the card's third"
+             " clause needs no mechanism",
+             f"{sorted(k.name for k in row.keywords)[:4] if row else None}")
+    out.that(sword.proficiency > 0,
+             "and the sword has a proficiency bonus that WOULD be worth"
+             " withholding -- without this the assertion below is about"
+             " a zero and passes for free",
+             f"{sword.proficiency}")
+    # **Changed, not inspected.** Reading the bonus once says nothing
+    # about what is in it; moving the sword's proficiency and finding the
+    # implement power's bonus unmoved is the withholding itself.
+    held = c.attack_with(row.attack.ability)
+    gear.weapons = [
+        dataclasses.replace(w, proficiency=w.proficiency + 5)
+        if w is sword else w
+        for w in gear.weapons
+    ]
+    again = c.attack_with(row.attack.ability)
+    out.that(again == held,
+             "moving the sword's proficiency by 5 does not move the"
+             " implement power's attack bonus -- which IS the printed"
+             " withholding, and it needed no mechanism",
+             f"{held} -> {again}")
+
+    out.that(not (getattr(REGISTRY["f1128"], "dropped", ()) or ()),
+             "f1128 carries no marker",
+             f"{getattr(REGISTRY['f1128'], 'dropped', ())}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -120151,6 +120274,9 @@ DRIVERS = {
     "a_blow_that_knows_it_is_a_finisher": (
         a_blow_that_knows_it_is_a_finisher,
         "a blow that knows it is a finisher"),
+    "a_weapon_standing_in_for_an_implement": (
+        a_weapon_standing_in_for_an_implement,
+        "a weapon standing in for an implement"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

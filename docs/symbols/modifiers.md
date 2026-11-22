@@ -168,7 +168,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - *"Can climb at full speed and does not grant combat advantage
 - `c.commanded_unseen(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - *"You don't need line of effect to the zephyr to command it."*
-- `c.counts_as(self, satisfies: 'str', *, holding: 'str | None' = None, kind: 'str | None' = None, keyword: 'Keyword | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.counts_as(self, satisfies: 'str', *, holding: 'str | None' = None, kind: 'str | None' = None, keyword: 'Keyword | None' = None, enhancement: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You can use a warhammer with any power that requires a light blade."
 - `c.counts_as_keyword(self, ref: 'str', keyword: 'Keyword', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Your <row> is considered an arcane attack power."
