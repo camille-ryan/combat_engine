@@ -4826,6 +4826,28 @@ class Cast:
         # Lent rather than given: taken back in the `finally` below, so a
         # character does not quietly keep a bard's at-will after using a
         # rod once.
+        # **The offer, which a row may refuse.** `i1541p1` prints *"use
+        # this power when you grant an ally a basic attack -- that ally
+        # can take a standard action instead"*, and nothing could withdraw
+        # a grant: this method resolves the swing in the same call, and
+        # `PowerUsed` is a plain notification that `use` does not read
+        # back. Announced here rather than making every power use
+        # refusable, which is a documented limitation three other rows
+        # carry markers for and a much wider change.
+        #
+        # Last, so a grant refused for an unknown ref or a dead recipient
+        # never reaches a listener: a row cannot claim a swing that was
+        # not going to be made.
+        from .events import SwingOffered
+
+        offer = SwingOffered(actor=who, power=chosen, at=target,
+                             by=self.ref, granter=self.me)
+        self.world.bus.emit(offer)
+        if offer.cancelled:
+            for effect in granted:
+                if effect is not None:
+                    self.world.effects.end(effect, "the grant was refused")
+            return False
         lent = False
         if known is not None and chosen not in known.all:
             known.known.append(chosen)

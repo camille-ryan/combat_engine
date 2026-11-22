@@ -271,6 +271,45 @@ class Decision(Event):
 
 
 @dataclass
+class SwingOffered(Decision):
+    """A creature is about to be handed somebody else's attack.
+
+    *"Use this power when you grant an ally a basic attack. That ally can
+    take a standard action instead"* -- `i1541p1`. The grant has to be
+    **withdrawable**, and nothing could withdraw one: `c.grant_attack`
+    resolves the swing in the same call, and `PowerUsed` is a plain
+    notification -- `feats/battlemind_b.py` records that limitation and
+    three rows carry markers naming it.
+
+    So this is the narrow door rather than making every power use
+    refusable. A listener that wants the swing not to happen calls
+    `cancel`, and `c.grant_attack` returns False without resolving --
+    whoever cancelled is then responsible for whatever happens instead.
+
+    Announced only by `c.grant_attack`, and only where there is a swing
+    to offer: a grant refused for an unknown ref or a dead recipient
+    never gets this far, so a listener cannot claim a swing that was
+    never going to be made.
+    """
+
+    #: Who would swing.
+    actor: int
+    #: What they would swing -- a basic attack unless the granting row
+    #: named a row of its own.
+    power: str
+    #: Who the swing is aimed at.
+    at: int
+    #: The row doing the granting, so a listener can tell *"when you
+    #: grant an ally a basic attack"* from any other offer.
+    by: str = ""
+    #: **Who is doing the granting**, which `by` cannot say: the ref names
+    #: the card and a board can have two creatures holding it. *"When YOU
+    #: grant an ally a basic attack"* is about the granter, so the
+    #: predicate needs the creature and not only the row.
+    granter: int = -1
+
+
+@dataclass
 class MoveStart(Decision):
     actor: int
     kind_: str  # "walk", "shift", "teleport", "push", "pull", "slide"

@@ -82,6 +82,7 @@ from combat_engine.engine import (
     Ranged,
     SavingThrow,
     SkillCheck,
+    SwingOffered,
     Trigger,
     Usage,
     When,
@@ -257,9 +258,17 @@ def _channelled(world: World, me: int, ev: PowerUsed) -> bool:
     return ev.actor == me and row is not None and row.group == CHANNEL_DIVINITY
 
 
-def _granted_swing(world: World, me: int, ev: PowerUsed) -> bool:
-    """An ally swinging a basic attack this creature handed over."""
-    return ev.granted_by == me and ev.actor != me
+def _granted_swing(world: World, me: int, ev: SwingOffered) -> bool:
+    """A basic attack this creature is about to hand an ally.
+
+    **`SwingOffered` and not `PowerUsed`**, which is the whole of
+    `i1541p1`'s clause: the card replaces the swing, so it has to answer
+    while the swing can still be withdrawn. `PowerUsed` goes out after
+    `c.grant_attack` has committed to it and `dsl.use` does not read the
+    event back, so a row answering that one could only ever add to the
+    grant.
+    """
+    return ev.granter == me and ev.actor != me
 
 
 def _foe(c: Cast) -> int | None:
@@ -1304,8 +1313,8 @@ def i1541x1(c: Cast) -> None:
 @power("i1541p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="you grant an ally a basic attack",
-       on=Trigger(PowerUsed, _granted_swing, "an ally swings one you gave"),
-       dropped=("c.grant_attack(upgrade=)",))
+       on=Trigger(SwingOffered, _granted_swing,
+                  "an ally is offered one you gave"))
 def i1541p1(c: Cast) -> None:
     """`PowerUsed.granted_by` names the granter, so the trigger is
     declared, and `c.extra_action` drops the standard action into the
@@ -1318,6 +1327,16 @@ def i1541p1(c: Cast) -> None:
     ally = getattr(c.trigger, "actor", None)
     if ally is None:
         return
+    # **"Instead", which is the clause this row was dropped for.** The
+    # swing is withdrawn rather than left standing beside the standard
+    # action: `SwingOffered` is a `Decision`, so refusing it makes
+    # `c.grant_attack` return False without resolving, and whoever
+    # refused -- this row -- owes whatever happens in its place.
+    #
+    # Answering `SwingOffered` rather than `PowerUsed` is the whole of
+    # why that is possible: by the time `PowerUsed` goes out the grant
+    # has committed, and `dsl.use` does not read the event back.
+    c.trigger.cancel(c.ref)
     c.extra_action(STANDARD, on=ally)
     c.bonus("damage", 2, on=ally, until=When.EOT, kind="power")
 

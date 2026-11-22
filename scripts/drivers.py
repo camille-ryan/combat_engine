@@ -86548,6 +86548,130 @@ def an_instinctive_effect_lent_to_a_block_that_prints_none(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_granted_swing_traded_for_a_standard_action(out: Result) -> None:
+    """*"Use this power when you grant an ally a basic attack. That ally
+    can take a standard action **instead**"* -- `i1541p1`.
+
+    **Nothing could withdraw a grant.** `c.grant_attack` resolves the
+    swing in the same call, and `PowerUsed` -- which the row used to
+    answer -- goes out after the grant has committed and is not read back
+    by `dsl.use`. `feats/battlemind_b.py` records that limitation in as
+    many words and three rows carry markers naming it. So the row gave
+    the standard action **beside** the basic attack, which is generous
+    rather than absent.
+
+    `events.SwingOffered` is the narrow door: a `Decision` announced by
+    `c.grant_attack` just before it resolves, so a listener that refuses
+    it makes the method return False with no swing made -- and owes
+    whatever happens instead.
+
+    **Narrow deliberately.** Making every `PowerUsed` refusable would
+    reach all 222 content calls to `grant_attack` and every power use
+    besides; this reaches a grant and nothing else, and is announced
+    after the grant's own refusals so a listener cannot claim a swing
+    that was never going to be made.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Mods, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit, Miss, SwingOffered
+
+    ROW = "i1541p1"
+
+    def granted(
+        *, holding: bool,
+    ) -> tuple[bool, list[tuple[int, int]], Any, Any, int]:
+        """Grant an ally a swing, with the item in the wearer's hands or not."""
+        world, me, _ = _board(ROW, 1)
+        known = must(world.get(me, Powers), "the wearer knows powers")
+        if not holding and ROW in known.known:
+            known.known.remove(ROW)
+        cast = Cast(world=world, me=me, ref="drv")
+        mate = sorted(cast.allies())[0]
+        foe = sorted(cast.enemies())[0]
+        # **Beside the enemy, or the basic attack is refused for reach**
+        # and both arms read False for the board's reason rather than the
+        # card's -- measured, before this line was here.
+        there = must(world.get(foe, Position), "the enemy stands").square
+        mine = must(world.get(mate, Position), "the ally stands")
+        world.grid.lift(mate)
+        mine.square = (there[0] + 1, there[1])
+        world.grid.place(mate, mine.squares)
+        swung: list[tuple[int, int]] = []
+        for kind in (Hit, Miss):
+            world.bus.on(kind, lambda e: swung.append((e.attacker, e.target)))
+        took = cast.grant_attack(mate, on=foe)
+        return (took, [s for s in swung if s[0] == mate],
+                must(world.get(mate, Budget), "the ally has a budget"),
+                world.get(mate, Mods), mate)
+
+    # -- the control -------------------------------------------------------
+    took, swings, budget, mods, _mate = granted(holding=False)
+    out.that(took and len(swings) == 1,
+             "premise: without the item the grant resolves and the ally"
+             " swings once -- so the board can tell a withdrawn swing"
+             " from one that was never possible",
+             f"{took}, {swings}")
+    out.that(budget.standard == 1,
+             "and it is left with its ordinary one standard action",
+             f"{budget}")
+    out.that(not (mods and mods.items and mods.total("damage", {}) > 0),
+             "and no damage bonus",
+             f"{mods.total('damage', {}) if mods and mods.items else 0}")
+
+    # -- the printed clause ------------------------------------------------
+    took2, swings2, budget2, mods2, _ = granted(holding=True)
+    out.that(not took2,
+             "with the item, `c.grant_attack` reports the grant refused --"
+             " the return value a caller reads, so a row that grants and"
+             " then does something about it sees the truth",
+             f"{took2}")
+    out.that(not swings2,
+             "and the ally does NOT swing: the attack is withdrawn, which"
+             " is the word 'instead' and the clause this row was dropped"
+             " for",
+             f"{swings2}")
+    out.that(budget2.standard == 2,
+             "it has a standard action it did not have, which is what the"
+             " swing was traded for",
+             f"{budget2}")
+    out.that(mods2 is not None and mods2.items
+             and mods2.total("damage", {}) == 2,
+             "and the +2 power bonus to damage the card names",
+             f"{mods2.total('damage', {}) if mods2 and mods2.items else 0}")
+
+    # -- the announcement is LAST, after the grant's own refusals -----------
+    # **This arm said something else and three plants showed it.** It
+    # read "a grant aimed at the granter itself is refused before any
+    # offer goes out" and went red whenever the offer path changed at
+    # all -- because with the item held the row cancels that grant too,
+    # so it was testing the refusal, mislabelled.
+    #
+    # What the ordering actually guarantees is that a grant refused on
+    # the method's own terms never reaches a listener.
+    world, me, _ = _board(ROW, 1)
+    mate2 = sorted(Cast(world=world, me=me, ref="drv").allies())[0]
+    heard: list[str] = []
+    world.bus.on(SwingOffered, lambda e: heard.append(e.by))
+    raised = False
+    try:
+        Cast(world=world, me=me, ref="drv").grant_attack(
+            mate2, ref="p-not-a-row", on=me)
+    except ValueError:
+        raised = True
+    out.that(raised and not heard,
+             "a grant naming a row that does not exist raises and"
+             " announces nothing -- the offer is last, so a listener"
+             " cannot claim a swing that was never going to be made",
+             f"raised {raised}, heard {heard}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: the clause it was dropped"
+             " for is the one asserted above",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -118659,10 +118783,16 @@ def a_fumbled_swing_restrains_until_a_hard_check(out: Result) -> None:
              " and agree with any number it produced",
              f"{sorted({n for _, n in asked})}")
 
-    out.that(REGISTRY["i3484x1"].unfinished == ("c.endable(by_any=)",),
-             "i3484x1 still waits on exactly the one symbol its narrowed"
-             " marker names -- the adjacent ally's half, which is a dropper"
-             " named by a test rather than by an id",
+    # **This pinned `("c.endable(by_any=)",)` and the symbol landed.**
+    # The adjacent ally's half -- a hold droppable by a creature named by
+    # a *test* rather than by an id -- is `c.endable(by_any=)`, written
+    # since. A rule that pins a marker tuple goes red the day the row is
+    # finished, which is this suite's own warning about un-marking a row,
+    # so it asserts the finished state instead.
+    out.that(not REGISTRY["i3484x1"].unfinished,
+             "and `i3484x1` carries no marker: the adjacent ally's half"
+             " is written, so the restraint above is the whole row rather"
+             " than the part of it that worked",
              f"{REGISTRY['i3484x1'].unfinished}")
 
 
@@ -122346,6 +122476,9 @@ DRIVERS = {
     "an_instinctive_effect_lent": (
         an_instinctive_effect_lent_to_a_block_that_prints_none,
         "an instinctive effect lent to a block that prints none"),
+    "a_granted_swing_traded": (
+        a_granted_swing_traded_for_a_standard_action,
+        "a granted swing traded for a standard action"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

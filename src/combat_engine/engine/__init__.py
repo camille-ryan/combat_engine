@@ -128,6 +128,7 @@ from .events import (
     Summoned,
     SurgeSpent,
     SustainDue,
+    SwingOffered,
     TempHP,
     TotalDefence,
     TrapSprung,
