@@ -2458,6 +2458,7 @@ class Cast:
         *,
         then: Callable[[], None] | None = None,
         by: int | None = None,
+        by_any: Callable[[Any, int], bool] | None = None,
         when: Callable[[Any, int], bool] | None = None,
         also: tuple[ActionType, int] | None = None,
         on_check: Callable[[Any, int], bool] | None = None,
@@ -2519,6 +2520,17 @@ class Cast:
         for nothing. *"While adjacent to the target"* is a condition on
         being offered the trade at all. Handed the world and the payer.
         #1304.
+
+        **`by_any=` names who may end it by a TEST rather than by an
+        id**, which `by=` and `also=` cannot: *"you or an adjacent ally"*
+        (`i3484x1`) is any one creature of a set that changes as people
+        walk, so neither one id nor two stands for it. Handed the world
+        and the creature asking, and asked for **every** actor -- it is
+        the collection gate in `actions._dropping`, where the two id
+        fields are the other two ways in.
+
+        It composes with `when=` rather than replacing it: one says who,
+        the other says when, and a row printing both uses both.
         """
         if effect is not None:
             effect.drop_cost = cost
@@ -2529,6 +2541,8 @@ class Cast:
             effect.drop_then = then
             if by is not None:
                 effect.drop_by = by
+            if by_any is not None:
+                effect.drop_any = by_any
             if when is not None:
                 effect.drop_when = when
         return effect

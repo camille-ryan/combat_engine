@@ -84407,6 +84407,110 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def an_ender_named_by_a_test(out: Result) -> None:
+    """"You or an adjacent ally can end it", which no id could say.
+
+    `Cast.endable` names who may end an effect with `by=` and `also=`,
+    and each is a **single** eid. `i3484x1` prints *"you or an adjacent
+    ally"* -- any one creature of a set that changes as people walk -- so
+    neither one id nor two stands for it, and the ally's half of that
+    card was the marker.
+
+    `Effect.drop_any` is a predicate, asked for **every** actor in
+    `actions._dropping`, where the two id fields are the other two ways
+    into the same list. `drop_when` is still asked after it, so a row may
+    use both: one says who, the other says when.
+
+    **The ally needs its own turn**, which is the premise this rule had
+    to stage and which read as the feature not working: `can_spend`
+    refuses a standard action to anybody but `world.turn`, so an
+    adjacent ally with the predicate satisfied was still offered
+    nothing. Measured that way first, with every arm reading 0.
+    """
+    import audit as A
+    from combat_engine.engine import actions
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, distance_between, enemies, team
+    from combat_engine.engine.types import ActionType, Condition
+
+    world, me, _start = A.board("i3484x1", 1)
+    A._revive_everyone(world, except_=())
+    c = Cast(world=world, me=me, ref="drivers:ender", target=me)
+    held = c.condition(Condition.RESTRAINED, on=me, until=When.ENCOUNTER)
+    mate = next((a for a in sorted(allies(world, me)) if a != me), None)
+    foe = next(iter(sorted(enemies(world, me))), None)
+    out.that(held is not None and mate is not None and foe is not None,
+             "a hold, an ally and an enemy -- the premise",
+             f"held={held is not None} ally={mate} enemy={foe}")
+    if held is None or mate is None or foe is None:
+        return
+
+    here = world.need(me, Position).square
+
+    def put(who: int, dx: int) -> None:
+        pos = world.need(who, Position)
+        world.grid.lift(who)
+        pos.square = (here[0] + dx, here[1])
+        world.grid.place(who, frozenset({pos.square}))
+
+    def offered(who: int) -> int:
+        # **Whose turn it is decides what may be spent**, so the actor
+        # being asked is given the turn. Without this every arm reads 0
+        # and the predicate looks broken.
+        world.turn = who
+        budget = world.get(who, Budget)
+        if budget is not None:
+            budget.refresh()
+        return len([a for a in actions.legal(world, world.encounter, who)
+                    if a.kind == "drop" and a.subject == held.id])
+
+    put(mate, 1)
+    put(foe, 1)
+    # The hold is made endable the ordinary way first, which is the
+    # baseline: the wearer's half comes free because the hold sits on the
+    # wearer, and nobody else is offered anything.
+    c.endable(held, ActionType.STANDARD)
+    out.that(offered(me) == 1,
+             "the wearer is offered it, because the hold sits on the"
+             " wearer -- that half comes free and is not what was"
+             " missing",
+             f"{offered(me)}")
+    out.that(offered(mate) == 0,
+             "and an adjacent ally is offered nothing -- the baseline,"
+             " and what `by=` alone leaves",
+             f"{offered(mate)}")
+
+    def ally_adjacent(w, who: int) -> bool:  # noqa: ANN001
+        return (who != me and team(w, who) == team(w, me)
+                and distance_between(w, who, me) <= 1)
+
+    c.endable(held, ActionType.STANDARD, by_any=ally_adjacent)
+    out.that(offered(mate) == 1,
+             "with the test set, the adjacent ALLY is offered it -- which"
+             " is the clause, and which neither `by=` nor a second"
+             " `also=` id could say",
+             f"{offered(mate)}")
+    out.that(offered(foe) == 0,
+             "and the adjacent ENEMY is not: the card says ally, and a"
+             " predicate reading only distance would have handed it to"
+             " whoever was standing there",
+             f"{offered(foe)}")
+    put(mate, 5)
+    out.that(offered(mate) == 0,
+             "and an ally who walks away stops being offered it -- the"
+             " set changes as people move, which is the whole reason an"
+             " id could not stand for it",
+             f"{offered(mate)}")
+
+    out.that(not (getattr(REGISTRY["i3484x1"], "dropped", ()) or ()),
+             "i3484x1 carries no marker: the ally's half was its last"
+             " clause",
+             f"{getattr(REGISTRY['i3484x1'], 'dropped', ())}")
+
+
 def a_boost_carries_a_bonus_type(out: Result) -> None:
     """Two item bonuses to one attack roll, where the rule gives one.
 
@@ -119908,6 +120012,9 @@ DRIVERS = {
     "a_boost_carries_a_bonus_type": (
         a_boost_carries_a_bonus_type,
         "a boost carries a bonus type"),
+    "an_ender_named_by_a_test": (
+        an_ender_named_by_a_test,
+        "an ender named by a test"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

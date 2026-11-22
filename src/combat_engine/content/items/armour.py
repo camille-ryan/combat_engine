@@ -4330,8 +4330,7 @@ def i3043p1(c: Cast) -> None:
 
 
 @power("i3484x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.endable(by_any=)",))
+       reach=PERSONAL, target=SELF)
 def i3484x1(c: Cast) -> None:
     """Both senses, at a range equal to the armour's enhancement -- so the
     radius is read off the item rather than printed as a number. The
@@ -4361,13 +4360,19 @@ def i3484x1(c: Cast) -> None:
     The DC is the printed table's `hard` at the item's level, read through
     `_item_dc` rather than written here as a number.
 
-    **What remains is who may roll it, narrowed.** `c.endable` takes `by=`
-    and `also=` now -- so the old `Effect.drop_cost(by=)` has landed and
-    that marker was stale -- but each of them is a **single** eid, and the
-    card says "you **or an adjacent ally**": any one creature of a set
-    that changes as people walk. The wearer's half is written, because the
-    hold sits on the wearer; the ally's half wants a dropper named by a
-    test rather than by an id, which is `c.endable(by_any=)`."""
+    **Who may roll it is written, and the ally's half was the last
+    clause.** `c.endable` takes `by=` and `also=`, and each of them is a
+    **single** eid where the card says *"you or an adjacent ally"*: any
+    one creature of a set that changes as people walk. The wearer's half
+    came free, because the hold sits on the wearer.
+
+    `by_any=` is a dropper named by a **test**. It is the collection
+    gate in `actions._dropping` -- asked for every actor, where the two
+    id fields are the other two ways in -- so an ally who steps up is
+    offered the action and one who walks away stops being.
+
+    It says *ally* rather than "anybody adjacent", which the card means
+    and an enemy does not."""
     me = c.me
     reach = c.enhancement or 1
     c.blindsight(reach)
@@ -4384,7 +4389,24 @@ def i3484x1(c: Cast) -> None:
             held = c.condition(
                 Condition.RESTRAINED, on=me, until=When.ENCOUNTER
             )
-            c.endable(held, STANDARD, on_check=shakes_free)
+            # **"You or an adjacent ally."** `by=` names one creature
+            # and `also=` a second; this is any one of a set that
+            # changes as people walk, so it is a test. The wearer's own
+            # half comes free -- the hold sits on the wearer, which is
+            # what `endable` offers by default -- so the predicate is
+            # the ally's half, and it says ally rather than "anybody
+            # adjacent" because an enemy is not who the card means.
+            def or_an_adjacent_ally(world: Any, who: int) -> bool:
+                from combat_engine.engine.query import (
+                    distance_between,
+                    team,
+                )
+
+                return (who != me and team(world, who) == team(world, me)
+                        and distance_between(world, who, me) <= 1)
+
+            c.endable(held, STANDARD, on_check=shakes_free,
+                      by_any=or_an_adjacent_ally)
 
     c.watch(AttackRolled, fumble, until=When.ENCOUNTER)
 

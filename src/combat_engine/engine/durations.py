@@ -208,6 +208,20 @@ class Effect:
     #: nothing. `p13861`'s *"while adjacent to the target"* has to gate the
     #: offer. #1304.
     drop_when: Callable[[Any, int], bool] | None = None
+    #: **Who may end this, named by a TEST rather than by an id.**
+    #:
+    #: `drop_by` and `drop_also` each name a single creature, which is
+    #: every printed line but one: *"you or an adjacent ally"*
+    #: (`i3484x1`) is any one creature of a set that changes as people
+    #: walk. An id cannot stand for it and a second id cannot either.
+    #:
+    #: Checked in `actions._dropping`, which collects an effect for an
+    #: actor the two id fields do not name and lets this say yes or no.
+    #: It is the **collection** gate; `drop_when` is still asked after it,
+    #: so a row may use both -- one for who, one for when.
+    #:
+    #: `Cast.endable(by_any=)` is the writer.
+    drop_any: Callable[[Any, int], bool] | None = None
     ended: bool = False
     #: Lifted but not ended -- everything it installed is off the creature and
     #: the effect is still standing, still clocked, still owed its saving

@@ -2307,6 +2307,16 @@ def _dropping(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # `p11273`'s caster ends it as a free action and the held creature as
     # a minor -- and `drop_cost`/`drop_by` is a single pair. Collected
     # here so the loop below offers both without knowing which it has.
+    # **And an effect whose printed line names a SET rather than a
+    # creature.** *"You or an adjacent ally"* -- `i3484x1` -- is any one
+    # of a group that changes as people walk, which neither `drop_by` nor
+    # a second `drop_also` id can stand for. The predicate is asked for
+    # every actor, so it is the collection gate; `drop_when` below is
+    # still asked after it.
+    for held in world.effects.live.values():
+        if (held.drop_any is not None and held not in mine
+                and held.drop_any(world, actor)):
+            mine.append(held)
     seconds = {
         held.id: held.drop_also[0]
         for held in world.effects.live.values()
