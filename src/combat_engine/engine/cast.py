@@ -6120,6 +6120,42 @@ class Cast:
         if who is not None:
             temp_hp(self.world, self.me, who, amount, self.ref)
 
+    def as_off_hand(
+        self, ref: str, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You can treat the hand crossbow as an off-hand weapon."
+
+        `Gear.off` is `melee[1]` and `Gear.melee` drops anything with a
+        range, so a shooter can never reach that slot however it is
+        held. The card says it does, and `Gear.two_weapon` is what a
+        dozen two-weapon rows read -- so asking about the grip, which is
+        how `rogue_b._shooter_in_the_second_hand` works around it, can
+        answer "is it in the other hand" and cannot answer that.
+
+        Written on `Gear.counts_as_off`, read by `off` and `two_weapon`
+        and by **nothing else**. `melee` is deliberately untouched: it
+        means "what can be swung at somebody", and a hand crossbow
+        cannot -- admitting it there would hand every melee row a weapon
+        nobody can hit with, which is the direction this tree errs away
+        from.
+
+        Yours, so it defaults to the caster: the hand is the wearer's.
+        """
+        from .components import Gear as _Gear
+
+        who = on if on is not None else self.me
+        gear = self.world.get(who, _Gear)
+        if gear is None or ref in gear.counts_as_off:
+            return None
+        gear.counts_as_off.add(ref)
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} {ref} fills the off hand",
+            on_suspend=[lambda: gear.counts_as_off.discard(ref)],
+            on_resume=[lambda: gear.counts_as_off.add(ref)],
+            by=self.ref,
+        )
+
     def sheathed(self, *, on: int | None = None) -> Weapon | None:
         """The weapon most recently put away, or None.
 

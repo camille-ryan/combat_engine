@@ -2563,6 +2563,21 @@ class Gear:
     armour: str = "cloth"
     #: What is on the belt rather than in the hands, by weapon ref.
     stowed: set[str] = field(default_factory=set)
+    #: Weapons that fill the **off hand** without being melee weapons.
+    #:
+    #: *"You can treat the hand crossbow as an off-hand weapon"* --
+    #: `f826`. `Gear.off` is `melee[1]` and `melee` drops anything with
+    #: a range, so a shooter can never reach that slot however it is
+    #: held -- which is why `rogue_b._shooter_in_the_second_hand` asks
+    #: about the **grip** instead, and why that helper cannot answer
+    #: `Gear.two_weapon` for the rows that read it.
+    #:
+    #: Read by `off` and `two_weapon` and by **nothing else**,
+    #: deliberately: `melee` is "what can be swung at somebody" and a
+    #: hand crossbow cannot, so admitting it there would hand every
+    #: melee row a weapon nobody can hit with. `c.as_off_hand` is what
+    #: fills this.
+    counts_as_off: set[str] = field(default_factory=set)
     #: The weapon most recently put away, by ref.
     #:
     #: *"The weapon most recently sheathed in the scabbard"* --
@@ -3171,8 +3186,27 @@ class Gear:
         Its own property rather than `weapons[1]`, because a ranger carrying
         a blade and a bow has a second weapon and is not fighting with two.
         """
-        melee = self.melee
-        return melee[1] if len(melee) > 1 else None
+        pair = self._off_hand_pool()
+        return pair[1] if len(pair) > 1 else None
+
+    def _off_hand_pool(self) -> list[Weapon]:
+        """What may occupy the two hands, for `off` and `two_weapon`.
+
+        `melee` plus anything `counts_as_off` admits -- a hand crossbow
+        held beside a blade, which the card says fills the off hand and
+        which `melee` will never carry because it cannot be swung.
+
+        Ordered with the melee weapons first, so the main hand is still
+        whatever `main` answers and the admitted weapon is the second.
+        """
+        pair = list(self.melee)
+        if not self.counts_as_off:
+            return pair
+        pair += [
+            w for w in self.swingable
+            if w.ref in self.counts_as_off and w not in pair
+        ]
+        return pair
 
     @property
     def two_weapon(self) -> bool:
@@ -3181,7 +3215,7 @@ class Gear:
         A printed Requirement several rows carry. Counting melee weapons
         rather than weapons, for the same reason as `off`.
         """
-        return len(self.melee) > 1 and not self.shield
+        return len(self._off_hand_pool()) > 1 and not self.shield
 
 
 #: The hand counts the printed weapon table uses, which are the only words

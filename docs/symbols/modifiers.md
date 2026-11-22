@@ -150,6 +150,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
 
 ## refusals
 
+- `c.as_off_hand(self, ref: 'str', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You can treat the hand crossbow as an off-hand weapon."
 - `c.cannot_act(self, *, during: 'int', on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "The target cannot take actions **during your turn**."
 - `c.cannot_attack(self, *, on: 'int | None' = None, against: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`

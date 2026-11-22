@@ -1160,7 +1160,7 @@ def _shooter_in_the_second_hand(c: Cast, ref: str) -> bool:
 
 @power("f826", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("Gear.off(ranged=)",))
+)
 def f826(c: Cast) -> None:
     """A hand crossbow held in the off hand and reloaded one-handed.
 
@@ -1190,17 +1190,30 @@ def f826(c: Cast) -> None:
     is a real `Gear` change rather than a reading of one: treating this
     weapon as an off-hand weapon is what would put it in `Gear.off` and
     make `Gear.two_weapon` true of a character carrying it, which is what
-    every other two-weapon row in the tree reads. `Gear.off(ranged=)` still
-    names exactly that, so the symbol is unchanged and the row is `dropped=`
-    rather than refused.
+    every other two-weapon row in the tree reads.
+
+    **That change is made and this row makes it.** `c.as_off_hand` adds
+    the ref to `Gear.counts_as_off`, which `off` and `two_weapon` read
+    and **nothing else** does -- `melee` stays "what can be swung at
+    somebody", because a hand crossbow cannot be and admitting it there
+    would hand every melee row a weapon nobody can hit with.
+
+    So `Gear.off(ranged=)` is spent: the slot does not learn about
+    ranges, it learns about one named weapon.
 
     `c.basic(ranged=True)` picks the shot up off `Powers.ranged`, and
     `Power.can_branch` asks for `gear.ranged` -- the **first** held weapon
     that can be fired, so "with that weapon" is exact only while this is
     the one shooter in hand. A second one in the other hand and the swing
-    would be made with whichever `Gear.ranged` answers; that is the same
-    narrowing `c.basic` imposes on every row granting a ranged basic
-    attack, and naming the weapon is `f977`'s `c.basic(with_=)`.
+    **That last half is written now**, and the note above is kept because
+    it names the door: the shot is `c.basic(ranged=True, with_="w3627")`,
+    so it comes from the hand crossbow rather than from whichever weapon
+    `Gear.ranged` happens to answer. `f977` is the precedent.
+
+    `Gear.off(ranged=)` -- the symbol this row carried -- is the wrong
+    door and the helper above says why: `Gear.melee` drops anything with
+    a range, so the off-hand **slot** can never hold a shooter. Naming
+    the weapon needs no slot.
     `c.within(10, ...)` is
     the printed range of the ranged basic attack, so a creature further off
     is not a legal target and offering it would be a menu entry nobody can
@@ -1211,6 +1224,8 @@ def f826(c: Cast) -> None:
     module docstring's rule for the weapons the catalogue has not got: the
     gate asks the ref, which is exact, rather than a group that would pay
     the clause out on a weapon the card never named."""
+    c.as_off_hand("w3627", on=c.me, until=When.ENCOUNTER)
+
     def crit(ev: Any) -> None:
         if getattr(ev, "attacker", None) != c.me:
             return
@@ -1225,7 +1240,18 @@ def f826(c: Cast) -> None:
             return
         who = c.choose(far, f"{c.ref}: who to shoot")
         if who is not None:
-            c.basic(ranged=True, on=who)
+            # **Named, so the shot comes from the hand crossbow and not
+            # from whatever `Gear.ranged` happens to answer.** That was
+            # the last of this row's marker and its own note already
+            # pointed here: *"naming the weapon is `f977`'s
+            # `c.basic(with_=)`"*.
+            #
+            # `Gear.off(ranged=)` is what the marker named and is the
+            # wrong door: `Gear.melee` drops anything with a range, so
+            # the off-hand SLOT can never hold a shooter -- which is
+            # exactly why `_shooter_in_the_second_hand` asks about the
+            # grip instead. Naming the weapon needs no slot at all.
+            c.basic(ranged=True, on=who, with_="w3627")
 
     c.watch(Hit, crit, until=When.ENCOUNTER, on=c.me,
             label=f"{c.ref} on a critical")

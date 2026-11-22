@@ -87217,6 +87217,128 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_shooter_that_fills_the_off_hand(out: Result) -> None:
+    """*"You can treat the hand crossbow as an off-hand weapon"* --
+    `f826`, whose other half fires it free on a critical hit.
+
+    **`Gear.off` is `melee[1]` and `Gear.melee` drops anything with a
+    range**, so a shooter can never reach that slot however it is held.
+    `rogue_b._shooter_in_the_second_hand` works round it by asking about
+    the **grip**, which answers "is it in the other hand" -- and cannot
+    answer `Gear.two_weapon`, which is what a dozen two-weapon rows
+    actually read.
+
+    `Gear.counts_as_off` is the slot learning about **one named
+    weapon** rather than about ranges, which is what the row's old
+    symbol -- `Gear.off(ranged=)` -- would have been.
+
+    **`melee` is deliberately untouched**, and that is the assertion
+    worth having: it means "what can be swung at somebody", a hand
+    crossbow cannot be, and admitting it there would hand every melee
+    row a weapon nobody can hit with.
+
+    **One plant here cannot be made red and that is a fact about the
+    board, not a weak assertion.** Dropping the `with_="w3627"` from the
+    row's free shot changes nothing measurable: a character holding a
+    one-handed melee weapon and a hand crossbow has exactly one ranged
+    weapon in hand, so `Gear.ranged` answers the crossbow and the
+    default agrees with the naming. Holding a third weapon is not
+    arrangeable -- `Gear.wield` keeps two, so a bow added as well is
+    stowed and `swingable` drops it.
+
+    The naming is still right and the row's own docstring says why: it
+    makes the shot independent of what else is in hand, where the
+    default is exact *"only while this is the one shooter in hand"*.
+    Recorded rather than deleted, so the next reader does not take a
+    green plant for a tested one.
+    """
+    from dataclasses import replace as _replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit, Miss
+
+    ROW, SHOOTER = "f826", "w3627"
+
+    def carrying(*, armed: bool) -> tuple[Any, int, Gear, str]:
+        """A blade in one hand and a hand crossbow in the other."""
+        # **The board has already armed this row**, so the body is never
+        # run here: running it again registers a second `Hit` watch and
+        # the free shot goes off twice for one critical. Measured --
+        # two `w3627` entries for one emit. The "without" arm is made by
+        # clearing the permission the arming laid.
+        world, me, _ = _board(ROW, 1)
+        gear = must(world.get(me, Gear), "the character has gear")
+        if not armed:
+            gear.counts_as_off.clear()
+        # A one-handed MELEE weapon for the main hand: the board's first
+        # is a two-handed axe, and wielding that stows everything else.
+        one = next(w for w in gear.weapons
+                   if not w.two_handed and not w.ranged)
+        gear.weapons.append(_replace(chargen.PRINTED[SHOOTER], ref=SHOOTER))
+        gear.wield(one)
+        return world, me, gear, one.ref
+
+    # -- the premises ------------------------------------------------------
+    _world, _me, gear, blade = carrying(armed=False)
+    out.that(any(w.ref == SHOOTER for w in gear.held),
+             "premise: the hand crossbow is in hand, beside a one-handed"
+             " melee weapon",
+             f"{[w.ref for w in gear.held]}")
+    out.that(gear.off is None and not gear.two_weapon,
+             "and without the feat it fills no off hand -- `melee` drops"
+             " anything with a range, so the slot is empty however the"
+             " weapon is held. That is the state the row's own helper"
+             " works around by asking about the grip",
+             f"off {gear.off}, two_weapon {gear.two_weapon}")
+
+    # -- the printed clause -------------------------------------------------
+    _, _, armed, _ = carrying(armed=True)
+    out.that(armed.off is not None and armed.off.ref == SHOOTER,
+             "with the feat, the hand crossbow IS the off-hand weapon",
+             f"{armed.off and armed.off.ref}")
+    out.that(armed.two_weapon,
+             "and the character counts as fighting with two -- which the"
+             " grip test could not say, and which a dozen rows read",
+             f"{armed.two_weapon}")
+
+    # -- what must NOT change -----------------------------------------------
+    out.that([w.ref for w in armed.melee] == [blade],
+             "while `melee` is unchanged: a hand crossbow is still not"
+             " something that can be swung at anybody, and every row"
+             " asking what is in hand to hit with sees only the blade",
+             f"{[w.ref for w in armed.melee]}")
+    out.that(armed.main is not None and armed.main.ref == blade,
+             "and the MAIN hand is still the blade -- the admitted"
+             " weapon is the second of the pair, never the first",
+             f"{armed.main and armed.main.ref}")
+
+    # -- the free shot comes from that weapon --------------------------------
+    world2, me2, _gear2, _ = carrying(armed=True)
+    foes = sorted(Cast(world=world2, me=me2, ref="drv").enemies())
+    shots: list[str | None] = []
+    for kind in (Hit, Miss):
+        world2.bus.on(kind, lambda e: shots.append(
+            getattr(e.result, "weapon", None)))
+    world2.bus.emit(Hit(attacker=me2, target=foes[0], power="mba",
+                        critical=True))
+    fired = [w for w in shots if w]
+    out.that(len(fired) == 1 and fired[0] == SHOOTER,
+             "and the critical-hit shot comes from the hand crossbow"
+             " rather than from whichever weapon `Gear.ranged` answers"
+             " -- `c.basic(with_=)`, which the row's note named before"
+             " it was written",
+             f"{shots}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: both halves of the card are"
+             " written",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -119651,25 +119773,42 @@ def two_hands_under_one_power_buys_an_extra_attack(out: Result) -> None:
       power" is the scope and the walk stops at the most recent one;
     * the other hand was somebody **else's** -- refused.
 
-    **The last assertion is red today and the row is what is wrong.** The
-    row is `target=SELF`, so `Cast.target` is the bearer, and `c.basic()`
-    with no `on=` reads `self._who(None)` -- which is the bearer. Measured
-    on the board below: `AttackDeclared(attacker=1, target=1, power='mba')`
-    and the bearer's hit points went from 54 to -15. The extra attack is
-    made against its own wearer.
+    **The payout arm was written red and is green now.** The row was
+    `target=SELF` with a bare `c.basic()`, so `Cast.target` was the
+    bearer and `self._who(None)` aimed the extra attack at it: measured
+    here as `AttackDeclared(attacker=1, target=1, power='mba')`, the
+    bearer's hit points 54 -> -15. It takes `on=` now, chosen from the
+    adjacent enemies.
 
-    Nothing could have caught it before this rule: the row reads UNUSED, so
-    `audit` never ran the body, and `c.basic()` is the spelling a sibling
-    (`i1261p1`) uses correctly -- because *that* row is `target=EACH_ENEMY`
-    and its `Cast.target` is a creature. The verb is right and the aim is
-    missing.
+    Nothing could have caught that before this rule: the row reads UNUSED,
+    so `audit` never ran the body, and `c.basic()` is the spelling a
+    sibling (`i1261p1`) uses correctly -- because *that* row is
+    `target=EACH_ENEMY` and its `Cast.target` is a creature. The verb was
+    right and only the aim was missing.
+
+    **The payout arm stages an off-hand weapon, which the board does
+    not deal.** The row swings `with_=Gear.off` and returns without
+    swinging at all when there is none -- so on the board as dealt the
+    arm below measures an empty list and says nothing about the aim. The
+    off-hand half itself belongs to
+    `a_basic_swung_with_the_off_hand`; what is asserted here is that the
+    payout, once there IS a weapon to make it with, goes at an enemy.
     """
+    from dataclasses import replace as _replace_
+
     import combat_engine.content  # noqa: F401
+    from combat_engine import chargen as chargen_
     from combat_engine.content.items.arms import _hit_with_both_hands
     from combat_engine.engine import dsl, movement
+    from combat_engine.engine.components import Gear as _Gear_
     from combat_engine.engine.components import Health, Position
     from combat_engine.engine.dsl import REGISTRY, usable
-    from combat_engine.engine.events import AttackDeclared, Hit, PowerUsed
+    from combat_engine.engine.events import (
+        AttackDeclared,
+        Hit,
+        Miss,
+        PowerUsed,
+    )
     from combat_engine.engine.query import enemies
 
     row = REGISTRY["i2122p1"]
@@ -119739,7 +119878,16 @@ def two_hands_under_one_power_buys_an_extra_attack(out: Result) -> None:
              " PowerUsed and the blows above it are that power's",
              f"{refused()}")
 
-    # -- the payout. RED today, and the row is what is wrong. -------------
+    # -- the payout -------------------------------------------------------
+    # **An off-hand weapon, or the row returns without swinging.** The
+    # board deals a two-handed axe first and `wield` stows everything
+    # else, so a one-handed weapon is wielded here before a second is
+    # added -- the same staging `a_basic_swung_with_the_off_hand` uses
+    # and for the same reason.
+    hands = must(world.get(me, _Gear_), "the character has gear")
+    one = next(w for w in hands.weapons if not w.two_handed)
+    hands.weapons.append(_replace_(chargen_.PRINTED["w3611"], ref="w-off"))
+    hands.wield(one)
     swung("main", me)
     swung("off", me)
     out.that(refused()[0],
@@ -119754,6 +119902,10 @@ def two_hands_under_one_power_buys_an_extra_attack(out: Result) -> None:
     # and the assertion reads as "it did not hit an enemy". That cost a
     # reading of the proposed fix as still broken.
     theirs = set(enemies(world, me))
+    with_what: list[str | None] = []
+    for kind in (Hit, Miss):
+        world.bus.on(kind, lambda e: with_what.append(
+            getattr(getattr(e, "result", None), "weapon", None)))
     world.rng.loaded = 20
     out.that(dsl.use(world, me, "i2122p1"),
              "the row is used", f"{said[seen:]}")
@@ -119761,20 +119913,26 @@ def two_hands_under_one_power_buys_an_extra_attack(out: Result) -> None:
     out.that(extra, "and an extra attack is declared -- the printed payout",
              f"{said[seen:]}")
     out.that(extra and all(target in theirs for _a, _p, target in extra),
-             "**against an ENEMY.** Red today, and the row is what is wrong:"
+             "**against an ENEMY**, which was the whole of what was wrong:"
              " i2122p1 is `target=SELF`, so `Cast.target` is the bearer and"
-             " `c.basic()` with no `on=` aims at it. The fix is one keyword"
-             " -- an adjacent enemy chosen and passed as `on=`",
+             " a bare `c.basic()` aimed at it. One keyword -- an adjacent"
+             " enemy chosen and passed as `on=`",
              f"{extra}, enemies {sorted(theirs)}")
     out.that(vital.hp == whole,
              "and the bearer takes nothing from its own extra attack."
              " Measured unfixed: 54 hit points to -15, its own swing",
              f"{whole} -> {vital.hp}")
+    # **The staged blows above emit `Hit` with no `result`**, so this
+    # filters to the real swing's weapon rather than counting them.
+    out.that(extra and [w for w in with_what if w] == ["w-off"],
+             "and it is swung with the OFF-HAND weapon rather than with"
+             " whatever the creature's basic attack would reach for",
+             f"{with_what}")
 
-    out.that(row.unfinished == ("Cast.basic(hand=)",),
-             "i2122p1 still waits on exactly the one symbol its marker names"
-             " -- the swing is made with whatever the creature's basic attack"
-             " is rather than with the off-hand weapon the card names",
+    out.that(not row.unfinished,
+             "and i2122p1 carries no marker: the one symbol its marker"
+             " named -- a hand on `c.basic` -- was `Gear.off` plus the"
+             " `with_=` the verb already had",
              f"{row.unfinished}")
 
 
@@ -123036,6 +123194,9 @@ DRIVERS = {
     "a_basic_swung_with_the_off_hand": (
         a_basic_swung_with_the_off_hand,
         "a basic swung with the off hand"),
+    "a_shooter_that_fills_the_off_hand": (
+        a_shooter_that_fills_the_off_hand,
+        "a shooter that fills the off hand"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

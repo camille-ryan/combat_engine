@@ -556,7 +556,14 @@ CATEGORIES: dict[str, dict] = {
                 "counts_as",
                 "forgo_second_wind", "refuses_forced_attack",
                 "shares_feat_bonus",
-                "counts_as_keyword", "forbid", "forgo_second_wind_heal",
+                "counts_as_keyword",
+                # Beside `counts_as_keyword` and not under gear: both say
+                # a named thing COUNTS AS something it is not, for one
+                # creature and for a while. `c.sheathed` and `c.wielding`
+                # ask what is in hand; this changes what a hand's
+                # contents are taken for. #1341.
+                "as_off_hand",
+                "forbid", "forgo_second_wind_heal",
                 # Beside `forbid` because it is the same question answered
                 # the other way: that one takes a named row away, this one
                 # opens a named row whose printed Requirement is not met.
