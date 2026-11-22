@@ -84407,6 +84407,139 @@ def mark_knows_its_row(out: Result) -> None:
              f"{bare.marked(on=foe, via='p3323')}")
 
 
+def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
+    """"You deliver a coup de grace ... 1[W] extra damage."
+
+    `Cast.coup_de_grace` rolls the finisher through an ordinary `strike`
+    and then sets `critical`, so by the time the damage is rolled the
+    blow was indistinguishable from any other critical. `f2071` had
+    nothing to gate on and carried the marker for it.
+
+    `AttackResult.finisher` is stamped by that strike and
+    `resolve.deal_damage` carries it into the damage context.
+
+    **Not `crit` plus a helpless target**, which is the shortcut this
+    would otherwise be written as and which is wrong: a lucky natural 20
+    against a helpless creature is both of those and is **not** a coup de
+    grace, which is a standard action somebody chose to take. The
+    ordinary-attack arm below is that control.
+    """
+    import audit as A
+    from combat_engine.engine import AC
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition
+
+    world, me, _start = A.board("f2071", 1)
+    A._revive_everyone(world, except_=())
+    foe = sorted(enemies(world, me))[0]
+    seen: list[bool] = []
+    spy = Cast(world=world, me=me, ref="drivers:spy", target=foe)
+    spy.bonus("damage", 0, on=me, until=When.ENCOUNTER,
+              when=lambda ctx: seen.append(bool(ctx.get("finisher")))
+              or False)
+
+    # **`mba` rather than a made-up ref**: `c.coup_de_grace` refuses a
+    # row with no attack line *before* it strikes, which is #250's guard,
+    # so a bare probe ref returns False and proves nothing.
+    c = Cast(world=world, me=me, ref="mba", target=foe)
+    out.that(not c.coup_de_grace(on=foe),
+             "a creature that is not helpless cannot be finished -- the"
+             " printed precondition, and the premise for the arm below",
+             f"{c.coup_de_grace(on=foe)}")
+    # **UNCONSCIOUS, because the guard reads `Rules.helpless`** and four
+    # conditions carry it. Laying `HELPLESS` itself works too; this one
+    # is the case a fight actually produces.
+    c.condition(Condition.UNCONSCIOUS, on=foe, until=When.ENCOUNTER)
+    out.that(c.coup_de_grace(on=foe),
+             "and a helpless one can -- the finisher lands",
+             "it did not")
+    out.that(c.result is not None and c.result.finisher,
+             "the result is stamped as a finisher, which is the fact the"
+             " damage context carries",
+             f"{c.result.finisher if c.result else None}")
+    seen.clear()
+    c.damage(5, on=foe)
+    out.that(seen == [True],
+             "and the blow it deals is seen as one by a damage gate --"
+             " which is the clause `f2071` could not write",
+             f"{seen}")
+
+    # -- the control: an ordinary attack, including a critical ------------
+    #
+    # **Revived first**, or the control proves nothing: the finisher
+    # above may well have killed the target, and a dead one is dealt no
+    # damage, so the gate is never asked and `seen` comes back empty.
+    # The assertion requires it non-empty for exactly that reason.
+    A._revive_everyone(world, except_=())
+    seen.clear()
+    other = Cast(world=world, me=me, ref="mba", target=foe)
+    other.attack(5, AC, on=foe)
+    if other.result is not None:
+        other.result.critical = True
+    other.damage(5, on=foe)
+    out.that(seen and not any(seen),
+             "an ordinary attack -- even one made critical, against the"
+             " same helpless creature -- is NOT a finisher. That is the"
+             " shortcut this key exists to avoid: `crit` and a helpless"
+             " target are both true of a lucky natural 20",
+             f"{seen}")
+
+    # -- and the ROW's own gate, which the spy above does not exercise ---
+    #
+    # Measured as a passing plant: pointing `f2071`'s `when=` at `crit`
+    # instead of `finisher` left every assertion above green, because the
+    # spy reads the key directly. So this asks what the row itself pays.
+    import dataclasses
+
+    from combat_engine.engine.components import Gear, Mods
+
+    world, me, _r = A.board("f2071", 1)
+    gear = world.get(me, Gear)
+    if gear is not None and not any(
+            w.group == "axe" and w.two_handed for w in gear.melee):
+        gear.weapons = [
+            dataclasses.replace(
+                w, group="axe", properties=w.properties | {"two-handed"})
+            if w in gear.melee else w
+            for w in gear.weapons
+        ]
+    gear = world.get(me, Gear)
+    out.that(gear is not None and any(
+                 w.group == "axe" and w.two_handed for w in gear.melee),
+             "the taker holds a two-handed axe, which this row's every"
+             " clause is gated on -- the premise",
+             f"{[(w.group, w.two_handed) for w in (gear.melee if gear else [])]}")
+    REGISTRY["f2071"].body(Cast(world=world, me=me, ref="f2071", target=me))
+    mods = world.get(me, Mods)
+    victim = sorted(enemies(world, me))[0]
+    base = {"source": me, "target": victim, "power": "mba",
+            "from_attack": True, "crit": False, "finisher": False}
+    out.that(mods is not None,
+             "the taker carries modifiers to read", f"{mods is not None}")
+    if mods is None:
+        return
+    plain = mods.total("damage", base)
+    on_crit = mods.total("damage", {**base, "crit": True})
+    on_coup = mods.total("damage", {**base, "finisher": True})
+    out.that(on_coup > plain,
+             "f2071 pays extra on a coup de grace -- its own gate, not"
+             " the key read directly",
+             f"plain {plain}, finisher {on_coup}")
+    out.that(on_crit == plain,
+             "and pays NOTHING on an ordinary critical, which is the"
+             " shortcut the key exists to avoid. Pointing this row's"
+             " `when=` at `crit` reds exactly this",
+             f"plain {plain}, crit {on_crit}")
+
+    out.that(not (getattr(REGISTRY["f2071"], "dropped", ()) or ()),
+             "f2071 carries no marker: the coup de grace half was its"
+             " last clause",
+             f"{getattr(REGISTRY['f2071'], 'dropped', ())}")
+
+
 def an_ender_named_by_a_test(out: Result) -> None:
     """"You or an adjacent ally can end it", which no id could say.
 
@@ -120015,6 +120148,9 @@ DRIVERS = {
     "an_ender_named_by_a_test": (
         an_ender_named_by_a_test,
         "an ender named by a test"),
+    "a_blow_that_knows_it_is_a_finisher": (
+        a_blow_that_knows_it_is_a_finisher,
+        "a blow that knows it is a finisher"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

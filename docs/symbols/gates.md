@@ -43,6 +43,11 @@ Added for `arms.i468x1`, *"you do not provoke opportunity attacks for making ran
 - `ctx['dtype']` -- the damage type of this blow.
 - `ctx['dtypes']` -- every type of a blow that is several at once.
 - `ctx['effect']` -- the effect being asked about.
+- `ctx['finisher']` -- is this blow a COUP DE GRACE, as opposed to any other critical.
+
+`Cast.coup_de_grace` rolls the finisher through an ordinary `strike` and then sets `critical`, so by the time the damage is rolled the two look identical. Stamped on `AttackResult` by that strike and carried into the damage context by `resolve.deal_damage`.
+
+**Not `crit` plus a helpless target**, which is the shortcut a row would otherwise be written as: a lucky natural 20 against a helpless creature is both of those and is not a coup de grace, which is a standard action somebody chose to take. `f2071` prints *"you deliver a coup de grace ... 1[W] extra damage"*.
 - `ctx['from_attack']` -- did this come out of an attack.
 - `ctx['gap']` -- what sort of hole a blocking square has -- "door", "cracked window". Read by `movement._may_squeeze` off `Grid.porous`, so a card naming one sort is a predicate on one mechanism rather than a second mechanism. #674.
 - `ctx['granted_by']` -- who handed this creature the attack, or -1.

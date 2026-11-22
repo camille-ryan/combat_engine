@@ -950,6 +950,19 @@ CTX_KEYS: dict[str, str] = {
         "`Gear.weapons` holds per-character `replace(w)` copies, so it "
         "reads whatever `c.improvised` or `c.weapon_group` has done to "
         "the weapon. On the damage context too since #1276. #1276."),
+    "finisher": (
+        "is this blow a COUP DE GRACE, as opposed to any other "
+        "critical.\n\n"
+        "`Cast.coup_de_grace` rolls the finisher through an ordinary "
+        "`strike` and then sets `critical`, so by the time the damage is "
+        "rolled the two look identical. Stamped on `AttackResult` by that "
+        "strike and carried into the damage context by "
+        "`resolve.deal_damage`.\n\n"
+        "**Not `crit` plus a helpless target**, which is the shortcut a "
+        "row would otherwise be written as: a lucky natural 20 against a "
+        "helpless creature is both of those and is not a coup de grace, "
+        "which is a standard action somebody chose to take. `f2071` "
+        "prints *\"you deliver a coup de grace ... 1[W] extra damage\"*."),
     "hand": "which hand the weapon is in.",
     "how": "the kind of forced movement -- push, pull, slide.",
     "ignore_cover": (

@@ -19,7 +19,7 @@ Making an attack, and what the attack turns out to be.
   - "The target is subject to effects as though hit by the chosen attack."
 - `c.as_weapon(self, *, damage: 'str' = '', group: 'str' = '', base: 'str' = '', proficiency: 'int' = 0, properties: 'frozenset[str]' = frozenset(), hands: 'str' = 'one-handed', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "This shield can be used as a one-handed melee weapon."
-- `c.attack(self, bonus: 'int', vs: 'Defense', *, on: 'int | None' = None, advantage: 'bool | None' = None, from_: 'int | None' = None, ignore_cover: 'bool' = False, keep: 'str' = '', hand: 'str' = 'main', as_: 'str' = '') -> 'AttackResult'`
+- `c.attack(self, bonus: 'int', vs: 'Defense', *, on: 'int | None' = None, advantage: 'bool | None' = None, from_: 'int | None' = None, ignore_cover: 'bool' = False, keep: 'str' = '', hand: 'str' = 'main', as_: 'str' = '', finisher: 'bool' = False) -> 'AttackResult'`
   - `as_` names *which* swing this is, when one row makes more than one.
 - `c.attack_with(self, a: 'Ability') -> 'int'`
   - The full attack bonus for an ability, named at runtime.
@@ -81,7 +81,7 @@ Making an attack, and what the attack turns out to be.
   - "You can see and hear as if you were in the target's space."
 - `c.see_from_as_well(self, square: 'Square', *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "You can see from **both** your location and that spot."
-- `c.strike(self, *, on: 'int | None' = None, advantage: 'bool | None' = None, plus: 'int' = 0, from_: 'int | None' = None, ignore_cover: 'bool' = False, keep: 'str' = '', hand: 'str' = 'main') -> 'AttackResult'`
+- `c.strike(self, *, on: 'int | None' = None, advantage: 'bool | None' = None, plus: 'int' = 0, from_: 'int | None' = None, ignore_cover: 'bool' = False, keep: 'str' = '', hand: 'str' = 'main', finisher: 'bool' = False) -> 'AttackResult'`
   - Roll the attack the header declared.
 - `c.target: int | None`
   - the target this call is for, or None. Everything defaults here.

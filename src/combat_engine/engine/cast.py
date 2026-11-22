@@ -4534,6 +4534,7 @@ class Cast:
         ignore_cover: bool = False,
         keep: str = "",
         hand: str = "main",
+        finisher: bool = False,
     ) -> AttackResult:
         """Roll the attack the header declared.
 
@@ -4571,6 +4572,7 @@ class Cast:
             ignore_cover=ignore_cover,
             keep=keep,
             hand=hand,
+            finisher=finisher,
         )
 
     def grant_attack(
@@ -5202,6 +5204,7 @@ class Cast:
         keep: str = "",
         hand: str = "main",
         as_: str = "",
+        finisher: bool = False,
     ) -> AttackResult:
         """`as_` names *which* swing this is, when one row makes more than one.
 
@@ -5251,6 +5254,15 @@ class Cast:
             ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
             keep=keep, hand=hand, as_=as_,
+            # **Whether this swing is a coup de grace**, which nothing on
+            # the board could say: the verb rolls the finisher through an
+            # ordinary `strike`, so the damage context looked identical to
+            # any other critical. `f2071`'s *"1[W] extra on a coup de
+            # grace"* had nothing to gate on. Threaded rather than
+            # inferred from `crit` and a helpless target, because a lucky
+            # natural 20 against a helpless creature is both of those and
+            # is not a coup de grace.
+            finisher=finisher,
             # **Which form is being swung**, so `ctx["basic"]` can answer
             # for a row whose Special says "unaugmented".
             #
@@ -5742,6 +5754,9 @@ class Cast:
             by_attack=bool(self.result and self.result.hit),
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via, crit=self.crit,
+            # Read off the result the attack stamped, so a rider inside
+            # the finisher inherits it and an ordinary critical does not.
+            finisher=bool(self.result and self.result.finisher),
             # Which weapon the blow came through. `detail` says which row
             # swung and cannot say which arm did it. #653.
             weapon=self._swung_weapon(),
@@ -8668,7 +8683,7 @@ class Cast:
         row = get(self.ref)
         if row is None or row.attack_of(self.branch) is None:
             return False
-        result = self.strike(on=who, advantage=True)
+        result = self.strike(on=who, advantage=True, finisher=True)
         if not result.hit:
             return False
         result.critical = True

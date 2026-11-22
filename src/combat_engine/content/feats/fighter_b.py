@@ -764,7 +764,7 @@ def f2331(c: Cast) -> None:
 
 
 @power("f2071", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.coup_de_grace(bonus=)",))
+       reach=PERSONAL, target=SELF)
 def f2071(c: Cast) -> None:
     """**Re-aimed.** The truncation this row was marked for is fixed:
     the spec prints all three associated refs now, so the long clause is
@@ -775,9 +775,17 @@ def f2071(c: Cast) -> None:
     and both are untyped, which stacks. So the +2 excludes the case the
     +5 covers.
 
-    The coup de grace half is dropped: `c.coup_de_grace` rolls the whole
-    finisher itself and the damage context has no key saying a blow is
-    one, so "1[W] extra on a coup de grace" has nothing to gate on.
+    **The coup de grace half is written, and the key is new.**
+    `c.coup_de_grace` rolls the finisher through an ordinary `strike`, so
+    by the time the damage is rolled the blow was indistinguishable from
+    any other critical -- there was nothing to gate on.
+
+    `AttackResult.finisher` is stamped by that strike and
+    `resolve.deal_damage` carries it into the damage context, so the gate
+    asks the fact rather than inferring it. **Not `crit` plus a helpless
+    target**, which is the tempting shortcut and is wrong: a lucky
+    natural 20 against a helpless creature is both of those and is not a
+    coup de grace, which is a standard action somebody chose to take.
     """
     me = c.me
     picked = among("p10592", "p1758", "p620")
@@ -797,6 +805,14 @@ def f2071(c: Cast) -> None:
         )
 
     c.bonus("skill:intimidate", 2, on=me, until=When.ENCOUNTER, kind="feat")
+    # **"You deliver a coup de grace ... 1[W] extra damage."** The damage
+    # context carries `finisher` now, stamped on `AttackResult` by
+    # `c.coup_de_grace`'s own strike -- so this is the blow the verb
+    # rolled and not any other critical. Gated on the grip the same way
+    # the two riders below are.
+    c.bonus("damage", 0, dice=c.w(1), on=me, until=When.ENCOUNTER,
+            when=lambda ctx: (bool(ctx.get("finisher"))
+                              and _grip(c, "axe", hands=2)))
     c.bonus("damage", 5, on=me, until=When.ENCOUNTER,
             when=lambda ctx: (picked(ctx) and _grip(c, "axe", hands=2)
                               and pinned_down(ctx)))

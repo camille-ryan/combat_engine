@@ -157,6 +157,23 @@ class AttackResult:
     #: `replay` records, and a new field there moves every fixture --
     #: which is a baseline write rather than a behaviour change.
     boosted: dict[str, int] = field(default_factory=dict, repr=False)
+    #: **Is this swing a coup de grace?**
+    #:
+    #: `Cast.coup_de_grace` rolls the finisher through an ordinary
+    #: `strike` and then sets `critical`, so by the time the damage is
+    #: rolled the blow is indistinguishable from any other critical --
+    #: and `f2071`'s *"1[W] extra on a coup de grace"* had nothing to gate
+    #: on.
+    #:
+    #: **Not inferred from `critical` and a helpless target**, which is
+    #: the tempting shortcut: a lucky natural 20 against a helpless
+    #: creature is both of those and is not a coup de grace, which is a
+    #: standard action somebody chose to take.
+    #:
+    #: On the result for the reason `weapon` one field up gives -- this
+    #: object is already threaded through the whole attack -- and
+    #: `repr=False` because the repr is in the stream `replay` records.
+    finisher: bool = field(default=False, repr=False)
 
     @property
     def parity(self) -> str:
@@ -492,11 +509,13 @@ def attack(
     as_: str = "",
     weapon: str = "",
     augment: int = 0,
+    finisher: bool = False,
     origin: frozenset[Square] = frozenset(),
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
     result = AttackResult()
+    result.finisher = finisher
     # The weapon of record, stamped once at the top so every rider that
     # pays out inside this attack reads the same answer. See the field.
     result.weapon = weapon
@@ -1433,6 +1452,7 @@ def deal_damage(
     granted_via: str = "",
     miss: bool = False,
     crit: bool = False,
+    finisher: bool = False,
     dtypes: Sequence[DamageType] = (),
     unpreventable: bool = False,
     weapon: str = "",
@@ -1518,6 +1538,15 @@ def deal_damage(
         # granted" is a damage-side rider and had nothing to gate on.
         "granted_by": granted_by,
         "granted_via": granted_via,
+        # **Was this blow a coup de grace?** `Cast.coup_de_grace` rolls
+        # the finisher through an ordinary `strike`, so by the time the
+        # damage is rolled the blow looks like any other critical --
+        # `f2071` prints *"1[W] extra on a coup de grace"* and had
+        # nothing to gate on. Carried on `AttackResult` and handed in
+        # here by `Cast.damage`, not inferred from `crit` and a helpless
+        # target: a lucky natural 20 against a helpless creature is both
+        # of those and is not one.
+        "finisher": finisher,
         # Which hand swung, empty for damage that came from no swing. The
         # attack context has carried this since #501; this one did not, so
         # a two-weapon card's attack half was exact and its damage half had
