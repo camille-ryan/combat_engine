@@ -1086,6 +1086,22 @@ class Companion:
     #: prints "if you haven't given it any commands by the end of your
     #: turn", so the instinctive effect needs to know whether one was.
     commanded: int = -1
+    #: An Instinctive Effect **lent** to a creature whose own block prints
+    #: none, run by `turns._uncommanded` exactly where the block's own one
+    #: would be.
+    #:
+    #: *"If the creature normally does nothing if you end your turn
+    #: without giving it a command, it instead uses a free action to make
+    #: a basic attack against the nearest enemy"* -- `i3538p1`. The clause
+    #: is about the creatures that print **no** effect, so it cannot be
+    #: said by firing the block's own: `Cast.instinctive` answers False
+    #: for exactly those.
+    #:
+    #: A callable rather than a ref, because the lent behaviour is the
+    #: lending row's and has no block of its own. Runtime state like
+    #: `Effect.on_end`, which holds closures for the same reason and is
+    #: never serialised. `Cast.instinctive(fn=)` is what sets it.
+    lent_instinctive: Any = None
     #: The dice its **own** attacks roll -- a ranger's beast prints `1[B]`
     #: the way a character's weapon prints `1[W]`, and `c.b(n)` reads this.
     #: Empty for a spirit, which has no attack of its own: every attack it

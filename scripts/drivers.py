@@ -86426,6 +86426,128 @@ def one_square_of_rough_going_is_free(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def an_instinctive_effect_lent_to_a_block_that_prints_none(out: Result) -> None:
+    """*"If the creature normally does nothing if you end your turn
+    without giving it a command, it instead uses a free action to make a
+    basic attack against the nearest enemy"* -- `i3538p1`.
+
+    **The clause is about the creatures `c.instinctive` answers False
+    for**, which is why calling it was the wrong verb twice over. That
+    method fires the **block's own** Instinctive Effect, found through
+    `Companion.ref` -- and the creatures this card is about print none.
+    Where it did find one it fired it a second time and at the wrong
+    moment, the instant the tapestry was used, because
+    `turns._uncommanded` already runs the printed one for free at the end
+    of the owner's turn.
+
+    So `fn=` **lends** rather than fires: the callable goes on
+    `Companion.lent_instinctive` and `_uncommanded` reaches it exactly
+    where a printed effect would have been reached. Nothing happens when
+    the item is used, which is the timing the card wants.
+
+    **A block's own effect always wins**, because the printed sentence is
+    conditional on the creature *normally doing nothing*. Asserted, since
+    that is the half a loan read first would have got wrong.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit, Miss
+    from combat_engine.engine.turns import _uncommanded
+
+    ROW = "i3538p1"
+
+    def played(
+        *, used: bool,
+    ) -> tuple[Any, int, int | None, list[tuple[int, int]]]:
+        """The board, with the tapestry used or not, and who swung."""
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref=ROW)
+        pets = cast.companions()
+        pet = pets[-1] if pets else None
+        if used:
+            REGISTRY[ROW].body(cast)
+        swung: list[tuple[int, int]] = []
+        for kind in (Hit, Miss):
+            world.bus.on(kind, lambda e: swung.append((e.attacker, e.target)))
+        _uncommanded(world, me)
+        return world, me, pet, [s for s in swung if pet is not None and s[0] == pet]
+
+    # -- the premises ------------------------------------------------------
+    world, _me, pet, _ = played(used=False)
+    out.that(pet is not None,
+             "premise: the board poses a summoned companion for this"
+             " caster, which is what the whole card is about",
+             f"{pet}")
+    held = must(world.get(pet, Companion), "it is a companion")
+    out.that(REGISTRY.get(held.ref) is None
+             or getattr(getattr(REGISTRY[held.ref], "summon", None),
+                        "instinctive", None) is None,
+             "premise: and its block prints NO instinctive effect --"
+             " which is the set the printed clause names and the set"
+             " `c.instinctive` answers False for",
+             f"{held.ref}")
+
+    # -- the control -------------------------------------------------------
+    _, _, _, idle = played(used=False)
+    out.that(not idle,
+             "left to itself with the tapestry unused, it does nothing at"
+             " the end of its owner's turn",
+             f"{idle}")
+
+    # -- the printed clause ------------------------------------------------
+    _, _, _pet2, swung = played(used=True)
+    out.that(len(swung) == 1,
+             "with the tapestry used it makes one attack at the end of"
+             " the owner's turn -- the loan, reached by"
+             " `turns._uncommanded` where a printed effect would be",
+             f"{swung}")
+
+    # -- nothing fires at the moment the item is used ----------------------
+    w3, me3, pet3, _ = played(used=False)
+    c3 = Cast(world=w3, me=me3, ref=ROW)
+    early: list[tuple[int, int]] = []
+    for kind in (Hit, Miss):
+        w3.bus.on(kind, lambda e: early.append((e.attacker, e.target)))
+    REGISTRY[ROW].body(c3)
+    out.that(not [s for s in early if s[0] == pet3],
+             "and nothing swings when the item is USED -- the half that"
+             " firing the effect here would have got wrong, a whole turn"
+             " early",
+             f"{early}")
+    out.that(must(w3.get(pet3, Companion), "it is a companion")
+             .lent_instinctive is not None,
+             "while the loan is on the creature, waiting",
+             f"{must(w3.get(pet3, Companion), 'companion').lent_instinctive}")
+
+    # -- a block with its own effect is untouched ---------------------------
+    w4, me4, pet4, _ = played(used=False)
+    ran: list[str] = []
+    Cast(world=w4, me=me4, ref="drv").instinctive(
+        pet4, fn=lambda _c, _w: ran.append("lent"))
+    out.that(must(w4.get(pet4, Companion), "it is a companion")
+             .lent_instinctive is not None,
+             "premise: a loan is in place",
+             f"{ran}")
+    _uncommanded(w4, me4)
+    out.that(ran == ["lent"],
+             "it runs where the block prints nothing -- the case this"
+             " card is for",
+             f"{ran}")
+    out.that(Cast(world=w4, me=me4, ref="drv").instinctive(pet4) is True,
+             "and `c.instinctive` now answers True for that creature,"
+             " where it answered False before the loan -- which is how"
+             " `_uncommanded` tells 'it acted' from 'it has no effect'"
+             " and skips the follow-its-owner default",
+             f"{ran}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: the clause it was dropped"
+             " for is the one asserted above",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -122221,6 +122343,9 @@ DRIVERS = {
     "one_square_of_rough_going_is_free": (
         one_square_of_rough_going_is_free,
         "one square of rough going is free"),
+    "an_instinctive_effect_lent": (
+        an_instinctive_effect_lent_to_a_block_that_prints_none,
+        "an instinctive effect lent to a block that prints none"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

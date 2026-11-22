@@ -189,7 +189,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - "The target dealt damage to you (or an ally) since the end of your
 - `c.index: int`
   - which target this is, counting from 0. `c.first` is `index == 0`.
-- `c.instinctive(self, who: 'int') -> 'bool'`
+- `c.instinctive(self, who: 'int', *, fn: 'Callable[[Any, int], None] | None' = None) -> 'bool'`
   - Set a standing summon going on its own Instinctive Effect.
 - `c.is_(self, condition: 'Condition', on: 'int | None' = None) -> 'bool'`
   - (no docstring)

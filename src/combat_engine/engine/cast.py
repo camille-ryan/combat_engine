@@ -13713,7 +13713,9 @@ class Cast:
             self.charge = was
         return hit
 
-    def instinctive(self, who: int) -> bool:
+    def instinctive(
+        self, who: int, *, fn: Callable[[Any, int], None] | None = None,
+    ) -> bool:
         """Set a standing summon going on its own Instinctive Effect.
 
         The behaviour is written on the block that made the creature, and
@@ -13725,6 +13727,31 @@ class Cast:
 
         False when the creature is not a summon of this caster's, or when
         its block prints no instinctive effect: most do not.
+
+        **`fn` LENDS one instead of firing one**, which is the opposite
+        job and is why it is a keyword rather than a second verb.
+        `i3538p1` prints *"if the creature normally does nothing if you
+        end your turn without giving it a command, it instead uses a free
+        action to make a basic attack against the nearest enemy"* -- a
+        clause about the creatures whose block prints **no** effect,
+        which is exactly the set this method answers False for.
+
+        So with `fn` nothing runs now: the callable is stored on
+        `Companion.lent_instinctive` and `turns._uncommanded` reaches it
+        at the end of the owner's turn, where a printed effect would have
+        been reached. Firing it here would be both too early -- the
+        instant the item was used -- and a second time, since
+        `_uncommanded` runs the printed one for free.
+
+        **A block's own effect always wins.** The printed sentence is
+        conditional on the creature *normally doing nothing*, so a
+        creature that prints one is untouched: the lent effect is read
+        only where `summon.instinctive` is absent.
+
+        The callable takes the same two arguments a printed effect does
+        -- a `Cast` rebound to the creature's own block ref, and the
+        creature -- so a row can hand over the same shape the header
+        carries.
         """
         from dataclasses import replace
 
@@ -13734,9 +13761,18 @@ class Cast:
         mine = self.world.get(who, Companion)
         if mine is None or mine.owner != self.me:
             return False
+        if fn is not None:
+            mine.lent_instinctive = fn
+            return True
         p = get(mine.ref)
         spec = getattr(p, "summon", None) if p else None
         act = getattr(spec, "instinctive", None) if spec is not None else None
+        # **The block's own first, the lent one only where there is
+        # none.** The printed clause that lends is conditional on the
+        # creature "normally doing nothing", so a block with an effect of
+        # its own runs that and the loan sits unread.
+        if act is None:
+            act = mine.lent_instinctive
         if act is None:
             return False
         act(replace(self, ref=mine.ref, targets=[], target=None, result=None), who)

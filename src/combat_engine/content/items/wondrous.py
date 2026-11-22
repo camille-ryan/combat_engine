@@ -3499,7 +3499,6 @@ def i3441p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.instinctive(fn=)",),
     requires_text="you must have used a summoning power near the tapestry",
 )
 def i3538p1(c: Cast) -> None:
@@ -3550,14 +3549,38 @@ def i3538p1(c: Cast) -> None:
     would mean rebinding the cast to `Companion.ref` by hand, because
     `c.command` reads `summon=` off the paying row's header and marks the
     creature commanded as a side effect -- engine plumbing that
-    `c.instinctive` exists to hold."""
+    `c.instinctive` exists to hold.
+
+    **Written. `fn=` lends rather than fires**, which is what makes the
+    timing right: nothing happens when the tapestry is used, and
+    `turns._uncommanded` reaches the loan at the end of the owner's turn
+    exactly where a printed effect would have been reached. A block with
+    an effect of its own is untouched, which is the printed *"normally
+    does nothing"*.
+
+    The lent effect takes the two arguments a printed one does -- a
+    `Cast` already rebound to the creature's own block ref, and the
+    creature -- so `c.basic` inside it swings as the summon rather than
+    as the tapestry's owner."""
     mine = c.companions()
     if mine:
-        c.resist(5, on=mine[-1], until=When.ENCOUNTER)
+        made = mine[-1]
+        c.resist(5, on=made, until=When.ENCOUNTER)
         c.immune(
-            keyword=[Keyword.CHARM, Keyword.FEAR], on=mine[-1],
+            keyword=[Keyword.CHARM, Keyword.FEAR], on=made,
             until=When.ENCOUNTER,
         )
+
+        def swing(summoned: Cast, who: int) -> None:
+            """*"A free action to make a basic attack against the
+            nearest enemy."*"""
+            from combat_engine.engine.query import nearest_enemy
+
+            near = nearest_enemy(summoned.world, who)
+            if near:
+                summoned.basic(who=who, on=near[0])
+
+        c.instinctive(made, fn=swing)
 
 
 @power(
