@@ -60616,9 +60616,19 @@ def a_retype_names_its_keyword_its_sources_and_one_use(out: Result) -> None:
     # already has a type" **is** `from_=UNTYPED`, which has existed since
     # #613. `i2400p1` is what `todo.py` reddened on the moment `once=`
     # landed. `i2550p1` is the one that needed `add=`.
+    #
+    # **`i2400p1` left this loop in `#1460` and that is the row getting
+    # NARROWER, not this rule losing an arm.** Its recolour used to be
+    # laid flat, so an ungated `_retyped` answered `('radiant',)` -- and
+    # the card is *"the next attack you make with THAT weapon"*, the one
+    # most recently sheathed. `Gear.last_sheathed` is that record now and
+    # the recolour is gated on it, so an ask that names no weapon
+    # correctly answers None. Asserted as the narrowing below; the
+    # payout, with the right weapon in the context, is three arms of
+    # `drivers.the_weapon_most_recently_sheathed`, which is where a board
+    # that can sheathe something is built.
     for ref, kws, printed, want in (
         ("i3170x1", (Keyword.IMPLEMENT,), T.UNTYPED, (T.FIRE,)),
-        ("i2400p1", (Keyword.WEAPON,), T.COLD, (T.RADIANT,)),
         ("i2550p1", (Keyword.WEAPON,), T.COLD, (T.COLD, T.RADIANT)),
     ):
         world, me, _foe = board(ref)
@@ -60643,11 +60653,15 @@ def a_retype_names_its_keyword_its_sources_and_one_use(out: Result) -> None:
              "and `i2400p1` is spent by one blow -- it used to recolour"
              " every swing in the printed window, which is a row more"
              " generous than its card")
-    out.that(REGISTRY["i2400p1"].unfinished == ("c.sheathed()",),
-             "`i2400p1` keeps the one marker it still earns: which weapon"
-             " was last sheathed is not recorded anywhere",
-             f"{REGISTRY['i2400p1'].unfinished}")
-    for ref in ("i3170x1", "i2550p1"):
+    narrowed = Cast(world=world, me=me, ref="drivers:unsheathed")
+    out.that(narrowed._retyped((Keyword.WEAPON,), T.COLD) is None,
+             "and it recolours NOTHING for an ask that names no weapon --"
+             " the card says *'the next attack you make with THAT"
+             " weapon'*, so a flat override was a row wider than its"
+             " card. This is the narrowing; the payout is three arms of"
+             " `the_weapon_most_recently_sheathed`",
+             f"{narrowed._retyped((Keyword.WEAPON,), T.COLD)}")
+    for ref in ("i3170x1", "i2550p1", "i2400p1"):
         out.that(not REGISTRY[ref].unfinished,
                  f"{ref} carries no marker now",
                  f"{REGISTRY[ref].unfinished}")
@@ -72790,6 +72804,303 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              "so the row carries no marker: all three printed clauses are "
              "honoured, the third one by chargen rather than by its body",
              f"{REGISTRY[REF].unfinished}")
+
+
+def deep_liquid_is_crossed_or_paid_for(out: Result) -> None:
+    """`Grid.liquid`: squares you would go *through*, and the permission
+    to walk on them. `i1322x1`, `i3110x1`, `i3199p2`, `m4356a5`. #1449.
+
+    **Four rows wanted one map and `c.surface` was not it.** That verb
+    answers what a *solid* floor is made of; these ask which squares are
+    liquid, which is a different question with a different reader --
+    `World._wet_squares`, in the movement path.
+
+    **The one decision worth defending is that it is NOT a difficult
+    label.** `i3110x1` and `m4356a5` each print *"ignores difficult
+    terrain"* **and** *"can cross liquid surfaces"* in one sentence. As a
+    label the second clause would be waived by the first, the two printed
+    sentences would collapse into one, and no arm could tell a row that
+    wrote both from a row that wrote either. The arm below plants exactly
+    that: a creature that ignores every sort of rough going still pays
+    for water.
+
+    `"shallow water"` stays a difficult label, and the two are not
+    rivals: wading is rough going, and this map is the water you do not
+    stand in.
+
+    **An extra square, not impassable, which is weaker than the page.**
+    Printed, deep water is swum -- `movement.swims` rolls that off
+    `world.terrain` for a whole-fight aquatic board. Pricing one liquid
+    square as rough going is the smallest reader that makes the
+    permission mean something and never stops a creature doing what the
+    rules allow. `World._wet_squares` says so in full.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.terrain import dress
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.grid import LIQUID_WORDS, neighbours
+    from combat_engine.engine.movement import place as _place_for_pool
+
+    ROWS = ("i1322x1", "i3110x1", "i3199p2", "m4356a5")
+
+    def wet_beside(ref: str, *, how_many: int = 4) -> tuple:
+        """A caster with a pool of water starting one square away."""
+        world, me, _ = _board(ref, 1)
+        cast = Cast(world=world, me=me, ref=ref)
+        here = must(world.get(me, Position), "the caster has a position")
+        # The audit board poses its own pool; cleared so this rule's
+        # geometry is the one being measured.
+        world.grid.liquid.clear()
+        beside = {sq for sq in neighbours(here.square)}
+        mouth = next(sq for sq in sorted(beside)
+                     if world.grid.occupant(sq) is None
+                     and sq not in world.grid.blocking)
+        pool = [mouth]
+        seen = {mouth}
+        queue = [mouth]
+        while queue and len(pool) < how_many:
+            at = queue.pop(0)
+            for nxt in sorted(neighbours(at)):
+                if len(pool) >= how_many:
+                    break
+                if (nxt in seen or nxt in beside
+                        or not world.grid.inside(nxt)
+                        or world.grid.occupant(nxt) is not None
+                        or nxt in world.grid.blocking):
+                    continue
+                seen.add(nxt)
+                pool.append(nxt)
+                queue.append(nxt)
+        for sq in pool:
+            world.grid.liquid[sq] = "water"
+        return world, me, cast, here.square, mouth, pool
+
+    # -- the price ----------------------------------------------------------
+    # **On the WAND's board, not the boots'.** `audit.board` runs
+    # `Encounter.start()`, which arms every trait including the row under
+    # test -- so on `i1322x1`'s own board the caster already crosses
+    # liquid and every price arm here read 1. Two arms failed that way on
+    # the first run. `i3199p2` is a minor-action wand that grants no
+    # permission, so its caster is an ordinary creature standing beside
+    # water, and the premise below says so rather than assuming it.
+    DRY_BOARD = ROWS[2]
+    world, me, _cast, stood, mouth, pool = wet_beside(DRY_BOARD)
+    dry = next(sq for sq in sorted(neighbours(stood))
+               if sq not in world.grid.liquid
+               and world.grid.inside(sq)
+               and world.grid.occupant(sq) is None
+               and sq not in world.grid.blocking
+               and sq not in world.grid.difficult)
+    out.that(len(pool) >= 3 and mouth in world.grid.liquid,
+             "premise: a pool of deep water starts one square from the"
+             " caster, and a dry square it has no entry for is beside it"
+             " too -- so the two steps below differ in the water and in"
+             " nothing else",
+             f"pool {sorted(pool)}, dry {dry}")
+    out.that(not must(world.get(me, Movement),
+                      "the caster moves").crosses_liquid,
+             "premise: and the caster does NOT already cross liquid, so"
+             " the price below is the board's and not a permission the"
+             " board handed out while arming its traits",
+             f"{must(world.get(me, Movement), 'it moves').crosses_liquid}")
+
+    def step(world, who: int) -> tuple:                  # noqa: ANN001
+        """What one step into the pool costs, against one onto dry land."""
+        price = world.crossing(who)
+        return price(stood, mouth), price(stood, dry)
+
+    into, across = step(world, me)
+    out.that(across == 1,
+             "a step onto ordinary ground costs the one square it always"
+             " did -- the control that makes the next line about the"
+             " water",
+             f"{across}")
+    out.that(into == 2,
+             "and a step into deep water costs 2, which is what makes"
+             " `c.crosses_liquid` a permission worth having rather than a"
+             " flag nothing consults",
+             f"{into}")
+
+    # -- the permission -----------------------------------------------------
+    w2, me2, c2, _, _, _ = wet_beside(DRY_BOARD)
+    out.that(c2.crosses_liquid(on=me2, until=When.ENCOUNTER) is not None,
+             "the permission is laid as an effect, so it ends with its"
+             " duration rather than editing the creature for good",
+             "laid")
+    walked, _ = step(w2, me2)
+    out.that(walked == 1,
+             "and with it the water costs what solid ground costs --"
+             " *'as if they were solid ground'*, which is the printed"
+             " words",
+             f"{walked}")
+
+    # -- the arm the whole design is for ------------------------------------
+    w3, me3, c3, _, _, _ = wet_beside(DRY_BOARD)
+    out.that(c3.ignores_difficult(on=me3, until=When.ENCOUNTER) is not None,
+             "premise: the same creature is given a waiver on EVERY sort"
+             " of rough going -- no `kind`, so the widest one this engine"
+             " has",
+             "laid")
+    rough_free, _ = step(w3, me3)
+    out.that(rough_free == 2,
+             "and it still pays for the water. This is why `Grid.liquid`"
+             " is not a `difficult` label: `i3110x1` and `m4356a5` print"
+             " both permissions in one sentence, and as a label the"
+             " second would be waived by the first -- two printed"
+             " clauses collapsed into one, with nothing able to tell a"
+             " row that wrote both from one that wrote either",
+             f"{rough_free}")
+
+    # -- two creatures that were never wading -------------------------------
+    for mode, why in (("swim", "the page gives a swim speed a speed to"
+                               " swim at rather than a surcharge"),
+                      ("fly", "and a flier is over the water, not in it")):
+        w4, me4, _, _, _, _ = wet_beside(DRY_BOARD)
+        must(w4.get(me4, Movement), "the creature moves").modes[mode] = 6
+        free, _ = step(w4, me4)
+        out.that(free == 1, f"a creature with a {mode} mode pays nothing"
+                            f" extra -- {why}", f"{free}")
+
+    # -- the body of water --------------------------------------------------
+    _w5, _me5, c5, _, mouth5, pool5 = wet_beside(ROWS[2], how_many=6)
+    found = c5.liquid_body(4, kind="water")
+    out.that(len(found) == 4 and set(found) <= set(pool5),
+             "`c.liquid_body` hands back as many contiguous squares of"
+             " the pool as were asked for, and no square outside it",
+             f"{sorted(found)}")
+    out.that(mouth5 in found,
+             "including the one touching the caster -- *'you touch an"
+             " adjacent ... body of water'*, so the fill starts at the"
+             " Requirement rather than anywhere wet",
+             f"{sorted(found)}, mouth {mouth5}")
+    out.that(c5.liquid_body(99, kind="water") == pool5[:len(pool5)]
+             or len(c5.liquid_body(99, kind="water")) == len(pool5),
+             "asking for more than the pool holds returns the pool --"
+             " a puddle of six freezes six, which is a real answer and"
+             " not a refusal",
+             f"{len(c5.liquid_body(99, kind='water'))} of {len(pool5)}")
+    out.that(c5.liquid_body(4, kind="acid") == [],
+             "and a pool of water is not a pool of acid: the kind is why"
+             " the map is a dict, and `i3199p2` must not freeze acid",
+             f"{c5.liquid_body(4, kind='acid')}")
+
+    # **A square with somebody in it is not frozen**, which is printed.
+    w6, _me6, c6, _, _mouth6, pool6 = wet_beside(ROWS[2], how_many=6)
+    victim = sorted(c6.enemies())[0]
+    _place_for_pool(w6, victim, pool6[-1])
+    out.that(w6.grid.occupant(pool6[-1]) == victim,
+             "premise: a creature stands in one square of the pool",
+             f"{pool6[-1]} holds {w6.grid.occupant(pool6[-1])}")
+    out.that(pool6[-1] not in c6.liquid_body(6, kind="water"),
+             "and that square is left out -- *'cannot freeze a square if"
+             " it contains any creatures'*",
+             f"{sorted(c6.liquid_body(6, kind='water'))}")
+
+    # -- a dry caster -------------------------------------------------------
+    w7, me7, _ = _board(ROWS[2], 1)
+    w7.grid.liquid.clear()
+    c7 = Cast(world=w7, me=me7, ref=ROWS[2])
+    out.that(c7.liquid_body(4, kind="water") == [],
+             "a caster with no water beside it finds none, which is the"
+             " card's own Requirement failing rather than an error",
+             f"{c7.liquid_body(4, kind='water')}")
+
+    # -- the freeze ---------------------------------------------------------
+    w8, _me8, c8, _, _mouth8, pool8 = wet_beside(ROWS[2], how_many=6)
+    ice = c8.liquid_body(3, kind="water")
+    held = c8.freeze(ice, label="ice", until=When.ENCOUNTER)
+    out.that(held is not None,
+             "freezing a pool lays an effect, so *'remain solid until the"
+             " end of the encounter'* is a duration and not a permanent"
+             " edit to the board",
+             "laid")
+    out.that(all(sq not in w8.grid.liquid for sq in ice),
+             "the frozen squares stop being liquid, so nothing pays the"
+             " surcharge to stand on them and no permission is needed",
+             f"{[sq in w8.grid.liquid for sq in ice]}")
+    out.that(all(w8.grid.difficult.get(sq) == "ice" for sq in ice),
+             "and become rough going labelled ice -- *'the squares of ice"
+             " are difficult terrain'*, so a row ignoring ice crosses"
+             " them free and one ignoring mud does not",
+             f"{[w8.grid.difficult.get(sq) for sq in ice]}")
+    out.that(all(sq in w8.grid.liquid for sq in pool8 if sq not in ice),
+             "while the rest of the pool is untouched -- the card freezes"
+             " a number of squares, not the body",
+             f"{sorted(set(pool8) - set(ice))}")
+    w8.effects.end(held, "driver")
+    out.that(all(sq in w8.grid.liquid for sq in ice)
+             and not any(w8.grid.difficult.get(sq) == "ice" for sq in ice),
+             "and it thaws when the effect ends, both halves together --"
+             " ice left behind on a square that is liquid again would be"
+             " two maps disagreeing about one square",
+             f"{[w8.grid.liquid.get(sq) for sq in ice]}")
+
+    # -- the vocabulary is closed -------------------------------------------
+    out.that("water" in LIQUID_WORDS and "stone" not in LIQUID_WORDS,
+             "`LIQUID_WORDS` is the closed vocabulary and is not"
+             " `SURFACE_WORDS`: the floor of a pool is still stone, so"
+             " the two maps answer different questions about one square",
+             f"{sorted(LIQUID_WORDS)}")
+    bad = False
+    try:
+        c5.liquid_body(2, kind="granite")
+    except ValueError:
+        bad = True
+    out.that(bad,
+             "and a word outside it RAISES rather than returning an empty"
+             " list -- `#598`'s rule, and an empty list here reads"
+             " exactly like a dry board",
+             "raised")
+
+    # -- something fills it in play -----------------------------------------
+    for terrain, want in (({"aquatic"}, True), (set(), False)):
+        w9, _me9, _ = _board(ROWS[0], 1)
+        w9.grid.liquid.clear()
+        w9.grid.difficult.clear()
+        w9.terrain = set(terrain)
+        dress(w9, seed=7, level=1)
+        out.that(bool(w9.grid.liquid) is want,
+                 f"a dressed board {'with' if want else 'without'} aquatic"
+                 f" terrain {'has' if want else 'has no'} deep water --"
+                 " the permission would be a flag nothing consults if"
+                 " nothing laid any",
+                 f"{len(w9.grid.liquid)} liquid square(s)")
+        if want:
+            out.that(not any(sq in w9.grid.difficult
+                             for sq in w9.grid.liquid),
+                     "and no square is both deep water and labelled rough"
+                     " going -- a `shallow water` label left under a pool"
+                     " would let a wading waiver pay for a walk on water",
+                     f"{[sq for sq in w9.grid.liquid if sq in w9.grid.difficult]}")
+
+    # -- the rows -----------------------------------------------------------
+    w10, me10, _c10, _, _, _ = wet_beside(ROWS[0])
+    REGISTRY[ROWS[0]].body(Cast(world=w10, me=me10, ref=ROWS[0]))
+    out.that(must(w10.get(me10, Movement), "it moves").crosses_liquid,
+             f"{ROWS[0]} does not sink -- and the ruling that blocked it"
+             " answered a different question: `movement.walk`'s 2D plane"
+             " is about the failed swimmer's printed *'sink 1 square'*,"
+             " where NOT sinking is permission to stand on a square and"
+             " needs no axis at all",
+             "crosses")
+
+    w11, me11, _ = _board(ROWS[3], 1)
+    REGISTRY[ROWS[3]].body(Cast(world=w11, me=me11, ref=ROWS[3]))
+    moves11 = must(w11.get(me11, Movement), "it moves")
+    out.that(moves11.crosses_liquid and ("*" in moves11.ignores
+                                         or moves11.ignores),
+             f"{ROWS[3]} writes BOTH of its printed permissions, which is"
+             " the pair that could not be told apart if liquid were a"
+             " difficult label",
+             f"crosses {moves11.crosses_liquid}, ignores {sorted(moves11.ignores)}")
+
+    for ref in ROWS:
+        out.that(not REGISTRY[ref].unfinished,
+                 f"and {ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
 
 
 def a_zone_hinders_whoever_aims_through_it(out: Result) -> None:
@@ -91316,12 +91627,15 @@ def a_weapon_splits_into_two(out: Result) -> None:
     out.that(not REGISTRY[ROW].unfinished,
              f"{ROW} carries no marker",
              f"{REGISTRY[ROW].unfinished}")
-    out.that(REGISTRY["f1237"].unfinished == ("c.declare(f1237)",),
-             "while `f1237` is RE-POINTED rather than cleared: its"
-             " both-hands clause is written and its three remaining ones"
-             " are riders in the bodies of the rows they name, which is"
-             " `#550`'s convention and four power files this wave does"
-             " not own",
+    out.that(not REGISTRY["f1237"].unfinished,
+             "and `f1237` carries no marker either. This arm pinned"
+             " `('c.declare(f1237)',)` until the four rider clauses were"
+             " written into the bodies of the rows they name, which is"
+             " `#550`'s convention -- `p971`, `p2104`, `p87` and `p4541`."
+             " The marker could never have come true as written:"
+             " `feat.category` for this row is empty, so it joins no"
+             " declare chain at all, and a ref-shaped marker on a chain"
+             " the feat cannot join is a hard False for ever",
              f"{REGISTRY['f1237'].unfinished}")
 
 
@@ -123129,6 +123443,16 @@ def a_herding_wall_penalises_shots_into_and_through_it(out: Result) -> None:
     """`f1713b`: -2 to attacks against anything inside the wall or on the
     far side of it, and two extra squares to enter (#1341).
 
+    **The penalty moved layers in `#1463` and everything below about
+    `Mods` and labels is history.** It is `Zone.attack_penalty` now, read
+    by `resolve._aimed_through` -- one field on the region instead of a
+    gated `c.penalty` on each of `c.enemies()`, because the per-enemy
+    shape could not reach an enemy that joined the board after the wall
+    went up. The deltas this rule asserts are **unchanged**; only
+    `delta()`'s reader moved, and a `Mods` read went to 0 on all four
+    arms the day the row changed. The paragraphs below are kept because
+    they say why the measurement is a *delta* at all, which still holds.
+
     **The delta against an identical board the row was not cast on, which
     is the only honest reading here.** `c.penalty(label=)` puts the label
     on the `Mod`, for the non-stacking rule, and **not** on the `Effect`
@@ -123187,9 +123511,10 @@ def a_herding_wall_penalises_shots_into_and_through_it(out: Result) -> None:
       before reading that red as something else.
     """
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Mods, Side
+    from combat_engine.engine.components import Side
     from combat_engine.engine.dsl import use
     from combat_engine.engine.movement import place
+    from combat_engine.engine.resolve import situational_attack as _situational
     from combat_engine.engine.zones import Zone
 
     ROW = "f1713b"
@@ -123258,14 +123583,33 @@ def a_herding_wall_penalises_shots_into_and_through_it(out: Result) -> None:
              f"{list(probe.line(near, clear))}")
 
     def delta(shooter_at: Square, victim_at: Square) -> int:
-        """The attack penalty the wall adds: cast board minus bare board."""
+        """The attack penalty the wall adds: cast board minus bare board.
+
+        **Read through `situational_attack`, not `Mods`, and the change
+        is `#1463`.** This row used to lay the penalty the `m238a3` way
+        -- a gated `c.penalty("attack", ...)` on each of `c.enemies()`,
+        which lands in `Mods` -- and it is a field on the zone now,
+        `Zone.attack_penalty`, read by `resolve._aimed_through`. The
+        deltas below are unchanged; the layer they are read from is not.
+        A `Mods` read went to 0 on all four arms the day the row moved.
+
+        Why the row moved, in one line: the per-enemy shape cannot reach
+        an enemy that joins the board *after* the wall goes up, because
+        it was not in `c.enemies()` when the loop ran. `#1463` has it in
+        full, and `drivers.aimed_through` asserts the verb. This rule
+        stays because it measures the **row**, cast through `dsl.use`,
+        over the wall's own squares -- including the two arms that one
+        does not have: the single-label number and the wall destroyed
+        under a penalty.
+        """
         reads: list[int] = []
         for cast in (True, False):
             board, _caster, shoots, hit, _w = staged(cast=cast)
             place(board, shoots, shooter_at)
             place(board, hit, victim_at)
-            reads.append(board.need(shoots, Mods).total(
-                "attack", {"attacker": shoots, "target": hit}))
+            reads.append(_situational(
+                board, shoots, hit, "mba",
+                {"attacker": shoots, "target": hit}))
         return reads[0] - reads[1]
 
     inside = delta(near, middle)
@@ -123296,13 +123640,16 @@ def a_herding_wall_penalises_shots_into_and_through_it(out: Result) -> None:
     place(board, shoots, near)
     place(board, hit, middle)
     ctx = {"attacker": shoots, "target": hit}
-    standing = board.need(shoots, Mods).total("attack", ctx)
+    standing = _situational(board, shoots, hit, "mba", ctx)
     board.zones.end(live[0][0], "the control")
-    gone = board.need(shoots, Mods).total("attack", ctx)
+    gone = _situational(board, shoots, hit, "mba", ctx)
     out.that(gone - standing == 2,
-             "CONTROL: destroying the wall takes the penalty back with the"
-             " modifier still laid -- the gate asks for the zone on every"
-             " roll, which is why it reads `world.get` and not `need`",
+             "CONTROL: destroying the wall takes the penalty with it --"
+             " which is now true by construction rather than by a live"
+             " gate, and is the better half of the move: the penalty is"
+             " a field ON the zone, so a destroyed wall has nowhere to"
+             " keep one. The old shape hung a modifier on each enemy and"
+             " had to re-ask `world.get` on every roll to get this right",
              f"{standing} -> {gone}")
 
 
@@ -126984,23 +127331,6 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
-        a_zone_hinders_whoever_aims_through_it,
-        a_standing_wall_is_reshaped_around_one_square,
-        a_rod_pays_the_dark_pact_tally,
-        allies_cross_rough_ground_on_a_granted_shift,
-        no_sound_crosses_a_silenced_zone,
-        a_feat_offers_shedding_light_as_an_action,
-        the_sixth_fighter_style_is_an_untrained_weapon,
-        a_borrowed_power_rolls_on_charisma,
-        a_form_ended_from_outside_it,
-        a_creature_takes_a_different_stat_block,
-        the_hexblade_boon_taken_from_a_new_moment,
-        a_feat_buys_an_attack_power_from_another_class,
-        a_dose_of_poison_goes_on_a_weapon,
-        the_spiked_chain_feats_four_clauses,
-        an_infusion_fired_from_the_familiars_square,
-        what_the_floor_is_made_of,
-        a_feature_ref_the_hand_holds_under_its_other_name,
         a_build_time_option_is_drawn_and_both_halves_are_dealt,
         "a build-time option is drawn rather than fixed at the first, so"
         " both halves of the artificer's pair are dealt and its exclusion"
@@ -127387,6 +127717,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "deep_liquid": (
+        deep_liquid_is_crossed_or_paid_for,
+        "deep liquid is crossed or paid for, and is NOT a difficult"
+        " label (#1449)",
     ),
     "aimed_through": (
         a_zone_hinders_whoever_aims_through_it,
@@ -129217,6 +129552,27 @@ DRIVERS = {
         " before it left behind (#1037)",
     ),
 }
+
+# **Every entry is `(function, description)`, checked here rather than
+# where it is read.** `main` unpacks `fn, what = DRIVERS[name]`, so a
+# malformed value is invisible to `drivers.py <name>` -- which looks up
+# one key -- and fatal to `drivers.py` with no argument, which is the
+# only invocation that touches every entry.
+#
+# That failure mode cost 18 commits of silence. A splice that added each
+# new rule also inserted a bare `fn,` line anchored on another bare
+# function line, and in this file such a line lives INSIDE another
+# entry's tuple: `build_option_draw` grew from 2 items to 20, one per
+# commit, while every single-rule run passed because each rule did also
+# get a correct key of its own. The traceback named `main()` and not the
+# entry. #1465.
+_MALFORMED = {k: len(v) for k, v in DRIVERS.items()
+              if not (isinstance(v, tuple) and len(v) == 2)}
+if _MALFORMED:
+    raise SystemExit(
+        "scripts/drivers.py: DRIVERS entries must be (function,"
+        f" description). Malformed: {_MALFORMED}"
+    )
 
 
 #: Rules that want the **unscored** draw for the whole of their body, not

@@ -4176,33 +4176,28 @@ def i3199p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("grid.Grid.liquid",),
 )
 def i3199p2(c: Cast) -> None:
-    """The whole row measures a body of water: which squares are liquid,
-    how many are contiguous, and which of them are empty. The map has no
-    such feature, and `c.terrain` answers only what sort of place the
-    fight is in.
+    """*"You touch an adjacent container, pool, or other body of water ...
+    and a number of contiguous squares within the body of water equal to
+    1 + the wand's enhancement bonus freeze into solid ice. Only one of
+    the frozen squares has to be adjacent to you. The squares of ice are
+    difficult terrain and remain solid until the end of the encounter.
+    This effect cannot freeze a square if it contains any creatures."*
 
-    **Re-pointed to the map rather than a verb.** `c.water()` named a
-    `Cast` verb; what is missing is a **per-square record of which squares
-    are liquid** -- `grid.Grid.liquid` -- because *"a liquid surface"* is a
-    place on the board and `world.terrain` answers only whether the whole
-    fight is aquatic. A verb reading a map nothing holds would be the
-    dead-gate shape `#598` measured, and `f3719` has just shown what the
-    honest version costs: the field, a vocabulary, a reader, and something
-    that fills it.
+    **This row is why `Grid.liquid` is a map and not a lookup.** The other
+    three rows that wanted it ask whether *one* square is liquid; this one
+    needs the body's **geometry** -- contiguous squares, only one of them
+    adjacent to the caster, none of them occupied. `c.liquid_body` is that
+    flood fill, and it is the row that decided the field holds the liquid's
+    *kind*: a wand that freezes water must not freeze a pool of acid.
 
-    Four rows want this one map -- `i1322x1`, `i3110x1`, `i3199p2` and
-    `m4356a5` -- so they move together. `#1449`.
-
-    **This row is the one that needs the most of the map.** The other three
-    ask whether a square is liquid; this one needs the body's *geometry* --
-    `1 + enhancement` contiguous squares, only one of which must be
-    adjacent to the caster, and none of which may hold a creature. So it is
-    a flood fill over the map rather than a lookup, and it is the row that
-    decides the field is worth having rather than a bare `set`.
+    **Fewer squares than asked for is a real answer.** A puddle of two
+    freezes two; nothing adjacent being water at all is the card's own
+    Requirement failing, and the row lays nothing. `#1449`.
     """
+    pool = c.liquid_body(1 + c.enhancement, kind="water")
+    c.freeze(pool, label="ice", until=When.ENCOUNTER)
 
 
 @power(

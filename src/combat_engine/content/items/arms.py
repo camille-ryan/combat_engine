@@ -495,7 +495,7 @@ def i1281x1(c: Cast) -> None:
     c.as_weapon(damage="1d6", group="heavy blade", proficiency=3,
                 properties=frozenset({"off-hand"}))
 @power("i1322x1", level=1, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("grid.Grid.liquid",))
+       reach=PERSONAL, target=SELF)
 def i1322x1(c: Cast) -> None:
     """Swim at your speed, and +3 to Athletics made to swim.
 
@@ -511,26 +511,28 @@ def i1322x1(c: Cast) -> None:
     `kind="item"` because the card says *"item bonus"*, which is what
     stops it stacking with another of the same source.
 
-    **Two clauses are left and neither is waiting for a symbol**, which is
-    why the marker names the map rather than a verb:
+    **The sinking clause is written now, and the ruling it was blocked on
+    answered a different question.** *"You do not sink beneath the surface
+    of any liquid"* was recorded as having no axis to not-sink along,
+    citing `movement.walk`'s 2D-plane ruling. That ruling is about the
+    failed swimmer's printed *"sink 1 square"*, which genuinely has
+    nowhere to go. **Not sinking needs no axis**: it is permission to
+    stand on a square you otherwise could not, which a plane says
+    perfectly well. The old note read a sentence about where you end up as
+    a sentence about a direction. `Grid.liquid` is the square and
+    `c.crosses_liquid` is the permission -- the same one `i3110x1` and
+    `m4356a5` print from the other side. `#1449`.
 
-    * *"You do not sink beneath the surface of any liquid"* has no axis to
-      not-sink along. `movement.walk`'s own docstring records the ruling --
-      a 2D plane, so *"sink 1 square"* has nowhere to go -- and that is an
-      in-code paraphrase of a chat turn rather than a quote, so it is cited
-      as the tree's record of the decision and not as Camille's words.
-    * *"+3 to Endurance checks to swim for an hour or more"* is hour-long
-      travel. `waist._holding_breath` measured which Endurance checks the
-      engine actually rolls -- one, for suffocation -- and the hour-long
-      ones are `#971` with no roll here.
-
-    What the marker does name is the per-square liquid map: *"the surface
-    of the water"* is a place, and `world.terrain` answers only whether the
-    **whole fight** is aquatic. `i3110x1`, `i3199p2` and `m4356a5` want the
-    same map for their own clauses.
+    **One clause stays unwritten and it is not that map.** *"+3 to
+    Endurance checks to swim for an hour or more"* is hour-long travel.
+    `waist._holding_breath` measured which Endurance checks this engine
+    rolls -- one, for suffocation -- and the hour-long ones are `#971`'s
+    clock, which has no roll in a fight. No marker, because there is no
+    symbol to wait for: the issue is the record.
     """
     if c.terrain("aquatic"):
         c.mode("swim", c.speed_of(), on=c.me, until=When.ENCOUNTER)
+    c.crosses_liquid(on=c.me, until=When.ENCOUNTER)
     c.bonus("skill:athletics", 3, kind="item", when=_swimming,
             until=When.ENCOUNTER, on=c.me)
 

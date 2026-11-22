@@ -436,6 +436,41 @@ class World:
             and sq not in near
         } | imposed
 
+    def _wet_squares(self, for_: int) -> frozenset[Any]:
+        """Liquid squares this creature pays an extra square to enter.
+
+        Empty for a board with no liquid, which is every board until
+        something dresses one -- so `crossing`'s fast path is unchanged
+        and the term costs a `dict` emptiness test per move search.
+
+        **Three creatures pay nothing.** One that `crosses_liquid`, which
+        is the printed permission; one with a **swim** mode, because the
+        page gives it a speed to swim at rather than a surcharge; and one
+        **flying**, which is over the water rather than in it.
+
+        **An extra square, not impassable, and that is weaker than the
+        page on purpose.** Printed, deep water is swum -- an Athletics
+        check, half speed, and `movement.swims` already rolls it off
+        `world.terrain` for a whole-fight aquatic board. Pricing a single
+        liquid square as rough going is the smallest reader that makes
+        the permission mean something, and it never stops a creature
+        doing what the rules allow. Turning the per-square map into a
+        per-square swim check would move pathing on every board that has
+        one, and is a second change rather than this one. #1449.
+        """
+        if not self.grid.liquid:
+            return frozenset()
+        from .components import Movement
+
+        mv = self.get(for_, Movement)
+        if mv is not None and (
+            mv.crosses_liquid
+            or mv.modes.get("swim")
+            or mv.modes.get("fly")
+        ):
+            return frozenset()
+        return frozenset(self.grid.liquid)
+
     def _wall_tolls(self, for_: int) -> dict[Any, int]:
         """What each stated wall costs this creature to climb, by square.
 
@@ -536,15 +571,22 @@ class World:
         # skipped entirely -- the shape of bug `Zone.extra_cost`'s own note
         # is about, one square cheaper than the card and nothing saying so.
         climb = self._wall_tolls(for_)
+        wet = self._wet_squares(for_)
         if not taxes and not toward and not climb:
-            return lambda _frm, to: 2 if to in rough else 1
+            return lambda _frm, to: 2 if (to in rough or to in wet) else 1
 
         def cost(frm: Any, to: Any) -> int:
             # **The larger of the two, never the sum.** `p3217` prints "2
             # extra **instead of** the normal 1 extra", so a tax replaces
             # difficult's surcharge; adding them would charge 3 for a square
             # the card prices at 2. See `Zone.extra_cost`.
-            extra = 1 if to in rough else 0
+            # **`wet` is beside `rough` and not folded into it**, so a
+            # difficult-terrain waiver does not buy a walk on water --
+            # `i3110x1` prints both permissions in one sentence and one
+            # must not pay for the other. `Grid.liquid` has the argument.
+            # The larger and not the sum, like everything else here: a
+            # square that is both rough and liquid costs one extra.
+            extra = 1 if (to in rough or to in wet) else 0
             for zone in taxes:
                 if zone.extra_cost_if_difficult and to not in rough:
                     continue

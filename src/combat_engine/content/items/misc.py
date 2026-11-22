@@ -3625,36 +3625,35 @@ def i3067p1(c: Cast) -> None:
 
 
 @power("i3110x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("grid.Grid.liquid",))
+       reach=PERSONAL, target=SELF)
 def i3110x1(c: Cast) -> None:
-    """Difficult terrain is exact.
+    """*"The mount ignores the effect of difficult terrain and can cross
+    liquid surfaces as if they were solid ground."*
 
-    **The second clause has nothing to apply to, and the measurement is
-    sharper than "there is no liquid surface".** The only water a board can
-    hold is `content.terrain._ROUGH`'s `"shallow water"`, which is a
-    *label on a difficult square* -- `Grid.difficult` carries it and
-    `c.ignores_difficult(kind)` reads it -- so every wet square this engine
-    can build is already covered by the line above. What is missing is an
-    impassable liquid surface to cross, which is a terrain **kind** and not
-    a `Cast` verb.
+    **Two permissions in one sentence, and they must not be one call.**
+    The old note had the measurement right: every wet square this engine
+    could build was `content.terrain._ROUGH`'s `"shallow water"`, a label
+    on a difficult square, so the first clause already covered it and the
+    second had nothing left to apply to. `Grid.liquid` is the layer that
+    was missing -- deep liquid, which is not rough going but a surface you
+    would go *through*.
 
-The marker named the wrong layer and all four are
-    re-pointed together now, which is what that note asked for.
+    It is deliberately **not** a difficult label, and this row is why. If
+    it were, the `c.ignores_difficult` above would waive it, the card's
+    two sentences would collapse into one, and nothing could tell a row
+    that wrote both from a row that wrote either. `Grid.liquid` carries
+    the argument in full; `World._wet_squares` is the separate term it
+    buys.
 
-    **Re-pointed to the map rather than a verb.** `c.water()` named a
-    `Cast` verb; what is missing is a **per-square record of which squares
-    are liquid** -- `grid.Grid.liquid` -- because *"a liquid surface"* is a
-    place on the board and `world.terrain` answers only whether the whole
-    fight is aquatic. A verb reading a map nothing holds would be the
-    dead-gate shape `#598` measured, and `f3719` has just shown what the
-    honest version costs: the field, a vocabulary, a reader, and something
-    that fills it.
-
-    Four rows want this one map -- `i1322x1`, `i3110x1`, `i3199p2` and
-    `m4356a5` -- so they move together. `#1449`."""
+    **The third sentence needs nothing written.** *"Any adverse effect of
+    that terrain, such as the damage from acid or magma, still affects the
+    mount normally"* -- the permission waives the *going* and touches no
+    damage, so a hazard laying harm over a liquid square goes on laying
+    it. That is a negative, asserted rather than coded. `#1449`."""
     beast = _the_mount(c)
     if beast is not None:
         c.ignores_difficult(on=beast, until=When.ENCOUNTER)
+        c.crosses_liquid(on=beast, until=When.ENCOUNTER)
 
 
 @power("i3358p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,

@@ -493,6 +493,17 @@ class Movement:
     #: creature on every board until a row says so -- the same bargain
     #: the five siblings strike. #1461.
     ignores_shift_granted_by: frozenset[int] = frozenset()
+    #: **Deep liquid is crossed as solid ground.** `i3110x1` and `m4356a5`
+    #: print it that way; `i1322x1` prints *"you do not sink beneath the
+    #: surface of any liquid"*, which is the same permission said from the
+    #: other side.
+    #:
+    #: Not one of the `ignores` narrowings above and not a difficult
+    #: label, deliberately: `i3110x1` grants a difficult-terrain waiver in
+    #: the same sentence, so folding liquid into that machinery would let
+    #: one clause pay for the other. `Grid.liquid`'s own note has the
+    #: argument. #1449.
+    crosses_liquid: bool = False
     #: Rough going is free, but only in squares **near a named creature** --
     #: `(anchor, squares)` pairs. `f1887` prints *"you and your allies
     #: ignore difficult terrain while adjacent to your spirit

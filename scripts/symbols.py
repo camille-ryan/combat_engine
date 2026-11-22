@@ -205,6 +205,13 @@ CATEGORIES: dict[str, dict] = {
                 # terrain **and** can move over obstacles 1 square high" --
                 # and an author who finds one wants the other.
                 "steps_over",
+                # `crosses_liquid` beside them for the same reason, and
+                # it is the pair that must NOT be one verb: `i3110x1`
+                # and `m4356a5` each print "ignores difficult terrain"
+                # AND "can cross liquid surfaces" in one sentence, so a
+                # single waiver would let one clause pay for the other.
+                # `Grid.liquid` holds the argument.
+                "crosses_liquid",
                 "ignores_hazards", "immovable", "movement_tax",
                 "no_charge", "no_walk", "phasing",
                 "may_enter", "occupy_also", "resist_forced", "rideable",
@@ -404,6 +411,14 @@ CATEGORIES: dict[str, dict] = {
                 # keeping them distinct is what `f3719` spent a marker
                 # on.
                 "surface",
+                # The liquid pair beside `surface` and `terraform`: one
+                # asks for the shape of a pool and the other changes it.
+                # They sit with the terrain verbs rather than with
+                # `crosses_liquid` above, which is a *permission* on a
+                # creature -- the same split `surface` and
+                # `ignores_difficult` already keep.
+                "liquid_body",
+                "freeze",
                 "terraform",
                 "terrain",
                 "unlit",

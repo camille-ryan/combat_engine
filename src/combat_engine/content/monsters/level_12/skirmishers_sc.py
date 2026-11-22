@@ -3046,20 +3046,24 @@ def m4356a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("grid.Grid.liquid",),
 )
 def m4356a5(c: Cast) -> None:
-    """Rough ground is exact. Crossing liquid is the dropped clause: a board
-    has no liquid surface, so there is nothing for a mode to be granted
-    over.
+    """*"Can move across liquid and ignores difficult terrain."*
 
-    **The marker named `c.surface()` and that verb now exists**, which made
-    this read as satisfiable when nothing had changed for it. `c.surface`
-    answers what a square is made *of*; this clause needs to know which
-    squares are **liquid**, which is a different map. Re-pointed with the
-    three item rows that share the gap. `#1449`.
+    **Two permissions, and the earlier note had the diagnosis exactly
+    right.** It said `c.surface` answers what a square is made *of* while
+    this clause needs to know which squares are **liquid** -- a different
+    map. `Grid.liquid` is that map and `c.crosses_liquid` is the
+    permission.
+
+    The two are separate calls on purpose: as a difficult label the
+    liquid half would be waived by the rough-ground half, and nothing
+    could tell a row that wrote both from one that wrote either.
+    `i3110x1` prints the same pair and `Grid.liquid` carries the
+    argument. `#1449`.
     """
     c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    c.crosses_liquid(on=c.me, until=When.ENCOUNTER)
 
 
 # ==========================================================================

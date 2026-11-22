@@ -3266,6 +3266,192 @@ class Cast:
             by=self.ref,
         )
 
+    def crosses_liquid(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Walk on deep liquid as if it were solid ground.
+
+        *"Can cross liquid surfaces as if they were solid ground"* --
+        `i3110x1` and `m4356a5`. *"You do not sink beneath the surface of
+        any liquid"* -- `i1322x1`, which is the same permission said from
+        the other side.
+
+        **`i1322x1`'s clause was recorded as unwritable and the ruling
+        behind that answered a different question.** `movement.walk`'s
+        docstring rules this a 2D plane, so *"sink 1 square"* -- the
+        failed swimmer's printed consequence -- has no axis to move
+        along. True, and *not sinking* needs no axis: it is a permission
+        to stand on a square you otherwise could not, which a plane says
+        perfectly well. The old note read a sentence about where you end
+        up as a sentence about a direction.
+
+        **Not `c.ignores_difficult`, which is the near miss.** `i3110x1`
+        prints a difficult-terrain waiver *and* this in one sentence, so
+        a row writing both with one verb would be indistinguishable from
+        a row writing either, and nothing could tell them apart.
+        `Grid.liquid` holds the argument in full.
+
+        Yours by default, like the rest of this family. Returns None for
+        a creature with no `Movement`.
+        """
+        from .components import Movement
+
+        who = self.me if on is None else on
+        moves = self.world.get(who, Movement)
+        if moves is None:
+            return None
+        was = moves.crosses_liquid
+        moves.crosses_liquid = True
+
+        def unlay() -> None:
+            moves.crosses_liquid = was
+
+        def relay() -> None:
+            moves.crosses_liquid = True
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} crosses liquid",
+            by=self.ref, on_suspend=[unlay], on_resume=[relay],
+        )
+
+    def liquid_body(
+        self,
+        squares: int,
+        *,
+        kind: str = "water",
+        of: int | None = None,
+    ) -> list[Square]:
+        """Contiguous liquid squares reachable from beside a creature.
+
+        *"A number of contiguous squares within the body of water equal
+        to 1 + the wand's enhancement bonus ... Only one of the frozen
+        squares has to be adjacent to you ... cannot freeze a square if
+        it contains any creatures"* -- `i3199p2`, which is the row that
+        decided `Grid.liquid` is a map rather than a lookup.
+
+        A flood fill, not a radius: the three other rows that want the
+        map ask whether *one* square is liquid, and this one asks for the
+        **shape of the pool**. So it walks outward from the liquid
+        squares adjacent to `of`, taking only squares of the named kind
+        and only squares nothing stands in, and stops at `squares`.
+
+        **Fewer than asked for is a real answer**, not a refusal: a
+        puddle of two squares freezes two. An empty list means nothing
+        adjacent is that liquid at all, which is the card's own
+        Requirement -- *"you touch an adjacent container, pool, or other
+        body of water"* -- and the row refuses on it.
+
+        **Walked in a fixed order**, breadth-first over sorted
+        neighbours, so a freeze is reproducible from a seed. `audit.py`
+        builds a fresh board per row and a set-iteration order here
+        would make the same row freeze different squares on two runs.
+
+        `kind` raises on a word outside `LIQUID_WORDS`, the discipline
+        `c.ignores_difficult(kind=)` keeps and for the reason #598
+        measured: a misspelling would return an empty list, which reads
+        exactly like a dry board.
+        """
+        from .grid import LIQUID_WORDS, neighbours
+        from .query import squares as _squares_of
+
+        if kind not in LIQUID_WORDS:
+            raise ValueError(
+                f"{self.ref}: c.liquid_body(kind={kind!r}) is not a"
+                f" liquid -- one of {sorted(LIQUID_WORDS)}."
+            )
+        who = self.me if of is None else of
+        grid = self.world.grid
+        if not grid.liquid:
+            return []
+        mine = _squares_of(self.world, who)
+        if not mine:
+            return []
+
+        def wet(sq: Square) -> bool:
+            return (grid.liquid.get(sq) == kind
+                    and grid.occupant(sq) is None)
+
+        start = sorted({n for sq in mine for n in neighbours(sq) if wet(n)})
+        if not start:
+            return []
+        found: list[Square] = []
+        seen = set(start)
+        queue = list(start)
+        while queue and len(found) < squares:
+            here = queue.pop(0)
+            found.append(here)
+            for nxt in sorted(neighbours(here)):
+                if nxt not in seen and wet(nxt):
+                    seen.add(nxt)
+                    queue.append(nxt)
+        return found[:squares]
+
+    def freeze(
+        self,
+        squares: Sequence[Square],
+        *,
+        label: str = "ice",
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Turn liquid squares solid, as rough going. `i3199p2`.
+
+        *"Freeze into solid ice. The squares of ice are difficult terrain
+        and remain solid until the end of the encounter"* -- so this is
+        two edits to one map pair and they belong together: the squares
+        leave `Grid.liquid`, so nothing pays the liquid surcharge or
+        needs a permission to stand there, and enter `Grid.difficult`
+        with `label`, so crossing them costs what the card says.
+
+        **Both are undone when the effect ends**, which is what makes
+        *"remain solid until the end of the encounter"* a duration rather
+        than a permanent edit to the board. A square that was already
+        rough keeps whatever label it had.
+
+        `label` is checked against `DIFFICULT_LABELS` for `#598`'s
+        reason: an unknown word would make the square rough-of-no-kind
+        and silently defeat every `c.ignores_difficult(kind=)` gate
+        aimed at it.
+
+        Returns None for an empty list -- a freeze with nothing to freeze
+        is the card's own Requirement failing, not an effect.
+        """
+        if not squares:
+            return None
+        if not _is_terrain_label(label):
+            raise ValueError(
+                f"{self.ref}: c.freeze(label={label!r}) is not a sort of"
+                " going -- see DIFFICULT_LABELS."
+            )
+        grid = self.world.grid
+        picked = [sq for sq in squares if sq in grid.liquid]
+        if not picked:
+            return None
+        was_wet = {sq: grid.liquid[sq] for sq in picked}
+        was_rough = {sq: grid.difficult.get(sq) for sq in picked}
+
+        def solid() -> None:
+            for sq in picked:
+                grid.liquid.pop(sq, None)
+                grid.difficult[sq] = label
+
+        def thaw() -> None:
+            for sq in picked:
+                grid.liquid[sq] = was_wet[sq]
+                had = was_rough[sq]
+                if had is None:
+                    grid.difficult.pop(sq, None)
+                else:
+                    grid.difficult[sq] = had
+
+        solid()
+        return self.world.effects.apply(
+            self.me, self.me, until, label=f"{self.ref} {label}",
+            by=self.ref, on_suspend=[thaw], on_resume=[solid],
+        )
+
     def ignores_difficult(
         self,
         kind: str = "",

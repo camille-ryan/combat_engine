@@ -23,6 +23,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Take a map feature off the board. It does not come back.
 - `c.floor(self, area: 'Iterable[Square]', *, until: 'When' = <When.SUSTAIN: 'sustain'>, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'Effect | None'`
   - Lay ground where the ground is against you: a bridge, a plank.
+- `c.freeze(self, squares: 'Sequence[Square]', *, label: 'str' = 'ice', until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Turn liquid squares solid, as rough going. `i3199p2`.
 - `c.grow(self, squares_: 'int' = 1, *, on: 'int | None' = None) -> 'bool'`
   - Spread a map feature into the clear ground beside it.
 - `c.hazard(self, area: 'Iterable[Square]', amount: 'str | int', dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, difficult: 'bool' = False, blocks_sight: 'bool' = False, height: 'int' = 0, adjacent: 'bool' = False, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'int'`
@@ -33,6 +35,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - "You shed bright light in a 2-square radius."
 - `c.line(self, a: 'Square', b: 'Square') -> 'list[Square]'`
   - The squares a straight run from one square to another covers.
+- `c.liquid_body(self, squares: 'int', *, kind: 'str' = 'water', of: 'int | None' = None) -> 'list[Square]'`
+  - Contiguous liquid squares reachable from beside a creature.
 - `c.move_zone(self, zone: 'int', squares_: 'int', *, to: 'Square | None' = None) -> 'bool'`
   - Move a zone or a conjuration, keeping its shape.
 - `c.multiply_range(self, times: 'int' = 2, *, when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'list[Effect]'`

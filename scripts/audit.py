@@ -4524,6 +4524,50 @@ def _board(ref: str, seed: int, pose: bool = False,
     # take another row's shift with it. See `_paint_a_wall`.
     if pose and _wants_climb(declared):
         _paint_a_wall(world)
+    # **A pool of deep water beside the caster, for the rows that read
+    # one.** Four rows read `Grid.liquid` -- `i1322x1`, `i3110x1` and
+    # `m4356a5` for the permission to walk on it, `i3199p2` to freeze part
+    # of it -- and the map is empty on every board, so each reported SILENT
+    # for the board's reason rather than its own. `#1449`.
+    #
+    # **Inside the `pose` block, unlike the ground, the dose and the
+    # mark, and that is what this pose cost to learn.** Those three are
+    # readable facts with no reader in the movement path, so posing them
+    # on every board cannot move a row they are not about. A liquid
+    # square is priced by `World._wet_squares`, so it changes what every
+    # creature can afford. Written unconditionally -- outside this block
+    # -- it broke five movement rules outright:
+    #
+    #     a_shared_shift_ends_in_the_occupied_square
+    #     the_board_walks_an_enemy_and_not_only_shifts
+    #     wall_height
+    #     zone_tax
+    #     a_granted_shift_that_must_end_beside_somebody
+    #
+    # 120 of 120 arms green without the pool, 6 red with it. `drivers`
+    # builds its boards with `pose=False`, so the `pose` half alone is
+    # what fixes those five.
+    #
+    # An earlier version was worse still: it grew the pool from EVERY
+    # free neighbour, so every printed `c.shift(1)` had nowhere it could
+    # afford to go. `m3254a3` is `c.shift(1)` and nothing else; it went
+    # silent, and `--sample 400` caught it as the one newly silent row.
+    #
+    # **`_wants_liquid` is NOT load-bearing on any measurement here, and
+    # it is kept anyway.** Both plants pass: forcing it True leaves
+    # `--sample 400` at 0 raise / 0 newly silent, and leaves the five
+    # rules above green because `drivers` does not pose. So it buys no
+    # red today -- what it buys is **scope**. A pool on every posed board
+    # is a change to 23,890 audit boards that only a wide sweep could
+    # clear, and narrowing it to the rows that read the map confines the
+    # change to four. That is the batching discipline this work is under,
+    # not a claim that an arm goes red without it.
+    #
+    # Gated by **source**, like `_wants_climb`, rather than on a list of
+    # refs: a row written against this map later gets the pool without
+    # anybody remembering to add it.
+    if pose and _wants_liquid(declared):
+        _fill_a_pool(world, caster)
     # **A disease needs a stage before anything arms it.** `cls="disease"`
     # rows are run by `turns.arm_afflictions`, off
     # `Afflictions.contracted`, which `Encounter.start()` below reaches --
@@ -5499,6 +5543,75 @@ def _wants_milestone(declared) -> bool:  # noqa: ANN001
 #: failed -- the loudest possible collateral. Placed where nobody stands,
 #: the only thing that can find it is a row looking for it. #1300.
 _WANTS_CLIMB = re.compile(r"climb_dc|movement\.climbs|\bclimbs\(")
+
+
+#: Rows that read the deep-liquid map. Matched in the body's source, the
+#: way `_WANTS_CLIMB` is, so a row written against `Grid.liquid` later is
+#: posed a pool without anybody adding its ref here.
+_WANTS_LIQUID = re.compile(r"crosses_liquid|liquid_body|grid\.liquid|c\.freeze\(")
+
+
+def _wants_liquid(declared) -> bool:  # noqa: ANN001
+    """Does this row read the deep-liquid map?"""
+    if declared is None:
+        return False
+    src = _source_of(declared.body, getattr(declared, "ref", ""))
+    return bool(_WANTS_LIQUID.search(src))
+
+
+def _fill_a_pool(world, caster: int) -> None:  # noqa: ANN001
+    """One body of deep water, reaching the caster by a single square.
+
+    **Exactly ONE square of it touches the caster**, which the first
+    version got wrong: grown from every free neighbour it wrapped each
+    caster in water, and a liquid square costs 2 -- so every printed
+    `c.shift(1)` had nowhere it could afford to go. `m3254a3` is
+    `c.shift(1)` and nothing else; it went silent, and `--sample 400`
+    caught it as the one newly silent row in the corpus.
+
+    A pool reaching the caster by one mouth and growing *away* satisfies
+    `i3199p2`'s printed adjacency -- *"you touch an adjacent container,
+    pool, or other body of water"* -- and leaves seven of the eight
+    neighbours dry.
+
+    **Contiguous and four squares**, because that row freezes
+    `1 + enhancement` *contiguous* squares and a scatter of singles would
+    cap every freeze at one however good the wand is.
+
+    Grown breadth-first over sorted neighbours, so the pool is the same
+    four squares on every run: a set-iteration order here would freeze
+    different squares on two sweeps of one row.
+    """
+    from combat_engine.engine.components import Position as _Seat
+    from combat_engine.engine.grid import neighbours as _near
+
+    def dry(sq: object) -> bool:
+        return (world.grid.inside(sq)
+                and world.grid.occupant(sq) is None
+                and sq not in world.grid.blocking)
+
+    seat = world.get(caster, _Seat)
+    if seat is None:
+        return
+    beside = set(_near(seat.square))
+    mouth = next((sq for sq in sorted(beside) if dry(sq)), None)
+    if mouth is None:
+        return
+    pool = [mouth]
+    seen = {mouth}
+    queue = [mouth]
+    while queue and len(pool) < 4:
+        here = queue.pop(0)
+        for nxt in sorted(_near(here)):
+            if len(pool) >= 4:
+                break
+            if nxt in seen or nxt in beside or not dry(nxt):
+                continue
+            seen.add(nxt)
+            pool.append(nxt)
+            queue.append(nxt)
+    for sq in pool:
+        world.grid.liquid[sq] = "water"
 
 
 def _wants_climb(declared) -> bool:  # noqa: ANN001

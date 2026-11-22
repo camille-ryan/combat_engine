@@ -220,6 +220,19 @@ def _corners(sq: Square) -> tuple[Point, Point, Point, Point]:
 #: construction spellings) and is deliberately a **separate** set: that one
 #: labels rough going, so its entries say a square is *hard to cross* and
 #: these say what it is *made of*. A stone floor is ordinary ground.
+#: What a square of deep liquid can be made of. Closed, for the reason
+#: `SURFACE_WORDS` and `DIFFICULT_LABELS` are closed: a word nothing reads
+#: is a gate that never fires, and `c.liquid`'s raise turns a misspelling
+#: into a refusal at import rather than a row that quietly never plays.
+#:
+#: **Deliberately not `SURFACE_WORDS`.** That vocabulary says what a solid
+#: floor is *made of* and both maps may describe the same square -- the
+#: floor of a pool is still stone. These are the things you would go
+#: *through*, which is a different question with a different reader.
+LIQUID_WORDS = frozenset({
+    "water", "acid", "magma", "mud", "oil", "slime", "sewage",
+})
+
 SURFACE_WORDS = frozenset({
     "earth", "earthen construction", "stone", "uneven stone",
     "wood", "metal", "sand", "snow", "ice", "rubble", "water",
@@ -317,6 +330,31 @@ class Grid:
     #: of whether it blocks: a stone wall and a stone floor are the same
     #: stuff.
     material: dict[Square, str] = field(default_factory=dict)
+    #: Squares that are **deep liquid** -- a surface you would go through
+    #: rather than stand on -- and what sort, from `LIQUID_WORDS`.
+    #:
+    #: Absent means solid ground, which is every square on every board
+    #: until something fills it: the same bargain `porous`, `climb_dc`,
+    #: `locked` and `light` strike, and the reason the reader in
+    #: `World.crossing` costs nothing today.
+    #:
+    #: **A dict and not a set**, because two rows need the kind rather
+    #: than the fact. `i3199p2` freezes a body of *water* and must not
+    #: freeze a pool of acid, and `i3110x1` prints *"any adverse effect of
+    #: that terrain, such as the damage from acid or magma, still affects
+    #: the mount normally"* -- so what the liquid is survives a permission
+    #: to walk on it.
+    #:
+    #: **Not a `difficult` label, which is the one decision here worth
+    #: defending.** `i3110x1` grants *"ignores the effect of difficult
+    #: terrain"* AND *"can cross liquid surfaces as if they were solid
+    #: ground"* in the same breath. As a label the second clause would be
+    #: waived by the first, the two printed sentences would collapse into
+    #: one, and no arm could tell a row that wrote both from a row that
+    #: wrote either. `shallow water` is a `difficult` label and stays one:
+    #: wading is rough going, and this map is the water you do not stand
+    #: in. #1449.
+    liquid: dict[Square, str] = field(default_factory=dict)
     #: What the floor is made of everywhere `material` does not say -- one
     #: word for the whole board, because "an earthen or stone surface" is a
     #: property of the *place* far more often than of a square.

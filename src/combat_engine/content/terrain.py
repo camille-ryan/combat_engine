@@ -107,6 +107,60 @@ def printed_trap(level: int, pick: Random | None = None) -> dict | None:
     return dict(chosen)
 
 
+def _flood(world: World, pick: Random, spare: set[Square]) -> None:
+    """Put one body of deep water on an aquatic board. `#1449`.
+
+    **One pool rather than scattered squares**, because `i3199p2` freezes
+    *contiguous* squares of it: a scatter of singles would cap every
+    freeze at one square however good the wand is, which would read as a
+    working row paying a tenth of its card.
+
+    Grown by breadth-first walk from one seed square, away from the two
+    starting bands, so the two sides are not standing in it when the
+    fight begins -- the same reason `dress` keeps its pillars out of
+    them, and a sharper one here: a creature that starts in deep water
+    pays the surcharge on its first step every round.
+
+    Nine squares, which is a pool worth routing around on the 20-odd
+    square boards this dresser builds and small enough to leave a dry way
+    past. Not a share of the floor, because a liquid square is priced in
+    the movement path and a quarter of a board being wet changes every
+    path on it.
+    """
+    from combat_engine.engine.grid import neighbours
+
+    width, height = world.grid.width, world.grid.height
+    for _ in range(12):
+        seed = (pick.randrange(width), pick.randrange(height))
+        if seed not in spare and seed not in world.grid.blocking:
+            break
+    else:
+        return
+    pool = [seed]
+    seen = {seed}
+    queue = [seed]
+    while queue and len(pool) < 9:
+        here = queue.pop(0)
+        for nxt in sorted(neighbours(here)):
+            if len(pool) >= 9:
+                break
+            if (nxt in seen or nxt in spare
+                    or not world.grid.inside(nxt)
+                    or nxt in world.grid.blocking):
+                continue
+            seen.add(nxt)
+            pool.append(nxt)
+            queue.append(nxt)
+    for sq in pool:
+        world.grid.liquid[sq] = "water"
+        # Deep water is not *also* rough going -- `World.crossing` takes
+        # the larger of the two and would charge the same either way, but
+        # a `"shallow water"` label left under a pool would answer True
+        # to `c.ignores_difficult("shallow water")` and let a wading
+        # waiver pay for a walk on water.
+        world.grid.difficult.pop(sq, None)
+
+
 def dress(
     world: World, seed: int, *, density: float = 0.06, level: int = 1,
     traps: int | None = None,
@@ -138,6 +192,19 @@ def dress(
             world.grid.blocking.add(sq)
         else:
             world.grid.difficult[sq] = pick.choice(_ROUGH)
+
+    # **Deep water, on an aquatic board only.** `Grid.liquid` is a surface
+    # you would go *through*, which `_ROUGH`'s `"shallow water"` is not --
+    # that one is wading, and four rows print the other thing. `#1449`.
+    #
+    # **Gated, and the gate draws nothing when it is False.** Every
+    # decision below this point comes out of `pick`, so an unconditional
+    # draw would move the rough ground and the trap on every board in the
+    # tree and diverge all eight replay fixtures. A dry board therefore
+    # must not touch `pick` at all -- not even to discard a roll, which is
+    # the trick the trap count above uses for the opposite reason.
+    if "aquatic" in getattr(world, "terrain", frozenset()):
+        _flood(world, pick, spare)
 
     # Not every board, and never more than two. A trap is one square the
     # fight has to route around and one attack nobody rolled for, which is
