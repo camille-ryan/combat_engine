@@ -61785,17 +61785,41 @@ def a_weapon_the_build_chose(out: Result) -> None:
              "handed in as a feat it was always trained -- the control that"
              " says the reader worked and was never reached")
 
-    # **There is no rogue without it**, which is why the control is the
-    # *shape* of the grant rather than its absence: the feature carries no
-    # `requires=on_leg`, so every rogue is dealt it and `powers=[]` ("deal me
-    # some") includes it. The first draft asserted a plain rogue was trained
-    # with neither and failed, which is the board and not the fix.
-    world, me, _ = built("rogue")
+    # **The feature follows a build leg, and this paragraph used to say
+    # the opposite.** It read *"the feature carries no `requires=on_leg`,
+    # so every rogue is dealt it"*, and `#1429` deliberately made that
+    # false: the four `cf:rogue-scoundrel-f1` arms are one per leg --
+    # `brawny`, `shadowy`, `cutthroat` and the trickster/aerialist pair --
+    # and `cf:rogue-scoundrel-f1s3` is the `cutthroat` one.
+    #
+    # So the assertion went red on a true statement about the tree, which
+    # is the check's definition being wrong rather than the code. Pinning
+    # the leg is also a **stronger** test than the old one: it proves the
+    # gate in both directions, where "every rogue has it" could not fail
+    # if the gate stopped working.
+    #
+    # Measured before rewriting, because "never drawn" and "drawn only on
+    # one leg" look alike from outside: over 24 seeds, scored and
+    # unscored, the arm dealt was `f1s1` every time -- and the build drawn
+    # was `brawny` every time, which is the leg `f1s1` belongs to.
+    world, me, _ = built("rogue", leg="cutthroat")
     trained = world.need(me, Gear).trained
+    out.that(PROF in world.need(me, Powers).all,
+             "premise: the leg this arm belongs to really is dealt it, so"
+             " the line below is about the grant and not about a draw"
+             " that skipped the feature",
+             f"{sorted(r for r in world.need(me, Powers).all if r.startswith('cf:rogue'))}")
     out.that(set(REGISTRY[PROF].proficiency) <= trained,
-             "every rogue is dealt the feature, so every rogue is trained"
-             " with both -- it carries no leg requirement",
+             "a rogue on the leg that carries the feature is trained with"
+             " both weapons it declares",
              f"{sorted(trained)}")
+    other, them, _ = built("rogue", leg="shadowy")
+    out.that(not set(REGISTRY[PROF].proficiency)
+             & other.need(them, Gear).trained,
+             "and a rogue on another leg is trained with NEITHER -- the"
+             " `on_leg` gate working, which the old 'every rogue has it'"
+             " assertion could not have shown",
+             f"{sorted(other.need(them, Gear).trained)}")
     out.that("w3621" not in trained,
              "and not every weapon a power *mentions*: `w3621` is named in a"
              " row's text and in no row's header, and it is not trained",
