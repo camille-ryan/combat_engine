@@ -4131,6 +4131,25 @@ def _lenders(world: World, actor: int, r: Range,
         # wide as their cards.
         if "blast" in words:
             allowed = (*allowed, "close_blast")
+        # **And a close BURST is a sixth kind, missed for the same reason
+        # the blast was.** `f1709b` prints *"you use `cf:artificer-f2`,
+        # but your familiar is the origin square for the effect"*, and all
+        # three cards that feature offers are Close burst 5 -- so the
+        # borrow was laid, stored and never consulted, exactly as
+        # `i2339p1`'s was before `blast` existed.
+        #
+        # Worth recording how long this hid: the row's marker read
+        # `c.use_power(origin=)` for three re-pointings, and that forward
+        # is inert here -- `dsl.use` honours an `origin` square only for
+        # `area_burst` and `close_blast`, and `area_of` builds a
+        # `close_burst` from `origins()` instead. Measured:
+        # `candidates` for a close burst 5 answered `[caster]` both with
+        # and without the square.
+        #
+        # Per caller like the other two, so the rows printing "ranged and
+        # area" stay exactly as wide as their cards. #1450.
+        if "burst" in words:
+            allowed = (*allowed, "close_burst")
         # **`kinds:` NARROWS where every other word widens**, and that
         # asymmetry is the whole reason it exists. `melee` and `blast`
         # add a family to `ranged`, `area_burst` and `wall`, which is

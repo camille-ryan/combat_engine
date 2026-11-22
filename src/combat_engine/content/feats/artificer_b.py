@@ -386,44 +386,101 @@ def f1709(c: Cast) -> None:
     c.grant_row("f1709b", on=c.me, until=When.ENCOUNTER)
 
 
+#: The three cards `cf:artificer-f2` offers, by the refs they are declared
+#: under. The feature's own sub-option refs -- `cf:artificer-f2c0`, `c1`,
+#: `c2` -- are aliases of exactly these through
+#: `class_feature.duplicate_of`, which is how `f1709b` stopped being
+#: blocked: the rows were written and the note was reading the wrong
+#: identity. #1447, #1450.
+_INFUSIONS = ("p4128", "p7635", "p10187")
+
+
 @power("f1709b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-       todo=("c.use_power(origin=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE])
 def f1709b(c: Cast) -> None:
     """Fires an infusion from the familiar's square instead of your own.
 
-    Re-aimed twice. The familiar's active state is readable
-    (`Companion.passive`), so that half of the old marker is gone, and
-    the hold is now named precisely: `dsl.use` **takes** an `origin`
-    square and `c.use_power` is the only route to it and does not pass
-    one through. `c.use_power(..., who=familiar)` is the near miss to
-    avoid -- it makes the familiar the caster, so the infusion would be
-    rolled with the familiar's ability modifiers instead of moving one
-    burst's origin, and the heal in particular would come out wrong.
+    *"You use `cf:artificer-f2`, but your familiar is the origin square
+    for the effect."*
 
-    Checked once more and the marker stands. `dsl.use` takes
-    `origin: Square | None` and `area_of`/`candidates` already measure
-    from it; `Cast.use_power` is the only content route and it does not
-    declare the parameter, so there is no surface to say this with.
-    `Range.from_ == "companion"` is the other route the engine has and it
-    is header data on the row being *borrowed*, which a feat cannot
-    reach. One forwarded kwarg closes it.
+    **Written, and both halves of the old marker were wrong.** It read
+    `c.use_power(origin=)` across three re-pointings, and the last note
+    said the forward *"was built, found to have no caller, and reverted"*
+    because the three infusion cards were undeclared. Two corrections:
 
-    **Re-measured 2026-11-19, and the kwarg is not the blocker.** It is
-    genuinely missing and the forward is one line -- but the row it would
-    be forwarded for has no area to move. `cf:artificer-f2` is the
-    **parent** feature (*"you can create healing infusions for later
-    use"*) and is declared `reach=Personal, target=None`: a build-option
-    gate. The usable infusions are `cf:artificer-f2c0`, `c1` and `c2`,
-    each **Close burst 5**, and **none of the three is declared in
-    content**.
+    * **They are declared.** `cf:artificer-f2c0`, `c1` and `c2` each
+      carry `class_feature.duplicate_of` pointing at a declared,
+      unmarked power row -- `p4128`, `p7635`, `p10187`. They are the
+      other half of one printed card's identity, which is the
+      relationship `#1447` is about.
+    * **The forward would not have helped.** Measured rather than
+      argued, because this is the part three passes believed:
 
-    So what blocks this row is that the thing it borrows is unwritten. The
-    forward was built, found to have no caller, and reverted -- the
-    precedent being `c.counts_as_nearest` and `Target.nearest` landing
-    together because *"a permission nothing consults is this component's
-    commonest bug"*."""
+          dsl.candidates, close burst 5, allies 9 and 10 squares off
+            no lender               -> [caster]
+            origin=familiar         -> [caster]
+            c.cast_from(familiar)   -> [caster]
+            c.cast_from(burst=True) -> [the two allies]
 
+      `dsl.use` honours an `origin` square only for `area_burst` and
+      `close_blast`; `area_of` builds a `close_burst` from `origins()`
+      instead. All three infusions are Close burst 5, so the parameter
+      the marker named is inert for every row that wanted it.
+
+    What moves a close burst is a `CASTS_FROM` lender carrying the
+    **`burst`** word, which is a sixth range kind added for `blast`'s
+    reason exactly -- `i2339p1`'s borrow was *"laid, stored and never
+    consulted"* before `blast` existed, and this was the same bug one
+    kind over. `#1450`.
+
+    **`rows=` and `once=`, so the borrow is as narrow as the card.**
+    Without the first it would move the origin of every ranged and area
+    attack the artificer makes in the window; without the second it
+    would outlast the one use the card buys. `until=When.EONT` is the
+    backstop for a use that never happens.
+
+    **`cast_from` and emphatically not `who=familiar`.** The card moves
+    one burst's *centre*; making the familiar the caster would roll the
+    borrowed row off the familiar's ability modifiers, and these three
+    are a heal, a defence bonus and a resistance -- every number would
+    come out wrong. The old note had this right and it is kept.
+
+    **The feature is a menu, so the row asks.** `cf:artificer-f2` is the
+    parent, a build-option gate with `reach=Personal, target=None`; what
+    a character uses is one of the three cards. Only the ones this
+    character holds are offered, and a character holding one is not
+    asked.
+    """
+    from combat_engine.engine.components import Position, Powers
+
+    pal = c.familiar_active()
+    if pal is None:
+        return
+    # **`Position`, not `grid.squares_of`.** `c.call_companion` gives a
+    # familiar a `Position` without placing it in the grid index, so the
+    # index answers an empty set for a familiar plainly on the board --
+    # measured, and the first draft returned early on a correctly staged
+    # one. The printed line says "the origin square", which is the field
+    # `Position` holds.
+    if c.world.get(pal, Position) is None:
+        return
+    # **The caster's own list, not `c.knows`.** That one answers "who on
+    # the board has this row" and would find an infusion on an ally's
+    # sheet, so a character who took none of the three would fire a
+    # stranger's card.
+    mine = c.world.get(c.me, Powers)
+    held = [ref for ref in _INFUSIONS
+            if mine is not None and ref in mine.all]
+    if not held:
+        return
+    pick = held[0] if len(held) == 1 else c.choose(
+        held, f"{c.ref}: which infusion to fire from the familiar")
+    if not pick:
+        return
+    # Laid before the use, because `dsl.candidates` consults the borrow
+    # while it is deciding what the burst may reach.
+    c.cast_from(pal, burst=True, rows=(pick,), once=True, until=When.EONT)
+    c.use_power(pick)
 
 @power("f1710", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)

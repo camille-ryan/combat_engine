@@ -7207,6 +7207,28 @@ class Cast:
         says so outright -- "even if you have already used it during this
         encounter".
 
+        **It deliberately does NOT forward `dsl.use`'s `origin` square,
+        and this is the third time that forward has been written and
+        taken out.** `f1709b` is the row that asks for it -- *"your
+        familiar is the origin square for the effect"* -- and the forward
+        does not help it, which is the thing neither earlier attempt
+        measured:
+
+            dsl.candidates, close burst 5, ally 9 squares away
+              no origin            -> [caster]
+              origin=familiar      -> [caster]
+
+        `dsl.use`'s own gate is `origin is not None and reach.kind in
+        ("area_burst", "close_blast")`, and `area_of` builds a
+        `close_burst` from `origins(...)` rather than from the square. So
+        a forward here is inert for every close burst, and the three
+        rows it would serve are all close bursts.
+
+        What moves a close burst is a `CASTS_FROM` lender with the
+        `burst` word -- `c.cast_from(burst=True)` -- which is where
+        `f1709b` is written. Add the forward only alongside a caller
+        whose range is an area burst or a close blast.
+
         `c.trigger` goes through, so the borrowed row reads the event this
         one is answering as its own `PowerUsed.trigger` -- which is how
         "use it against the creature that triggered this" is written.
@@ -20875,6 +20897,7 @@ class Cast:
         self, square: Square, *, on: int | None = None,
         until: When = When.EONT,
         optional: bool = False, melee: bool = False, blast: bool = False,
+        burst: bool = False,
         once: bool = False, kinds: Sequence[str] = (), within: int = 0,
         only: Sequence[Sequence[str]] = (),
         rows: Sequence[str] = (),
@@ -20928,7 +20951,7 @@ class Cast:
         )
         held = self.cast_from(
             marker, on=borrower, until=until, optional=optional,
-            melee=melee, blast=blast, once=once, kinds=kinds,
+            melee=melee, blast=blast, burst=burst, once=once, kinds=kinds,
             within=within, only=only, rows=rows,
         )
         if held is not None:
@@ -20941,6 +20964,7 @@ class Cast:
     def cast_from(
         self, who: int, *, on: int | None = None, until: When = When.ENCOUNTER,
         optional: bool = False, melee: bool = False, blast: bool = False,
+        burst: bool = False,
         companion: bool = False, once: bool = False,
         kinds: Sequence[str] = (),
         within: int = 0,
@@ -21138,6 +21162,13 @@ class Cast:
                     word for word, on_ in (
                         ("optional", optional), ("melee", melee),
                         ("blast", blast),
+                        # **A close burst is a sixth kind and needs its own
+                        # word, for `blast`'s reason exactly.**
+                        # `_lenders`' default allows `ranged`, `area_burst`
+                        # and `wall`; a close burst is none of them, so
+                        # `f1709b`'s borrow would be laid, stored and never
+                        # consulted. #1450.
+                        ("burst", burst),
                         ("companion", companion), ("once", once),
                     )
                     if on_

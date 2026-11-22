@@ -160,6 +160,25 @@ KNOWN_SILENT = {
     # `drivers.a_second_elemental_manifestation` is the proof and
     # measures the pick both ways, plus `f1848`'s payout for holding
     # two.
+    # **A feat whose Requirement the board deliberately cannot pose.**
+    # `f1709b` is *"you use `cf:artificer-f2`, but your familiar is the
+    # origin square for the effect"*, so it refuses without an active
+    # familiar -- and the companion pose above is gated on
+    # `declared.cls`, which is `""` on all 2,536 feats. That gate is not
+    # an oversight: widening it was tried and swept at corpus scale,
+    # measured **+11 rows and -4**, and the four regressions are
+    # triggered rows that must NOT have a companion already standing.
+    # The long comment at the pose says so in full.
+    #
+    # So this is the board's measured limit rather than anything about
+    # the row, and the proof lives where it can stage one:
+    # `drivers.familiar_origin` poses an active familiar, puts every ally
+    # outside the caster's own Close burst 5, and shows the heal landing
+    # on one of them -- which it cannot do unless the origin moved. It
+    # also plants the mechanism out and goes red.
+    "f1709b": "needs an active familiar, which the board cannot pose for "
+              "a feat -- see the companion gate's +11/-4 measurement and "
+              "`drivers.familiar_origin` for the proof",
     "f604": "deals a second racial pick at build time; nothing to do on "
             "a board -- see `drivers.a_second_elemental_manifestation`, "
             "and #1446 for its rest-time half",

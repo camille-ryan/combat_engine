@@ -72792,6 +72792,156 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def an_infusion_fired_from_the_familiars_square(out: Result) -> None:
+    """*"You use `cf:artificer-f2`, but your familiar is the origin square
+    for the effect"* -- `f1709b`.
+
+    **Two measured corrections, and the second is why three passes left
+    this marked.** The marker read `c.use_power(origin=)`.
+
+    `dsl.use` honours an `origin` square only for `area_burst` and
+    `close_blast`; `area_of` builds a `close_burst` from `origins()`
+    instead. All three cards `cf:artificer-f2` offers are **Close burst
+    5**, so the parameter the marker named is inert for every row that
+    wanted it -- and a previous pass built the forward, found no caller,
+    and reverted it without measuring that.
+
+    What moves a close burst is a `CASTS_FROM` lender carrying the
+    **`burst`** word. That is a sixth range kind beside `melee` and
+    `blast`, added for `blast`'s reason exactly: `_lenders` allows
+    `ranged`, `area_burst` and `wall` by default, so `i2339p1`'s borrow
+    was *"laid, stored and never consulted"* until `blast` existed, and
+    this was the same bug one kind over.
+
+    The other correction is that the cards are **declared**:
+    `cf:artificer-f2c0`, `c1` and `c2` carry `class_feature.duplicate_of`
+    pointing at `p4128`, `p7635` and `p10187`, which are written and
+    unmarked. `#1447` is the relationship. `#1450`.
+
+    **The geometry is the whole proof.** Every ally is put 9 or more
+    squares from the caster -- outside its own burst 5 -- and one square
+    from the familiar. A heal landing there cannot have been measured
+    from the caster.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.feats.artificer_b import _INFUSIONS
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, candidates, get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Healed, PowerUsed
+    from combat_engine.engine.grid import distance
+
+    ROW, CARD = "f1709b", "p4128"
+
+    def staged(*, familiar: bool = True, infusion: bool = True) -> tuple:
+        """Allies out of the caster's burst, beside the familiar."""
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref="drv")
+        if infusion:
+            must(world.get(me, Powers), "the caster has powers").known.append(CARD)
+        here = sorted(world.grid.squares_of(me))[0]
+        placed = []
+        for n, mate in enumerate(sorted(cast.allies())):
+            far = (here[0] + 9 + n, here[1])
+            world.grid.lift(mate)
+            must(world.get(mate, Position), "the ally has a position").square = far
+            world.grid.place(mate, frozenset({far}))
+            must(world.get(mate, Health), "the ally has hit points").hp = 5
+            placed.append((mate, far))
+        pal = None
+        if familiar:
+            pal = cast.call_companion(at=(here[0] + 9, here[1] + 1),
+                                      kind="familiar")
+        return world, me, here, placed, pal
+
+    # -- the premises ------------------------------------------------------
+    world, me, here, placed, pal = staged()
+    out.that(all(distance(here, where) > 5 for _, where in placed),
+             "premise: every ally is further than 5 squares from the"
+             " caster, so none of them is in its own Close burst 5 -- this"
+             " is what makes the heal below evidence about the origin"
+             " rather than about the power working",
+             f"caster {here}, allies {[(m, distance(here, w)) for m, w in placed]}")
+    out.that(pal is not None and world.get(pal, Position) is not None,
+             "and the familiar is on the board, one square past them",
+             f"familiar {pal} at"
+             f" {world.get(pal, Position) and world.get(pal, Position).square}")
+    out.that(all(ref in REGISTRY and not REGISTRY[ref].unfinished
+                 for ref in _INFUSIONS),
+             "and all three infusion cards are declared and unmarked --"
+             " the note said none of them was, which is what kept this"
+             " row marked",
+             f"{[(r, r in REGISTRY) for r in _INFUSIONS]}")
+
+    # -- the word is load-bearing -------------------------------------------
+    card = must(get(CARD), f"{CARD} is declared")
+    out.that(str(card.reach).startswith("Close burst"),
+             "premise: the card is a CLOSE BURST, which is the kind"
+             " `dsl.use(origin=)` does not honour and the reason the old"
+             " marker could never have worked",
+             f"{card.reach}")
+
+    def reachable(lend: str) -> list[int]:
+        w, who, _, _, pet = staged()
+        if lend:
+            kw = {"burst": True} if lend == "burst" else {}
+            Cast(world=w, me=who, ref="drv").cast_from(
+                pet, rows=(CARD,), once=True, until=When.EONT, **kw)
+        return sorted(candidates(w, who, card) or [])
+
+    bare, plain, with_burst = reachable(""), reachable("plain"), reachable("burst")
+    out.that(len(bare) == 1,
+             "with no borrow the burst reaches only the caster itself",
+             f"{bare}")
+    out.that(plain == bare,
+             "and a PLAIN `c.cast_from` changes nothing -- `_lenders`"
+             " allows `ranged`, `area_burst` and `wall`, so the borrow is"
+             " laid, stored and never consulted. This is the arm that"
+             " makes `burst=True` load-bearing rather than decorative",
+             f"{plain} vs {bare}")
+    out.that(len(with_burst) > len(bare)
+             and set(with_burst) == {m for m, _ in placed},
+             "while `c.cast_from(burst=True)` moves the centre: the burst"
+             " now reaches exactly the allies standing beside the"
+             " familiar, and no longer the caster",
+             f"{with_burst} vs allies {[m for m, _ in placed]}")
+
+    # -- the row ------------------------------------------------------------
+    def played(**kw: bool) -> tuple[list[str], list[tuple[int, int]]]:
+        w, who, _, _, _ = staged(**kw)
+        used: list[str] = []
+        healed: list[tuple[int, int]] = []
+        w.bus.on(PowerUsed, lambda e: used.append(e.power))
+        w.bus.on(Healed, lambda e: healed.append((e.target, e.amount)))
+        REGISTRY[ROW].body(Cast(world=w, me=who, ref=ROW))
+        return used, healed
+
+    used, healed = played()
+    out.that(CARD in used,
+             "the row fires the infusion it holds",
+             f"{used}")
+    out.that(healed and all(t != me for t, _ in healed),
+             "and the hit points land on an ALLY out past the caster's own"
+             " burst, which is the printed clause: measured from the"
+             " familiar, not from the artificer",
+             f"{healed}, caster is {me}")
+
+    # -- the two refusals ---------------------------------------------------
+    for label, kw in (("no familiar", {"familiar": False}),
+                      ("no infusion held", {"infusion": False})):
+        used2, healed2 = played(**kw)
+        out.that(not used2 and not healed2,
+                 f"with {label} the row fires nothing -- the Requirement"
+                 " is its familiar being active, and a character holding"
+                 " none of the three cards has nothing to fire",
+                 f"used {used2}, healed {healed2}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def what_the_floor_is_made_of(out: Result) -> None:
     """*"When you use your second wind while on an earthen or stone
     surface, you also gain resist 5 to all damage"* -- `f3719`.
@@ -124926,6 +125076,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        an_infusion_fired_from_the_familiars_square,
         what_the_floor_is_made_of,
         a_feature_ref_the_hand_holds_under_its_other_name,
         a_build_time_option_is_drawn_and_both_halves_are_dealt,
@@ -125314,6 +125465,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "familiar_origin": (
+        an_infusion_fired_from_the_familiars_square,
+        "an infusion fired from the familiar's square, which needed a"
+        " sixth borrowable range kind (#1450)",
     ),
     "board_surface": (
         what_the_floor_is_made_of,
