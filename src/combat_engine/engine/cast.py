@@ -587,7 +587,10 @@ class Cast:
             "ranged", "area_burst",
         )
 
-    def redirect(self, *, to: int | None = None, by: int | None = None) -> bool:
+    def redirect(
+        self, *, to: int | None = None, by: int | None = None,
+        recheck: bool = False,
+    ) -> bool:
         """Point the attack you are interrupting at somebody else.
 
         "The triggering attack targets a creature adjacent to you instead"
@@ -609,6 +612,31 @@ class Cast:
         worked, and `m115864a5` fires 21 times and reports nothing the
         moment the board provokes with a different power. #900.
 
+        **`recheck` re-judges the blow against the creature it was moved
+        to**, and without it a redirected *miss* moves the announcement
+        and nothing else. `i3378p1` prints *"if such an attack misses you
+        while you have this bonus, you can redirect it to another
+        creature within 5 squares"*, and the point of that card is the
+        +4 it was carrying: the roll that missed a boosted defence may
+        clear an ordinary one. Pointing the miss elsewhere without asking
+        again is a clause that reads as written and cannot ever land.
+
+        It recomputes `result.target_defence` for the new creature --
+        `resolve.defence`, the same function that set it -- and then goes
+        through `c.settle_attack`, which is the one home for re-judging an
+        outcome and already announces `BlowTurned` when the verdict moves.
+        So this adds no second answer to either question.
+
+        The re-announcement is `resolve.attack`'s own loop, which watches
+        `result.hit` and runs again when a reaction changes it. That loop
+        builds the new event from `result.target`, which is what makes a
+        recheck arrive on the right creature.
+
+        Needs the event to carry `vs` and `ctx`, which every announcement
+        from `resolve.attack` does; a hand-built event that does not is
+        moved and not re-judged, which is the old behaviour rather than a
+        wrong one.
+
         The return value is deliberately unchanged -- still True whenever
         there was an event to move, even if the move was a no-op -- because
         rows read it. The **announcement** is gated on something actually
@@ -624,6 +652,16 @@ class Cast:
             result = getattr(ev, "result", None)
             if result is not None:
                 result.target = to
+                if recheck:
+                    vs = getattr(ev, "vs", None)
+                    if vs is not None:
+                        from .resolve import defence as _defence
+
+                        result.target_defence = _defence(
+                            self.world, to, vs,
+                            getattr(ev, "ctx", None) or {},
+                        )
+                        self.settle_attack(ev=ev)
         if by is not None:
             ev.attacker = by
         now_target = int(getattr(ev, "target", -1))

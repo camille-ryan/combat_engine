@@ -1407,20 +1407,35 @@ def i3366p1(c: Cast) -> None:
 
 
 @power("i3378p1", level=3, cls=ITEM, usage=ENCOUNTER, action=MOVE,
-       reach=PERSONAL, target=SELF, dropped=("c.redirect(recheck=)",))
+       reach=PERSONAL, target=SELF)
 def i3378p1(c: Cast) -> None:
-    """`c.redirect` exists, and it is still the wrong tool here, so the
-    marker names the argument rather than the verb.
+    """**Written. `c.redirect(recheck=)` is the argument, and the note
+    below is kept because it is an exact account of why the bare verb was
+    not enough.**
 
-    It moves a *live* result: `ev.target` and `result.target`, read back by
-    the body that is still resolving. By the time a `Miss` is announced the
-    comparison against a defence has already been made and `resolve.attack`
-    only re-announces when `result.hit` flips -- so pointing a miss at a new
-    creature moves the announcement and nothing else. Redirecting a resolved
-    attack means re-reading the roll against the new target's defence, which
-    is the argument this wants. (It is also printed as an immediate
-    reaction, so the half would hang off `c.watch(Miss, ...)`, where
-    `c.trigger` is None and `c.redirect` has nothing to move either way.)
+    `c.redirect` moves a *live* result -- `ev.target` and `result.target`
+    -- and by the time a `Miss` is announced the comparison against a
+    defence has already been made, so pointing a miss at a new creature
+    moved the announcement and nothing else. That is not a small loss on
+    this card: the whole point is the +4 it was carrying, so a roll that
+    missed a boosted defence is exactly the roll that may clear an
+    ordinary one. Without the re-judge the clause reads as written and
+    can never land.
+
+    `recheck=True` recomputes `result.target_defence` for the creature
+    the blow was moved to and goes through `c.settle_attack`, which is
+    the one home for re-judging an outcome. `resolve.attack`'s own loop
+    then re-announces, because a reaction changed `result.hit` -- and
+    that loop builds the new event from `result.target`, which is what
+    puts it on the right creature.
+
+    **The second half of the old note was also right and is handled
+    here.** It is an immediate reaction, so the clause hangs off
+    `c.watch(Miss, ...)` where `c.trigger` is None -- the watcher passes
+    the event in by hand, which `c.redirect` reads off `self.trigger`.
+    So the handler sets it, which is what `Cast(..., trigger=)` is for
+    elsewhere; here the same thing is done by assigning it for the call
+    and putting it back.
 
     The free-hand requirement is read off what is in hand, and the bonus is
     gated on a ranged **weapon** attack -- see `_ranged_weapon_ctx`, which
@@ -1435,6 +1450,33 @@ def i3378p1(c: Cast) -> None:
         for d in (AC, FORT, REF, WILL):
             c.bonus(d, 4, on=c.me, until=When.EONT, kind="power",
                     when=_ranged_weapon_ctx)
+
+        # **"If such an attack misses you while you have this bonus, you
+        # can redirect it to another creature within 5 squares."**
+        #
+        # Inside the `if`, because "while you have this bonus" is the
+        # printed condition and the bonus is what the branch lays. Same
+        # window -- `When.EONT` -- for the same reason.
+        def deflect(ev: Any) -> None:
+            if ev.target != c.me or not _ranged_weapon_ctx(
+                    getattr(ev, "ctx", None) or {}):
+                return
+            # Somebody else within 5. The card says "another creature",
+            # not "another enemy", and the choice is the holder's -- so
+            # the nearest enemy is what optimal play picks and what the
+            # engine offers without a prompt it has nowhere to put.
+            near = c.within(5, side="enemy")
+            away = [foe for foe in near if foe != ev.attacker]
+            if not away:
+                return
+            was = c.trigger
+            c.trigger = ev
+            try:
+                c.redirect(to=away[0], recheck=True)
+            finally:
+                c.trigger = was
+
+        c.watch(Miss, deflect, on=c.me, until=When.EONT)
     c.move(c.speed_of())
 
 

@@ -85556,6 +85556,126 @@ def two_stances_at_once(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_miss_redirected_and_judged_again(out: Result) -> None:
+    """*"If such an attack misses you while you have this bonus, you can
+    redirect it to another creature within 5 squares of you as an
+    immediate reaction"* -- `i3378p1`, whose bonus is +4 to every defence
+    against ranged weapon attacks.
+
+    **The bare `c.redirect` could not play this, and the reason is the
+    card's own arithmetic.** It moves a live result -- `ev.target` and
+    `result.target` -- and by the time a `Miss` is announced the
+    comparison against a defence has already been made. So pointing a
+    miss at somebody else moved the announcement and nothing else, which
+    on *this* card is the whole clause: the roll that missed a defence
+    raised by four is exactly the roll that may clear an ordinary one.
+    Written without the re-judge it reads correct and can never land.
+
+    `recheck=True` recomputes `result.target_defence` for the creature
+    the blow was moved to -- `resolve.defence`, the same function that
+    set it -- and re-judges through `c.settle_attack`, which is the one
+    home for that question. `resolve.attack`'s own loop then re-announces,
+    because a reaction changed `result.hit`.
+
+    **And that loop had to learn to read `result.target`.** It built the
+    new event from the local the attack started with, so a redirected
+    blow that flipped would have announced a hit on the creature that was
+    spared -- the same mistake `c.redirect`'s docstring records making
+    once before about the damage. Asserted directly.
+    """
+    from dataclasses import replace as _replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit, Miss
+    from combat_engine.engine.query import enemies
+
+    ROW = "i3378p1"
+    #: A real bow, so the blow is a RANGED WEAPON attack -- the gate the
+    #: bonus and the redirect both read. The board's own first enemy
+    #: swings a melee weapon power, on which this card says nothing.
+    BOW = "w3627"
+
+    def shot(
+        *, armed: bool, soft: bool = False,
+    ) -> tuple[Any, list[tuple[str, int]], int, int, int]:
+        """One ranged weapon attack at the holder, and what was announced."""
+        world, me, _ = _board(ROW, 1)
+        if armed:
+            REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+        foes = sorted(enemies(world, me))
+        shooter, bystander = foes[0], foes[1]
+        gear = must(world.get(shooter, Gear), "the shooter has gear")
+        bow = _replace(chargen.PRINTED[BOW])
+        gear.weapons.append(bow)
+        gear.wield(bow)
+        if soft:
+            Cast(world=world, me=me, ref="drv").penalty(
+                "ac", 12, on=bystander, until=When.ENCOUNTER)
+        said: list[tuple[str, int]] = []
+        world.bus.on(Hit, lambda e: said.append(("Hit", e.target)))
+        world.bus.on(Miss, lambda e: said.append(("Miss", e.target)))
+        swing = Cast(world=world, me=shooter, ref="rba")
+        swing.target = me
+        return swing.strike(on=me), said, me, shooter, bystander
+
+    # -- the premises ------------------------------------------------------
+    plain, said_plain, me, *_who = shot(armed=False)
+    out.that(not plain.hit,
+             "premise: the shot misses the holder, which is the trigger"
+             " the card names",
+             f"hit {plain.hit}, {plain.total} vs {plain.target_defence}")
+    out.that(said_plain == [("Miss", me)],
+             "with the item unused, the miss stays on the holder and"
+             " nothing else is announced -- the control",
+             f"{said_plain}")
+
+    # -- the printed clause ------------------------------------------------
+    moved, said, me2, shooter2, by2 = shot(armed=True)
+    out.that(moved.target == by2 and moved.target != me2,
+             "with the item used, the blow is pointed at another creature"
+             " within 5 -- and not at the shooter, which 'another"
+             " creature' excludes and the body filters for",
+             f"target {moved.target}, holder {me2}, shooter {shooter2}")
+    out.that(said == [("Miss", by2)],
+             "and the announcement names that creature. Still a miss,"
+             " because its defence is no lower -- which is the honest"
+             " outcome and the control for the flip below",
+             f"{said}")
+
+    # -- the flip, which is what `recheck` buys -----------------------------
+    flipped, said2, me3, _, by3 = shot(armed=True, soft=True)
+    out.that(flipped.target_defence < plain.target_defence,
+             "premise: the creature it was moved to has the lower"
+             " defence, which is the whole situation this card is for --"
+             " a roll that missed a defence raised by four",
+             f"{flipped.target_defence} vs {plain.target_defence}")
+    out.that(flipped.hit,
+             "so the same roll now LANDS: the blow is judged again"
+             " against the new creature rather than carrying a verdict"
+             " reached about somebody else",
+             f"hit {flipped.hit}, {flipped.total} vs {flipped.target_defence}")
+    out.that(said2 == [("Miss", by3), ("Hit", by3)],
+             "and `resolve.attack` re-announces it as a Hit **on that"
+             " creature** -- the half that needed the announcement built"
+             " from `result.target`, or the blow would have landed on the"
+             " one it was redirected away from",
+             f"{said2}")
+    out.that(all(who != me3 for _, who in said2),
+             "the holder appears in neither announcement, which is what"
+             " 'redirect it to another creature' comes to",
+             f"{said2}, holder {me3}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             "and the row carries no marker: the clause it was dropped"
+             " for is the one asserted above",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -121321,6 +121441,9 @@ DRIVERS = {
     "two_stances_at_once": (
         two_stances_at_once,
         "two stances at once"),
+    "a_miss_redirected_and_judged_again": (
+        a_miss_redirected_and_judged_again,
+        "a miss redirected and judged again"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

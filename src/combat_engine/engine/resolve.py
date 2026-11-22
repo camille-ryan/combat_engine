@@ -958,11 +958,25 @@ def attack(
                 ev.cancel("undone by an interrupt")
 
         def announce() -> Hit | Miss:
+            # **`result.target`, not the local**, because a row answering
+            # the first announcement may have moved the blow:
+            # `c.redirect(recheck=True)` points a miss at somebody else
+            # and re-judges it against that creature's defence, and the
+            # re-announcement below is the only thing that then carries
+            # the new outcome. Built from `target` it named the creature
+            # that was spared, which is the half `c.redirect`'s own
+            # docstring records getting wrong once before -- there about
+            # the damage, here about the event.
+            #
+            # `result.target` is set beside the roll and is the same
+            # number until something moves it, so this is identical for
+            # every attack nobody redirects.
+            at = int(getattr(result, "target", target) or target)
             ev = (
-                Hit(attacker=attacker, target=target, power=power,
+                Hit(attacker=attacker, target=at, power=power,
                     critical=result.critical)
                 if result.hit
-                else Miss(attacker=attacker, target=target, power=power)
+                else Miss(attacker=attacker, target=at, power=power)
             )
             # The second announcement site, and it needs the same -- see
             # the note above. A reader that found `origin` on one path and
