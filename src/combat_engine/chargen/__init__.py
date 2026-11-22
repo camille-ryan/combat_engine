@@ -1565,6 +1565,33 @@ ORIGINAL = "original"
 #: once -- `#851`'s exact bug, introduced by the guard against it.
 _FEATURE_SUB_OPTION = re.compile(r"-f\d+s\d+$")
 
+#: Forks whose chosen arm is a row the character **holds**, rather than one
+#: its parent hands over or never grants at all.
+#:
+#: **Named rather than derived, because the cards differ and nothing in
+#: them is readable.** `ladder_row` refuses a sub-option whose parent is a
+#: `BUILD_OPTIONS` entry -- right for the warlock's pacts, where
+#: `drivers.hexblade_pacts` asserts outright that *"a dealt hexblade is
+#: handed NONE of the fork options"*, and wrong for these two, where the
+#: arms are ordinary traits with no gate of their own and nothing else
+#: puts them in a hand.
+#:
+#: Measured, which is why the list has exactly two entries: adding
+#: `BUILD_OPTIONS` entries for 21 parents took **8 arms** to zero hands
+#: -- `cf:artificer-f0s0`, `f0s1` and all six `cf:wizard-arcanist-f0sN`
+#: -- and `drivers.rest_reaches_a_row` went red, because the artificer's
+#: reservoir is one of them. Every other fork's arms were already
+#: unreached before that change and are not this list's business.
+#:
+#: Tried and rejected: asking whether the parent's body calls
+#: `c.grant_row`. Measured over all 24 such parents, **4** do and the
+#: hexblade's is not among them -- so the test would have dealt the
+#: hexblade its arms, which is the thing the guard exists to prevent.
+ARMS_IN_THE_HAND = frozenset({
+    "cf:artificer-f0",
+    "cf:wizard-arcanist-f0",
+})
+
 
 def feature_level(ref: str) -> int:
     """The printed level a class feature is gained at.
@@ -1664,7 +1691,7 @@ def ladder_row(p, level: int = 1) -> bool:  # noqa: ANN001
     if _FEATURE_SUB_OPTION.search(p.ref) and not leg_named_by(p):
         parent = _FEATURE_SUB_OPTION.sub(
             lambda m: m.group(0).split("s")[0], p.ref)
-        if parent in BUILD_OPTIONS:
+        if parent in BUILD_OPTIONS and parent not in ARMS_IN_THE_HAND:
             return False
     # **The PRINTED level, which `Power.level` does not carry.**
     # `class_feature` has no level column (`#1261`), so every class feature

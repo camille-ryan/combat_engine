@@ -3217,11 +3217,22 @@ def f2604(c: Cast) -> None:
 
 @power("f2622", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.ignores_difficult(squares=)",))
+)
 def f2622(c: Cast) -> None:
-    """One square of difficult ground per move. `c.ignores_difficult` is
-    all of it or none, and writing the blanket version would hand the
-    character a benefit several feats charge much more for."""
+    """One square of difficult ground per move.
+
+    **The old note was right to refuse the blanket version.** It read:
+    *"`c.ignores_difficult` is all of it or none, and writing the blanket
+    version would hand the character a benefit several feats charge much
+    more for."* It is a count now -- `Movement.free_difficult`, a budget
+    on the **path** rather than a label on a square -- and the difference
+    is exactly what that note was protecting: crossing two squares of
+    rough ground costs 4 here and 2 with the blanket waiver.
+
+    `c.ignores_difficult(squares=)` lays it; `step`, `reachable` and
+    `costs` each spend it in their own terms. See that verb for why it
+    could not be a term in `World.crossing`'s closure."""
+    c.ignores_difficult(squares=1, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2630", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -86172,6 +86172,229 @@ def a_type_word_that_only_helps(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def one_square_of_rough_going_is_free(out: Result) -> None:
+    """*"You ignore 1 square of difficult terrain when you move"* --
+    `f1873` and `f2622`, which carried one symbol between them.
+
+    **The marker said `c.ignores_difficult(squares=)` and a parameter on
+    that verb was never the shape.** `c.ignores_difficult` writes a set of
+    terrain labels, and a count has nowhere to go in a set -- but the real
+    reason is one layer down and the verb's own docstring records it: a
+    budget is a property of a **path**, not of a square.
+    `World.crossing` resolves the waivers once and hands back a pricing
+    closure that `step`, `reachable` and `costs` all share, so a counter
+    living in it would be decremented by every route the Dijkstra merely
+    considers -- and the reachable set would come out wrong in a way
+    nothing announces.
+
+    So the budget is `Movement.free_difficult`, and each of the three
+    readers spends it in its own terms:
+
+      step        a per-move counter, reset where the move starts
+      reachable   a LAYERED search over (square, waivers spent)
+      costs       greedily over the path the search chose
+
+    **Layered only when there is a budget**, which is what keeps the hot
+    path honest: with `free_difficult == 0` there is one layer and the key
+    is the square, exactly as before.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Movement, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.movement import costs, reachable
+
+    ROWS = ("f1873", "f2622")
+
+    def lane(free: int, bands: int) -> tuple:
+        """A straight run of rough ground the creature has to cross.
+
+        **The direction is chosen rather than assumed.** The first draft
+        always went east and the two-band case reported `None` -- not the
+        budget refusing it, but an impassable square four along. A board
+        is dealt, not built, so the lane has to be looked for.
+        """
+        world, me, _ = _board(ROWS[1], 1)
+        must(world.get(me, Movement), "the creature moves").free_difficult = free
+        x, y = must(world.get(me, Position), "it stands").square
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            run = [(x + dx * d, y + dy * d) for d in range(1, bands + 2)]
+            if all(world.grid.passable(sq) and world.grid.occupant(sq) is None
+                   for sq in run):
+                break
+        else:
+            return world, me, None, None
+        # The rough ground spans the lane, so there is no way round it.
+        across = (dy, dx)
+        for sq in run[:bands]:
+            for n in range(-4, 5):
+                world.grid.difficult[
+                    (sq[0] + across[0] * n, sq[1] + across[1] * n)] = "rubble"
+        far = run[-1]
+        return world, me, far, costs(world, me, 10, kind="walk").get(far)
+
+    # -- the premises ------------------------------------------------------
+    world, _me, far, _ = lane(0, 1)
+    out.that(world.grid.passable(far) and world.grid.occupant(far) is None,
+             "premise: the square on the far side is empty and passable,"
+             " so a cost of None below would be the budget and not the"
+             " board",
+             f"{far}: passable {world.grid.passable(far)},"
+             f" occupant {world.grid.occupant(far)}")
+    out.that(far is not None and lane(0, 2)[2] is not None,
+             "premise: a clear lane exists for one band AND for two, so a"
+             " cost of None below is the budget and not an impassable"
+             " square the board happened to deal",
+             f"one band {far}, two bands {lane(0, 2)[2]}")
+
+    # -- one band: the printed clause ---------------------------------------
+    _, _, _, plain = lane(0, 1)
+    out.that(plain == 3,
+             "crossing one square of rough ground and stepping off it"
+             " costs 3 with no waiver -- 2 for the rough square and 1 for"
+             " the next",
+             f"{plain}")
+    _, _, _, waived = lane(1, 1)
+    out.that(waived == 2,
+             "and 2 with one square free, which is the printed sentence",
+             f"{waived}")
+
+    # -- the budget is ONE, not a blanket -----------------------------------
+    _, _, _, two_bands_none = lane(0, 2)
+    _, _, _, two_bands_one = lane(1, 2)
+    _, _, _, two_bands_two = lane(2, 2)
+    out.that(two_bands_none == 5,
+             "premise: two squares of rough ground cost 5 with no waiver",
+             f"{two_bands_none}")
+    out.that(two_bands_one == 4,
+             "one waiver takes one square off and no more -- the"
+             " difference between this card and `c.ignores_difficult()`,"
+             " which would make the crossing cost 3",
+             f"{two_bands_one}")
+    out.that(two_bands_two == 3,
+             "and a budget of two takes both, which is what makes it a"
+             " count rather than a flag",
+             f"{two_bands_two}")
+
+    # -- a bigger budget than there is rough ground -------------------------
+    _, _, _, spare = lane(3, 1)
+    out.that(spare == 2,
+             "a budget larger than the rough ground on the path is not"
+             " refunded against ordinary squares -- it waives the"
+             " surcharge, never the step",
+             f"{spare}")
+
+    # -- nothing changes for a creature with no budget ----------------------
+    out.that(lane(0, 1)[3] == plain and lane(0, 2)[3] == two_bands_none,
+             "and a creature with no allowance prices both crossings"
+             " exactly as it did -- the layered search collapses to one"
+             " layer, which is what keeps this off the hot path",
+             f"{lane(0, 1)[3]}, {lane(0, 2)[3]}")
+
+    # -- what the LAYERED SEARCH buys, which costs alone cannot show ---------
+    # **Three plants said this arm was missing.** Breaking `reachable`'s
+    # layering -- not layering at all, never offering the waiving branch,
+    # letting the budget exceed its ceiling -- left every assertion above
+    # green, because `costs` applies its own greedy waiver to whatever
+    # path the search returned. So the arms above are about the *price*
+    # of a square and say nothing about *which squares there are*.
+    #
+    # The set is what layering decides: without it, a square whose
+    # un-waived cost is over budget is never reached at all, and no
+    # discount applied afterwards can put it back.
+    def far_side(free: int, bands: int, budget: int) -> bool:
+        world, me, _ = _board(ROWS[1], 1)
+        must(world.get(me, Movement), "the creature moves").free_difficult = free
+        x, y = must(world.get(me, Position), "it stands").square
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            run = [(x + dx * d, y + dy * d) for d in range(1, bands + 2)]
+            if all(world.grid.passable(sq) and world.grid.occupant(sq) is None
+                   for sq in run):
+                break
+        else:
+            return False
+        across = (dy, dx)
+        for sq in run[:bands]:
+            for n in range(-4, 5):
+                world.grid.difficult[
+                    (sq[0] + across[0] * n, sq[1] + across[1] * n)] = "rubble"
+        return run[-1] in reachable(world, me, budget, kind="walk")
+
+    out.that(not far_side(0, 1, 2),
+             "premise: with a budget of 2, the far side of one rough band"
+             " is OUT OF REACH without a waiver -- it costs 3",
+             f"{far_side(0, 1, 2)}")
+    out.that(far_side(1, 1, 2),
+             "and one free square puts it in reach. That is the layered"
+             " search: a discount applied after the fact cannot add a"
+             " square the search never reached",
+             f"{far_side(1, 1, 2)}")
+    out.that(not far_side(1, 2, 3),
+             "two rough bands and ONE waiver still cost 4, so a budget of"
+             " 3 does not reach -- the ceiling, which a budget spending"
+             " itself twice would have cleared",
+             f"{far_side(1, 2, 3)}")
+    out.that(far_side(2, 2, 3),
+             "and two waivers do, which is the same arrangement one step"
+             " further along",
+             f"{far_side(2, 2, 3)}")
+
+    # -- the cheapest layer is the one reported -----------------------------
+    # A square can be reached in several layers -- with a waiver spent and
+    # without -- and `reachable` keeps one per square. It has to be the
+    # cheapest, or `costs` reports a price the creature need not pay.
+    # Asserted as an invariant over the whole board rather than on one
+    # square, because which layer is found first is an ordering accident
+    # and a single square cannot be relied on to expose it.
+    with_free, me_f, _, _ = lane(1, 1)
+    without, me_w, _, _ = lane(0, 1)
+    priced = costs(with_free, me_f, 10, kind="walk")
+    plainly = costs(without, me_w, 10, kind="walk")
+    dearer = {sq: (priced[sq], plainly[sq]) for sq in priced
+              if sq in plainly and priced[sq] > plainly[sq]}
+    out.that(not dearer,
+             "no square costs MORE with a waiver in hand than without"
+             " one, over the whole reachable set -- the invariant that"
+             " says the layer kept for each square is its cheapest",
+             f"{sorted(dearer.items())[:4]}")
+    out.that(any(priced[sq] < plainly[sq] for sq in priced if sq in plainly),
+             "premise: and at least one costs less, so the line above is"
+             " an invariant holding rather than two identical boards",
+             f"{sum(1 for sq in priced if sq in plainly and priced[sq] < plainly[sq])}"
+             " cheaper")
+
+    # -- both rows lay it ---------------------------------------------------
+    def laid(ref: str, *, heavy: bool = False) -> int:
+        world, me, _ = _board(ref, 1)
+        gear = must(world.get(me, Gear), "the character has gear")
+        moves = must(world.get(me, Movement), "the creature moves")
+        if not heavy:
+            gear.armour = "cloth"
+        moves.free_difficult = 0
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        return moves.free_difficult
+
+    for ref in ROWS:
+        out.that(laid(ref) == 1,
+                 f"{ref} lays a budget of exactly one square",
+                 f"{laid(ref)}")
+
+    # `f1873`'s own gate, which is the half that is not shared: its card
+    # gives the exemption only out of heavy armour, and the board deals
+    # it scale.
+    out.that(laid("f1873", heavy=True) == 0,
+             "and `f1873` lays nothing in heavy armour -- its printed"
+             " condition, and the reason the arm above has to undress the"
+             " character rather than take the board as dealt",
+             f"{laid('f1873', heavy=True)}")
+
+    for ref in ROWS:
+        out.that(not REGISTRY[ref].unfinished,
+                 f"and {ref} carries no marker: the clause both were"
+                 " blocked on is the one asserted above",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_blow_that_knows_it_is_a_finisher(out: Result) -> None:
     """"You deliver a coup de grace ... 1[W] extra damage."
 
@@ -121964,6 +122187,9 @@ DRIVERS = {
     "a_type_word_that_only_helps": (
         a_type_word_that_only_helps,
         "a type word that only helps"),
+    "one_square_of_rough_going_is_free": (
+        one_square_of_rough_going_is_free,
+        "one square of rough going is free"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,

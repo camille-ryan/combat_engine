@@ -3216,6 +3216,7 @@ class Cast:
         made_by: str = "",
         unlit: bool = False,
         while_near: tuple[int, int] | None = None,
+        squares: int = 0,
         on: int | None = None,
         until: When = When.ENCOUNTER,
         when: str = "",
@@ -3285,6 +3286,24 @@ class Cast:
         two rows because this is where somebody would come looking for the
         parameter. #1196's lesson, in the other direction: a symbol that
         reads like a parameter can be a pathfinding change.
+
+        **It is written now, and every word of the paragraph above turned
+        out to be the design.** `squares=N` is an argument here after all
+        -- but it only *lays* the budget, on `Movement.free_difficult`,
+        and each of the three readers spends it in its own terms:
+
+            step        a per-move counter, reset where the move starts
+            reachable   a LAYERED search over (square, waivers spent)
+            costs       greedily over the path the search chose
+
+        The layering is what the old paragraph was protecting against,
+        and it is taken **only when the budget is positive**: with
+        `free_difficult == 0` there is one layer and the search key is
+        the square, exactly as it was. So the hot path pays one component
+        read.
+
+        A budget waives the **surcharge** and never the step, so more
+        waivers than there is rough ground on a path buys nothing.
         """
         from .components import Movement
 
@@ -3292,6 +3311,33 @@ class Cast:
         moves = self.world.get(who, Movement)
         if moves is None:
             return None
+        # **The counted form, which shares nothing with the sets below.**
+        # Laid first and returned, because it combines with none of them:
+        # `kind`, `made_by`, `unlit` and `while_near` each name *which*
+        # going is free, where this names *how much* -- and no card
+        # prints two of those at once.
+        if squares:
+            if kind or made_by or unlit or while_near is not None or when:
+                raise ValueError(
+                    f"{self.ref}: c.ignores_difficult(squares=) is how"
+                    " MUCH rough going is free and the others are which"
+                    " SORT -- one call each, and no card prints two."
+                )
+            was = moves.free_difficult
+            moves.free_difficult = max(was, squares)
+
+            def unlay() -> None:
+                moves.free_difficult = was
+
+            def relay() -> None:
+                moves.free_difficult = max(was, squares)
+
+            return self.world.effects.apply(
+                who, self.me, until,
+                label=f"{self.ref} sure-footed {squares}",
+                on_suspend=[unlay], on_resume=[relay],
+                by=self.ref,
+            )
         if made_by and kind:
             raise ValueError(
                 f"{self.ref}: c.ignores_difficult takes `kind` or `made_by`,"

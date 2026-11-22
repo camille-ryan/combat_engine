@@ -431,6 +431,28 @@ class Movement:
     #: square searched. `charge` and `run` are the other two the cards name
     #: and this engine prices both -- `movement.PRICED_KINDS`.
     ignores_when: dict[str, set[str]] = field(default_factory=dict)
+    #: **How many squares of rough going are free per move**, where
+    #: `ignores` above is all of it or none.
+    #:
+    #: *"You ignore 1 square of difficult terrain when you move"* --
+    #: `f1873`, `f2622`. A **budget on a path** and not a property of a
+    #: square, which is why it could not live in `World.crossing`'s
+    #: closure: that prices one step at a time and is shared by `step`,
+    #: `reachable` and `costs`, so a counter inside it would be spent by
+    #: routes a search merely considered.
+    #:
+    #: `0` for every creature nothing has given one, and the three
+    #: readers all take their fast path on that -- `movement.reachable`
+    #: layers its search only when this is positive.
+    free_difficult: int = 0
+    #: How many of `free_difficult` are left in the move being walked
+    #: right now. Reset by `movement.start_move`, spent by `step`.
+    #:
+    #: Separate from the allowance for the reason a `Powers.used` count
+    #: is separate from `Power.uses`: one is what the card grants and the
+    #: other is what is left, and a search must be able to ask the first
+    #: without disturbing the second.
+    free_difficult_left: int = 0
     #: The same exemption asked the other way: not what the going **is** but
     #: what **made** it. "Ignores difficult terrain that is `m2824`", "ignores
     #: difficult terrain related to spider swarms" -- five rows, and the only

@@ -905,21 +905,32 @@ def f1839(c: Cast) -> None:
 
 @power("f1873", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignores_difficult(squares=)",))
+)
 def f1873(c: Cast) -> None:
     """All rough ground on a charge, out of heavy armour. One square of it
     on an ordinary move, which is the dropped half.
 
     The charge half is exact: `when="charge"` is read where the cost of a
-    square is settled. The other half is a **partial** exemption -- one
-    square of difficult terrain and no more -- and the holder is a set of
-    terrain labels, so there is nowhere to put a count. That is a different
-    gap from this one and keeps its own marker.
+    square is settled.
+
+    **The other half is a partial exemption and is written now.** It is
+    *"one square of difficult terrain and no more"*, and the old note was
+    right that *"the holder is a set of terrain labels, so there is
+    nowhere to put a count"* -- the count lives on
+    `Movement.free_difficult` instead, which is a budget on the **path**.
+    `c.ignores_difficult(squares=1)` lays it and `step`, `reachable` and
+    `costs` each spend it in their own terms; see that verb.
+
+    Two calls rather than one, because they are two sentences: the charge
+    half waives **all** rough going for one kind of move, and this waives
+    **one square** of it for any move. The verb refuses them together for
+    that reason.
     """
     gear = c.world.get(c.me, Gear)
     if gear is not None and gear.armour in _HEAVY_ARMOUR:
         return
     c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="charge")
+    c.ignores_difficult(squares=1, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1983", level=1, cls="", usage=DAILY, action=ActionType.NONE,

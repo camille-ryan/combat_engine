@@ -1041,6 +1041,13 @@ def walk(
         # or blocked still started somewhere and the two must agree.
         start = world.get(eid, Position)
         mv.went_from = start.square if start is not None else None
+        # **The per-move allowance of free rough going, reset here.**
+        # *"You ignore 1 square of difficult terrain when you move"* is a
+        # budget on a **path**, so this is the one place it can start
+        # again -- `World.crossing` prices a step at a time and is shared
+        # with `reachable`, whose Dijkstra would have spent the budget on
+        # routes nobody takes.
+        mv.free_difficult_left = mv.free_difficult
     # **Hoisted, and it was being rebuilt per square.** `world.difficult`
     # was called inside this loop, so a creature's waivers and every live
     # zone were re-resolved for every square it walked. `crossing` resolves
@@ -1090,7 +1097,23 @@ def walk(
         # difficult *terrain*, so a zone that both slows and burns still
         # waives its damage for a flier passing over and charges for the
         # ground.
-        spent += 1 if (over and sq not in sticky) else price(frm, sq)
+        step_cost = 1 if (over and sq not in sticky) else price(frm, sq)
+        # **The per-move allowance, spent here and only here.** A square
+        # that cost extra for being rough costs one less while the budget
+        # lasts -- *"you ignore 1 square of difficult terrain when you
+        # move"*. Charged against the surcharge rather than the whole
+        # step, so a zone that taxes a crossing for a different reason
+        # still charges it.
+        #
+        # `price(frm, sq) - 1` is the comparison rather than
+        # `sq in world.rough()`, because `crossing` is the one owner of
+        # what a step costs and a second opinion here is the
+        # disagreement that function exists to prevent.
+        if (mv is not None and mv.free_difficult_left > 0
+                and step_cost > 1 and not over):
+            step_cost -= 1
+            mv.free_difficult_left -= 1
+        spent += step_cost
         frm = sq
         # Squares entered, not budget spent -- `spent` charges 2 for rough
         # ground and the printed penalty counts squares.
@@ -1492,15 +1515,35 @@ def reachable(
     start = pos.square
     threat = _threatened_from(world, eid)
 
+    # **How many squares of rough going are free on this path.**
+    # `Movement.free_difficult`, and it is read here rather than inside
+    # `price` for the reason `c.ignores_difficult` records: the budget
+    # belongs to a **path**, and a counter in the shared pricing closure
+    # would be spent by every route this search merely considers.
+    #
+    # Zero for every creature nothing has given one, and the whole
+    # layering below collapses to the ordinary search when it is -- so
+    # this costs one component read on the hot path and nothing else.
+    moves = world.get(eid, Movement)
+    free = max(0, moves.free_difficult) if moves is not None else 0
+
     # (movement spent, squares walked under threat). Lexicographic, so a
     # safer route wins outright and only a tie on safety is settled by cost.
-    best: dict[Square, tuple[int, int]] = {start: (0, 0)}
-    came: dict[Square, list[Square]] = {start: []}
-    frontier = [start]
+    #
+    # **Keyed on (square, waivers spent) when there is a budget**, which
+    # is a layered search over `free + 1` copies of the board: arriving
+    # somewhere having spent a waiver is a different state from arriving
+    # having kept it, and the cheaper of the two is not always the one
+    # worth keeping. With `free == 0` there is one layer and the key is
+    # the square, which is exactly what this was.
+    best: dict[tuple[Square, int], tuple[int, int]] = {(start, 0): (0, 0)}
+    came: dict[tuple[Square, int], list[tuple[Square, int]]] = {(start, 0): []}
+    frontier = [(start, 0)]
     while frontier:
         frontier.sort(key=lambda s: best[s])
-        here = frontier.pop(0)
-        spent, risked = best[here]
+        node = frontier.pop(0)
+        here, used = node
+        spent, risked = best[node]
         # A linked square is one step away like any neighbour. `step` never
         # asked whether a destination was adjacent to where the mover stood,
         # so the search is the only place a rift has to be known about.
@@ -1511,21 +1554,59 @@ def reachable(
                           overhead=overhead or share,
                           move={"kind": kind, "squares": budget, "by": by}):
                 continue
-            step_cost = price(here, nxt)
-            score = (spent + step_cost, risked + _provokes_step(threat, here, nxt, pos.size))
-            if score[0] > budget:
-                continue
-            known = best.get(nxt)
-            if known is not None and score > known:
-                continue
-            if known is not None and score == known:
-                came[nxt].append(here)      # another equally good way in
-                continue
-            best[nxt] = score
-            came[nxt] = [here]
-            frontier.append(nxt)
+            full = price(here, nxt)
+            # Both ways of entering a rough square: pay for it, or spend
+            # one of the waivers. The search keeps whichever turns out
+            # better further on rather than deciding here, which is the
+            # whole reason the state carries `used`.
+            options = [(full, used)]
+            if free and used < free and full > 1:
+                options.append((full - 1, used + 1))
+            for step_cost, now_used in options:
+                score = (spent + step_cost,
+                         risked + _provokes_step(threat, here, nxt, pos.size))
+                if score[0] > budget:
+                    continue
+                ahead = (nxt, now_used)
+                known = best.get(ahead)
+                if known is not None and score > known:
+                    continue
+                if known is not None and score == known:
+                    came[ahead].append(node)   # another equally good way in
+                    continue
+                best[ahead] = score
+                came[ahead] = [node]
+                frontier.append(ahead)
 
-    paths = {sq: _straightest(start, sq, came) for sq in came if sq != start}
+    # **One answer per square, taken from the layer that reached it most
+    # cheaply.** A square may be in several layers -- reached with a
+    # waiver spent and without -- and a caller wants the cost, not the
+    # bookkeeping. Ties break on the fewest waivers spent, so a route
+    # that costs the same keeps the budget for later.
+    #
+    # **The comparison is a guard the frontier ordering makes hard to
+    # reach, and that is measured rather than assumed.** `frontier` is
+    # re-sorted by cost on every pop, so a square's cheaper layer is
+    # normally inserted first and `kept is None` alone would answer the
+    # same -- replacing the test with that changed no assertion in
+    # `drivers.one_square_of_rough_going_is_free`. It is kept because the
+    # ordering does not make it *impossible*: a node popped later can
+    # relax a neighbour below a sibling layer inserted earlier, and
+    # `best` iterates in insertion order. Deleting a guard on the
+    # strength of one board is how a search starts answering the second
+    # best price.
+    arrived: dict[Square, tuple[Square, int]] = {}
+    for node_, score in best.items():
+        sq_, used_ = node_
+        kept = arrived.get(sq_)
+        if kept is None or (score, used_) < (best[kept], kept[1]):
+            arrived[sq_] = node_
+    came_sq: dict[Square, list[Square]] = {
+        sq_: [frm for frm, _ in came[node_]]
+        for sq_, node_ in arrived.items()
+    }
+    paths = {sq: _straightest(start, sq, came_sq)
+             for sq in came_sq if sq != start}
     # **Moving through a body is not standing in one.** A flyer's destinations
     # were already filtered this way; a phasing creature's were not, and
     # `_clear` waives occupancy for a ghost as readily as for a flyer -- so the
@@ -1738,11 +1819,31 @@ def costs(
     if pos is None:
         return {}
     price = world.crossing(eid, kind)
+    moves = world.get(eid, Movement)
+    free = max(0, moves.free_difficult) if moves is not None else 0
     out: dict[Square, int] = {}
     for sq, path in reachable(world, eid, budget, mode=mode, kind=kind).items():
         # Paired with the square each step leaves, since a tax can be on the
         # way out -- `pos.square` is where the first step starts from.
-        out[sq] = sum(
-            price(frm, to) for frm, to in zip([pos.square, *path], path, strict=False)
-        )
+        steps = [
+            price(frm, to)
+            for frm, to in zip([pos.square, *path], path, strict=False)
+        ]
+        # **The per-move allowance, spent greedily on the dearest steps.**
+        # Each waiver saves exactly one square of movement whichever rough
+        # step it is spent on, so spending them on the first ones found is
+        # as good as any other order -- and `reachable` has already
+        # decided this path is the cheapest, so the two agree.
+        #
+        # Without this, `costs` reported 2 for a square the search had
+        # reached at 1, which is the kind of disagreement `World.crossing`
+        # exists to make impossible.
+        left = free
+        total = 0
+        for cost in steps:
+            if left > 0 and cost > 1:
+                cost -= 1
+                left -= 1
+            total += cost
+        out[sq] = total
     return out
