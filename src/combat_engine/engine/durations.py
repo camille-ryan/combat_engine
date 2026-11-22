@@ -163,6 +163,21 @@ class Effect:
     #: that -- "reverting to your normal form is a minor action". Distinct
     #: from `sustain_cost`: one keeps a thing alive, the other kills it.
     drop_cost: ActionType | None = None
+    #: **This hold is a polymorph form**, laid by `Cast.form` and by
+    #: nothing else.
+    #:
+    #: `drop_cost` above was the obvious discriminator and it is the wrong
+    #: one: it means *"you may end this deliberately"*, which a defender's
+    #: aura and a swapped sense also carry -- measured on an audit board,
+    #: where `c.end_forms` stripped `p12660`'s aura from a creature that
+    #: had taken no shape at all.
+    #:
+    #: A flag rather than a label convention, because `Cast.form` labels
+    #: the hold with the ref of whichever row changed shape, so there is
+    #: nothing in the text a reader could match on. `i2459p1` is the row
+    #: that needs this: *"reverts to its natural form"*, from outside the
+    #: creature. #1456.
+    is_form: bool = False
     #: **A second creature who may end it, at its own cost.** One printed
     #: line gives two: `p11273`'s *"you can end this effect as a free
     #: action ... if the target is a creature, it can end the effect as a
@@ -573,6 +588,7 @@ class Effects:
         on_resume: Iterable[Callable[[], None]] = (),
         sustain_cost: ActionType | None = None,
         drop_cost: ActionType | None = None,
+        is_form: bool = False,
         drop_by: int = -1,
         drop_when: Callable[[Any, int], bool] | None = None,
         sustain_when: Callable[[Any, int], bool] | None = None,
@@ -687,6 +703,7 @@ class Effects:
             sustained=self.world.round,
             sustain_cost=sustain_cost,
             drop_cost=drop_cost,
+            is_form=is_form,
             drop_by=drop_by,
             drop_when=drop_when,
             sustain_when=sustain_when,

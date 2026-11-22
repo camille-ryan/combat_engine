@@ -72792,6 +72792,107 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_form_ended_from_outside_it(out: Result) -> None:
+    """*"Reverts to its natural form **and** cannot use powers that have
+    the polymorph keyword (save ends)"* -- `i2459p1`. #1456.
+
+    **`drop_cost` was the obvious discriminator and it is the wrong
+    one.** A form is a hold with a printed way out, so the first draft of
+    `c.end_forms` looked for `drop_cost` -- and that field means only
+    *"you may end this deliberately"*, which a defender's aura and a
+    swapped sense also carry. Measured on an audit board: it stripped
+    `p12660`'s aura from a creature that had taken **no shape at all**.
+
+    A label convention could not work either, which the row's own note
+    had already read out: `c.form` labels the hold with the ref of
+    whichever row changed shape, so there is nothing in the text to match
+    on. `Effect.is_form` is the flag, set by `c.form` and by nothing
+    else.
+
+    **Every form at once**, because `Shapes` is a set and the cards stack
+    -- a creature can be "hybrid" and "rat" together, and *"reverts to its
+    natural form"* is singular about the destination rather than about how
+    many shapes are being left.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Shapes
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+
+    ROW = "i2459p1"
+
+    def shifted() -> tuple:
+        """A creature in two shapes at once, and a board aura beside it."""
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref="drv")
+        foe = sorted(cast.enemies())[0]
+        theirs = Cast(world=world, me=foe, ref="drv:shapeshift")
+        theirs.form(name="rat", until=When.ENCOUNTER)
+        theirs.form(name="hybrid", until=When.ENCOUNTER)
+        return world, me, cast, foe
+
+    world, _me, cast, foe = shifted()
+    live = must(world.get(foe, Shapes), "the creature records its shapes").live
+    out.that({"rat", "hybrid"} <= live,
+             "premise: the creature is in two shapes at once, which is the"
+             " ordinary case rather than an edge -- `Shapes` is a set"
+             " because the cards stack",
+             f"{sorted(live)}")
+    out.that(cast.end_forms(on=foe) == 2,
+             "`c.end_forms` ends BOTH from outside the creature -- the"
+             " verb nothing had: `c.form` is laid by whoever changes"
+             " shape",
+             "2 forms")
+    out.that(not live,
+             "and the shape words clear themselves, because `c.form` hangs"
+             " the discard on the hold -- no second step here",
+             f"{sorted(live)}")
+
+    # -- the discrimination that cost a draft -------------------------------
+    w2, me2, c2, _ = shifted()
+    droppable = [e.label for e in w2.effects.of(me2)
+                 if getattr(e, "drop_cost", None) is not None]
+    out.that(droppable,
+             "premise: the board gives the CASTER a hold that is"
+             " deliberately droppable and is not a form -- a defender's"
+             " aura. Without one on the board the arm below passes"
+             " vacuously, which is how the first draft read green",
+             f"{droppable}")
+    out.that(c2.end_forms(on=me2) == 0,
+             "and a creature in no shape loses nothing: `is_form` is the"
+             " test, where `drop_cost` would have stripped that aura."
+             " This is the arm the whole flag exists for",
+             "0 forms")
+    out.that([e.label for e in w2.effects.of(me2)
+              if getattr(e, "drop_cost", None) is not None] == droppable,
+             "stated the other way round too -- the droppable holds are"
+             " all still there afterwards",
+             f"{droppable}")
+
+    # -- the row ------------------------------------------------------------
+    w3, me3, _c3, foe3 = shifted()
+    body = Cast(world=w3, me=me3, ref=ROW)
+    body.target = foe3
+    REGISTRY[ROW].body(body)
+    out.that(not must(w3.get(foe3, Shapes), "shapes").live,
+             f"{ROW} reverts the creature it hit to its natural form",
+             f"{sorted(must(w3.get(foe3, Shapes), 'shapes').live)}")
+    refusal = [e.label for e in w3.effects.of(foe3)
+               if e.by == ROW and e is not None]
+    out.that(refusal,
+             "and the second half of the same printed sentence is laid"
+             " beside it -- the polymorph refusal, which `dsl.usable`"
+             " reads off its `forbidden` list. Asserted together because"
+             " the ORDER matters: a creature refused polymorph powers"
+             " must not be left in a shape it can no longer step out of"
+             " by the printed minor action",
+             f"{refusal}")
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_creature_takes_a_different_stat_block(out: Result) -> None:
     """*"The target becomes Large ... The creature has the same statistics
     as"* a printed mount -- `i3364p1`. #1455.
@@ -125863,6 +125964,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_form_ended_from_outside_it,
         a_creature_takes_a_different_stat_block,
         the_hexblade_boon_taken_from_a_new_moment,
         a_feat_buys_an_attack_power_from_another_class,
@@ -126257,6 +126359,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "form_ended": (
+        a_form_ended_from_outside_it,
+        "a form ended from outside the creature, which drop_cost could"
+        " not find (#1456)",
     ),
     "stat_block_swap": (
         a_creature_takes_a_different_stat_block,

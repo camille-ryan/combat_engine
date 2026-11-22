@@ -1751,16 +1751,15 @@ def i2459x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with the weapon",
     on=Trigger(Hit, by_me, "you hit with the weapon"),
-    dropped=("c.end_forms(on=)",),
 )
 def i2459p1(c: Cast) -> None:
     """"Reverts to its natural form **and** cannot use powers that have the
     polymorph keyword (save ends)."
 
-    The second half is written now. The first is not: nothing ends a form
-    from *outside* it -- `c.form` is laid by the creature changing shape and
-    there is no verb for a third party stripping it -- so this is `dropped=`
-    rather than `todo=`, because the row now does something in play.
+    **Both halves are written.** The first waited on ending a form from
+    *outside* it -- `c.form` is laid by the creature changing shape and
+    there was no verb for a third party stripping one. `c.end_forms(on=)`
+    is that verb. #1456.
 
     **The near miss, read so the next pass does not have to.**
     `c.end_effect` does take `on=` and does pick out of another creature's
@@ -1777,6 +1776,13 @@ def i2459p1(c: Cast) -> None:
 
     The two halves are not redundant. Barring the keyword stops it shifting
     *again*; it does not undo the shape it is already wearing."""
+    # **The revert first, then the refusal.** Both halves are one printed
+    # sentence -- *"reverts to its natural form **and** cannot use powers
+    # that have the polymorph keyword (save ends)"* -- and in this order,
+    # because a creature that may not use a polymorph power must not be
+    # left standing in a shape it can no longer step out of by the printed
+    # minor action.
+    c.end_forms(on=c.target)
     c.forbid(keyword=Keyword.POLYMORPH, until=When.SAVE_ENDS)
 
 

@@ -11485,6 +11485,11 @@ class Cast:
             label=label or self.ref,
             conditions=conditions,
             drop_cost=revert,
+            # **What makes the hold findable from outside**, which is the
+            # whole of `c.end_forms`. `drop_cost` was the obvious marker
+            # and means only "you may end this deliberately" -- a
+            # defender's aura carries one too. #1456.
+            is_form=True,
             by=self.ref,
         )
         if name:
@@ -18907,6 +18912,48 @@ class Cast:
 
         who = self._who(on)
         return False if who is None else in_form(self.world, who, *names)
+
+    def end_forms(self, *, on: int | None = None) -> int:
+        """Send a creature back to its natural form. How many forms ended?
+
+        *"Reverts to its natural form"* -- `i2459p1`, and nothing could do
+        it from **outside**: `c.form` is laid by the creature changing
+        shape, and a third party stripping one had no verb.
+
+        **`c.end_effect(on=)` was the near miss and could not find the
+        form.** That one does reach into another creature's standing
+        effects, so the shape of the call existed; its three narrowings
+        are `save_ends`, `carrying=` a condition and `against=` a
+        fragment of the label -- and `c.form` labels the hold with the ref
+        of whichever row changed shape, so there is no fragment this card
+        could pass. The row's own note read that out before this landed.
+
+        **A form is identified by `Effect.is_form`, and `drop_cost` was
+        the wrong answer.** That field means *"you may end this
+        deliberately"*, which a defender's aura and a swapped sense also
+        carry -- measured, where the first draft of this verb stripped
+        `p12660`'s aura off a creature that had taken no shape at all. A
+        label convention could not work either: `c.form` labels the hold
+        with the ref of whichever row changed shape, so there is nothing
+        in the text to match on.
+
+        Every form at once, because the cards stack -- `Shapes` is a set
+        for that reason, a creature can be in "hybrid" and "rat" together,
+        and *"reverts to its natural form"* is singular about the
+        destination rather than about how many shapes are being left.
+
+        The shape words clear themselves: `c.form` hangs the discard on
+        the hold, so ending it here takes the word out of `Shapes.live`
+        with no second step. Measured.
+        """
+        who = self.me if on is None else on
+        ended = 0
+        for eff in list(self.world.effects.of(who)):
+            if not getattr(eff, "is_form", False):
+                continue
+            self.world.effects.end(eff, f"{self.ref} reverted the form")
+            ended += 1
+        return ended
 
     def shaped(self, *, on: int | None = None) -> bool:
         """Has the creature taken a shape that is not its own?

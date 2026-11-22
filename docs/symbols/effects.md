@@ -72,6 +72,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Everything laid inside this block is `ref`'s doing, not this row's.
 - `c.effect(self, label: 'str', *, until: 'When' = <When.SAVE_ENDS: 'save ends'>, on: 'int | None' = None, sustain: 'ActionType | None' = None) -> 'Effect | None'`
   - A named hold with no mechanical content of its own.
+- `c.end_forms(self, *, on: 'int | None' = None) -> 'int'`
+  - Send a creature back to its natural form. How many forms ended?
 - `c.form(self, *, conditions: 'Iterable[Condition]' = (), modes: 'dict[str, int] | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, revert: 'ActionType | None' = <ActionType.MINOR: 'minor'>, label: 'str' = '', name: 'str' = '') -> 'Effect'`
   - Assume a shape: some conditions, some ways of moving, and a way out.
 - `c.in_form(self, *names: 'str', on: 'int | None' = None) -> 'bool'`
