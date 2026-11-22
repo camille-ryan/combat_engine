@@ -4739,12 +4739,27 @@ def candidates(
             for word in said
         )
 
+    # **A creature the caster counts as nearer than it is.** The area is
+    # a set of squares and a halving is a fact about a *pair*, so it
+    # cannot be folded into the shape -- `area_of` has no target. Only a
+    # melee or a ranged line has a reach to shorten; a burst's size is
+    # not a distance to a creature, and `_within_reach` returns True for
+    # every other kind for the same reason.
+    nearer: set[int] = set()
+    shape = reach_of(world, actor, p, branch, augment)
+    if shape.kind in ("melee", "ranged"):
+        reach = _reach_of(world, actor, shape, p.ref)
+        nearer = {
+            c for c in pool
+            if c != actor and _apparent(world, actor, c) <= reach
+        }
+
     return [
         c
         for c in pool
         if can_aim(c)
         and not refuses(c)
-        and squares(world, c) & area
+        and (squares(world, c) & area or c in nearer)
         and (unblocked(c)
              or any(line_of_effect(world, eye, c) for eye in eyes))
     ]
@@ -5629,6 +5644,41 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
 _DEPARTING = ("AdjacencyLost", "MoveStart", "MoveEnd", "Moved")
 
 
+def _apparent(world: World, actor: int, target: int) -> int:
+    """How far away that creature counts as, for this creature's ranges.
+
+    *"Until the end of the encounter, this target is considered half as
+    far away for the purpose of ranged attacks made with this orb"* --
+    `i1949p1`, and the halving is the only form any card prints.
+
+    **A property of the PAIR, which is why no existing carrier fits.**
+    `_stretched` is asked per *range kind* with a context of `power` and
+    `range_kind`, and `_within_reach` resolves one number for the power
+    before it ever loops over candidates -- so a hold there says "every
+    enemy is nearer", where the card names one creature chosen at use.
+    Laying the stretch unnarrowed doubles the orb's reach to everybody
+    for the rest of the encounter, which is the direction of error this
+    tree marks rather than ships, and the row's own note refused it on
+    exactly that ground.
+
+    Held on the **attacker** and gated on `target`, which is a key the
+    modifier context already carries everywhere else. Capped at four
+    halvings, because a stacked hold is a loop and nothing prints two.
+    """
+    from .components import Mods as _Mods
+    from .query import distance_between as _apart
+
+    gap = _apart(world, actor, target)
+    mods = world.get(actor, _Mods)
+    if mods is None or not mods.items:
+        return gap
+    for _ in range(min(
+        mods.total("range_halved", {"target": target, "actor": actor}), 4,
+    )):
+        gap //= 2
+    return gap
+
+
 def _within_reach(
     world: World,
     actor: int,
@@ -5687,8 +5737,13 @@ def _within_reach(
     from .query import distance_between
 
     far = _reach_of(world, actor, r, p.ref)
+    # **How far the target COUNTS as**, which is not always how far it
+    # is -- see `_apparent`. Only from the caster's own square: a
+    # borrowed or a companion origin is a different creature's distance
+    # and the card is about this one's.
     return any(
-        distance_between(world, eye, target) <= far
+        (_apparent(world, actor, target) if eye == actor
+         else distance_between(world, eye, target)) <= far
         for eye in origins(world, actor, r, p)
     )
 

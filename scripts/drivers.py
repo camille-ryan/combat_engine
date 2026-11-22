@@ -87217,6 +87217,145 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def one_creature_counts_as_nearer(out: Result) -> None:
+    """*"Choose a target within 10 squares of you. Until the end of the
+    encounter, this target is considered half as far away for the purpose
+    of ranged attacks made with this orb"* -- `i1949p1`.
+
+    **A fact about a PAIR, which is why no existing carrier fits.**
+    `dsl._stretched` is asked per *range kind*, with a context of `power`
+    and `range_kind` and no room for a creature, and `_within_reach`
+    resolves one number for the power before it loops over candidates.
+    So the nearest available hold said *"every enemy is nearer"* -- which
+    on a row whose only clause this is doubles the orb's reach to
+    everybody for the rest of the encounter.
+
+    **Both ends are asserted, because either alone leaves the clause
+    unreachable.** `_within_reach` is where a range is enforced and
+    `candidates` is where one is offered; a target the menu never shows
+    is a clause nobody gets, and a target the menu shows and the
+    enforcement refuses is a row that reads as broken.
+
+    **And it is one creature.** The second enemy, at the same distance,
+    is still out of range -- that arm is the whole difference between
+    this and a reach bonus.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, _within_reach, candidates
+    from combat_engine.engine.durations import When
+
+    ROW, SHOT = "i1949p1", "p10189"
+
+    def staged() -> tuple:
+        """Two enemies, both 14 squares off -- past a ranged 10."""
+        world, me, _ = _board(ROW, 1)
+        for eff in list(world.effects.of(me)):
+            if eff.by == ROW:
+                world.effects.end(eff)
+        here = world.need(me, Position).square
+        foes = sorted(Cast(world=world, me=me, ref="drv").enemies())
+        must(len(foes) >= 2, "the board has two enemies")
+        movement.place(world, foes[0], (here[0] + 14, here[1]))
+        movement.place(world, foes[1], (here[0] + 14, here[1] + 1))
+        return world, me, foes[0], foes[1]
+
+    world, me, near, other = staged()
+    shot = REGISTRY[SHOT]
+    out.that(shot.reach is not None and shot.reach.kind == "ranged"
+             and shot.reach.size == 10,
+             "premise: the power below is a ranged 10, which is the"
+             " distance the two enemies are outside of",
+             f"{shot.reach}")
+    out.that(not _within_reach(world, me, shot, near)
+             and not _within_reach(world, me, shot, other),
+             "premise: neither enemy is in range at 14 squares",
+             "both out")
+    out.that(near not in candidates(world, me, shot)
+             and other not in candidates(world, me, shot),
+             "and the menu offers neither",
+             f"{sorted(candidates(world, me, shot))}")
+
+    # -- the printed clause -------------------------------------------------
+    REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW, target=near))
+    out.that(_within_reach(world, me, shot, near),
+             "with the orb, the chosen enemy IS in range -- 14 squares"
+             " counts as 7, which is inside a ranged 10",
+             "reached")
+    out.that(near in candidates(world, me, shot),
+             "and the MENU offers it, which is the half that makes the"
+             " clause reachable at all -- `candidates` builds a set of"
+             " squares and a halving is a fact about a pair, so it"
+             " cannot be folded into the shape",
+             f"{sorted(candidates(world, me, shot))}")
+
+    # -- one creature, not every creature -----------------------------------
+    out.that(not _within_reach(world, me, shot, other),
+             "**the OTHER enemy, at the same distance, is still out of"
+             " range.** That is the whole difference between this and a"
+             " reach bonus, and the shape the row's own note refused to"
+             " ship",
+             "still out")
+    out.that(other not in candidates(world, me, shot),
+             "and the menu still does not offer it",
+             f"{sorted(candidates(world, me, shot))}")
+
+    # -- far enough is still far enough -------------------------------------
+    # **Against a ranged FIVE, not the orb's ten.** The board is 24x16
+    # and the caster stands at (6, 8), so the furthest square on it is
+    # 17 away -- and 17 halved is 8, which is inside a ranged 10. There
+    # is no position on this board that stays out of range after the
+    # halving, so the arm needs a shorter printed range rather than a
+    # further creature. Measured, on the first run.
+    SHORT = "p12967"
+    short = REGISTRY[SHORT]
+    out.that(short.reach is not None and short.reach.size == 5,
+             "premise: a ranged 5 power, which is short enough for the"
+             " halving to leave a creature outside it",
+             f"{short.reach}")
+    w2, me2, far, _ = staged()
+    here2 = w2.need(me2, Position).square
+    movement.place(w2, far, (here2[0] + 17, here2[1]))
+    Cast(world=w2, me=me2, ref="drv").range_to(
+        far, on=me2, until=When.ENCOUNTER)
+    out.that(not _within_reach(w2, me2, short, far),
+             "a creature 17 squares off is still out of a ranged 5 at"
+             " half -- the halving is a division, not a licence",
+             "out")
+    out.that(_within_reach(w2, me2, shot, far),
+             "while the same creature IS inside the orb's ranged 10,"
+             " which is the halving working rather than nothing"
+             " happening at all",
+             "reached")
+
+    # -- a burst's size is not a distance to a creature ---------------------
+    # **A BIG burst, deliberately.** With a burst 1 the halved distance
+    # (7) is outside it anyway, so a menu widened without asking the
+    # kind still would not offer this creature and the plant stayed
+    # green. A burst 10 is larger than the halved distance and smaller
+    # than the real one, which is the only size that tells the two
+    # apart.
+    BURST = "p9400"
+    blast = REGISTRY[BURST]
+    out.that(blast.reach is not None and blast.reach.kind == "close_burst"
+             and blast.reach.size >= 10,
+             "premise: a close burst 10 -- bigger than the halved"
+             " distance and smaller than the real one",
+             f"{blast.reach}")
+    out.that(near not in candidates(world, me, blast),
+             "**the halved creature is NOT dragged into a close burst.**"
+             " `_within_reach` returns True for every kind that is not"
+             " melee or ranged, so a menu widened without asking the kind"
+             " would offer a creature fourteen squares outside a burst 1",
+             f"{sorted(candidates(world, me, blast))}, foe {near}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"{ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def becoming_invisible_is_not_hiding(out: Result) -> None:
     """Two cards about being unseen, and both needed something the
     engine could not say.
@@ -121195,6 +121334,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "one_creature_counts_as_nearer": (
+        one_creature_counts_as_nearer,
+        "`i1949p1` makes one chosen enemy count as half as far away, "
+        "at both ends of the range question (#1341)",
     ),
     "invisible_is_not_hidden": (
         becoming_invisible_is_not_hiding,

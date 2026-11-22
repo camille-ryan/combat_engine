@@ -631,6 +631,11 @@ CATEGORIES: dict[str, dict] = {
                 "level_of", "living",
                 "master", "my_aura", "my_weapon", "my_zones", "servants",
                 "size_of", "there", "threatens", "within",
+                # Beside `distance` and `threatens` rather than under a
+                # modifiers heading: it changes what the distance to ONE
+                # creature counts as, which is this page's question, and
+                # `dsl._apparent` is where the answer is read. #1341.
+                "range_to",
             ]),
             ("the caster's own numbers", [
                 "ability_for", "b_mod", "cha_", "cha_mod", "con_", "con_mod",

@@ -3043,32 +3043,41 @@ def i1927p1(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.range_to()",),
 )
 def i1949p1(c: Cast) -> None:
-    """Halving the measured distance to one creature is not a modifier
-    anything reads -- and the old note's reason for that was wrong, which
-    is worth correcting because it reads as "nothing modifies range".
+    """*"Choose a target within 10 squares of you. Until the end of the
+    encounter, this target is considered half as far away for the purpose
+    of ranged attacks made with this orb."*
 
-    *"`query.distance` is geometry"* is true and is not the question. The
-    distance that matters is the one `dsl._within_reach` measures, which
-    is what the action menu reads and the only place a range is enforced,
-    and that **does** consult a modifier: `_reach_of` asks `_stretched`
-    with a context of `{"power", "range_kind"}`. So "your range increases
-    by N" has a carrier today.
+    **The old note had the gap located exactly and refused the wrong
+    shape for the right reason.** `_reach_of` asks `_stretched` with a
+    context of `power` and `range_kind` and no room for a creature, and
+    `_within_reach` resolves one number for the power before it loops
+    over candidates -- so the nearest available hold said *"every enemy
+    is nearer"*. On a row whose only clause this is, that doubles the
+    orb's reach to everybody for the rest of the encounter.
 
-    **What that context has no room for is the creature.** `_within_reach`
-    resolves one number for the power and then loops over `origins()`
-    comparing it to each candidate, so a hold cannot say "and to *this*
-    enemy it is further". Laying the stretch unnarrowed is the shape to
-    refuse rather than to ship: the printed line names one target chosen
-    at use, and an unnarrowed hold doubles the orb's reach to everybody
-    for the rest of the encounter -- strictly stronger than print, on a
-    row whose only clause this is.
+    `c.range_to` is the narrowed form: held on the caster, gated on the
+    `target` key the modifier context already carries, and read by
+    `dsl._apparent` in **both** `_within_reach`, which enforces a range,
+    and `candidates`, which offers one. A target the menu never offers
+    is a clause nobody gets.
 
-    `c.range_to()` is therefore kept and is not the same gap as
-    `c.power_range()`: that one lengthens a power's printed range for
-    every target, which `_stretched` is already most of the way to."""
+    Measured from the caster's own square only. A borrowed or a
+    companion origin is a different creature's distance, and the card is
+    about this one's.
+
+    **Not narrowed to the orb**, and that is the one place this is wider
+    than print: *"ranged attacks made with this orb"* names the
+    implement, and nothing ties a power's use to the implement it was
+    used through -- the same hole every "through this weapon" item in
+    the tree has, said here rather than marked, because `c.as_implement`
+    records that a weapon *may* be one and no event records which was
+    picked."""
+    foe = c.target
+    if foe is None:
+        return
+    c.range_to(foe, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

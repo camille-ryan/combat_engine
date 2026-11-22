@@ -10575,6 +10575,39 @@ class Cast:
             retarget=retarget,
         )
 
+    def range_to(
+        self, who: int, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """*"Until the end of the encounter, this target is considered
+        half as far away for the purpose of ranged attacks made with
+        this orb."*
+
+        **A fact about a PAIR, which is why no existing carrier fits.**
+        `c.bonus("range", n)` is read by `dsl._stretched` per *range
+        kind*, with a context of `power` and `range_kind` and no room
+        for a creature -- and `_within_reach` resolves one number for
+        the power before it loops over candidates. So the nearest thing
+        available said *"every enemy is nearer"*, where the card names
+        one creature chosen at use: it would double the orb's reach to
+        everybody for the rest of the encounter, on a row whose only
+        clause this is.
+
+        Held on the **caster** and gated on the `target` key, which the
+        modifier context already carries everywhere else, and read by
+        `dsl._apparent` -- in `_within_reach`, which enforces a range,
+        and in `candidates`, which offers one. Both, because a target
+        the menu never offers is a clause nobody gets.
+
+        Halving only. That is the one form any card prints, and a
+        general factor would be a parameter with no caller.
+        """
+        return self.bonus(
+            "range_halved", 1, on=on if on is not None else self.me,
+            until=until, when=lambda ctx, w=who: ctx.get("target") == w,
+            label=f"{self.ref} half as far",
+        )
+
     def untargetable(
         self, *, keyword: Keyword, on: int | None = None,
         until: When = When.SAVE_ENDS,

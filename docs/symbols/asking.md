@@ -71,6 +71,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - The weapon **this row's item sits on**, or None.
 - `c.my_zones(self) -> 'list[int]'`
   - Every live zone and conjuration this caster owns. Auras included.
+- `c.range_to(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - *"Until the end of the encounter, this target is considered
 - `c.servants(self) -> 'list[int]'`
   - Everything that serves this creature.
 - `c.size_of(self, on: 'int | None' = None)`
