@@ -4858,7 +4858,22 @@ def affordable(world: World, actor: int, p: Power) -> tuple[int, ...]:
     # augments are **offered**, so a point the menu cannot see cannot be
     # spent at all. The grant shipped before this did, and the row was
     # written against a point it could not use.
-    have = (pool.points + pool.temporary) if pool is not None else 0
+    # **An earmarked expiring point counts only for what it is for.**
+    # `i1793p1`'s is *"only to augment a psionic attack power"*, and this
+    # is the reader that decides which augments are **offered** -- so
+    # counting it toward a utility augment would offer one the spend
+    # then cannot pay for, and `PowerPoints.spend` would quietly reach
+    # into the pool instead. `Power.attack is not None` is the printed
+    # half the tag is matched against.
+    spare = 0
+    if pool is not None:
+        want = "attack" if p.attack is not None else "utility"
+        spare = (
+            pool.temporary
+            if not pool.temporary_for or pool.temporary_for == want
+            else 0
+        )
+    have = (pool.points + spare) if pool is not None else 0
     return tuple(n for n in p.augment_costs if n <= have)
 
 

@@ -1064,6 +1064,14 @@ def extended_rest(world: World) -> None:
     # the store worth having -- so this is the one place that empties it.
     for _, pool in world.each(PowerPoints):
         pool.stored.clear()
+        # **And a point that stayed spent comes back.** `f3389` prints
+        # *"once you spend this power point, you do not regain the power
+        # point until you take an extended rest"*, which `refresh`
+        # cannot honour -- it refills every encounter. `locked` is how
+        # far short it leaves the pool, and this is the one place that
+        # clears it, exactly as with `stored` above.
+        pool.locked = 0
+        pool.points = pool.maximum
     for _, health in world.each(Health):
         health.hp = health.max_hp
         health.temp = 0

@@ -23467,7 +23467,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         return gone
 
     def gain_points(self, n: int, *, who: int | None = None,
-                    expiring: When | None = None) -> int:
+                    expiring: When | None = None,
+                    only_for: str = "") -> int:
         """"You regain 2 power points." Returns how many actually went in.
 
         The mirror of `c.spend_points`, and two rows were left out for want
@@ -23502,6 +23503,18 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         `PowerPoints.temporary`, `spend` takes them **first** because they
         are the ones about to lapse, and whatever is left when the clock
         runs out goes back. `f3625` and `i1793p1` are the two cards.
+        
+        **`only_for` narrows what an expiring point may buy**, which
+        `i1793p1` prints: *"you can use this power point only to augment
+        a psionic attack power."* It rides on `PowerPoints.temporary_for`
+        beside the points themselves, `spend` consults it, and
+        `dsl.affordable` -- the reader that decides which augments are
+        **offered** -- counts it only for what it is for.
+
+        `"attack"` and `"utility"` are the two words `affordable` matches
+        against, derived from `Power.attack is not None`. Meaningless
+        without `expiring`, because the pool's own points carry no tag
+        and the card that narrows one grants it from outside.
         """
         from .events import PointsRegained
 
@@ -23515,6 +23528,12 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             # outside, so a character at its maximum still takes them,
             # where `gain` would answer 0 and the row would do nothing.
             pool.temporary += n
+            if only_for:
+                # One word for the whole temporary bucket, which is
+                # exact while one card narrows: see the field's own
+                # note. A second grant with a different word would
+                # overwrite it, and none is printed.
+                pool.temporary_for = only_for
             got = n
 
             def lapse() -> None:

@@ -87244,6 +87244,134 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def two_power_points_with_strings_attached(out: Result) -> None:
+    """Two cards grant a power point with a restriction a plain count
+    cannot carry.
+
+    * `i1793p1`: *"you gain 1 power point until the end of your next
+      turn. You can use this power point only to augment a psionic
+      attack power."*
+    * `f3389`: *"you gain ... 1 power point ... Once you spend this power
+      point, you do not regain the power point until you take an extended
+      rest."*
+
+    **`PowerPoints.temporary_for` is the earmark** and
+    **`PowerPoints.locked` is the lock.** Both ride beside the counts
+    they qualify, and each has exactly one reader that matters beyond
+    `spend`:
+
+    * `dsl.affordable` decides which augments are **offered**, so an
+      earmarked point counted toward a utility augment would offer one
+      the spend then reaches into the pool to pay for. That is the
+      quieter half of the same error and it has its own arm.
+    * `turns.extended_rest` is the one place `locked` clears, exactly as
+      with `stored` beside it -- `refresh` refills every encounter and
+      cannot honour a rule about rests.
+
+    **One plant cannot be reddened and the code says why.**
+    `refresh` clearing `temporary_for` is belt and braces: it zeroes
+    `temporary` on the line above, so with no expiring points the word
+    is never consulted. It is kept because a word describing a bucket
+    that no longer exists is the kind of stale state a later
+    `temporary +=` would inherit.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import turns
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import PowerPoints
+    from combat_engine.engine.dsl import REGISTRY, affordable
+
+    MARK, LOCK = "i1793p1", "f3389"
+
+    # -- the earmark ---------------------------------------------------------
+    world, me, _ = _board(MARK, 1)
+    pool = world.get(me, PowerPoints) or world.add(me, PowerPoints())
+    pool.points, pool.maximum, pool.temporary = 0, 2, 0
+    pool.temporary_for = ""
+    REGISTRY[MARK].body(Cast(world=world, me=me, ref=MARK))
+    out.that(pool.temporary == 1 and pool.temporary_for == "attack",
+             "the row grants one expiring point earmarked for an attack"
+             " augment -- the word rides beside the points, because a"
+             " point in a pool carries no tag",
+             f"{pool.temporary} for {pool.temporary_for!r}")
+
+    out.that(pool.spend(1, purpose="utility") == 0,
+             "**spending it on a utility augment takes nothing**: the"
+             " earmarked point is not reachable and the pool is empty,"
+             " which is the printed restriction",
+             f"left {pool.temporary}/{pool.points}")
+    out.that(pool.temporary == 1,
+             "and the point is still there rather than burnt",
+             f"{pool.temporary}")
+    out.that(pool.spend(1, purpose="attack") == 1 and pool.temporary == 0,
+             "while an ATTACK augment spends it",
+             f"{pool.temporary}")
+
+    # -- the pool is reached past, not burnt ---------------------------------
+    w2, me2, _ = _board(MARK, 1)
+    pool2 = w2.get(me2, PowerPoints) or w2.add(me2, PowerPoints())
+    pool2.points, pool2.maximum, pool2.temporary = 2, 2, 0
+    pool2.temporary_for = ""
+    REGISTRY[MARK].body(Cast(world=w2, me=me2, ref=MARK))
+    out.that(pool2.spend(1, purpose="utility") == 1
+             and pool2.temporary == 1 and pool2.points == 1,
+             "with points in the pool a utility augment reaches PAST the"
+             " earmarked one -- it is not burnt and it is not spent on"
+             " something the card forbids",
+             f"temp {pool2.temporary}, pool {pool2.points}")
+
+    # -- what the menu offers ------------------------------------------------
+    w3, me3, _ = _board(MARK, 1)
+    pool3 = w3.get(me3, PowerPoints) or w3.add(me3, PowerPoints())
+    pool3.points, pool3.maximum, pool3.temporary = 0, 2, 0
+    pool3.temporary_for = ""
+    REGISTRY[MARK].body(Cast(world=w3, me=me3, ref=MARK))
+    attacker = next(r for r in REGISTRY.values()
+                    if r.augment_costs and r.attack is not None
+                    and 1 in r.augment_costs)
+    helper = next(r for r in REGISTRY.values()
+                  if r.augment_costs and r.attack is None
+                  and 1 in r.augment_costs)
+    out.that(1 in affordable(w3, me3, attacker),
+             "`dsl.affordable` offers a 1-point augment of an ATTACK"
+             " power, which is what the earmarked point is for",
+             f"{affordable(w3, me3, attacker)}")
+    out.that(1 not in affordable(w3, me3, helper),
+             "**and does not offer one on a utility power.** This is the"
+             " reader that decides what the menu shows, so counting the"
+             " point here would offer an augment the spend then pays for"
+             " out of the pool",
+             f"{affordable(w3, me3, helper)}")
+
+    # -- the lock -------------------------------------------------------------
+    w4, me4, _ = _board(LOCK, 1)
+    REGISTRY[LOCK].body(Cast(world=w4, me=me4, ref=LOCK))
+    pool4 = must(w4.get(me4, PowerPoints), "the character has a pool")
+    out.that(pool4.locked == 1,
+             f"{LOCK} records one point as locked -- how far short of"
+             " `maximum` a refresh must leave the pool",
+             f"{pool4.locked}")
+    pool4.maximum = 4
+    pool4.points = 0
+    pool4.refresh()
+    out.that(pool4.points == 3,
+             "**and a new encounter refills to one short of the"
+             " maximum**, which `refresh` alone could not do: it refills"
+             " every fight, and the card says the point does not come"
+             " back until an extended rest",
+             f"{pool4.points} of {pool4.maximum}")
+    turns.extended_rest(w4)
+    out.that(pool4.locked == 0 and pool4.points == pool4.maximum,
+             "and the rest gives it back -- the one place `locked`"
+             " clears, exactly as with `stored` beside it",
+             f"{pool4.points}/{pool4.maximum}, locked {pool4.locked}")
+
+    for ref in (MARK, LOCK):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_one_on_an_area_damage_die(out: Result) -> None:
     """*"Trigger: you roll a 1 on any damage die when you hit with an area
     or close attack power. Effect: you reroll any result of 1 or 2 on a
@@ -123404,6 +123532,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "points_with_strings": (
+        two_power_points_with_strings_attached,
+        "`i1793p1`'s point is earmarked for an attack augment and "
+        "`f3389`'s stays spent until an extended rest (#1341)",
     ),
     "one_on_an_area_die": (
         a_one_on_an_area_damage_die,

@@ -2366,6 +2366,29 @@ class PowerPoints:
     #: be told apart to be taken away again when the clock runs out, which
     #: a single total cannot do.
     temporary: int = 0
+    #: **What the expiring points may be spent ON**, when the card
+    #: narrows it. `""` is every other grant: a temporary point buys
+    #: anything a pool point buys.
+    #:
+    #: `i1793p1` prints *"you can use this power point only to augment a
+    #: psionic attack power"*, and a point in a pool carries no tag --
+    #: `spend` takes a count. So the word rides beside `temporary` and
+    #: `spend` consults it, which is the narrowest thing that can
+    #: express the restriction.
+    #:
+    #: One word rather than a dict: one card narrows, and a mapping would
+    #: be a store with one key and a reader nobody else needs.
+    temporary_for: str = ""
+    #: **Points that stay spent until an extended rest.** `refresh`
+    #: refills the pool every encounter, which is right for a class's own
+    #: points and wrong for a granted one: `f3389` prints *"once you
+    #: spend this power point, you do not regain the power point until
+    #: you take an extended rest."*
+    #:
+    #: So this is how far short of `maximum` a refresh must leave the
+    #: pool, and `turns.extended_rest` is the one place that clears it --
+    #: the same arrangement, and the same reasoning, as `stored` below.
+    locked: int = 0
     #: Points banked **inside an item**, keyed by its ref. "Expend 1 or 2
     #: power points and place them in the orb. They remain there until you
     #: use them or until you take an extended rest."
@@ -2398,22 +2421,47 @@ class PowerPoints:
         return True
 
     def refresh(self) -> None:
-        self.points = self.maximum
+        """A new fight. `locked` and `stored` are the two things it
+        leaves alone, and both for a printed reason -- see their own
+        notes."""
+        self.points = max(self.maximum - self.locked, 0)
         self.temporary = 0
+        # Belt and braces: the line above leaves no expiring points, so
+        # the word is never consulted and a plant removing this cannot
+        # be reddened. Kept because a word describing a bucket that no
+        # longer exists is the kind of stale state a later `temporary +=`
+        # would inherit.
+        self.temporary_for = ""
         self.payers.clear()
         self.augmented.clear()
         self.last.clear()
 
-    def spend(self, n: int) -> int:
+    def spend(self, n: int, purpose: str = "") -> int:
         """Take `n` points if they are there. Returns how many actually went.
 
         **Expiring points go first**, which is not a courtesy to the
         player: they are about to vanish, so spending the pool ahead of
         them would throw them away and make the granting card worth
         nothing on any turn the character also augments from the pool.
+
+        **`purpose` is what the spend is FOR**, and it is consulted only
+        when the expiring points are earmarked. `i1793p1`'s point may buy
+        *"only ... a psionic attack power"*, so a spend for anything else
+        reaches past it into the pool rather than burning it -- and a
+        character with nothing in the pool simply cannot afford that
+        augment, which is the printed restriction.
+
+        `""` on either side means no narrowing: an unearmarked grant is
+        spendable on anything, and a caller that does not say what it is
+        buying gets the pool.
         """
-        n = max(0, min(n, self.points + self.temporary))
-        from_temp = min(n, self.temporary)
+        usable = (
+            self.temporary
+            if not self.temporary_for or self.temporary_for == purpose
+            else 0
+        )
+        n = max(0, min(n, self.points + usable))
+        from_temp = min(n, usable)
         self.temporary -= from_temp
         self.points -= n - from_temp
         return n

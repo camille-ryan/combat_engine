@@ -2619,7 +2619,7 @@ def f3329(c: Cast) -> None:
 
 @power("f3389", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("PowerPoints.spent_until_extended_rest",))
+       )
 def f3389(c: Cast) -> None:
     """The feature is a row, so "you gain it" is `c.grant_row`.
 
@@ -2665,6 +2665,18 @@ def f3389(c: Cast) -> None:
         return
     pool = c.world.get(c.me, PowerPoints) or c.world.add(c.me, PowerPoints())
     pool.points += 1
+    # **"Once you spend this power point, you do not regain the power
+    # point until you take an extended rest."** `pool.refresh` refills
+    # every encounter, so the restriction is `PowerPoints.locked`: how
+    # far short of `maximum` a refresh leaves the pool.
+    #
+    # Laid at the grant rather than when the point is spent, which is
+    # the simpler reading and the same one: the pool is one point over
+    # its own ceiling until the point goes and one short of it
+    # afterwards. `maximum` is deliberately left alone here, so
+    # `maximum - locked` is the character's own pool either way, and
+    # `turns.extended_rest` clears it.
+    pool.locked += 1
 
 
 

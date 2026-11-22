@@ -1030,7 +1030,6 @@ def i1771p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("PowerPoints.earmark",),
 )
 def i1793p1(c: Cast) -> None:
     """A power point out of nowhere, held until the end of your next turn.
@@ -1049,15 +1048,21 @@ def i1793p1(c: Cast) -> None:
     character who augments anything at all spends this one first rather
     than letting it lapse beside a full pool.
 
-    **What is still missing is the earmark, and it is a narrower gap than
-    the verb was.** The card says the point may be spent *only* to
-    augment a psionic **attack** power, and a point in the pool carries
-    no such tag: `spend` takes a count. So the row is strictly generous
-    by one point on a utility augment, which is the whole of the
-    remaining difference -- it plays, and `f3625` prints the same
-    mechanism.
+    **The earmark is written.** The card says the point may be spent
+    *only* to augment a psionic **attack** power, and a point in the
+    pool carried no such tag -- `spend` took a count.
+    `PowerPoints.temporary_for` is the word, `c.gain_points(only_for=)`
+    writes it, `spend(purpose=)` consults it, and `dsl.affordable` --
+    the reader that decides which augments are **offered** -- counts the
+    point only for what it is for. Without that last half the menu would
+    offer a utility augment the spend then reaches into the pool to pay
+    for, which is the quieter half of the same error.
+
+    One word for the whole temporary bucket rather than a mapping: one
+    card narrows, and a dict would be a store with one key. `f3625`
+    prints the same mechanism and takes the same word.
     """
-    c.gain_points(1, expiring=When.EONT, who=c.me)
+    c.gain_points(1, expiring=When.EONT, who=c.me, only_for="attack")
 
 
 @power(
