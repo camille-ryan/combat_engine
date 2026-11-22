@@ -159,9 +159,9 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
 
   `blinded`, `dazed`, `dead`, `deafened`, `dominated`, `dying`, `grabbed`, `helpless`, `immobilized`, `insubstantial`, `marked`, `petrified`, `pinned`, `prone`, `removed`, `restrained`, `shaped`, `surrendered`, `stable`, `cannot shift`, `slowed`, `squeezing`, `stunned`, `surprised`, `unconscious`, `weakened`
 
-## `When` (11 members)
+## `When` (12 members)
 
-  `instant`, `end of this turn`, `end of source's next turn`, `start of source's next turn`, `end of target's next turn`, `start of target's next turn`, `save ends`, `end of encounter`, `stance`, `sustain`, `until it escapes`
+  `instant`, `end of this turn`, `end of source's next turn`, `start of source's next turn`, `end of target's next turn`, `end of source's turn after next`, `start of target's next turn`, `save ends`, `end of encounter`, `stance`, `sustain`, `until it escapes`
 
 ## Which conditions have a same-named `Cast` member
 

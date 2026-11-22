@@ -2670,42 +2670,63 @@ def i2321x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("durations.When.EOTAN",),
 )
 def i2323x1(c: Cast) -> None:
-    """**Re-pointed off `c.extend_effect()`, which named a door onto a rung
-    that does not exist.**
+    """*"Affects artificers only. Resistance granted by your artificer
+    powers that lasts until the end of your next turn instead lasts an
+    extra round (until the end of your turn on the subsequent round)."*
 
-    Finding the effects is not the problem, and neither is re-clocking one.
-    `c.resist` labels its hold `"<ref> resist"` and a label leads with the
-    laying row's ref, so "resistance granted by your artificer powers" is
-    readable off `world.effects.of(c.me)`; and `i1960p1` and `p5052` both
-    write `effect.when`, `effect.clock` and `effect.latch` from a body, so
-    a `Cast` door was never the thing missing.
+    **The rung existed in neither direction and now does.** Finding the
+    effects was never the problem -- `c.resist` labels its hold
+    `"<ref> resist"` and a label leads with the laying row's ref -- and
+    neither was re-clocking one: `c.extend_effect` writes `effect.when`
+    and `effect.clock` from a body, and two rows already use it.
 
-    The duration is, and it is a **rung**. Both of those precedents move
-    `When.EOT` to `When.EONT`, which the ladder already has. This card asks
-    for the end of the caster's turn on the round *after* next, and `When`
-    has no such value: the ladder is EOT, EONT, SONT, EOTNT, SOTNT, and
-    EONT is already the top of it for a source-clocked hold.
+    What was missing is `When.EOTAN`, the end of the caster's turn on the
+    round *after* next. The ladder is EOT, EONT, SONT, EOTNT, SOTNT, and
+    `EONT` was the top of it for a source-clocked hold.
 
-    Spelled `durations.When.` and not a bare `When.`, because that is the
-    only form that can ever go green: `blocked._surface` indexes the enum
-    under its module, and neither `triggers` nor `events` re-exports it, so
-    a bare `When.X` resolves against nothing for ever. #1231.
-
-    **`Effect.latch` is not the cheap way out, and the two rows this card
-    is about are what show it.** `latch` is a bool consumed by one turn
-    end, so setting it buys exactly one extra round and only on a hold that
-    did not already have it. Of the two artificer rows granting resistance
-    `until=When.EONT`, `p10195` is an immediate interrupt and so lands on
+    **`Effect.latch` was not the cheap way out**, and the two artificer
+    rows this lengthens are what show it: `latch` is a bool consumed by
+    one turn end, so it buys one extra round and only on a hold that did
+    not already have it. `p10195` is an immediate interrupt and lands on
     somebody else's turn -- `latch` False, where the bool would work --
     and `p4145` is a standard action on the caster's own turn, where
-    `latch` is already True and setting it does nothing. Half the cases is
-    worse than none here, because nothing would report the other half.
+    `latch` is already True and setting it does nothing. Half the cases
+    is worse than none, because nothing reports the other half.
 
-    The premise holds either way: there are two rows in the tree for this
-    to lengthen, and both are heroic."""
+    So `When.EOTAN` carries `Effect.extra_ends`, a counted turn end that
+    the sweep spends after the latch and before ending the hold.
+
+    **Narrowed to resistance laid by an artificer row**, which is both
+    halves of the printed sentence: the label names the laying row and
+    `Power.cls` says whose it is. A watch rather than a sweep of what is
+    already standing, because the card is about resistance *granted*
+    while this is worn -- a hold laid before the item was put on is not
+    one of them."""
+    def lengthen(ev: Any) -> None:
+        # **Matched by LABEL and not by an id**, because `EffectApplied`
+        # carries no effect id -- source, target, duration, label and
+        # `save_ends` is the whole of it. The label is `"<ref> resist"`
+        # and a label leads with the laying row's ref, which is both
+        # halves of the printed narrowing in one string.
+        if getattr(ev, "target", None) != c.me:
+            return
+        label = str(getattr(ev, "label", ""))
+        if not label.endswith(" resist"):
+            return
+        row = get(label.split(" ", 1)[0])
+        if row is None or row.cls != "artificer":
+            return
+        held = next(
+            (e for e in c.world.effects.of(c.me)
+             if e.label == label and e.when is When.EONT),
+            None,
+        )
+        if held is not None:
+            c.extend_effect(held, until=When.EOTAN)
+
+    c.watch(EffectApplied, lengthen, until=When.ENCOUNTER, on=c.me)
 
 
 @power(

@@ -365,6 +365,7 @@ def _duration_text(session: Session, effect) -> str:  # noqa: ANN001
     return {
         When.EOT: f"end of {who} turn",
         When.EONT: f"end of {who} next turn",
+        When.EOTAN: f"end of {who} turn after next",
         When.SONT: f"start of {who} next turn",
         When.EOTNT: f"end of {who} next turn",
         When.SOTNT: f"start of {who} next turn",

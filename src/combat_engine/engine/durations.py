@@ -55,6 +55,25 @@ class When(StrEnum):
     EONT = "end of source's next turn"
     SONT = "start of source's next turn"
     EOTNT = "end of target's next turn"
+    #: **A rung above `EONT`: the end of the source's turn on the round
+    #: *after* next.** `i2323x1` prints *"resistance ... that lasts until
+    #: the end of your next turn instead lasts an extra round (until the
+    #: end of your turn on the subsequent round)"*, and the ladder stopped
+    #: at `EONT` for a source-clocked hold.
+    #:
+    #: **`Effect.latch` is not the cheap way out**, and the two rows that
+    #: card lengthens are what show it: `latch` is a bool consumed by one
+    #: turn end, so it buys exactly one extra round and only on a hold
+    #: that did not already have it. `p10195` is an immediate interrupt
+    #: and lands on somebody else's turn -- `latch` False, where the bool
+    #: would work -- and `p4145` is a standard action on the caster's own
+    #: turn, where `latch` is already True and setting it does nothing.
+    #: Half the cases is worse than none, because nothing reports the
+    #: other half.
+    #:
+    #: So this is `EONT` plus a counted extra: `Effect.extra_ends`, which
+    #: the turn-end sweep spends before it reaches the latch.
+    EOTAN = "end of source's turn after next"
     SOTNT = "start of target's next turn"
     SAVE_ENDS = "save ends"
     ENCOUNTER = "end of encounter"
@@ -94,6 +113,12 @@ class Effect:
     when: When
     clock: int
     latch: bool = False
+    #: **Turn ends this hold survives beyond its ordinary duration**, and
+    #: the only thing that sets it is `When.EOTAN`. Spent *before* the
+    #: latch rather than after, so a hold laid on its own clock's turn
+    #: gets the latch and then this one, which is the two-round reading
+    #: the card prints. See `When.EOTAN`.
+    extra_ends: int = 0
     conditions: tuple[Condition, ...] = ()
     mods: list[tuple[int, Mod]] = field(default_factory=list)
     relations: list[tuple[Relation, int, int]] = field(default_factory=list)
@@ -644,7 +669,9 @@ class Effects:
             source=source,
             when=when,
             clock=clock,
-            latch=(when in (When.EONT, When.EOTNT) and self.world.turn == clock),
+            latch=(when in (When.EONT, When.EOTNT, When.EOTAN)
+                   and self.world.turn == clock),
+            extra_ends=1 if when is When.EOTAN else 0,
             conditions=tuple(conditions),
             mods=list(mods),
             relations=list(relations),
@@ -1325,7 +1352,7 @@ class Effects:
                 continue
             if eff.when is When.EOT:
                 self.end(eff, "end of turn")
-            elif eff.when in (When.EONT, When.EOTNT):
+            elif eff.when in (When.EONT, When.EOTNT, When.EOTAN):
                 # **A refreshed condition announces nothing, and that reads as a
                 # stuck one.** When a second effect carries a condition the
                 # creature already has, `apply` does not re-emit
@@ -1338,6 +1365,12 @@ class Effects:
                 # duration looks stuck, count the applications first.
                 if eff.latch:
                     eff.latch = False
+                elif eff.extra_ends:
+                    # `When.EOTAN` -- one more turn end than `EONT` buys.
+                    # Spent after the latch, so a hold laid on its own
+                    # clock's turn survives this turn, next turn, and
+                    # ends on the one after.
+                    eff.extra_ends -= 1
                 else:
                     self.end(eff, "end of turn")
             elif eff.when is When.SAVE_ENDS:

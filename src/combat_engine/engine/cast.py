@@ -23849,9 +23849,14 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         effect.when = until
         effect.clock = effect.owner if until in _TARGET_CLOCKED else who
         effect.latch = (
-            until in (When.EONT, When.EOTNT)
+            until in (When.EONT, When.EOTNT, When.EOTAN)
             and self.world.turn == effect.clock
         )
+        # **Re-clocking TO `EOTAN` grants the extra end, and re-clocking
+        # away from it takes it back.** Without the second half a hold
+        # moved off `EOTAN` kept a counter nothing would ever read as
+        # belonging to its new duration.
+        effect.extra_ends = 1 if until is When.EOTAN else 0
         return True
 
     def shares_magic(

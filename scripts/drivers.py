@@ -87217,6 +87217,176 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_resistance_lasts_an_extra_round(out: Result) -> None:
+    """*"Affects artificers only. Resistance granted by your artificer
+    powers that lasts until the end of your next turn instead lasts an
+    extra round (until the end of your turn on the subsequent round)."*
+    -- `i2323x1`.
+
+    **The missing thing was a RUNG, not a door.** `c.extend_effect`
+    already writes `when` and `clock` from a body and two rows use it;
+    the ladder is EOT, EONT, SONT, EOTNT, SOTNT, and `EONT` was the top
+    of it for a source-clocked hold.
+
+    **`Effect.latch` is not the cheap way out**, and the two artificer
+    rows this lengthens are the measurement. `latch` is a bool consumed
+    by one turn end, so it buys one extra round and only on a hold that
+    did not already have it: `p10195` is an immediate interrupt and
+    lands on somebody else's turn -- `latch` False, where the bool would
+    work -- and `p4145` is a standard on the caster's own turn, where
+    `latch` is already True and setting it does nothing. Both arms are
+    below, because half the cases is worse than none.
+
+    `When.EOTAN` carries `Effect.extra_ends`, a counted turn end the
+    sweep spends **after** the latch.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import TurnEnd
+
+    ROW = "i2323x1"
+
+    def ticks(world, who: int, n: int) -> None:  # noqa: ANN001
+        """`n` of this creature's own turn ends."""
+        for _ in range(n):
+            world.turn = who
+            world.round += 1
+            world.bus.emit(TurnEnd(actor=who, round=world.round))
+
+    def held(world, who: int) -> list:  # noqa: ANN001
+        return [e for e in world.effects.of(who)
+                if str(e.label).endswith(" resist")]
+
+    def bare() -> tuple:
+        """The board with the ITEM'S OWN watch taken off.
+
+        `i2323x1` is `action=NONE`, so `audit.board` arms it -- and the
+        first two arms below are about what an un-lengthened `When.EONT`
+        resistance does. Measured without this: the "plain" hold
+        survived two turn ends and `c.extend_effect` returned False
+        because the item had already moved it.
+        """
+        world, me, _ = _board(ROW, 1)
+        for eff in list(world.effects.of(me)):
+            if eff.by == ROW:
+                world.effects.end(eff)
+        return world, me
+
+    # -- the rung itself, on its own clock's turn ---------------------------
+    world, me = bare()
+    world.turn = me
+    plain = Cast(world=world, me=me, ref="p4145")
+    plain.resist(5, until=When.EONT)
+    out.that(len(held(world, me)) == 1,
+             "premise: a resistance that lasts until the end of your next"
+             " turn",
+             f"{[e.label for e in held(world, me)]}")
+    ticks(world, me, 1)
+    out.that(len(held(world, me)) == 1,
+             "it survives the turn it was laid on -- that is the latch,"
+             " and it is why a second latch buys nothing here",
+             f"{[e.label for e in held(world, me)]}")
+    ticks(world, me, 1)
+    out.that(not held(world, me),
+             "and ends on the next: `When.EONT`, unchanged",
+             f"{[e.label for e in held(world, me)]}")
+
+    # -- the same hold, re-clocked ------------------------------------------
+    w2, me2 = bare()
+    w2.turn = me2
+    cast2 = Cast(world=w2, me=me2, ref="p4145")
+    cast2.resist(5, until=When.EONT)
+    one = held(w2, me2)[0]
+    out.that(Cast(world=w2, me=me2, ref="drv").extend_effect(
+                 one, until=When.EOTAN),
+             "the hold is re-clocked to `When.EOTAN`",
+             f"{one.when}")
+    ticks(w2, me2, 2)
+    out.that(len(held(w2, me2)) == 1,
+             "**and it is still standing where the plain one had gone** --"
+             " two of this creature's turn ends, which is exactly the"
+             " extra round the card buys",
+             f"{[e.label for e in held(w2, me2)]}")
+    ticks(w2, me2, 1)
+    out.that(not held(w2, me2),
+             "and ends on the third, rather than running for ever",
+             f"{[e.label for e in held(w2, me2)]}")
+
+    # -- laid as EOTAN from the start, which is the other door --------------
+    # Every arm above reaches the rung through `c.extend_effect`, so the
+    # apply-time branch -- `Effects.apply` granting `extra_ends` for a
+    # hold declared `until=When.EOTAN` -- was untested and its plant
+    # stayed green.
+    w6, me6 = bare()
+    w6.turn = me6
+    Cast(world=w6, me=me6, ref="p4145").resist(5, until=When.EOTAN)
+    out.that(len(held(w6, me6)) == 1,
+             "premise: a resistance declared `When.EOTAN` outright",
+             f"{[(e.label, e.when) for e in held(w6, me6)]}")
+    ticks(w6, me6, 2)
+    out.that(len(held(w6, me6)) == 1,
+             "it survives two of its clock's turn ends when declared at"
+             " the rung, not only when re-clocked onto it -- `apply` and"
+             " `c.extend_effect` are two doors and both grant the extra"
+             " end",
+             f"{[e.label for e in held(w6, me6)]}")
+    ticks(w6, me6, 1)
+    out.that(not held(w6, me6),
+             "and ends on the third there too",
+             f"{[e.label for e in held(w6, me6)]}")
+
+    # -- the row, on both of the shapes it is about -------------------------
+    for ref, turn_is_mine, extra in (("p4145", True, 2), ("p10195", False, 1)):
+        w3, me3, _ = _board(ROW, 1)
+        REGISTRY[ROW].body(Cast(world=w3, me=me3, ref=ROW))
+        w3.turn = me3 if turn_is_mine else sorted(
+            Cast(world=w3, me=me3, ref="drv").enemies())[0]
+        Cast(world=w3, me=me3, ref=ref).resist(5, until=When.EONT)
+        laid = held(w3, me3)
+        out.that(laid and laid[0].when is When.EOTAN,
+                 f"with the item worn, {ref}'s resistance is re-clocked"
+                 " to the later rung -- the row reads the label, which"
+                 " names the laying power, and `Power.cls` says whose it"
+                 " is",
+                 f"{[(e.label, e.when) for e in laid]}")
+        ticks(w3, me3, extra)
+        out.that(len(held(w3, me3)) == 1,
+                 f"and {ref} is STILL standing after {extra} of the"
+                 " wearer's turn ends -- the arm `Effect.latch` alone"
+                 " cannot do for both shapes, an interrupt on somebody"
+                 " else's turn and a standard on your own",
+                 f"{[e.label for e in held(w3, me3)]}")
+
+    # -- what it must not lengthen ------------------------------------------
+    w4, me4, _ = _board(ROW, 1)
+    REGISTRY[ROW].body(Cast(world=w4, me=me4, ref=ROW))
+    w4.turn = me4
+    Cast(world=w4, me=me4, ref="p1169").resist(5, until=When.EONT)
+    other = held(w4, me4)
+    out.that(other and other[0].when is When.EONT,
+             "**a WIZARD's resistance is left where it was.** 'Your"
+             " artificer powers' is the printed narrowing and it is read"
+             " off the laying row's class, not off the fact that this"
+             " creature laid it",
+             f"{[(e.label, e.when) for e in other]}")
+    w5, me5, _ = _board(ROW, 1)
+    REGISTRY[ROW].body(Cast(world=w5, me=me5, ref=ROW))
+    w5.turn = me5
+    Cast(world=w5, me=me5, ref="p4145").resist(5, until=When.ENCOUNTER)
+    longer = held(w5, me5)
+    out.that(longer and longer[0].when is When.ENCOUNTER,
+             "and a resistance that already lasts the encounter is not"
+             " shortened to a rung -- the card says 'that lasts until the"
+             " end of your next turn'",
+             f"{[(e.label, e.when) for e in longer]}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"{ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def one_creature_counts_as_nearer(out: Result) -> None:
     """*"Choose a target within 10 squares of you. Until the end of the
     encounter, this target is considered half as far away for the purpose
@@ -121334,6 +121504,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "resist_lasts_an_extra_round": (
+        a_resistance_lasts_an_extra_round,
+        "`i2323x1` re-clocks an artificer's resistance to `When.EOTAN`, "
+        "a rung above EONT (#1341)",
     ),
     "one_creature_counts_as_nearer": (
         one_creature_counts_as_nearer,
