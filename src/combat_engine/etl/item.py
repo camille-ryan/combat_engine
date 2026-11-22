@@ -738,7 +738,17 @@ def _one_item(
     ref = f"i{row['ID']}"
     name = (row["Name"] or "").strip()
     category = (row["Category"] or "").strip()
-    body = _own_page(detail(row["Txt"] or ""))
+    # **`whole` keeps the member cards `_own_page` strips**, and only the
+    # set branch below may read it. `_own_page`'s whole job is to cut
+    # everything from the second `<h1>` -- the members' own pages, or an
+    # inlined creature's stat block -- so a set's membership lives in
+    # exactly the part it removes.
+    #
+    # Measured the hard way: `_set_members` was handed `body` and the
+    # build reported `set members 0`, while a scratch run over the
+    # untrimmed text wrote 205. The report line is what caught it.
+    whole = detail(row["Txt"] or "")
+    body = _own_page(whole)
 
     # Everything before the first `<h2>` belongs to the item itself; after
     # it, every line belongs to a block and is that block's to record.
@@ -755,7 +765,7 @@ def _one_item(
         # is the set's own benefit table, which exists nowhere else.
         report.sets_skipped += 1
         spec = scrub(_set_benefits(body), {name: ref})
-        report.set_members += _set_members(body, ref, by_name or {}, out)
+        report.set_members += _set_members(whole, ref, by_name or {}, out)
     else:
         spec = item_spec(head, ref, name)
 

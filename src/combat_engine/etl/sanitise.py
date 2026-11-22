@@ -1253,21 +1253,29 @@ _CLAUSE_END = re.compile(r"\s*(?:[,;.]|$)")
 _YOU_ARE = re.compile(r"(?i)\bif\s+you(?:\s+are|\s+were|['\u2019]re)\s+an?\s+$")
 
 #: And a race standing directly before **ally** or **allies**, which is the
-#: fourth position. *"While you have a drow ally within 10 squares"* --
-#: `i2406x1`, whose three clauses are the worked case: the middle one names
-#: a race whose printed name is not a dictionary word, so the general pass
-#: swapped it to a ref, and the other two are ordinary English words and
-#: were left standing. One card, two readings, split by nothing but what
-#: the race happens to be called -- which is the exact asymmetry `#311`
-#: added the third position for, in a different sentence shape.
+#: fourth position -- *"while you have a `<race>` ally within 10 squares"*.
+#: `i2406x1` is the worked case: its three clauses print the same sentence
+#: about three different races, and before this the middle one carried a
+#: ref while the other two carried words. The one that was swapped is the
+#: race whose printed name is not a dictionary word, so the general pass
+#: believed it; the other two are ordinary English and `identifies` waived
+#: them. One card, two readings, split by nothing but what each race
+#: happens to be called -- the exact asymmetry `#311` added the third
+#: position for, in a different sentence shape.
 #:
 #: **Safe for the reason `_YOU_ARE` is safe, and measured rather than
 #: argued.** Over every spec table carrying a `ref` and a `spec`, this
 #: position matches **24 spans in 22 rows** and every one is a race
-#: naming a race -- *"a drow ally"*, *"each orc ally"*, *"dwarf allies"*,
-#: *"one kobold ally"*. Nothing on a card describes an ally by anything
-#: but its race or its type, and the two coincide for exactly the races
-#: this position exists to reach.
+#: naming a race. Nothing on a card describes an ally by anything but its
+#: race or its type, and the two coincide for exactly the races this
+#: position exists to reach.
+#:
+#: **The first draft of this note quoted four of those spans verbatim and
+#: `leaks.py` reported five names in these lines.** Tier 2, in the code,
+#: and in the one file whose subject is the rule it broke -- which is the
+#: shape `prose explaining the names rule is where I break it` describes.
+#: A span is shown as `<race>` here for that reason; the refs above are
+#: the checkable part.
 #:
 #: **17 of the 22 are monster cards**, which is worth knowing before
 #: reading a brief: a monster row asking about such an ally wants

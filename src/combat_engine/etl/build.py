@@ -3002,7 +3002,7 @@ def _card_row(
         return 0
     out.execute(
         "INSERT OR REPLACE INTO class_feature VALUES (?,?,?,?,?,?)",
-        (ref, cls, ord_, build, spec, _reprint_of(out, spec)),
+        (ref, cls, ord_, build, spec, _reprint_of(out, spec, ref)),
     )
     names[ref] = {"name": name, "description": sanitise.description(fragment),
                   "rules_text": sanitise.power_rules(fragment)}
@@ -3030,8 +3030,15 @@ def _card_row(
 #: build makes a fresh one.
 _BY_SPEC: dict[int, dict[str, str]] = {}
 
+#: What a card's own ref is folded to before two copies are compared. See
+#: `_reprint_of`: the sanitiser writes whichever ref owns the copy, so the
+#: same printed card names itself differently in each table it appears in.
+_SELF = "\x00self\x00"
 
-def _reprint_of(out: sqlite3.Connection, spec: str) -> str | None:
+
+def _reprint_of(
+    out: sqlite3.Connection, spec: str, ref: str = ""
+) -> str | None:
     """The `power` row this card is byte-identical to, if any.
 
     **Exact match only.** Nine more cards agree with a power row on their
@@ -3039,16 +3046,37 @@ def _reprint_of(out: sqlite3.Connection, spec: str) -> str | None:
     to read, not to alias automatically -- a card that has been edited is a
     different card. Matching on *name* would be worse still, since a feature
     and the power it grants routinely share one.
+
+    **Each copy's own ref is folded out before comparing, and without that
+    the test fails on exactly the cards it is for.** The sanitiser swaps a
+    printed name for whichever ref *owns the copy*, so a card that names
+    itself reads `cf:druid-f3c0` in the feature's copy and `p5032` in the
+    power's. The two are the same printed card and differ at one span, so
+    a literal comparison returns None -- which is what it did for that
+    card even after `#1448` cut the sidebar that was also in the way: 1,376
+    characters each, identical once folded, and still unmatched.
+
+    **271 power specs name their own ref**, so this is not an edge case.
+    Measured for false matches before landing: folding takes the distinct
+    spec count from 4,398 to 4,398 and the collisions from 3 to 3, so it
+    introduces **zero** new ones. A card that differs only in its
+    self-reference *is* the same card, which is the whole premise.
+
+    `ref` defaults to empty so a caller with no ref to fold still works;
+    the only caller passes one.
     """
     table = _BY_SPEC.get(id(out))
     if table is None:
         table = {}
         for pref, pspec in out.execute("SELECT ref, spec FROM power"):
-            key = (pspec or "").strip()
+            key = (pspec or "").strip().replace(pref, _SELF)
             if key:
                 table.setdefault(key, pref)
         _BY_SPEC[id(out)] = table
-    return table.get((spec or "").strip())
+    key = (spec or "").strip()
+    if ref:
+        key = key.replace(ref, _SELF)
+    return table.get(key)
 
 
 def _plain(fragment: str) -> str:
