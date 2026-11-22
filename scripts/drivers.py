@@ -72792,6 +72792,103 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_rod_pays_the_dark_pact_tally(out: Result) -> None:
+    """*"When you hit an enemy affected by your `cf:warlock-f4` with a `c7`
+    attack power using this rod, you deal extra damage equal to the value
+    of your [pact boon] class feature"* -- `i1015x1`. #1462.
+
+    **The marker was stale twice over.** It read `cf:warlock-f1c0` -- the
+    boon's own row, undeclared -- on the reasoning that *"once the row
+    exists its value is the row's"*. The value does not wait on the row:
+    it is `powers.warlock.pacts.TALLY`, a running total `raise_tally`
+    adds to whenever a cursed enemy drops and `clear_tally` resets at a
+    rest. `c.total` reads it.
+
+    The note also called it *"the **star** pact's boon"*. It is the
+    **dark** pact's -- `cf:warlock-f1s0`'s own spec opens *"you have
+    forged a pact with the dark beings that lurk in the shadows"* and
+    `TALLY` is named for it. Asserted below, because a reader chasing the
+    star pact would find nothing.
+
+    **Read live, not captured at arming.** A cursed enemy dropping
+    between two hits raises the total, so the number the rider pays has
+    to be asked at the moment of the hit.
+
+    **Three conditions at once**, which is why this is a watcher rather
+    than a declared `Trigger`: a hit, by this creature, on a creature
+    *it* cursed, with a warlock attack power. `Trigger` carries one event
+    class and one predicate, and `cursed_by_me`-style relational reads
+    are what make the curse this warlock's rather than anybody's.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.powers.warlock.pacts import TALLY, raise_tally
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.events import DamageApplied, Hit
+
+    ROW, SPELL = "i1015x1", "p3403"
+
+    spell = must(get(SPELL), f"{SPELL} is declared")
+    out.that(spell.cls == "warlock" and spell.attack is not None,
+             f"premise: {SPELL} is a warlock ATTACK power, which is what"
+             " the card's class gate names",
+             f"cls {spell.cls}, attack {spell.attack is not None}")
+    out.that(TALLY == "dark pact tally",
+             "and the running value the card names is the DARK pact's"
+             " tally, not the star pact's -- the row's own note had the"
+             " pact wrong and a reader chasing the star one would find"
+             " nothing",
+             f"{TALLY!r}")
+
+    def struck(*, cursed: bool, tally: int, power: str) -> list[int]:
+        """Hit a foe and report what extra damage it took.
+
+        **The board's own arming is the one watcher.** `audit.board` arms
+        every `action=NONE` row including the one under test, so calling
+        the body here as well installed a second watcher and the rider
+        paid twice -- measured, `[3, 3]`.
+        """
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref="drv")
+        foe = sorted(cast.enemies())[0]
+        hurt = must(world.get(foe, Health), "the enemy has hit points")
+        hurt.max_hp = hurt.hp = 400
+        if cursed:
+            cast.curse(on=foe)
+        for _ in range(tally):
+            raise_tally(Cast(world=world, me=me, ref="drv:pact"))
+        seen: list[tuple[int, int]] = []
+        world.bus.on(DamageApplied, lambda e: seen.append((e.target, e.amount)))
+        world.bus.emit(Hit(attacker=me, target=foe, power=power,
+                           critical=False))
+        return [a for t, a in seen if t == foe]
+
+    out.that(struck(cursed=True, tally=3, power=SPELL) == [3],
+             "a cursed enemy hit by a warlock power takes extra damage"
+             " equal to the tally, once",
+             f"{struck(cursed=True, tally=3, power=SPELL)}")
+    out.that(not struck(cursed=True, tally=0, power=SPELL),
+             "with the tally at nothing it pays nothing -- which is the"
+             " arm that says the number is the tally rather than a"
+             " constant",
+             "nothing")
+    out.that(not struck(cursed=False, tally=3, power=SPELL),
+             "and an enemy this warlock has NOT cursed takes nothing,"
+             " however high the tally stands",
+             "nothing")
+    out.that(struck(cursed=True, tally=5, power=SPELL) == [5],
+             "the amount follows the tally rather than being fixed:"
+             " five raises pay five",
+             f"{struck(cursed=True, tally=5, power=SPELL)}")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker -- *'using this rod'* is wider"
+             " than the card and said rather than marked, which is this"
+             " file's recorded position (`i2324p1`)",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def allies_cross_rough_ground_on_a_granted_shift(out: Result) -> None:
     """*"Whenever you use a power that lets your allies shift, they ignore
     difficult terrain during the shift"* -- `f2424`. #1461.
@@ -126474,6 +126571,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_rod_pays_the_dark_pact_tally,
         allies_cross_rough_ground_on_a_granted_shift,
         no_sound_crosses_a_silenced_zone,
         a_feat_offers_shedding_light_as_an_action,
@@ -126874,6 +126972,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "pact_tally_rod": (
+        a_rod_pays_the_dark_pact_tally,
+        "a rod pays the dark pact's running tally as extra damage"
+        " (#1462)",
     ),
     "granted_shift_terrain": (
         allies_cross_rough_ground_on_a_granted_shift,

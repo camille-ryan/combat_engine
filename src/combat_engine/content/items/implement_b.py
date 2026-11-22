@@ -1225,13 +1225,60 @@ def i998p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("cf:warlock-f1c0",),
 )
 def i1015x1(c: Cast) -> None:
-    """Re-aimed at the ref. The extra damage is the running value of the
-    star pact's boon, and that boon is a row -- `cf:warlock-f1c0`, named
-    by `cf:warlock-f1s0` -- which is not declared. A verb was the wrong
-    thing to ask for: once the row exists its value is the row's."""
+    """*"When you hit an enemy affected by your `cf:warlock-f4` with a
+    `c7` attack power using this rod, you deal extra damage equal to the
+    value of your [pact boon] class feature to the enemy."*
+
+    **Written, and the marker was stale twice over.** It read
+    `cf:warlock-f1c0` -- the boon's own row, undeclared -- on the
+    reasoning that *"once the row exists its value is the row's"*. The
+    value does not wait on the row: it is
+    `powers.warlock.pacts.TALLY`, a running total `raise_tally` adds to
+    whenever a cursed enemy drops and `clear_tally` resets at a rest.
+    That is exactly the number the card names, and `c.total` reads it.
+
+    The note also called it *"the **star** pact's boon"*. It is the
+    **dark** pact's: `cf:warlock-f1s0`'s own spec opens *"you have forged
+    a pact with the dark beings that lurk in the shadows"*, and `TALLY`
+    is named for it. Corrected rather than carried forward, because a
+    reader chasing the star pact would find nothing.
+
+    **A watcher and not a declared trigger**, because the card's
+    condition is three things at once -- a hit, by this creature, on a
+    creature *it* cursed, with a warlock power -- and `Trigger` carries
+    one event class with one predicate. `cursed_by_me` is the relational
+    read, which is what makes the curse *this* warlock's.
+
+    *"Using this rod"* is **not enforced**, following this file's
+    recorded position rather than a new decision: `i2324p1`'s note says
+    it in full -- *"the same hole every 'through this weapon' item has:
+    nothing ties a power's use to the implement it was used through.
+    Said rather than marked."* So the row is wider than its card by that
+    qualifier and says so. #1462.
+    """
+    from combat_engine.content.powers.warlock.pacts import TALLY
+
+    me = c.me
+
+    def struck(ev: Any) -> None:
+        foe = getattr(ev, "target", None)
+        if not isinstance(foe, int) or getattr(ev, "attacker", None) != me:
+            return
+        if not c.cursed(foe):
+            return
+        row = get(str(getattr(ev, "power", "")))
+        if row is None or row.cls != "warlock" or row.attack is None:
+            return
+        # The running total, read live: a cursed enemy dropping between
+        # this hit and the last one raises it, so a number captured at
+        # arming would be the wrong one.
+        running = c.total(TALLY)
+        if running > 0:
+            c.flat(running, on=foe)
+
+    c.watch(Hit, struck, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
