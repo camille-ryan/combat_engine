@@ -2469,10 +2469,31 @@ _TRAILING_ESSAY = re.compile(
 #: rather than to relax the other pattern for: **no feature heading on any of
 #: the 45 class pages contains the word**, where relaxing `_TRAILING_ESSAY`
 #: is what eats `CANTRIPS`.
+#: **Two mid-page SIDEBARS are named here too, and they are not the
+#: post-features essay.** `DRUIDS AND RITUALS` and `DIVINE SANCTION` are
+#: boxes inside the class page, and each was glued onto the last *card* of
+#: its section -- exactly the cost the comment beside the second cut
+#: describes. Measured: `cf:druid-f3c0` came out 1,593 characters against
+#: `p5032`'s 1,376 with the power's copy an exact **prefix**, and
+#: `cf:paladin-f2c0` 1,263 against `p1566`'s 418. So `duplicate_of`
+#: missed both, which is `#1448`.
+#:
+#: Named rather than matched, for this pattern's own stated reason, and
+#: the safety check it made for `OVERVIEW` was repeated: over all 77
+#: `Class` pages each phrase appears on **exactly one** and matches
+#: `_FEATURE_HEAD` on **none**, so naming them cannot eat a feature.
+#:
+#: **The `\u2019` here was `\\u2019` and that was a typo**, which in a raw
+#: string is an escaped backslash: the class admitted a literal `\` and
+#: not the right quote it was reaching for. Inert, and worth knowing why
+#: -- a space is also in the class and `re.search` may start anywhere, so
+#: `BATTLEMIND\u2019S OVERVIEW` matched from the `S` regardless. A latent
+#: hole that two unrelated features were covering.
 _TRAILING_SECTION = re.compile(
     r"(?:<br\s*/?>|</p>)\s*(?:<b>\s*)?"
     r"(?:Ability Scores|Characteristics|Religion|Races|Alignment"
-    r"|[A-Z][A-Z0-9 \\u2019'&/-]*OVERVIEW)"
+    r"|DRUIDS AND RITUALS|DIVINE SANCTION"
+    r"|[A-Z][A-Z0-9 \u2019'&/-]*OVERVIEW)"
     r"\s*(?:</b>)?\s*(?::|<br|</p>|$)"
 )
 
