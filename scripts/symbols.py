@@ -222,6 +222,14 @@ CATEGORIES: dict[str, dict] = {
                 "ignore_run_penalty", "run_penalty",
             ]),
             ("modes and mounts", [
+                # `lend_defences` and `lend_checks` are here rather than
+                # under the defences or the skills page, by the same
+                # judgement `c.hide` and `run_penalty` above got: both
+                # exist for one printed relationship -- a mount using
+                # its rider's numbers -- and a reader asking "what can a
+                # mount do" would not think to look under either
+                # mechanism. #1341.
+                "lend_checks", "lend_defences",
                 "lose_mode", "mode", "mount", "move_companion",
             ]),
         ],
@@ -1248,6 +1256,11 @@ READERS: dict[str, list[str]] = {
         "enemies", "feat_categories", "feats_of", "is_", "is_conjuration",
         "provoked_by_allies",
         "alignment", "evil_at",
+        # `lends` is here with `team` and `race_of` and not under a
+        # defences or a skills heading: it answers *whose numbers this
+        # creature uses*, which is a fact about the creature rather than
+        # about either mechanism -- and it is read by both. #1341.
+        "lends",
         "is_minion", "is_trap", "kind_waived", "kinds_of", "level_term",
         "living",
         "on_build",

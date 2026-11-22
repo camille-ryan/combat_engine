@@ -1331,6 +1331,39 @@ def level_term(world: World, eid: int, scale: str) -> int:
     return 0
 
 
+def lends(world: World, eid: int, what: str) -> int | None:
+    """Who this creature borrows `what` from, if anybody.
+
+    `Relation.LENDS_NUMBERS` carries which numbers on its `via`:
+    `defences`, or `skills:a+b` for a named list. `what` is matched
+    against both -- `"defences"`, or `"skill:stealth"`.
+
+    First lender wins. No card lends a creature two sets of numbers, and
+    composing them would invent a rule no page states -- the same
+    reasoning, and the same words, as `dsl._reshaped`.
+    """
+    from .types import Relation as _Relation
+
+    for lender in world.relations.targets(_Relation.LENDS_NUMBERS, eid):
+        words = set(
+            world.relations.via(_Relation.LENDS_NUMBERS, eid, lender)
+            .split(",")
+        )
+        if what in words:
+            return lender
+        if what.startswith("skill:"):
+            named = {
+                one
+                for w in words if w.startswith("skills:")
+                for one in w.split(":", 1)[1].split("+")
+            }
+            # `*` is "every check", which `i1662p1` prints and `f3777`
+            # does not -- see `Cast.lend_checks`.
+            if "*" in named or what.split(":", 1)[1] in named:
+                return lender
+    return None
+
+
 def defence(world: World, eid: int, d: Defense, ctx: dict | None = None) -> int:
     """A defence as the attacker sees it: base, level, modifiers, conditions.
 
@@ -1351,6 +1384,19 @@ def defence(world: World, eid: int, d: Defense, ctx: dict | None = None) -> int:
         return min(defence(world, eid, each, ctx) for each in DEFENCES)
     defs = world.need(eid, Defenses)
     base = defs.base(d) + level_term(world, eid, defs.scale)
+    # **"The creature can use your defenses in place of its own (not
+    # including any temporary bonuses or penalties)."** A substitution of
+    # the untouched number -- the lender's printed defence and its level
+    # term -- and nothing else moves: the borrower's own modifiers and
+    # conditions still apply on top, which is what the parenthetical
+    # excludes and what a difference between the two creatures could not
+    # express. A difference drifts the moment either one is modified, and
+    # a defence is what a fight spends its time changing.
+    borrowed = lends(world, eid, "defences")
+    if borrowed is not None:
+        lent = world.get(borrowed, Defenses)
+        if lent is not None:
+            base = lent.base(d) + level_term(world, borrowed, lent.scale)
     mods = world.get(eid, Mods)
     if mods is not None:
         base += mods.total(d.value, ctx or {})

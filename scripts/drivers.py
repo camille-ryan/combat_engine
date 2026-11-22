@@ -87217,6 +87217,234 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_mount_uses_its_riders_numbers(out: Result) -> None:
+    """Two cards lend a creature its rider's numbers.
+
+    * `f3777`: *"the creature can use your defenses in place of its own
+      (not including any temporary bonuses or penalties)"*, and four
+      named skills *"using your modifier ... in place of its own"*.
+    * `i1662p1`: *"when the horse makes a check, you make the roll using
+      your game statistics"* -- every check, not a named list.
+
+    **A substitution, which is why a bonus could not say it.** `f3777`'s
+    old body laid the *difference* between the two creatures' skill
+    modifiers and its own docstring recorded the cost: the two readings
+    agree only at the moment the trait arms, and a defence is what a
+    fight spends its time changing. `Relation.LENDS_NUMBERS` replaces the
+    number instead, read in `query.defence` and `skills.modifier` -- the
+    two places those numbers are assembled.
+
+    **The borrower's own modifiers still apply on top**, which is the
+    printed parenthetical read the only way that keeps a penalty laid on
+    the mount counting. Asserted on its own below, because a
+    substitution that also threw those away would be a different and
+    quieter error.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defenses, Ident, Mods, Skills, Stats
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import defence
+    from combat_engine.engine.skills import TRAINING, modifier
+    from combat_engine.engine.types import Defense
+
+    FEAT, HORSE = "f3777", "i1662p1"
+
+    def mounted() -> tuple:
+        """A rider on a mount, with the two creatures' numbers apart."""
+        world, me, _ = _board(FEAT, 1)
+        cast = Cast(world=world, me=me, ref="drv")
+        beast = cast.mount()
+        # **The board arms `f3777` and the loan lands on the MOUNT**, not
+        # on the character the trait belongs to -- so stripping effects
+        # from `me` found nothing and every arm below was measuring the
+        # row twice. Measured: `query.lends(world, beast, "defences")`
+        # already answered the rider, and the two creatures read 18
+        # against 18 however far apart their printed numbers were set.
+        if beast is not None:
+            for who in (me, beast):
+                for eff in list(world.effects.of(who)):
+                    if eff.by == FEAT:
+                        world.effects.end(eff)
+        return world, me, beast
+
+    world, me, beast = mounted()
+    out.that(beast is not None,
+             "premise: the character is riding a friendly mount, which is"
+             " the feat's printed condition",
+             f"{beast}")
+    if beast is None:
+        return
+
+    # **The two creatures must DIFFER, or nothing below is a claim.**
+    mine = must(world.get(me, Defenses), "the rider has defences")
+    theirs = must(world.get(beast, Defenses), "the mount has defences")
+    # `Defenses.values` is the dict and there is no `base_ac` attribute
+    # -- writing one made a stray field and both creatures read 18.
+    theirs.values[Defense.AC] = mine.base(Defense.AC) - 4
+    riders = defence(world, me, Defense.AC)
+    before = defence(world, beast, Defense.AC)
+    out.that(before != riders,
+             "premise: the mount's AC is a different number from the"
+             " rider's, so the line below is the feat and not a"
+             " coincidence",
+             f"mount {before}, rider {riders}")
+
+    REGISTRY[FEAT].body(Cast(world=world, me=me, ref=FEAT))
+    out.that(defence(world, beast, Defense.AC) == riders,
+             "with the feat the mount's AC IS the rider's -- a"
+             " substitution, which a bonus worth the gap could only have"
+             " matched at the moment it was laid",
+             f"{before} -> {defence(world, beast, Defense.AC)},"
+             f" rider {riders}")
+
+    # -- the rider's own defence still moves with it ------------------------
+    Cast(world=world, me=me, ref="drv").bonus(
+        "ac", 3, on=me, until=When.ENCOUNTER)
+    out.that(defence(world, beast, Defense.AC) == riders,
+             "**a temporary bonus on the RIDER is not lent**, which is the"
+             " printed parenthetical: the mount borrows the untouched"
+             " defence and its level term, not what the fight has done to"
+             " it",
+             f"{defence(world, beast, Defense.AC)} vs rider now"
+             f" {defence(world, me, Defense.AC)}")
+    Cast(world=world, me=me, ref="drv").penalty(
+        "ac", 2, on=beast, until=When.ENCOUNTER)
+    out.that(defence(world, beast, Defense.AC) == riders - 2,
+             "and a penalty on the MOUNT still counts -- the borrowed"
+             " number is the base, and the creature's own modifiers apply"
+             " on top of it",
+             f"{defence(world, beast, Defense.AC)}, borrowed {riders}")
+
+    # -- the four named skills ----------------------------------------------
+    w2, me2, beast2 = mounted()
+    if beast2 is None:
+        return
+    # **The two creatures are driven APART by ten levels**, and that is
+    # the arm working rather than tidiness. On the board as dealt their
+    # half levels and ability modifiers agreed for all four printed
+    # skills, so the plant that never read the loan at all stayed green:
+    # the mount's number was the rider's already. The premise below is
+    # what says this is fixed.
+    stats = must(w2.get(beast2, Stats), "the mount has statistics")
+    mine2 = must(w2.get(me2, Stats), "the rider has statistics")
+    mine2.level = stats.level + 10
+    # **Both creatures' own `skill:` modifiers are stripped first**, and
+    # that is the arm being honest rather than being convenient. The loan
+    # replaces the *untouched* part -- half level, ability, training --
+    # and leaves the borrower's own modifiers standing on top, so a
+    # mount carrying a +2 Acrobatics of its own reads two above the
+    # rider and an arm comparing totals fails for the right behaviour.
+    # Measured: 4 against the rider's 2 on the first run. The two halves
+    # are asserted separately instead, here and on the AC arms above.
+    SKILLS_ = ("acrobatics", "athletics", "endurance", "stealth", "arcana")
+    for who in (me2, beast2):
+        mods = w2.get(who, Mods)
+        if mods is not None:
+            mods.items[:] = [
+                m for m in mods.items
+                if not str(m.what).startswith("skill:")
+            ]
+    was = {s: modifier(w2, beast2, s) for s in SKILLS_}
+    want = {s: modifier(w2, me2, s) for s in SKILLS_}
+    out.that(all(was[s] != want[s] for s in SKILLS_),
+             "premise: the two creatures roll a different number on EVERY"
+             " skill below -- `all`, not `any`: with one of them equal"
+             " already, the arm about that skill holds whether the loan"
+             " is read or not",
+             f"mount {was}, rider {want}")
+
+    REGISTRY[FEAT].body(Cast(world=w2, me=me2, ref=FEAT))
+    lent = {s: modifier(w2, beast2, s) for s in SKILLS_}
+    out.that(all(lent[s] == want[s]
+                 for s in ("acrobatics", "athletics", "endurance",
+                           "stealth")),
+             "the four NAMED skills come out at the rider's modifier",
+             f"{lent} vs {want}")
+    out.that(lent["arcana"] == was["arcana"],
+             "and a skill the card does not name is untouched -- four are"
+             " printed, so the loan is by name and not a blanket",
+             f"{lent['arcana']} vs {was['arcana']}")
+    # **Training follows the lent modifier**, and this is the arm that
+    # says so: without it neither creature was trained in any of the four
+    # and the plant leaving training with the borrower stayed green.
+    # Training is part of the number being lent -- half level, ability,
+    # training -- rather than a temporary bonus on it.
+    riders_list = must(w2.get(me2, Skills), "the rider has a skill list")
+    beasts_list = must(w2.get(beast2, Skills), "the mount has a skill list")
+    # `Skills.trained` is a **frozenset**, so these are rebinds rather
+    # than mutations.
+    beasts_list.trained = frozenset(beasts_list.trained - {"athletics"})
+    riders_list.trained = frozenset(riders_list.trained - {"athletics"})
+    before_training = modifier(w2, beast2, "athletics")
+    riders_list.trained = frozenset(riders_list.trained | {"athletics"})
+    out.that(modifier(w2, beast2, "athletics") == before_training + TRAINING,
+             "training the RIDER raises the mount's lent Athletics by the"
+             " full +5 -- training is part of the number being lent, not"
+             " a temporary bonus on it",
+             f"{before_training} -> {modifier(w2, beast2, 'athletics')}")
+
+    Cast(world=w2, me=me2, ref="drv").bonus(
+        "skill:stealth", 3, on=beast2, until=When.ENCOUNTER)
+    out.that(modifier(w2, beast2, "stealth") == want["stealth"] + 3,
+             "and a bonus laid on the MOUNT still adds on top of the"
+             " borrowed number, the same way a penalty does to the"
+             " borrowed defence above",
+             f"{modifier(w2, beast2, 'stealth')} vs"
+             f" {want['stealth']} + 3")
+
+    # -- the horse, which lends EVERY check ---------------------------------
+    w3, me3, _ = _board(HORSE, 1)
+    # **The summoned horse, found by what it IS.** `c.companion()`
+    # answers 9 on this board -- a creature the character already had --
+    # where the item spawns 15, so an arm reading `companion()` measured
+    # somebody else entirely and the loan plant stayed green.
+    had = set(w3.having(Stats))
+    REGISTRY[HORSE].body(Cast(world=w3, me=me3, ref=HORSE))
+    nag = next((e for e in sorted(set(w3.having(Stats)) - had)
+                if (w3.get(e, Ident) or Ident(ref="")).ref == "x10_17"),
+               None)
+    out.that(nag is not None,
+             "premise: the item puts its mount on the board",
+             f"{nag}")
+    if nag is None:
+        return
+    # Driven apart for the same reason as the feat's arm above: the
+    # horse's `Stats` carry no ability scores, but its half level came
+    # out the same as the summoner's, so "reads the summoner's number"
+    # and "reads its own" agreed.
+    rider3 = must(w3.get(me3, Stats), "the summoner has statistics")
+    nags = must(w3.get(nag, Stats), "the horse has statistics")
+    rider3.level = nags.level + 10
+    out.that(modifier(w3, nag, "arcana") == modifier(w3, me3, "arcana"),
+             "**every** check reads the summoner's statistics, including"
+             " one no card names -- the horse's own `Stats` carry no"
+             " ability scores at all, so before this a check it made read"
+             " nothing",
+             f"{modifier(w3, nag, 'arcana')} vs"
+             f" {modifier(w3, me3, 'arcana')}")
+    for eff in list(w3.effects.of(nag)):
+        if eff.by == HORSE:
+            w3.effects.end(eff)
+    out.that(modifier(w3, nag, "arcana") != modifier(w3, me3, "arcana"),
+             "and WITHOUT the loan it does not -- measured on the same"
+             " board with the effect ended, so the line above is the row"
+             " and not two creatures that happened to agree",
+             f"{modifier(w3, nag, 'arcana')} vs"
+             f" {modifier(w3, me3, 'arcana')}")
+
+    out.that(not REGISTRY[FEAT].unfinished,
+             f"{FEAT} carries no marker: both of its halves are written",
+             f"{REGISTRY[FEAT].unfinished}")
+    out.that(REGISTRY[HORSE].unfinished == ("c.forbid(action=)",),
+             "while the horse is RE-POINTED rather than cleared -- its"
+             " check clause is written and the riderless action ban is"
+             " not, which is a different axis and `m5948a5` waits on the"
+             " same symbol",
+             f"{REGISTRY[HORSE].unfinished}")
+
+
 def a_pool_set_and_four_dice_maximised(out: Result) -> None:
     """Two cards state a number outright where every verb beside them
     states a change.
@@ -120714,6 +120942,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "mount_uses_riders_numbers": (
+        a_mount_uses_its_riders_numbers,
+        "`f3777` and `i1662p1` lend a mount its rider's defences and "
+        "check modifiers, as a substitution (#1341)",
     ),
     "pool_set_and_dice_maximised": (
         a_pool_set_and_four_dice_maximised,

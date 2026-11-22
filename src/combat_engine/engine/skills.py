@@ -122,7 +122,22 @@ def modifier(
     way round: the bonus is a contingency on a die that has not been
     thrown.
     """
-    stats = world.get(eid, Stats)
+    # **"Can make Acrobatics, Athletics, Endurance, or Stealth checks
+    # using your modifier (not including any temporary bonuses or
+    # penalties) in place of its own."** The untouched part of the
+    # lender's check -- half level, ability, training -- stands in for
+    # the borrower's, and the borrower's own `Mods` still apply below.
+    # That is the same shape as `query.defence`'s loan and for the same
+    # reason: a *difference* between the two creatures is right only
+    # until either is modified.
+    #
+    # `f3777` laid exactly such a difference and said so in its own
+    # docstring, with the caveat that it is correct at the moment the
+    # trait arms. This replaces it.
+    from .query import lends as _lends
+
+    whose = _lends(world, eid, f"skill:{skill.lower()}")
+    stats = world.get(whose if whose is not None else eid, Stats)
     ability = SKILLS.get(skill.lower())
     out = 0
     if stats is not None:
@@ -140,7 +155,9 @@ def modifier(
     # own +5: `c.bonus("skill:stealth", 5)` and being trained in stealth are
     # different facts that add, and bucketing both under one key would make
     # the second silently replace the first.
-    trained = world.get(eid, Skills)
+    # Training follows the lent modifier, because it is part of the
+    # number being lent rather than a temporary bonus on it.
+    trained = world.get(whose if whose is not None else eid, Skills)
     if trained is not None and skill.lower() in trained.trained:
         out += TRAINING
 

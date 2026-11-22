@@ -332,6 +332,23 @@ class Relation(StrEnum):
     #: Read in `dsl.measured_from`, so it decides what can be aimed at as
     #: well as where line of effect is traced from.
     CASTS_FROM = "casts_from"
+    #: **Whose NUMBERS the source uses in place of its own.** The source
+    #: borrows, the target lends, which is the same direction as
+    #: `CASTS_FROM` beside it and the opposite of `MASTER_OF` above.
+    #:
+    #: Two printed lines, both about a mount: *"the creature can use your
+    #: defenses in place of its own"* and *"can make Acrobatics,
+    #: Athletics, Endurance, or Stealth checks using your modifier ... in
+    #: place of its own"*. Which numbers is on the relation's `via`:
+    #: `defences`, and `skills:a+b`.
+    #:
+    #: Read in `query.defence` and `skills.modifier`, which are the two
+    #: places those numbers are assembled. A **substitution** and not a
+    #: bonus, which is why it is a relation rather than a `Mods` entry: a
+    #: difference between two creatures' numbers drifts the moment either
+    #: one is modified, and a defence is what a fight spends its time
+    #: changing.
+    LENDS_NUMBERS = "lends_numbers"
     #: **A creature under a lasting effect of the source's, where a later
     #: clause has to find it again.**
     #:

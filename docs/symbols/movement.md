@@ -122,6 +122,10 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
 
 ## modes and mounts
 
+- `c.lend_checks(self, *skills: 'str', to: 'int', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - *"The mount can make Acrobatics, Athletics, Endurance, or
+- `c.lend_defences(self, to: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - *"The creature can use your defenses in place of its own (not
 - `c.lose_mode(self, name: 'str', *, until: 'When' = <When.EOTNT: "end of target's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - Take a way of moving away for a while, and give it back.
 - `c.mode(self, name: 'str', speed: 'int', *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None) -> 'Effect | None'`

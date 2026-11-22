@@ -2580,7 +2580,7 @@ _NOT_RIDERLESS = (
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    dropped=("c.lend_checks()",),
+    dropped=("c.forbid(action=)",),
 )
 def i1662p1(c: Cast) -> None:
     """The mount is `x10_17`, an **associate** block, so it does not spawn
@@ -2631,7 +2631,8 @@ def i1662p1(c: Cast) -> None:
     the card prints and a `Dropped` watch can see -- `once=True` because
     the creature only falls the once.
 
-    `dropped=("c.forbid(action=)",)` is the riderless restriction:
+    `dropped=("c.forbid(action=)",)` is the one remaining gap: the
+    riderless restriction,
     *"the only actions it can take while riderless are move actions and
     free actions"*. That is an action-category ban and there is no verb
     for one -- `c.forbid` takes rows away by ref, keyword or usage, and
@@ -2643,25 +2644,17 @@ def i1662p1(c: Cast) -> None:
     it bars less than the card does, and it would bar it whether anybody
     is riding or not.
 
-    `c.lend_checks()` is the second gap, and it gets its own symbol
-    because it is a different question: *"when it makes a check, you make
-    the roll using your game statistics, not including any temporary
-    bonuses or penalties"*. `spawn_associate` gives the creature
-    `Stats(level=..., scores={})` -- no ability scores at all -- so a
-    check it makes reads nothing, and the family that would answer this is
-    `c.lend_defences()` and `c.lend_passive(skill)` rather than anything
-    about actions. **`c.cast_from` is the near miss and is deliberately
-    not copied**: `batch_f`'s `p15885` writes it against this same printed
-    sentence, and it is the line-of-sight-and-effect origin, which is a
-    different clause of the summoning rules. A verb that nearly fits would
-    make this row green on the wrong half.
+    **The check clause is written.** *"When the horse makes a check, you
+    make the roll using your game statistics, not including any temporary
+    bonuses or penalties"* -- every check, not a named list, so
+    `c.lend_checks(to=)` with no skills named is the wide form.
 
-    The one clause with no symbol is dismissal. *"It lasts until you
-    dismiss it as a minor action"* wants `c.dismiss_companion`, which
-    reads a `Companion` that `spawn_associate` does not give; the hold is
-    the encounter either way, so what is lost is the player's option to
-    end it early rather than a limit on how long it stays.
-    """
+    That mattered more here than on the feat printing the same sentence
+    about four skills: `spawn_associate` gives this creature
+    `Stats(level=..., scores={})` with no ability scores at all, so a
+    check it made read nothing. It now reads the summoner's half level,
+    ability and training, with the creature's own modifiers still
+    applying on top -- which is the printed parenthetical."""
     here = {c.here}
     size = _associate_size("x10_17")
     room = {
@@ -2683,6 +2676,11 @@ def i1662p1(c: Cast) -> None:
     beast = c.summon("x10_17", at=where, after=c.me)
     if not beast:
         return
+    # **"When the horse makes a check, you make the roll using your game
+    # statistics."** Every check, so no skills are named. The creature's
+    # own `Stats` carry no ability scores at all, so without this a check
+    # it made read nothing.
+    c.lend_checks(to=beast, until=When.ENCOUNTER)
 
     def fell(ev: Dropped) -> None:
         if ev.actor == beast:

@@ -10534,6 +10534,98 @@ class Cast:
             retarget=retarget,
         )
 
+    def lend_defences(
+        self, to: int, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """*"The creature can use your defenses in place of its own (not
+        including any temporary bonuses or penalties)."*
+
+        **A substitution, which is why nothing here could say it.**
+        `c.bonus` lays a difference between two creatures' numbers, and a
+        difference is right only until either one is modified -- a
+        defence being exactly what a fight spends its time changing.
+        `query.defence` had no notion of reading somebody else's, which
+        is what `f3777`'s marker said.
+
+        `Relation.LENDS_NUMBERS` from the borrower to the lender, read
+        where the number is assembled. The lender's **untouched**
+        defence and its level term stand in; the borrower's own
+        modifiers and conditions still apply on top, which is what the
+        printed parenthetical excludes and the only reading under which
+        a penalty laid on the mount still counts.
+
+        Yours to lend, so the lender defaults to the **caster**.
+        """
+        lender = on if on is not None else self.me
+        return self._lend(to, lender, "defences", until)
+
+    def lend_checks(
+        self, *skills: str, to: int, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """*"The mount can make Acrobatics, Athletics, Endurance, or
+        Stealth checks using your modifier (not including any temporary
+        bonuses or penalties) in place of its own."*
+
+        The same loan as `c.lend_defences`, by named skill, read in
+        `skills.modifier`. Half level, ability and **training** come from
+        the lender -- training is part of the number being lent rather
+        than a temporary bonus on it -- and the borrower's own `skill:`
+        modifiers still apply.
+
+        **This replaces a difference `f3777` laid by hand** and whose own
+        docstring recorded the approximation: a modifier laid by a power
+        and one printed on a stat block both live in `Mods` and cannot be
+        told apart, so the gap was taken whole and was correct only at
+        the moment the trait armed.
+        """
+        lender = on if on is not None else self.me
+        # **No skills named is EVERY check**, which is the wider of the
+        # two printed lines rather than a default nobody meant.
+        # `i1662p1` says *"when the horse makes a check, you make the
+        # roll using your game statistics"* -- all of them -- where
+        # `f3777` names four. A row wanting the narrow form has to say
+        # which, so the wide one cannot be reached by forgetting.
+        words = ("+".join(sorted(s.lower() for s in skills)) if skills
+                 else "*")
+        return self._lend(to, lender, f"skills:{words}", until)
+
+    def _lend(
+        self, borrower: int, lender: int, words: str, until: When,
+    ) -> Effect | None:
+        """File one loan, folding into any already standing.
+
+        **One relation per pair**, because `Relations.via` holds a single
+        string and a second `set` overwrites it -- the trap
+        `c.cast_from`'s own docstring records for `only`. So a row
+        lending defences *and* skills, which both printed cards do, has
+        to arrive as one `via` rather than two calls fighting over it.
+        """
+        from .types import Relation
+
+        if borrower == lender:
+            return None
+        had = self.world.relations.via(
+            Relation.LENDS_NUMBERS, borrower, lender,
+        )
+        kept = [w for w in had.split(",") if w]
+        if words not in kept:
+            kept.append(words)
+        self.world.relations.set(
+            Relation.LENDS_NUMBERS, borrower, lender, via=",".join(kept),
+        )
+
+        def undo() -> None:
+            self.world.relations.clear(
+                Relation.LENDS_NUMBERS, borrower, lender,
+            )
+
+        return self.world.effects.apply(
+            borrower, self.me, until, label=f"{self.ref} lends {words}",
+            on_end=[undo], by=self.ref,
+        )
+
     def spare_squares(
         self,
         n: int = 1,

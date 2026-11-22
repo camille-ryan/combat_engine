@@ -2471,43 +2471,43 @@ def f3776b(c: Cast) -> None:
 
 @power("f3777", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.lend_defences()",))
+)
 def f3777(c: Cast) -> None:
-    """The four skills are lent; the defences are still a substitution.
+    """*"When you ride a friendly mount, the creature can use your
+    defenses in place of its own (not including any temporary bonuses or
+    penalties). In addition, the mount can make Acrobatics, Athletics,
+    Endurance, or Stealth checks using your modifier ... in place of its
+    own."*
 
-    **The skills half is a difference, and that is safe here**, which is the
-    distinction the old note missed. `skill:<name>` is a live modifier key
-    that `skills.modifier` reads, so "in place of its own" is the gap between
-    the two numbers laid on the mount: the creature's check then comes to the
-    rider's exactly.
+    **Both halves are substitutions now, and the skills half was a
+    difference.** The old body laid `skill:<name>` bonuses worth the gap
+    between the two creatures' modifiers, and its own note recorded the
+    approximation: a modifier laid by a power and one printed on a stat
+    block both live in `Mods` and cannot be told apart, so the gap was
+    taken whole and the reading was exact only at the moment the trait
+    armed.
 
-    The parenthetical is the one approximation, and it is a small one. A
-    modifier laid by a power and one printed on a stat block both live in
-    `Mods` and cannot be told apart, so the gap is taken whole -- but the
-    trait arms at the top of the fight, before anything temporary has been
-    laid on either creature, which is when the two readings agree. Taking
-    only the ability-and-level part instead would leave the mount's own
-    bonuses standing *on top of* the rider's number, which is further from
-    the printed line than this is. Arming it twice lays nothing the second
-    time, because by then the gap is zero.
+    `Relation.LENDS_NUMBERS` replaces it. `skills.modifier` takes the
+    lender's half level, ability and training in place of the mount's,
+    and `query.defence` does the same with the printed defence and its
+    level term -- which is what *"in place of its own"* says and what the
+    defences half had no way to express at all.
 
-    The defences half stays dropped: a defence is read through
-    `query.defence`, which has no notion of rolling somebody else's, and
-    there the difference really would drift -- a defence is what the fight
-    spends its time changing.
+    The borrower's own modifiers still apply on top of either, which is
+    the printed parenthetical read the only way that keeps a penalty laid
+    on the mount counting.
 
-    The mount is read when the trait arms, the way `f3778` below reads the
-    beast: nothing announces mounting, so a character that climbs on later
-    in the fight is not covered."""
-    from combat_engine.engine.skills import modifier
-
+    The mount is read when the trait arms, the way `f3778` below reads
+    the beast: nothing announces mounting, so a character that climbs on
+    later in the fight is not covered."""
     beast = c.mount()
     if beast is None:
         return
-    for skill in ("acrobatics", "athletics", "endurance", "stealth"):
-        lent = modifier(c.world, c.me, skill) - modifier(c.world, beast, skill)
-        if lent:
-            c.bonus(f"skill:{skill}", lent, on=beast, until=When.ENCOUNTER)
+    c.lend_defences(to=beast, until=When.ENCOUNTER)
+    c.lend_checks(
+        "acrobatics", "athletics", "endurance", "stealth",
+        to=beast, until=When.ENCOUNTER,
+    )
 
 
 @power("f3778", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
