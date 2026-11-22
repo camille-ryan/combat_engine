@@ -1336,32 +1336,48 @@ def i1290x1(c: Cast) -> None:
 
 
 @power("i2406x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.race_named()",))
+       reach=PERSONAL, target=SELF)
 def i2406x1(c: Cast) -> None:
     """The clause naming a race **by ref** is written: `c.race_of` reads the
     `race:<ref>` that `Build.choices` has carried all along (#411), so a
     character ally's race is on the board after all.
 
-    Still dropped, and re-aimed: the other two clauses name a race by its
-    printed *word*, and nothing bridges a word to a ref. `query.race_of`
-    answers a ref; the `race` table carries no word at all -- no `slug`
-    column, the way `weapon` has one -- so there is nothing to match against.
-    `c.is_kind` finds a monster ally carrying the word on its type line and
-    a character of that race is missed, which in a party is the usual case."""
+    **All three clauses read a ref now, and the fix was in the ETL.** The
+    note here used to say the other two named a race by its printed
+    *word* with nothing to bridge a word to a ref -- true of the spec as
+    it was imported. `sanitise.named_races` gained a fourth position,
+    *"a `<race>` ally"*, so the card arrives with a ref in all three
+    clauses instead of one. `#1449`-adjacent; the position is in the ETL
+    batch.
 
-    def beside(word: str) -> bool:
-        return any(c.is_kind(word, on=a) for a in c.within(10, side="ally"))
+    That also took two printed names **out of this file**: the two
+    clauses were written `c.is_kind("<word>")` because the word was all
+    the spec gave, which is a name in a tracked file -- tier 2 by
+    Camille's ordering on `#447` -- sitting in a content body.
+
+    **What reading the ref gives up, said rather than hidden.**
+    `c.race_of` answers a *character's* race, off the `race:<ref>` in
+    `Build.choices`. A **monster** ally of the same race carries its race
+    as a type word on its stat block and no ref, so it no longer matches.
+    That is the right trade for this card -- it is about allies, and an
+    ally in a party is a character, which this note already argued was
+    "the usual case" -- but it is a narrowing and not a widening.
+
+    The thing that would answer both is one reader asking "is this
+    creature of this race, however its race is recorded", taking a ref
+    and checking `Build.choices` or the type line. Named rather than
+    built: no row in the tree needs the monster half today."""
 
     def beside_race(ref: str) -> bool:
         return any(c.race_of(on=a) == ref for a in c.within(10, side="ally"))
 
-    if beside("drow"):
+    if beside_race("r16"):
         c.bonus("skill:intimidate", 2, on=c.me, until=When.ENCOUNTER, kind="item")
         c.bonus("skill:stealth", 2, on=c.me, until=When.ENCOUNTER, kind="item")
     if beside_race("r3"):
         c.bonus("skill:arcana", 2, on=c.me, until=When.ENCOUNTER, kind="item")
         c.bonus("skill:history", 2, on=c.me, until=When.ENCOUNTER, kind="item")
-    if beside("elf"):
+    if beside_race("r4"):
         c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER, kind="item")
         c.bonus("skill:nature", 2, on=c.me, until=When.ENCOUNTER, kind="item")
 
