@@ -1694,6 +1694,40 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # Offered only while the light is not already shed, because the hold
     # is what the free action ends and two of them would want two
     # endings.
+    # **Switching a familiar's mode, which is a printed MINOR for anybody
+    # who has one.** Unlike `shed_light` above, this action exists
+    # without a feat -- `c.familiar_mode` has always been able to do it
+    # and nothing put it on the menu, so `f2258`'s "a free action instead
+    # of a minor" had no cost to cheapen. #1472.
+    #
+    # The cheaper cost **replaces** the minor rather than joining it, for
+    # `_manoeuvres`' reason: two entries differing only in what they
+    # spend is a choice no player makes the expensive way round.
+    cheap_switch = next(
+        (cost for (what, cost) in _granted(world, actor)
+         if what == "familiar_switch" and cost is not ActionType.MINOR),
+        None,
+    )
+    # **The cheaper cost FALLS BACK to the minor rather than replacing
+    # it, which is the opposite of the aid manoeuvres above and the bug
+    # a probe caught.** `f2258` grants a free switch *once per turn*; it
+    # does not take the printed minor away. Written as a replacement, the
+    # menu offered the free one, the turn's use was spent, and then
+    # **nothing** was offered -- a character strictly worse off for
+    # holding the feat.
+    #
+    # Aid differs because its grant carries no per-turn cap: there the
+    # cheap cost is always available, so a second entry at the standard
+    # would be a choice nobody makes the expensive way round.
+    pick = (cheap_switch
+            if cheap_switch is not None
+            and _switch_open(world, actor, cheap_switch)
+            else ActionType.MINOR)
+    if (_CastFor(world=world, me=actor, ref="actions:familiar_switch")
+            .familiar() is not None
+            and encounter.can_spend(actor, pick)):
+        out.append(Action(kind="familiar_switch", cost=pick))
+
     for (what, cost), far in _granted(world, actor).items():
         if what != "shed_light":
             continue
@@ -1862,6 +1896,14 @@ GRANTABLE = frozenset({
     # offers a free action to end a hold that names one, so "until you end
     # it as a free action" needs no second word. #1459.
     "shed_light",
+    # **`familiar_switch` arrived with its reader too**, and it is the
+    # one word in this set whose action already existed as a *verb*.
+    # `c.familiar_mode` switches a familiar between active and passive;
+    # nothing offered it, so `f2258`'s *"with a free action on your turn
+    # instead of a minor action"* had no cost to cheapen. The offer and
+    # the `perform` branch are both in this file, the base cost is the
+    # printed minor, and the once-a-turn half is `Powers.latched`.
+    "familiar_switch",
     # **`move_in_zone` moves the CREATURE; `move_zone` moves the zone.**
     # Two words because they are opposite operations that read alike:
     # `move_zone` is the monster line "as a minor action it can move the
@@ -2140,6 +2182,35 @@ def _cheap_aid_open(
             for a in _allies(world, actor)
         )
     return True
+
+
+def _switch_open(world: World, actor: int, cost: ActionType) -> bool:
+    """Is a familiar-mode switch still available this turn? `#1472`.
+
+    `f2258` prints *"you can do so only once per turn"*, and that limit
+    rides the **granted** cost: the printed minor action carries no such
+    cap, so a creature paying the ordinary minor may switch as often as
+    it has minors. Scoped the way `f3535`'s two narrowings are, and for
+    the same reason -- the card narrows the option the feat adds, not the
+    action everybody has.
+
+    A latch, not a count on the grant, which is this file's recorded call
+    for `move_companion`: `c.grant_action` carries squares rather than
+    uses.
+    """
+    from .cast import Cast as _CastFor
+
+    # **No early return for the printed minor, and a plant proved one
+    # would be dead.** The flag is keyed per cost -- the grant writes
+    # `"familiar_switch as free once_a_turn"` -- so asking about the
+    # minor answers False by construction and the cap cannot reach it.
+    # An `if cost is MINOR: return True` guard above this read as
+    # defensive and changed no arm when removed, which is this repo's
+    # test for a guard worth carrying.
+    if not _granted_flag(world, actor, "familiar_switch", cost, "once_a_turn"):
+        return True
+    asker = _CastFor(world=world, me=actor, ref="actions:familiar_switch")
+    return not asker.latched("familiar_switch", per_turn=True)
 
 
 def _granted_flag(
@@ -3884,6 +3955,31 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             # no room, a condition -- does not burn the turn's one use.
             walker.latch("move_companion", per_turn=True)
         return bool(moved)
+
+    if action.kind == "familiar_switch":
+        # **The verb already existed; this is only the menu entry.**
+        # `c.familiar_mode` refuses a switch to the mode the familiar is
+        # already in, so the other mode is read off `Companion.passive`
+        # rather than asked for -- an `Action` carries no mode field and
+        # a menu offering both directions would list one that refuses.
+        from .cast import Cast as _Cast
+        from .components import Companion as _Comp
+
+        mover = _Cast(world=world, me=actor, ref="actions:familiar_switch")
+        pet = mover.familiar()
+        if pet is None:
+            return False
+        mine = world.get(pet, _Comp)
+        if mine is None:
+            return False
+        if not mover.familiar_mode("active" if mine.passive else "passive"):
+            return False
+        # Spent on the use, so a switch that refused costs nothing.
+        if action.cost is not ActionType.MINOR and _granted_flag(
+            world, actor, "familiar_switch", action.cost, "once_a_turn"
+        ):
+            mover.latch("familiar_switch", per_turn=True)
+        return True
 
     if action.kind == "shed_light":
         # `Cast.light` is what the 15 printed rows use, so the radius

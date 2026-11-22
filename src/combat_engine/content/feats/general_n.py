@@ -1973,16 +1973,36 @@ def f2257(c: Cast) -> None:
 
 
 @power("f2258", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("actions.familiar_switch",))
+       reach=PERSONAL, target=SELF)
 def f2258(c: Cast) -> None:
     """Cheapens the action that switches a familiar's mode.
 
-    **The third unrelated thing the old symbol held.** Switching is a
-    `Cast` verb, not an entry in the action menu, so it has no declared
-    cost for a feat to cheapen -- "a free action instead of a minor" has
-    nothing to change. `c.grant_action` changes the cost of an
-    action the menu already has and now raises on a word no reader looks
-    for (#762), so it was never the road here. #620."""
+    **The old note was right about the diagnosis and the fix was to
+    offer the action.** Switching was a `Cast` verb and not an entry in
+    the action menu, so *"a free action instead of a minor"* had no cost
+    to cheapen -- `c.grant_action` changes the price of something the
+    menu already has. So `familiar_switch` is in the menu now, at the
+    printed **minor**, for anybody who keeps a familiar; the feat buys
+    the cheaper price. `#1472`, and the same shape as `shed_light`:
+    the word arrived with its reader.
+
+    **`once_a_turn` and not `once_a_round`**, which are two different
+    printed spans and so two different flags -- this card says *"only
+    once per turn"* where `f3535` says *"once per round"*.
+
+    **The cap is on the FREE switch and the minor is never taken away**,
+    which is the half a probe caught. Written as a replacement the menu
+    offered the free one, the turn's use was spent, and then nothing was
+    offered at all -- a character strictly worse off for holding this
+    feat. The printed minor is the fallback.
+
+    No body beyond the grant: the switch itself is `c.familiar_mode`,
+    which has always worked, and the direction is read off
+    `Companion.passive` at the moment it is taken rather than chosen
+    here. #620."""
+    c.grant_action("familiar_switch", ActionType.FREE, on=c.me,
+                   once_a_turn=True, until=When.ENCOUNTER)
+
 
 
 # -- riders on a racial power named only in prose ---------------------------

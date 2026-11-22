@@ -72892,6 +72892,169 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def switching_a_familiar_is_an_action_the_menu_offers(out: Result) -> None:
+    """*"You can switch your familiar between passive mode and active mode
+    with a free action on your turn instead of a minor action. You can do
+    so only once per turn."* -- `f2258`. #1472.
+
+    **The verb always worked; nothing offered it.** `c.familiar_mode`
+    switches a familiar between modes and six rows read
+    `query.familiar_active`, but the switch was never an entry in the
+    action menu -- so *"a free action instead of a minor"* had no cost to
+    cheapen, which is exactly what the row's old note said. The fix is to
+    offer the action at its printed **minor**, for anybody who keeps a
+    familiar, and let the feat buy the cheaper price. Same shape as
+    `shed_light`: the word arrived with its reader.
+
+    **The cheaper cost FALLS BACK to the minor rather than replacing it,
+    and that is the arm worth having.** Written as a replacement -- which
+    is what the aid manoeuvres correctly do -- the menu offered the free
+    switch, the turn's use was spent, and then **nothing** was offered: a
+    character strictly worse off for holding the feat. Aid differs
+    because its grant carries no per-turn cap, so there the cheap cost is
+    always there and a second entry at the standard would be a choice
+    nobody makes the expensive way round.
+
+    **`once_a_turn`, not `once_a_round`.** Two printed spans, two flags:
+    this card says *"only once per turn"* and `f3535` says *"once per
+    round"*, and `Powers.latched` keys both.
+
+    **The direction is read when the switch is taken, not chosen in the
+    menu.** `c.familiar_mode` refuses a switch into the mode the familiar
+    is already in, so an `Action` carrying a mode would list one entry
+    that always refuses. `Companion.passive` is read in `perform`.
+
+    **A familiar has to be put on the board for any of this**, and
+    nothing in `audit.board` does: measured, three posed boards and the
+    row's own all answer `c.familiar() is None`. `cf:wizard-sha-ir-f1`
+    calls `c.call_companion(kind="familiar")` and is what this rule arms
+    -- which is why the row audits SILENT and is not evidence against it.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions as _A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+
+    ROW, FAMILIAR = "f2258", "cf:wizard-sha-ir-f1"
+
+    def staged(*, armed: bool) -> tuple:
+        """A caster with a familiar, and the feat armed or not.
+
+        **`armed=False` has to take the feat's own grant back off**, and
+        that is `audit.board` arming every `action=NONE` row *including
+        the row under test*. `f2258` is one, so its board arrives with
+        the free switch already granted and the "without the feat" arm
+        measured the feat -- it read `['free']` where it wanted
+        `['minor']`. The same correction `herding_wall`'s `bare()` helper
+        makes, for the same reason.
+        """
+        world, me, _ = _board(ROW, 1)
+        REGISTRY[FAMILIAR].body(Cast(world=world, me=me, ref=FAMILIAR))
+        if not armed:
+            for eff in list(world.effects.of(me)):
+                if eff.by == ROW:
+                    world.effects.end(eff, "driver")
+        elif not any(e.by == ROW for e in world.effects.of(me)):
+            REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+        cast = Cast(world=world, me=me, ref="drv")
+        return world, me, cast, Encounter(world)
+
+    def offered(world, enc, me: int) -> list[str]:      # noqa: ANN001
+        return sorted({o.cost.value for o in _A.legal(world, enc, me)
+                       if o.kind == "familiar_switch"})
+
+    # -- the premise -------------------------------------------------------
+    bare, me0, c0, enc0 = staged(armed=False)
+    pet = c0.familiar()
+    out.that(pet is not None,
+             "premise: the caster keeps a familiar -- nothing in"
+             " `audit.board` poses one, so the rule arms the class"
+             " feature that calls `c.call_companion(kind='familiar')`",
+             f"{pet}")
+
+    # -- the printed action, without the feat -----------------------------
+    out.that(offered(bare, enc0, me0) == ["minor"],
+             "switching is offered at the printed MINOR to anybody who"
+             " keeps a familiar, with no feat at all -- which is the half"
+             " that was missing and the reason the feat had no cost to"
+             " cheapen",
+             f"{offered(bare, enc0, me0)}")
+
+    # -- the feat buys the cheaper price -----------------------------------
+    world, me, cast, enc = staged(armed=True)
+    out.that(offered(world, enc, me) == ["free"],
+             "with the feat it is a FREE action instead -- *'instead of a"
+             " minor action'*, so the cheaper price replaces it while it"
+             " is available",
+             f"{offered(world, enc, me)}")
+
+    # -- it switches, and both ways ---------------------------------------
+    kept = must(world.get(cast.familiar(), Companion), "the familiar")
+    was = kept.passive
+    # **`next(..., None)` and not a bare `next`.** A plant that stops the
+    # action being offered leaves nothing to take, and a bare `next`
+    # raises `StopIteration` there -- which prints no FAIL line at all,
+    # so the plant reads as passing. Measured: the "drop the offer" plant
+    # produced no output until this defaulted.
+    free = next((o for o in _A.legal(world, enc, me)
+                 if o.kind == "familiar_switch"), None)
+    out.that(free is not None
+             and _A.perform(world, enc, me, free)
+             and kept.passive is not was,
+             "taking it switches the mode -- read off `Companion.passive`"
+             " when the action resolves rather than chosen in the menu,"
+             " because a menu carrying a direction would list an entry"
+             " that always refuses",
+             f"passive {was} -> {kept.passive}")
+
+    # -- the cap, and the fallback ----------------------------------------
+    out.that(offered(world, enc, me) == ["minor"],
+             "THE arm: the free switch is spent for the turn and the"
+             " printed MINOR is offered in its place. Written as a"
+             " replacement this read `[]` -- the feat's option gone and"
+             " the printed one taken away with it, leaving a character"
+             " strictly worse off for holding the feat",
+             f"{offered(world, enc, me)}")
+    again = next((o for o in _A.legal(world, enc, me)
+                  if o.kind == "familiar_switch"), None)
+    out.that(again is not None
+             and again.cost is ActionType.MINOR
+             and _A.perform(world, enc, me, again)
+             and kept.passive is was,
+             "and that minor switches it back, so the card's 'between"
+             " passive and active' works in both directions rather than"
+             " stranding the familiar in whichever mode it reached first",
+             f"passive back to {kept.passive}")
+
+    # -- the cap is on the GRANT, not on the action -----------------------
+    plain, me2, c2, enc2 = staged(armed=False)
+    pet2 = must(world.get(c2.familiar(), Companion), "the familiar") \
+        if c2.familiar() is not None else None
+    del pet2
+    took = 0
+    for _ in range(3):
+        opt = next((o for o in _A.legal(plain, enc2, me2)
+                    if o.kind == "familiar_switch"), None)
+        if opt is None or not _A.perform(plain, enc2, me2, opt):
+            break
+        took += 1
+    out.that(took >= 2,
+             "and WITHOUT the feat there is no once-a-turn cap: the"
+             " printed minor may be taken as often as a creature has"
+             " minors, because the limit is a narrowing on the granted"
+             " cost and not a change to the action everybody has",
+             f"{took} switch(es) taken on the ordinary minor")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+    del When
+
+
 def a_cheaper_aid_narrowed_to_a_bloodied_ally(out: Result) -> None:
     """*"Once per round, you can use the aid defense action as a minor
     action, but only if the chosen ally is bloodied"* -- `f3535`. #1470.
@@ -113805,6 +113968,17 @@ UNNAMED_KINDS_OWED = frozenset(
         # `#1098`'s rule is that a declared 0.0 claims the kind was
         # priced at nothing. #1466.
         "shed_light",
+        # **`familiar_switch` is owed on the same standing ruling, and
+        # arrived here the day it landed.** `f2258` buys a free switch
+        # instead of the printed minor, once a turn -- `#1472`. What that
+        # is worth is a positional question about a body with no turn of
+        # its own: passive is off the board, so going passive protects
+        # the familiar and loses whatever its square was doing for
+        # flanking and for a row that measures from it. The same
+        # judgement `move_companion` below is owed for, and `#1098`'s
+        # rule is that a declared 0.0 claims the kind was priced at
+        # nothing.
+        "familiar_switch",
         # **`move_companion` is owed on exactly the same standing ruling**,
         # and it arrived here the day it landed -- which is this list
         # working rather than a lapse. `f1336` prints *"once per turn, you
@@ -127991,6 +128165,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "familiar_switch": (
+        switching_a_familiar_is_an_action_the_menu_offers,
+        "switching a familiar's mode is an action the menu offers, and"
+        " f2258 buys it cheaper once a turn (#1472)",
     ),
     "cheap_aid": (
         a_cheaper_aid_narrowed_to_a_bloodied_ally,

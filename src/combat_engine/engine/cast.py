@@ -6985,6 +6985,7 @@ class Cast:
         in_zone: int | None = None,
         bloodied_ally: bool = False,
         once_a_round: bool = False,
+        once_a_turn: bool = False,
         on: int | None = None,
         until: When = When.STANCE,
     ) -> Effect | None:
@@ -7072,8 +7073,15 @@ class Cast:
         # for everybody, unconditionally -- which is what makes this a
         # narrowing of a granted option rather than a change to the
         # printed manoeuvre.
+        # **Two windows and not one word with a parameter**, because the
+        # cards print two different sentences and each means a different
+        # span: `f3535` is *"once per round"* and `f2258` is *"only once
+        # per turn"*. `Powers.latched` already keys both -- `per_turn`
+        # picks the window -- so the flag that reaches it has to say
+        # which, and a single `once=True` would have had to guess.
         for word, flag in (("bloodied_ally", bloodied_ally),
-                           ("once_a_round", once_a_round)):
+                           ("once_a_round", once_a_round),
+                           ("once_a_turn", once_a_turn)):
             if flag:
                 self.bonus(
                     f"{what} as {cost.value} {word}", 1, on=who,
