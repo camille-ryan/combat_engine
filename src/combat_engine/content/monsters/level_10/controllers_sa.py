@@ -129,6 +129,7 @@ from combat_engine.engine.events import (
     AdjacencyGained,
     AttackDeclared,
     DamageApplied,
+    DamageRolled,
     Dropped,
     EffectApplied,
     Hit,
@@ -3489,6 +3490,11 @@ def m5661a5(c: Cast) -> None:
 # ==========================================================================
 
 
+#: `m5787a0`'s three substitutions, in the order the card prints them.
+#: Her choice among them, so the row takes the first -- see the docstring.
+_THRALL_BLOCKS = ("m5789", "m5788", "m5790")
+
+
 @power(
     "m5787a0",
     level=10,
@@ -3496,12 +3502,65 @@ def m5661a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.transform(into=)",),
 )
 def m5787a0(c: Cast) -> None:
-    """Nothing replaces a creature's whole stat block with a different
-    one in place of killing it -- `c.reanimate` keeps the same entity's
-    own numbers, which is not what "permanently becomes" asks for."""
+    """*"When m5787 would kill a creature with psychic damage, she can
+    choose not to kill that creature, and instead the creature
+    permanently becomes"* one of three blocks.
+
+    **`c.transform` is the verb, and the row's old note was true when it
+    was written.** It said nothing replaced a creature's whole stat block
+    in place of killing it and that `c.reanimate` keeps the same entity's
+    own numbers -- both still true of `reanimate`, and `c.transform` is
+    the facility that did not exist: it overwrites the block-derived
+    components and keeps the entity id, so *"permanently becomes"* is one
+    call. `i2714p1` and `i3364p1` print the other two shapes of it.
+
+    **Declared on `DamageRolled`, not on `Dropped`.** *"Would kill"* is a
+    predicate on a number while the hit points are still there, and
+    `Dropped` announces a creature already at zero -- `events.Dropped`
+    says so at length and names `i652p1` as the worked case. Cancelling
+    the roll is what *"can choose not to kill"* is: `resolve` returns 0
+    damage for a refused `DamageRolled`, so no blow lands and no death
+    throe fires.
+
+    **The hit points are put back where they were, which is the card's
+    own second sentence.** *"The creature does not regain hit points when
+    this change occurs"* -- and `transform` installs the new block's
+    `Health`, at full. So the total is re-read afterwards and clamped to
+    the new maximum, which is the one thing this row has to undo rather
+    than ask for.
+
+    **Two judgement calls, both resolved the weaker way.**
+
+    * *"m5787's choice"* among three blocks: any of the three is a legal
+      play, so making one is not a dropped clause -- nothing in `policy/`
+      scores a stat-block substitution and inventing a preference would
+      be a number the page does not print. The first printed is taken.
+    * **The side is left alone.** The card does not say the creature
+      changes allegiance, and `transform` keeps the team unless told, so
+      a transformed character stays with its party and fights on with
+      different numbers. `m5787a8` does say *"a dead m5789 **ally**"*,
+      but that is about blocks already hers, not about what this clause
+      produces -- reading it the other way would hand her a party member
+      on a sentence that never mentions sides.
+
+    #1464.
+    """
+
+    def thralled(ev: Any) -> None:
+        if ev.source != c.me or ev.dtype is not DamageType.PSYCHIC:
+            return
+        hurt = c.world.get(ev.target, Health)
+        if hurt is None or hurt.hp - ev.amount > 0:
+            return
+        was = hurt.hp
+        ev.cancel("m5787a0")
+        if c.transform(_THRALL_BLOCKS[0], on=ev.target):
+            now = c.world.need(ev.target, Health)
+            now.hp = min(was, now.max_hp)
+
+    c.watch(DamageRolled, thralled, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

@@ -268,7 +268,68 @@ def situational_attack(
     situational -= _long_range(world, attacker, target, power, branch, ctx)
     situational += _mark_penalty(world, attacker, among or (target,))
     situational += _underwater(world, attacker, target, power, ctx)
+    situational -= _aimed_through(world, attacker, target)
     return situational
+
+
+def _aimed_through(world: World, attacker: int, target: int) -> int:
+    """A zone's penalty on whoever aims into or through it. `f1713b`.
+
+    *"-2 to attack rolls against a creature inside the wall or on the
+    other side of it"* -- the mirror of the `_in` family, which lays a
+    zone's modifier on the creatures **standing in** it.
+
+    **Two ways to be caught, and the second is what the card is
+    distinctive for.** The target standing in the region is a membership
+    test; *"on the other side"* is the traced line crossing it, which
+    `_line` already answers -- so a shot whose path enters a wall square
+    is through it, and diagonals stay counted the way the rest of the
+    geometry counts them.
+
+    **The membership test looks redundant and is not.** Deleting it left
+    every arm of `drivers.aimed_through` green, because the traced line
+    *ends on the target's square* -- so a Medium creature standing in the
+    region is caught by the line branch anyway. It is live for a creature
+    wider than one square: the line runs between one corner each,
+    `min(here)` to `min(there)`, so a Large target with its near corner
+    outside the region and its far corner inside is *inside the wall* by
+    the card's first clause and off the traced line by the geometry. The
+    rule poses exactly that, and with it the plant goes red.
+
+    **Zone-held rather than per-enemy**, which is the loss `f1713b`'s own
+    note measured about the `m238a3` shape: a gated `c.penalty` laid on
+    each enemy misses one that joins the board after the wall goes up.
+
+    The **largest** penalty rather than the sum, for the reason
+    `World.crossing` takes the larger of two taxes: two walls of light
+    between a shooter and its target are one worse shot, not two.
+
+    Returns 0 on every board with no such zone, which is every board
+    until a row lays one -- one loop over a list that is usually empty.
+    """
+    from .movement import _line
+    from .query import squares as _squares
+    from .query import team as _side_of
+
+    worst = 0
+    for _eid, zone in world.zones.all():
+        if not zone.attack_penalty or not zone.squares:
+            continue
+        if zone.penalty_for == "enemy":
+            mine = _side_of(world, zone.owner)
+            theirs = _side_of(world, attacker)
+            if mine == theirs:
+                continue
+        if _squares(world, target) & zone.squares:
+            worst = max(worst, zone.attack_penalty)
+            continue
+        here = _squares(world, attacker)
+        there = _squares(world, target)
+        if here and there and any(
+            sq in zone.squares for sq in _line(min(here), min(there))
+        ):
+            worst = max(worst, zone.attack_penalty)
+    return worst
 
 
 #: The two weapon groups the printed underwater rule exempts.

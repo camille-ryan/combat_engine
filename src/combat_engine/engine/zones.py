@@ -80,6 +80,31 @@ class Zone:
     #: region, and separate from it because sound and sight are different
     #: senses: a silent zone is not dark and a dark one is not quiet.
     silences: bool = False
+    #: **A penalty on whoever aims INTO or THROUGH this region**, as a
+    #: positive number of points subtracted from the attack roll.
+    #:
+    #: The mirror of the `_in` family -- `cover_in`, `grants_in`,
+    #: `conceal_in` and the rest all hold a modifier on the zone and lay
+    #: it on the creatures **inside**. `f1713b` prints the other
+    #: direction: *"-2 to attack rolls against a creature inside the wall
+    #: or on the other side of it"*, which is about the shooter and not
+    #: the occupant.
+    #:
+    #: **Held on the zone rather than on each enemy**, which is the whole
+    #: reason it is a field. A gated `c.penalty` per enemy -- the shape
+    #: `m238a3` accepts -- misses an enemy that joins the board after the
+    #: wall goes up, because it was not in `c.enemies()` when the loop
+    #: ran. `f1713b`'s note measured exactly that loss.
+    #:
+    #: Read by `resolve._aimed_through`, which asks whether the target
+    #: stands in the region or the traced line crosses it. Zero on every
+    #: zone nothing has given one, which is every zone until a row says
+    #: so. #1463.
+    attack_penalty: int = 0
+    #: Whose attacks the penalty applies to -- `"any"`, or `"enemy"` for
+    #: the caster's enemies only. `f1713b`'s wall of light hinders
+    #: everybody, which is what its card prints.
+    penalty_for: str = "any"
     #: Damage a creature takes for being in these squares -- a dice
     #: expression, or `""` for a zone that does not hurt anybody.
     #:

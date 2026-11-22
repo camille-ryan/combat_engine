@@ -72792,6 +72792,192 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_zone_hinders_whoever_aims_through_it(out: Result) -> None:
+    """*"-2 to attack rolls against a creature inside the wall or on the
+    other side of it"* -- `f1713b`. #1463.
+
+    **The mirror of the `_in` family.** `c.cover_in`, `c.grants_in`,
+    `c.conceal_in`, `c.resist_in` and the rest all hold a modifier on the
+    zone and lay it on the creatures **inside**, through `_while_inside`.
+    This card is about the **shooter**, who may be anywhere, so it is a
+    field on the `Zone` read by `resolve._aimed_through`.
+
+    **Why not `c.cover_in`**, which is the near-miss the row's own note
+    rejected in three measured ways: cover is taken as the *max* against
+    traced cover where a printed penalty **adds**, so a target already
+    behind a pillar would get nothing; `cover_waived` zeroes it, so an
+    ignore-cover row walks past a penalty this card gives it no leave to
+    waive; and it makes the occupant *have cover*, which other cards read
+    as a target condition and pays out sentences this one does not print.
+
+    **Held on the zone rather than per enemy, and that is the gap this
+    closed.** The row had the penalty written the `m238a3` way -- a gated
+    `c.penalty` on each of `c.enemies()` -- which answers a target walking
+    into the wall and a wall destroyed early, because it asks at roll
+    time. What it cannot answer is an enemy that **joins the board after
+    the wall goes up**: it was not in `c.enemies()` when the loop ran.
+    A field on the region has no such horizon.
+
+    **The largest penalty, not the sum**, for the reason `World.crossing`
+    takes the larger of two taxes: two walls of light between a shooter
+    and its target are one worse shot, not two.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Size
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import _line
+    from combat_engine.engine.movement import place as _place
+    from combat_engine.engine.query import squares as _squares
+    from combat_engine.engine.resolve import situational_attack
+    from combat_engine.engine.zones import Zone
+
+    ROW = "f1713b"
+
+    def apart() -> tuple:
+        """Shooter and target six squares apart, so a line has a middle."""
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref="drv")
+        foe = sorted(cast.enemies())[0]
+        here = must(world.get(me, Position), "the caster has a position").square
+        far = (here[0] + 6, here[1])
+        world.grid.lift(foe)
+        must(world.get(foe, Position), "the enemy has a position").square = far
+        world.grid.place(foe, frozenset({far}))
+        between = [sq for sq in _line(here, far) if sq not in (here, far)]
+        return world, me, cast, foe, far, between
+
+    _, _, cast, _, far, between = apart()
+    out.that(len(between) >= 3,
+             "premise: there are squares between the two, so a wall can"
+             " stand in the line rather than on either of them -- a"
+             " shooter adjacent to its target has no middle and the"
+             " through-it arm cannot be posed at all",
+             f"{len(between)} squares between")
+
+    def hindered(where: str, side: str = "any") -> tuple[int, bool]:
+        """How much worse the shot gets with a penalising zone there.
+
+        Returns the delta and whether the zone took the penalty at all,
+        so each board is built **once**: the first draft called this
+        inside both the condition and the evidence string of every arm,
+        which built six boards and printed one inner assertion five
+        times.
+        """
+        w2, me2, c2, foe2, far2, mid2 = apart()
+        shot = {"attacker": me2, "target": foe2}
+        before = situational_attack(w2, me2, foe2, "mba", shot)
+        picked = ([far2] if where == "target"
+                  else [mid2[len(mid2) // 2]] if where == "between"
+                  else [(w2.grid.width - 2, w2.grid.height - 2)])
+        zid = c2.zone(picked, label="drv wall", until=When.ENCOUNTER)
+        took = c2.penalty_into(zid, 2, side=side)
+        return situational_attack(w2, me2, foe2, "mba", shot) - before, took
+
+    on_it, laid = hindered("target")
+    out.that(laid,
+             "the zone takes the penalty, which is what the three arms"
+             " below are measuring",
+             f"{laid}")
+    out.that(on_it == -2,
+             "a creature standing IN the region is harder to hit by the"
+             " printed 2",
+             f"{on_it}")
+    beyond, _ = hindered("between")
+    out.that(beyond == -2,
+             "and so is one on the other side of it -- *'on the other"
+             " side'* is the traced line crossing the squares, which is"
+             " the half this card is distinctive for and the half every"
+             " `_in` verb misses",
+             f"{beyond}")
+    away, _ = hindered("elsewhere")
+    out.that(away == 0,
+             "while a region nowhere near the shot costs nothing, which"
+             " is the arm that makes the two above about the geometry",
+             f"{away}")
+
+    # -- a target too big to stand on one square ----------------------------
+    # **The membership test is not what the line test already does, and a
+    # plant proved it the wrong way round first.** Dropping the membership
+    # branch left all ten arms green, because the traced line ENDS on the
+    # target's square -- so for a Medium creature standing in the region
+    # the line arm catches it anyway and the branch looks dead.
+    #
+    # It is live for a creature wider than one square. The line is traced
+    # between one corner each -- `min(here)` to `min(there)` -- so a Large
+    # target with its near corner outside the region and its far corner
+    # inside is *in the wall* by the card's words and off the traced line
+    # by the geometry. That is the arm below, and with it the plant goes
+    # red where it used to pass.
+    w4, me4, c4, foe4, far4, _mid = apart()
+    big = must(w4.get(foe4, Position), "the enemy has a position")
+    big.size = Size.LARGE
+    # `movement.place` takes one origin square and derives the footprint
+    # from `Position.size`, so the size is set first and the four squares
+    # are its doing, not a hand-written set -- which is also what a
+    # Large creature on a real board gets.
+    _place(w4, foe4, far4)
+    body = _squares(w4, foe4)
+    corner = max(body)
+    out.that(len(body) == 4 and corner != min(body),
+             "premise: the enemy is Large, so it stands on four squares"
+             " and its far corner is not the one the line is traced to",
+             f"{sorted(body)}, line ends at {min(body)}")
+    shot4 = {"attacker": me4, "target": foe4}
+    was4 = situational_attack(w4, me4, foe4, "mba", shot4)
+    zid4 = c4.zone([corner], label="drv corner", until=When.ENCOUNTER)
+    c4.penalty_into(zid4, 2)
+    now4 = situational_attack(w4, me4, foe4, "mba", shot4)
+    out.that(now4 - was4 == -2,
+             "and a region covering ONLY that far corner still hinders"
+             " the shot -- the creature is inside the wall, which is the"
+             " card's own first clause, and the traced line never enters"
+             " the square. This is the arm that makes the membership test"
+             " something other than a slower spelling of the line test",
+             f"{was4} -> {now4}")
+
+    # -- whose shot it spoils -----------------------------------------------
+    # `f1713b` prints *"**enemies** take a -2 penalty"*, so the caster's
+    # own party shoots through its own wall unhindered. Both arms, because
+    # the default is the other one and a row that forgets the keyword is
+    # wider than print -- which is what this row did for one commit.
+    mine, _ = hindered("target", side="enemy")
+    out.that(mine == 0,
+             "a zone penalising ENEMIES does not spoil its own side's"
+             " shot, even with the target standing in it",
+             f"{mine}")
+    anyones, _ = hindered("target", side="any")
+    out.that(anyones == -2,
+             "while the same zone laid for `any` does -- stated beside it,"
+             " because an arm that only checked `enemy` would pass on a"
+             " reader that ignored the keyword altogether",
+             f"{anyones}")
+
+    # -- an aura is refused -------------------------------------------------
+    out.that(not cast.penalty_into(cast.my_aura() or -1, 2),
+             "an aura is refused: it follows its owner and a penalty"
+             " hung on nothing would read as laid",
+             "refused")
+
+    # -- the row itself -----------------------------------------------------
+    from combat_engine.engine.dsl import REGISTRY
+
+    w3, me3, _ = _board(ROW, 1)
+    standing = {e for e, _z in w3.each(Zone)}
+    REGISTRY[ROW].body(Cast(world=w3, me=me3, ref=ROW))
+    walls = [z for e, z in w3.each(Zone) if e not in standing]
+    out.that(walls and any(z.attack_penalty == 2
+                           and z.penalty_for == "enemy" for z in walls),
+             f"{ROW} lays its wall carrying the penalty, so an enemy that"
+             " arrives after the wall does is hindered too -- the loss"
+             " the per-enemy shape could not close",
+             f"{[(z.label, z.attack_penalty, z.penalty_for) for z in walls]}")
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+    del far
+
+
 def a_standing_wall_is_reshaped_around_one_square(out: Result) -> None:
     """*"Reshape one existing wall effect that you cast. At least one
     square of the wall must remain stationary"* -- `i526p1`. #1462.
@@ -73759,6 +73945,109 @@ def a_creature_takes_a_different_stat_block(out: Result) -> None:
     out.that(not REGISTRY["i3364p1"].unfinished,
              "so the row carries no marker",
              f"{REGISTRY['i3364p1'].unfinished}")
+
+    # -- a kill traded for a substitution -----------------------------------
+    # `m5787a0`: *"when m5787 would kill a creature with psychic damage,
+    # she can choose not to kill that creature, and instead the creature
+    # permanently becomes"* one of three blocks. Declared on
+    # `DamageRolled` rather than `Dropped`, because *"would kill"* is a
+    # predicate on a number while the hit points are still there. #1464.
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.types import DamageType
+
+    THRALL = "m5789"
+
+    def psychic(amount: int, dtype: DamageType = DamageType.PSYCHIC) -> tuple:
+        """Her trait armed, and a blow of `amount` at a victim on 6 hp."""
+        world, me, _ = _board("m5787a0", 1)
+        cast = Cast(world=world, me=me, ref="m5787a0")
+        REGISTRY["m5787a0"].body(cast)
+        prey = sorted(cast.enemies())[0]
+        hurt = must(world.get(prey, Health), "the victim has hit points")
+        hurt.hp = 6
+        ident = must(world.get(prey, Ident), "the victim has an ident").ref
+        ev = DamageRolled(source=me, target=prey, amount=amount,
+                          dtype=dtype, detail="drv")
+        world.bus.emit(ev)
+        # **`Health` is re-read AFTER the emit, and a plant proved it has
+        # to be.** `transform` *replaces* the component -- `world.add` with
+        # the substituted block's -- so the object taken before the blow
+        # is the old one and still reads 6 whatever the row did. Dropping
+        # the row's hit-point restore left this arm green until the read
+        # moved here.
+        return world, prey, ident, ev, must(
+            world.get(prey, Health), "the victim still has hit points")
+
+    # **A blow that would kill.** 9 against 6 hit points.
+    w5, prey, was5, ev5, hurt5 = psychic(9)
+    out.that(ev5.cancelled,
+             "a psychic blow that would kill is REFUSED -- `resolve`"
+             " returns 0 damage for a cancelled `DamageRolled`, which is"
+             " what *'can choose not to kill that creature'* is",
+             f"{ev5.cancelled}")
+    now5 = must(w5.get(prey, Ident), "an ident").ref
+    out.that(now5 == THRALL and now5 != was5,
+             "and the creature has the printed block instead",
+             f"{was5} -> {now5}")
+    out.that(hurt5.hp == 6,
+             "with its hit points where they were -- *'the creature does"
+             " not regain hit points when this change occurs'*, and"
+             " `transform` installs the new block's `Health` at FULL, so"
+             " this is the one thing the row puts back rather than asks"
+             " for",
+             f"{hurt5.hp}/{hurt5.max_hp}")
+    out.that(0 < hurt5.hp <= hurt5.max_hp,
+             "and inside the new maximum, which is what the clamp is for:"
+             " a victim on more hit points than the substituted block has"
+             " would otherwise stand above its own total",
+             f"{hurt5.hp}/{hurt5.max_hp}")
+
+    # -- the three negatives, each failing one clause of the predicate ------
+    w6, prey6, was6, ev6, _ = psychic(3)
+    out.that(not ev6.cancelled
+             and must(w6.get(prey6, Ident), "an ident").ref == was6,
+             "a psychic blow that would NOT kill is left alone -- 3"
+             " against 6 hit points, and the creature keeps its own"
+             " block",
+             f"{ev6.cancelled}, {must(w6.get(prey6, Ident), 'an ident').ref}")
+    w7, prey7, was7, ev7, _ = psychic(9, DamageType.NECROTIC)
+    out.that(not ev7.cancelled
+             and must(w7.get(prey7, Ident), "an ident").ref == was7,
+             "and a killing blow of the WRONG type is left alone too --"
+             " the card says psychic, and a predicate missing that clause"
+             " would turn every creature she kills",
+             f"{ev7.cancelled}, {must(w7.get(prey7, Ident), 'an ident').ref}")
+    w8, me8, _ = _board("m5787a0", 1)
+    c8 = Cast(world=w8, me=me8, ref="m5787a0")
+    REGISTRY["m5787a0"].body(c8)
+    prey8 = sorted(c8.enemies())[0]
+    # **Somebody genuinely else**, asserted below rather than assumed:
+    # the first draft fell back to `me8` when `c8.allies()` came back
+    # empty, so the arm emitted HER blow and read as a broken row.
+    others = [e for e in sorted(c8.enemies()) + sorted(c8.allies())
+              if e not in (me8, prey8)]
+    other = others[0] if others else me8
+    was8 = must(w8.get(prey8, Ident), "an ident").ref
+    must(w8.get(prey8, Health), "hit points").hp = 6
+    out.that(other not in (me8, prey8),
+             "premise: the blow below comes from a third creature -- not"
+             " her, and not the victim",
+             f"struck by {other}, she is {me8}, the victim is {prey8}")
+    ev8 = DamageRolled(source=other, target=prey8, amount=9,
+                       dtype=DamageType.PSYCHIC, detail="drv")
+    w8.bus.emit(ev8)
+    out.that(not ev8.cancelled
+             and must(w8.get(prey8, Ident), "an ident").ref == was8,
+             "and SOMEBODY ELSE's killing psychic blow is left alone --"
+             " *'when m5787 would kill'*, so the watch reads `ev.source`"
+             " and not merely the type. Three negatives, one per clause,"
+             " because a predicate of three cannot be tested by one",
+             f"{ev8.cancelled}")
+
+    out.that(not REGISTRY["m5787a0"].unfinished,
+             "and `m5787a0` carries no marker: its note named"
+             " `c.transform(into=)`, which exists now",
+             f"{REGISTRY['m5787a0'].unfinished}")
 
 
 def the_hexblade_boon_taken_from_a_new_moment(out: Result) -> None:
@@ -126695,6 +126984,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_zone_hinders_whoever_aims_through_it,
         a_standing_wall_is_reshaped_around_one_square,
         a_rod_pays_the_dark_pact_tally,
         allies_cross_rough_ground_on_a_granted_shift,
@@ -127097,6 +127387,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "aimed_through": (
+        a_zone_hinders_whoever_aims_through_it,
+        "a zone hinders whoever aims into or through it, the mirror of"
+        " the _in family (#1463)",
     ),
     "reshaped_wall": (
         a_standing_wall_is_reshaped_around_one_square,

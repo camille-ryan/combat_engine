@@ -464,6 +464,12 @@ CATEGORIES: dict[str, dict] = {
                 "amount_for", "attack_mod", "bonus", "boost_check",
                 "boost_roll", "change_amount", "change_dice", "dice_for",
                 "enhancement", "grants_in", "penalty",
+                # `penalty_into` beside `penalty` and `grants_in` rather
+                # than with the zone verbs: it is a number on an attack
+                # roll, and it is the MIRROR of `grants_in` -- that one
+                # lays a zone's modifier on whoever stands in it, this
+                # one on whoever aims into or through it.
+                "penalty_into",
                 # `pick_roll`/`picked` beside `change_dice`/`dice_for` and
                 # NOT with the rerolls below: those throw a fresh die, and
                 # these two are the write/read pair saying what a body's own

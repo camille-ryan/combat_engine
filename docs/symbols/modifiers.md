@@ -29,6 +29,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - A zone that carries a modifier for as long as you stand in it.
 - `c.penalty(self, what: 'str | Defense', value: 'int', **kw: 'Any') -> 'Effect | None'`
   - A negative modifier. **It takes no `kind`, and that is the rule.**
+- `c.penalty_into(self, zone: 'int', amount: 'int' = 2, *, side: 'str' = 'any') -> 'bool'`
+  - A penalty on whoever aims into or through a region. `f1713b`.
 - `c.pick_roll(self, ref: 'str', face: 'int', *, on: 'int | None' = None, until: 'When' = <When.EOTNT: "end of target's next turn">) -> 'Effect | None'`
   - Say what a named row's next die **comes up**.
 - `c.picked(self, ref: 'str' = '') -> 'int'`

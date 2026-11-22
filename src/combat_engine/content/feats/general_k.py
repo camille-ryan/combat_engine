@@ -110,10 +110,8 @@ from combat_engine.engine.query import (
     allies,
     distance_between,
     enemies,
-    squares,
     team,
 )
-from combat_engine.engine.zones import Zone
 
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
@@ -1756,8 +1754,7 @@ _granted("f1713", "f1713b", swap=Swap(16, utility=True))
 
 @power("f1713b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Wall(8, 20), target=NO_TARGET,
-       keywords=[Keyword.ARCANE, Keyword.CONJURATION],
-       dropped=("c.penalty_into(zone=)",))
+       keywords=[Keyword.ARCANE, Keyword.CONJURATION])
 def f1713b(c: Cast) -> None:
     """A wall that herds rather than blocks: `solid=False` because a
     creature may walk into it, `difficult=True` for the extra cost to
@@ -1845,40 +1842,31 @@ def f1713b(c: Cast) -> None:
                      sustain=MINOR,
                      height=4,)
 
-    def _square_of(who: int) -> Any:
-        """One square of a creature, stable: a big creature holds several."""
-        held = sorted(squares(c.world, who))
-        return held[0] if held else None
-
-    def behind_it(ctx: dict[str, Any]) -> bool:
-        """Is the thing being shot at inside the wall, or past it?
-
-        `get` rather than `need`: the wall carries `Health`, so it can be
-        destroyed while this modifier is still standing, and the penalty
-        then asks about a zone that is gone.
-        """
-        zone = c.world.get(barrier, Zone)
-        if zone is None:
-            return False
-        victim, shooter = ctx.get("target"), ctx.get("attacker")
-        if victim is None or shooter is None:
-            return False
-        if squares(c.world, victim) & zone.squares:
-            return True
-        here, there = _square_of(shooter), _square_of(victim)
-        if here is None or there is None:
-            return False
-        return any(step in zone.squares for step in c.line(here, there))
-
-    # `ENCOUNTER` rather than the wall's own `EONT`, which `m238a3` also
-    # does and for this reason: the wall is sustainable, so a modifier
-    # clocked to the wall's printed duration would lapse under the first
-    # sustain while the wall stood. The gate *is* the duration -- it asks
-    # for the zone every roll and a zone that has ended or been destroyed
-    # answers False -- so a longer hold cannot outlive the sentence.
-    for foe in c.enemies():
-        c.penalty("attack", 2, on=foe, until=When.ENCOUNTER,
-                  when=behind_it, label="through the wall")
+    # **Held on the ZONE now, which closes the one loss the per-enemy
+    # shape had.** This was `c.penalty` in a loop over `c.enemies()` --
+    # the `m238a3` shape -- and the gate above was its geometry. That
+    # answered a target walking into the wall and a wall destroyed early,
+    # because it asked at roll time; what it could not answer was an
+    # enemy that **joins the board after the wall goes up**, since it was
+    # not in `c.enemies()` when the loop ran.
+    #
+    # `c.penalty_into` is the mirror of the `_in` family: one modifier on
+    # the region, landing on whoever aims into or through it, with no
+    # horizon at all. `resolve._aimed_through` does the geometry the
+    # closure above used to -- the target standing in the squares, or the
+    # traced line crossing them -- so the closure goes with it.
+    #
+    # No duration to choose either, which the old comment had to reason
+    # about: the zone *is* the duration, so a wall that ends or is
+    # destroyed takes the penalty with it. #1463.
+    # **`side="enemy"`, which the printed line says and the default does
+    # not.** The card is *"**enemies** take a -2 penalty to attack rolls
+    # against targets inside or on the other side of the wall"*, so the
+    # caster's own party shoots through its wall unhindered. The
+    # per-enemy loop this replaced got that for free by iterating
+    # `c.enemies()`; a zone-held modifier has to be told, and landing it
+    # on `"any"` was the one thing the move made WIDER than print.
+    c.penalty_into(barrier, 2, side="enemy")
 
     def herd(ev: Any) -> None:
         if ev.ghost or team(c.world, ev.actor) == team(c.world, c.me):

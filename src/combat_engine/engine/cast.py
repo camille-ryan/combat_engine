@@ -21540,6 +21540,49 @@ class Cast:
             side,
         )
 
+    def penalty_into(self, zone: int, amount: int = 2, *,
+                     side: str = "any") -> bool:
+        """A penalty on whoever aims into or through a region. `f1713b`.
+
+        *"-2 to attack rolls against a creature inside the wall or on the
+        other side of it."*
+
+        **The mirror of the `_in` family**, and the reason it is a
+        separate verb rather than one of them: `c.cover_in`,
+        `c.grants_in`, `c.conceal_in` and the rest hold a modifier on the
+        zone and lay it on the creatures **inside**, through
+        `_while_inside`. This one is about the **shooter**, who may be
+        anywhere.
+
+        **Held on the zone, not on each enemy**, which is the loss
+        `f1713b`'s note measured: a gated `c.penalty` laid on every enemy
+        -- the shape `m238a3` accepts -- misses one that joins the board
+        after the wall goes up, because it was not in `c.enemies()` when
+        the loop ran. A field on the `Zone` has no such horizon.
+
+        **Not `c.cover_in`**, which is the near-miss that row rejected in
+        three measured ways: cover is taken as the *max* against traced
+        cover where a printed penalty adds, `cover_waived` zeroes it so
+        an ignore-cover row walks past a penalty this card gives no leave
+        to waive, and it makes the occupant *have cover*, which other
+        cards read as a target condition and pays out sentences this one
+        does not print.
+
+        `side="enemy"` narrows it to the zone owner's enemies; the
+        default hinders everybody, which is what a wall of light prints.
+
+        Returns False for an aura or a zone with no squares, so a row
+        cannot hang a penalty on nothing. #1463.
+        """
+        from .zones import Zone as _Zone
+
+        z = self.world.get(zone, _Zone)
+        if z is None or z.aura is not None or not z.squares or amount <= 0:
+            return False
+        z.attack_penalty = max(z.attack_penalty, amount)
+        z.penalty_for = side
+        return True
+
     def no_conceal_in(
         self, zone: int, *, side: str = "any", total: bool = False
     ) -> None:
