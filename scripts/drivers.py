@@ -87244,6 +87244,124 @@ def a_basic_swung_with_the_off_hand(out: Result) -> None:
              f"{REGISTRY[ROW].unfinished}")
 
 
+def a_multiclass_swap_pays_power_points(out: Result) -> None:
+    """Two multiclass swap feats move power points, by the same printed
+    table read from opposite sides.
+
+    * `f2698`: *"you gain a number of power points based on the level of
+      the at-will attack power: level 1-10, 2 power points; level 11-20,
+      4 power points; and level 21-30, 6 power points"* -- and the
+      at-will is the one coming **in**.
+    * `f2732`: *"you lose a number of power points"*, same bands, and the
+      at-will is the one going **out**.
+
+    **`Swap.points` is a SIGN and not an amount**, which is the whole
+    design: the amount is a band of the at-will's level and the at-will
+    is a different side of the trade on each card, so
+    `chargen.power_swap` -- which knows both sides -- is the one place
+    that can price it. A literal amount on the descriptor would be a
+    second copy of the band table.
+
+    `spawn` adds the delta to the pool **and to its maximum**: the card
+    says the character gains points, not that it starts one day with
+    extra, so a rest refills to the larger number. Floored at zero so a
+    class with no points of its own cannot end up owing them.
+
+    **Two plants here cannot be reddened and the reason is measured
+    rather than argued.** The highest-level character at-will attack
+    power in this corpus is level 9 -- there are none above 10 outside
+    the monster rows -- so every trade these two cards make lands in the
+    first printed band. Flattening the band arithmetic to a constant
+    gives the same answer, and so does reading it off the other side of
+    the trade: both sides are inside band one. The arithmetic is written
+    for the printed table and bands two and three are exercised by
+    nothing.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Usage
+
+    GAIN, LOSE = "f2698", "f2732"
+
+    # -- the descriptors ----------------------------------------------------
+    out.that(REGISTRY[GAIN].swap is not None
+             and REGISTRY[GAIN].swap.points == 1,
+             f"{GAIN} declares a GAIN as a sign",
+             f"{REGISTRY[GAIN].swap}")
+    out.that(REGISTRY[LOSE].swap is not None
+             and REGISTRY[LOSE].swap.points == -1,
+             f"{LOSE} declares a LOSS as a sign, which is the same"
+             " printed table pointed the other way",
+             f"{REGISTRY[LOSE].swap}")
+
+    # -- the band, off the AT-WILL's level ----------------------------------
+    def traded(feat: str, hand: list[str], cls: str, other: str) -> dict:
+        said: set[str] = set()
+        chargen.power_swap(list(hand), [feat], cls=cls, level=10,
+                           multiclass=other, record=said)
+        return {
+            c.split(":", 1)[0]: c.rsplit(":", 1)[1]
+            for c in said
+        } | {"all": sorted(said)}
+
+    enc = [p.ref for p in REGISTRY.values()
+           if p.cls == "fighter" and p.usage is Usage.ENCOUNTER
+           and p.attack is not None and (p.level or 0) >= 1][:2]
+    out.that(len(enc) >= 1,
+             "premise: the hand has an encounter attack for the gaining"
+             " card to trade away",
+             f"{enc}")
+    got = traded(GAIN, enc, "fighter", "ardent")
+    out.that(got.get("points") == "2",
+             f"{GAIN} records +2 at level 10 -- the first printed band,"
+             " 'level 1-10, 2 power points', read off the INCOMING"
+             " at-will",
+             f"{got['all']}")
+
+    aw = [p.ref for p in REGISTRY.values()
+          if p.cls == "ardent" and p.usage is Usage.AT_WILL
+          and p.attack is not None][:2]
+    out.that(len(aw) >= 1,
+             "premise: the hand has an augmentable at-will for the losing"
+             " card to trade away",
+             f"{aw}")
+    lost = traded(LOSE, aw, "ardent", "fighter")
+    out.that(lost.get("points") == "-2",
+             f"{LOSE} records -2 from the same band, read off the"
+             " OUTGOING at-will -- the opposite side of the trade, which"
+             " is why the descriptor carries a sign",
+             f"{lost['all']}")
+
+    # -- only the first band is reachable, and that is measured ------------
+    tops = max((p.level or 0) for p in REGISTRY.values()
+               if p.usage is Usage.AT_WILL and p.attack is not None
+               and p.cls and not p.ref.startswith("m"))
+    out.that(tops <= 10,
+             "**only the FIRST printed band is reachable in this corpus,**"
+             " and that is why the two arms above both read 2: the"
+             f" highest-level character at-will attack power is {tops},"
+             " so 'level 11-20, 4' and 'level 21-30, 6' are written from"
+             " the page and exercised by nothing. A plant flattening the"
+             " band to a constant cannot be reddened, and nor can one"
+             " reading it off the other side of the trade -- both sides"
+             " are inside band one",
+             f"highest at-will level {tops}")
+
+    # -- a row with no points clause records none ---------------------------
+    plain = traded("f2697", aw, "ardent", "fighter")
+    out.that("points" not in plain,
+             "**and the third card of the family records nothing**:"
+             " `f2697` prints no points clause and carries `points=0`,"
+             " so the record is absent rather than zero",
+             f"{plain['all']}")
+
+    for ref in (GAIN, LOSE):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_tome_contains_two_chosen_dailies(out: Result) -> None:
     """*"This tome contains two wizard daily cold powers. Both powers must
     be of a level equal to or lower than that of the tome. Choose these
@@ -91494,10 +91612,12 @@ def a_multiclass_swap_limits_both_halves(out: Result) -> None:
              f"{getattr(REGISTRY['f2697'], 'dropped', ())}")
     for feat in ("f2698", "f2732"):
         left = tuple(getattr(REGISTRY[feat], "dropped", ()) or ())
-        out.that(left == ("chargen.power_points_for_swap()",),
-                 f"{feat} is down to the points alone -- the trade is"
-                 " written and the power points are a separate half, so"
-                 " the marker names one gap rather than two",
+        out.that(not left,
+                 f"{feat} carries no marker: the trade was written first"
+                 " and the power points are written now --"
+                 " `Swap.points` as a sign, priced by"
+                 " `chargen.power_swap` off the at-will's level band."
+                 " See `drivers.a_multiclass_swap_pays_power_points`",
                  f"{left}")
 
 
@@ -122870,6 +122990,11 @@ DRIVERS = {
         the_light_silvers_only_the_weapons_it_lent,
         "`i2478p1` silvers weapons inside its light and strips only the "
         "ones it lent the word to (#1341)",
+    ),
+    "swap_pays_power_points": (
+        a_multiclass_swap_pays_power_points,
+        "`f2698` gains and `f2732` loses power points by the at-will's "
+        "printed level band (#1112)",
     ),
     "tome_contains_two_dailies": (
         a_tome_contains_two_chosen_dailies,

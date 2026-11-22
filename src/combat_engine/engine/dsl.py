@@ -1728,6 +1728,23 @@ class Swap:
     #: declaring either would have drawn the wrong kind of power in --
     #: quietly, since both halves are individually legal.
     incoming_usage: Usage | None = None
+    #: **Power points the trade costs or pays, as a SIGN.** `+1` gains
+    #: them, `-1` spends them, `0` is every other row.
+    #:
+    #: Two cards print it and print the same table: *"you gain a number
+    #: of power points based on the level of the at-will attack power:
+    #: level 1-10, 2 power points; level 11-20, 4 power points; and
+    #: level 21-30, 6 power points"* -- `f2698`, which gains, and
+    #: `f2732`, which loses by the same bands.
+    #:
+    #: A sign rather than an amount, because the amount is a **band of
+    #: the at-will's level** and the at-will is a different side of the
+    #: trade on each card: `f2698` brings one in and `f2732` sends one
+    #: out. `chargen.power_swap` knows which side is `AT_WILL` from
+    #: `usage` and `incoming_usage`, so it is the one place that can
+    #: price it -- and a second copy of the band table is what a literal
+    #: amount here would become.
+    points: int = 0
     #: Must the **outgoing** card be augmentable? And the **incoming**
     #: one? Two flags, because the three cards that ask differ on which
     #: half -- read off the printed sentences rather than assumed:

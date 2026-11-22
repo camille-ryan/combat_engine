@@ -6890,6 +6890,22 @@ def power_swap(powers: list[str], feats: list[str], *,
             # next rest would have nothing to swap forward to. Measured
             # -- the second rest raised.
             record.add(f"swapped:{ref}:{gone}+{took}")
+            # **The power points the trade costs or pays.** `Swap.points`
+            # is a sign and the amount is a band of the **at-will's**
+            # level -- *"level 1-10, 2 power points; level 11-20, 4;
+            # and level 21-30, 6"*, printed identically on both cards.
+            #
+            # Which side is the at-will differs per card: `f2698` brings
+            # one in and `f2732` sends one out, so this is the only place
+            # that can price it. `#1112`.
+            if trade.points:
+                at_will = (
+                    took if trade.incoming_usage is Usage.AT_WILL else gone
+                )
+                row = REGISTRY.get(at_will)
+                band = 2 * ((min(max(row.level if row else 1, 1), 30) - 1)
+                            // 10 + 1)
+                record.add(f"points:{ref}:{trade.points * band}")
     return out
 
 
@@ -8798,8 +8814,24 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
                 _Mod(what=f"skill:{skill}", value=BACKGROUND_BONUS,
                      kind="background", label=who.background)
             )
-    if line.power_points:
-        world.add(eid, PowerPoints(points=line.power_points, maximum=line.power_points))
+    # **What a multiclass swap paid or cost.** `power_swap` records
+    # `points:<feat>:<delta>` for the two cards that print one --
+    # `f2698` gains by the at-will's level band, `f2732` loses by the
+    # same bands -- and this is where the pool exists to adjust.
+    #
+    # Added to the **maximum** as well as the pool: the card says the
+    # character *gains* points, not that it starts a day with extra, so
+    # a rest must refill to the larger number. Floored at zero, because
+    # a class with no points of its own that somehow took `f2732` must
+    # not end up owing them.
+    traded = sum(
+        int(c.rsplit(":", 1)[1])
+        for c in swapped_in if c.startswith("points:")
+    )
+    pool = line.power_points + traded
+    if line.power_points or traded:
+        world.add(eid, PowerPoints(points=max(pool, 0),
+                                   maximum=max(pool, 0)))
     # Gear last, so it has a `Gear` and a `Mods` to write into. Its own
     # stream again -- dealing treasure must not move the fight's dice.
     # **The pinned kit if the caller brought one, dealt here if not.** Exactly

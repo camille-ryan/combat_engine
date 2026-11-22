@@ -779,14 +779,25 @@ def f2697(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        swap=Swap(1, Usage.ENCOUNTER, pool="multiclass",
                  incoming_usage=Usage.AT_WILL,
-                 incoming_augmentable=True, ceiling=True),
-       dropped=("chargen.power_points_for_swap()",))
+                 incoming_augmentable=True, ceiling=True,
+                 points=1))
 def f2698(c: Cast) -> None:
     """Trades an encounter attack power for an augmentable at-will, and
     hands out points by level band.
 
-    **The trade is written. The points are the one half still owed**, and
-    the marker is down to that alone.
+    **Both halves are written now.** `Swap.points=1` is the gain and
+    the amount is a band of the **incoming** at-will's level -- *"level
+    1-10, 2 power points; level 11-20, 4; and level 21-30, 6"*.
+
+    A **sign** on the descriptor rather than an amount, because the
+    at-will is a different side of the trade on this card and on
+    `f2732`: `chargen.power_swap` knows which side is `AT_WILL` and is
+    the one place that can price it, so a literal amount here would be a
+    second copy of the band table.
+
+    `spawn` adds the delta to `PowerPoints` and to its **maximum**: the
+    card says the character *gains* points, not that it starts one day
+    with extra, so a rest refills to the larger number.
 
     What used to stand here described `Swap` filtering both halves through
     one `trade.usage` -- *"one field, both sides"* -- and this card takes
@@ -833,14 +844,17 @@ def f2698(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        swap=Swap(1, Usage.AT_WILL, pool="multiclass",
                  incoming_usage=Usage.ENCOUNTER,
-                 augmentable=True, ceiling=True),
-       dropped=("chargen.power_points_for_swap()",))
+                 augmentable=True, ceiling=True,
+                 points=-1))
 def f2732(c: Cast) -> None:
     """The same trade as `f2698` in the other direction, and it spends
     points rather than granting them.
 
-    The trade is written and the points are what is owed, the same split
-    `f2698` has. A paragraph here used to say both of `f2697`'s extra gaps
+    Both halves are written now, `points=-1` being the loss: the same
+    printed band table as `f2698` read off the **outgoing** at-will,
+    which is why the descriptor carries a sign and not an amount.
+    `spawn` floors the pool at zero, so a class with no points of its
+    own cannot end up owing them. A paragraph here used to say both of `f2697`'s extra gaps
     applied at once -- augmentability off a header, and one `trade.usage`
     for two halves -- and both are fields now. Measured on this row's own
     descriptor, in its own direction: an ardent's augmentable at-will out,
