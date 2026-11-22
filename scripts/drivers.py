@@ -72792,6 +72792,228 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_dose_of_poison_goes_on_a_weapon(out: Result) -> None:
+    """The seven heroic doses, the gloves that hold one, and `f1307`'s
+    clause that smears one instead of moving. #1452.
+
+    **Three things had to exist together and the two rows said so.**
+    `i2061p2`'s note: *"the poison table is imported ... Measured: 0 of
+    them are declared, so there is no body for `c.apply_poison`'s rider to
+    borrow, and nothing records which of the 19 is in the gloves."* So:
+    rows for the doses, a field to hold one, and a verb to read it.
+
+    **Seven of nineteen, and the test is delivery.** Four heroic doses
+    cannot be put on a weapon at all -- *"only by way of food or drink"*,
+    *"only when it is inhaled"* -- and the other eight are out of band.
+    `content/diseases` sets the rule this follows: a row nothing can give
+    a character is worse than a gap, because the audit cannot tell a wrong
+    row from an unreachable one. The four are asserted absent below, so
+    "declare the rest" cannot quietly happen later.
+
+    **Two clause shapes, and the file keeps them a square foot apart.**
+    *"immobilized instead of slowed"* **replaces** -- the chain ends the
+    standing hold and re-lays it carrying the ongoing damage forward --
+    where *"the target is also dominated"* **adds**, which is `c.worsen`
+    and keeps one saving throw against the whole printed sentence. Both
+    are asserted, because a row using the wrong one reads plausibly.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Health, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, get, use
+    from combat_engine.engine.query import is_
+    from combat_engine.engine.types import Condition
+
+    DECLARED = ("x4_1", "x4_2", "x4_3", "x4_4", "x4_6", "x4_7", "x4_15")
+    # Heroic, and deliberately NOT declared: each is delivered by food,
+    # drink or breath, with its attack minutes or a round later, so there
+    # is no moment inside a fight for a body to act in.
+    UNDELIVERABLE = ("x4_5", "x4_14", "x4_18", "x4_19")
+
+    # -- the corpus ---------------------------------------------------------
+    out.that(all(r in REGISTRY for r in DECLARED),
+             "the seven weapon-deliverable heroic doses are declared",
+             f"{[r for r in DECLARED if r not in REGISTRY] or 'all seven'}")
+    out.that(not any(r in REGISTRY for r in UNDELIVERABLE),
+             "and the four that cannot go on a weapon are NOT -- ingested"
+             " or inhaled, attacking minutes later, so a board could never"
+             " pose one. `content/diseases` sets this rule and the"
+             " assertion is what stops them being added later by habit",
+             f"{[r for r in UNDELIVERABLE if r in REGISTRY] or 'none declared'}")
+    out.that(all(not REGISTRY[r].unfinished for r in DECLARED),
+             "and none of the seven carries a marker",
+             f"{[(r, REGISTRY[r].unfinished) for r in DECLARED if REGISTRY[r].unfinished]}")
+
+    def bitten(dose: str) -> tuple:
+        """Run one dose against a victim that survives the blow."""
+        world, me, _ = _board("i2061p2", 1)
+        cast = Cast(world=world, me=me, ref="drv")
+        foe = sorted(cast.enemies())[0]
+        hurt = must(world.get(foe, Health), "the enemy has hit points")
+        # **400 hit points, because a loaded 20 killed the victim and took
+        # its holds with it** -- the first draft read an empty condition
+        # list and looked like a poison that did nothing. Measured.
+        hurt.max_hp = hurt.hp = 400
+        world.rng.loaded = 20
+        REGISTRY[dose].body(
+            _aimed(Cast(world=world, me=me, ref=dose), foe))
+        return world, foe
+
+    def _aimed(cast: Cast, foe: int) -> Cast:
+        cast.target = foe
+        return cast
+
+    def conditions(world, foe: int) -> list[str]:   # noqa: ANN001
+        return sorted(x.value for x in Condition if is_(world, foe, x))
+
+    def shaken(world, foe: int) -> None:            # noqa: ANN001
+        """One failed saving throw against everything standing."""
+        world.rng.loaded = 1
+        for eff in list(world.effects.of(foe)):
+            if not getattr(eff, "ended", False):
+                world.effects.save(eff)
+
+    # -- the simple card ----------------------------------------------------
+    world, foe = bitten("x4_2")
+    out.that("slowed" in conditions(world, foe),
+             "`x4_2` is the whole card with no escalation: ongoing 5"
+             " poison and slowed, save ends both",
+             f"{conditions(world, foe)}")
+    held = [e for e in world.effects.of(foe) if e.by == "x4_2"]
+    out.that(len(held) == 1,
+             "and it is ONE effect, not two -- 'save ends both' means one"
+             " saving throw, and two effects would let the victim shake"
+             " off half of a thing the page says is one",
+             f"{[e.label for e in held]}")
+
+    # -- replace, and add --------------------------------------------------
+    world, foe = bitten("x4_3")
+    chain = [conditions(world, foe)]
+    for _ in range(2):
+        shaken(world, foe)
+        chain.append(conditions(world, foe))
+    out.that("slowed" in chain[0] and "immobilized" in chain[1]
+             and "stunned" in chain[2],
+             "`x4_3` escalates slowed -> immobilized -> stunned on failed"
+             " saves",
+             f"{chain}")
+    out.that("slowed" not in chain[1] and "immobilized" not in chain[2],
+             "and each step REPLACES the one before -- 'immobilized"
+             " instead of slowed' -- so the victim never carries two of"
+             " them. This is the arm that tells the printed shape from"
+             " `c.worsen`, which would have left both standing",
+             f"step 2 {chain[1]}, step 3 {chain[2]}")
+
+    world, foe = bitten("x4_4")
+    first = conditions(world, foe)
+    shaken(world, foe)
+    second = conditions(world, foe)
+    out.that("weakened" in first and "dominated" in second
+             and "weakened" in second,
+             "`x4_4` ADDS instead: 'the target is also dominated (save"
+             " ends both)', so weakened is still there afterwards --"
+             " the opposite shape to `x4_3` and the reason both are"
+             " asserted",
+             f"{first} -> {second}")
+
+    # -- the gloves ---------------------------------------------------------
+    def gloves(dose: str | None) -> tuple:
+        world2, me, _ = _board("i2061p2", 1)
+        gear = must(world2.get(me, Gear), "the character has gear")
+        gear.doses.clear()
+        gear.vial = ""
+        if dose:
+            gear.doses.append(dose)
+            REGISTRY["i2061p1"].body(Cast(world=world2, me=me, ref="i2061p1"))
+            REGISTRY["i2061p2"].body(Cast(world=world2, me=me, ref="i2061p2"))
+        cast = Cast(world=world2, me=me, ref="mba")
+        foe2 = sorted(cast.enemies())[0]
+        hurt = must(world2.get(foe2, Health), "the enemy has hit points")
+        hurt.max_hp = hurt.hp = 400
+        world2.rng.loaded = 20
+        cast.basic(on=foe2)
+        return gear, [e.label for e in world2.effects.of(foe2)
+                      if e.by and e.by.startswith("x4")]
+
+    gear, landed = gloves("x4_2")
+    out.that(landed == ["x4_2"],
+             "the dose loaded into the gloves goes on the weapon and bites"
+             " the next creature hit with it -- `c.apply_poison` ties the"
+             " coat to that weapon, which its own docstring records the"
+             " cost of not doing",
+             f"{landed}")
+    out.that(gear.vial == "" and "x4_2" not in gear.doses,
+             "and the dose is gone: spent when the coat went on, which is"
+             " what 'doing so consumes that dose' says. Spent on the bite"
+             " instead it would come back whenever the character missed",
+             f"vial {gear.vial!r}, pack {gear.doses}")
+    _, nothing = gloves(None)
+    out.that(not nothing,
+             "while an empty vial coats nothing -- the control that makes"
+             " the line above about the dose rather than about the swing",
+             f"{nothing}")
+
+    # -- f1307's substitution on p971 ---------------------------------------
+    def smeared(*, feat: bool, dose: bool) -> tuple:
+        world3, me, _ = _board("p971", 1)
+        gear3 = must(world3.get(me, Gear), "the character has gear")
+        gear3.doses.clear()
+        gear3.vial = ""
+        if feat:
+            must(world3.get(me, Powers), "powers").known.append("f1307")
+        if dose:
+            gear3.doses.append("x4_2")
+        cast = Cast(world=world3, me=me, ref="drv")
+        foe3 = sorted(cast.enemies())[0]
+        hurt = must(world3.get(foe3, Health), "the enemy has hit points")
+        hurt.max_hp = hurt.hp = 400
+        was = must(world3.get(me, Position), "a position").square
+        world3.rng.loaded = 20
+        use(world3, me, "p971")
+        now = must(world3.get(me, Position), "a position").square
+        return was != now, [e.label for e in world3.effects.of(foe3)
+                            if e.by and e.by.startswith("x4")], list(gear3.doses)
+
+    moved, poisoned, left = smeared(feat=True, dose=True)
+    out.that(poisoned and not moved and not left,
+             "`f1307` on `p971`: with the feat and a dose the character"
+             " smears the poison and does NOT move, and the dose is"
+             " spent. 'Rather than moving' is an exchange, and a row that"
+             " did both would be strictly better than its card",
+             f"moved {moved}, poison {poisoned}, pack {left}")
+    moved2, poisoned2, _ = smeared(feat=True, dose=False)
+    out.that(moved2 and not poisoned2,
+             "with the feat and no dose it moves, which is the printed"
+             " card unchanged",
+             f"moved {moved2}, poison {poisoned2}")
+    moved3, poisoned3, left3 = smeared(feat=False, dose=True)
+    out.that(moved3 and not poisoned3 and left3 == ["x4_2"],
+             "and with a dose but no feat it moves and KEEPS the dose --"
+             " the arm that makes the substitution the feat's rather than"
+             " something the row does for anybody carrying poison",
+             f"moved {moved3}, poison {poisoned3}, pack {left3}")
+
+    # -- an undeclared dose is refused, not silently coated -----------------
+    world4, me4, _ = _board("i2061p2", 1)
+    gear4 = must(world4.get(me4, Gear), "the character has gear")
+    gear4.doses.clear()
+    gear4.vial = "x4_14"          # heroic, printed, deliberately undeclared
+    REGISTRY["i2061p2"].body(Cast(world=world4, me=me4, ref="i2061p2"))
+    out.that(gear4.vial == "x4_14"
+             and not [e for e in world4.effects.of(me4)
+                      if "coated" in (e.label or "")],
+             "a vial holding one of the twelve undeclared doses coats"
+             " nothing and keeps the dose -- `get(dose) is None` is"
+             " checked, because a coat that bites for nothing would spend"
+             " a dose for no effect",
+             f"vial {gear4.vial!r}")
+
+    out.that(get("x4_14") is None,
+             "and that dose really is undeclared, so the arm above is"
+             " about the refusal and not about a typo",
+             f"{get('x4_14')}")
+
+
 def the_spiked_chain_feats_four_clauses(out: Result) -> None:
     """`f1237` pays on four named rows, and `#550` puts each clause in the
     body of the row it names.
@@ -125276,6 +125498,7 @@ DRIVERS = {
         " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
+        a_dose_of_poison_goes_on_a_weapon,
         the_spiked_chain_feats_four_clauses,
         an_infusion_fired_from_the_familiars_square,
         what_the_floor_is_made_of,
@@ -125666,6 +125889,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "poison_dose": (
+        a_dose_of_poison_goes_on_a_weapon,
+        "the seven heroic doses, the gloves that hold one, and f1307's"
+        " smear-instead-of-move (#1452)",
     ),
     "spiked_chain": (
         the_spiked_chain_feats_four_clauses,

@@ -557,24 +557,94 @@ def i1532p2(c: Cast) -> None:
 @power("i2061p1", level=4, cls=ITEM, usage=AT_WILL, action=STANDARD,
        reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
 def i2061p1(c: Cast) -> None:
-    """Loading a dose into the gloves, which happens before a fight."""
+    """*"You store one dose of poison that can be applied to a weapon in
+    these gloves. The gloves can hold only one dose of poison at a
+    time."*
+
+    Loading happens before a fight -- `out_of_combat=True` -- and the
+    body is written anyway, because the **record** is what `i2061p2` reads
+    and a story-layer caller needs somewhere to put it. `c.store_dose`
+    moves the dose out of the pack and puts whatever was loaded back, so
+    "only one dose at a time" is the field's own shape rather than a check
+    here. #1452.
+
+    Only a dose that has a row is offered: a vial holding one of the
+    twelve undeclared doses would make `i2061p2` refuse, so offering it
+    here would be a choice that silently does nothing.
+    """
+    from combat_engine.engine.dsl import get as _get
+
+    pack = [d for d in c.doses() if _get(d) is not None]
+    if not pack:
+        return
+    pick = pack[0] if len(pack) == 1 else c.choose(
+        pack, f"{c.ref}: which dose goes in the gloves")
+    if pick:
+        c.store_dose(pick)
 
 
 @power("i2061p2", level=4, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.stored_dose()",))
+       reach=PERSONAL, target=SELF)
 def i2061p2(c: Cast) -> None:
-    """Re-aimed. `c.apply_poison` coats a weapon now, but it coats it with
-    a rider the row supplies -- and this row supplies none. What it
-    applies is whatever dose i2061p1 loaded, and a dose of poison is not
-    a thing the engine counts: the consumable that would be spent has no
-    identity a second row can reach for.
+    """*"You apply the stored poison to a weapon you're holding; doing so
+    consumes that dose of poison."*
 
-    **Half of that has moved and the marker still stands.** The poison
-    table is imported -- 19 rows in `game.db`, each with a ref -- so the
-    doses are nameable now. Measured: **0** of them are declared, so there
-    is no body for `c.apply_poison`'s rider to borrow, and nothing records
-    which of the 19 is in the gloves. Both halves of that are what
-    `c.stored_dose()` names, and `f1307` waits on the same thing."""
+    **Written, and both halves the old note named have landed.** It said
+    the doses were nameable but *"0 of them are declared, so there is no
+    body for `c.apply_poison`'s rider to borrow, and nothing records which
+    of the 19 is in the gloves"*. `content/poisons` declares the seven
+    heroic doses that can go on a weapon, and `Gear.vial` is the record.
+    #1452.
+
+    `c.apply_poison` coats the weapon and runs the bite on the next hit
+    with **that** weapon -- its own docstring records what the tie cost
+    before it existed, a ranger coating a blade and getting the poison
+    free off a bow.
+
+    **The dose is spent when the coat goes on, not when it bites.** The
+    printed sentence is *"doing so consumes that dose"*, where "doing so"
+    is the applying; a dose spent on the bite instead would come back if
+    the character never connected.
+
+    **An undeclared dose is refused rather than silently coating
+    nothing.** Twelve of the nineteen printed doses have no row -- four
+    heroic ones cannot be put on a weapon at all and eight are out of
+    band -- so a vial holding one of those must not produce a coat that
+    bites for nothing. The dose stays in the vial in that case, which is
+    the honest outcome: nothing was applied.
+    """
+    from combat_engine.engine.dsl import get as _get
+
+    dose = c.stored_dose()
+    if not dose or _get(dose) is None:
+        return
+
+    def bite(ev: Any) -> None:
+        """The dose's own row, against whoever the coated weapon hit.
+
+        **The body is called directly, which is how a row that is not a
+        power is run.** `turns.arm_afflictions` does the same for a
+        disease, and `c.use_power` is wrong here twice over: it refuses
+        outright -- measured, `usable` answers *"not known"* and the lend
+        does not get past it -- and even if it did not, a poison is not
+        something the character *uses*. The dose makes its own attack with
+        its own printed bonus.
+
+        The `Cast` carries the dose's ref so `c.strike` reads the dose's
+        `Attack(printed=)` rather than the character's, and the victim is
+        set as the target because the poison's header target line is
+        `NO_TARGET` -- a bare call would land on nobody.
+        """
+        victim = getattr(ev, "target", None)
+        row = _get(dose)
+        if victim is None or row is None:
+            return
+        shot = Cast(world=c.world, me=c.me, ref=dose)
+        shot.target = victim
+        row.body(shot)
+
+    if c.apply_poison(bite) is not None:
+        c.spend_dose()
 
 
 @power("i2673x1", level=4, cls=ITEM, action=ActionType.NONE,

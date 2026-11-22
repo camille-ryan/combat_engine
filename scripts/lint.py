@@ -776,6 +776,28 @@ def _subjectless_verbs() -> frozenset[str]:
 
     from combat_engine.engine.cast import Cast
 
+    def _code(src: str) -> str:
+        """The verb's source with its docstring taken out.
+
+        **All three tests below read source, so prose counted as code.**
+        `c.doses` explains the very trap this check exists to catch and
+        quotes `self._who(on)` while doing it -- so the explanation made
+        the check flag a verb that defaults to the caster, and
+        `lint.py` reported a structural fault on a correct row.
+
+        Measured before changing it: of the **142** verbs whose source
+        matches, exactly **1** matches only inside a docstring, so this
+        unflags that one and reclassifies nothing else. The narrowness is
+        the point -- a check that reads prose is wrong in whichever
+        direction the prose happens to run, and the next docstring to
+        mention `_who` would have cost the same hour.
+
+        Regex rather than `ast`, because the only thing that needs
+        removing is the leading triple-quoted string of a method and
+        nothing in `Cast` puts one anywhere else.
+        """
+        return re.sub(r'"""(?:.|\n)*?"""', "", src)
+
     out: set[str] = set()
     for name in dir(Cast):
         if name.startswith("__"):
@@ -791,12 +813,14 @@ def _subjectless_verbs() -> frozenset[str]:
         p = sig.parameters.get("on")
         if p is None or p.default is not None:
             continue
-        if not re.search(r"self\._who\(\s*on\s*\)", src):
+        body = _code(src)
+        if not re.search(r"self\._who\(\s*on\s*\)", body):
             continue
-        if re.search(r"_who\(\s*on\s*\)\s*or\s+self\.me", src):
+        if re.search(r"_who\(\s*on\s*\)\s*or\s+self\.me", body):
             continue
         if re.search(
-            r"_who\(\s*on\s*\)\s*if\s+on\s+is\s+not\s+None\s+else\s+self\.me", src
+            r"_who\(\s*on\s*\)\s*if\s+on\s+is\s+not\s+None\s+else\s+self\.me",
+            body,
         ):
             continue
         out.add(name)
@@ -833,7 +857,7 @@ def _subjectless_verbs() -> frozenset[str]:
         p = sig.parameters.get("on")
         if p is None or p.default is not None:
             continue
-        if any(hop in out for hop in re.findall(FORWARDS, src)):
+        if any(hop in out for hop in re.findall(FORWARDS, _code(src))):
             out.add(name)
     return frozenset(out)
 

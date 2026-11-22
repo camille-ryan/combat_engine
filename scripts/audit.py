@@ -3575,6 +3575,14 @@ def _board(ref: str, seed: int, pose: bool = False,
         # row is only ever run against a stage, so the stage goes on below
         # and the class underneath takes the classless fallback.
         diseased = skill_word == "disease"
+        # **`cls="poison"` is a third word that is not a class**, beside
+        # `"disease"` above and the skills before it. Without this the
+        # fallback below fed `poison` to `chargen.spawn`, which looks a
+        # class line up by word and died on `KeyError: 'poison'` -- all
+        # seven rows in `content/poisons` reported RAISED for the
+        # harness's reason rather than their own, which is exactly what
+        # the disease note beside it records happening three times. #1452.
+        dosed = skill_word == "poison"
         wears = ref[3:].split("-")[0] if ref.startswith("rt:") else declared.cls
         worn_race = wears if wears in chargen.RACES else ""
         gate = _gates().get(ref)
@@ -3631,7 +3639,7 @@ def _board(ref: str, seed: int, pose: bool = False,
                     break
         legged = _class_of_leg(gate_leg)
         cls = (not carried and not racial and not themed and not skilled
-               and not diseased and declared.cls) or (
+               and not diseased and not dosed and declared.cls) or (
             gated or legged
         ) or (
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
@@ -4489,6 +4497,29 @@ def _board(ref: str, seed: int, pose: bool = False,
     # Hoisted here for the same reason the milestone above is: it is state
     # the row reads at arming, and set afterwards it is state the row
     # never saw.
+    # **A dose of poison in the pack, and one in the vial.** Four rows read
+    # one -- `i2061p1` loads it, `i2061p2` applies it, and `f1307`'s clause
+    # on `p971` smears it instead of moving -- and `Gear.doses` is empty on
+    # every dealt character, so each reported SILENT for the board's reason
+    # rather than its own. The same kind of pose as the mark and the zone
+    # above.
+    #
+    # `x4_2` is the simplest declared dose: one condition, one ongoing, no
+    # escalation, so a row asking "did a poison land" gets a clean answer.
+    #
+    # The **vial** is filled as well as the pack, and that is not
+    # redundant: `i2061p2` reads the vial, and the row that fills it is
+    # `out_of_combat=True` -- the loading happens before a board exists, so
+    # a board that only stocked the pack would leave the applying row with
+    # nothing and report it silent. #1452.
+    from combat_engine.engine import Gear as _Gear_for_doses
+
+    _pouch = world.get(caster, _Gear_for_doses)
+    if _pouch is not None:
+        _pouch.doses.append("x4_2")
+        if not _pouch.vial:
+            _pouch.vial = "x4_2"
+
     if diseased:
         from combat_engine.engine.components import Afflictions
 

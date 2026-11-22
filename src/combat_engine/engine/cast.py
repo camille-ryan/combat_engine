@@ -25288,6 +25288,96 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             self.ref.split("x")[0].split("p")[0],
         )
 
+    def doses(self, *, on: int | None = None) -> tuple[str, ...]:
+        """Which doses of poison this creature is carrying, by ref.
+
+        *"A poison you possess"* is the printed phrase, on `f1307` and
+        three rows beside it, and nothing could answer it: the 19 printed
+        doses are in `game.db`'s own `poison` table and a character had
+        nowhere to hold one. `Gear.doses` is that place. #1452.
+
+        A tuple, so a caller cannot spend one by editing what it was
+        handed -- `c.spend_dose` is the only way out, and it is the single
+        place the removal is written.
+
+        **Defaults to the CASTER, not the target**, as `c.build` does and
+        for the same reason: a character's pack is its own, and no card
+        asks what a creature it is attacking is carrying. The first draft
+        of these four used `self._who(on)`, which follows `c.target` --
+        so loading a dose silently filled an enemy's gloves and
+        `i2061p1` read an empty pack. That default is the trap
+        `c.bloodied`, `c.resistances` and `c.held` each carry a warning
+        about.
+
+        The **loaded** dose is deliberately not in here: see
+        `c.stored_dose`.
+        """
+        gear = self.world.get(self.me if on is None else on, Gear)
+        return tuple(gear.doses) if gear is not None else ()
+
+    def stored_dose(self, *, on: int | None = None) -> str:
+        """The dose loaded into a vessel, or `""`.
+
+        `i2061p1` is *"you store one dose of poison that can be applied to
+        a weapon in these gloves. The gloves can hold only one dose of
+        poison at a time"*, and `i2061p2` applies it. So the vessel's
+        contents are a fact about the character that outlives the loading
+        -- the loading is `out_of_combat=True` -- and the applying row
+        needs to read it without knowing how it got there.
+
+        **A separate question from `c.doses`**, not a filtered view of it.
+        A loaded dose has left the pack: `c.store_dose` moves it, so
+        "doing so consumes that dose" is one removal rather than a removal
+        that has to decide which list it came from.
+        """
+        gear = self.world.get(self.me if on is None else on, Gear)
+        return gear.vial if gear is not None else ""
+
+    def store_dose(self, ref: str, *, on: int | None = None) -> bool:
+        """Load one carried dose into the vessel. `c.store_dose("x4_1")`.
+
+        **Moves rather than copies**, which is the whole of "the gloves
+        can hold only one dose at a time": the dose leaves `Gear.doses`
+        and whatever was already loaded goes back, so a character cannot
+        end up holding a dose twice over by loading it again.
+
+        False when the creature is not carrying that dose, so a row
+        cannot load a poison out of nowhere.
+        """
+        gear = self.world.get(self.me if on is None else on, Gear)
+        if gear is None or ref not in gear.doses:
+            return False
+        gear.doses.remove(ref)
+        if gear.vial:
+            # The displaced dose goes back in the pack rather than being
+            # destroyed. Nothing on the card says loading a second dose
+            # spoils the first.
+            gear.doses.append(gear.vial)
+        gear.vial = ref
+        return True
+
+    def spend_dose(self, ref: str = "", *, on: int | None = None) -> str:
+        """Use up a dose: the loaded one, or a named carried one.
+
+        Returns the ref spent, or `""` if there was nothing to spend --
+        which is what lets a row say "doing so consumes that dose" and
+        still refuse cleanly when the vessel is empty.
+
+        `ref` empty takes the **loaded** dose, which is `i2061p2`'s
+        printed sentence. Naming one takes it from the pack instead, for
+        the rows that apply a dose straight from a belt pouch.
+        """
+        gear = self.world.get(self.me if on is None else on, Gear)
+        if gear is None:
+            return ""
+        if not ref:
+            spent, gear.vial = gear.vial, ""
+            return spent
+        if ref in gear.doses:
+            gear.doses.remove(ref)
+            return ref
+        return ""
+
     def apply_poison(
         self,
         bite: Callable[[Any], None],

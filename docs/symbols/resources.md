@@ -123,6 +123,8 @@ Things a creature spends, and the budget it spends them from.
 
 ## cards and carried things
 
+- `c.doses(self, *, on: 'int | None' = None) -> 'tuple[str, ...]'`
+  - Which doses of poison this creature is carrying, by ref.
 - `c.draw(self, ref: 'str' = '', *, on: 'int | None' = None) -> 'bool'`
   - Take a stowed weapon up, paying nothing for it.
 - `c.draws_free(self, *, cost: 'ActionType' = <ActionType.FREE: 'free'>, per_turn: 'int' = -1, only: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
@@ -135,5 +137,11 @@ Things a creature spends, and the budget it spends them from.
   - Take something up off the floor, paying nothing for it.
 - `c.recall_weapon(self, *, within: 'int' = 0, on: 'int | None' = None) -> 'bool'`
   - Call a weapon that was yours back into your hand from a distance.
+- `c.spend_dose(self, ref: 'str' = '', *, on: 'int | None' = None) -> 'str'`
+  - Use up a dose: the loaded one, or a named carried one.
+- `c.store_dose(self, ref: 'str', *, on: 'int | None' = None) -> 'bool'`
+  - Load one carried dose into the vessel. `c.store_dose("x4_1")`.
+- `c.stored_dose(self, *, on: 'int | None' = None) -> 'str'`
+  - The dose loaded into a vessel, or `""`.
 - `c.stow(self, ref: 'str' = '', *, on: 'int | None' = None) -> 'bool'`
   - Put a held weapon away. `draw` read backwards.

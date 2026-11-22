@@ -83,3 +83,11 @@ _load("terrain_powers")
 # `dsl.get`, finds `None` for an unregistered ref and skips it, so every
 # disease would simply do nothing with no error anywhere. #948.
 _load("diseases")
+
+# **`poisons` is the ninth, a package for the same reason `diseases` is.**
+# `_load` walks packages, so a top-level `poisons.py` would register
+# nothing -- and the failure would be quiet in the same way: `i2061p2`
+# looks its dose up by ref and a missing row is a `None` to step around,
+# not a raise. Twelve paragon and epic doses are still unwritten, so the
+# package is the shape that takes them without touching this file. #1452.
+_load("poisons")

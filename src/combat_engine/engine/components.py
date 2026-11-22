@@ -2884,6 +2884,36 @@ class Gear:
     #:   > generated characters don't do that. We'll actually have item
     #:   > shopping."*
     carried: list[str] = field(default_factory=list)
+    #: Doses of poison on the creature's person, by their `poison` table
+    #: ref -- `x4_1`, `x4_14`. A list rather than a set because two doses of
+    #: one poison are two doses, and spending one must leave the other.
+    #:
+    #: **Separate from `carried` above, which holds *item* refs.** A poison
+    #: is not in the `item` table at all: the 19 printed doses live in their
+    #: own `poison` table with `x4_N` refs, so a ref in one list and a ref
+    #: in the other are looked up in different places. Putting both in one
+    #: list would make every reader guess which table to ask.
+    #:
+    #: Empty means carrying none, which is every character until something
+    #: deals one -- the same bargain `carried` strikes, and stated for the
+    #: same reason. #1452.
+    doses: list[str] = field(default_factory=list)
+    #: The one dose loaded into a vessel that holds a dose, by ref, or `""`.
+    #:
+    #: **One slot and not a dict keyed by the vessel**, because the printed
+    #: line is singular and there is exactly one such item: `i2061p1` is
+    #: *"you store one dose of poison ... the gloves can hold only one dose
+    #: of poison at a time"*. A dict keyed by item ref would be a second
+    #: thing to keep in step for a case no card prints, and the day a
+    #: second vessel lands this becomes that dict with one reader to
+    #: change.
+    #:
+    #: Held here rather than taken out of `doses`, so the two questions
+    #: stay separate: *"do you have a dose"* and *"is one loaded"*. A loaded
+    #: dose is **not** in `doses` -- `Cast.store_dose` moves it -- which is
+    #: what makes "doing so consumes that dose" a single removal rather
+    #: than a removal that has to find the right list.
+    vial: str = ""
     #: **How many size categories above its own this creature may wield**,
     #: 0 for everybody by default.
     #:

@@ -866,6 +866,13 @@ CATEGORIES: dict[str, dict] = {
             # `actions._picking_up` -- the adjacency version of the same
             # question -- is what it was written against. #736.
             ("cards and carried things", [
+                # The four poison-dose readers sit here rather than beside
+                # `apply_poison` under damage, and the distinction is the
+                # same one `recall_weapon` is here for: these are about
+                # **what is in the pack**, where `apply_poison` is about
+                # the blow it rides. A row asking "do I possess a poison"
+                # wants this shelf. #1452.
+                "doses", "spend_dose", "store_dose", "stored_dose",
                 "draw", "draws_free", "give", "loads_free", "recall_weapon",
                 # The floor rather than the belt, and the comment four
                 # lines up is about exactly this: `actions._picking_up`

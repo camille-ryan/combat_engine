@@ -15,6 +15,7 @@ base line only.
 from __future__ import annotations
 
 from contextlib import ExitStack
+from typing import Any
 
 from combat_engine.engine import (
     AC,
@@ -53,6 +54,12 @@ ROGUE_GROUPS = frozenset({"light blade", "crossbow", "sling"})
 def _light_blade(world: World, eid: int) -> bool:
     gear = world.get(eid, Gear)
     return bool(gear and gear.main and gear.main.is_light_blade)
+
+
+# `dsl.get` under an alias, for the two clauses that ask whether a poison
+# dose has a declared row before offering it. A dose with no row would be
+# spent on a bite that does nothing. #1452.
+from combat_engine.engine.dsl import get as _get  # noqa: E402
 
 
 def _rogue_weapon(world: World, eid: int) -> bool:
@@ -552,7 +559,40 @@ def p971(c: Cast) -> None:
                     c.con_mod, on=c.me, until=When.EOT,
                     when=lambda ctx: bool(walking and ctx.get("opportunity")),
                 )
-        c.instead_of("move", lambda: c.move(c.squares_for(c.ref, 2)))
+        # **`f1307`'s clause on this row** (#550): *"rather than moving 2
+        # squares before the attack, you can apply a poison you possess to
+        # the weapon as a free action."*
+        #
+        # Written as the printed **substitution**, so the move is given up
+        # when the poison goes on -- "rather than" is an exchange and a
+        # row that did both would be strictly better than the card. It is
+        # offered rather than taken, because the card says "you can".
+        #
+        # `c.doses()` is what "a poison you possess" asks, and only a dose
+        # with a declared row is offered: coating with one of the twelve
+        # that have none would spend the dose on a bite that does nothing.
+        pack = [d for d in c.doses() if _get(d) is not None] if (
+            c.feat("f1307")) else []
+        if pack and c.may("smear a poison instead of moving (f1307)"):
+            pick = pack[0] if len(pack) == 1 else c.choose(
+                pack, f"{c.ref}: which poison goes on the weapon")
+            row = _get(pick) if pick else None
+            if row is not None:
+                def bite(ev: Any, dose: str = pick) -> None:
+                    """The dose's own row, run the way a disease is."""
+                    victim = getattr(ev, "target", None)
+                    carrier = _get(dose)
+                    if victim is None or carrier is None:
+                        return
+                    shot = Cast(world=c.world, me=c.me, ref=dose)
+                    shot.target = victim
+                    carrier.body(shot)
+
+                with c.credit("f1307"):
+                    if c.apply_poison(bite) is not None:
+                        c.spend_dose(pick)
+        else:
+            c.instead_of("move", lambda: c.move(c.squares_for(c.ref, 2)))
         walking.clear()
         # **`f1296`'s clause, and it has to be here**: the card asks what
         # the walk above changed, so it can only be read after that line

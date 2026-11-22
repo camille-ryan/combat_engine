@@ -2316,7 +2316,7 @@ def _poisoned(c: Cast, who: int) -> bool:
     return False
 
 
-@_trait("f1307", dropped=("c.stored_dose()",))
+@_trait("f1307", dropped=("poisons.ingested",))
 def f1307(c: Cast) -> None:
     """Three of the four clauses still want the dose itself: two raise the
     attack roll of a secondary poison attack, which only exists once a
@@ -2330,21 +2330,35 @@ def f1307(c: Cast) -> None:
     of the printed sentence are about that moment, so a dose that lands
     in between still counts.
 
-    **Unchanged, and re-checked because the table arrived.** `game.db`
-    carries a `poison` table now -- 19 rows, `x4_1` upward, each with its
-    own printed attack line -- so "a poison you possess" has refs behind
-    it for the first time. It is still the same hold: **nothing is
-    declared and nothing carries one.** Zero `x4_` rows exist in
-    `content`, and no `Gear` field holds a dose (`weapons`, `stowed`,
-    `worn`, `quiver`, `thrown_left` -- there is no consumable among them),
-    so there is nothing to apply and no secondary attack to raise. The
-    coating machinery is the half that is ready: `c.apply_poison` ties a
-    payout to the weapon it was smeared on and checks the blow against it.
+    **Two of the three have landed and the marker is re-pointed to what
+    is genuinely left.** The old note was right about the state it
+    described -- *"nothing is declared and nothing carries one"* -- and
+    both halves of that have since been built: `content/poisons` declares
+    the seven heroic doses that can go on a weapon and `Gear.doses` is
+    where a character holds one. #1452.
 
-    A poison ref cannot be the symbol either -- `dsl._SYMBOL` admits
-    an `x5_` disease ref and nothing for `x4_`, which is why this names
-    the verb and leaves the dose abstract, the same answer the 47
-    `c.contract(ref)` rows reached before the disease table landed.
+    So the `p971` clause is **written**, in that row's body under `#550`:
+    *"rather than moving 2 squares before the attack, you can apply a
+    poison you possess to the weapon as a free action"* is the printed
+    **substitution**, so the move is given up when the poison goes on.
+    Measured three ways -- with the feat and a dose it coats and does not
+    move, with the feat and no dose it moves, with a dose and no feat it
+    moves and keeps the dose.
+
+    **What is left is `p917`'s and `p1758`'s +2, and it has nothing to
+    raise.** *"A +2 bonus to the attack roll for any secondary poison
+    attack"* needs a dose that prints a **Secondary Attack**, and exactly
+    one of the nineteen does: `x4_14`. That dose is *"works only when it
+    is inhaled"*, so it cannot be put on a weapon and is one of the four
+    `content/poisons` deliberately leaves undeclared -- a row nothing
+    could deliver is worse than a gap, which is the rule
+    `content/diseases` sets.
+
+    `poisons.ingested` is therefore the symbol: a delivery mode for the
+    doses that arrive by food, drink or breath. It is named as the thing
+    that would make `x4_14` declarable, because the `+2` is correct and
+    will stay inert until some dose on a board makes a secondary attack.
+    A `+2` to a roll nothing can make is not a clause a verb can close.
     """
     me = c.me
 
