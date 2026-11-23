@@ -865,10 +865,7 @@ def f305(c: Cast) -> None:
        reach=Ranged(5), target=ONE_CREATURE, keywords=DIVINE,
        trigger="you roll a natural 20 on a saving throw",
        on=Trigger(SavingThrow, _my_natural_20_save,
-                  "you roll a natural 20 on a saving throw"),
-       dropped=("c.transfer(re_aim=)",),
-       wants="re-aim a transferred hold's relations and bus subscriptions at "
-             "the new subject instead of refusing the whole hold")
+                  "you roll a natural 20 on a saving throw"))
 def f305b(c: Cast) -> None:
     """Hand the effect just saved against to an enemy.
 
@@ -881,9 +878,21 @@ def f305b(c: Cast) -> None:
     "saved" ending that follows finds the transferred copy already gone
     and does nothing.
 
-    `c.transfer` refuses a hold carrying a relation or a subscription and
-    returns None rather than moving half of it, so a hold of that shape
-    stays where it is. That is the one dropped clause.
+    **The relation half is written now.** `c.transfer(re_aim=True)`
+    re-points a relation at the new subject instead of refusing the whole
+    hold, and the end it moves is the **target** -- which
+    `relations.IMPLIES` settles rather than any convention about names:
+    `Relations._mirror` applies the implied condition to the target, so
+    the target is the creature suffering the relation.
+
+    Anything outside that map is still refused, and so is any hold
+    carrying a **subscription**: a `Sub` is a closure already bound to the
+    old subject and there is nothing to rewrite. This row's trigger only
+    ever sees `When.SAVE_ENDS` holds, and its own measurement found the
+    one that routinely carries a relation is `c.dominate`'s -- a
+    `DOMINATED_BY`, which is in the map. The subscription sites are
+    one-shot modifiers spent on use, so almost none of them outlive a
+    save. #1523.
 
     **The marker said `Effect.subs` and that was never a gap.** The field
     has existed for as long as `c.transfer` has, and `c.transfer` is one of
@@ -918,7 +927,7 @@ def f305b(c: Cast) -> None:
         return
     for eff in c.world.effects.of(c.me):
         if str(eff) == c.trigger.against:
-            c.transfer(eff, to=foe)
+            c.transfer(eff, to=foe, re_aim=True)
             return
 
 

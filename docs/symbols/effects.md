@@ -94,7 +94,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Has the creature taken a shape that is not its own?
 - `c.stance(self, *, on: 'int | None' = None, conditions: 'Iterable[Condition]' = (), label: 'str' = '') -> 'Effect'`
   - Assume a stance. Whatever you were in, you are not in it now.
-- `c.transfer(self, effect: 'Effect | None', *, to: 'int', save_mod: 'int' = 0) -> 'Effect | None'`
+- `c.transfer(self, effect: 'Effect | None', *, to: 'int', save_mod: 'int' = 0, re_aim: 'bool' = False) -> 'Effect | None'`
   - Move a live hold from one creature to another, intact.
 
 ## summoning and companions

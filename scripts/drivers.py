@@ -5783,6 +5783,172 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_transferred_hold_can_re_aim_its_relation(out: Result) -> None:
+    """`f305b`: *"hand the effect just saved against to an enemy."*
+
+    `c.transfer` rebuilds a hold on a new creature, and it refused one
+    carrying a **relation** or a **subscription** rather than dropping
+    half of it. The relation half is openable; the subscription half is
+    not, and the two are separated here for that reason.
+
+    **A triple is `(kind, source, target)` and the two ends are NOT
+    interchangeable**, so re-pointing the wrong one moves a mark's
+    *holder* rather than the creature marked. `relations.IMPLIES` settles
+    which end is the subject -- `Relations._mirror` applies the implied
+    condition to the **target** -- and that is a derived answer rather
+    than a table somebody has to keep: a relation joining that map is
+    handled, one outside it is declined.
+
+    **Measured before relying on it, because the names do not predict
+    it.** The 14 members write their triples in inconsistent argument
+    orders: `(GRABBED_BY, grabber, me)` puts the subject last and
+    `(CURSED_BY, me, source)` puts it first. A blanket rule read off the
+    `_BY` suffix would have silently mis-pointed some. #1523.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conditions
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.relations import IMPLIES
+    from combat_engine.engine.types import Condition, Relation
+
+    REF = "f305b"
+
+    def dominated(*, re_aim: bool) -> tuple[Any, ...]:
+        """Dominate one foe, then transfer that hold to another.
+
+        `c.dominate` is the printed live case -- the row's own note
+        measured that it is the save-ends hold which routinely carries a
+        relation.
+        """
+        world, me, _ = _board(REF, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        foes = sorted(c.enemies())
+        victim, next_one = foes[0], foes[1]
+        Cast(world=world, me=me, ref="drv").dominate(on=victim)
+        # **Picked by the relation it carries, not by being first.** The
+        # board already hangs relation-bearing effects on a foe, so
+        # `[0]` was some other hold -- the transfer then moved a hold
+        # that was never the dominate one and the arms read as the
+        # re-aiming not working.
+        held = [e for e in world.effects.of(victim)
+                if any(kind is Relation.DOMINATED_BY
+                       for kind, _s, _t in e.relations)]
+        if not held:
+            return (None,) * 6
+        moved = Cast(world=world, me=me, ref=REF).transfer(
+            held[0], to=next_one, re_aim=re_aim)
+        was = world.get(victim, Conditions)
+        now = world.get(next_one, Conditions)
+        return (
+            moved is not None,
+            world.relations.holds(Relation.DOMINATED_BY, me, victim),
+            world.relations.holds(Relation.DOMINATED_BY, me, next_one),
+            Condition.DOMINATED in (was.active if was else ()),
+            Condition.DOMINATED in (now.active if now else ()),
+            held[0].relations,
+        )
+
+    out.that(Relation.DOMINATED_BY in IMPLIES,
+             "the premise: `DOMINATED_BY` is in `relations.IMPLIES`, which"
+             " is what establishes that its TARGET is the creature"
+             " suffering it -- the end a transfer moves",
+             f"{IMPLIES.get(Relation.DOMINATED_BY)}")
+
+    refused = dominated(re_aim=False)
+    out.that(refused[0] is False,
+             "CONTROL: without `re_aim` the hold is still REFUSED rather"
+             " than moved half-way, which is the guarantee this verb"
+             " started with and keeps",
+             f"transferred={refused[0]}")
+    out.that(refused[1] and not refused[2],
+             "and it stays on the first foe, relation and all -- a"
+             " refusal that left the relation behind on nobody would be"
+             " the half-dropped hold the refusal exists to prevent",
+             f"on the first {refused[1]}, on the second {refused[2]}")
+
+    aimed = dominated(re_aim=True)
+    out.that(aimed[0] is True,
+             "THE arm: with `re_aim` the hold moves",
+             f"transferred={aimed[0]}")
+    out.that(aimed[2] and not aimed[1],
+             "and the RELATION moves with it -- the second foe is the"
+             " dominated one now and the first is not. Re-pointing the"
+             " other end would have moved the dominator instead",
+             f"on the first {aimed[1]}, on the second {aimed[2]}")
+    out.that(aimed[4] and not aimed[3],
+             "and the implied CONDITION follows, which is the half"
+             " `Relations._mirror` owns: the new subject is dominated and"
+             " the old one is not",
+             f"first dominated {aimed[3]}, second {aimed[4]}")
+
+    # -- a subscription is still refused, with or without re_aim ----------
+    def subscribed(*, re_aim: bool) -> bool:
+        world, me, _ = _board(REF, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        foes = sorted(c.enemies())
+        from combat_engine.engine.events import Hit
+
+        Cast(world=world, me=me, ref="drv").watch(
+            Hit, lambda ev: None, on=foes[0], until=When.SAVE_ENDS)
+        held = [e for e in world.effects.of(foes[0]) if e.subs]
+        if not held:
+            return False
+        return Cast(world=world, me=me, ref=REF).transfer(
+            held[0], to=foes[1], re_aim=re_aim) is None
+
+    out.that(subscribed(re_aim=False) and subscribed(re_aim=True),
+             "and a hold carrying a SUBSCRIPTION is refused either way: a"
+             " `Sub` is a closure already bound to the old subject, so"
+             " there is nothing to rewrite. `re_aim` opens the relations"
+             " half and makes no claim about that one",
+             "refused with and without re_aim")
+
+    # -- and the ROW asks for it ------------------------------------------
+    #
+    # **This arm exists because a plant showed the others could not see
+    # the row.** Every reading above calls `c.transfer` itself, so
+    # deleting the row's own `re_aim=True` reddened nothing.
+    def handed_on() -> tuple[bool, bool]:
+        """`f305b`: a natural 20 on the save hands the hold to an enemy."""
+        from combat_engine.engine import dsl as _dsl
+        from combat_engine.engine.events import SavingThrow
+
+        world, me, _ = _board(REF, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        foes = sorted(c.enemies())
+        # Dominated BY a foe, so the hold sits on the caster -- which is
+        # where the row looks (`c.world.effects.of(c.me)`).
+        Cast(world=world, me=foes[0], ref="drv").dominate(on=me)
+        mine = [e for e in world.effects.of(me)
+                if any(kind is Relation.DOMINATED_BY
+                       for kind, _s, _t in e.relations)]
+        if not mine:
+            return (False, False)
+        world.turn = me
+        _dsl.use(world, me, REF, targets=[foes[1]], spend=False,
+                 trigger=SavingThrow(
+                     actor=me, against=str(mine[0]), natural=20,
+                     bonus=0, saved=True))
+        return (
+            world.relations.holds(Relation.DOMINATED_BY, foes[0], foes[1]),
+            world.relations.holds(Relation.DOMINATED_BY, foes[0], me),
+        )
+
+    on_the_foe, still_mine = handed_on()
+    out.that(on_the_foe and not still_mine,
+             "THE row arm: a natural 20 on the save hands the domination"
+             " to an enemy -- the relation lands on the foe the row aimed"
+             " at and leaves the holder. Without the row asking for"
+             " `re_aim` the whole hold would have been refused and stayed"
+             " where it was",
+             f"on the foe {on_the_foe}, still on me {still_mine}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def half_a_blow_comes_out_as_another_type(out: Result) -> None:
     """`i991x1`: *"half the damage dealt with this weapon is radiant
     damage."*
@@ -135696,6 +135862,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "transfer_re_aims": (
+        a_transferred_hold_can_re_aim_its_relation,
+        "f305b hands on a hold carrying a relation, re-pointing it"
+        " at the new subject (#1523)",
     ),
     "half_a_blow_retyped": (
         half_a_blow_comes_out_as_another_type,

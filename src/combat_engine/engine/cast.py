@@ -23592,7 +23592,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         return armed[0]
 
     def transfer(
-        self, effect: Effect | None, *, to: int, save_mod: int = 0
+        self, effect: Effect | None, *, to: int, save_mod: int = 0,
+        re_aim: bool = False,
     ) -> Effect | None:
         """Move a live hold from one creature to another, intact.
 
@@ -23602,13 +23603,42 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         throw it is still owed. Rebuilt from the effect itself, with every
         modifier that pointed at the old subject re-aimed at the new one.
 
-        **It refuses a hold carrying a relation or a subscription** and
-        returns None rather than dropping half of it: whose mark it is has
-        no answer here, and a watcher armed on the old subject is not the
-        same watcher on the new one.
+        **A subscription is always refused** and returns None rather than
+        dropping half the hold: a `Sub` carries a closure already bound to
+        the old subject, and there is nothing to rewrite. That half has no
+        answer and this verb does not pretend otherwise.
+
+        **`re_aim` opens the RELATIONS half, and only where the subject's
+        position is established.** A triple is `(kind, source, target)` and
+        the two ends are not interchangeable, so re-pointing the wrong one
+        would move a mark's *holder* rather than the creature marked.
+        `relations.IMPLIES` settles it for the relations it covers:
+        `Relations._mirror` applies the implied condition to the
+        **target**, so the target is the creature suffering the relation
+        and is the end a transfer moves.
+
+        Everything outside `IMPLIES` is still refused, which is a derived
+        answer rather than a table somebody has to maintain -- a relation
+        that joins that map is handled, and one that does not is declined.
+        Measured before relying on it: the 14 members write their triples
+        in **inconsistent argument orders** (`GRABBED_BY, grabber, me` and
+        `CURSED_BY, me, source` put the subject at opposite ends), so a
+        blanket rule read off the names would silently mis-point some.
+
+        `f305b` is the printed caller -- *"hand the effect just saved
+        against to an enemy"* -- and its own note measured that the live
+        case is `c.dominate`'s hold, which carries `DOMINATED_BY`. #1523.
         """
-        if effect is None or effect.ended or effect.relations or effect.subs:
+        if effect is None or effect.ended or effect.subs:
             return None
+        if effect.relations:
+            from .relations import IMPLIES
+
+            if not re_aim or any(
+                kind not in IMPLIES or target != effect.owner
+                for kind, _source, target in effect.relations
+            ):
+                return None
         old = effect.owner
         self.world.effects.end(effect, "transferred")
         return self.world.effects.apply(
@@ -23622,6 +23652,11 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             by=getattr(effect, "by", "") or effect.label,
             conditions=effect.conditions,
             mods=[(to if eid == old else eid, m) for eid, m in effect.mods],
+            # Re-pointed at the new subject, which is the `target` end --
+            # see the docstring for why that is the end and why anything
+            # outside `relations.IMPLIES` never reaches here.
+            relations=[(kind, source, to if target == old else target)
+                       for kind, source, target in effect.relations],
             ongoing=effect.ongoing,
             save_mod=effect.save_mod + save_mod,
             escalate=effect.escalate,
