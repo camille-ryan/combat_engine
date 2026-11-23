@@ -43227,18 +43227,32 @@ def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
              "and whose high-crit property it lays -- a property with a live"
              f" reader in `Cast._high_crit` ({sorted(blow.properties)})")
 
-    # -- and the three that are not --------------------------------------
+    # -- the two that waited on the gate, and the one that did not --------
     #
-    # **Two still name the ranged-basic site and one no longer does.** The
-    # gate those two wait on was built and measured and taken back out: it
-    # makes the printed rule true and the AI measurably worse, because a
-    # thrown weapon costs nothing to throw (#520). `f1843` was never waiting
-    # on the gate at all -- it wants an improvised weapon to exist -- and
-    # the shared marker hid that. #838.
+    # **This asserted the two were BLOCKED, and they are written now.**
+    # The assertion was correct when written: the gate had been built,
+    # measured and taken back out, because a thrown weapon cost nothing
+    # and the AI got measurably worse. `#520` gave a throw a cost and
+    # Camille opened the gate on `#838` ("the first"), so `#1493` wrote
+    # both rows -- and this arm went red on the next full suite run,
+    # which is a correct later commit invalidating an older rule rather
+    # than either being wrong.
+    #
+    # Kept pointed at the same two rows, asserting the other end: what
+    # this rule is really for is the SPLIT below, that `f1843` was never
+    # waiting on the gate at all. #838, #1493.
+    #
+    # **And the arms are now gate-INDEPENDENT, deliberately.** Measured:
+    # shutting the gate again leaves this rule green, where it used to be
+    # the thing that noticed. That is the right division rather than a
+    # loss -- `drivers.thrown_rba` holds the gate, with an arm that
+    # throws a weapon down to its last copy and watches it close, so a
+    # reader should not expect a gate regression to surface here.
     for ref in ("f1841", "f3641"):
-        out.that(REGISTRY[ref].unfinished == ("Gear.ranged(thrown=)",),
-                 f"{ref} names the ranged-basic site, not a weapon field,"
-                 " and is blocked behind #520 giving a throw a cost",
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} is written: it named the ranged-basic site, the"
+                 " gate opened once a throw cost a copy, and the clause"
+                 " landed",
                  f"{REGISTRY[ref].unfinished}")
     out.that(REGISTRY["f1843"].unfinished == ("chargen.IMPROVISED",),
              "and f1843 waits on an **improvised weapon existing** instead,"
@@ -96585,14 +96599,27 @@ def a_basic_attack_names_its_weapon(out: Result) -> None:
              f"ranged={gear.ranged}, melee"
              f" {[(w.ref, sorted(w.properties)[:2]) for w in gear.melee]}")
     rba = REGISTRY.get("rba")
-    out.that(rba is not None and not rba.can_branch(world, me),
-             "and `rba` is refused to it with no weapon named -- the"
-             " premise, and the measurement the row was marked on",
+    # **This asserted `rba` was REFUSED here, and that was the gap.** It
+    # was the measurement `f977`'s clause had been approximated on: the
+    # branch opened only when the weapon was named, so the contrast
+    # below was the point of the pair. `#1493` opened the gate on
+    # Camille's ruling -- a creature with something to throw may make a
+    # ranged basic attack, which is the compendium's own sentence -- so
+    # the refusal is gone and with it the contrast.
+    #
+    # Both ends are asserted anyway, because the pair still says
+    # something: the branch is open **whether or not** the weapon is
+    # named, where it used to need naming. A rule that only kept the
+    # second arm would pass vacuously now.
+    out.that(rba is not None and rba.can_branch(world, me),
+             "`rba` is OPEN to it with no weapon named, which is what"
+             " `#1493` changed -- the gate used to refuse exactly this"
+             " character and that refusal was `f977`'s whole gap",
              f"can_branch={rba.can_branch(world, me) if rba else None}")
     gear.swinging = THROWN
     out.that(rba is not None and rba.can_branch(world, me),
-             "naming the weapon opens the branch, because the named"
-             " weapon is a thrown one and there are throws left",
+             "and naming the weapon still opens it, so the two readings"
+             " agree rather than one depending on the other",
              f"can_branch={rba.can_branch(world, me) if rba else None}")
     gear.swinging = ""
 
