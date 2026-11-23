@@ -1838,6 +1838,16 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # failed one of them: a loop over a tuple of words hid the read, a
     # `not in` guard hid half of it, and `kind=what` made a second blind
     # spot. The gates caught all three. #1305, #1309.
+    #
+    # **A fourth draft failed a different way: it put a word in
+    # `GRANTABLE` that nothing grants.** `surge_for_points` (`#1485`) is
+    # an offer gated on holding a feat, not a word a card hands over, so
+    # it has no `what ==` comparison and cannot have one -- and
+    # `granted_words` went red for the whole suite until it came back
+    # out. The tell is the direction: `GRANTABLE` is read by `_granted`,
+    # so a word belongs here only if some card's `c.grant_action` can
+    # name it. `kinds_named` is the gate a new **kind** owes, and it is
+    # satisfied by the `Action(kind="...")` literal alone.
     for (what, cost) in _granted(world, actor):
         if what == "slide_grabbed":
             bond = Relation.GRABBED_BY
@@ -1921,15 +1931,6 @@ GRANTABLE = frozenset({
     # the `perform` branch are both in this file, the base cost is the
     # printed minor, and the once-a-turn half is `Powers.latched`.
     "familiar_switch",
-    # **`surge_for_points` is a trade, which is why it is a kind and not a
-    # verb.** `c.spend_surge` and `c.gain_points(expiring=)` both already
-    # existed; what was missing was somewhere for the character to be
-    # *offered* the exchange. `f3625` is the one card printing it and its
-    # cadence is once per encounter, which is `World.latches` through
-    # `c.once_per_board` rather than any `Usage` member -- the four are
-    # at-will, encounter, daily and recharge, and none of them is a cap on
-    # something that is not a power. #1485.
-    "surge_for_points",
     # **`move_in_zone` moves the CREATURE; `move_zone` moves the zone.**
     # Two words because they are opposite operations that read alike:
     # `move_zone` is the monster line "as a minor action it can move the
