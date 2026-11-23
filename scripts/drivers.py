@@ -5783,6 +5783,145 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_weapon_keyed_clause_is_offered_as_a_variant(out: Result) -> None:
+    """`f959`: *"when you make a weapon attack with your bola and hit, you
+    can forgo dealing damage to immobilize it until the end of your next
+    turn. On a critical hit, the target is also knocked prone."*
+
+    **The last blocker was the MENU, not the damage read.** The row's
+    note said the missing half was a central damage site, filed as
+    `#954`. That landed -- `c.damage` carries the central read -- and the
+    row still did nothing, which is why `#954`'s closing comment asked
+    for a look rather than assuming the clear.
+
+    `c.pre_empt` registrations are elected as **variants**, by its own
+    design: *"each registration becomes its own entry in the action menu,
+    because a question put halfway through a body cannot be clicked on a
+    card"*. And `actions._variants` counted only registrations whose key
+    equalled the row's own ref -- so a `weapon=` one, keyed
+    `"weapon:w3661"`, matched nothing and no variant was ever offered.
+    The clause was stored, the central read would have found it, and
+    nothing could elect it.
+
+    It counts over `Cast._clause_keys` now, which is the helper that
+    existed for exactly this agreement -- its own docstring says *"the
+    menu has to agree with the body about what position means what"*.
+
+    **And activating the menu side made a latent over-reach live, so the
+    two land together.** `_clause_keys` offered every held weapon's key
+    to every row the character had, so a wizard's implement power was
+    offered "forgo the damage to immobilize it". The cards keyed this way
+    read *"when you make a **weapon attack**"*, so the keys are filtered
+    by `Keyword.WEAPON`. The last arm is that one. #1530.
+    """
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.types import Condition, Keyword
+
+    REF = "f959"
+
+    def armed() -> tuple[Any, int, int]:
+        """A board with the bola drawn and the feat used."""
+        world, me, _ = _board(REF, 1)
+        gear = world.need(me, Gear)
+        # The bola comes STOWED on this board -- measured -- so nothing
+        # swings it until it is drawn, and the clause correctly did
+        # nothing. Drawing it is the staging, said outright.
+        gear.stowed = [w.ref for w in gear.weapons if w.ref != "w3661"]
+        _dsl.use(world, me, REF, spend=False)
+        return world, me, sorted(
+            Cast(world=world, me=me, ref="drv").enemies())[0]
+
+    world, me, _foe = armed()
+    known = world.need(me, __import__(
+        "combat_engine.engine.components", fromlist=["Powers"]).Powers)
+    out.that(("weapon:w3661", "damage") in known.pre_empts,
+             "the premise: the row registered its clause keyed on the"
+             " WEAPON rather than on any row -- the class-of-powers case"
+             " `c.pre_empt(weapon=)` exists for",
+             f"{sorted(known.pre_empts)}")
+
+    world.turn = me
+    offered = [(a.ref, a.variant) for a in
+               _actions.legal(world, world.encounter, me) if a.variant]
+    out.that(offered,
+             "THE arm: a variant IS offered now. `actions._variants`"
+             " matched the row's own ref alone before, so a"
+             " `weapon:`-keyed registration was stored, readable, and"
+             " impossible to elect",
+             f"{sorted(set(offered))}")
+    out.that({ref for ref, _v in offered} == {"rba"},
+             "and only on the attack that swings the bola -- a ranged"
+             " basic, since the bola is `ranged=(4, 8)` and so is not in"
+             " `Gear.melee`. CONTROL for the keyword filter: without it"
+             " every held weapon spoke for every row, and the wizard"
+             " powers on this board were offered the clause too",
+             f"{sorted({ref for ref, _v in offered})}")
+
+    # -- the substitution itself -------------------------------------------
+    def shot(variant: int) -> tuple[int, bool, bool]:
+        world2, me2, foe2 = armed()
+        c2 = Cast(world=world2, me=me2, ref="drv")
+        world2.turn = me2
+        world2.rng.loaded = 20
+        mark = len(world2.bus.log)
+        _dsl.use(world2, me2, "rba", targets=[foe2], spend=False,
+                 variant=variant)
+        dealt = sum(e.amount for e in world2.bus.log[mark:]
+                    if isinstance(e, DamageApplied) and e.target == foe2)
+        return (dealt, c2.is_(Condition.IMMOBILIZED, on=foe2),
+                c2.is_(Condition.PRONE, on=foe2))
+
+    printed = shot(0)
+    forgone = shot(1)
+    out.that(printed[0] > 0 and not printed[1] and not printed[2],
+             "variant 0 is the card as printed -- damage and nothing"
+             " else. 0 leads deliberately, so a headless run takes the"
+             " printed card rather than whichever feat registered",
+             f"{printed[0]} damage, immobilized={printed[1]},"
+             f" prone={printed[2]}")
+    out.that(forgone[0] == 0 and forgone[1],
+             "THE arm: variant 1 forgoes the damage and immobilizes --"
+             " both of which `#954`'s central read makes reachable and"
+             " neither of which could be elected before",
+             f"{forgone[0]} damage, immobilized={forgone[1]}")
+    out.that(forgone[2],
+             "and the critical's knockdown rides in the SAME"
+             " registration, which this row's note has always said the"
+             " two halves have to -- the die is loaded to 20",
+             f"prone={forgone[2]}")
+
+    # -- the keyword filter, asked of the helper ---------------------------
+    weaponless = next(
+        (r for r, p in sorted(REGISTRY.items())
+         if p.attack is not None
+         and Keyword.WEAPON not in (p.keywords or ())), "")
+    out.that(weaponless != "",
+             "the premise for the last arm: the corpus holds an attack"
+             " row that is not a weapon attack",
+             f"{weaponless}")
+    out.that(Cast(world=world, me=me, ref=weaponless)._clause_keys()
+             == [weaponless],
+             "CONTROL: and a row that is not a weapon attack gets its own"
+             " ref and no weapon keys -- so the clause cannot be offered"
+             " on an implement power. That over-reach was latent while"
+             " nothing could reach the keys, and activating the menu made"
+             " it live",
+             f"{Cast(world=world, me=me, ref=weaponless)._clause_keys()}")
+    out.that(len(Cast(world=world, me=me, ref="rba")._clause_keys()) > 1,
+             "and a weapon attack still gets them, so the filter narrows"
+             " rather than switching the mechanism off",
+             f"{Cast(world=world, me=me, ref='rba')._clause_keys()}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_bar_with_a_hole_in_it_is_a_whitelist(out: Result) -> None:
     """`i3560p1`: *"you can take actions only to spend your second wind or
     to end this effect (a minor action)."*
@@ -136636,6 +136775,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "weapon_clause_offered": (
+        a_weapon_keyed_clause_is_offered_as_a_variant,
+        "f959's weapon-keyed trade is offered as a variant and"
+        " only on a weapon attack (#1530)",
     ),
     "only_these_actions": (
         a_bar_with_a_hole_in_it_is_a_whitelist,

@@ -1261,10 +1261,29 @@ def _variants(world: World, actor: int, ref: str) -> list[int]:
     known = world.get(actor, Powers)
     if known is None:
         return [0]
+    # **Counted over `Cast._clause_keys`, not over `ref` alone.** A
+    # `c.pre_empt(weapon=...)` registration is keyed `"weapon:<ref>"` --
+    # the "class of powers" case, where the card names a weapon and no
+    # row at all -- so `on_ref == ref` never matched one and **no variant
+    # was ever offered for it**. The clause was stored, `c.damage`'s
+    # central read would have found it, and nothing could elect it.
+    #
+    # `_clause_keys` is the helper that already exists for exactly this
+    # and its own docstring says why sharing it is the point: it is "its
+    # own ref first, then one per weapon in hand", and "the menu has to
+    # agree with the body about what position means what". Counting a
+    # different set here is how the two would disagree about which
+    # variant means which clause.
+    #
+    # `f959` is the row -- *"when you make a weapon attack with your bola
+    # and hit, you can forgo dealing damage to immobilize it"*. #1530.
+    from .cast import Cast
+
+    keys = Cast(world=world, me=actor, ref=ref)._clause_keys()
     found = sum(
         len(entries)
-        for (on_ref, _what), entries in known.pre_empts.items()
-        if on_ref == ref
+        for (on_ref, _what), entries in sorted(known.pre_empts.items())
+        if on_ref in keys
     )
     return list(range(found + 1))
 

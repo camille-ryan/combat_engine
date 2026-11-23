@@ -17514,10 +17514,26 @@ class Cast:
         Costs nothing when nobody registered a weapon clause, which is the
         normal case: these are keys to look up, and a key absent from the
         table matches nothing.
+
+        **Only for a row that actually attacks with a weapon**, and that
+        filter was latent until `#1530`. The cards keyed this way read
+        *"when you make a **weapon attack** with your <weapon>"*, and
+        without the test every held weapon spoke for every row the
+        character had -- a wizard's implement power offered "forgo the
+        damage to immobilize it". Nothing reached the keys before, because
+        `actions._variants` matched the row's own ref alone and never
+        offered a variant for one; activating the menu side made the
+        over-reach live, so the two land together.
+
+        `Keyword.WEAPON` is the test the cards themselves use, and it is
+        what `c.deals`'s default scope asks as well.
         """
         from .components import Gear
 
         keys = [self.ref]
+        declared = self._declared()
+        if declared is None or Keyword.WEAPON not in self.keywords_of(declared):
+            return keys
         gear = self.world.get(self.me, Gear)
         if gear is not None:
             keys += [WEAPON_CLAUSE + w.ref for w in gear.held]

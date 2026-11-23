@@ -100,7 +100,6 @@ def _swap(ref: str, card: str):  # noqa: ANN202
 
 @power("f959", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("dsl.weapon_damage_through_instead_of",),
        proficiency=("w3661",))
 def f959(c: Cast) -> None:
     """The trade is registered on the **weapon**, which is what #928 built.
@@ -111,21 +110,32 @@ def f959(c: Cast) -> None:
     registration -- the immobilise and the critical's knockdown are the same
     clause -- which is what the paragraph below says they have to be.
 
-    **It plays on a basic attack and nowhere else yet, and that is the
-    `dropped=`.** `instead_of` only speaks where the row being changed calls
-    it, and measured across the tree: 34 `instead_of` call sites, of which
-    **2** are `instead_of("damage")` -- one of them `basic.py:87`, the basic
-    attack. Every other weapon power calls `c.damage` directly, so the
-    registration is consulted for a basic and skipped for the rest.
+    **Both halves play now, and the last blocker was NOT the one this
+    note named.** It said the missing half was a read at a central damage
+    site, filed as `#954`. That landed -- `c.damage` carries the central
+    read and its own comment says so -- and the row still did nothing,
+    which is why `#954`'s closing comment asked for this look rather than
+    assuming the clear.
 
-    So #928's premise that *"the reader is already there ... this is a key
-    shape rather than a new mechanism"* is **half true**: the key shape is
-    built and sound, and the missing half is a read at a central damage
-    site rather than in each row -- filed as **#954**. That is the real
-    remaining cost and it is an engine change of a different size, so the
-    row carries `dropped=`
-    rather than being un-marked: it plays, with one clause short, which is
-    exactly what that marker means. Un-marking it would make it drawable
+    What was actually left was the **menu**. `c.pre_empt` registrations
+    are elected as variants, by its own design: *"each registration
+    becomes its own entry in the action menu, because a question put
+    halfway through a body cannot be clicked on a card"*. And
+    `actions._variants` counted only registrations whose key equalled the
+    row's own ref -- so a `weapon=` one, keyed `"weapon:w3661"`, matched
+    nothing and **no variant was ever offered for it**. The clause was
+    stored, the central read would have found it, and nothing could elect
+    it. It counts over `Cast._clause_keys` now, which is the helper that
+    existed for exactly this agreement. #1530.
+
+    Measured, on the ranged basic with the bola drawn:
+
+        variant 0   25 damage, nothing else      the card as printed
+        variant 1    0 damage, immobilized and prone
+
+    Both halves, in one registration, which is what this note has always
+    said they have to be -- the prone is the critical's and the die was
+    loaded to 20.rker means. Un-marking it would make it drawable
     and inert on every weapon power, which is a fault rather than progress.
 
     What follows is why the trade cannot be split, which still holds.
