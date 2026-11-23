@@ -5783,6 +5783,159 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def another_rows_trigger_can_be_widened_for_one_creature(out: Result) -> None:
+    """`f2091`: *"you can use your `p1452` power when an attack hits an
+    ally within 10 squares of you. If the attack misses, you can slide
+    that ally a number of squares equal to your Dexterity modifier."*
+
+    `p1452`'s own trigger is *"you are hit by an attack"*, and a
+    `Trigger` is **header data** -- one tuple shared by everybody who
+    holds the row -- so a feat cannot edit it without editing it for all
+    of them. `Powers.retriggers` is the per-creature widening and
+    `Triggers._offer` ORs it with the printed predicate.
+
+    **OR'd, never replacing**, which the controls below are for: the card
+    says *you can also use it when*, so *"you are hit"* keeps working.
+
+    **It cannot widen the event CLASS**, and that is a limit rather than
+    an oversight -- `Triggers.arm` subscribes off `dsl.REGISTRY` once, so
+    a class no declared row watches never arrives. `f2091` needs none:
+    `p1452` already triggers on `Hit` and the widening is about *whose*
+    hit. #1531.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit, PowerUsed
+    from combat_engine.engine.query import allies, distance_between
+
+    REF = "f2091"
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="drv")
+
+    declared = REGISTRY["p1452"].on
+    out.that(declared is not None
+             and [cls.__name__ for cls in declared.classes] == ["Hit"]
+             and declared.when is not None,
+             "the premise: `p1452` declares one trigger, on `Hit`, with a"
+             " predicate of its own -- *you are hit by an attack* -- so"
+             " the widening below is a difference and the class needs no"
+             " changing",
+             f"{[c.__name__ for c in declared.classes] if declared else None}")
+
+    friends = [a for a in sorted(allies(world, me)) if a != me]
+    out.that(friends and distance_between(world, me, friends[0]) <= 10,
+             "and the board fields an ally within the printed 10 squares",
+             f"ally {friends[0] if friends else None} at"
+             f" {distance_between(world, me, friends[0]) if friends else '?'}")
+    ally = friends[0]
+    foe = sorted(c.enemies())[0]
+
+    # **The predicate is asked directly, and the unarmed board is built
+    # for an UNRELATED ref.** `f2091` is `action=NONE`, so
+    # `audit.board(REF)` arms it -- the "unarmed" control did not exist
+    # and the arm below read as the printed trigger answering an ally,
+    # which it does not: measured, `targets_me` is True for the holder
+    # and False for an ally. Fifth time that board has pre-set the thing
+    # under test in this batch.
+    def reached(*, armed: bool, struck: int) -> bool:
+        world2, me2, _ = _board(REF if armed else "f419", 1)
+        kn = world2.need(me2, Powers)
+        if "p1452" not in kn.known:
+            kn.known.append("p1452")
+        if armed:
+            _dsl.use(world2, me2, REF, spend=False)
+        wider = world2.need(me2, Powers).retriggers.get("p1452") or []
+        ev = Hit(attacker=foe, target=struck, power="drv", critical=False)
+        own = declared.when(world2, me2, ev) if declared else False
+        return bool(own or any(w(world2, me2, ev) for w in wider))
+
+    out.that(reached(armed=False, struck=me),
+             "CONTROL: unarmed, the printed trigger answers a hit on the"
+             " holder -- which is what *you are hit by an attack* means",
+             "answers")
+    out.that(not reached(armed=False, struck=ally),
+             "CONTROL: and unarmed it does NOT answer a hit on an ally,"
+             " so the arm below is the widening and not the board",
+             "does not answer")
+    out.that(reached(armed=True, struck=ally),
+             "THE arm: with the feat used, a hit on an ally within 10"
+             " squares answers too -- the per-creature widening, since a"
+             " `Trigger` is header data shared by everybody holding"
+             " `p1452`",
+             "answers")
+    out.that(reached(armed=True, struck=me),
+             "and the printed trigger STILL answers a hit on the holder."
+             " OR'd, never replacing -- the card says *you can also use"
+             " it when*, and a replacement would be a narrower card",
+             "answers")
+
+    # -- and the DISPATCHER really offers it -------------------------------
+    #
+    # **These arms exist because two plants showed the ones above could
+    # not see the dispatcher.** They ask the predicate directly -- the
+    # printed one OR'd with the widening -- so a plant that made
+    # `Triggers._offer` ignore `retriggers`, and one that made the
+    # widening REPLACE the printed predicate, both passed. The arms
+    # above are about the predicates; these are about the wiring.
+    def used_on(*, armed: bool, struck: int) -> int:
+        """How many times `p1452` is used off a real hit on `struck`."""
+        world4, me4, _ = _board(REF if armed else "f419", 1)
+        kn = world4.need(me4, Powers)
+        if "p1452" not in kn.known:
+            kn.known.append("p1452")
+        if armed:
+            _dsl.use(world4, me4, REF, spend=False)
+        enemy = sorted(Cast(world=world4, me=me4, ref="drv").enemies())[0]
+        world4.turn = me4
+        mark = len(world4.bus.log)
+        world4.bus.emit(Hit(attacker=enemy, target=struck, power="drv",
+                            critical=False))
+        return sum(1 for e in world4.bus.log[mark:]
+                   if isinstance(e, PowerUsed) and e.power == "p1452")
+
+    friend = next(a for a in sorted(allies(world, me)) if a != me)
+    out.that(used_on(armed=False, struck=me) > 0,
+             "CONTROL through the dispatcher: unarmed, a hit on the"
+             " holder really does get `p1452` offered and used -- so the"
+             " wiring works before any widening",
+             f"{used_on(armed=False, struck=me)} use(s)")
+    out.that(used_on(armed=False, struck=friend) == 0,
+             "CONTROL: and unarmed a hit on an ALLY gets nothing, which"
+             " is the printed trigger",
+             f"{used_on(armed=False, struck=friend)} use(s)")
+    out.that(used_on(armed=True, struck=friend) > 0,
+             "THE dispatcher arm: with the feat used, a real hit on an"
+             " ally within 10 squares gets `p1452` offered and used."
+             " `Triggers._offer` reads `Powers.retriggers`, which the"
+             " predicate arms above cannot show",
+             f"{used_on(armed=True, struck=friend)} use(s)")
+    out.that(used_on(armed=True, struck=me) > 0,
+             "and a hit on the HOLDER still does, through the"
+             " dispatcher -- OR'd and not replaced, which is the other"
+             " thing a plant on those arms slipped past",
+             f"{used_on(armed=True, struck=me)} use(s)")
+
+    # -- and the hold gives the narrowing back -----------------------------
+    world3, me3, _ = _board(REF, 1)
+    _dsl.use(world3, me3, REF, spend=False)
+    out.that(world3.need(me3, Powers).retriggers.get("p1452"),
+             "the row registered the widening against `p1452` by ref",
+             f"{list(world3.need(me3, Powers).retriggers)}")
+    for eff in list(world3.effects.of(me3)):
+        if "widens" in (eff.label or ""):
+            world3.effects.end(eff, "the control")
+    out.that(not (world3.need(me3, Powers).retriggers.get("p1452") or []),
+             "and ending the hold takes it back off, so the widening is a"
+             " hold with a clock rather than a change to the row",
+             f"{world3.need(me3, Powers).retriggers}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_weapon_keyed_clause_is_offered_as_a_variant(out: Result) -> None:
     """`f959`: *"when you make a weapon attack with your bola and hit, you
     can forgo dealing damage to immobilize it until the end of your next
@@ -136775,6 +136928,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "trigger_widened": (
+        another_rows_trigger_can_be_widened_for_one_creature,
+        "f2091 widens p1452's printed trigger to an ally within 10,"
+        " for one creature (#1531)",
     ),
     "weapon_clause_offered": (
         a_weapon_keyed_clause_is_offered_as_a_variant,

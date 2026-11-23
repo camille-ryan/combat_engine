@@ -843,6 +843,11 @@ CATEGORIES: dict[str, dict] = {
             ]),
             ("rolling and the trigger", [
                 "ability_check", "check", "deferring",
+                # Beside the trigger readers because it is the one WRITER
+                # of a trigger: `Trigger(events=)` widens a row's event
+                # classes in the header, for everybody; this widens one
+                # creature's copy of another row's predicate. #1531.
+                "retrigger",
                 "instinctive_action",
                 "knowledge_check", "opportunity", "ranged", "roll",
                 "struck_by", "struck_by_property", "struck_with",

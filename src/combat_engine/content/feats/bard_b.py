@@ -49,7 +49,13 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import allies, line_of_effect, unseen_by
+from combat_engine.engine.events import Rerolled
+from combat_engine.engine.query import (
+    allies,
+    distance_between,
+    line_of_effect,
+    unseen_by,
+)
 from combat_engine.engine.types import Ability
 
 #: The ref the prerequisite column gives for the heal three rows modify.
@@ -570,7 +576,7 @@ def f1231(c: Cast) -> None:
 
 
 @power("f2091", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retrigger(ref)",))
+       reach=PERSONAL, target=SELF)
 def f2091(c: Cast) -> None:
     """Widens another row's printed Trigger and adds a miss rider.
     `p1452` is a ref and its `on=Trigger(...)` is header data, read by
@@ -579,7 +585,61 @@ def f2091(c: Cast) -> None:
 
     Re-aimed only in spelling: the marker carried the ref inside the
     symbol, so it grouped with nothing and the next row wanting the same
-    operation would have named it a third way."""
+    operation would have named it a third way.
+
+    **Both halves are written.** `c.retrigger` is the per-creature
+    widening, OR'd with the printed predicate rather than replacing it --
+    the card says *you can also use it when*, so *"you are hit"* keeps
+    working. It cannot widen the event CLASS and does not need to:
+    `p1452` already triggers on `Hit` and the widening is about **whose**
+    hit.
+
+    The miss half hangs on `Rerolled`, which is the event `p1452`'s own
+    effect produces -- *"the attacker must reroll the attack and use the
+    second roll"*. That event's own docstring names this case: *"combat
+    advantage when the forced second roll misses"*, one of the 18 riders
+    it was built for. So *"if the attack misses"* means the **rerolled**
+    attack, which is the only reading on which the clause can ever fire:
+    the trigger is a hit, so the first roll landed. #1531."""
+    me = c.me
+
+    def an_ally_near_me(world: Any, holder: int, ev: Any) -> bool:
+        """*"When an attack hits an ally within 10 squares of you."*
+
+        `holder` is the creature holding `p1452` rather than the one that
+        caused the event, which is the contract `Trigger.when` documents
+        and the whole reason "you are hit" and "an ally is hit" can be
+        the same event class.
+        """
+        hurt = getattr(ev, "target", None)
+        if hurt is None or hurt == holder:
+            return False
+        if hurt not in allies(world, holder):
+            return False
+        return distance_between(world, holder, hurt) <= 10
+
+    c.retrigger("p1452", when=an_ally_near_me, on=me,
+                until=When.ENCOUNTER)
+
+    def slid(ev: Rerolled) -> None:
+        """*"If the attack misses, you can slide that ally."*
+
+        The REROLLED attack, which is the only reading that can fire:
+        `p1452` triggers on a hit, so the first roll landed and only the
+        second can miss.
+        """
+        if getattr(ev, "by", "") != "p1452":
+            return
+        outcome = getattr(ev, "result", None)
+        if outcome is None or outcome.hit:
+            return
+        hurt = getattr(outcome, "target", None)
+        if hurt is None or hurt not in allies(c.world, me):
+            return
+        c.slide(c.dex_mod, on=hurt)
+
+    c.watch(Rerolled, slid, on=me, until=When.ENCOUNTER, label=c.ref)
+
 
 
 #: The four the card lists.

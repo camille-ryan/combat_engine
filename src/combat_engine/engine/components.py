@@ -2021,6 +2021,29 @@ class Powers:
     #: Written by `Cast.only_action`, read in `actions.legal` beside
     #: `acts_despite`. #1529.
     only_actions: set[str] = field(default_factory=set)
+    #: **Extra predicates that widen another row's printed Trigger**, by
+    #: that row's ref.
+    #:
+    #: `f2091` prints *"you can use your `p1452` power when an attack hits
+    #: an ally within 10 squares of you"*. `p1452`'s own trigger is *"you
+    #: are hit by an attack"*, and a `Trigger` is **header data** -- one
+    #: tuple shared by everybody who holds the row -- so a feat cannot
+    #: edit it without editing it for all of them. This is the
+    #: per-creature widening.
+    #:
+    #: OR'd with the declared predicate in `Triggers._offer`, never
+    #: replacing it: the card says *you can also use it when*, so the
+    #: printed trigger keeps working.
+    #:
+    #: **It cannot widen the event CLASS**, and that is a stated limit
+    #: rather than an oversight: `Triggers.arm` subscribes off
+    #: `dsl.REGISTRY` once, so a class no declared row watches never
+    #: arrives at all. `f2091` needs none -- `p1452` already triggers on
+    #: `Hit` and the widening is about *whose* hit. A card wanting a new
+    #: class wants `Trigger(events=)` on the header instead. #1531.
+    #:
+    #: Written by `Cast.retrigger`, which lays the hold that clears it.
+    retriggers: dict[str, list[Any]] = field(default_factory=dict)
     #: **The only attack rows this creature may reach**, by ref, when it is
     #: not empty. *"When it attacks, the target can only make a melee basic
     #: attack"* and *"dominated … but can use only basic attacks"* are the

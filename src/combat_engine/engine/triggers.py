@@ -436,11 +436,24 @@ class Triggers:
             # branch.** `action_of` is `action_alt or action` for branch 1,
             # so a row printing a second way of being used is checked
             # against that way rather than against its base action line.
+            # **A per-creature widening, OR'd with the printed
+            # predicate.** `f2091` prints "you can use your `p1452` power
+            # when an attack hits an ALLY within 10 squares", and a
+            # `Trigger` is header data shared by everybody holding the
+            # row -- so the feat cannot edit it without editing it for
+            # all of them. See `Powers.retriggers`.
+            #
+            # Never replacing: the card says *you can also use it when*,
+            # so the printed trigger keeps working. And the class test
+            # above is unchanged, which is the stated limit -- a class no
+            # declared row watches is never subscribed. #1531
+            wider = known.retriggers.get(ref) or ()
             answered = [
                 t for t in p.triggers
                 if isinstance(ev, t.classes)
                 and (t.window or WINDOW_OF.get(p.action_of(t.branch))) is window
-                and t.when(self.world, eid, ev)
+                and (t.when(self.world, eid, ev)
+                     or any(extra(self.world, eid, ev) for extra in wider))
             ]
             if not answered:
                 continue

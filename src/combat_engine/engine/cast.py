@@ -20448,6 +20448,68 @@ class Cast:
         ]
         return mine[-1] if mine else 0
 
+    def retrigger(
+        self,
+        ref: str,
+        *,
+        when: Callable[[Any, int, Any], bool],
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Widen another row's printed Trigger, for one creature.
+
+        `f2091`: *"you can use your `p1452` power when an attack hits an
+        ally within 10 squares of you."* `p1452`'s own trigger is *"you
+        are hit by an attack"*, and a `Trigger` is **header data** -- one
+        tuple shared by everybody who holds the row -- so a feat cannot
+        edit it without editing it for all of them.
+
+        `when` is handed `(world, me, event)`, the same contract
+        `Trigger.when` documents: `me` is the creature **holding** the
+        row rather than the one that caused the event, which is what lets
+        "you are hit" and "an ally is hit" be the same event class.
+
+        **OR'd with the printed predicate, never replacing it.** The card
+        says *you can also use it when*, so the declared trigger keeps
+        working -- asserted, because a replacement would be a different
+        and narrower card.
+
+        **It cannot widen the event CLASS**, and that is a limit rather
+        than an oversight: `Triggers.arm` subscribes off `dsl.REGISTRY`
+        once, so a class no declared row watches never arrives. `f2091`
+        needs none, since `p1452` already triggers on `Hit` and the
+        widening is about *whose* hit. A card wanting a new class wants
+        `Trigger(events=)` on the header, which is `#1519`.
+
+        Yours by default, like the rest of this family. #1531.
+        """
+        from .components import Powers
+
+        who = self._who(on) if on is not None else self.me
+        if who is None or not ref:
+            return None
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        owed = known.retriggers.setdefault(ref, [])
+        owed.append(when)
+
+        def narrow() -> None:
+            left = known.retriggers.get(ref)
+            if left and when in left:
+                left.remove(when)
+
+        held = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} widens {ref}'s trigger",
+            on_end=[narrow],
+            by=self.ref,
+        )
+        if held is None:
+            narrow()
+            return None
+        return held
+
     def only_action(
         self, *words: str, on: int | None = None,
         until: When = When.ENCOUNTER,

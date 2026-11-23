@@ -310,6 +310,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - is this use an opportunity attack?
 - `c.ranged`
   - Is this use a ranged one? Asks the branch, not the keywords.
+- `c.retrigger(self, ref: 'str', *, when: 'Callable[[Any, int, Any], bool]', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Widen another row's printed Trigger, for one creature.
 - `c.roll(self, dice: 'str | int') -> 'int'`
   - Roll dice and get the number, without applying it to anybody.
 - `c.struck_by(self, ev: 'Any', *, kind: 'str' = '', ref: 'str' = '', basic: 'bool' = False) -> 'bool'`
