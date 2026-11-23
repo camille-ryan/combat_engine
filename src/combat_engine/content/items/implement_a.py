@@ -3517,7 +3517,6 @@ def _arcanist_leg_by_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     trigger="you use cf:wizard-arcanist-f0 on a creature this orb hit",
     on=Trigger(PowerUsed, _arcanist_leg_by_me,
                "you use that class feature"),
-    dropped=("c.weapon_of(cf:)",),
 )
 def i1986p1(c: Cast) -> None:
     """Deepens a saving-throw penalty `cf:wizard-arcanist-f0` laid.
@@ -3537,41 +3536,74 @@ def i1986p1(c: Cast) -> None:
     would be a modifier nothing reads, which `c.change_amount`'s own
     docstring names as the commonest bug in this pair.
 
-    Still dropped: "on a creature hit by an attack made through this
-    implement". **Both halves of the reason this used to give are false,
-    and the measurement is in `i2611p1`'s note and the file header.** It
-    said a wizard carries no implement in `Gear` at all: the chassis arms
+    **"On a creature hit by an attack made through this implement" is
+    written now, and `c.weapon_of` was never what it wanted.** Both
+    halves of the reason the marker used to give are false, and the
+    measurement is in `i2611p1`'s note and the file header. It said a
+    wizard carries no implement in `Gear` at all: the chassis arms
     `w:orb`, and handing the character this item writes its ref onto that
     object as `Weapon.item`. And it said nothing can ask whether the blow
     came through: `c.my_weapon()` is the reader for *this* block's object,
-    `c.struck_with(ev)` is the reader for the one an attack was made with,
-    and comparing them is the whole question. `c.weapon_of` is the only
-    one of the three that cannot help, because `Gear.main` skips
-    implements deliberately -- which is where the old note's `cf:` reading
-    came from.
+    `c.struck_with(ev)` is the reader for the one an attack was made
+    with, and comparing them is the whole question. `c.weapon_of` is the
+    only one of the three that cannot help, because `Gear.main` skips
+    implements deliberately -- which is where the old marker's `cf:`
+    reading came from.
 
-    **What actually holds it is the ordering, and it is two-sided.** The
+    **What held it was the ordering, and the fix was one file away.** The
     printed line is a *trigger* condition -- the feature used **on a
     creature** hit through this implement -- and `cf:wizard-arcanist-f0`
     chooses that creature with `c.choose` **inside its own body**, after
-    the `PowerUsed` this row answers. So the victim is undecided when the
-    trigger fires. Narrowing the raise instead does not work either: the
-    feature reads it as `c.amount_for(IMPOSITION_RAISE, 0)` with no
-    context, so `query.granted_amount` calls a `when=` gate with `{}` and
-    any predicate about a creature is a gate that can never be true. The
-    one announcement that does name the victim is the `EffectApplied` for
-    the penalty, by which point its number has been computed.
+    the `PowerUsed` this row answers, so the victim is undecided when the
+    trigger fires. Narrowing the raise was the answer, and it could not
+    be written while the feature read it as
+    `c.amount_for(IMPOSITION_RAISE, 0)` with no context:
+    `query.granted_amount` calls a `when=` gate with `{}`, so any
+    predicate about a creature was a gate that could never be true. That
+    read site passes `{"target": who, "effect": against}` now, so the gate
+    below is asked about the creature the leg designated. A **content**
+    gap one file away, which is `i2627x1`'s shape exactly. #1512.
 
-    So this is a **content** gap one file away -- `features/controllers.py`
-    passing a context at its read site -- and not an engine symbol, which
-    is `i2627x1`'s shape exactly. The marker is kept for want of a
-    truthful symbol and must not be read as one parameter of work on
-    `c.weapon_of`: `cf:wizard-arcanist-f0` is declared and finished, so
-    naming it would read ARRIVED, and `cf:wizard-arcanist-f0c1` is
-    undeclared on purpose -- `arcanist.py` says the parent implements that
-    mastery by build -- so naming it would park this row behind a row
-    nobody intends to write."""
-    c.change_amount(IMPOSITION_RAISE, 2, on=c.me, until=When.ENCOUNTER)
+    `drivers.orb_raise_narrows` is the gate, on the throw rather than on
+    the raise: five arms, the raise read as the printed +2 for the struck
+    foe, the Wisdom penalty alone for a foe hit through the character's
+    weapon instead, and the ordering asserted rather than taken from
+    `dsl.py`'s comment."""
+    me = c.me
+    mine = c.my_weapon()
+
+    def through_my_implement(ctx: dict[str, Any]) -> bool:
+        """Was that creature hit by an attack made through this orb?
+
+        **Looked up in the log, because the card is in the past tense.**
+        *"...on a creature hit by an attack made through this
+        implement"* -- the hit has already happened when this free
+        action is taken, so a watch armed at use time would miss every
+        one of them. `Bus.log` is the record and this is read once per
+        imposition, so the walk costs nothing worth saving.
+
+        `c.struck_with(ev)` against `c.my_weapon()` is the comparison,
+        which is what this row's note worked out: the first is the
+        object an attack came through and the second is the object this
+        block sits on. `c.weapon_of` is the one of the three that cannot
+        help, because `Gear.main` skips implements deliberately.
+        """
+        victim = ctx.get("target")
+        if victim is None or mine is None:
+            return False
+        for ev in c.world.bus.log:
+            if not isinstance(ev, Hit):
+                continue
+            if ev.attacker != me or ev.target != victim:
+                continue
+            if c.struck_with(ev) is mine:
+                return True
+        return False
+
+    c.change_amount(
+        IMPOSITION_RAISE, 2, on=me, until=When.ENCOUNTER,
+        when=through_my_implement,
+    )
 
 
 @power(

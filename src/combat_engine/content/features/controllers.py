@@ -95,8 +95,22 @@ def orb_imposition(c: Cast) -> bool:
     def this_one(ctx: dict[str, Any]) -> bool:
         return ctx.get("effect") is against
 
+    # **The raise is read WITH a context naming the victim**, which is
+    # what lets a card narrow it. `i1986p1` prints *"on a creature hit by
+    # an attack made through this implement"*, and a bare read hands
+    # `query.granted_amount` a `{}` -- so any `when=` gate about a
+    # creature was a gate that could never be true. Its note measured
+    # exactly that and called this "a content gap one file away".
+    #
+    # `target` and not `on`, because that is the key every other modifier
+    # context in the tree uses for the creature a clause is about.
+    # `effect` rides along so a card could narrow to one designated
+    # effect, which none prints today and costs nothing to pass. #1512.
     held = c.penalty(
-        "save", c.wis_mod + c.amount_for(IMPOSITION_RAISE, 0),
+        "save",
+        c.wis_mod + c.amount_for(
+            IMPOSITION_RAISE, 0, {"target": who, "effect": against},
+        ),
         on=who, until=When.ENCOUNTER, when=this_one,
     )
     if held is None:

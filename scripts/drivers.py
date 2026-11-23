@@ -5783,6 +5783,179 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def an_orbs_raise_narrows_to_what_it_struck(out: Result) -> None:
+    """`i1986p1`: *"on a creature hit by an attack made through this
+    implement"*, raising the orb mastery's save penalty by 2.
+
+    The row laid its +2 for **any** victim, because the feature read the
+    raise with no context -- `c.amount_for(IMPOSITION_RAISE, 0)` -- so
+    `query.granted_amount` called a `when=` gate with `{}` and any
+    predicate about a creature was a gate that could never be true. The
+    row's own note measured that and called it *"a content gap one file
+    away"*: `features/controllers.py` passing a context at its read
+    site. #1512.
+
+    **The gate looks BACK, because the card is in the past tense.** The
+    hit has already happened when this free action is taken, so a watch
+    armed at use time would miss every one -- it walks `Bus.log` and
+    compares `c.struck_with(ev)` against `c.my_weapon()`.
+
+    **Asserted on the THROW, not on `amount_for`.** The first draft read
+    the raise directly and a plant that emptied the feature's read site
+    **passed**, because the rule never went through the feature at all --
+    `drivers` asserting a helper instead of its caller, which is a trap
+    this tree has recorded. `SavingThrow.bonus` is downstream of the
+    feature's `c.penalty("save", ...)` and so moves with it.
+
+    **Driven by the row's own trigger.** The first draft used the item
+    directly, which skipped the one thing the row depends on: it fires on
+    the arcanist leg's `PowerUsed`, and `dsl.use` announces that *before*
+    the body runs, so the raise is in place by the time the feature reads
+    it. That is asserted here rather than believed off `dsl.py`'s comment.
+
+    **And that arm carries the ordering ALONE.** Re-pointing the row's
+    trigger at `PowerResolved` reds it and leaves the raise arm green,
+    because this rule designates after `dsl.use` has returned and the
+    raise is in place by then either way. So the raise arm is evidence the
+    gate narrows correctly and is *not* evidence the timing works; only
+    the third arm is.
+
+    **The attacking object is staged, and that is a stand-in said
+    outright.** The dealt character's only at-will attacks are its
+    basics, which go through its *weapon* -- measured, `w3611` carrying
+    item `i528` -- so nothing it holds lands a blow through the holy
+    symbol. Writing the item's ref onto the object the basics use poses
+    the case the card is about without inventing an event, and the
+    unstaged board is kept as the negative arm.
+    """
+    from combat_engine.content.features.controllers import (
+        ORB_CARD,
+        orb_imposition,
+    )
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import (
+        EffectApplied,
+        Hit,
+        PowerResolved,
+        SavingThrow,
+    )
+    from combat_engine.engine.types import Defense
+
+    REF = "i1986p1"
+
+    def throw(*, through_mine: bool) -> tuple[int, int, bool, bool]:
+        """The save penalty a designated foe rolls under, and the premises.
+
+        Returns the throw's bonus, the caster's Wisdom modifier, whether a
+        blow landed, and whether the designation happened at all.
+        """
+        world, me, _ = _board(REF, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        gear = world.need(me, Gear)
+        if through_mine and gear.weapons:
+            # The object the basics swing becomes the item's own, which is
+            # what "an attack made through this implement" comes to for a
+            # character whose attacks all go through one object.
+            from dataclasses import replace as _replace
+
+            gear.weapons = [_replace(gear.weapons[0], item="i1986"),
+                            *gear.weapons[1:]]
+        struck = sorted(c.enemies())[0]
+        landed = False
+        for _ in range(8):
+            _dsl.use(world, me, "mba", targets=[struck], spend=False)
+            if any(isinstance(e, Hit) and e.attacker == me
+                   and e.target == struck for e in world.bus.log):
+                landed = True
+                break
+        # **The foe is stood back up, because one swing kills it** -- 34
+        # damage over two hits against 31hp, measured, since the board
+        # arms every rider the character holds. A dead creature rolls no
+        # saving throw, so without this the designation has nothing to
+        # designate and the whole rule reads as a broken row. Staging,
+        # said outright: the question is the penalty on the throw, not
+        # how hard a basic attack hits.
+        hp = world.need(struck, Health)
+        hp.hp = hp.max_hp
+        # The effect is laid AFTER the blow, which is the card's own order
+        # -- the spell leaves something that lasts until a save, and the
+        # designation is a later free action. One save-ends effect of
+        # mine, on one foe, so `c.choose` has exactly one answer.
+        c.penalty(Defense.AC, 2, on=struck, until=When.SAVE_ENDS)
+        # **Driven by the row's own printed trigger, not by a direct
+        # use.** `i1986p1` declares `on=Trigger(PowerUsed, ...)` for the
+        # arcanist leg, and `dsl.use` announces `PowerUsed` BEFORE it runs
+        # the body -- so the raise is laid while the feature is still on
+        # its way to reading it. Asserted below rather than taken from
+        # that comment in `dsl.py`.
+        used_at = len(world.bus.log)
+        _dsl.use(world, me, "cf:wizard-arcanist-f0", spend=False)
+        # The dealt character is not a control-leg arcanist -- measured,
+        # `c.build("control")` is False -- so the feature's own body
+        # returns early and the sentence has to be reached directly. The
+        # trigger above is what matters: it is the real path by which the
+        # item's raise arrives.
+        designated = orb_imposition(
+            Cast(world=world, me=me, ref=ORB_CARD))
+        laid_before_resolved = any(
+            isinstance(e, EffectApplied) for e in world.bus.log[used_at:]
+        ) and next(
+            (i for i, e in enumerate(world.bus.log[used_at:])
+             if isinstance(e, EffectApplied)), 10 ** 6,
+        ) < next(
+            (i for i, e in enumerate(world.bus.log[used_at:])
+             if isinstance(e, PowerResolved)), -1,
+        )
+        mine = [eff for eff in world.effects.of(struck)
+                if eff.source == me and eff.when is When.SAVE_ENDS]
+        if mine:
+            world.effects.save(mine[0])
+        rolls = [e for e in world.bus.log if isinstance(e, SavingThrow)
+                 and e.actor == struck]
+        return (rolls[-1].bonus if rolls else 0, c.wis_mod,
+                landed, designated, laid_before_resolved)
+
+    mine_bonus, wis, landed, designated, ordered = throw(
+        through_mine=True)
+    out.that(landed and designated,
+             "a blow landed and the orb designated the foe -- both"
+             " premises, since a gate that looks back at the log has"
+             " nothing to find without a hit and no penalty is laid"
+             " without a designation",
+             f"landed={landed} designated={designated}")
+    out.that(mine_bonus == -(wis + 2),
+             "THE arm: the throw is made at the printed Wisdom penalty"
+             " PLUS this implement's 2, for a creature hit through it --"
+             " which needed the feature to read the raise WITH a context,"
+             " since a gate handed `{}` can never be true",
+             f"bonus={mine_bonus} wis={wis}")
+
+    out.that(ordered,
+             "and the raise was laid BEFORE the feature's use resolved,"
+             " which is the ordering the whole row rests on -- `dsl.use`"
+             " announces `PowerUsed` ahead of the body, so a row"
+             " triggered on it is in place by the time the body reads it",
+             f"ordered={ordered}")
+
+    other_bonus, other_wis, other_landed, other_designated, _ = throw(
+        through_mine=False)
+    out.that(other_landed and other_designated,
+             "and the same two premises on the unstaged board, so the arm"
+             " below is about the gate rather than about a board that"
+             " never got going",
+             f"landed={other_landed} designated={other_designated}")
+    out.that(other_bonus == -other_wis,
+             "and the Wisdom penalty ALONE for a creature hit through a"
+             " DIFFERENT object -- the dealt character's basics go through"
+             " its weapon, so this is the board as it comes and the arm"
+             " that shows the gate asks about the implement rather than"
+             " about being hit at all",
+             f"bonus={other_bonus} wis={other_wis}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -62903,13 +63076,21 @@ def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
     one of your powers grants a bonus to a defense"* is a modifier on
     modifiers, every defence bonus from any row the character has.
     """
+    from dataclasses import replace
+
     import combat_engine.content  # noqa: F401
     from audit import board as _posed
     from combat_engine.engine import When
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Build, Mods, Powers, Stats
-    from combat_engine.engine.dsl import REGISTRY
-    from combat_engine.engine.events import AttackDeclared
+    from combat_engine.engine.components import (
+        Build,
+        Gear,
+        Mods,
+        Powers,
+        Stats,
+    )
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import AttackDeclared, Hit
     from combat_engine.engine.query import enemies
     from combat_engine.engine.types import Ability, Condition, Defense
 
@@ -62986,6 +63167,37 @@ def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
         # deepen, and the board carries none. Posed here.
         victim = sorted(enemies(world, me))[0]
         c.condition(Condition.SLOWED, on=victim, until=When.SAVE_ENDS)
+        # **A blow through this implement, which the printed line now
+        # requires and this board did not supply.** `i1986p1` reads *"on
+        # a creature hit by an attack made through this implement"* and
+        # gates its raise on it, so without a hit the raise is correctly
+        # 0 and the two ordering arms below both read `plain` -- which
+        # would make the one that tells the fix from a raise nothing
+        # reads vacuous rather than red.
+        #
+        # The attacking object is staged, said outright: the board arms
+        # `w:orb` carrying a DIFFERENT orb (`i1782`) alongside `w3610`,
+        # and overwriting that item ref is what "made through this
+        # implement" comes to here. Measured, and both halves matter --
+        # `c.my_weapon()` walks `c.held(what="magic")`, so staging the
+        # plain `w3610` leaves it None; and the basic's `struck_with` on
+        # this board is the orb rather than the weapon, so the orb is
+        # also the object the blow genuinely went through.
+        # `drivers.orb_raise_narrows` is where the gate's own arms are
+        # posed.
+        gear = world.need(me, Gear)
+        swung = next((i for i, w in enumerate(gear.weapons)
+                      if w.item), None)
+        if swung is not None:
+            gear.weapons = [
+                replace(w, item="i1986") if i == swung else w
+                for i, w in enumerate(gear.weapons)
+            ]
+        for _ in range(8):
+            use(world, me, "mba", targets=[victim], spend=False)
+            if any(isinstance(ev, Hit) and ev.attacker == me
+                   and ev.target == victim for ev in world.bus.log):
+                break
         item = Cast(world=world, me=me, ref="i1986p1")
         if when == "first":
             REGISTRY["i1986p1"].body(item)
@@ -63023,7 +63235,9 @@ def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
     out.that(first == plain - 2,
              "with the orb's power spent FIRST the penalty is 2 deeper,"
              " which is the printed sentence. A DIFFERENCE, because the"
-             " base is the caster's Wisdom and the draw sets that",
+             " base is the caster's Wisdom and the draw sets that -- and"
+             " it needs a blow through this implement now, which the"
+             " board is staged for above",
              f"{plain} -> {first}")
     out.that(after == plain,
              "and spent AFTER the leg it changes nothing -- the ordering"
@@ -63075,10 +63289,12 @@ def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
     out.that(not REGISTRY["i2633x1"].unfinished,
              "i2633x1 carries no marker now",
              f"{REGISTRY['i2633x1'].unfinished}")
-    out.that(REGISTRY["i1986p1"].unfinished == ("c.weapon_of(cf:)",),
-             "i1986p1 keeps the one clause it still earns -- whether the"
-             " blow came through this implement, which a wizard holding no"
-             " implement at all cannot be asked",
+    out.that(not REGISTRY["i1986p1"].unfinished,
+             "and i1986p1 carries no marker either: its last clause --"
+             " whether the blow came through this implement -- is written,"
+             " and what unblocked it was the feature passing a context at"
+             " its read site rather than any `c.weapon_of` work."
+             " `orb_raise_narrows` is its gate",
              f"{REGISTRY['i1986p1'].unfinished}")
     out.that("c.amplify_bonus()" not in str(REGISTRY["f1398"].unfinished),
              "and f1398 no longer shares a symbol with them: raising EVERY"
@@ -134057,6 +134273,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "orb_raise_narrows": (
+        an_orbs_raise_narrows_to_what_it_struck,
+        "i1986p1 raises the save penalty only for a creature hit"
+        " through its own implement",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,
