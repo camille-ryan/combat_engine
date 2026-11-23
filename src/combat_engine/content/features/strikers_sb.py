@@ -57,7 +57,13 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.basic import MELEE
 from combat_engine.engine.ecs import World
-from combat_engine.engine.events import AttackDeclared, Dropped, Hit, Moved
+from combat_engine.engine.events import (
+    AttackDeclared,
+    Dropped,
+    Hit,
+    Moved,
+    TurnEnd,
+)
 from combat_engine.engine.query import feats_of, on_build, team
 
 #: The armours "while you are not wearing heavy armor" rules out. Named
@@ -925,3 +931,91 @@ def cf_vampire_f3(c: Cast) -> None:
         while_bloodied=True,
         unless_damaged_by=(DamageType.RADIANT,),
     )
+
+
+@power(
+    "cf:vampire-f2",
+    level=0,
+    cls="vampire",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    dropped=("c.becomes_kind()", "gear.protective_covering"),
+)
+def cf_vampire_f2(c: Cast) -> None:
+    """The vampire's five printed benefits and weaknesses.
+
+    Three are a line each and were never the difficulty: darkvision,
+    resist 5 necrotic, vulnerable 5 radiant. `c.vulnerable` is passed
+    `until=When.ENCOUNTER` **explicitly**, because its default is
+    `SAVE_ENDS` -- right for a power that inflicts one and wrong for a
+    standing feature, which would otherwise be saved off on the
+    vampire's first turn.
+
+    **The sunlight clause is written and its covering waiver is not.**
+    *"If you end your turn in direct sunlight and lack a protective
+    covering such as a cloak or other heavy clothing"* -- `sunlight` is
+    one of the eighteen words in `cast.TERRAIN_WORDS`, so the first half
+    asks `c.terrain("sunlight")`; nothing says whether a character is
+    covered up. Reading the **neck** slot for it was considered and
+    refused: an amulet fills that slot and would then work as a sun
+    shield, which is wider than the card in the one direction a penalty
+    must not be.
+
+    So the clause fires whenever the vampire ends its turn in sunlight,
+    which is print's own case for a vampire without a covering -- and is
+    **stronger than print for one who has it**. That is the direction of
+    the error, said plainly rather than left for a reader to find, and it
+    is why `gear.protective_covering` is a marker rather than a note.
+
+    **`c.becomes_kind()` is the other, and it is not cosmetic.** *"You
+    are an undead creature. You are unaffected by anything that affects
+    only living creatures."* `c.is_kind("undead")` is read across the
+    tree -- an avenger's oath, a wizard's turn, a warlord's rider -- and
+    `kinds_of` answers off the **stat block**, which a character does not
+    have. So nothing can make a character undead, and every one of those
+    rows reads a vampire as alive. A new symbol, because
+    `blocked.py --group` holds none for it.
+
+    The rest of the first bullet -- not breathing, not ageing, still
+    needing to sleep -- has no combat reading and wants nothing.
+
+    Second of the vampire's features in the tree; the other 24 are still
+    undeclared. Written because `f3621` *removes* the radiant
+    vulnerability this grants and `f3626` grants this feature, and
+    neither could be finished against a feature that did not exist.
+    #1510.
+    """
+    me = c.me
+    c.darkvision(on=me, until=When.ENCOUNTER)
+    c.resist(5, DamageType.NECROTIC, on=me, until=When.ENCOUNTER)
+    # **`f3621` takes both of these away, and it is written HERE.** *"You
+    # lose the vulnerable 5 radiant granted by the cf:vampire-f2 class
+    # feature, and you do not take damage from direct sunlight"* -- a
+    # feat naming one power writes its clause into that power, gated on
+    # `c.feat`, which is this file's charter per `#550`.
+    #
+    # **Gated rather than removed, deliberately.** Ending the effect from
+    # the feat's own body would be a race: both are `action=NONE` traits
+    # and `arm_traits` runs them in an order no card states, so a feat
+    # arming first would find nothing to remove. Withholding cannot lose
+    # that race.
+    #
+    # Nothing is laid when the feat is held, so there is no `c.credit`
+    # block to open -- `drivers.UNCREDITED_GATE` carries this pair for
+    # the same reason it carries `p1448`'s.
+    sunproof = c.feat("f3621")
+    if not sunproof:
+        c.vulnerable(5, DamageType.RADIANT, on=me, until=When.ENCOUNTER)
+
+    def burned(ev: TurnEnd) -> None:
+        if ev.actor != me or sunproof or not c.terrain("sunlight"):
+            return
+        # The radiant vulnerability this feature itself granted adds to
+        # this, which is the card's own parenthetical -- and is why the
+        # damage is typed rather than flat.
+        c.damage(0, 5, dtype=DamageType.RADIANT, on=me)
+        c.weakened(on=me, until=When.SAVE_ENDS)
+
+    c.watch(TurnEnd, burned, until=When.ENCOUNTER, on=me, label=c.ref)

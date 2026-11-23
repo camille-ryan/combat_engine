@@ -2341,11 +2341,27 @@ def f3620(c: Cast) -> None:
 
 
 @power("f3621", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=UNDECLARED_CLASS_FEATURE)
+       reach=PERSONAL, target=SELF)
 def f3621(c: Cast) -> None:
-    """Both surge halves play. What is left is the third clause, which
-    unwinds a class feature named in prose -- there is nothing to unwind.
+    """Both surge halves play, and the third clause is written now --
+    inside the feature it unwinds.
+
+    **It lives in `cf:vampire-f2`, which is this file's charter.** *"You
+    lose the vulnerable 5 radiant granted by the cf:vampire-f2 class
+    feature, and you do not take damage from direct sunlight"* -- a feat
+    naming one power writes its clause into that power gated on
+    `c.feat`, per `#550`, and that feature is declared now (`#1510`).
+
+    **Gated there rather than removed from here**, which is the race
+    this avoids: both rows are `action=NONE` traits and `arm_traits`
+    runs them in an order no card states, so a body that ended the
+    vulnerability would find nothing to end whenever it armed first.
+    Withholding cannot lose that race. Nothing is laid when the feat is
+    held, so there is no `c.credit` block to open and
+    `drivers.UNCREDITED_GATE` carries the pair.
+
+    The old note read "there is nothing to unwind", which was true of a
+    feature that did not exist.
 
     The word *instead* was said to be unsayable because nothing lets a
     watcher stand in the way of another row's spend. It does:

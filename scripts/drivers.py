@@ -5450,6 +5450,130 @@ def a_features_regeneration_can_be_raised_from_an_item(out: Result) -> None:
                      f" after +{moved} Charisma")
 
 
+def a_vampires_weaknesses_and_the_feat_that_lifts_them(out: Result) -> None:
+    """`cf:vampire-f2` and `f3621`: the printed weaknesses, and a feat
+    that takes two of them away.
+
+    The feature prints five benefits and weaknesses; the feat prints
+    *"you lose the vulnerable 5 radiant granted by the cf:vampire-f2
+    class feature, and you do not take damage from direct sunlight"*.
+    The feat's clause is written **inside the feature**, gated on
+    `c.feat` -- this tree's charter for a feat naming one power (`#550`)
+    -- and gated rather than removed, because both are `action=NONE`
+    traits and `arm_traits` runs them in an order no card states. A body
+    that *ended* the vulnerability would find nothing to end whenever it
+    armed first. #1510.
+
+    Sunlight is staged by declaring it on the board: `sunlight` is one
+    of the eighteen words in `cast.TERRAIN_WORDS`, and `query.terrain`
+    **raises** on a word outside that vocabulary -- which is why the
+    clause could be written at all.
+
+    Six arms. The two that matter are the pair the feat decides, and
+    they are measured on **damage taken** rather than on which effects
+    are standing: the vulnerability is read when a blow lands, so a
+    listed effect proves a record and not an outcome.
+    """
+    from combat_engine.engine import DamageType
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import TurnEnd
+    from combat_engine.engine.query import has_sense
+
+    FEATURE = "cf:vampire-f2"
+
+    world, me, _ = _board(FEATURE, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    out.that(not c.feat("f3621"),
+             "the dealt vampire does NOT hold f3621 -- the premise for"
+             " every arm below, since the feat is what switches the"
+             " weaknesses off",
+             f"holds f3621: {c.feat('f3621')}")
+    out.that(has_sense(world, me, "darkvision"),
+             "it has darkvision, which is the one benefit with no gate"
+             " and the arm that shows the feature ran at all")
+
+    def took(dtype: DamageType, amount: int = 10, *, board: str = FEATURE) -> int:
+        """How much a blow of that type actually costs this vampire."""
+        world2, me2, _ = _board(board, 1)
+        c2 = Cast(world=world2, me=me2, ref="drv")
+        hp = world2.need(me2, Health)
+        hp.hp = hp.max_hp
+        c2.damage(0, amount, dtype=dtype, on=me2)
+        return hp.max_hp - world2.need(me2, Health).hp
+
+    # **Against a CONTROL type on the same board, not against the printed
+    # 10.** `audit.board` lays its own damage modifiers, so a 10-point
+    # blow does not cost 10 -- the first draft asserted 15 for radiant
+    # and measured 16. Cold is neither resisted nor made worse by this
+    # feature, so the two differences are the feature's own doing.
+    control = took(DamageType.COLD)
+    out.that(control > 0,
+             "a blow of a type this feature says nothing about costs"
+             " something -- the baseline the two arms below are measured"
+             " against",
+             f"cold cost {control}")
+    necrotic = took(DamageType.NECROTIC)
+    out.that(necrotic == control - 5,
+             "resist 5 necrotic: a necrotic blow costs five less than the"
+             " control",
+             f"cold {control}, necrotic {necrotic}")
+    radiant = took(DamageType.RADIANT)
+    out.that(radiant == control + 5,
+             "and vulnerable 5 radiant: a radiant blow costs five more."
+             " Measured on the damage and not on a listed effect, since"
+             " the vulnerability is read when a blow lands",
+             f"cold {control}, radiant {radiant}")
+    out.that(took(DamageType.RADIANT, board="f3621") == control,
+             "and with f3621 held the radiant blow costs exactly the"
+             " control -- the feat's first clause, and the arm that shows"
+             " the gate withholds the vulnerability rather than merely"
+             " recording a waiver",
+             f"control {control},"
+             f" radiant with the feat"
+             f" {took(DamageType.RADIANT, board='f3621')}")
+
+    # ---- the sunlight burn, and the feat that lifts it
+    def sunburn(*, feat: bool, sunlit: bool = True) -> int:
+        """Hit points lost ending a turn in sunlight.
+
+        **Two boards, not one board re-armed.** The gate reads `c.feat`
+        when the feature's body runs, so the feat has to be in the hand
+        by then -- and `audit.board` has already armed the feature, so
+        granting the feat afterwards and running the body again leaves
+        the FIRST instance burning and adds a second. The first draft did
+        that and read 11 where it wanted 0.
+        `_board("f3621")` holds both the feat and the feature, which is
+        what makes the arm posable at all.
+        """
+        world2, me2, _ = _board("f3621" if feat else FEATURE, 1)
+        if sunlit:
+            world2.terrain = frozenset({"sunlight"})
+        hp = world2.need(me2, Health)
+        hp.hp = hp.max_hp
+        world2.turn = me2
+        world2.bus.emit(TurnEnd(actor=me2, round=world2.round))
+        return hp.max_hp - world2.need(me2, Health).hp
+
+    burned = sunburn(feat=False)
+    out.that(burned > 0,
+             "ending a turn in direct sunlight costs a vampire hit points"
+             " -- the printed 5 plus its own radiant vulnerability, which"
+             " is the card's parenthetical and why the damage is typed",
+             f"took {burned}")
+    out.that(sunburn(feat=False, sunlit=False) == 0,
+             "and a vampire ending its turn OUT of the sunlight takes"
+             " nothing -- the control, which a plant making the burn"
+             " ignore the terrain is what found missing: without it every"
+             " other arm passed a feature that burned anywhere",
+             f"took {sunburn(feat=False, sunlit=False)}")
+    out.that(sunburn(feat=True) == 0,
+             "THE arm: with f3621 held it takes nothing from the sunlight"
+             " -- the feat's clause, written into the feature and gated"
+             " rather than removed so it cannot lose the arming race",
+             f"took {sunburn(feat=True)}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -46328,6 +46452,23 @@ def at_most_one_applies(out: Result) -> None:
 ANY_CREDIT = "<computed>"
 
 UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
+    # **`cf:vampire-f2` WITHHOLDS a vulnerability and a sunlight burn;
+    # withholding is not an effect.** `f3621` prints *"you lose the
+    # vulnerable 5 radiant granted by the cf:vampire-f2 class feature,
+    # and you do not take damage from direct sunlight"*, written into
+    # the feature per `#550` -- a `c.feat` gate in front of
+    # `c.vulnerable` and in the `TurnEnd` handler's early return.
+    #
+    # So when the feat is held nothing is laid, and when it is absent
+    # what is laid is the feature's own weakness. There is no moment at
+    # which an effect belongs to the feat, and a `c.credit` block would
+    # wrap an empty stack -- the same test `p1448` above is here for.
+    #
+    # Gated rather than removed from the feat's body on purpose: both
+    # rows are `action=NONE` traits and `arm_traits` runs them in an
+    # order no card states, so a body that *ended* the vulnerability
+    # would find nothing to end whenever it armed first. #1510.
+    "cf:vampire-f2": ("f3621",),
     # **`p1448` WITHHOLDS a strike from an ally; withholding is not an
     # effect.** `f1500` and `f2176` each print *"targets only enemies"*,
     # written into this power per #550 (`#1497`), as a `return` in front
@@ -133667,6 +133808,11 @@ DRIVERS = {
     "feature_regen_raised": (
         a_features_regeneration_can_be_raised_from_an_item,
         "i3523x1 raises the regeneration cf:vampire-f3 hands out",
+    ),
+    "vampire_weaknesses": (
+        a_vampires_weaknesses_and_the_feat_that_lifts_them,
+        "cf:vampire-f2 pays its printed weaknesses and f3621 lifts"
+        " two of them",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,
