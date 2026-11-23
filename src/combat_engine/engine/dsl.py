@@ -1854,6 +1854,11 @@ def _requirement_waived(world: World, actor: int, ref: str) -> bool:
 CENTRES: frozenset[str] = frozenset({"trigger_target"})
 
 
+#: `Power.grabs` answered once per ref. The property walks an `ast`, and
+#: a `Miss` handler asks it per blow.
+_GRABS: dict[str, bool] = {}
+
+
 @dataclass
 class Power:
     ref: str
@@ -2485,6 +2490,63 @@ class Power:
     #: *all* of them here, because the choice is then made once, before the
     #: body, and `Cast.augment` is what the body reads.
     augments: tuple[Augment, ...] = ()
+
+    @property
+    def grabs(self) -> bool:
+        """Can this row's attack **grab** on a hit?
+
+        `f2478` prints damage on a *missed* grab, and the rest of its
+        phrase is *"a martial power that would have grabbed on a hit"* --
+        a fact about the power that missed, asked at the moment of the
+        `Miss`, when nothing landed and there is no grab to read a
+        permission from. No header field said it. #1526.
+
+        **Derived from the body rather than declared on 275 decorators**,
+        which is both cheaper and safer: 275 declared attack rows call
+        `c.grab`, and a field true on the handful a card happens to need
+        would read as the other 271 not grabbing. Derived, it cannot
+        drift from the code.
+
+        The same `ast` walk `chargen._does_more_than_damage` uses, and
+        for the reasons that function records: a docstring is a
+        `Constant` and not an `Attribute`, so **prose cannot decide the
+        answer**; every `c.<name>` is found wherever it sits; and a call
+        split across lines survives a parse where a substring search
+        does not.
+
+        **The honest limit is the same one**, stated there and repeated
+        here because it is the way this answers falsely: a row that grabs
+        by calling a **helper** is invisible, so this can be False for a
+        row that does grab. It is never True for one that does not, which
+        is the direction that matters for a card paying damage out.
+
+        Cached per ref, because a `Miss` handler asks it and an `ast`
+        parse per blow is not free.
+        """
+        if self.attack is None:
+            return False
+        cached = _GRABS.get(self.ref)
+        if cached is not None:
+            return cached
+        import ast
+        import inspect
+        import textwrap
+
+        answer = False
+        try:
+            tree = ast.parse(textwrap.dedent(inspect.getsource(self.body)))
+        except (OSError, TypeError, SyntaxError):
+            tree = None
+        if tree is not None:
+            answer = any(
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "c"
+                and node.attr == "grab"
+                for node in ast.walk(tree)
+            )
+        _GRABS[self.ref] = answer
+        return answer
 
     @property
     def unfinished(self) -> tuple[str, ...]:

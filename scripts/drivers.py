@@ -5783,6 +5783,112 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_row_can_be_asked_whether_its_attack_grabs(out: Result) -> None:
+    """`f2478`: *"whenever you miss an enemy with an attack that would
+    allow you to grab it, you deal damage equal to your Dexterity
+    modifier."*
+
+    **Two ways an attack allows a grab and only one was asked.** A grab
+    *manoeuvre* is stamped `as_="grab"` by `resolve` and is the attack
+    that is only ever a grab -- that half was written. The other is a
+    **power whose hit line grabs**, which is the rest of the printed
+    phrase: nothing landed, so there is no grab to read the permission
+    from and no header field said so.
+
+    **`Power.grabs` is derived from the body, not declared on 275
+    decorators**, and that is cheaper and safer both: a field true only
+    on the handful a card happens to need would read as the other rows
+    not grabbing, and a derived answer cannot drift from the code.
+
+    The same `ast` walk `chargen._does_more_than_damage` uses, and the
+    last arm is why: a substring search finds **275** rows and the walk
+    finds **274**. The difference is `m6113a3`, which mentions
+    `c.grab(dc=)` only in a docstring saying the row does *not* grab.
+    Prose deciding a reader's answer is the exact fault that function's
+    own note records. #1526.
+    """
+    import inspect
+
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Miss
+
+    REF = "f2478"
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    foe = sorted(c.enemies())[0]
+
+    grabber = next((r for r, p in sorted(REGISTRY.items())
+                    if p.attack is not None and p.grabs), "")
+    plain = next((r for r, p in sorted(REGISTRY.items())
+                  if p.attack is not None and not p.grabs), "")
+    out.that(grabber and plain,
+             "the premise: the corpus holds a row whose attack grabs and"
+             " one whose attack does not, so the arms below are a"
+             " difference rather than one answer twice",
+             f"grabs {grabber}, does not {plain}")
+
+    def missed(power: str, *, manoeuvre: bool = False) -> int:
+        """Damage the holder deals when that power misses the foe."""
+        world, me, _ = _board(REF, 1)
+        health = world.need(foe, Health)
+        was = health.hp
+        ev = Miss(attacker=me, target=foe, power=power)
+        if manoeuvre:
+            ev.as_ = "grab"
+        world.bus.emit(ev)
+        return was - health.hp
+
+    out.that(missed(grabber) > 0,
+             "THE arm: a miss with a power whose HIT LINE grabs pays the"
+             " Dexterity modifier -- the half that carried the marker,"
+             " where nothing landed and there was no grab to read a"
+             " permission from",
+             f"{missed(grabber)} dealt")
+    out.that(missed(plain) == 0,
+             "and a miss with a power that would NOT have grabbed pays"
+             " nothing, which is the printed narrowing: *an attack that"
+             " would allow you to grab it*",
+             f"{missed(plain)} dealt")
+    out.that(missed(plain, manoeuvre=True) > 0,
+             "and the manoeuvre half still pays -- `as_=\"grab\"` is the"
+             " attack that is only ever a grab, and it was written before"
+             " this. Both ways into the clause, not one replacing the"
+             " other",
+             f"{missed(plain, manoeuvre=True)} dealt")
+
+    # -- the derivation reads code, not prose -----------------------------
+    substring, walked = set(), set()
+    for ref, p in REGISTRY.items():
+        if p.attack is None:
+            continue
+        try:
+            src = inspect.getsource(p.body)
+        except (OSError, TypeError):
+            continue
+        if "c.grab(" in src:
+            substring.add(ref)
+        if p.grabs:
+            walked.add(ref)
+    only_prose = substring - walked
+    out.that(walked and not (walked - substring),
+             "every row the walk calls a grabber also mentions the verb,"
+             " so the derivation invents nothing",
+             f"{len(walked)} walked, {len(substring)} mention it")
+    out.that(only_prose == {"m6113a3"},
+             "and the ONE row a substring search would have added is"
+             " `m6113a3`, which mentions `c.grab(dc=)` in a docstring"
+             " saying it does NOT grab -- so prose cannot decide this"
+             " reader's answer, which is the fault"
+             " `chargen._does_more_than_damage` records about itself",
+             f"{sorted(only_prose)}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_missed_uses_effects_can_be_taken_back(out: Result) -> None:
     """`i1676p1`: *"Trigger: you miss every target with an attack you make
     using this crossbow. Effect: you don't expend the use of that power.
@@ -136160,6 +136266,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "row_grabs_is_askable": (
+        a_row_can_be_asked_whether_its_attack_grabs,
+        "f2478 pays on a miss with any power whose hit line would"
+        " have grabbed (#1526)",
     ),
     "missed_use_retracted": (
         a_missed_uses_effects_can_be_taken_back,

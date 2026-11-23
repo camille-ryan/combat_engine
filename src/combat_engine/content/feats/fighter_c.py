@@ -753,7 +753,7 @@ def f2432(c: Cast) -> None:
 
 
 @power("f2478", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Power.grabs",))
+       reach=PERSONAL, target=SELF)
 def f2478(c: Cast) -> None:
     """Damage on a **missed** grab. The manoeuvre half is written: a grab
     attempt rolls as_ `"grab"` and `resolve` stamps that onto the `Miss`,
@@ -777,12 +777,25 @@ def f2478(c: Cast) -> None:
     me = c.me
 
     def on_miss(ev: Any) -> None:
-        if (
-            ev.attacker == me
-            and getattr(ev, "as_", "") == "grab"
-            and ev.target in enemies(c.world, me)
-        ):
-            c.flat(c.dex_mod, on=ev.target)
+        """*"Whenever you miss an enemy with an attack that would allow
+        you to grab it."*
+
+        **Two ways an attack allows a grab, and only one was asked.** A
+        grab *manoeuvre* is stamped `as_="grab"` by `resolve` and is the
+        attack that is only ever a grab. The other is a **power whose hit
+        line grabs** -- the rest of the printed phrase, and the half that
+        carried the marker: nothing landed, so there is no grab to read
+        the permission from.
+        `Power.grabs` is that reader, derived from the body rather than
+        declared, and 274 declared attack rows answer it. #1526.
+        """
+        if ev.attacker != me or ev.target not in enemies(c.world, me):
+            return
+        declared = get(getattr(ev, "power", "") or "")
+        if (getattr(ev, "as_", "") != "grab"
+                and not (declared is not None and declared.grabs)):
+            return
+        c.flat(c.dex_mod, on=ev.target)
 
     c.watch(Miss, on_miss, on=me, until=When.ENCOUNTER)
 
