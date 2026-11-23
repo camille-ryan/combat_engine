@@ -1540,14 +1540,42 @@ def f2129c(c: Cast) -> None:
               when=lambda ctx: ctx.get("target") == me)
 
 
+def _cowed_or_struck(world: World, me: int, ev: Any) -> bool:
+    """*"You succeed on an Intimidate check or hit with an attack."*
+
+    **Two event classes, one power**, which is what
+    `Trigger(events=)` is for: `either(...)` composes predicates and
+    cannot help here, because what differs is the class that gets
+    subscribed. So this predicate is handed whichever of the two
+    arrived and has to look at what it was given -- the same discipline
+    any `when` on a shared event class already needs.
+
+    The Intimidate half needs a creature it was made **against**: a
+    check about a fact leaves `SkillCheck.target` None, and cowing
+    nobody is not this card. `Cast.surrender` is the printed Intimidate
+    action and names the creature it rolled against.
+
+    Read in the AFTER window, which `WINDOW_OF` gives a free action, so
+    `success` is the resolved answer rather than the announcement's --
+    `SkillCheck`'s own docstring says the fixed part is finished inside
+    the resolve callback. #1519.
+    """
+    if isinstance(ev, SkillCheck):
+        return (getattr(ev, "actor", None) == me
+                and getattr(ev, "skill", "") == "skill:intimidate"
+                and bool(getattr(ev, "success", False))
+                and getattr(ev, "target", None) is not None)
+    return _i_hit(world, me, ev)
+
+
 _granted("f2130", "f2130b", swap=Swap(2, utility=True))
 
 
 @power("f2130b", level=1, cls="", usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
-       trigger="you hit with an attack",
-       on=Trigger(Hit, _i_hit, "you hit an enemy with an attack"),
-       dropped=("triggers.Trigger(events=)",))
+       trigger="you succeed on an Intimidate check or hit with an attack",
+       on=Trigger(Hit, _cowed_or_struck, events=(SkillCheck,),
+                  text="you cow a creature or hit it with an attack"))
 def f2130b(c: Cast) -> None:
     """Half the printed trigger is declared; the attack half does fire.
 
@@ -1585,7 +1613,13 @@ def f2130b(c: Cast) -> None:
     no word before "bonus"; `When.ENCOUNTER` is the printed clock.
     """
     me = c.me
+    # `target` on both events is the creature the trigger was about:
+    # `Hit.target` is who was struck and `SkillCheck.target` is who the
+    # check was made against. The field exists on `SkillCheck` for
+    # exactly this -- see its own note.
     victim = c.trigger.target
+    if victim is None:
+        return
     c.bonus("skill:intimidate", 2, on=me, until=When.ENCOUNTER)
     held = c.penalty("attack", c.cha_mod, on=victim, until=When.SAVE_ENDS,
                      when=lambda ctx: ctx.get("target") == me)

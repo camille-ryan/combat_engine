@@ -86,6 +86,24 @@ class Trigger:
     event: type[Event]
     when: Callable[[World, int, Any], bool] = _always
     text: str = ""
+    #: **More event classes, for a printed trigger that names two
+    #: different moments.** `f2130b`'s card is *"you succeed on an
+    #: Intimidate check **or** hit with an attack"*, which is two event
+    #: classes and one power; `either(...)` composes predicates and
+    #: cannot help, because the thing that differs is what gets
+    #: subscribed.
+    #:
+    #: The usual escape -- moving the trigger into a `c.watch` the way
+    #: `f3313` does -- is not open to a row like that: it is a DAILY
+    #: whose use is spent by the declared trigger firing, so a trait
+    #: would change what the row **costs** as well as when it runs.
+    #:
+    #: Read through `classes` and never directly, so all four readers in
+    #: this module see the same answer. `when` is handed whichever event
+    #: arrived, so a predicate for a two-class trigger has to look at
+    #: what it was given -- which is the same discipline any `when` on a
+    #: shared event class already needs. #1519.
+    events: tuple[type[Event], ...] = ()
     #: Which side of the event to answer on, when the action's own window is
     #: the wrong one. A free action is a reaction almost always -- "when you
     #: hit, free action: ..." -- so `WINDOW_OF` puts it after. A handful of
@@ -109,6 +127,16 @@ class Trigger:
     #: the minor -- so the window was wrong and the branch's own body was
     #: unreachable.
     branch: int = 0
+
+    @property
+    def classes(self) -> tuple[type[Event], ...]:
+        """Every event class this trigger answers, `event` first.
+
+        The one door for all four readers in this module, so a two-class
+        trigger cannot be half-subscribed: `isinstance` takes a tuple, so
+        the two dispatch sites need no other change.
+        """
+        return (self.event, *self.events)
 
 
 #: Refs currently resolving, keyed by responder. A reaction that emits the
@@ -214,7 +242,8 @@ def _watched(_rows: int) -> dict[type[Event], set[Window]]:
             resolved = trig.window or window
             if resolved is None:
                 continue
-            watched.setdefault(trig.event, set()).add(resolved)
+            for watching in trig.classes:
+                watched.setdefault(watching, set()).add(resolved)
     return watched
 
 
@@ -228,7 +257,8 @@ def _recharge_events(_rows: int) -> tuple[type[Event], ...]:
     from .dsl import REGISTRY
 
     return tuple(sorted(
-        {t.event for p in REGISTRY.values() for t in p.recharges},
+        {cls for p in REGISTRY.values() for t in p.recharges
+         for cls in t.classes},
         key=lambda e: e.__name__,
     ))
 
@@ -303,7 +333,8 @@ class Triggers:
                 if p is None:
                     continue
                 for trig in p.recharges:
-                    if isinstance(ev, trig.event) and trig.when(self.world, eid, ev):
+                    if isinstance(ev, trig.classes) and trig.when(
+                            self.world, eid, ev):
                         # **Announced now, and on both paths at once**, which
                         # is what the comment here used to say this wanted.
                         # `rolled=0` because no die brought it back -- the
@@ -407,7 +438,7 @@ class Triggers:
             # against that way rather than against its base action line.
             answered = [
                 t for t in p.triggers
-                if isinstance(ev, t.event)
+                if isinstance(ev, t.classes)
                 and (t.window or WINDOW_OF.get(p.action_of(t.branch))) is window
                 and t.when(self.world, eid, ev)
             ]

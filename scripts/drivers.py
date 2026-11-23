@@ -5783,6 +5783,128 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_declared_trigger_can_name_two_event_classes(out: Result) -> None:
+    """`f2130b`: *"you succeed on an Intimidate check **or** hit with an
+    attack."*
+
+    `Trigger` carried one `event` class. `either(...)` composes
+    **predicates** and cannot help, because what differs here is the
+    class that gets subscribed -- and the usual escape, moving the
+    trigger into a `c.watch` the way `f3313` does, is not open to this
+    row: it is a DAILY whose use is spent by the declared trigger firing,
+    so a trait would change what the row **costs** as well as when it
+    runs.
+
+    `Trigger.classes` is the one door all four readers in
+    `triggers.py` go through, so a two-class trigger cannot be
+    half-subscribed. #1519.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import EffectApplied, Hit, SkillCheck
+    from combat_engine.engine.triggers import Trigger
+
+    REF = "f2130b"
+    # **The board FIRST, because `dsl.REGISTRY` holds three rows until
+    # one is built** -- content imports lazily. Reading the registry at
+    # the top of a rule is a `KeyError` on any real ref, and it is the
+    # third time in this batch that has caught me.
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    foe = sorted(c.enemies())[0]
+    declared = REGISTRY[REF].on
+    out.that(declared is not None
+             and [cls.__name__ for cls in declared.classes]
+             == ["Hit", "SkillCheck"],
+             "THE arm: the row's declared trigger names BOTH event"
+             " classes, `event` first -- which is what `Trigger` could"
+             " not carry and why the Intimidate half of the printed line"
+             " was dropped",
+             f"{[c.__name__ for c in declared.classes] if declared else None}")
+    out.that(Trigger(Hit).classes == (Hit,),
+             "CONTROL: a trigger naming one class answers one, so every"
+             " other declared row in the tree is unchanged -- which is"
+             " what `replay verify` 8 of 8 says from the other side",
+             f"{Trigger(Hit).classes}")
+
+    # -- the dispatcher really offers it, end to end ----------------------
+    #
+    # **Asserted by emitting the event and watching the row fire**, not
+    # off `triggers._watched`. That was the first draft and it is a weak
+    # arm: `_watched` maps an event class to a set of *Windows*, not to
+    # refs, so `SkillCheck in watched` is true because some OTHER row
+    # declares a trigger on it -- and a plant that made `classes` forget
+    # its extras left the arm green. Measured, then replaced.
+    from combat_engine.engine.events import PowerUsed
+
+    world2, me2, _ = _board(REF, 1)
+    foe2 = sorted(Cast(world=world2, me=me2, ref="drv").enemies())[0]
+    world2.turn = me2
+    mark = len(world2.bus.log)
+    world2.bus.emit(SkillCheck(
+        actor=me2, skill="skill:intimidate", dc=10, natural=18, bonus=5,
+        total=23, success=True, target=foe2))
+    fired = [e for e in world2.bus.log[mark:]
+             if isinstance(e, PowerUsed) and e.power == REF]
+    out.that(fired,
+             "and the dispatcher OFFERS it on the second class: emitting"
+             " a successful Intimidate check makes the row run, which is"
+             " the half a declaration alone does not prove",
+             f"{len(fired)} use(s) of the row off a SkillCheck")
+
+    # -- the predicate tells them apart -----------------------------------
+    pred = declared.when if declared is not None else None
+
+    cowed = SkillCheck(actor=me, skill="skill:intimidate", dc=10,
+                       natural=18, bonus=5, total=23, success=True,
+                       target=foe)
+    missed = SkillCheck(actor=me, skill="skill:intimidate", dc=30,
+                        natural=3, bonus=5, total=8, success=False,
+                        target=foe)
+    nobody = SkillCheck(actor=me, skill="skill:intimidate", dc=10,
+                        natural=18, bonus=5, total=23, success=True,
+                        target=None)
+    other = SkillCheck(actor=me, skill="skill:athletics", dc=10,
+                       natural=18, bonus=5, total=23, success=True,
+                       target=foe)
+    assert pred is not None
+    out.that(pred(world, me, cowed),
+             "the Intimidate half answers a SUCCESSFUL check made"
+             " against a creature, which is the half that was dropped",
+             f"{pred(world, me, cowed)}")
+    out.that(not pred(world, me, missed),
+             "CONTROL: and not a failed one -- the card says *succeed*",
+             f"{pred(world, me, missed)}")
+    out.that(not pred(world, me, nobody),
+             "CONTROL: and not a check made against nobody. A check about"
+             " a fact leaves `SkillCheck.target` None, and cowing nobody"
+             " is not this card -- the body reads that field for its"
+             " victim",
+             f"{pred(world, me, nobody)}")
+    out.that(not pred(world, me, other),
+             "CONTROL: and not another skill, so the predicate reads the"
+             " skill as well as the class",
+             f"{pred(world, me, other)}")
+
+    # -- and the body pays on the Intimidate half -------------------------
+    before = len(world.bus.log)
+    cast = Cast(world=world, me=me, ref=REF)
+    cast.trigger = cowed
+    REGISTRY[REF].body(cast)
+    laid = [e for e in world.bus.log[before:]
+            if isinstance(e, EffectApplied) and e.target == foe]
+    out.that(laid,
+             "and the BODY pays out on it: the penalty lands on the"
+             " creature the check was made against, which it could never"
+             " reach before because the event never arrived",
+             f"{len(laid)} effect(s) on the cowed foe")
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+    assert _dsl is not None
+
+
 def an_ability_modifier_can_be_raised_but_not_the_attack(out: Result) -> None:
     """`i2814x1`: *"when a power or class feature calls on your Intelligence
     modifier to determine a value other than your attack bonus, add 1 to
@@ -135305,6 +135427,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "trigger_two_classes": (
+        a_declared_trigger_can_name_two_event_classes,
+        "f2130b declares a trigger on two event classes, which"
+        " Trigger could not carry (#1519)",
     ),
     "ability_modifier_raised": (
         an_ability_modifier_can_be_raised_but_not_the_attack,
