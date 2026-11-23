@@ -169,6 +169,56 @@ def _skills(c: Cast, value: int, *names: str, kind: str = "item") -> None:
         c.bonus(f"skill:{name}", value, on=c.me, until=When.ENCOUNTER, kind=kind)
 
 
+#: The minor-action attack `i2980p1` offers once a round, printed inside
+#: its own card with no id of its own. Coined by rule from the parent --
+#: Camille's call on `#1484`, with `#1494` the worked example -- and named
+#: for the mechanic so no printed word reaches a tracked file.
+_BLESSING_ATTACK = "i2980p1:attack"
+
+
+@power(_BLESSING_ATTACK, level=5, cls=ITEM, usage=AT_WILL, action=MINOR,
+       reach=PERSONAL, target=NO_TARGET)
+def i2980p1_attack(c: Cast) -> None:
+    """*"On each of your turns, you can take a minor action once per round
+    to make the following attack against an enemy in the zone. Attack:
+    level + 5 vs. Reflex. Hit: the target is immobilized until the start
+    of your next turn."* -- printed inside `i2980p1` with no id of its
+    own. #1484, #1496.
+
+    **"Once per round" is a latch, because `Usage` has no such member.**
+    The four are at-will, encounter, daily and recharge, and none caps a
+    thing that is not a power -- so the header is `AT_WILL` and
+    `c.latched` carries the cadence. `per_turn=False` is the round
+    window, which is what the card says; `per_turn=True` would be the
+    initiative slot and would let a second use through on an action
+    point.
+
+    **"On each of your turns" needs nothing**: the cost is a minor
+    action, and a creature only spends those on its own turn.
+
+    The bonus is read, not written: `_item_level(c) + 5` is the printed
+    *"level + 5"*, and `c.attack` rather than a header `printed=` for the
+    reason `i3037x1`'s note gives -- `world.scaling.trim` would re-level
+    a `printed=` against the holder, where this number is the item's.
+    """
+    found = next(((zid, z) for zid, z in c.world.zones.all()
+                  if z.owner == c.me and z.label == "i2980p1"), None)
+    if found is None:
+        return
+    zid, _zone = found
+    spent = f"{_BLESSING_ATTACK} this round"
+    if c.latched(spent):
+        return
+    inside = [e for e in sorted(c.enemies())
+              if e in c.world.zones.occupants(zid)]
+    if not inside:
+        return
+    victim = c.choose(inside, "which enemy in the zone") or inside[0]
+    c.latch(spent)
+    if c.attack(_item_level(c) + 5, REF, on=victim).hit:
+        c.immobilized(on=victim, until=When.SOTNT)
+
+
 def _item_level(c: Cast) -> int:
     """"Equal to this boon's level" -- the row's own level, not the wearer's."""
     row = get(c.ref)
@@ -2453,8 +2503,7 @@ def i2966p1(c: Cast) -> None:
 
 
 @power("i2980p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBurst(1), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.grant_inline()",))
+       reach=CloseBurst(1), target=NO_TARGET, keywords=[Keyword.ZONE])
 def i2980p1(c: Cast) -> None:
     """The zone is exact. The minor-action attack it offers once a round has
     no ref of its own, and the route round that is to coin one and hand it
@@ -2484,8 +2533,26 @@ def i2980p1(c: Cast) -> None:
     not a symbol and will never arrive as one, and the cadence is a latch
     rather than a header field. Re-pointing it here would split the symbol
     off `i1188p1`, which wears it for the same clause -- so the two move
-    together, or the question goes on an issue. Not an authoring call."""
-    c.zone(c.area(), until=When.ENCOUNTER, difficult=True)
+    together, or the question goes on an issue. Not an authoring call.
+
+    **Both obstacles are answered now.** The ref convention is Camille's
+    ruling on `#1484` -- coined, formulaic, from the parent -- and
+    `#1494` is the worked example. The cadence is what this note already
+    said it was: *"a `c.world.round` latch on the granted row and not a
+    header field"*. `Usage` genuinely has four members and none of them
+    caps a thing that is not a power, so the latch is the answer rather
+    than a workaround. #1496.
+
+    **The explicit label is documentation, not a fix.** I wrote that the
+    zone "had to" gain one so the granted row could find it, and that was
+    wrong: `c.zone` already stores `label or self.ref`, so an unlabelled
+    zone carries this row's ref anyway. The plant proved it -- removing
+    the argument changes nothing and reds no arm, which is a passing
+    plant that means *the change was unnecessary* rather than *the test
+    is weak*. It stays because the granted row matches on that string and
+    a reader should not have to know the default to see why."""
+    c.zone(c.area(), label=c.ref, until=When.ENCOUNTER, difficult=True)
+    c.grant_row(_BLESSING_ATTACK, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i3363p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,

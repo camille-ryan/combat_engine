@@ -72906,6 +72906,108 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_zone_offers_one_attack_a_round(out: Result) -> None:
+    """*"On each of your turns, you can take a minor action once per round
+    to make the following attack against an enemy in the zone. Attack:
+    level + 5 vs. Reflex. Hit: the target is immobilized until the start
+    of your next turn."* -- printed inside `i2980p1` with no id of its
+    own. #1484, #1496.
+
+    **The cadence is the whole of what was missing**, and the row's own
+    note had already worked it out: *"a `c.world.round` latch on the
+    granted row and not a header field"*. `Usage` has four members --
+    at-will, encounter, daily, recharge -- and none caps a thing that is
+    not a power, so the header is `AT_WILL` and `c.latched` carries the
+    once-a-round.
+
+    **`per_turn=False` is the round, not the slot.** The other spelling
+    is the initiative slot, which would let a second use through on an
+    action point -- so the arms below spend twice in one round and then
+    once in the next, which is the only way to tell the two windows
+    apart.
+
+    **Measured on the effect, never on the return.** `dsl.use` answers
+    True for a row that ran and returned on its first line, so a second
+    use reads as accepted whether the latch held or not: the first draft
+    of this read `True` and said nothing. The arms compare the set of
+    immobilised enemies instead.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Condition
+
+    PARENT, GRANTED = "i2980p1", "i2980p1:attack"
+    out.that(GRANTED in REGISTRY and not REGISTRY[PARENT].unfinished,
+             "the granted attack is declared under a coined ref and the"
+             " parent carries no marker",
+             f"{GRANTED in REGISTRY}, {REGISTRY[PARENT].unfinished}")
+
+    world, me, _ = _board(PARENT, 1)
+    out.that(dsl.use(world, me, PARENT, spend=False),
+             "premise: the parent's own use is accepted",
+             "used")
+    known = world.get(me, Powers)
+    out.that(known is not None and GRANTED in (known.all or ()),
+             "and it grants the inline attack for the encounter",
+             f"{[k for k in (known.all or ()) if k.startswith(PARENT + ':')]}")
+
+    found = next(((zid, z) for zid, z in world.zones.all()
+                  if z.label == PARENT), None)
+    out.that(found is not None,
+             "premise: the zone carries the parent's own ref as its label,"
+             " which is how the granted row finds it -- and it does so"
+             " whether the parent passes one or not, because `c.zone`"
+             " stores `label or self.ref`",
+             f"{found[1].label if found else None}")
+    if found is None:
+        return
+    zid, _zone = found
+
+    c = Cast(world=world, me=me, ref="drv")
+    inside = [e for e in sorted(c.enemies())
+              if e in c.world.zones.occupants(zid)]
+    out.that(len(inside) >= 2,
+             "premise: two enemies stand in the zone, so a second use has"
+             " somebody new to catch if the latch lets it through",
+             f"{inside}")
+    if len(inside) < 2:
+        return
+
+    def held() -> list[int]:
+        return [e for e in inside if c.is_(Condition.IMMOBILIZED, on=e)]
+
+    world.rng.loaded = 20
+    world.decider = lambda who, kind, pool, what="": pool[0]
+    dsl.use(world, me, GRANTED, spend=False)
+    once = held()
+    out.that(len(once) == 1,
+             "THE arm: one use immobilises one enemy in the zone",
+             f"{once}")
+
+    world.decider = (lambda who, kind, pool, what="":
+                     pool[1] if len(pool) > 1 else pool[0])
+    dsl.use(world, me, GRANTED, spend=False)
+    twice = held()
+    out.that(twice == once,
+             "the LATCH: a second use in the same round catches nobody"
+             " new, even with a different enemy offered and the die"
+             " loaded to hit",
+             f"{once} -> {twice}")
+
+    world.round += 1
+    dsl.use(world, me, GRANTED, spend=False)
+    later = held()
+    world.rng.loaded = None
+    out.that(len(later) > len(twice),
+             "and the NEXT round releases it, so the window is the round"
+             " rather than the encounter -- a latch that never released"
+             " would pass the arm above and fail the card",
+             f"{twice} -> {later}")
+
+
 def an_egg_variety_grants_its_own_minor_action(out: Result) -> None:
     """Two of `i3569p1`'s seven printed varieties grant a minor action of
     their own, printed in full with no id: *"you slide each slowed
@@ -130360,6 +130462,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "zone_attack_a_round": (
+        a_zone_offers_one_attack_a_round,
+        "i2980p1's zone offers one inline attack a round, latched on the"
+        " round rather than capped by a Usage",
     ),
     "egg_granted_minor": (
         an_egg_variety_grants_its_own_minor_action,
