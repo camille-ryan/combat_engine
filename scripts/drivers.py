@@ -5783,6 +5783,138 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_missed_uses_effects_can_be_taken_back(out: Result) -> None:
+    """`i1676p1`: *"Trigger: you miss every target with an attack you make
+    using this crossbow. Effect: you don't expend the use of that power.
+    The power also has no effect on a miss, even if it normally does."*
+
+    **The trigger is what makes the undo affordable, and `#1332` raised
+    three decisions the card itself answers.** It asked how far an undo
+    reaches, whether every resolution has to be recorded, and how to
+    scope it. The card fires only when **every** target was missed, so
+    there is no hit half to preserve; and nothing has to be recorded on
+    any attack, because `Bus.log` already holds the use and `PowerUsed`
+    bounds it. `resolve.retract_miss` is a walk back to that event.
+
+    **Hit points are restored, not healed**, which is the arm worth
+    reading: `c.heal` announces `Healed` and rows answer one, so healing
+    here would pay out riders for a blow the card says never landed.
+    #1525.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Healed
+    from combat_engine.engine.resolve import retract_miss
+    from combat_engine.engine.types import Condition, DamageType
+
+    REF = "i1676p1"
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    victim = sorted(c.enemies())[0]
+    health = world.need(victim, Health)
+
+    # A use of a made-up ref, announced the way `dsl.use` announces one,
+    # so the walk has a `PowerUsed` to stop at. The row reads the ref off
+    # its own trigger, so any ref will do here.
+    from combat_engine.engine.events import PowerUsed
+
+    world.bus.emit(PowerUsed(actor=me, power="drv:shot", targets=[victim]))
+    hurt = Cast(world=world, me=me, ref="drv:shot")
+    was = health.hp
+    hurt.flat(7, dtype=DamageType.FIRE, on=victim)
+    hurt.condition(Condition.SLOWED, on=victim, until=When.SAVE_ENDS)
+    after_miss = health.hp
+    slowed = c.is_(Condition.SLOWED, on=victim)
+
+    out.that(after_miss == was - 7 and slowed,
+             "the premise: the missed use really did something -- 7 points"
+             " and a condition -- so an undo is a difference rather than a"
+             " board that never got going",
+             f"hp {was} -> {after_miss}, slowed {slowed}")
+
+    mark = len(world.bus.log)
+    undone = retract_miss(world, me, "drv:shot")
+    out.that(undone == 2,
+             "THE arm: both are reversed -- the damage and the hold. The"
+             " count is the return, and 0 is a real answer for a power"
+             " whose miss line does nothing",
+             f"{undone} reversed")
+    out.that(health.hp == was,
+             "and the hit points are back where they started",
+             f"{after_miss} -> {health.hp}")
+    out.that(not c.is_(Condition.SLOWED, on=victim),
+             "and the condition is gone, which is the *even if it"
+             " normally does* half -- damage alone would have been the"
+             " easy reading",
+             f"slowed {c.is_(Condition.SLOWED, on=victim)}")
+    out.that(not [e for e in world.bus.log[mark:] if isinstance(e, Healed)],
+             "and NOTHING was healed: `c.heal` announces `Healed` and"
+             " rows answer one, so healing here would pay out riders for"
+             " a blow the card says never landed. An undo is not a heal",
+             "no Healed announced")
+
+    # -- it stops at the use's own boundary -------------------------------
+    world2, me2, _ = _board(REF, 1)
+    c2 = Cast(world=world2, me=me2, ref="drv")
+    foe2 = sorted(c2.enemies())[0]
+    hp2 = world2.need(foe2, Health)
+    earlier = Cast(world=world2, me=me2, ref="drv:before")
+    earlier.flat(5, dtype=DamageType.FIRE, on=foe2)
+    before_the_use = hp2.hp
+    world2.bus.emit(PowerUsed(actor=me2, power="drv:shot", targets=[foe2]))
+    Cast(world=world2, me=me2, ref="drv:shot").flat(
+        3, dtype=DamageType.FIRE, on=foe2)
+    retract_miss(world2, me2, "drv:shot")
+    out.that(hp2.hp == before_the_use,
+             "CONTROL: and it stops at that use's own `PowerUsed` --"
+             " damage dealt BEFORE the shot stays dealt, so the walk"
+             " undoes one use rather than the whole fight",
+             f"{before_the_use} -> {hp2.hp}, 5 earlier points kept")
+    out.that(retract_miss(world2, me2, "drv:never-used") == 0,
+             "CONTROL: and a ref that was never used reverses nothing"
+             " rather than walking the whole log",
+             "0 reversed")
+
+    # -- and the ROW calls it ---------------------------------------------
+    #
+    # **This arm exists because a plant showed the others could not see
+    # the row.** Everything above calls `retract_miss` directly, so
+    # deleting the row's own line reddened nothing.
+    def the_row() -> tuple[int, int, bool]:
+        from combat_engine.engine.events import PowerResolved
+
+        world3, me3, _ = _board(REF, 1)
+        c3 = Cast(world=world3, me=me3, ref="drv")
+        foe3 = sorted(c3.enemies())[0]
+        hp3 = world3.need(foe3, Health)
+        world3.bus.emit(PowerUsed(actor=me3, power="drv:shot",
+                                  targets=[foe3]))
+        shot = Cast(world=world3, me=me3, ref="drv:shot")
+        start_hp = hp3.hp
+        shot.flat(7, dtype=DamageType.FIRE, on=foe3)
+        shot.condition(Condition.SLOWED, on=foe3, until=When.SAVE_ENDS)
+        cast = Cast(world=world3, me=me3, ref=REF)
+        cast.trigger = PowerResolved(actor=me3, power="drv:shot",
+                                     targets=[foe3], rolls=[])
+        REGISTRY[REF].body(cast)
+        return (start_hp, hp3.hp,
+                Cast(world=world3, me=me3, ref="drv").is_(
+                    Condition.SLOWED, on=foe3))
+
+    was3, now3, still = the_row()
+    out.that(now3 == was3 and not still,
+             "THE row arm: the row itself takes the miss half back -- the"
+             " hit points are where they started and the hold is gone,"
+             " driven through the body with the trigger staged",
+             f"hp {was3} -> {now3}, slowed {still}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_power_can_be_told_to_target_somebody_before_it_runs(out: Result) -> None:
     """`i2339p1`: *"until the end of your next turn, when you attack with
     your `p1448`, ... the attack also targets the affected creature."*
@@ -136028,6 +136160,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "missed_use_retracted": (
+        a_missed_uses_effects_can_be_taken_back,
+        "i1676p1 takes back what a use that missed everything did"
+        " (#1525)",
     ),
     "target_added_before_the_use": (
         a_power_can_be_told_to_target_somebody_before_it_runs,

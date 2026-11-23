@@ -122,6 +122,7 @@ from combat_engine.engine.basic import RANGED
 #: rather than approximated off a single `Miss`.
 from combat_engine.engine.events import Boosted, DamageRolled, PowerResolved
 from combat_engine.engine.query import shaped
+from combat_engine.engine.resolve import retract_miss
 
 ITEM = "item"
 
@@ -1497,7 +1498,6 @@ def i1676x1(c: Cast) -> None:
     target=SELF,
     trigger="you miss every target with an attack using this crossbow",
     on=Trigger(PowerResolved, _all_missed, "you missed with every shot"),
-    dropped=("resolve.retract_miss()",),
 )
 def i1676p1(c: Cast) -> None:
     """`c.restore_use` is the "you don't expend the use" half.
@@ -1529,8 +1529,19 @@ def i1676p1(c: Cast) -> None:
     it is laid on a victim before the blow, where this is the attacker
     afterwards."""
     ref = getattr(c.trigger, "power", "")
-    if ref:
-        c.restore_use(ref, on=c.me)
+    if not ref:
+        return
+    c.restore_use(ref, on=c.me)
+    # **"The power also has no effect on a miss, even if it normally
+    # does."** `resolve.retract_miss` walks back to that use's own
+    # `PowerUsed` and reverses the effects and the damage it announced.
+    #
+    # Affordable because of the trigger rather than in spite of it: the
+    # card fires only when EVERY target was missed, so there is no hit
+    # half to preserve and nothing has to be recorded on every attack in
+    # the game -- `#1332` raised both of those as decisions and the
+    # printed trigger answers them. #1525.
+    retract_miss(c.world, c.me, ref)
 
 
 @power(

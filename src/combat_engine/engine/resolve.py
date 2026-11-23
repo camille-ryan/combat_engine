@@ -30,9 +30,11 @@ from .events import (
     DamageRolled,
     Died,
     Dropped,
+    EffectApplied,
     Healed,
     Hit,
     Miss,
+    PowerUsed,
     SurgeSpent,
     TempHP,
 )
@@ -1584,6 +1586,75 @@ def _mark_penalty(world: World, attacker: int, among: tuple[int, ...]) -> int:
 
 
 # -- damage -----------------------------------------------------------------
+
+def retract_miss(world: World, actor: int, power: str) -> int:
+    """Un-apply what a resolved use did, for a use that missed everything.
+
+    `i1676p1`: *"Trigger: you miss every target with an attack you make
+    using this crossbow. Effect: you don't expend the use of that power.
+    The power also has no effect on a miss, even if it normally does."*
+
+    **The trigger is what makes this affordable, and `#1332` did not
+    exploit it.** That issue raised three decisions -- how far an undo
+    reaches, whether to record every resolution, and how to scope it --
+    and the card answers all three by saying *every* target was missed.
+    There is no hit half to preserve, so this does not have to tell a
+    miss line from a hit line; and nothing has to be recorded on every
+    attack in the game, because `Bus.log` already holds the use and
+    `PowerUsed` already bounds it.
+
+    So the undo is a walk back to this use's own `PowerUsed` and a
+    reversal of what it announced:
+
+    * every `EffectApplied` by this actor -- the hold is found by its
+      label and source on the target it landed on, because the event
+      carries no id;
+    * every `DamageApplied` by this actor -- the points go back on.
+
+    Returns how many things were reversed, which is a real answer at 0:
+    a power whose miss line does nothing has nothing to take off.
+
+    **Hit points are restored, not healed.** `c.heal` announces `Healed`
+    and a dozen rows answer one, so healing here would pay out riders for
+    a blow the card says never landed. An undo is not a heal. For the
+    same reason nothing is emitted per reversal -- `#1332`'s own first
+    decision is that the miss half should not have happened, and a log
+    full of undo events is a different claim.
+
+    **What it cannot reverse**, said plainly rather than left to be
+    discovered: a miss that *moved* a creature or *spent* something.
+    Putting a creature back is not the same as its never having moved --
+    it has left and re-entered every zone on the way -- and this card's
+    printed line is about effects and damage. No printed miss line in the
+    tree moves anybody, measured; the day one does, this returns a count
+    that is short and the row above it is the place to notice.
+    """
+    from .components import Health
+
+    start = -1
+    for n in range(len(world.bus.log) - 1, -1, -1):
+        ev = world.bus.log[n]
+        if (isinstance(ev, PowerUsed) and ev.actor == actor
+                and ev.power == power):
+            start = n
+            break
+    if start < 0:
+        return 0
+    undone = 0
+    for ev in world.bus.log[start + 1:]:
+        if isinstance(ev, EffectApplied) and ev.source == actor:
+            for eff in list(world.effects.of(ev.target)):
+                if eff.label == ev.label and eff.source == actor:
+                    world.effects.end(eff, "the attack missed")
+                    undone += 1
+                    break
+        elif isinstance(ev, DamageApplied) and ev.source == actor:
+            health = world.get(ev.target, Health)
+            if health is not None and ev.amount > 0:
+                health.hp = min(health.max_hp, health.hp + ev.amount)
+                undone += 1
+    return undone
+
 
 
 def deal_damage(
