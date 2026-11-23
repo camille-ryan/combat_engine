@@ -314,7 +314,7 @@ def f1163(c: Cast) -> None:
 
 
 @power("f2805", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("cf:sorcerer-f0s3",),
+       reach=PERSONAL, target=SELF,
        trigger="you slide a target with a sorcerer attack",
        on=Trigger(ForcedMove, _my_sorcerer_slide, "you slide a target"))
 def f2805(c: Cast) -> None:
@@ -338,12 +338,17 @@ def f2805(c: Cast) -> None:
     `p16224`, `p11834` and `cf:sorcerer-elementalist-f2s3` are the three
     -- so testing for a declared attack would drop exactly those.
 
-    **`dropped=` is now the dealability alone.** The printed prerequisite
-    is `{"ref": "cf:sorcerer-f0s3"}` in an `all`, and no declared row
-    carries that ref: the wild soul is a *leg* of `cf:sorcerer-f0`,
-    answered by `c.build("wild")`, and `chargen.meets` reads a dealt hand
-    which never holds a leg ref. So the clause is complete and nobody can
-    hold it -- `#1447`'s census, `#235`'s axis. #1533.
+    **And the dealability holds too, so there is no marker left.** The
+    printed prerequisite is `{"ref": "cf:sorcerer-f0s3"}` in an `all`.
+    No declared *row* carries that ref -- the wild soul is a **leg** of
+    `cf:sorcerer-f0` -- and `chargen.meets` does not want a row: it asks
+    whether the hand holds the ref. `#1427` put it there.
+    `cf:sorcerer-f0s3` is a `BUILD_OPTIONS["cf:sorcerer-f0"]` value,
+    `OPTION_PACT` keys it to the `wild` leg, and `spawn` draws options in
+    a **pre-feat** pass whose result is handed to `feats_for`.
+    Re-measured through `spawn` over all eight sorcerer legs: the option
+    is held on `wild` and on no other, and this row is in the legal pool
+    for exactly those sorcerers. #1533, #1535.
     """
     c.penalty(AC, 2, on=c.trigger.target, until=When.EONT)
 
@@ -581,7 +586,7 @@ def f2806(c: Cast) -> None:
 
 
 @power("f2807", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("cf:sorcerer-f0s3",),
+       reach=PERSONAL, target=SELF,
        trigger="you roll initiative",
        on=Trigger(InitiativeRolled, about_me, "you roll initiative"))
 def f2807(c: Cast) -> None:
@@ -628,19 +633,22 @@ def f2807(c: Cast) -> None:
     rather than rolled, so the gate reads no match there rather than
     even, which is why the parity test asks for a face at all.
 
-    **And the feat still cannot be DEALT, which is a second gap and was
-    missed when the parity half landed.** Its printed prerequisite is
-    `{"ref": "cf:sorcerer-f0s3"}` in an `all`, and that leg is not a
-    declared row -- so `chargen.meets` answers it against a dealt hand
-    that never holds a leg ref. The clause above is written and correct;
-    nobody can hold it. `f2805`, `f2806` and `f3435` wait on the same
-    leg, and `f469`, `f470`, `f1009`, `f370`, `f2478`, `f3425` on their
-    own, which is `#235`'s axis -- a decision, not work, and the reason
-    granting the leg from its parent is refused there is that it would
-    hand a sorcerer on another fork a feat printed for this one.
+    **The second gap -- "and the feat still cannot be DEALT" -- is gone
+    too, and it was a stale measurement rather than a wrong one.** That
+    note said `chargen.meets` answers the printed
+    `{"ref": "cf:sorcerer-f0s3"}` against a dealt hand that never holds
+    a leg ref, and listed five other rows waiting on `#235` for the same
+    reason. `#1427` had already fixed it by a route the note did not
+    know about: the leg refs are `BUILD_OPTIONS` values, `OPTION_PACT`
+    keys each to its own leg, and `spawn` draws options in a **pre-feat**
+    pass whose result it hands to `feats_for`. So the hand does hold the
+    ref -- for the character on that leg and for nobody else, which is
+    exactly what `#235` was being asked to guarantee.
 
-    One symbol now, not two: the ordering gap was not this row's and the
-    dealability one is. `#1447` holds the census."""
+    Re-measured through `spawn` over all eight sorcerer legs: the option
+    lands on `wild` alone, and this row is in the legal pool for those
+    sorcerers. `f2805`, `f469`, `f470` and `f1009` un-marked with it.
+    No symbols left. `#1535`."""
     me = c.me
     # Even, by the argument in the docstring: the call is free.
     want_even = True

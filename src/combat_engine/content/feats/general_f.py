@@ -554,9 +554,17 @@ def f604(c: Cast) -> None:
 # The prerequisites name `cf:bard-f1s0` and `cf:bard-f1s2` by ref, and
 # neither is a row: `cf:bard-f1` writes both of those virtues *inline*,
 # forking on the derived `second-int` and `second-con` legs, and only the
-# third virtue got a row of its own (`cf:bard-f1s1`). So the leg is
-# reachable as a name and not as something `chargen.meets` can answer,
-# which is why both rows below carry a dealability marker.
+# third virtue got a row of its own (`cf:bard-f1s1`).
+#
+# **Neither row carries a dealability marker any more, and the last
+# clause of the paragraph above was the stale part.** "Reachable as a
+# name and not as something `chargen.meets` can answer" assumed `meets`
+# resolves a ref to a row. It does not -- it asks whether the hand holds
+# the ref -- and `#1427` put both refs in the hand: they are
+# `BUILD_OPTIONS["cf:bard-f1"]` values, `OPTION_PACT` keys each to its
+# leg, and `spawn`'s pre-feat option pass hands the result to
+# `feats_for`. So a bard on `f1s0` holds `cf:bard-f1s0` and no other,
+# which is both halves of what these prerequisites want. #1535.
 #
 # **The moment is not the problem, and this comment used to say it was.**
 # It ended "so the feature is reachable as a name and not as a moment",
@@ -567,7 +575,7 @@ def f604(c: Cast) -> None:
 
 
 @power("f469", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("cf:bard-f1s0",))
+       reach=PERSONAL, target=SELF)
 def f469(c: Cast) -> None:
     """Rides on the virtue that slides an ally.
 
@@ -606,14 +614,17 @@ def f469(c: Cast) -> None:
     card names the square rather than a distance. One square is the whole
     of it.
 
-    **Dropped: the feat still cannot be dealt**, which is not a clause
-    here. Its printed prerequisite is `cf:bard-f1s0` and that ref is not
-    declared -- `cf:bard-f1` writes the virtue inline, forking on the
-    derived leg -- so `chargen.meets` can never answer it. `dropped=`
-    rather than `todo=` because the row plays the moment it is held, and
-    `legal_feats` refuses a `todo=` row outright. A separate symbol from
-    `f470`'s `cf:bard-f1s2`: they are two different undeclared
-    sub-options and one marker names one gap.
+    **The dealability marker is gone, and it was stale rather than
+    wrong.** It said the printed prerequisite `{"ref": "cf:bard-f1s0"}`
+    could never be answered because no row declares that ref. The ref is
+    not a row and never will be -- but `chargen.meets` does not ask for
+    one. It asks whether the hand holds the ref, and `#1427` put it
+    there: `cf:bard-f1s0` is a value of `BUILD_OPTIONS["cf:bard-f1"]`,
+    `OPTION_PACT` keys it to the `f1s0` leg, and `spawn` runs a
+    **pre-feat** option pass (`from_hand`) whose results are handed to
+    `feats_for`. Measured through the dealer: the option is held by
+    exactly the bards on that leg, and this row is in the legal pool for
+    them. #1535.
     """
     me = c.me
     pending: dict[str, Any] = {}
@@ -660,7 +671,7 @@ def f469(c: Cast) -> None:
 
 
 @power("f470", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("cf:bard-f1s2",))
+       reach=PERSONAL, target=SELF)
 def f470(c: Cast) -> None:
     """Rides on the virtue that grants temporary hit points.
 
@@ -683,12 +694,17 @@ def f470(c: Cast) -> None:
     ally's. `once=True` is "the next damage roll". Untyped, because the
     card prints no word in front of the bonus.
 
-    **Dropped: the feat still cannot be dealt**, and that is not a clause
-    here. Its printed prerequisite is `{"ref": "cf:bard-f1s2"}`, which
-    `chargen.meets` answers against the dealt list, and no dealt hand ever
-    holds a leg ref -- measured through `chargen.dealt_hand` over class x
-    declared_chassis x build: the 29 leg refs a feat prerequisite names are
-    dealt 0 times and their 22 parent features 22 of 22. #1447.
+    **The dealability marker is gone, and the measurement it rested on
+    has expired.** It read *"no dealt hand ever holds a leg ref --
+    measured through `chargen.dealt_hand` over class x declared_chassis x
+    build: the 29 leg refs a feat prerequisite names are dealt 0
+    times"*. That was true of `dealt_hand`, which deals **powers**, and
+    `#1427` then made the leg refs arrive by another route: they are
+    `BUILD_OPTIONS` values, `OPTION_PACT` keys each to its leg, and
+    `spawn` draws them in a **pre-feat** pass that hands them to
+    `feats_for`. Re-measured through `spawn`: `cf:bard-f1s2` is held by
+    exactly the bards on the `f1s2` leg, and this row is in their legal
+    pool. #1535.
 
     **Re-pointed from #416, which is closed**, and the correction narrows
     this rather than restating it. #416 was about recording that a leg's
@@ -706,13 +722,13 @@ def f470(c: Cast) -> None:
       narrower: `meets` reads `class_feature.duplicate_of`, which recovers
       three feats whose leg is another name for a card the hand holds.
 
-    `cf:bard-f1s2` is an `fNsM` **build leg**, which is a fork and not
-    another name for one card, so the alias cannot answer it and must not:
-    granting it from `cf:bard-f1` would hand a bard on `f1s0` a feat
-    printed for `f1s2`. That is `#235`'s axis and this row waits for it.
-
-    `dropped=` rather than `todo=` for `f1009`'s reason: the row plays if
-    it is ever held, and `legal_feats` refuses a `todo=` row outright.
+    Both of those corrections stand. What has changed is only the last
+    step: `cf:bard-f1s2` is indeed an `fNsM` **build leg** and the
+    `duplicate_of` alias must not answer it -- granting it from
+    `cf:bard-f1` would hand a bard on `f1s0` a feat printed for `f1s2`.
+    The hand does not need an alias, because the character's **own** leg
+    puts its own option there and no other. So this row does not wait on
+    `#235`.
     """
 
     def paid(ev: TempHP) -> None:

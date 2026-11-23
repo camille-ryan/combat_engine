@@ -152,7 +152,7 @@ def f1720(c: Cast) -> None:
 
 
 @power("f1009", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("cf:barbarian-f1s0",))
+       reach=PERSONAL, target=SELF)
 def f1009(c: Cast) -> None:
     """Raises the temporary hit points one class-feature option pays.
 
@@ -176,15 +176,19 @@ def f1009(c: Cast) -> None:
     *is* this option's. It stops being exact the day the feature pays
     temporary hit points on a second leg.
 
-    **Dropped: the feat cannot be dealt.** Its printed prerequisite is
-    `{"ref": "cf:barbarian-f1s0"}`, and `chargen.meets` answers that
-    against the character's dealt list, which carries `f1s1`..`f1s3` and
-    never `f1s0` -- because no row declares it. The mechanism works: with
-    the ref present `meets` returns True. So the body is complete and what
-    is still owed is the option's own row, which is `primal_shadow.py`'s
-    ruling and `docs/blocked.json`'s `cf:barbarian-might-rest`, not a
-    clause here. `dropped=` rather than `todo=` because the row plays if it
-    is ever held, and `legal_feats` refuses a `todo=` row outright.
+    **The dealability marker is gone, and the note had already written
+    down the thing that retires it.** It said *"the mechanism works: with
+    the ref present `meets` returns True"*, and then that the ref is
+    never present because no row declares it. `meets` does not want a
+    row -- it asks whether the hand holds the ref -- and `#1427` put it
+    there: `cf:barbarian-f1s0` is a `BUILD_OPTIONS["cf:barbarian-f1"]`
+    value, `OPTION_PACT` keys it to the `rageblood` leg, and `spawn`
+    draws options in a **pre-feat** pass that hands them to `feats_for`.
+    Re-measured through `spawn`: the option is held by exactly the
+    rageblood barbarians, and this row is in their legal pool. The
+    option's own *row* is still not declared and still need not be --
+    the body gates on `cf:barbarian-f1`, which is the ref that rides the
+    `TempHP`, for the reason the paragraph above gives. #1535.
 
     Untyped: the card prints no word in front of a bonus, and the belt
     property that raises the same pool prints none either -- untyped

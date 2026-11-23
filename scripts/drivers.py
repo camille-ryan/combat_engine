@@ -52942,6 +52942,214 @@ def concealment_denied_without_cover(out: Result) -> None:
         )
 
 
+def a_leg_feat_is_dealable(out: Result) -> None:
+    """A feat gated on a `cf:` build leg reaches the character on that leg.
+
+    Five feats carried a **dealability** marker naming a leg ref --
+    `f469`, `f470`, `f1009`, `f2805`, `f2807` -- each note saying that
+    `chargen.meets` answers `{"ref": "cf:bard-f1s0"}` against a hand
+    that never holds a leg ref, because no row declares one. Every one
+    of those notes was measured when written and all five had expired.
+
+    `meets` does not resolve a ref to a row; it asks whether the hand
+    holds the ref. `#1427` put it there, by a route none of the notes
+    knew about:
+
+    * the leg refs are values of `BUILD_OPTIONS[<parent fork>]`;
+    * `OPTION_PACT` keys each one to the leg it belongs to, and
+      `deal_build_options` narrows a leg-keyed fork to that leg **before**
+      drawing, so no draw happens at all when the narrowing leaves one;
+    * `spawn` runs a **pre-feat** option pass -- `from_hand` -- and hands
+      its refs to `feats_for`, so they are in the hand when the
+      prerequisite is evaluated.
+
+    Three arms, and the second is the one that matters:
+
+    * each of the five is in the legal pool for a character on its own
+      leg;
+    * and **not** for a character on a sibling leg of the same class,
+      which is the guarantee `#235` was being asked for and the reason
+      `meets` still refuses to grant a leg from its parent;
+    * the option really is dealt by `spawn` on that leg and on no other,
+      so the pool arm is not resting on a hand this rule assembled.
+
+    #1535.
+    """
+    from random import Random
+
+    from combat_engine import chargen
+    from combat_engine.chargen import choices as C
+    from combat_engine.chargen.choices import legal_feats
+    from combat_engine.engine.components import Build
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import Bus
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.rng import Rng
+
+    #: (feat, class, its own leg, the option its prerequisite names)
+    FIVE = (
+        ("f469", "bard", "f1s0", "cf:bard-f1s0"),
+        ("f470", "bard", "f1s2", "cf:bard-f1s2"),
+        ("f1009", "barbarian", "rageblood", "cf:barbarian-f1s0"),
+        ("f2805", "sorcerer", "wild", "cf:sorcerer-f0s3"),
+        ("f2807", "sorcerer", "wild", "cf:sorcerer-f0s3"),
+    )
+
+    # **A board first, and it is load-bearing rather than ceremony.**
+    # `legal_feats` filters on `ref in REGISTRY`, and `dsl.REGISTRY` holds
+    # three rows until something imports the content package -- so without
+    # this every arm below reads an empty pool and reports the five
+    # un-dealable, which is the opposite of what it measures.
+    _board("f2805", 1)
+
+    def leg(cls: str, name: str) -> Any:
+        return next(b for b in chargen.BUILDS[cls]
+                    if getattr(b, "name", b) == name)
+
+    own = [ref for ref, cls, name, opt in FIVE
+           if ref in legal_feats(cls, 10, leg(cls, name), "", taken=(opt,))]
+    out.that(
+        len(own) == len(FIVE),
+        "each of the five is in the legal pool for a character holding"
+        " its own leg's option",
+        f"legal: {own}",
+    )
+
+    # **The sibling control, and it is the whole reason this is safe.**
+    # The option is handed in from the WRONG leg, so a `meets` that
+    # granted a leg from its parent -- or ignored the ref -- would admit
+    # the feat here too.
+    strays = []
+    for ref, cls, name, _opt in FIVE:
+        others = [getattr(b, "name", b) for b in chargen.BUILDS[cls]
+                  if getattr(b, "name", b) != name]
+        for other in others:
+            sibling = chargen._build_options([], None, other)
+            held = tuple(c[c.rindex(":cf:") + 1:]
+                         for c in sibling if ":cf:" in c)
+            if ref in legal_feats(cls, 10, leg(cls, other), "", taken=held):
+                strays.append((ref, other))
+    out.that(
+        not strays,
+        "and NOT for a character on a sibling leg of the same class,"
+        " which is the guarantee that makes admitting the ref safe",
+        f"admitted off the wrong leg: {strays}",
+    )
+
+    # -- and spawn's own wiring puts it there, which the arm above cannot
+    # -- say, because that arm HANDS IN the option. Removing the pre-feat
+    # -- option pass left every assertion above green: `legal_feats` was
+    # -- being told the very thing the pass is for. This arm spies on the
+    # -- pools `spawn` really asks for, so it reaches the wiring.
+    pools: dict[tuple[str, str], set[str]] = {}
+
+    def pool_from_spawn(cls: str, name: str) -> set[str]:
+        """The union of the feat pools `spawn` asks for on that leg.
+
+        **Capped at three matching draws and memoised**, which is a cost
+        decision and is said out loud: uncapped, this arm alone was 154s
+        of a suite whose whole budget is about fifteen minutes. Three is
+        enough to cross every chassis the dealer pairs with a leg in
+        practice -- the bard's two are both reached inside three -- and
+        the arm below that walks **all** (chassis, leg) pairs is the one
+        carrying the completeness claim.
+        """
+        if (cls, name) in pools:
+            return pools[cls, name]
+        asked: list[set[str]] = []
+        plain = C.legal_feats
+
+        def spy(*a: Any, **k: Any) -> Any:
+            got = plain(*a, **k)
+            asked.append(set(got))
+            return got
+
+        runs = 0
+        for seed in range(400):
+            rng = Random(seed)
+            chassis = chargen.deal_chassis(rng, cls)
+            build = chargen.deal_build(rng, cls, chassis=chassis)
+            if getattr(build, "name", build) != name:
+                continue
+            who = chargen.Character(cls=cls, level=10, build=name,
+                                    chassis=chassis)
+            world = World(grid=Grid(24, 24), rng=Rng(seed=1), bus=Bus())
+            C.legal_feats = spy
+            try:
+                chargen.spawn(world, who, (4, 4))
+            finally:
+                C.legal_feats = plain
+            runs += 1
+            if runs >= 3:
+                break
+        pools[cls, name] = set().union(*asked) if asked else set()
+        return pools[cls, name]
+
+    unwired = [(ref, name) for ref, cls, name, _o in FIVE
+               if ref not in pool_from_spawn(cls, name)]
+    out.that(
+        not unwired,
+        "and `spawn`'s OWN feat draw is offered it -- spied on the pools"
+        " it asks for, which is the only arm that reaches the pre-feat"
+        " option pass rather than being handed its result",
+        f"never offered by spawn: {unwired}",
+    )
+
+    # -- the option is really dealt there, which the arms above assume ---
+    def pairs_holding(cls: str, opt: str) -> tuple[list, list]:
+        """Every (chassis, leg) the dealer makes, split by holding `opt`.
+
+        **Over all pairs rather than the first one found**, and that is
+        not thoroughness for its own sake: a chassis can replace the
+        whole feature. The bard's `skald` carries `cf:bard-skald-f0..f5`
+        and no `cf:bard-f1` at all, so a draw landing on leg `f1s2` as a
+        skald holds no option -- and an arm that returned on the first
+        such draw read as the option never being dealt. Searching until
+        one *does* hold it would be the opposite error, so both lists are
+        returned and both are asserted.
+        """
+        with_it: list[tuple[str, str]] = []
+        without: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for seed in range(400):
+            rng = Random(seed)
+            chassis = chargen.deal_chassis(rng, cls)
+            build = chargen.deal_build(rng, cls, chassis=chassis)
+            name = getattr(build, "name", build)
+            key = (chassis, name)
+            if key in seen:
+                continue
+            seen.add(key)
+            who = chargen.Character(cls=cls, level=10, build=name,
+                                    chassis=chassis)
+            world = World(grid=Grid(24, 24), rng=Rng(seed=1), bus=Bus())
+            eid = chargen.spawn(world, who, (4, 4))
+            got = getattr(world.get(eid, Build), "choices", ()) or ()
+            (with_it if any(opt in c for c in got) else without).append(key)
+        return with_it, without
+
+    never = []
+    wrong_leg = []
+    for ref, cls, name, opt in FIVE:
+        with_it, _without = pairs_holding(cls, opt)
+        if not with_it:
+            never.append((ref, opt))
+        wrong_leg += [(ref, k) for k in with_it if k[1] != name]
+    out.that(
+        not never,
+        "`spawn` really deals each option to at least one character the"
+        " dealer makes, so the pool arms are not resting on a hand"
+        " assembled here",
+        f"dealt to nobody: {never}",
+    )
+    out.that(
+        not wrong_leg,
+        "and only ever on the feat's own leg -- the dealer's half of the"
+        " same guarantee the pool arm makes",
+        f"dealt on a sibling leg: {wrong_leg}",
+    )
+
+
 def the_called_soul_die(out: Result) -> None:
     """"Choose 1-5 or 6-10 ... you can choose any result to replace it."
 
@@ -135998,6 +136206,10 @@ DRIVERS = {
     "called_initiative": (
         the_called_initiative,
         "f2807 reaches the fight's own opening initiative roll",
+    ),
+    "leg_feat_dealable": (
+        a_leg_feat_is_dealable,
+        "a feat gated on a cf: build leg reaches that leg and no sibling",
     ),
     "no_concealment": (
         concealment_denied_without_cover,
