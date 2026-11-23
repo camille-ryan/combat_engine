@@ -1381,15 +1381,24 @@ def m5648a2(c: Cast) -> None:
     attack=Attack(vs=REF, printed=6),
     requires=_not_grabbing,
     requires_text="must have no creature grabbed",
-    dropped=("c.grab_reach()",),
+    dropped=("relations.grab_at_a_distance",),
 )
 def m5648a3(c: Cast) -> None:
     """The blind is tied to the hold rather than given a duration of its own:
     "until the grab ends" is not a `When`, and `Effect.on_end` is.
 
-    Two clauses are dropped and they are different gaps -- the printed escape
-    DC, which `c.grab` neither takes nor rolls, and the two squares the hold
-    reaches, where `Relation.GRABBED_BY` means adjacent and nothing else.
+    **One clause is dropped now, not two, and the symbol is narrowed.**
+    The note said the printed escape DC was a gap *"which `c.grab`
+    neither takes nor rolls"*; it takes one, and the body four lines
+    below passes `dc=13`. That half has been written for a while.
+
+    What is left is the two squares the **hold** reaches, where
+    `Relation.GRABBED_BY` means adjacent and nothing else. That is not
+    `c.grab_reach()`, which this used to name and which `i2393x1` has
+    now: that one is the reach of a grab *attempt*, read in
+    `actions._manoeuvres` off a gated `c.bonus("reach", ...)`, and it
+    says nothing about how far away a hold may persist. One symbol was
+    serving the two, so this names its own. #1491.
     """
     foe = c.target
     if foe is None or not c.strike():

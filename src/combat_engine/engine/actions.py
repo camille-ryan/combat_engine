@@ -3290,6 +3290,22 @@ def _manoeuvres(world: World, encounter: Encounter, actor: int) -> list[Action]:
     standard = encounter.can_spend(actor, ActionType.STANDARD)
     if not standard and not cheap:
         return out
+    # **A grab may reach further than the other two, so the three no longer
+    # share one `> 1`.** `i2393x1` prints *"gain reach 2 for purposes of
+    # grab attacks"* and `m5648a3` the same clause; both were refused by a
+    # literal 1 here that consulted nothing per-creature. Read through
+    # `dsl._stretched`, which is the door every other reach increase goes
+    # through, with the `as_` the attack context already carries for a grab
+    # -- so the modifier is an ordinary gated `c.bonus("reach", ...)` and
+    # needs no vocabulary of its own.
+    #
+    # Bull rush and aid keep the printed 1 deliberately: no card in the
+    # tree stretches either, and reading the same stretch for all three
+    # would hand a grab-reach item a longer shove as well. #1491.
+    from .dsl import _stretched
+
+    grab_reach = 1 + _stretched(world, actor, "melee", {"as_": "grab"},
+                                printed=1)
     for foe in enemies(world, actor):
         if not alive(world, foe) or distance_between(world, actor, foe) > 1:
             continue
@@ -3308,6 +3324,21 @@ def _manoeuvres(world: World, encounter: Encounter, actor: int) -> list[Action]:
                 cost = ActionType.STANDARD
             if cost is not None:
                 out.append(Action(kind=what, cost=cost, targets=(foe,)))
+
+    # **Appended as its own pass rather than widening the loop above.**
+    # `legal` promises a deterministic order and `policy/` walks it, so a
+    # grab reaching two squares has to ADD an entry without moving the
+    # ones already offered -- rewriting the loop's gate reordered bull
+    # rush and grab for every adjacent foe in the game, which is a
+    # fixture change for a clause two rows print.
+    if standard and grab_reach > 1:
+        for foe in enemies(world, actor):
+            if not alive(world, foe):
+                continue
+            apart = distance_between(world, actor, foe)
+            if 1 < apart <= grab_reach:
+                out.append(Action(kind="grab", cost=ActionType.STANDARD,
+                                  targets=(foe,)))
     return out
 
 

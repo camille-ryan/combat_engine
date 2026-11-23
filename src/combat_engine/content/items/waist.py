@@ -1092,9 +1092,22 @@ def i2067x1(c: Cast) -> None:
     behind one gap, not two."""
 
 
+def _for_a_grab(ctx: dict[str, Any]) -> bool:
+    """Is the roll being modified a grab attempt?
+
+    `c.attack(as_="grab")` is what `c.grab_attempt` rolls through and
+    `resolve` declares `as_` in the attack context, which is the same
+    door the bull rush modifiers use. `items/feet.py` has the identical
+    helper for its own file; kept local rather than shared because a
+    one-line predicate imported across content files is the coupling the
+    component rules warn about.
+    """
+    return ctx.get("as_") == "grab"
+
+
 @power("i2393x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.grab_reach()", "c.grab_without_hand()"))
+)
 def i2393x1(c: Cast) -> None:
     """Reach 2 for a grab attempt, and no free hand needed to make one.
 
@@ -1130,7 +1143,31 @@ def i2393x1(c: Cast) -> None:
     card prints them as two sentences.
 
     Still `todo=` and not `dropped=`: with neither half written the
-    property does nothing whatever in a fight."""
+    **Both halves land, and the old note had already found both sites.**
+    The reach is `actions._manoeuvres`' literal 1, which is now
+    `dsl._stretched(world, actor, "melee", {"as_": "grab"}, printed=1)` --
+    the door every other reach increase goes through, with the `as_` the
+    attack context already carries for a grab. So the modifier is an
+    ordinary gated `c.bonus("reach", ...)` and no vocabulary was minted
+    for it. The free hand is `c.grab_attempt`'s `len(gear.held) >= 2`,
+    waived by `"grab_handless"`, read in that one place. #1491.
+
+    **Not `c.waive`**, whose four words raise on anything else by design:
+    spending a closed set a gate depends on, for one clause, is the trade
+    `c.waive(cannot_act)` is still correctly refusing elsewhere.
+
+    The longer grab is offered as its own pass in `_manoeuvres` rather
+    than by widening the adjacency loop, because `legal` promises a
+    deterministic order and `policy/` walks it -- rewriting the gate
+    reordered bull rush and grab for every adjacent foe in the game.
+    Measured: `replay` 8 of 8 unmoved with the pass appended.
+
+    `m5648a3` prints the reach half too and shares the modifier rather
+    than a second key.
+    """
+    c.bonus("reach", 1, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_for_a_grab)
+    c.bonus("grab_handless", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i2393p1", level=8, cls=ITEM, usage=DAILY, action=FREE,

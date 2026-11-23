@@ -72892,6 +72892,182 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_grab_may_reach_two_and_need_no_hand(out: Result) -> None:
+    """*"Gain reach 2 for purposes of grab attacks. Also, you do not need a
+    free hand to make a grab attack."* -- `i2393x1`. #1491.
+
+    **Two clauses, two sites, and the row's own note had found both.** The
+    reach was a literal `1` in `actions._manoeuvres` gating bull rush,
+    grab and aid alike and consulting nothing per-creature; the free hand
+    is `c.grab_attempt`'s `len(gear.held) >= 2`.
+
+    **The control is the hard part here, because `audit.board` arms the
+    row under test.** Measured: on a board built for this ref the
+    `"reach"` bonus and the handless waiver are *already standing* before
+    anything is used -- so a before/after around `dsl.use` is not a
+    control at all, and reported the widened offer as present "before".
+    The arms below strip the row's own modifiers by label to get a real
+    one.
+
+    The longer grab is offered as its own pass rather than by widening
+    the adjacency loop: `legal` promises a deterministic order and
+    `policy/` walks it, so an added reach must ADD entries without
+    moving the ones already there.
+    """
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW = "i2393x1"
+    out.that(not REGISTRY[ROW].unfinished,
+             "the row carries no marker any more",
+             f"{REGISTRY[ROW].unfinished}")
+
+    world, me, _ = _board(ROW, 1)
+    mods = world.get(me, Mods)
+    out.that(mods is not None
+             and mods.total("reach", {"as_": "grab"}) == 1
+             and mods.total("grab_handless", {}) > 0,
+             "premise: the board ARMS the row under test, so both"
+             " modifiers stand before anything is used -- which is why"
+             " the arms below strip them rather than measuring before and"
+             " after a `dsl.use`",
+             f"reach={mods.total('reach', {'as_': 'grab'}) if mods else None},"
+             f" handless={mods.total('grab_handless', {}) if mods else None}")
+    out.that(mods is not None
+             and mods.total("reach", {}) == 0
+             and mods.total("reach", {"as_": "bull_rush"}) == 0,
+             "and the reach bonus is SCOPED: it reads 0 for an ungated"
+             " context and 0 for a bull rush, so a grab-reach item does"
+             " not lengthen a shove",
+             f"bare={mods.total('reach', {}) if mods else None},"
+             f" bull_rush="
+             f"{mods.total('reach', {'as_': 'bull_rush'}) if mods else None}")
+
+    # -- a foe two squares off --------------------------------------------
+    c = Cast(world=world, me=me, ref="drv")
+    foes = sorted(c.enemies())
+    out.that(len(foes) >= 2, "premise: two foes to place",
+             f"{len(foes)}")
+    if len(foes) < 2:
+        return
+    here = world.get(me, Position).square
+    far = foes[0]
+    world.get(far, Position).square = (here[0] + 2, here[1])
+    for other in foes[1:]:
+        world.get(other, Position).square = (here[0] + 9, here[1] + 9)
+    out.that(c.distance(far) == 2,
+             "premise: the one live foe stands exactly two squares away",
+             f"{c.distance(far)}")
+
+    def grabbable() -> list[int]:
+        return [a.targets[0] for a in actions.legal(world, world.encounter, me)
+                if a.kind == "grab" and a.targets]
+
+    with_item = grabbable()
+    out.that(with_item == [far],
+             "THE arm: a grab is offered against a foe TWO squares away",
+             f"{with_item}")
+
+    # -- the control: the same board without the row's modifiers ----------
+    kept = [m for m in mods.items if m.label != ROW] if mods else []
+    dropped = len(mods.items) - len(kept) if mods else 0
+    if mods is not None:
+        mods.items[:] = kept
+    out.that(dropped >= 2,
+             "premise: the row's own two modifiers were found by label and"
+             " removed, so the control differs from the arm above in"
+             " exactly this row's doing",
+             f"{dropped} removed")
+    out.that(grabbable() == [],
+             "the CONTROL: with those two gone, no grab is offered at two"
+             " squares -- so the offer above is the modifier's doing and"
+             " not the board's",
+             f"{grabbable()}")
+
+    # -- bull rush is NOT widened ------------------------------------------
+    world2, me2, _ = _board(ROW, 1)
+    c2 = Cast(world=world2, me=me2, ref="drv")
+    foes2 = sorted(c2.enemies())
+    here2 = world2.get(me2, Position).square
+    world2.get(foes2[0], Position).square = (here2[0] + 2, here2[1])
+    for other in foes2[1:]:
+        world2.get(other, Position).square = (here2[0] + 9, here2[1] + 9)
+    kinds = {a.kind for a in actions.legal(world2, world2.encounter, me2)
+             if a.targets and a.targets[0] == foes2[0]}
+    out.that("grab" in kinds and "bull_rush" not in kinds,
+             "a bull rush is NOT offered at two squares, so the stretch is"
+             " read for the grab alone -- the printed clause says \"for"
+             " purposes of grab attacks\"",
+             f"{sorted(kinds)}")
+
+    # -- the free hand -----------------------------------------------------
+    world3, me3, _ = _board(ROW, 1)
+    gear = world3.get(me3, Gear)
+    out.that(gear is not None,
+             "premise: the character has `Gear` to fill",
+             f"{gear is not None}")
+    if gear is None:
+        return
+    # **`Gear.held` is a PROPERTY -- `weapons` minus `stowed` -- so it
+    # cannot be appended to.** Written as `while len(gear.held) < 2:
+    # gear.held.append(...)` first, which built a fresh list every
+    # iteration and spun for ten minutes until the run was killed. Hands
+    # are filled by giving the creature weapons, and the loop is bounded
+    # so a future shape change cannot hang the suite again.
+    for n in range(2):
+        if len(gear.held) >= 2 or not gear.weapons:
+            break
+        gear.weapons.append(replace(gear.weapons[0], ref=f"drv-spare-{n}"))
+    out.that(len(gear.held) >= 2,
+             "premise: both hands are full, which is what the printed"
+             " waiver is about",
+             f"{len(gear.held)}")
+    c3 = Cast(world=world3, me=me3, ref="drv")
+    beside = sorted(c3.enemies())[0]
+    world3.get(beside, Position).square = (
+        world3.get(me3, Position).square[0] + 1,
+        world3.get(me3, Position).square[1])
+    # **Measured by whether it ROLLED, not by what it answered.**
+    # `grab_attempt` returns False both for a refusal and for a roll that
+    # missed, so the return cannot tell the hand from the dice -- the
+    # first draft asserted `is not False or True` (true whatever happens)
+    # and the second asserted only the refusal, which **passed with the
+    # waiver forced off**: both arms expected False. Counting
+    # `Rng.rolls` separates them, because a refusal happens before the
+    # attack roll.
+    before = len(world3.rng.rolls)
+    c3.grab_attempt(on=beside)
+    rolled_with = len(world3.rng.rolls) - before
+    out.that(rolled_with > 0,
+             "THE arm: with both hands full and the waiver standing, the"
+             " attempt ROLLS -- which is the printed \"you do not need a"
+             " free hand\" and is what a forced-off waiver breaks",
+             f"{rolled_with} roll(s)")
+
+    mods3 = world3.get(me3, Mods)
+    kept3 = [m for m in mods3.items if m.label != ROW] if mods3 else []
+    dropped3 = len(mods3.items) - len(kept3) if mods3 else 0
+    if mods3 is not None:
+        mods3.items[:] = kept3
+    out.that(dropped3 >= 1,
+             "premise: the waiver was found by label and removed",
+             f"{dropped3} removed")
+    before = len(world3.rng.rolls)
+    answered = Cast(world=world3, me=me3, ref="drv").grab_attempt(on=beside)
+    rolled_without = len(world3.rng.rolls) - before
+    out.that(rolled_without == 0 and answered is False,
+             "the CONTROL: with the waiver gone it refuses BEFORE rolling"
+             " -- no dice at all, where the armed case rolled. A False"
+             " return alone could not say this, and asserting only that"
+             " is what let a forced-off waiver pass",
+             f"{rolled_without} roll(s), answered {answered}")
+
+
 def a_lapsing_arcane_hold_is_sustained_free(out: Result) -> None:
     """*"Trigger: on your turn, you fail to sustain an arcane implement
     power you could sustain. Effect: you sustain the effect until the end
@@ -129722,6 +129898,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "grab_reach": (
+        a_grab_may_reach_two_and_need_no_hand,
+        "i2393x1 grabs at two squares and with no hand free, and neither"
+        " widens a bull rush",
     ),
     "sustain_lapse": (
         a_lapsing_arcane_hold_is_sustained_free,

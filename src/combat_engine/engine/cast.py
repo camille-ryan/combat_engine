@@ -9315,13 +9315,24 @@ class Cast:
         grabs. #501, #510.
 
         "You must have at least one hand free to make a grab attempt", which
-        is read off `Gear` -- a creature with both hands full cannot try.
+        is read off `Gear` -- a creature with both hands full cannot try,
+        unless something has laid `"grab_handless"` on it. `i2393x1`
+        prints exactly that waiver and this is its only reader.
         """
         who = self._who(on)
         if who is None or not self._manoeuvrable(who):
             return False
+        # **"You do not need a free hand to make a grab attack"** --
+        # `i2393x1`, which is the one card that waives this. A modifier
+        # key rather than `c.waive`: that verb's vocabulary is four words
+        # and raises on anything else, deliberately, so widening it for
+        # one clause would spend the closed set a gate depends on.
+        # Read exactly here, which is the only place the hand is tested.
+        # #1491.
+        mods = self.world.get(self.me, Mods)
+        handless = mods is not None and mods.total("grab_handless", {}) > 0
         gear = self.world.get(self.me, Gear)
-        if gear is not None and len(gear.held) >= 2:
+        if not handless and gear is not None and len(gear.held) >= 2:
             return False
         if not self.attack(self.str_, Defense.REF, on=who, as_="grab"):
             return False
