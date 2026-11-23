@@ -72906,6 +72906,116 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_card_printed_inside_another_gets_a_coined_ref(out: Result) -> None:
+    """A card printed inside an item block, with no id of its own, declared
+    under a **coined** ref. Camille's call on `#1484`, 2026-11-23:
+
+        "I doubt they have names in the book. I would prefer it just be
+         more formulaic."
+
+    `i1188p1` prints an at-will attack in full -- close blast 3, +10 vs
+    Reflex, 2d6 + Constitution -- and hands it over for the encounter.
+
+    **The colon is the whole point of the spelling.** An item's blocks are
+    `iNNNpN`/`iNNNxN` read straight off columns, so a coined second `p`
+    block reads as one the database is *missing*, which is the objection
+    the three rows on this symbol raised. `refs.py` agrees by
+    construction rather than by waiver: its `_MINTED` shapes are all
+    `$`-anchored, so a colon suffix cannot match one and the ref is
+    classed hand-coined with nothing added to a list.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, get
+
+    PARENT, GRANTED = "i1188p1", "i1188p1:granted"
+
+    out.that(GRANTED in REGISTRY,
+             "the inline card is DECLARED under its coined ref, so"
+             " `c.grant_row` has a row that exists -- which is what the"
+             " parent's marker waited on",
+             f"{GRANTED in REGISTRY}")
+    out.that(not REGISTRY[PARENT].unfinished,
+             "and the parent carries no marker any more",
+             f"{REGISTRY[PARENT].unfinished}")
+
+    # -- the spelling is the coined one, not an importer shape -----------
+    import refs as _refs
+
+    minted = [p.pattern for p in _refs._MINTED if p.search(GRANTED)]
+    out.that(not minted,
+             "the ref matches NO importer-minted shape, so `refs.py`"
+             " classes it hand-coined by construction -- every `_MINTED`"
+             " pattern is `$`-anchored and a colon suffix cannot reach"
+             " the end of one",
+             f"{minted}")
+    out.that(any(p.search("i1188p1") for p in _refs._MINTED),
+             "while the PARENT's own ref does match one, which is the"
+             " contrast that makes the spelling readable: the database"
+             " has the parent and cannot have this",
+             f"{[p.pattern for p in _refs._MINTED if p.search('i1188p1')]}")
+
+    # -- and it is granted, not merely declared --------------------------
+    world, me, _ = _board(PARENT, 1)
+    known = world.get(me, Powers)
+    out.that(known is not None and GRANTED not in (known.all or ()),
+             "premise: the character does NOT know it before the elixir is"
+             " drunk, so the arm below is the grant and not the deal",
+             f"{GRANTED in (known.all or ()) if known else None}")
+    out.that(dsl.use(world, me, PARENT, spend=False),
+             "premise: the parent's own use is accepted",
+             "used")
+    known = world.get(me, Powers)
+    out.that(known is not None and GRANTED in (known.all or ()),
+             "THE arm: drinking it grants the inline card for the"
+             " encounter",
+             f"{GRANTED in (known.all or ()) if known else None}")
+
+    row = get(GRANTED)
+    out.that(row is not None and row.usage == "at-will",
+             "and it is an AT-WILL, which is why `c.give` was the wrong"
+             " verb -- that one is a single use",
+             f"{row.usage if row else None}")
+    out.that(row is not None and row.reach is not None
+             and row.reach.kind == "close_blast",
+             "a close blast, as printed",
+             f"{row.reach.kind if row and row.reach else None}")
+    out.that(row is not None and row.can_branch(world, me),
+             "and the branch is open to the creature holding it",
+             f"{row.can_branch(world, me) if row else None}")
+
+    # -- and it DEALS, which the header arms above cannot say ------------
+    #
+    # Measured: gutting the body to `c.attack(10, REF)` with no damage
+    # left every arm above green, because they all read the header and
+    # the grant. A declared card that hits for nothing is exactly the
+    # shape `audit.py`'s SILENT verdict exists for, and this rule has to
+    # ask it directly.
+    from combat_engine.engine.events import DamageApplied
+
+    dealt: list[tuple[int, str]] = []
+    world.bus.on(DamageApplied,
+                 lambda e: dealt.append((e.amount, str(e.dtype))))
+    world.rng.loaded = 20
+    dsl.use(world, me, GRANTED, spend=False)
+    world.rng.loaded = None
+    out.that(bool(dealt),
+             "THE arm: using the granted card deals damage -- on a loaded"
+             " 20, so a miss cannot make this read as a dead body",
+             f"{dealt[:3]}")
+    out.that(all(amount > 0 for amount, _ in dealt),
+             "and the amounts are positive, so `2d6 + Constitution` is"
+             " reaching hit points rather than resolving to nothing",
+             f"{[a for a, _ in dealt][:4]}")
+    kinds = {kind for _a, kind in dealt}
+    out.that(kinds and not (kinds & {"untyped"}),
+             "and it is TYPED, which is the printed \"damage of a type"
+             " determined when the elixir was made\" -- untyped would mean"
+             " `_element`'s pick never reached `c.damage`",
+             f"{sorted(kinds)}")
+
+
 def something_to_throw_opens_a_ranged_basic(out: Result) -> None:
     """*"A creature can make a ranged basic attack as long as it has
     something to throw **or** shoot."* -- the compendium's Basic Attack
@@ -130110,6 +130220,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "coined_inline_ref": (
+        a_card_printed_inside_another_gets_a_coined_ref,
+        "a card printed inside an item block is declared under a coined"
+        " ref that no importer shape can match",
     ),
     "thrown_rba": (
         something_to_throw_opens_a_ranged_basic,

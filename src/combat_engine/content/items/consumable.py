@@ -61,6 +61,7 @@ from typing import Any
 from combat_engine.content.powers.barbarian.rage import RAGE, raging
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     DAILY,
     DEX,
     EACH_ENEMY,
@@ -1330,13 +1331,77 @@ def i1071p1(c: Cast) -> None:
     c.watch(TurnStart, free_round, until=When.EONT)
 
 
+#: **A card printed inside another, with a coined ref.** Camille's call on
+#: `#1484`, 2026-11-23, asked whether these should be minted, coined or
+#: done without a ref at all:
+#:
+#:     "I doubt they have names in the book. I would prefer it just be
+#:      more formulaic. <item> -> <item> Granted Power."
+#:
+#: So the ref is derived from the parent by rule, and the **colon** is
+#: what makes it unmistakable: an item's blocks are `iNNNpN`/`iNNNxN`
+#: read straight off columns, so a coined second `p` block would read as
+#: one the database is missing -- which is the objection these rows
+#: raised. No importer can mint a colon, and no declared ref outside the
+#: `cf:`/`rt:`/`skill:` prefixes carries one.
+#:
+#: **And `refs.py` already agrees, by construction rather than by
+#: exemption.** Its `_MINTED` patterns are the shapes the importer mints
+#: and every one is `$`-anchored -- `i\d+[px]\d+$` for an item block --
+#: so a colon suffix cannot match one and the ref is classed hand-coined
+#: without anything being added to a waiver list. Measured: `refs.py`
+#: reports `0 declared row(s) have no database row` with this row
+#: declared. That gate's own vocabulary separates coined from minted, and
+#: this spelling lands on the right side of it.
+#:
+#: The **name** half is the other end of the same ruling and is ETL:
+#: the parent's printed name plus a fixed suffix, built in the sanitiser
+#: where every other name is built. Deferred with the rest of the ETL
+#: this round, so until it lands the page renders the ref -- which is
+#: `#467`'s surface and deferred too, on Camille's own call.
+_GRANTED = "i1188p1:granted"
+
+
+@power(_GRANTED, level=7, cls=ITEM, usage=AT_WILL, action=STANDARD,
+       reach=CloseBlast(3), target=EACH_OTHER,
+       keywords=[Keyword.ACID, Keyword.COLD, Keyword.FIRE,
+                 Keyword.LIGHTNING, Keyword.POISON])
+def i1188p1_granted(c: Cast) -> None:
+    """The at-will `i1188p1` hands over, printed in full inside its card.
+
+    *"Close blast 3; +10 vs. Reflex; on a hit, deal 2d6 + Constitution
+    modifier damage of a type determined when the elixir is made."*
+
+    **`c.attack(10, REF)` and not `printed=`**, which is the convention
+    `i3037x1`'s note states for an item printing a flat bonus:
+    `world.scaling.trim` re-levels a `printed=` against the **holder**,
+    and this number is the elixir's. The 10 is copied rather than
+    derived, per the rule against deriving a number the page prints.
+
+    The damage type goes through `_element`, which is this file's answer
+    for *"determined when the item was made"*: fixed by an object the
+    engine does not model, so asked of the decider each time rather than
+    guessed at authoring time. See that helper's own note -- using it
+    here keeps this row consistent with the nine others in the file that
+    print the same sentence.
+
+    `Level 17:` and `Level 27:` are paragon rungs and out of scope.
+    """
+    if c.attack(10, REF).hit:
+        c.damage("2d6", c.con_mod, dtype=_element(c))
+
+
 @power("i1188p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.ACID, Keyword.COLD, Keyword.FIRE,
-                 Keyword.LIGHTNING, Keyword.POISON],
-       todo=("c.grant_inline()",))
+                 Keyword.LIGHTNING, Keyword.POISON])
 def i1188p1(c: Cast) -> None:
-    """An at-will attack power granted for the encounter, printed in full
+    """**Written now that the ref convention is settled.** The note below
+    is kept because its reasoning is what the ruling answered, and only
+    its conclusion has moved: the card above *is* declared, with a
+    coined ref, so `c.grant_row` has a row that exists. #1484, #1494.
+
+    An at-will attack power granted for the encounter, printed in full
     and with no ref of its own: `c.grant_row` needs a row that exists and
     `c.give` is a one-shot, not an at-will.
 
@@ -1365,6 +1430,7 @@ def i1188p1(c: Cast) -> None:
     `c.grant_row` already *is* the verb and nothing new is wanted. Left as
     it is only because re-pointing it to an importer symbol belongs in
     that batch."""
+    c.grant_row(_GRANTED, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1368p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
