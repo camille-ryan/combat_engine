@@ -16539,6 +16539,59 @@ class Cast:
         known.waived_requires.setdefault(ref, []).append(when)
         return effect
 
+    def act_despite(
+        self,
+        *costs: ActionType,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You can take a minor action during a round when you are
+        surprised."
+
+        The **allow**-list half of `c.forbid(action=)`, and three cards
+        print it: `i2656x1`'s minor while surprised, and `i3578p1` and
+        `m6109a3`'s *"release the seed"* while swallowed -- a creature
+        `REMOVED` from play. All three were filed under three different
+        symbols (`actions.legal(minor_despite_surprised=)` and
+        `c.waive(cannot_act)` twice), which is one gap under three names
+        and the reason none of them could go green.
+
+        **Why it is not `c.waive(Condition.SURPRISED, "cannot_act")`**,
+        which is where it was first aimed: that verb's words are
+        `Rules` field names and the set is all-or-nothing per rule, so
+        admitting `cannot_act` would hand a surprised character its
+        whole turn rather than the one action its card names. Its own
+        docstring says so and points here.
+
+        **It names costs, not rows**, because every printed one does --
+        "a minor action", not "this power". `dsl.usable` refuses a row
+        whose action type is not named and `actions.legal` keeps only
+        those costs, so the allowance is read in the same place
+        `Powers.forbidden_actions` is and the menu follows without
+        learning anything.
+
+        Free and no-cost actions stay available: a printed allowance
+        gives a cost the creature did not have and takes nothing away,
+        and a turn has to be able to end. `#1473`.
+        """
+        from .components import Powers
+
+        who = self._who(on)
+        if who is None or not costs:
+            return None
+        known = self.world.get(who, Powers) or self.world.add(who, Powers())
+        was = set(known.acts_despite)
+        known.acts_despite |= set(costs)
+
+        def lapse() -> None:
+            known.acts_despite = was
+
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} may act",
+            on_end=[lapse], by=self.ref,
+        )
+
     def forbid(
         self,
         ref: str = "",

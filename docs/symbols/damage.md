@@ -62,7 +62,7 @@ Points off and points back on, and the dice behind them.
   - "You gain 5 additional hit points."
 - `c.regen_suppressed(self, *, on: 'int | None' = None) -> 'bool'`
   - Is this creature's regeneration switched off right now?
-- `c.regeneration(self, amount: 'int', *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, while_bloodied: 'bool' = False, unless: 'Callable[[], bool] | None' = None, unless_struck_by: 'str' = '', unless_damaged_by: 'tuple[DamageType, ...]' = ()) -> 'Effect'`
+- `c.regeneration(self, amount: 'int | Callable[[], int]', *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, while_bloodied: 'bool' = False, unless: 'Callable[[], bool] | None' = None, unless_struck_by: 'str' = '', unless_damaged_by: 'tuple[DamageType, ...]' = ()) -> 'Effect'`
   - Heal this much at the start of each of that creature's turns.
 - `c.resume_regeneration(self, *, on: 'int | None' = None) -> 'bool'`
   - "Its regeneration immediately reactivates." Switch it back on.

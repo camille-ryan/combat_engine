@@ -5666,6 +5666,123 @@ def an_off_hand_item_pays_only_in_that_hand(out: Result) -> None:
              f"AC against an opportunity: +{off_ac}")
 
 
+def acting_when_you_could_not_act_at_all(out: Result) -> None:
+    """`#1473`, and it was one gap filed under three symbols.
+
+    Three cards print a permission to act while something says you
+    cannot, and each was marked differently -- `i2656x1`'s minor while
+    surprised as `actions.legal(minor_despite_surprised=)`, `i3578p1`
+    and `m6109a3`'s seed while swallowed as `c.waive(cannot_act)`. That
+    verb's own docstring refuses the word, because its set is
+    all-or-nothing per rule and admitting it would hand over a whole
+    turn.
+
+    **Two halves, because the cards say two different things.**
+
+    * `Powers.acts_despite` names a **cost** somebody granted you --
+      *"you can take a minor action during a round when you are
+      surprised"*. Laid by `c.act_despite(MINOR)`, read by
+      `query.can_act` so the menu is built at all, and narrowed by
+      `dsl.usable` and `actions.legal` so only that cost survives.
+    * `Power.despite_cannot_act` names a **row** whose own card is its
+      permission -- *"if you are inside a creature that has swallowed
+      you, and you release the seed"*. Header data, because nothing has
+      to grant it; writing it as a cost allowance would let a swallowed
+      character spend its minor on anything.
+
+    **`can_act` is where the first half has to be read**, which `#1473`
+    measured the hard way: `actions.legal` returns a bare `end` before
+    offering anything and every sub-offer tests the predicate on its
+    own, so a menu filtered afterwards was 391 options before the
+    condition and `[('end', 'none')]` after.
+    """
+    from combat_engine.engine import actions
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import can_act
+    from combat_engine.engine.types import Condition
+
+    # ---- the cost allowance
+    def costs(*, surprised: bool, allowance: bool) -> tuple[bool, list[str]]:
+        """The menu a surprised character is offered.
+
+        **The board for `i2656x1` cannot pose the controls**, because
+        `audit.board` arms every `action=NONE` row including the one
+        under test -- and that row IS the allowance now, so a "without
+        it" arm had it. The controls use a neutral board; the first
+        draft read `['free', 'minor', 'none']` for all three arms.
+        """
+        world, me, _ = _board("i2656x1" if allowance else "i3578p1", 1)
+        c = Cast(world=world, me=me, ref="drv")
+        world.turn = me
+        if surprised:
+            c.condition(Condition.SURPRISED, on=me)
+        menu = actions.legal(world, world.encounter, me)
+        return can_act(world, me), sorted({a.cost.value for a in menu})
+
+    free_ok, free_costs = costs(surprised=False, allowance=False)
+    out.that(free_ok and {"standard", "move", "minor"} <= set(free_costs),
+             "an unsurprised character is offered a standard, a move and"
+             " a minor -- the baseline, and the arm that shows the"
+             " allowance is not what builds the menu",
+             f"{free_costs}")
+
+    hushed_ok, hushed = costs(surprised=True, allowance=False)
+    out.that(not hushed_ok and hushed == ["none"],
+             "surprised with no allowance it can do nothing but end its"
+             " turn, which is what `cannot_act` means and what every"
+             " sub-offer tests for itself",
+             f"can_act={hushed_ok}, {hushed}")
+
+    armed_ok, armed = costs(surprised=True, allowance=True)
+    out.that(armed_ok,
+             "THE arm: with a minor allowance `can_act` answers True, so"
+             " the menu is built at all -- which is the thing `#1473`"
+             " measured as impossible from `actions.legal`",
+             f"can_act={armed_ok}")
+    out.that("minor" in armed,
+             "and the minor is offered",
+             f"{armed}")
+    out.that("standard" not in armed and "move" not in armed,
+             "and the standard and the move are NOT -- the allowance"
+             " gives the one cost the card names and does not hand over"
+             " a turn, which is why `c.waive(cannot_act)` was the wrong"
+             " door",
+             f"{armed}")
+
+    # ---- the row permission
+    def seed(flag: bool) -> tuple[bool, str, bool]:
+        world, me, _ = _board("i3578p1", 1)
+        c = Cast(world=world, me=me, ref="drv")
+        host = sorted(c.enemies())[0]
+        Cast(world=world, me=host, ref="drv").swallow(
+            on=me, by=host, conditions=(Condition.REMOVED,))
+        row = _dsl.REGISTRY["i3578p1"]
+        was = row.despite_cannot_act
+        object.__setattr__(row, "despite_cannot_act", flag)
+        try:
+            ok, why = _dsl.usable(world, me, row)
+            return ok, why, c.is_(Condition.REMOVED, on=me)
+        finally:
+            object.__setattr__(row, "despite_cannot_act", was)
+
+    on_ok, on_why, removed = seed(True)
+    out.that(removed,
+             "a swallowed creature is REMOVED from play, which is"
+             " `cannot_act` -- the premise, and the reason the one row"
+             " that sentence is about was refused",
+             f"removed={removed}")
+    out.that(on_ok,
+             "THE arm: the seed is usable while swallowed, because its"
+             " own header declares the permission",
+             f"usable={on_ok} {on_why!r}")
+    off_ok, off_why, _ = seed(False)
+    out.that(not off_ok and off_why == "cannot act",
+             "and without the flag it is refused with 'cannot act' -- so"
+             " the header is load-bearing and not decoration",
+             f"usable={off_ok} {off_why!r}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -133935,6 +134052,11 @@ DRIVERS = {
     "off_hand_item": (
         an_off_hand_item_pays_only_in_that_hand,
         "i3037x1 pays only while its weapon is in the off hand",
+    ),
+    "act_despite": (
+        acting_when_you_could_not_act_at_all,
+        "a cost granted while surprised, and a row whose own card"
+        " works while you cannot act",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,

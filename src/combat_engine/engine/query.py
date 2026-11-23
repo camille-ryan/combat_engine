@@ -2333,13 +2333,38 @@ def is_conjuration(world: World, eid: int) -> bool:
 
 
 def can_act(world: World, eid: int, *, ignoring: Condition | None = None) -> bool:
+    """Can this creature take an action at all.
+
+    **An allowance beats `cannot_act`, and it has to be read here rather
+    than where the menu is built.** `Powers.acts_despite` is the
+    **allow**-list three cards print -- a minor action while surprised,
+    and releasing a seed while swallowed -- and `actions.legal` returns a
+    bare `end` before it offers anything, while `dsl.usable`, `_readying`
+    and the companion offers each test this predicate on their own. So
+    filtering a menu downstream changes nothing: measured at 391 options
+    before the condition and `[('end', 'none')]` after, with the
+    allowance set and read correctly.
+
+    What the allowance does **not** do is hand the creature its turn.
+    The restriction lives where `forbidden_actions` already does --
+    `dsl.usable` refuses a row whose action type is not named, and
+    `actions.legal` keeps only those costs -- so a surprised character
+    with a minor allowance is offered its minor and nothing else. `#1473`.
+    """
     # A trap and a conjuration have no hit points to be unconscious about.
     # Without this they failed `conscious` and could never make the attack
     # they exist to make.
     if is_trap(world, eid) or is_conjuration(world, eid):
         return True
+    if not conscious(world, eid):
+        return False
     held = [c for c in active(world, eid) if c is not ignoring]
-    return conscious(world, eid) and not any(rules(c).cannot_act for c in held)
+    if not any(rules(c).cannot_act for c in held):
+        return True
+    from .components import Powers
+
+    known = world.get(eid, Powers)
+    return bool(known is not None and known.acts_despite)
 
 
 def can_react(world: World, eid: int, *, ignoring: Condition | None = None) -> bool:

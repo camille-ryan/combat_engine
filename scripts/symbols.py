@@ -657,7 +657,7 @@ CATEGORIES: dict[str, dict] = {
                 # admits a weapon to a slot it is not, this makes a
                 # second weapon out of one. #1341.
                 "split_weapon",
-                "forbid", "forgo_second_wind_heal",
+                "act_despite", "forbid", "forgo_second_wind_heal",
                 # Beside `forbid` because it is the same question answered
                 # the other way: that one takes a named row away, this one
                 # opens a named row whose printed Requirement is not met.

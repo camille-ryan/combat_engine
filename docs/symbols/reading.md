@@ -232,7 +232,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 ## what a creature may do
 
 - `query.can_act(world: 'World', eid: 'int', *, ignoring: 'Condition | None' = None) -> 'bool'`
-  - (no docstring)
+  - Can this creature take an action at all.
 - `query.can_charge(world: 'World', eid: 'int') -> 'bool'`
   - "The target cannot charge." It may still walk, run and shift.
 - `query.can_move(world: 'World', eid: 'int') -> 'bool'`

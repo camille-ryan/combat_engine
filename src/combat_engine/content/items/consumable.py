@@ -2194,7 +2194,7 @@ def i3577p1(c: Cast) -> None:
 @power("i3578p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
        narrative=("skill:endurance",),
-       dropped=("c.waive(cannot_act)",))
+       despite_cannot_act=True)
 def i3578p1(c: Cast) -> None:
     """The note below said *"being inside something that ate you is not a
     state the board has"*, and now it is: `Relation.SWALLOWED_BY`, which

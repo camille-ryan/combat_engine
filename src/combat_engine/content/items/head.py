@@ -565,8 +565,7 @@ def i2527x1(c: Cast) -> None:
 
 
 @power("i2656x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("actions.legal(minor_despite_surprised=)",))
+       reach=PERSONAL, target=SELF)
 def i2656x1(c: Cast) -> None:
     """**A passive read is separable from a rolled one**, which the note
     that stood here denied. `skills.modifier` puts `natural` -- the die
@@ -616,11 +615,39 @@ def i2656x1(c: Cast) -> None:
 
     So it wants `can_act` to answer for a creature holding an allowance,
     with the restriction expressed where `Powers.forbidden_actions`
-    already lives -- and that is a core predicate read in eight places,
-    which is its own batch and its own wide sweep.
+    already lives.
+
+    ## Written
+
+    That is what `c.act_despite` is, and `query.can_act` reads
+    `Powers.acts_despite` -- so the menu is built, and `dsl.usable` plus
+    `actions.legal` then keep only the costs the card names. Measured on
+    a surprised wearer:
+
+        not surprised              free, minor, move, none, standard
+        surprised, no allowance    none
+        surprised, with it         free, minor, none
+
+So the minor arrives and the standard and the move do not, which is the
+    whole of the printed sentence. Free and no-cost stay, because an
+    allowance gives a cost the creature did not have and takes nothing
+    away, and a turn has to be able to end.
+
+    **Laid unconditionally rather than gated on being surprised.**
+    `can_act` consults the allowance only when something is imposing
+    `cannot_act`, so a wearer who is not surprised is unaffected by its
+    presence -- and gating it would mean re-arming the trait at the
+    moment the condition landed, which nothing does.
+
+    **One gap, three symbols.** `i3578p1` and `m6109a3` print the same
+    allowance about a creature `REMOVED` from play and were filed as
+    `c.waive(cannot_act)`; that verb's own docstring refuses the word,
+    because its set is all-or-nothing per rule and would hand over a
+    whole turn. `#1473`.
     """
     c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER,
             kind="item", when=lambda ctx: ctx.get("natural") is None)
+    c.act_despite(ActionType.MINOR, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i3230p1", level=5, cls=ITEM, usage=AT_WILL, action=MINOR,

@@ -1865,6 +1865,29 @@ class Powers:
     #: follows without learning anything -- it offers what `usable`
     #: allows.
     forbidden_actions: set[ActionType] = field(default_factory=set)
+    #: **The only actions this creature may take while it could not act at
+    #: all**, and the mirror of the set above pointed the other way.
+    #:
+    #: *"You can take a minor action during a round when you are
+    #: surprised"* -- `i2656x1` -- and *"if you are inside a creature that
+    #: has swallowed you, and you release the seed"*, which `i3578p1` and
+    #: `m6109a3` print about a creature `REMOVED` from play. All three are
+    #: one allowance and were filed under three different symbols.
+    #:
+    #: **Non-empty makes `query.can_act` answer True**, which is the only
+    #: way the menu gets built at all: `actions.legal` returns a bare
+    #: `end` before it offers anything, and `dsl.usable`, `_readying` and
+    #: the companion offers each test `can_act` independently -- so
+    #: filtering a menu was measured at 391 options before the condition
+    #: and `[('end', 'none')]` after, with the allowance set and read
+    #: correctly. `#1473` records that attempt.
+    #:
+    #: The restriction then lives where `forbidden_actions` already does:
+    #: `dsl.usable` refuses a row whose action type is not in here, and
+    #: `actions.legal` keeps only the costs it names. An allowance is
+    #: therefore an **allow**-list where the set above is a deny-list, and
+    #: the two are read in the same place. `#1473`.
+    acts_despite: set[ActionType] = field(default_factory=set)
     #: **The only attack rows this creature may reach**, by ref, when it is
     #: not empty. *"When it attacks, the target can only make a melee basic
     #: attack"* and *"dominated … but can use only basic attacks"* are the

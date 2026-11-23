@@ -2118,6 +2118,24 @@ class Power:
     #: Set on the few rows whose printed text says they do not provoke,
     #: despite being ranged or area.
     no_provoke: bool = False
+    #: **This row may be used by a creature that cannot act**, because its
+    #: own card says so. *"If you are inside a creature that has swallowed
+    #: you, and you release the seed"* -- `i3578p1`, and being swallowed
+    #: is `Condition.REMOVED`, which is `cannot_act`, so `usable` refused
+    #: the one row the sentence is about.
+    #:
+    #: **Header data and not a runtime allowance**, which is the
+    #: distinction worth keeping. `Powers.acts_despite` names a *cost* a
+    #: creature may spend and is laid by a card that grants it to
+    #: somebody -- `i2656x1`'s minor while surprised. This names a *row*
+    #: and belongs to the row, because nothing has to grant it: the card
+    #: is its own permission, and a creature holding the seed needs no
+    #: effect laid to be allowed to release it.
+    #:
+    #: Writing it as a cost allowance would have been wider than print in
+    #: the obvious way -- a swallowed character could then spend its minor
+    #: on anything. `#1473`.
+    despite_cannot_act: bool = False
     #: **Where a declared area is centred, when it is not where the aim
     #: lands most.** One word, from a closed set, and `""` is the ordinary
     #: behaviour -- `_auto_targets` walking `aim_points` and keeping the
@@ -2926,6 +2944,7 @@ def power(
     once_per_round: bool = False,
     group: str = "",
     no_provoke: bool = False,
+    despite_cannot_act: bool = False,
     centred_on: str = "",
     out_of_combat: bool = False,
     also_chosen: bool = False,
@@ -3225,6 +3244,7 @@ def power(
             once_per_round=once_per_round,
             group=group,
             no_provoke=no_provoke,
+            despite_cannot_act=despite_cannot_act,
             centred_on=centred_on,
             out_of_combat=out_of_combat,
             also_chosen=also_chosen,
@@ -5172,7 +5192,15 @@ def usable(
     # argument all along and nothing could pass it from a row, which is
     # the narrower gap that row's marker named -- "the gate is reachable
     # and the door is not".
-    if (not dying and not no_action
+    # **And a row whose own card says it works while you cannot act.**
+    # *"If you are inside a creature that has swallowed you, and you
+    # release the seed"* -- `i3578p1`, where being swallowed is
+    # `Condition.REMOVED` and so `cannot_act`, which refused the one row
+    # the sentence is about. Header data rather than a laid allowance,
+    # because nothing has to grant it: the card is its own permission.
+    # `Powers.acts_despite` is the other half of `#1473` and names a
+    # COST somebody granted you, which is a different sentence.
+    if (not dying and not no_action and not p.despite_cannot_act
             and not can_act(world, actor, ignoring=ignoring)):
         return False, "cannot act"
     # **The stance you are already in.** A stance ends whatever you were
@@ -5316,6 +5344,19 @@ def usable(
         # allows, so one test covers the menu and every other caller.
         if powers.forbidden_actions and p.action in powers.forbidden_actions:
             return False, f"cannot take {p.action.value} actions"
+        # **The allow-list half, and the reason `query.can_act` can say
+        # True for a creature that cannot act.** `Powers.acts_despite`
+        # names the only costs a surprised or swallowed creature may
+        # spend; everything else is refused here, which is what keeps the
+        # allowance from handing over a whole turn. Read beside the
+        # deny-list above so the menu follows without learning anything.
+        # `#1473`.
+        if powers.acts_despite and p.action not in powers.acts_despite:
+            return False, (
+                f"may take only "
+                f"{', '.join(sorted(a.value for a in powers.acts_despite))}"
+                f" actions right now"
+            )
         # **A barred weapon, which is not a restriction on a row at all.**
         # *"While grabbing the target, you cannot make attacks with the
         # whip"* -- `f970b`. The row is perfectly legal; what it may not

@@ -174,6 +174,18 @@ def legal(
     out.extend(_feinting(world, encounter, actor))
     out.extend(_delaying(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
+    # **An allowance keeps only the costs it names.** `query.can_act`
+    # answers True for a creature holding `Powers.acts_despite`, which is
+    # the only way this menu gets built at all -- so the restriction is
+    # applied here, after everything has offered what it would. A free
+    # action stays available because every printed allowance is "you may
+    # take a <cost> action", which does not take away what costs nothing;
+    # `end` is kept for the same reason and because a turn must be able
+    # to finish. `#1473`.
+    allowed = world.get(actor, Powers)
+    if allowed is not None and allowed.acts_despite:
+        keep = set(allowed.acts_despite) | {ActionType.NONE, ActionType.FREE}
+        out = [a for a in out if a.cost in keep]
     return out
 
 
