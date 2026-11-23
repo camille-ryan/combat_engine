@@ -99,7 +99,7 @@ def p5108(c: Cast) -> None:
     requires_text="must have dropped an enemy this turn",
 )
 def p5110(c: Cast) -> None:
-    c.heal(c.roll("1d6") + c.wis_mod + c.con_mod, on=c.me)
+    c.heal("1d6", plus=c.wis_mod + c.con_mod, on=c.me)
 
 
 @power(

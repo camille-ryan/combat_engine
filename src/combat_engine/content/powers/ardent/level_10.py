@@ -118,7 +118,7 @@ def p10291(c: Cast) -> None:
     was_dying = c.is_(Condition.DYING, on=who)
     c.heal(c.surge_value(who), on=who)
     if was_dying:
-        c.heal(c.roll("2d10") + c.cha_mod, on=who)
+        c.heal("2d10", plus=c.cha_mod, on=who)
     for eff in list(c.world.effects.of(who)):
         if Condition.PRONE in eff.conditions:
             c.world.effects.end(eff, "stands up")

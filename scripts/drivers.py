@@ -72892,6 +72892,133 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_heal_can_report_its_ceiling(out: Result) -> None:
+    """*"You or the ally regains hit points equal to the maximum possible
+    result of the healing effect and also regains hit points equal to your
+    Wisdom or Charisma modifier."* -- `i1525p1`. #1487.
+
+    **The gap was a record, not a verb.** `c.maximise` already tops a
+    *damage* roll up, and it works because a damage expression is a header
+    field. Healing had no header counterpart -- `Cast.heal` took an `int`
+    the body had already rolled -- so by the time `Healed` fired there was
+    nothing left to compute a maximum from. `Healed.most` is that record
+    and `c.heal` takes the expression now.
+
+    **A number rather than the dice**, which is what the marker asked
+    for. An expression would make every reader parse it and has no honest
+    value for a flat heal; `0` means "not rolled, so `amount` already is
+    the maximum", which is true of 473 of the 501 sites. So the row reads
+    `max(amount, most)` and is correct for both kinds without knowing
+    which it got -- and reading `most` alone would zero every flat heal in
+    the game, which is the arm below that catches it.
+
+    The audit cannot see any of this: the row is a declared trigger on
+    `Healed` and the board never provokes one, so it reports SILENT and
+    did at the last full sweep too.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Healed
+
+    ROW = "i1525p1"
+    row = REGISTRY[ROW]
+    out.that(row.on is not None and row.on.event is Healed,
+             "premise: the row declares its trigger on `Healed`, so the"
+             " predicate asked below is the one the dispatcher consults",
+             f"{row.on.event.__name__ if row.on else None}")
+    out.that(not row.unfinished,
+             "and it carries no marker any more",
+             f"{row.unfinished}")
+
+    world, me, _ = _board(ROW, 1)
+    mates = [a for a in sorted(_audit._allies_of(world, me)) if a != me]
+    out.that(bool(mates), "premise: the board fields an ally to heal",
+             f"{mates}")
+    c = Cast(world=world, me=me, ref="drv")
+    bump = max(c.wis_mod, c.cha_mod)
+    out.that(bump > 0,
+             "premise: the caster's better modifier is positive, so the"
+             " added half is visible rather than a no-op",
+             f"wis={c.wis_mod}, cha={c.cha_mod}")
+
+    def fired(amount: int, most: int) -> int:
+        """The row's answer for one `Healed`, as the amount it leaves."""
+        ev = Healed(source=me, target=me, amount=amount, hp=10,
+                    power="drv", most=most)
+        dsl.use(world, me, ROW, spend=False, trigger=ev)
+        return ev.amount
+
+    # -- a flat heal: `most` is 0 and the amount must survive ------------
+    flat = fired(7, 0)
+    out.that(flat == 7 + bump,
+             "a FLAT heal keeps its amount and gains the modifier -- this"
+             " is the arm that `ev.most` alone would fail, zeroing every"
+             " unrolled heal in the game",
+             f"7 -> {flat}, modifier {bump}")
+
+    # -- a rolled heal: the ceiling REPLACES what was rolled -------------
+    rolled = fired(6, 20)
+    out.that(rolled == 20 + bump,
+             "a ROLLED heal is raised to its ceiling and the modifier goes"
+             " on top -- the maximum replaces the roll rather than adding"
+             " to it",
+             f"6 of a possible 20 -> {rolled}")
+    out.that(rolled != 6 + 20 + bump,
+             "and the two are not summed, which is the other way the"
+             " printed sentence could be read and is not what it says",
+             f"{rolled} vs {6 + 20 + bump}")
+
+    # -- a ceiling below the roll cannot lower it ------------------------
+    odd = fired(18, 12)
+    out.that(odd == 18 + bump,
+             "a ceiling BELOW the amount leaves it alone, so a rider that"
+             " raised the heal before this row saw it is not clawed back",
+             f"18 with most=12 -> {odd}")
+
+    # -- the trigger's own side gate, asked of the declared predicate ----
+    gate = row.on.when if row.on else None
+    if gate is not None:
+        friend = mates[0] if mates else me
+        foes = [e for e in sorted(c.enemies()) if e != me]
+        ours = Healed(source=me, target=friend, amount=5, hp=10)
+        out.that(bool(gate(world, me, ours)),
+                 "an ally being healed DOES open it",
+                 f"target={friend} -> {bool(gate(world, me, ours))}")
+        out.that(bool(foes),
+                 "premise: the board fields an enemy, so the negative arm"
+                 " below is not asserting against an empty set",
+                 f"{foes[:2]}")
+        if foes:
+            theirs = Healed(source=foes[0], target=foes[0], amount=5, hp=10)
+            out.that(not gate(world, me, theirs),
+                     "and an ENEMY being healed does not -- the printed"
+                     " line is \"you or an ally\"",
+                     f"target={foes[0]} -> {bool(gate(world, me, theirs))}")
+
+    # -- and the record is really populated by the verb ------------------
+    seen: list[tuple[int, int]] = []
+    world2, me2, _ = _board(ROW, 1)
+    world2.bus.on(Healed, lambda e: seen.append((e.amount, e.most)))
+    hp = world2.get(me2, Health)
+    hp.hp = 1
+    probe = Cast(world=world2, me=me2, ref="drv")
+    probe.heal(7, on=me2)
+    hp.hp = 1
+    probe.heal("2d10", plus=3, on=me2)
+    out.that(len(seen) == 2 and seen[0][1] == 0 and seen[1][1] == 23,
+             "`c.heal` records 0 for a flat heal and 20+3 for `2d10` with"
+             " `plus=3`, so `most` is the ceiling INCLUDING the flat half"
+             " -- the modifier is part of what the heal could pay",
+             f"{seen}")
+    out.that(len(seen) == 2 and seen[1][0] <= seen[1][1],
+             "and the rolled amount never exceeds the ceiling it reports",
+             f"{seen[1] if len(seen) > 1 else None}")
+
+
 def a_surge_buys_two_expiring_points(out: Result) -> None:
     """*"Once per encounter, as a minor action, you can lose a healing surge
     to gain 2 power points that expire at the end of your turn."* --
@@ -129294,6 +129421,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "heal_ceiling": (
+        a_heal_can_report_its_ceiling,
+        "Healed.most carries what a heal could have paid, so i1525p1 can"
+        " raise it to its maximum",
     ),
     "surge_for_points": (
         a_surge_buys_two_expiring_points,

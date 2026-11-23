@@ -1608,7 +1608,7 @@ def m2507a5(c: Cast) -> None:
     ally = c.target
     if ally is not None and c.may("spend a healing surge", who=ally):
         c.spend_surge(on=ally)
-        c.heal(c.roll("2d6") + 3, on=ally)
+        c.heal("2d6", plus=3, on=ally)
 
 
 @power(

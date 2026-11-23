@@ -915,6 +915,20 @@ class Healed(Decision):
     #: treating empty as a wildcard, or a short rest reads as every power
     #: at once.
     power: str = ""
+    #: **The largest this heal could have paid out, where the amount was
+    #: rolled.** `0` means it was not rolled, so `amount` already *is* the
+    #: maximum -- true of 474 of the 501 `c.heal` sites in `content/`
+    #: (surges, flat numbers, `surge_value`), so the default is the common
+    #: case rather than a missing value.
+    #:
+    #: A number, not the dice expression `i1525p1`'s marker asked for. An
+    #: expression would make every reader parse it and has no honest value
+    #: for a flat heal; a maximum has one, so `max(amount, most)` is
+    #: correct for both kinds without the reader knowing which it got.
+    #:
+    #: *"Regains hit points equal to the maximum possible result of the
+    #: healing effect"* -- `i1525p1`, the one card that reads it. #1487.
+    most: int = 0
 
 
 @dataclass

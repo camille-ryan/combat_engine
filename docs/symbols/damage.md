@@ -56,7 +56,7 @@ Points off and points back on, and the dice behind them.
 
 - `c.half_healing(self, *, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - "The target regains half the normal hit points from healing."
-- `c.heal(self, amount: 'int', *, on: 'int | None' = None) -> 'int'`
+- `c.heal(self, amount: 'int | str', *, on: 'int | None' = None, plus: 'int' = 0) -> 'int'`
   - Put hit points back. The row's own ref rides along on `Healed`.
 - `c.max_hp(self, amount: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, absolute: 'bool' = False) -> 'Effect | None'`
   - "You gain 5 additional hit points."

@@ -121,7 +121,7 @@ def p1455(c: Cast) -> None:
         # inside the substitution, because the card forgoes the *extra* hit
         # points and not the healing surge the target spends. #739.
         c.instead_of(
-            "extra_hp", lambda: c.heal(c.roll("1d6"), on=who), on=who
+            "extra_hp", lambda: c.heal("1d6", on=who), on=who
         )
 
 

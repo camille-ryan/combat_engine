@@ -73,7 +73,7 @@ def _heal_an_ally(c: Cast) -> None:
     if not c.may("spend a healing surge", who=who):
         return
     if c.surge(on=who):
-        c.heal(c.roll("1d6"), on=who)
+        c.heal("1d6", on=who)
 
 
 @power(

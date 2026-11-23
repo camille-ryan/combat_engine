@@ -2883,7 +2883,7 @@ def i1227p1(c: Cast) -> None:
             ev, usage=(ENCOUNTER, DAILY)
         ):
             return
-        c.heal(c.roll("1d10") + c.cha_mod, on=ev.target)
+        c.heal("1d10", plus=c.cha_mod, on=ev.target)
 
     c.watch(Healed, mended, until=When.EOT, on=c.me)
 
@@ -3320,7 +3320,7 @@ def i626x1(c: Cast) -> None:
     which is what `SecondWind` being announced ahead of the healing is
     for. Heroic tier, so 1d10; the level steps are paragon and epic."""
     if c.bloodied(on=c.me):
-        c.heal(c.roll("1d10"), on=c.me)
+        c.heal("1d10", on=c.me)
 
 
 @power("i721x1", level=5, cls=ITEM, action=ActionType.NONE,

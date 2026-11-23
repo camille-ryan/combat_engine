@@ -306,7 +306,7 @@ def p9757(c: Cast) -> None:
     costs, and there is no verb for that, so the healing is the row."""
     mate = c.target
     if mate is not None and mate != c.companion():
-        c.heal(c.roll("1d6"), on=mate)
+        c.heal("1d6", on=mate)
 
 
 @power(

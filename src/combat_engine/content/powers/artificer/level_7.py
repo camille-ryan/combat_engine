@@ -282,6 +282,6 @@ def p7654(c: Cast) -> None:
         if not is_weapon(c.world, c.me, ev):
             return
         healed.add(ev.source)
-        c.heal(c.roll("1d6") + c.con_mod, on=ev.source)
+        c.heal("1d6", plus=c.con_mod, on=ev.source)
 
     c.watch(DamageApplied, mend, until=When.EONT)

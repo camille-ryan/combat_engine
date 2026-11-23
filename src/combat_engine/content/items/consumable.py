@@ -491,7 +491,7 @@ def i3288p1(c: Cast) -> None:
     points" -- so the surge is spent when there is one and the healing
     happens whenever either half is true."""
     if c.spend_surge(on=c.me) or c.bloodied(on=c.me):
-        c.heal(c.roll("1d8") + 1, on=c.me)
+        c.heal("1d8", plus=1, on=c.me)
 
 
 @power("i710p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1112,7 +1112,7 @@ def i3576p2(c: Cast) -> None:
         c.surge(on=c.me)
     else:
         c.spend_surge(on=c.me)
-    c.heal(c.roll("2d8"), on=c.me)
+    c.heal("2d8", on=c.me)
 
 
 @power("i992p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
@@ -2482,7 +2482,7 @@ def i3289p1(c: Cast) -> None:
     """As i3288p1: the surge is spent when there is one, and a bloodied
     drinker with none regains the hit points anyway."""
     if c.spend_surge(on=c.me) or c.bloodied(on=c.me):
-        c.heal(c.roll("2d8") + 10, on=c.me)
+        c.heal("2d8", plus=10, on=c.me)
 
 
 @power("i3292p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,

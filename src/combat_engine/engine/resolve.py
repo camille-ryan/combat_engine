@@ -2133,7 +2133,8 @@ def deal_damage(
 
 
 def heal(
-    world: World, source: int, target: int, amount: int, power: str = ""
+    world: World, source: int, target: int, amount: int, power: str = "",
+    most: int = 0,
 ) -> int:
     health = world.get(target, Health)
     if health is None or amount <= 0:
@@ -2147,7 +2148,8 @@ def heal(
     # surplus back off `Health` -- the total came out right and the number
     # in the log did not.
     offered = Healed(
-        source=source, target=target, amount=amount, hp=health.hp, power=power
+        source=source, target=target, amount=amount, hp=health.hp,
+        power=power, most=most,
     )
     if world.bus.emit(offered).cancelled:
         return 0

@@ -365,7 +365,7 @@ def m2857a2(c: Cast) -> None:
         return
     for kin in c.in_squares(c.area()):
         if _same_row(c, kin, "m2857"):
-            c.heal(c.roll("1d4") + 5, on=kin)
+            c.heal("1d4", plus=5, on=kin)
 
 
 # --------------------------------------------------------------------------

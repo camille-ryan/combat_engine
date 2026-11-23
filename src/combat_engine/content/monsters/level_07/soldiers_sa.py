@@ -2765,7 +2765,7 @@ def m6193a1(c: Cast) -> None:
 def m6193a2(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.heal(c.roll("2d6"), on=c.me)
+        c.heal("2d6", on=c.me)
 
 
 def _adjacent_foe_melees_my_ally(world: World, me: int, ev: AttackDeclared) -> bool:

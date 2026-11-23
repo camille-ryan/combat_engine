@@ -1592,7 +1592,7 @@ def i2780p1(c: Cast) -> None:
         if ev.source == c.me and c.healed_by(
             ev, usage=(ENCOUNTER, DAILY)
         ):
-            c.heal(c.roll("1d6"), on=ev.target)
+            c.heal("1d6", on=ev.target)
 
     c.watch(Healed, extra, until=When.EOT)
 

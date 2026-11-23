@@ -1231,7 +1231,7 @@ def p15844(c: Cast) -> None:
     if who is None:
         return
     if isinstance(ev, Healed):
-        c.heal(c.roll("2d6"), on=who)
+        c.heal("2d6", on=who)
     elif c.by_attack(ev=ev):
         c.damage("2d6", on=who)
 

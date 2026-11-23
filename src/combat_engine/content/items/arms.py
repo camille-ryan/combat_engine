@@ -689,7 +689,7 @@ def i794p1(c: Cast) -> None:
     beside = [c.me, *(a for a in c.within(1, side="ally") if a != c.me)]
     who = c.choose(beside, "who regains the hit points")
     if who is not None:
-        c.heal(c.roll("1d8"), on=who)
+        c.heal("1d8", on=who)
 
 
 # -- level 3 ----------------------------------------------------------------
@@ -2211,7 +2211,7 @@ def i1487p1(c: Cast) -> None:
        trigger="you or an ally in line of sight regains hit points",
        on=Trigger(Healed, _healed_in_sight,
                   "somebody on your side is healed"),
-       dropped=("Healed.dice",))
+)
 def i1525p1(c: Cast) -> None:
     """`Healed` is announced before the hit points go on and `resolve.heal`
     reads `offered.amount` back, so the ability modifier is added there and
@@ -2228,16 +2228,25 @@ def i1525p1(c: Cast) -> None:
     `c.maximise` would have to be built on a record that does not exist,
     and would read as arrived the moment it landed.
 
-    So the wait is for the record: `Healed` carrying what the heal *could*
-    have rolled, beside the `amount` it did. Counted over `content/`, 27 of
-    the 501 `c.heal` call sites roll for the amount; for the other 474 --
-    surges, flat numbers, `surge_value` -- `amount` already **is** the
-    maximum possible result, so this row is short on about one heal in
-    twenty rather than on all of them, which is the other reason the clause
-    is `dropped=` and not `todo=`."""
+    **The record arrived and it is a number, not the dice.** The note
+    below asked for `Healed.dice`; what landed is `Healed.most`, the
+    largest the heal could have paid. An expression would make every
+    reader parse it and has no honest value for a flat heal, where a
+    maximum has one -- so `max(amount, most)` is correct for both kinds
+    without this row knowing which it got. #1487.
+
+    `most` is `0` for a heal that was not rolled, and that is the common
+    case rather than a gap: 28 of the 501 `c.heal` sites in `content/`
+    roll for the amount and the other 473 -- surges, flat numbers,
+    `surge_value` -- already pay their own maximum. So `max()` and not
+    `ev.most` alone, which would zero every flat heal in the game.
+
+    The order is the card's: the maximum **replaces** what was rolled,
+    and the ability modifier is added on top of it. Adding first and
+    maximising after would discard the modifier."""
     ev = c.trigger
     if ev is not None:
-        ev.amount += max(c.wis_mod, c.cha_mod)
+        ev.amount = max(ev.amount, ev.most) + max(c.wis_mod, c.cha_mod)
 
 
 @power("i604x1", level=10, cls=ITEM, action=ActionType.NONE,

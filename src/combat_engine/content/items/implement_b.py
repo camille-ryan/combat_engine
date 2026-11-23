@@ -705,7 +705,7 @@ def i3344x1(c: Cast) -> None:
             return
         busy.append(1)
         try:
-            c.heal(c.roll(f"{max(1, c.enhancement)}d6"), on=ev.target)
+            c.heal(f"{max(1, c.enhancement)}d6", on=ev.target)
         finally:
             busy.clear()
 
@@ -4888,7 +4888,7 @@ def i2002p1(c: Cast) -> None:
 )
 def i2110p1(c: Cast) -> None:
     if c.target is not None:
-        c.heal(c.roll(f"{max(1, c.enhancement)}d6"), on=c.target)
+        c.heal(f"{max(1, c.enhancement)}d6", on=c.target)
 
 
 @power(

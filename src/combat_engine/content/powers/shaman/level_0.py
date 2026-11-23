@@ -296,11 +296,11 @@ def p3773(c: Cast) -> None:
                  if a not in (c.me, c.target)]
         if wider:
             with c.credit("f1027"):
-                c.heal(c.roll("1d6"), on=wider[0])
+                c.heal("1d6", on=wider[0])
         return
     mates = [a for a in beside(c) if a not in (c.me, c.target)]
     if mates:
-        c.heal(c.roll("1d6"), on=mates[0])
+        c.heal("1d6", on=mates[0])
 
 
 @power(

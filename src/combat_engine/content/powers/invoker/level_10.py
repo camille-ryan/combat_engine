@@ -291,7 +291,7 @@ def p11296c1(c: Cast) -> None:
     """
     # `c.heal` takes a number, not an expression -- the idiom the
     # runepriest and ardent at-wills use.
-    c.heal(c.roll("1d6"))
+    c.heal("1d6")
 
 
 @power(

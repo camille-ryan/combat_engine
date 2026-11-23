@@ -353,7 +353,7 @@ def p5454(c: Cast) -> None:
         paid[0] += 1
         busy[0] = True
         try:
-            c.heal(c.roll(f"{paid[0]}d8"), on=mate)
+            c.heal(f"{paid[0]}d8", on=mate)
         finally:
             busy[0] = False
 

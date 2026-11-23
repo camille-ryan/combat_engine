@@ -1127,7 +1127,7 @@ def i2168x1(c: Cast) -> None:
     def surged(ev: SurgeSpent) -> None:
         if (ev.source == c.me and ev.actor != c.me and ev.healed
                 and c.is_kind("construct", on=ev.actor)):
-            c.heal(c.roll("2d6"), on=ev.actor)
+            c.heal("2d6", on=ev.actor)
 
     def temped(ev: TempHP) -> None:
         if (ev.source == c.me and ev.target != c.me

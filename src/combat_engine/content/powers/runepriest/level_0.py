@@ -42,7 +42,7 @@ def p11353(c: Cast) -> None:
         c.surge(on=who)
         dice = sum(lv <= c.level for lv in (6, 11, 16, 21, 26))
         if dice:
-            c.heal(c.roll(f"{dice}d6"), on=who)
+            c.heal(f"{dice}d6", on=who)
     burst = dict.fromkeys([c.me, *c.within(5, side="ally")])
     if rune_state(c) == PROTECTION:
         for friend in burst:

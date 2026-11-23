@@ -273,7 +273,7 @@ def f3302(c: Cast) -> None:
         return
     for who in c.trigger.targets:
         if c.wounded(on=who):
-            c.heal(c.roll("1d6"), on=who)
+            c.heal("1d6", on=who)
 
 
 @power("f3306", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

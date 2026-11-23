@@ -362,7 +362,7 @@ def p3275(c: Cast) -> None:
     # no proficiency, which is what `c.cha_` would wrongly add here.
     if c.attack(c.world.scaling.pc(c.level) + c.cha_mod, WILL, on=foe):
         c.damage("2d8", c.cha_mod, dtype=DamageType.RADIANT, on=foe)
-        c.heal(c.roll("1d6") + c.cha_mod, on=c.me)
+        c.heal("1d6", plus=c.cha_mod, on=c.me)
 
 
 @power(

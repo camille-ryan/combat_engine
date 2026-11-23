@@ -6406,18 +6406,50 @@ class Cast:
             granted_by=self.granted_by, granted_via=self.granted_via,
         )
 
-    def heal(self, amount: int, *, on: int | None = None) -> int:
+    def heal(
+        self, amount: int | str, *, on: int | None = None, plus: int = 0
+    ) -> int:
         """Put hit points back. The row's own ref rides along on `Healed`.
 
         `power=self.ref` is what lets a rider tell *which* heal it is
         looking at -- "the hit points regained by your cleric healing
         powers", "each character healed by one of your encounter powers".
         Ten rows wanted that and the event said only who healed whom.
+
+        **An expression as well as a number, which is what records the
+        maximum.** `c.heal("2d10", plus=c.cha_mod)` rolls here instead of
+        in the body, so `Healed.most` can carry what the heal *could*
+        have paid -- `i1525p1` regains *"hit points equal to the maximum
+        possible result of the healing effect"* and nothing could compute
+        that once the body had already reduced the dice to an `int`.
+
+        `Rng.roll`'s own precedent, and for the same reason it gives:
+        *"a bare int is a constant, which keeps callers that sometimes
+        have flat damage from having to special-case it."* An `int` here
+        leaves `most` at 0, which says "this was not rolled, so `amount`
+        is already the maximum" -- true of 474 of the 501 sites.
+
+        `plus=` is the flat half, because the common shape is
+        `c.roll("2d10") + c.cha_mod` and the maximum has to include the
+        modifier. Passing it separately is what lets the arithmetic
+        happen once, here, rather than being duplicated by every caller
+        that wants to report its own ceiling.
+
+        **The roll still goes through `c.roll`**, which is load-bearing
+        rather than tidy: that method already maximises a healing roll
+        when `maximise_heal` stands and the rolling row carries
+        `Keyword.HEALING`, and it reads `self.ref` to decide. Rolling
+        here keeps that working, and when it fires `amount` and `most`
+        agree, which is the right answer rather than a coincidence.
         """
         who = self._who(on)
         if who is None:
             return 0
-        return heal(self.world, self.me, who, amount, self.ref)
+        if isinstance(amount, str):
+            rolled = self.roll(amount) + plus
+            return heal(self.world, self.me, who, rolled, self.ref,
+                        _max_of(amount) + plus)
+        return heal(self.world, self.me, who, amount + plus, self.ref)
 
     def surge(self, *, on: int | None = None, bonus: int = 0) -> int:
         """Spend a healing surge: a quarter of maximum hit points."""

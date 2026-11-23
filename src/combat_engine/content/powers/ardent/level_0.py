@@ -68,7 +68,7 @@ def p10273(c: Cast) -> None:
     if c.may("spend a healing surge", who=who):
         c.surge(on=who)
         dice = 1 + sum(lv <= c.level for lv in (6, 11, 16, 21, 26))
-        c.heal(c.roll(f"{dice}d6"), on=who)
+        c.heal(f"{dice}d6", on=who)
     for d in DEFENCES:
         c.bonus(d, 1, on=who, until=When.EONT)
 
