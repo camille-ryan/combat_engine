@@ -328,6 +328,25 @@ class Relation(StrEnum):
     MASTER_OF = "master_of"
     RIDDEN_BY = "ridden_by"
     GUARDED_BY = "guarded_by"
+    #: **Who is inside whom.** Source is the swallower, target the
+    #: creature it has eaten, which is the same direction as `MASTER_OF`
+    #: above -- the one in charge is the source.
+    #:
+    #: Relational for exactly the reason this module's docstring gives
+    #: about a grab: *"`x is grabbed` is only half a fact"*. Being
+    #: swallowed was written twice by hand before this, as an `Effect`
+    #: carrying `Condition.REMOVED` -- `m412a2` labelling it with a
+    #: file-local constant and `m6109a3` with the row's own ref -- so
+    #: nothing could ask *"inside what"* without knowing every label any
+    #: card might have used. `i3578p1` is the row that has to ask:
+    #: *"if you are inside a creature that has swallowed you"*.
+    #:
+    #: `IMPLIES` maps this to `Condition.REMOVED`, so setting the
+    #: relation takes the creature off the board and no caller has to
+    #: remember to do both. The capacity rule reads
+    #: `targets(SWALLOWED_BY, swallower)`, which is what `m412a2`'s
+    #: `_room_inside` counted by hand over the effect store. #1489.
+    SWALLOWED_BY = "swallowed_by"
     #: Whose square the source measures its ranged and area attacks from.
     #: Read in `dsl.measured_from`, so it decides what can be aimed at as
     #: well as where line of effect is traced from.

@@ -316,18 +316,21 @@ def m251a3(c: Cast) -> None:
 
 #: The hold that says a creature is inside this one. Read by the printed
 #: Requirement on m412a2, which counts them.
-_M412_INSIDE = "m412a2 taken"
 
 
 def _room_inside(world: World, eid: int) -> bool:
-    return (
-        sum(
-            1
-            for eff in world.effects.live.values()
-            if eff.source == eid and eff.label == _M412_INSIDE and not eff.ended
-        )
-        < 2
-    )
+    """"Must not have two creatures removed from play."
+
+    **Asked of the relation rather than counted off the effect store.**
+    This summed live effects whose `source` was the m412 and whose label
+    matched this file's own constant, which worked only because nothing
+    else used that label -- and that is exactly why nothing could ask
+    what a creature was inside. `query.inside_count` is the same question
+    with no label in it. #1489.
+    """
+    from combat_engine.engine.query import inside_count
+
+    return inside_count(world, eid) < 2
 
 
 @power(
@@ -392,9 +395,8 @@ def m412a2(c: Cast) -> None:
     if not c.strike(on=victim):
         return
     c.pull(max(1, c.distance(victim)), on=victim)
-    inside = c.world.effects.apply(
-        victim, me, When.SAVE_ENDS, label=_M412_INSIDE,
-        conditions=(Condition.REMOVED,),
+    inside = c.swallow(
+        on=victim, until=When.SAVE_ENDS, conditions=(Condition.REMOVED,),
     )
 
     def digest(ev: TurnStart) -> None:

@@ -1248,7 +1248,7 @@ def m2237a1(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=12),
     requires=_has_hold,
     requires_text="the m2237 must be grabbing a Medium or smaller creature",
-    dropped=("c.swallowed()",),
+    dropped=("query.line_of_sight(inside=)",),
 )
 def m2237a2(c: Cast) -> None:
     """Being inside the creature is written as what the card says it costs:
@@ -1278,6 +1278,15 @@ def m2237a2(c: Cast) -> None:
 
     "Escape ends" has no duration either, so the hold is the save-ends one
     the engine does have.
+    **Half of what `c.swallowed()` named now exists, so the marker is
+    narrowed.** `Relation.SWALLOWED_BY` records *inside whom* and
+    `query.inside_count` answers the capacity rule, both off one store
+    rather than a per-file label (#1489). What is left here is the sight
+    half, which is why the symbol names that and not swallowing: a
+    creature inside another has line of sight and effect **only** to its
+    host, and nobody has either to it. `query.sealed` is still the wrong
+    verb -- it cuts line of effect to everybody including the host -- and
+    the one-way version does not exist.
     """
     held = sorted(
         who for who in _holding(c.world, c.me) if c.size_of(on=who) in SMALL_ENOUGH

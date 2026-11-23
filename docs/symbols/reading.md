@@ -31,6 +31,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Every feat's printed category, by ref, from the database.
 - `query.feats_of(world: 'World', eid: 'int', category: 'str' = '') -> 'tuple[str, ...]'`
   - The feats this creature has, by ref, optionally of one category.
+- `query.inside_count(world: 'World', eid: 'int') -> 'int'`
+  - How many creatures that one has swallowed.
 - `query.is_(world: 'World', eid: 'int', c: 'Condition') -> 'bool'`
   - (no docstring)
 - `query.is_conjuration(world: 'World', eid: 'int') -> 'bool'`

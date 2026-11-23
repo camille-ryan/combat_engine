@@ -72892,6 +72892,160 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def being_inside_a_creature_is_a_relation(out: Result) -> None:
+    """*"If you are inside a creature that has swallowed you, and you
+    release the seed, the creature immediately disgorges you and is dazed
+    until the start of its next turn."* -- `i3578p1`. #1489.
+
+    **Swallowing was written twice by hand with two conventions**, which
+    is why nothing could ask what a creature was inside: `m412a2`
+    labelled its hold with a file-local constant and `m6109a3` with the
+    row's own ref. `Relation.SWALLOWED_BY` is the store, and
+    `relations.py`'s own argument about a grab is the one that applies --
+    *"`x is grabbed` is only half a fact"*.
+
+    **The relation imposes no condition, and the first draft had it
+    mapped to `Condition.REMOVED` through `IMPLIES`.** That was wrong:
+    the five printed swallows impose three different things, and
+    `m2237a2` and `m3932a2` deliberately leave the victim able to attack
+    the thing that ate it, which `REMOVED` forbids outright. So the
+    relation records *inside whom* and each card says what that costs --
+    which is the arm below that would have caught it.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+
+    # -- the relation carries no condition of its own --------------------
+    from combat_engine.engine.relations import IMPLIES
+    from combat_engine.engine.types import Condition, Relation
+    out.that(Relation.SWALLOWED_BY not in IMPLIES,
+             "the relation implies NO condition, so a card that leaves its"
+             " victim able to fight back is not overridden -- `m2237a2`"
+             " and `m3932a2` both print exactly that",
+             f"{Relation.SWALLOWED_BY in IMPLIES}")
+
+    world, me, _ = _board("i3578p1", 1)
+    c = Cast(world=world, me=me, ref="drv")
+    foes = sorted(c.enemies())
+    out.that(len(foes) >= 3,
+             "premise: three foes, so the capacity arm has a third"
+             " candidate to be refused",
+             f"{len(foes)}")
+    if len(foes) < 3:
+        return
+
+    # -- both kinds of swallow, one store --------------------------------
+    c.swallow(on=foes[0], conditions=(Condition.REMOVED,))
+    c.swallow(on=foes[1], conditions=(Condition.RESTRAINED,))
+    gone = query.is_(world, foes[0], Condition.REMOVED)
+    held = query.is_(world, foes[1], Condition.RESTRAINED)
+    out.that(gone and held
+             and not query.is_(world, foes[1], Condition.REMOVED),
+             "the SAME relation holds a removed victim and a merely"
+             " restrained one, and the restrained one is NOT removed --"
+             " one store, three printed costs",
+             f"removed={gone}, restrained={held},"
+             f" restrained-also-removed="
+             f"{query.is_(world, foes[1], Condition.REMOVED)}")
+    out.that(c.inside(on=foes[0]) == me and c.inside(on=foes[1]) == me,
+             "and both answer INSIDE WHOM, which is the question no label"
+             " could be asked",
+             f"{c.inside(on=foes[0])}, {c.inside(on=foes[1])}, me={me}")
+
+    # -- the capacity rule, asked rather than counted --------------------
+    out.that(query.inside_count(world, me) == 2,
+             "`query.inside_count` is the capacity rule `m412a2`'s"
+             " `_room_inside` counted off the effect store by label",
+             f"{query.inside_count(world, me)}")
+    out.that(c.swallow(on=foes[2], room=2) is None,
+             "and a third is REFUSED at a printed capacity of two",
+             "refused")
+
+    # -- the release ------------------------------------------------------
+    host = c.disgorge(on=foes[1])
+    out.that(host == me and c.inside(on=foes[1]) == -1
+             and not query.is_(world, foes[1], Condition.RESTRAINED),
+             "disgorging ends the hold, so the relation AND the condition"
+             " it carried both go -- ending the effect is what releases"
+             " them, not clearing the relation by hand",
+             f"host={host}, inside={c.inside(on=foes[1])},"
+             f" restrained={query.is_(world, foes[1], Condition.RESTRAINED)}")
+    out.that(c.disgorge(on=foes[2]) == -1,
+             "and disgorging a creature that is inside nothing answers -1"
+             " rather than raising",
+             f"{c.disgorge(on=foes[2])}")
+
+    # -- THROUGH THE ROWS: one card reads another's swallow --------------
+    w2, host2, _ = _board("i3578p1", 1)
+    eater = sorted(Cast(world=w2, me=host2, ref="drv").enemies())[0]
+    Cast(world=w2, me=eater, ref="drv").swallow(
+        on=host2, conditions=(Condition.RESTRAINED,))
+    v = Cast(world=w2, me=host2, ref="drv")
+    out.that(v.inside(on=host2) == eater,
+             "premise: the caster is inside somebody else's swallow",
+             f"{v.inside(on=host2)} vs {eater}")
+    out.that(query.can_act(w2, host2),
+             "premise: and can still act, which the restrained kind of"
+             " swallow allows and the removed kind does not",
+             f"{query.can_act(w2, host2)}")
+    dsl.use(w2, host2, "i3578p1", spend=False)
+    out.that(v.inside(on=host2) == -1,
+             "THE arm: the seed disgorges the caster from a swallow laid"
+             " by a DIFFERENT card, which is the whole point of the"
+             " relation being shared rather than per-file",
+             f"{v.inside(on=host2)}")
+    out.that(query.is_(w2, eater, Condition.DAZED)
+             and not query.is_(w2, host2, Condition.DAZED),
+             "and the HOST is dazed while the caster is not -- the two"
+             " branches daze different creatures, which is why the card"
+             " cannot be collapsed into one",
+             f"host={query.is_(w2, eater, Condition.DAZED)},"
+             f" caster={query.is_(w2, host2, Condition.DAZED)}")
+
+    # -- the other branch -------------------------------------------------
+    w3, lone, _ = _board("i3578p1", 1)
+    dsl.use(w3, lone, "i3578p1", spend=False)
+    out.that(query.is_(w3, lone, Condition.DAZED),
+             "swallowed as a seed by somebody inside nothing, the caster"
+             " dazes itself -- the card's other branch",
+             f"{query.is_(w3, lone, Condition.DAZED)}")
+
+    # -- the two migrated writers -----------------------------------------
+    #
+    # **Asserted separately, because the first draft claimed both were
+    # unmarked and `m6109a3` is not.** It carries
+    # `dropped=("c.waive(cannot_act)",)` for the clause that lets a
+    # swallowed creature fight back -- which is the SAME gap `i3578p1`
+    # waits on for the removed kind of swallow, and the reason that row
+    # names this symbol rather than a synonym.
+    out.that(not REGISTRY["m412a2"].unfinished,
+             "m412a2 carries no marker: it was already written and is only"
+             " migrated onto the relation",
+             f"{REGISTRY['m412a2'].unfinished}")
+    shared = REGISTRY["m6109a3"].unfinished
+    out.that(any("cannot_act" in sym for sym in shared),
+             "m6109a3 still names `c.waive(cannot_act)` -- migrating it"
+             " onto the relation did not touch its own dropped clause",
+             f"{shared}")
+    out.that(any("cannot_act" in sym
+                 for sym in REGISTRY["i3578p1"].unfinished),
+             "and `i3578p1` waits on the SAME symbol rather than a new"
+             " one, so one gap has one name and `todo.py` cannot report"
+             " half the family ready",
+             f"{REGISTRY['i3578p1'].unfinished}")
+    still = {r: REGISTRY[r].unfinished
+             for r in ("m3511a0", "m2237a2", "m3932a2")}
+    out.that(all("line_of_sight" in str(v) for v in still.values()),
+             "and the three that are NOT finished name the sight half"
+             " rather than swallowing, so the half that landed cannot"
+             " report them ready",
+             f"{still}")
+    del _audit
+
+
 def a_heal_can_report_its_ceiling(out: Result) -> None:
     """*"You or the ally regains hit points equal to the maximum possible
     result of the healing effect and also regains hit points equal to your
@@ -129421,6 +129575,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "swallowed_relation": (
+        being_inside_a_creature_is_a_relation,
+        "being inside a creature is one relation every card reads, not a"
+        " per-file label",
     ),
     "heal_ceiling": (
         a_heal_can_report_its_ceiling,

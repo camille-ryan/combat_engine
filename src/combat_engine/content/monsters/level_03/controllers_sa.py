@@ -1310,14 +1310,24 @@ def m1652a7(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d6", 5),
-    dropped=("c.swallowed()",),
+    dropped=("query.line_of_sight(inside=)",),
 )
 def m3511a0(c: Cast) -> None:
     """Being inside the creature is modelled as what the card says it does --
     stunned and burning, both ended by one save. What is dropped is the rest
     of being swallowed: nothing has line of sight or effect to the victim, and
     only one creature can be held at a time, so the row is not refused while
-    it already has somebody."""
+    it already has somebody.
+    **Half of what `c.swallowed()` named now exists, so the marker is
+    narrowed.** `Relation.SWALLOWED_BY` records *inside whom* and
+    `query.inside_count` answers the capacity rule, both off one store
+    rather than a per-file label (#1489). What is left here is the sight
+    half, which is why the symbol names that and not swallowing: a
+    creature inside another has line of sight and effect **only** to its
+    host, and nobody has either to it. `query.sealed` is still the wrong
+    verb -- it cuts line of effect to everybody including the host -- and
+    the one-way version does not exist.
+    """
     if not c.strike():
         return
     c.hit()

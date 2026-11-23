@@ -48,6 +48,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Apply one or more conditions for a duration.
 - `c.control(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None) -> 'Effect | None'`
   - Take charge of a map feature, and put it back when you let go.
+- `c.disgorge(self, *, on: 'int | None' = None) -> 'int'`
+  - Let a swallowed creature out, beside the thing that ate it.
 - `c.dominate(self, *, on: 'int | None' = None, by: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - Dominate a creature, relation and condition together.
 - `c.grab(self, *, on: 'int | None' = None, by: 'int | None' = None, dc: 'int' = 0, sustain: 'ActionType | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
@@ -64,6 +66,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Mark the target -- for you, or for somebody else.
 - `c.move_grabbed(self, *, on: 'int | None' = None) -> 'bool'`
   - Drag a creature you have hold of. A Strength attack vs Fortitude.
+- `c.swallow(self, *, on: 'int | None' = None, by: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>, room: 'int' = 0, conditions: 'tuple[Condition, ...]' = (), ongoing: 'tuple[int, DamageType] | None' = None) -> 'Effect | None'`
+  - Record that one creature is **inside** another.
 - `c.unlatch(self, label: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Hand the payout back, so it may be spent again this window.
 - `c.worsen(self, eff: 'Effect', cond: 'Condition') -> 'bool'`
@@ -77,12 +81,16 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Everyone holding that creature in a grab.
 - `c.grabbing(self, *, of: 'int | None' = None) -> 'list[int]'`
   - Everything this creature is holding in a grab.
+- `c.inside(self, *, on: 'int | None' = None) -> 'int'`
+  - What this creature is inside, or `-1`.
 - `c.latched(self, label: 'str', *, on: 'int | None' = None, per_turn: 'bool' = False) -> 'bool'`
   - Has that creature already spent this payout in the current window?
 - `c.marked(self, on: 'int | None' = None, *, by: 'int | None' = None, via: 'str' = '') -> 'bool'`
   - Is that creature marked -- **by you**, unless told otherwise?
 - `c.suffering(self, label: 'str' = '', *, by: 'int | None' = None, include_self: 'bool' = False) -> 'list[int]'`
   - Everyone carrying an effect I applied. "Each creature affected by
+- `c.swallowed_by(self, who: 'int | None' = None) -> 'list[int]'`
+  - Who this creature has swallowed. The capacity reader.
 
 ## getting out, and not getting out
 

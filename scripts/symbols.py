@@ -282,10 +282,25 @@ CATEGORIES: dict[str, dict] = {
                 "dominate", "grab", "grab_attempt", "latch", "leash", "link",
                 "move_grabbed",
                 "mark", "unlatch", "worsen",
+                # **Beside `grab`, which is the relation it is modelled
+                # on.** `swallow` records that one creature is inside
+                # another and imposes nothing itself -- the three printed
+                # costs (removed, stunned, restrained) are each card's --
+                # so it belongs with the writers of a two-creature hold
+                # rather than with movement or removal. `disgorge` is the
+                # release, and it ends the hold rather than clearing the
+                # relation, which is what lets the condition go with it.
+                # #1489.
+                "swallow", "disgorge",
             ]),
             ("readers", [
                 "dying", "grabbed_by", "grabbing", "latched", "marked",
                 "suffering",
+                # The two directions of one relation: `inside` is what the
+                # creature is in, `swallowed_by` is what it holds. Both
+                # here rather than beside the writers, for the same reason
+                # `grabbed_by` is.
+                "inside", "swallowed_by",
             ]),
             # `c.save_early` sits beside `c.save` because it is about the
             # same throw, and the pair is the one place the difference
@@ -1400,6 +1415,12 @@ READERS: dict[str, list[str]] = {
         # `feats_of` and `race_of` above. `set_of` takes the ENTRY ref,
         # never the block's. #1479.
         "set_items_on", "set_of",
+        # The **Requirement** reader for a swallow's capacity: `requires=`
+        # is handed `(world, eid)` and has no `Cast`, so `c.swallowed_by`
+        # cannot serve it. Here rather than with the conditions because
+        # the question is "what does this creature hold", like `feats_of`
+        # and `race_of` above. #1489.
+        "inside_count",
     ],
     "where, and how far": [
         # `terrain` is not a distance, and it is here because it is the one

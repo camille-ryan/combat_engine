@@ -4611,10 +4611,10 @@ def m6109a3(c: Cast) -> None:
     victim = c.target
     if victim is None or not c.strike():
         return
-    inside = c.world.effects.apply(
-        victim, me, When.ENCOUNTER, label=c.ref,
+    inside = c.swallow(
+        on=victim, until=When.ENCOUNTER,
         conditions=(Condition.REMOVED,),
-        ongoing=(10, DamageType.UNTYPED), by=c.ref,
+        ongoing=(10, DamageType.UNTYPED),
     )
     if inside is None:
         return

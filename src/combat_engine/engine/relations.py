@@ -21,6 +21,15 @@ if TYPE_CHECKING:
     from .ecs import World
 
 #: A relation that also imposes a condition on the creature it is aimed at.
+#:
+#: **`SWALLOWED_BY` is deliberately NOT here, and the first draft had it
+#: mapped to `Condition.REMOVED`.** That was wrong because the five
+#: printed swallows in this tree impose three different things: `m412a2`
+#: and `m6109a3` remove the victim from play, `m3511a0` stuns it and
+#: burns it, and `m2237a2` and `m3932a2` grab and restrain it -- the last
+#: two deliberately leaving it able to attack the thing that ate it,
+#: which `REMOVED` forbids outright. So the relation records *inside
+#: whom* and the card says what that costs. #1489.
 IMPLIES: dict[Relation, Condition] = {
     Relation.GRABBED_BY: Condition.GRABBED,
     Relation.MARKED_BY: Condition.MARKED,

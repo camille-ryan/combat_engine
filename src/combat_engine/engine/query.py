@@ -1783,6 +1783,21 @@ def _type_word(raw: str) -> str:
     return raw.strip("() ,.").lower()
 
 
+def inside_count(world: World, eid: int) -> int:
+    """How many creatures that one has swallowed.
+
+    The reader a **Requirement** needs: `requires=` is handed
+    `(world, eid)` and has no `Cast`, so `c.swallowed_by` cannot serve it.
+    `m412a2` prints *"must not have two creatures removed from play"* and
+    counted live effects whose `source` was the swallower and whose label
+    matched its own -- which worked only because it was the only card
+    using that label. #1489.
+    """
+    from .types import Relation
+
+    return len(world.relations.targets(Relation.SWALLOWED_BY, eid))
+
+
 @lru_cache(maxsize=1)
 def _item_sets() -> dict[str, tuple[str, ...]]:
     """`item_set`, members by set ref and in printed order. One read, cached.

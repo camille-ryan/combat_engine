@@ -2000,11 +2000,59 @@ def i3577p1(c: Cast) -> None:
 
 
 @power("i3578p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.swallowed()",))
+       reach=PERSONAL, target=SELF,
+       narrative=("skill:endurance",),
+       dropped=("c.waive(cannot_act)",))
 def i3578p1(c: Cast) -> None:
-    """Being inside something that ate you is not a state the board has,
-    so only the second half -- swallow it yourself and be sick -- is
-    written."""
+    """The note below said *"being inside something that ate you is not a
+    state the board has"*, and now it is: `Relation.SWALLOWED_BY`, which
+    `c.inside` reads and `c.disgorge` undoes. #1489.
+
+    **Two branches and the card chooses between them, so this is an
+    `if`.** *"If you are inside a creature that has swallowed you"* is the
+    first; *"if you swallow the seed"* is the second, and a character
+    inside something is plainly taking the first. The daze lands on
+    different creatures in each -- the swallower in one, the caster in the
+    other -- which is the whole reason they cannot be collapsed.
+
+    `When.SOTNT` in both arms reads correctly for each: the card says
+    *"until the start of its next turn"* for the swallower and *"until
+    the start of your next turn"* for the caster, and the hold is laid on
+    whoever is dazed, so the clock is theirs.
+
+    **Measured both branches.** Inside a host, the seed disgorges the
+    caster and dazes the **host**, not the caster; swallowed as a seed, it
+    dazes the caster and nobody else.
+
+    **And one of the two kinds of swallow in this tree puts the row out
+    of reach, which is the `dropped=`.** `m412a2` and `m6109a3` impose
+    `Condition.REMOVED`, which is `cannot_act`, so `dsl.use` refuses this
+    row before the body runs -- measured: the victim stays inside and the
+    host is not dazed. The card plainly allows it: *"if you are inside a
+    creature that has swallowed you, and you release the seed"*. The
+    other three swallows grab or stun instead, the victim can act, and
+    the clause pays exactly as printed.
+
+    **The symbol is `m6109a3`'s, not a new one.** That row -- one of the
+    two swallows that removes its victim -- already carries
+    `dropped=("c.waive(cannot_act)",)` for the identical sentence:
+    *"the card lets the swallowed creature act and hit this creature
+    back, where `Condition.REMOVED` is `cannot_act`"*. Minting a second
+    name for one gap is what makes `todo.py` report half a family ready,
+    so this waits on the same word. `c.waive`'s vocabulary is closed and
+    `cannot_act` is not in it. See `#1473` for why widening `can_act`
+    instead is not the fix: every sub-offer gates on it independently.
+
+    Carries `narrative=("skill:endurance",)` for the one clause with no
+    combat meaning: *"ending or preventing the effect of any ingested
+    substance you consumed by swallowing within the last minute"*. A
+    minute is ten rounds, nothing in a fight is an ingested substance
+    with a lingering effect, and the engine holds no record of what a
+    character swallowed before the encounter began."""
+    host = c.disgorge(on=c.me)
+    if host >= 0:
+        c.dazed(on=host, until=When.SOTNT)
+        return
     c.dazed(on=c.me, until=When.SOTNT)
 
 

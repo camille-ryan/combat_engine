@@ -3161,7 +3161,7 @@ def m3932a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=17),
     damage=Damage("2d6", 5, kind=LIMITED),
-    dropped=("c.swallowed()",),
+    dropped=("query.line_of_sight(inside=)",),
 )
 def m3932a2(c: Cast) -> None:
     """Inside the creature, written as what the card says it costs.
@@ -3173,6 +3173,15 @@ def m3932a2(c: Cast) -> None:
     hold is the save-ends one the engine does have, and the release puts the
     victim down beside the m3932 and hands the use back, which is the
     printed recharge.
+    **Half of what `c.swallowed()` named now exists, so the marker is
+    narrowed.** `Relation.SWALLOWED_BY` records *inside whom* and
+    `query.inside_count` answers the capacity rule, both off one store
+    rather than a per-file label (#1489). What is left here is the sight
+    half, which is why the symbol names that and not swallowing: a
+    creature inside another has line of sight and effect **only** to its
+    host, and nobody has either to it. `query.sealed` is still the wrong
+    verb -- it cuts line of effect to everybody including the host -- and
+    the one-way version does not exist.
     """
     me = c.me
     victim = _restricted_to(

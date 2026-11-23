@@ -12257,6 +12257,144 @@ class Cast:
             by=self.ref,
         )
 
+    def swallow(
+        self, *, on: int | None = None, by: int | None = None,
+        until: When = When.SAVE_ENDS, room: int = 0,
+        conditions: tuple[Condition, ...] = (),
+        ongoing: tuple[int, DamageType] | None = None,
+    ) -> Effect | None:
+        """Record that one creature is **inside** another.
+
+        Not "take it off the board", which this said until the
+        `conditions=` note below was written: whether a swallowed creature
+        is removed, stunned or merely restrained is the swallowing card's
+        business and three different answers are printed.
+
+        `c.grab`'s stronger sibling and written to its shape, because the
+        argument `relations.py` makes about a grab is the one that matters
+        here: *"`x is grabbed` is only half a fact, and storing it on `x`
+        alone is how an engine ends up unable to answer 'grabbed by
+        whom'."*
+
+        **Being swallowed was written twice by hand before this, with two
+        conventions.** `m412a2` applied `Condition.REMOVED` under a
+        file-local label and `m6109a3` under the row's own ref, so nothing
+        could ask what a creature was inside without knowing every label
+        any card might have used. `i3578p1` is the row that has to ask --
+        *"if you are inside a creature that has swallowed you"* -- and
+        four rows carried `c.swallowed()` for want of it. #1489.
+
+        **`conditions=` is the card's, because the five printed swallows
+        impose three different things.** `m412a2` and `m6109a3` remove the
+        victim from play; `m3511a0` stuns and burns it; `m2237a2` and
+        `m3932a2` grab and restrain it, and those two deliberately leave
+        it able to attack the thing that ate it -- which
+        `Condition.REMOVED` forbids. So this verb records *inside whom*
+        and nothing else, and an `IMPLIES` entry mapping the relation to
+        one condition was the first draft's mistake.
+
+        **`room=` is the printed capacity**, and `0` is no limit. `m412a2`
+        prints *"must not have two creatures removed from play"* and
+        counted live effects by hand to enforce it; this reads
+        `Relations.targets`, which is the question rather than a proxy for
+        it. A swallow refused for want of room returns `None`, which is
+        what a body checks -- and a row's `requires=` wants
+        `query.inside_count`, not this, because a Requirement predicate is
+        handed `(world, eid)` and has no `Cast` to call. That is the
+        difference between refusing the swallow and never offering the
+        row.
+
+        `by=` names the swallower when it is not the caster, for the same
+        reason `c.grab` takes it. `ongoing=` is the digestion several of
+        these cards print, passed through rather than restated.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        holder = self.me if by is None else by
+        if room and len(self.swallowed_by(holder)) >= room:
+            return None
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} swallow",
+            relations=[(Relation.SWALLOWED_BY, holder, who)],
+            conditions=conditions,
+            ongoing=ongoing,
+            by=self.ref,
+        )
+
+    def swallowed_by(self, who: int | None = None) -> list[int]:
+        """Who this creature has swallowed. The capacity reader.
+
+        `Relations.targets(SWALLOWED_BY, ...)`, which is `m412a2`'s
+        `_room_inside` asked directly instead of counted off the effect
+        store. Defaults to the **caster**, not the target, because every
+        printed use is about the swallower -- the capacity rule and the
+        "it disgorges whatever it holds" clause both are.
+        """
+        from .types import Relation as _Relation
+
+        holder = self.me if who is None else who
+        return self.world.relations.targets(_Relation.SWALLOWED_BY, holder)
+
+    def inside(self, *, on: int | None = None) -> int:
+        """What this creature is inside, or `-1`.
+
+        The other direction, and the one `i3578p1` asks: *"if you are
+        inside a creature that has swallowed you"*. `-1` rather than
+        `None` so a caller can compare without a two-step, matching the
+        rest of the eid-returning readers here.
+
+        **Defaults to `c.target`** like almost everything on `Cast`, so a
+        row meaning itself passes `on=c.me` -- which `i3578p1` does,
+        because the creature asking is the one that was eaten.
+        """
+        from .types import Relation as _Relation
+
+        who = self._who(on)
+        if who is None:
+            return -1
+        held = self.world.relations.sources(_Relation.SWALLOWED_BY, who)
+        return held[0] if held else -1
+
+    def disgorge(self, *, on: int | None = None) -> int:
+        """Let a swallowed creature out, beside the thing that ate it.
+
+        *"The creature immediately disgorges you and is dazed until the
+        start of its next turn"* -- `i3578p1`, which is the seed a
+        swallowed character bites. Returns the swallower's eid, or `-1`
+        when the creature was not inside anything, so a body can branch on
+        the card's own "if you are inside a creature" without asking
+        twice.
+
+        **Ends the hold rather than clearing the relation**, which is the
+        order that matters: `Effects._clear` drops an effect's relations
+        when it ends, so ending the swallow releases the relation and the
+        `Condition.REMOVED` it implied in one step. Clearing the relation
+        by hand would leave the effect standing and the creature removed
+        with nothing recording why.
+
+        The square is the swallower's, because that is where the printed
+        sentence puts it and `c.reappear` already does the fallback --
+        *"or the nearest unoccupied space"* -- for the common case where
+        the swallower is standing on it.
+        """
+        from .types import Relation as _Relation
+
+        who = self._who(on)
+        if who is None:
+            return -1
+        host = self.inside(on=who)
+        if host < 0:
+            return -1
+        for eff in list(self.world.effects.of(who)):
+            if any(kind is _Relation.SWALLOWED_BY and target == who
+                   for kind, _source, target in eff.relations):
+                self.world.effects.end(eff, "disgorged")
+        pos = self.world.get(host, Position)
+        if pos is not None:
+            self.reappear(pos.square, who=who, within=1, of=pos.square)
+        return host
+
     def dominate(
         self,
         *,
