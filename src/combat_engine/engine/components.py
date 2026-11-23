@@ -1950,6 +1950,24 @@ class Powers:
     #: printed window is a duration and covers every attack inside it.
     #: #1524.
     pending_targets: dict[str, list[int]] = field(default_factory=dict)
+    #: **Rows this creature may not augment**, by ref.
+    #:
+    #: `f2731` grants a chosen at-will of another class *"and you cannot
+    #: augment it"*. `dsl.use(augment=)` arrived, so the augment is
+    #: offered -- which is precisely what makes the clause say
+    #: something -- and nothing took the offer away again for one
+    #: creature's copy of one row. `c.forbid` removes a row whole; this
+    #: removes a **form** of one.
+    #:
+    #: Read in `dsl.affordable`, which its own docstring names as "the
+    #: reader that decides which augments are offered", and in
+    #: `dsl.usable` so a direct `use(augment=n)` is refused too -- a bar
+    #: that lived only in the menu would be a bar the AI policy obeys and
+    #: a row does not.
+    #:
+    #: Written by `Cast.no_augment`, which lays the hold that clears it.
+    #: #1527.
+    no_augment: set[str] = field(default_factory=set)
     #: **The only attack rows this creature may reach**, by ref, when it is
     #: not empty. *"When it attacks, the target can only make a melee basic
     #: attack"* and *"dominated … but can use only basic attacks"* are the

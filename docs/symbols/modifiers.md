@@ -196,6 +196,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - One named row's printed Requirement is met, while `when` holds.
 - `c.loses_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, mine_only: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Take a weapon property back off. Returns how many weapons changed.
+- `c.no_augment(self, ref: 'str', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You cannot augment it" -- one row, for one creature.
 - `c.no_basic(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Take away what this creature's basic attack *is*, not the ability.
 - `c.no_coup_de_grace(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`

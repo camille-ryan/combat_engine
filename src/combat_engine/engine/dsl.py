@@ -5062,6 +5062,24 @@ def affordable(world: World, actor: int, p: Power) -> tuple[int, ...]:
     """
     if not p.augments:
         return (0,)
+    from .components import Powers as _Powers
+
+    # **A row this creature may not augment is offered unaugmented and
+    # nothing else.** `f2731` prints *"and you cannot augment it"*, and
+    # this is the reader that decides what is offered -- see the
+    # docstring above.
+    #
+    # **One read site, not two, and a plant is what settled that.** A
+    # second refusal was written into `dsl.usable` so a row asking for
+    # `augment=n` by hand would be refused as well -- and deleting it
+    # reddened nothing, because `usable` already ends with
+    # `if augment not in affordable(...)`. So the bar reaches a direct
+    # ask through this function, and the extra branch was a second lock
+    # on a door the first already holds: dead bookkeeping no plant can
+    # redden. #1527.
+    _barred = world.get(actor, _Powers)
+    if _barred is not None and p.ref in _barred.no_augment:
+        return (0,)
     from .components import PowerPoints
 
     pool = world.get(actor, PowerPoints)

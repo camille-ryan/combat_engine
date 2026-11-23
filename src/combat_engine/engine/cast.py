@@ -20432,6 +20432,56 @@ class Cast:
         ]
         return mine[-1] if mine else 0
 
+    def no_augment(
+        self, ref: str, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You cannot augment it" -- one row, for one creature.
+
+        `f2731` grants a chosen at-will of another class and forbids
+        augmenting it. `dsl.use(augment=)` exists, so the augment is
+        offered, which is what makes the clause say something -- and
+        nothing took the offer away again.
+
+        **`c.forbid` is the near miss and removes the row whole.** This
+        removes a *form* of one: the plain use stays available and the
+        augmented forms do not.
+
+        **Read in ONE place, and a plant is what settled that.**
+        `dsl.affordable` decides which augments are offered, so that is
+        what the action menu and the AI policy see. A second refusal was
+        written into `dsl.usable` for a row asking `augment=n` by
+        hand -- and deleting it reddened nothing, because `usable`
+        already ends with `if augment not in affordable(...)`. A direct
+        ask is refused through the same function, so the extra branch was
+        a second lock on a door the first already holds. #1527.
+
+        Defaults to the caster, since the card is about its own holder.
+        """
+        from .components import Powers
+
+        who = self._who(on) if on is not None else self.me
+        if who is None or not ref:
+            return None
+        known = self.world.get(who, Powers)
+        if known is None or ref in known.no_augment:
+            return None
+        known.no_augment.add(ref)
+
+        def allow() -> None:
+            known.no_augment.discard(ref)
+
+        held = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} forbids augmenting {ref}",
+            on_end=[allow],
+            by=self.ref,
+        )
+        if held is None:
+            allow()
+            return None
+        return held
+
     def immune_power(
         self,
         *refs: str,

@@ -665,7 +665,7 @@ def f2694(c: Cast) -> None:
 
 
 @power("f2731", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.no_augment(ref)",))
+       reach=PERSONAL, target=SELF)
 def f2731(c: Cast) -> None:
     """A chosen 1st-level at-will of another class, once per encounter.
 
@@ -678,7 +678,16 @@ def f2731(c: Cast) -> None:
     precisely what makes the clause say something. What has no verb is
     taking the offer away again for one creature's copy of one row.
     `c.forbid` removes a row whole; nothing removes a form of one."""
-    c.borrow_row("psion", level=1, uses=1)
+    borrowed = c.borrow_row("psion", level=1, uses=1)
+    # **"And you cannot augment it."** `c.borrow_row` hands back the ref
+    # it chose, which is what makes this one line: the clause is about
+    # the row that was borrowed and nothing else this character holds.
+    #
+    # `c.forbid` is the near miss and would remove the row whole. This
+    # removes a FORM of it -- the plain use stays and the augmented ones
+    # do not, which is what the card says. #1527.
+    if borrowed:
+        c.no_augment(borrowed, on=c.me)
 
 
 @power("f2859", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

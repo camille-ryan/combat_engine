@@ -669,6 +669,11 @@ CATEGORIES: dict[str, dict] = {
                 # second weapon out of one. #1341.
                 "split_weapon",
                 "act_despite", "forbid", "forgo_second_wind_heal",
+                # Beside `forbid` because it is the narrower half of the
+                # same sentence: that one takes a row away, this takes a
+                # FORM of one -- the plain use stays and the augmented
+                # ones do not. #1527.
+                "no_augment",
                 # Beside `forbid` because it is the same question answered
                 # the other way: that one takes a named row away, this one
                 # opens a named row whose printed Requirement is not met.

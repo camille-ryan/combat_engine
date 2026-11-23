@@ -5783,6 +5783,132 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def one_row_can_be_barred_from_being_augmented(out: Result) -> None:
+    """`f2731`: a chosen 1st-level at-will of another class, once per
+    encounter, *"and you cannot augment it."*
+
+    `dsl.use(augment=)` arrived, so the augment is offered -- which is
+    precisely what makes the clause say something -- and nothing took
+    the offer away again for one creature's copy of one row.
+
+    **`c.forbid` is the near miss and removes the row whole.** This
+    removes a *form* of one: the plain use stays and the augmented forms
+    do not.
+
+    **Read in two places, and that is the point rather than belt and
+    braces.** `dsl.affordable` decides which augments are **offered**,
+    which is what the action menu and the AI policy see; `dsl.usable`
+    refuses a direct `augment=n`, so a row asking for one by hand is
+    refused too. A bar living only in the menu would be one the policy
+    obeys and a row does not -- and the two arms below are planted
+    separately for that reason. #1527.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        affordable,
+        usable,
+    )
+
+    REF = "f2731"
+    world, me, _ = _board(REF, 1)
+
+    # A row that really prints an Augment line, picked off the corpus so
+    # the arms cannot pass on a row with nothing to take away.
+    augmentable = next(
+        (r for r, p in sorted(REGISTRY.items()) if p.augments), "")
+    out.that(augmentable != "",
+             "the premise: the corpus holds a row that prints an Augment"
+             " line, so there is a form to take away",
+             f"{augmentable}")
+    declared = REGISTRY[augmentable]
+
+    known = world.need(me, Powers)
+    if augmentable not in known.known:
+        known.known.append(augmentable)
+    # Points to spend, or every augment is unaffordable for a reason that
+    # has nothing to do with this clause.
+    from combat_engine.engine.components import PowerPoints
+
+    pool = world.get(me, PowerPoints) or world.add(me, PowerPoints())
+    pool.points = 9
+
+    before = affordable(world, me, declared)
+    out.that(len(before) > 1,
+             "and the character can afford more than the plain form, so"
+             " the narrowing below is a difference rather than a board"
+             " that could never augment anything",
+             f"{before}")
+
+    Cast(world=world, me=me, ref=REF).no_augment(augmentable, on=me)
+    after = affordable(world, me, declared)
+    out.that(after == (0,),
+             "THE arm: only the plain form is OFFERED now -- which is"
+             " what the action menu and the AI policy read, since"
+             " `dsl.affordable`'s own docstring calls itself the reader"
+             " that decides",
+             f"{before} -> {after}")
+    out.that(usable(world, me, declared,
+                    augment=next(n for n in before if n))[0] is False,
+             "and a DIRECT `augment=n` is refused as well, so the bar is"
+             " not only in the menu. A row asking by hand would otherwise"
+             " walk straight past it",
+             f"{usable(world, me, declared, augment=next(n for n in before if n))}")
+    out.that(usable(world, me, declared)[0],
+             "CONTROL: and the PLAIN use is still allowed -- this takes a"
+             " form away, where `c.forbid` would have taken the row",
+             f"{usable(world, me, declared)}")
+
+    # -- and only that row ------------------------------------------------
+    other = next((r for r, p in sorted(REGISTRY.items())
+                  if p.augments and r != augmentable), "")
+    if other:
+        if other not in known.known:
+            known.known.append(other)
+        out.that(len(affordable(world, me, REGISTRY[other])) > 1,
+             "CONTROL: another row that prints an Augment line still"
+             " offers its forms, so the bar is keyed on the ref rather"
+             " than switching augmenting off for the creature",
+             f"{other}: {affordable(world, me, REGISTRY[other])}")
+
+    # -- and the hold gives it back ---------------------------------------
+    for eff in list(world.effects.of(me)):
+        if "forbids augmenting" in (eff.label or ""):
+            world.effects.end(eff, "the control")
+    out.that(affordable(world, me, declared) == before,
+             "and ending the hold gives the forms back, at the same list"
+             " -- the bar is a hold with a clock and not a change to the"
+             " row",
+             f"{after} -> {affordable(world, me, declared)}")
+
+    # -- and the ROW bars the row it borrowed -----------------------------
+    #
+    # **This arm exists because a plant showed the others could not see
+    # the row.** Everything above calls `c.no_augment` itself, so
+    # deleting the row's own line reddened nothing.
+    def the_row() -> tuple[str, set[str]]:
+        world2, me2, _ = _board(REF, 1)
+        _dsl.use(world2, me2, REF, spend=False)
+        barred = set(world2.need(me2, Powers).no_augment)
+        borrowed = [r for r in world2.need(me2, Powers).known
+                    if (q := REGISTRY.get(r)) is not None
+                    and q.cls == "psion"]
+        return (borrowed[0] if borrowed else ""), barred
+
+    took, barred = the_row()
+    out.that(took != "" and took in barred,
+             "THE row arm: the row borrows a psion at-will and bars that"
+             " SAME ref from being augmented -- `c.borrow_row` hands back"
+             " the ref it chose, which is what makes the clause one line",
+             f"borrowed {took}, barred {sorted(barred)}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_row_can_be_asked_whether_its_attack_grabs(out: Result) -> None:
     """`f2478`: *"whenever you miss an enemy with an attack that would
     allow you to grab it, you deal damage equal to your Dexterity
@@ -136266,6 +136392,10 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "one_row_not_augmentable": (
+        one_row_can_be_barred_from_being_augmented,
+        "f2731 forbids augmenting the row it borrowed, and only that row (#1527)",
     ),
     "row_grabs_is_askable": (
         a_row_can_be_asked_whether_its_attack_grabs,
