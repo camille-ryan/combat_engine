@@ -1622,6 +1622,21 @@ def deal_damage(
     roll: Roll | None = None,
     reprice: Callable[[int], int] | None = None,
     by_attack: bool = False,
+    #: **Which aiming of a two-range row this blow belongs to.** The
+    #: attack context has carried `branch` all along and this did not, so
+    #: the damage side answered for the row's **first** range always --
+    #: which is the comment below the `ranged` key records as *"wrong for
+    #: the handful that do"*.
+    #:
+    #: `f2202` is one of the handful: *"you can choose to make it a close
+    #: blast 1 instead of a close blast 3. If you do, add 2 to the damage
+    #: roll."* That is a rider on **which aiming was chosen**, and a
+    #: `ctx` key was not enough -- the dict is built inside this
+    #: function, so the branch has to reach the function first.
+    #:
+    #: Two keys move with it: `branch` itself, and `ranged`, which was
+    #: computing off branch 0 by hand. #1521.
+    branch: int = 0,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -1752,7 +1767,12 @@ def deal_damage(
         # `dsl.reach_of` is that a grant honoured at one site and missed at
         # the next is a modifier nothing consults -- `durations.keywords_of`
         # records that as 22 sites and one miss. #614.
-        "ranged": _is_ranged(detail, 0, world, source),
+        "ranged": _is_ranged(detail, branch, world, source),
+        # **Which aiming of a two-range row this is.** The attack context
+        # has always had it; this did not, so a rider on the narrower of
+        # two printed blasts had nothing to read. See the parameter's own
+        # note. #1521.
+        "branch": branch,
         # **Every type the blow is**, for the handful that are more than
         # one. `dtype` above is the primary and answers for all the blows
         # it always did; a gate that means "is there any thunder in this"

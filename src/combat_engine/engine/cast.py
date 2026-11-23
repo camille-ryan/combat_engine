@@ -6419,7 +6419,8 @@ class Cast:
             roll=roll, reprice=_reprice if roll is not None else None,
             by_attack=bool(self.result and self.result.hit),
             opportunity=self.opportunity, charge=self.charge,
-            granted_by=self.granted_by, granted_via=self.granted_via, crit=self.crit,
+            granted_by=self.granted_by, granted_via=self.granted_via,
+            crit=self.crit, branch=self.branch,
             # Read off the result the attack stamped, so a rider inside
             # the finisher inherits it and an ordinary critical does not.
             finisher=bool(self.result and self.result.finisher),
@@ -6514,7 +6515,8 @@ class Cast:
             roll=roll, reprice=_reprice if roll is not None else None,
             by_attack=bool(self.result and self.result.hit),
             opportunity=self.opportunity, charge=self.charge,
-            granted_by=self.granted_by, granted_via=self.granted_via, miss=True,
+            granted_by=self.granted_by, granted_via=self.granted_via,
+            miss=True, branch=self.branch,
         )
         # "Miss: half damage" still deals damage, and the rattling keyword
         # asks nothing about hitting.

@@ -2431,7 +2431,7 @@ def f2179(c: Cast) -> None:
 
 @power("f2202", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("resolve.deal_damage(branch=)",))
+)
 def f2202(c: Cast) -> None:
     """The narrower blast is written. The damage it buys is not.
 
@@ -2477,13 +2477,37 @@ def f2202(c: Cast) -> None:
     melee-as-ranged, which is a different rewrite -- see
     `c.recast(as_ranged=)`.
     """
+    me = c.me
     c.reshape_area(
         lambda r: CloseBlast(1),
         ref="p1448",
         optional=True,
-        on=c.me,
+        on=me,
         until=When.ENCOUNTER,
     )
+
+    def narrowed(ctx: dict[str, Any]) -> bool:
+        """Was this blow dealt by the narrower of the two blasts?
+
+        **The RESOLVED size, not the branch index.** `branches_for`
+        answers `(0, 1, 2)` on a board where the trait has been armed
+        twice, and branch 0 is the printed blast 3 while 1 and 2 are both
+        the contributed blast 1 -- so an index test would be right by
+        luck and wrong the moment anything else contributes. Measured
+        rather than assumed; an out-of-range branch falls back to the
+        printed reach rather than raising, so there is nothing to guard.
+        """
+        if ctx.get("power") != "p1448":
+            return False
+        declared = get("p1448")
+        if declared is None:
+            return False
+        aimed = reach_of(c.world, me, declared,
+                         int(ctx.get("branch") or 0))
+        return aimed.size == 1
+
+    c.bonus("damage", 2, on=me, until=When.ENCOUNTER, kind="untyped",
+            when=narrowed)
 
 
 @power("f2206", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

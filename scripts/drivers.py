@@ -5783,6 +5783,139 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_damage_rider_reads_which_aiming_was_chosen(out: Result) -> None:
+    """`f2202`: *"you can choose to make it a close blast 1 instead of a
+    close blast 3. If you do, add 2 to the damage roll."*
+
+    The attack context has carried `branch` all along and the damage
+    context did not -- `deal_damage` builds its own dict, and its comment
+    said so: *"`branch` is not carried this far, so a power printing two
+    ranges answers for its first -- wrong for the handful that do."* This
+    is one of the handful.
+
+    So the gap was the **parameter** rather than a ctx key: the dict is
+    built inside the function, so the branch has to reach the function
+    first. Two keys move with it -- `branch` itself, and `ranged`, which
+    was computing off branch 0 by hand. #1521.
+
+    Writing the bonus ungated would add 2 to every use of the power,
+    including the printed wide blast the card charges nothing for, which
+    is the direction worth refusing -- so the last arm is the one that
+    matters.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import DamageApplied
+
+    REF = "f2202"
+
+    def blast(branch: int) -> tuple[int, int]:
+        """Damage dealt by `p1448` on that aiming, and the blast's size."""
+        world, me, _ = _board(REF, 1)
+        world.turn = me
+        world.rng.loaded = 20
+        declared = _dsl.get("p1448")
+        size = _dsl.reach_of(world, me, declared, branch).size
+        before = len(world.bus.log)
+        _dsl.use(world, me, "p1448", spend=False, branch=branch)
+        dealt = sum(e.amount for e in world.bus.log[before:]
+                    if isinstance(e, DamageApplied) and e.source == me)
+        return dealt, size
+
+    wide, wide_size = blast(0)
+    narrow, narrow_size = blast(1)
+
+    out.that(wide_size == 3 and narrow_size == 1,
+             "the premise: branch 0 is the printed close blast 3 and"
+             " branch 1 is the contributed close blast 1, so the two arms"
+             " below really are the two printed aimings",
+             f"branch 0 size {wide_size}, branch 1 size {narrow_size}")
+    out.that(wide > 0 and narrow > 0,
+             "and both aimings landed damage, so a difference between"
+             " them is the rider rather than a board that missed",
+             f"wide {wide}, narrow {narrow}")
+
+    # -- the gate reads the resolved size, not the index -------------------
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    seen = {}
+    for branch in _dsl.branches_for(world, me, _dsl.get("p1448")):
+        seen[branch] = _dsl.reach_of(
+            world, me, _dsl.get("p1448"), branch).size
+    out.that(sorted(seen.values()).count(1) >= 1 and 3 in seen.values(),
+             "and the row's gate reads the RESOLVED size rather than the"
+             " branch index, which is why: on a board where the trait has"
+             " been armed twice the narrow blast holds more than one"
+             " index, so an index test would be right by luck",
+             f"{seen}")
+
+    # -- the rider is on the narrow aiming and nothing else ---------------
+    #
+    # **Read through `c.total` with each context, not off the damage
+    # dealt.** A blast 3 and a blast 1 touch different numbers of
+    # creatures, so comparing what the two aimings dealt is comparing the
+    # board -- the same confound that made an earlier rule in this file
+    # pass on a two-point difference between two foes. `Mods.total` is
+    # the read site `resolve` itself uses, and it takes the ctx.
+    def owed(**ctx: Any) -> int:
+        return c.total("damage", on=me, ctx=ctx)
+
+    plain = owed(power="p1448", branch=0)
+    deeper = owed(power="p1448", branch=1)
+    out.that(deeper == plain + 2,
+             "THE arm: the damage modifiers owe 2 more on the NARROW"
+             " blast than on the printed wide one -- the printed *if you"
+             " do*, and a difference so the board's own damage bonuses"
+             " cancel",
+             f"wide {plain}, narrow {deeper}")
+    out.that(owed(power="p1449", branch=1) == owed(power="p1449", branch=0),
+             "CONTROL: and another row's blast owes the same on either"
+             " aiming, so the gate reads the power as well as the branch",
+             f"{owed(power='p1449', branch=1)}"
+             f" vs {owed(power='p1449', branch=0)}")
+    out.that(owed(power="p1448") == plain,
+             "CONTROL: and a blow whose context carries no branch at all"
+             " owes the printed aiming's amount -- an absent key reads as"
+             " branch 0, which is the safe direction",
+             f"{owed(power='p1448')} vs {plain}")
+
+    # -- and `deal_damage` really puts the branch in the context ----------
+    #
+    # **This arm exists because a plant showed the others could not see
+    # it.** They read `Mods.total` with a ctx built by hand, so the whole
+    # engine half -- threading `branch` from `Cast.damage` into
+    # `deal_damage` and into the dict it builds -- was never exercised:
+    # the rule supplied the very thing that was missing. A recorder
+    # modifier is the narrow fix, since a `when=` gate is handed the real
+    # context by the real read site.
+    world3, me3, _ = _board(REF, 1)
+    world3.turn = me3
+    world3.rng.loaded = 20
+    c3 = Cast(world=world3, me=me3, ref="drv")
+    handed: list[dict[str, Any]] = []
+
+    def recorder(ctx: dict[str, Any]) -> bool:
+        if ctx.get("power") == "p1448":
+            handed.append(dict(ctx))
+        return False
+
+    c3.bonus("damage", 1, on=me3, until=When.ENCOUNTER, when=recorder)
+    _dsl.use(world3, me3, "p1448", spend=False, branch=1)
+    out.that(handed and all(h.get("branch") == 1 for h in handed),
+             "and the context `deal_damage` builds carries the aiming it"
+             " was used on -- recorded off a real blow through a `when=`"
+             " gate, because every arm above hands the ctx in itself and"
+             " a plant on the engine half left them all green",
+             f"{len(handed)} blow(s), branches"
+             f" {sorted({h.get('branch') for h in handed})}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_declared_trigger_can_name_two_event_classes(out: Result) -> None:
     """`f2130b`: *"you succeed on an Intimidate check **or** hit with an
     attack."*
@@ -135427,6 +135560,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "damage_reads_the_aiming": (
+        a_damage_rider_reads_which_aiming_was_chosen,
+        "f2202 adds 2 to the damage roll only on the narrower of"
+        " two printed blasts (#1521)",
     ),
     "trigger_two_classes": (
         a_declared_trigger_can_name_two_event_classes,
