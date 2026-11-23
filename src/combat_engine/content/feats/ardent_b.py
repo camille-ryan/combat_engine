@@ -55,6 +55,11 @@ DEFENCES = (AC, FORT, REF, WILL)
 #: The radius of the one mantle the class page prints, from `cf:ardent-f0`.
 MANTLE = 5
 
+#: The mantle's own ref, for a row naming it rather than its radius.
+#: `f3321` gates a `blast_size` modifier on it so the growth reaches
+#: that burst and no other.
+MANTLE_REF = "cf:ardent-f0"
+
 ARDENT_SURGE = "p10273"
 ARDENT_ERUPTION = "p12931"
 BLOODIED_ADVANTAGE = "p11060"
@@ -193,11 +198,38 @@ def f2593(c: Cast) -> None:
 
 
 @power("f3321", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.widen_area()",))
+       reach=PERSONAL, target=SELF)
 def f3321(c: Cast) -> None:
-    """Grows the mantle by 2 squares while the pool is empty. The radius is
-    `cf:ardent-f0`'s close burst 5, which is header data read before that
-    row's body runs -- the same gap f1010 and f1134 name."""
+    """Grows the mantle by 2 squares while the pool is empty.
+
+    **Written, and the old note's premise was false.** It said the radius
+    "is header data read before that row's body runs -- the same gap
+    f1010 and f1134 name". The first half is true and the second does
+    not follow: the thing that grows a burst is not the row's own body
+    but its **reader**, and `dsl._stretched` is handed a context
+    carrying `power`. So a `blast_size` modifier gated on one ref grows
+    exactly that row's area -- which is what `i526x1` already does, one
+    keyword instead of one ref.
+
+    Measured before writing it, because the note had been believed
+    twice: `cf:ardent-f0` covers **121** squares, 210 with this gate
+    standing, and 121 again with the same bonus gated on another ref.
+
+    `c.points()` is asked **in the gate** rather than at arming. This is
+    a trait, armed once at the start of the fight, and the printed clause
+    is *"while you have no power points remaining"* -- a condition that
+    changes every time the ardent spends or regains, so a reading taken
+    at arming would be frozen at whatever the pool held on round one.
+
+    What f1010, f1134 and f2202 want is still missing and is a different
+    thing: f1134 is an **offer** made before aiming (a price paid for the
+    wider blast), and f2202 **shrinks** an area -- `_stretched` clamps
+    with `max(0, ...)`, so a negative `blast_size` is no answer there."""
+    c.bonus(
+        "blast_size", 2, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (ctx.get("power") == MANTLE_REF
+                          and c.points() == 0),
+    )
 
 
 @power("f3173", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

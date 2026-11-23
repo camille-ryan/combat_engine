@@ -4948,6 +4948,132 @@ def a_wall_can_be_lengthened_where_a_burst_is_widened(out: Result) -> None:
                  f"{bare_burst} -> {sized(burst, 'blast_size')}")
 
 
+def one_named_rows_burst_grows_and_no_others(out: Result) -> None:
+    """`f3321`: *"the radius of your mantle increases by 2"*, that mantle.
+
+    **The note on this row said it could not be written and was wrong**,
+    which is the finding worth keeping. It read: the radius "is header
+    data read before that row's body runs". True, and it does not
+    follow -- the thing that grows a burst is the *reader*, not the
+    row's own body, and `dsl._stretched` is handed a context carrying
+    `power`. So a `blast_size` modifier gated on one ref grows exactly
+    that row's area. `i526x1` already does this with a keyword where
+    this does it with a ref.
+
+    Four arms, and the two negatives are the whole gate:
+
+    * the mantle grows while the pool is empty;
+    * a bonus gated on **another** ref leaves it alone -- so the growth
+      is keyed on the ref and is not simply "every burst this caster
+      throws", which is what the plain verb would have given;
+    * with power points in hand it does not grow, which is the printed
+      *"while you have no power points remaining"*;
+    * and the points are read **live**: spending the pool down to zero
+      mid-fight starts the growth, where a reading taken when the trait
+      armed would be frozen at round one.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, area_of, use
+
+    MANTLE = "cf:ardent-f0"
+
+    def covered(points: int, *, board: str = "f3321") -> int:
+        """Squares the mantle covers with that many power points in hand.
+
+        **No `armed` switch, because there cannot be one on this board.**
+        `audit.board` arms every `action=NONE` row INCLUDING the row
+        under test, so an "unarmed" arm here measured the GROWN mantle
+        and the first draft read its numbers backwards. The control is a
+        board built for another ref, which does not grant this feat.
+        """
+        world, me, _ = _board(board, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        have = c.points()
+        if points > have:
+            c.gain_points(points - have)
+        elif points < have:
+            c.spend_points(have - points)
+        return len(area_of(world, me, REGISTRY[MANTLE]))
+
+    printed = covered(0, board="f2807")
+    out.that(printed > 0,
+             "the mantle covers squares for a character WITHOUT this feat"
+             " -- the control, on a board built for another ref, and the"
+             " baseline the arms below are measured against",
+             f"{printed} square(s)")
+
+    grown = covered(0)
+    out.that(grown > printed,
+             "THE arm: with the pool empty the mantle is bigger. The row"
+             " this feat names is grown and its own body never ran --"
+             " `_stretched` reads the gate, which is why the old note's"
+             " 'header data' argument did not settle it",
+             f"{printed} -> {grown}")
+
+    flush = covered(2)
+    out.that(flush == printed,
+             "and with power points in hand it is back to the printed"
+             " radius, which is 'while you have no power points"
+             " remaining'",
+             f"{grown} grown, {flush} with points, {printed} printed")
+
+    # ---- the ref gate: another row's burst is untouched
+    #
+    # **Measured ACROSS boards, not before-and-after a `use`.** The first
+    # draft read one board's other-burst area, called `use(f3321)` and
+    # read it again -- and the board had already armed the feat, so the
+    # second modifier did not stack and the arm could never move. A plant
+    # removing the ref clause entirely left all six arms green, which is
+    # how that was found.
+    world, me, _ = _board("f3321", 1)
+    other = next(
+        (r for r, row in sorted(REGISTRY.items())
+         if r != MANTLE and getattr(row.reach_of(0), "kind", "") == "close_burst"
+         and row.level <= 10),
+        "")
+    out.that(bool(other),
+             "another close burst exists to check the gate against -- the"
+             " premise, asked AFTER a board is built because `REGISTRY`"
+             " holds three rows until one is",
+             f"{other}")
+    if other:
+        def other_area(board: str) -> int:
+            world2, me2, _ = _board(board, 1)
+            c2 = Cast(world=world2, me=me2, ref="drv")
+            have = c2.points()
+            if have:
+                c2.spend_points(have)
+            return len(area_of(world2, me2, REGISTRY[other]))
+
+        with_feat = other_area("f3321")
+        without = other_area("f2807")
+        out.that(with_feat == without,
+                 "and ANOTHER row's close burst is the same size for a"
+                 " character who holds this feat with an empty pool as"
+                 " for one who does not -- so the growth is keyed on the"
+                 " mantle's REF rather than on every burst this caster"
+                 " throws, which is what the ungated verb would have"
+                 " given and is strictly more than the card",
+                 f"{other}: {with_feat} with the feat, {without} without")
+
+    # ---- the pool is read live, not at arming
+    world, me, _ = _board("f3321", 1)
+    c = Cast(world=world, me=me, ref="drv")
+    have = c.points()
+    if have == 0:
+        c.gain_points(2)
+    use(world, me, "f3321", spend=False)
+    with_points = len(area_of(world, me, REGISTRY[MANTLE]))
+    c.spend_points(c.points())
+    emptied = len(area_of(world, me, REGISTRY[MANTLE]))
+    out.that(c.points() == 0 and emptied > with_points,
+             "and the pool is read LIVE: armed with points in hand and"
+             " then spent to nothing, the mantle grows without the trait"
+             " being re-armed. A reading taken at arming would be frozen"
+             " at round one",
+             f"{with_points} -> {emptied} at {c.points()} point(s)")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -133126,6 +133252,10 @@ DRIVERS = {
     "wall_length": (
         a_wall_can_be_lengthened_where_a_burst_is_widened,
         "i526x1 lengthens a wall with its own term, not blast_size",
+    ),
+    "named_burst_grows": (
+        one_named_rows_burst_grows_and_no_others,
+        "f3321 grows the mantle it names and no other burst",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,
