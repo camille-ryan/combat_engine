@@ -83,8 +83,28 @@ def _ranged_basic(c: Cast) -> None:
     # the body runs -- so with nothing registered this is one attribute read
     # and no decision. A mid-body prompt here would have cost every basic
     # attack in every fight a choice.
-    if c.strike():
-        c.instead_of("damage", lambda: c.damage(c.w(1), c.attack_mod))
+    #
+    # **And the SWING itself is replaceable, which is the outer key.**
+    # *"Trigger: you make a ranged basic attack using this weapon. Effect:
+    # you make a ranged at-will attack using this weapon instead."* --
+    # `i2730p1`, and the whole swing is what "instead" governs there, not
+    # the damage it would have dealt. Only the damage was named, so a card
+    # replacing the attack had nothing to register against.
+    #
+    # Additive, by `instead_of`'s own rule: the variant names ONE clause
+    # and every other clause of the row stays printed, so a `"damage"`
+    # registration is unaffected by a `"swing"` one existing. `"swing"` is
+    # the name already in use for this -- `features/racial.py` reads
+    # `c.instead_of("swing", ...)` -- rather than a new word. #1502.
+    #
+    # `_melee_basic` deliberately does NOT get this yet: no card asks for
+    # it, and an unregistered key is a key nothing looks up rather than
+    # free generality.
+    def printed() -> None:
+        if c.strike():
+            c.instead_of("damage", lambda: c.damage(c.w(1), c.attack_mod))
+
+    c.instead_of("swing", printed)
 
 
 @power(

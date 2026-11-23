@@ -113,6 +113,7 @@ from combat_engine.engine import (
     power,
     query,
 )
+from combat_engine.engine.basic import RANGED
 
 #: `PowerResolved` is the one event this file needs that the engine's
 #: package does not re-export. It is the only place "you miss **every**
@@ -2910,7 +2911,6 @@ def i2405p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you make a ranged basic attack using this weapon",
-    todo=("basic.SWING_CLAUSE",),
 )
 def i2730p1(c: Cast) -> None:
     """Swaps a basic attack that is already happening for a different row
@@ -2953,7 +2953,54 @@ def i2730p1(c: Cast) -> None:
     One symbol, because the limit is not a second gap. Nothing announces
     that a swing was taken in place of a granted basic (`ctx["basic"]`
     leaves the `instead` list out deliberately, #522), which is why
-    charging the use from outside is not an option."""
+    charging the use from outside is not an option.
+
+    ## Written
+
+    `basic._ranged_basic` reads `c.instead_of("swing", ...)` now, so the
+    swing is a clause a card can replace -- additive, because the variant
+    names one clause and every other clause of the row stays printed.
+    `#1502`.
+
+    The registration is keyed on the **weapon in hand** and becomes its
+    own action-menu entry, which is what makes the choice among at-wills
+    a menu entry rather than a prompt halfway through a body. It ends
+    itself as it is taken, so the free action buys exactly one swapped
+    swing and not a standing licence -- the limit the old note said would
+    come free.
+
+    Two honest limits, neither introduced here. `pre_empt(weapon=)` keys
+    the **base** weapon, so a character holding two bows carries the
+    clause on both; that is the facility's documented behaviour. And
+    `i2730`'s printed base is the bow *group* rather than one weapon, so
+    "this weapon" can only ever mean "the bow being shot"."""
+    bow = c.my_weapon()
+    if bow is None:
+        return
+    # The character's own ranged at-wills, minus the basic this is
+    # replacing -- offering `rba` here would swap a basic for itself.
+    mine = [r for r in c.borrowed_rows(c.me, at_will=True, melee=False)
+            if r != RANGED]
+    if not mine:
+        return
+    laid: list[Effect] = []
+
+    def instead(using: Cast) -> None:
+        # **Ends its own registration first**, so the free action buys one
+        # swapped swing. Before the at-will runs, because that row may make
+        # a basic attack of its own and would otherwise find this clause
+        # still standing.
+        for effect in laid:
+            using.end_effect(effect)
+        laid.clear()
+        pick = using.choose(mine, f"{c.ref}: which ranged at-will")
+        if pick is not None:
+            using.use_power(pick)
+
+    held = c.pre_empt("", "swing", instead, weapon=bow.ref,
+                      until=When.ENCOUNTER)
+    if held is not None:
+        laid.append(held)
 
 
 @power(

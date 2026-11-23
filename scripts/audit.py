@@ -143,6 +143,26 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **The board cannot put this item's own weapon in the wielder's
+    # hand.** `i2730`'s printed base is the `bow` *group* rather than one
+    # weapon, so `audit.board` equips an axe -- and the row's first line
+    # is `c.my_weapon()`, which matches on `Weapon.item` and not on
+    # whatever magic is held. With no bow it returns at once, and with no
+    # bow there is no ranged basic attack for it to replace either, so
+    # there is nothing the board could pose instead.
+    #
+    # Nothing is wrong with the row. `drivers.swing_replaced` is the
+    # proof, which is the condition `scripts/CLAUDE.md` sets before a
+    # silent row may be recorded as known: it stages the bow as the
+    # item's own, grants a ranged at-will (the dealt character has none),
+    # and measures `AttackRolled` **by power** -- so "the at-will fired
+    # as well" and "the at-will fired instead" are told apart. Three
+    # plants, all red. #1502.
+    "i2730p1": "the board equips an axe because i2730's printed base is "
+               "the bow GROUP, so `c.my_weapon()` is None and the row "
+               "returns on its first line -- and with no bow there is no "
+               "ranged basic to replace. drivers.swing_replaced stages "
+               "the bow and is the proof. #1502",
     # **A third row of #1499's shape**, found by sweeping the marked rows
     # for notes that had already concluded the clause grants nothing.
     # `i2413x1` prints "creatures that have tremorsense must have line of

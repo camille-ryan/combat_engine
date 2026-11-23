@@ -4618,6 +4618,122 @@ def tremorsense_does_not_see_through_a_hide(out: Result) -> None:
              f"before={si_before}, after={si_after}")
 
 
+def a_ranged_basics_swing_can_be_replaced(out: Result) -> None:
+    """`i2730p1`: a ranged basic becomes a ranged at-will instead.
+
+    *"Trigger: you make a ranged basic attack using this weapon. Effect:
+    you make a ranged at-will attack using this weapon instead."* The
+    whole **swing** is what "instead" governs, and `_ranged_basic` named
+    only its damage -- so a card replacing the attack had nothing to
+    register against. `#1502`.
+
+    Three roads were ruled out first and the row's docstring holds the
+    reasoning: `c.as_basic` files its offer where a swing is handed out
+    and this row's printed trigger stops its body ever running; an
+    interrupt is withheld because the card prints a free action; and
+    `pre_empt` keyed `(ref, what)` cannot say "using this weapon". The
+    fourth road works, because `pre_empt(weapon=)` keys on the weapon in
+    hand.
+
+    **Staged, because the board cannot pose this ref.** `i2730`'s printed
+    base is the `bow` *group* rather than one weapon, so `audit.board`
+    equips an axe and there is no ranged basic to replace at all. The bow
+    is put in hand as the item's own -- `Weapon(item="i2730")`, which is
+    what `c.my_weapon` matches on, not "whatever magic is held" -- and a
+    ranged at-will is granted, since the dealt character has none.
+
+    Four arms. The one that matters is that `rba` rolls **no attack of
+    its own**: counting `AttackRolled` by `power` separates "the at-will
+    fired as well" from "the at-will fired instead", and only the second
+    is what the card prints.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Powers, Weapon
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.types import ActionType, Usage
+
+    ITEM, BOW = "i2730p1", "w3631"
+
+    def staged():  # noqa: ANN202
+        """A board with the item's own bow in hand and an at-will to swap to."""
+        world, me, _ = _board(ITEM, 1)
+        gear = world.need(me, Gear)
+        gear.weapons = [Weapon(ref=BOW, group="bow", ranged=(20, 40),
+                               item="i2730", enhancement=2, granted_by="")]
+        c = Cast(world=world, me=me, ref=ITEM)
+        spare = [r for r, p in REGISTRY.items()
+                 if p.usage is Usage.AT_WILL and p.attack_of(0) is not None
+                 and p.action is ActionType.STANDARD
+                 and p.reach_of(0).kind == "ranged" and p.level <= 10
+                 and r.startswith("p") and not p.unfinished]
+        if spare:
+            c.grant_row(spare[0])
+        return world, me, c, (spare[0] if spare else "")
+
+    world, me, c, at_will = staged()
+    out.that(bool(at_will), "there is a ranged at-will in the tree to swap"
+                            " to -- the premise", f"{at_will}")
+    mine = c.my_weapon()
+    out.that(mine is not None and mine.ref == BOW,
+             "the item's own bow is in hand, matched by `Weapon.item` and"
+             " not by whatever magic is held -- without this the row"
+             " returns on its first line and the board equips an axe,"
+             " since i2730's printed base is the bow GROUP",
+             f"my_weapon={mine.ref if mine else None}")
+    if mine is None or not at_will:
+        return
+
+    out.that(at_will in c.borrowed_rows(me, at_will=True, melee=False),
+             "and it is offered as a ranged at-will the wielder could"
+             " choose -- `borrowed_rows`, which filters on the printed"
+             " action and range")
+
+    use(world, me, ITEM, spend=False)
+    known = world.need(me, Powers)
+    keys = sorted(known.pre_empts)
+    out.that(keys == [(f"weapon:{BOW}", "swing")],
+             "using the free action registers one clause, keyed on the"
+             " WEAPON and on the swing -- so it reaches every basic made"
+             " with that bow without being written into the basic",
+             f"{keys}")
+
+    def shoot(variant: int) -> dict[str, int]:
+        rolled: dict[str, int] = {}
+        world.bus.on(AttackRolled, lambda ev, into=rolled: into.__setitem__(
+            ev.power, into.get(ev.power, 0) + 1))
+        foe = sorted(c.enemies())[0]
+        use(world, me, "rba", targets=[foe], spend=False, variant=variant)
+        return rolled
+
+    swapped = shoot(1)
+    out.that(swapped.get(at_will, 0) == 1 and swapped.get("rba", 0) == 0,
+             "THE arm: the chosen variant makes the at-will the swing --"
+             " `rba` rolls NO attack of its own, which is the difference"
+             " between 'instead' and 'as well' and the only reading the"
+             " card allows",
+             f"AttackRolled by power: {swapped}")
+    out.that(not known.pre_empts,
+             "and the clause ends itself as it is taken, so one free"
+             " action buys one swapped swing rather than a standing"
+             " licence for the encounter",
+             f"{sorted(known.pre_empts)}")
+
+    # ---- the control: the printed card, with nothing chosen
+    world, me, c, at_will = staged()
+    use(world, me, ITEM, spend=False)
+    printed: dict[str, int] = {}
+    world.bus.on(AttackRolled, lambda ev, into=printed: into.__setitem__(
+        ev.power, into.get(ev.power, 0) + 1))
+    foe = sorted(c.enemies())[0]
+    use(world, me, "rba", targets=[foe], spend=False)
+    out.that(printed.get("rba", 0) == 1 and printed.get(at_will, 0) == 0,
+             "the control: with no variant chosen the basic is the printed"
+             " basic and the at-will does not fire, which is the contract"
+             " `instead_of` holds for every row that reads a clause",
+             f"AttackRolled by power: {printed}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -132783,6 +132899,11 @@ DRIVERS = {
     "tremorsense_does_not_see_through_a_hide": (
         tremorsense_does_not_see_through_a_hide,
         "i2413x1's empty body: tremorsense never finds a hidden creature",
+    ),
+    "swing_replaced": (
+        a_ranged_basics_swing_can_be_replaced,
+        "i2730p1 swaps a ranged basic's whole swing for a ranged"
+        " at-will",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,
