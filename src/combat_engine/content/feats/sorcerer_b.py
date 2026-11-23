@@ -553,7 +553,7 @@ def f2806(c: Cast) -> None:
 
 @power("f2807", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("turns.arm_before_initiative",))
+       dropped=("turns.arm_before_initiative", "cf:sorcerer-f0s3"))
 def f2807(c: Cast) -> None:
     """Call the parity of your initiative d20 and add Charisma if it lands.
 
@@ -584,7 +584,21 @@ def f2807(c: Cast) -> None:
 
     `Initiative.natural` is 0 for a creature whose count was *copied*
     rather than rolled, so the gate reads no match there rather than
-    even, which is why the parity test asks for a face at all."""
+    even, which is why the parity test asks for a face at all.
+
+    **And the feat still cannot be DEALT, which is a second gap and was
+    missed when the parity half landed.** Its printed prerequisite is
+    `{"ref": "cf:sorcerer-f0s3"}` in an `all`, and that leg is not a
+    declared row -- so `chargen.meets` answers it against a dealt hand
+    that never holds a leg ref. The clause above is written and correct;
+    nobody can hold it. `f2805`, `f2806` and `f3435` wait on the same
+    leg, and `f469`, `f470`, `f1009`, `f370`, `f2478`, `f3425` on their
+    own, which is `#235`'s axis -- a decision, not work, and the reason
+    granting the leg from its parent is refused there is that it would
+    hand a sorcerer on another fork a feat printed for this one.
+
+    So two symbols, because they are two gaps: the ordering one above,
+    and this. `#1447` holds the census."""
     me = c.me
     # Even, by the argument in the docstring: the call is free.
     want_even = True
