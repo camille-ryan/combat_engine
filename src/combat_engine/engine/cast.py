@@ -20432,6 +20432,64 @@ class Cast:
         ]
         return mine[-1] if mine else 0
 
+    def only_action(
+        self, *words: str, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You can take actions only to <these things>" -- a whitelist.
+
+        `i3560p1`: *"you can take actions only to spend your second wind
+        or to end this effect (a minor action)."*
+
+        **A bar is per action COST and this card needs one per
+        identity.** `Condition.SHAPED` is `no_standard` and
+        `Rules.cannot_move` closes the move half, and between them there
+        is no way to leave **one** minor action open and close the rest.
+        `Powers.acts_despite` is the cost-shaped version of this and the
+        filter sits beside it in `actions.legal`.
+
+        A word matches an `Action.kind` (`"second_wind"`) or an
+        `Action.ref`. The ref is what makes it exact: `Cast.form` labels
+        its hold, and `actions._dropping` offers a `drop` entry carrying
+        that label -- so naming the label permits ending **that** form
+        and nothing else the creature is holding. Naming the kind would
+        let it drop anything.
+
+        `ActionType.NONE` and `ActionType.FREE` stay available, the same
+        exemption `acts_despite` makes: a free action is not "taking an
+        action" in the sense these cards mean, and `kind="end"` has to
+        stay or the turn cannot be passed.
+
+        Defaults to the caster, since every printed line is about its own
+        holder. #1529.
+        """
+        from .components import Powers
+
+        who = self._who(on) if on is not None else self.me
+        if who is None or not words:
+            return None
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        added = {w for w in words if w and w not in known.only_actions}
+        if not added:
+            return None
+        known.only_actions |= added
+
+        def release() -> None:
+            known.only_actions -= added
+
+        held = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} allows only {len(added)} action(s)",
+            on_end=[release],
+            by=self.ref,
+        )
+        if held is None:
+            release()
+            return None
+        return held
+
     def concealment_cap(
         self,
         cap: Cover = Cover.PARTIAL,

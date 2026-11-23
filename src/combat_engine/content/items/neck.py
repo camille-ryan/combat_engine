@@ -1875,7 +1875,7 @@ def i3560x1(c: Cast) -> None:
 
 @power("i3560p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH],
-       dropped=("c.only_action(word)",))
+       )
 def i3560p1(c: Cast) -> None:
     """`c.form` holds the shape and gives back the minor action that ends
     it. The tremorsense is written at the printed 10.
@@ -1892,17 +1892,33 @@ def i3560p1(c: Cast) -> None:
     of the shape early kept resist 20 and the temporary hit points for the
     rest of the fight.
 
-    Still dropped: the move actions and the *other* minor actions. The card
-    allows exactly two things, and a bar is per action cost -- there is no
-    way to leave one minor action open and close the rest.
+    **The whitelist is written, which is what a bar with a hole in it
+    is.** `c.only_action` names what may still be done -- the second
+    wind, and the `drop` entry that ends this form -- and
+    `actions.legal` filters to it beside the cost-shaped
+    `Powers.acts_despite`. `Rules.cannot_move` would have closed the
+    move half on its own and is not needed: the whitelist closes it with
+    everything else. #733, #1529.
 
-    **Re-pointed to `c.only_action(word)`**, which is what a bar with a hole
-    in it is: a whitelist rather than a prohibition. `Rules.cannot_move`
-    exists and would close the move half on its own; the minor-action hole
-    is the part nothing can say, and it is a different mechanism from both
-    of the other two rows that shared the old symbol. #733."""
+    **The label, not the `drop` kind.** `actions._dropping` offers one
+    entry per hold carrying a `drop_cost`, and on an audit board this
+    creature is also holding a defender aura at the same cost -- so
+    permitting the kind would let it shed that too. Naming the form's
+    own label permits exactly the printed one."""
     shape = c.form(until=When.ENCOUNTER, revert=MINOR, label="statue",
                    conditions=(Condition.SHAPED,))
+    # **"You can take actions only to spend your second wind or to end
+    # this effect."** `Condition.SHAPED` closes the standard half and
+    # nothing could leave ONE minor action open while closing the rest --
+    # a bar is per action cost. `c.only_action` is the whitelist.
+    #
+    # `"statue"` is the label above, and naming the LABEL rather than the
+    # `drop` kind is what makes it exact: `actions._dropping` offers one
+    # `drop` entry per hold carrying a `drop_cost`, so the kind would
+    # also let the creature shed anything else it holds. Measured on an
+    # audit board, where it was holding a defender aura with the same
+    # cost. #1529.
+    c.only_action("second_wind", "statue", on=c.me, until=When.ENCOUNTER)
 
     def hardening(ev: TurnStart) -> None:
         if getattr(ev, "actor", None) == c.me:

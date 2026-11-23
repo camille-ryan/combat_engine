@@ -186,6 +186,22 @@ def legal(
     if allowed is not None and allowed.acts_despite:
         keep = set(allowed.acts_despite) | {ActionType.NONE, ActionType.FREE}
         out = [a for a in out if a.cost in keep]
+    # **A whitelist by identity**, where the line above is one by cost.
+    # `i3560p1` allows exactly two things -- the second wind and the
+    # minor that ends the form -- and a bar per cost cannot leave one
+    # minor action open and close the rest. See `Powers.only_actions`.
+    #
+    # Matched on the kind OR the ref, so `"statue"` passes the `drop`
+    # entry that ends that one hold and not the `drop` entries for every
+    # other hold the creature carries. The same NONE/FREE exemption as
+    # above, which is also what keeps `kind="end"` available. #1529.
+    if allowed is not None and allowed.only_actions:
+        words = allowed.only_actions
+        out = [
+            a for a in out
+            if a.cost in (ActionType.NONE, ActionType.FREE)
+            or a.kind in words or (a.ref and a.ref in words)
+        ]
     return out
 
 

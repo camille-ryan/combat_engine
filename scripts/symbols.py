@@ -675,7 +675,14 @@ CATEGORIES: dict[str, dict] = {
                 # admits a weapon to a slot it is not, this makes a
                 # second weapon out of one. #1341.
                 "split_weapon",
-                "act_despite", "forbid", "forgo_second_wind_heal",
+                "act_despite",
+                # Beside `act_despite` because they are the two shapes of
+                # the same sentence: that one whitelists by action COST,
+                # this one by action IDENTITY -- which is what a card
+                # leaving one minor action open and closing the rest
+                # needs. #1529.
+                "only_action",
+                "forbid", "forgo_second_wind_heal",
                 # Beside `forbid` because it is the narrower half of the
                 # same sentence: that one takes a row away, this takes a
                 # FORM of one -- the plain use stays and the augmented

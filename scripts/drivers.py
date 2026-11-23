@@ -5783,6 +5783,127 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_bar_with_a_hole_in_it_is_a_whitelist(out: Result) -> None:
+    """`i3560p1`: *"you can take actions only to spend your second wind or
+    to end this effect (a minor action)."*
+
+    **A bar is per action COST and this card needs one per identity.**
+    `Condition.SHAPED` is `no_standard` and `Rules.cannot_move` would
+    close the move half, and between them there is no way to leave
+    **one** minor action open and close the rest.
+    `Powers.acts_despite` is the cost-shaped version and the new filter
+    sits beside it in `actions.legal`.
+
+    **The LABEL, not the `drop` kind**, and that is measured rather than
+    tidy: `actions._dropping` offers one entry per hold carrying a
+    `drop_cost`, and on this very board the creature is also holding a
+    defender aura at the same cost -- so permitting the kind would let it
+    shed that too. The last arm is that one. #1529.
+    """
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.types import ActionType
+
+    REF = "i3560p1"
+
+    def menu(*, shaped: bool) -> list[tuple[str, str]]:
+        world, me, _ = _board(REF, 1)
+        world.turn = me
+        if shaped:
+            _dsl.use(world, me, REF, spend=False)
+        return [(a.kind, a.ref) for a in
+                _actions.legal(world, world.encounter, me)]
+
+    plain = menu(shaped=False)
+    statue = menu(shaped=True)
+
+    out.that(len(plain) > 50,
+             "the premise: the unshaped menu is long, so a whitelist is a"
+             " difference rather than a board with nothing on it",
+             f"{len(plain)} entries")
+    out.that(len(statue) < len(plain),
+             "and the shaped menu is shorter",
+             f"{len(plain)} -> {len(statue)}")
+
+    kinds = {k for k, _r in statue}
+    out.that("second_wind" in kinds,
+             "THE arm: the second wind survives -- the one thing the card"
+             " names besides ending the form, and it is handed back at"
+             " the printed minor",
+             f"{sorted(kinds)}")
+    out.that(("drop", "statue") in statue,
+             "and so does the entry that ends the form, which"
+             " `actions._dropping` offers off the hold's `drop_cost`",
+             f"{[e for e in statue if e[0] == 'drop']}")
+    out.that(not {"run", "move", "shift", "charge"} & kinds,
+             "and the moving is gone -- which `Rules.cannot_move` would"
+             " have done on its own, so this is the whitelist closing it"
+             " along with everything else",
+             f"{sorted(kinds)}")
+    out.that("power" not in kinds,
+             "and so are the rows: 17 `power` entries on the unshaped"
+             " menu, none here. A cost bar left every minor-action power"
+             " standing, which is the hole this card does not have",
+             f"{sum(1 for k, _ in plain if k == 'power')} ->"
+             f" {sum(1 for k, _ in statue if k == 'power')}")
+    out.that("end" in kinds,
+             "CONTROL: and the turn can still be passed. `kind=\"end\"`"
+             " costs `ActionType.NONE`, which is exempt -- without that"
+             " the whitelist would hang the fight",
+             f"{'end' in kinds}")
+
+    # -- the label, not the kind ------------------------------------------
+    others = [r for k, r in statue if k == "drop" and r != "statue"]
+    # **The form laid WITHOUT the whitelist**, which is the only board on
+    # which the last arm is a difference. The first draft counted the
+    # drops on the *unshaped* board and found one: the statue's own entry
+    # does not exist until the form does, so the premise was measuring a
+    # board where the arm could not be wrong.
+    world, me, _ = _board(REF, 1)
+    Cast(world=world, me=me, ref="drv").form(
+        until=When.ENCOUNTER, revert=ActionType.MINOR, label="statue")
+    world.turn = me
+    before_drops = [a.ref for a in _actions.legal(world, world.encounter, me)
+                    if a.kind == "drop"]
+    out.that(len(before_drops) > 1 and "statue" in before_drops,
+             "the premise for the last arm: with the form laid and NO"
+             " whitelist, this creature holds more than one thing it"
+             " could end deliberately -- measured, the statue and a"
+             " defender aura, both at a minor",
+             f"{sorted(before_drops)}")
+    out.that(others == [],
+             "THE arm: and only the form's own `drop` entry survives."
+             " Permitting the `drop` KIND would have let the statue shed"
+             " the aura as well, which the card does not say -- so the"
+             " whitelist matches the label `c.form` gave the hold",
+             f"other drops still offered: {others}")
+
+    # -- the exemption is the same one acts_despite makes ------------------
+    world2, me2, _ = _board(REF, 1)
+    Cast(world=world2, me=me2, ref="drv").only_action(
+        "drv:nothing", on=me2)
+    world2.turn = me2
+    left = _actions.legal(world2, world2.encounter, me2)
+    out.that(left and all(
+                 a.cost in (ActionType.NONE, ActionType.FREE)
+                 for a in left),
+             "and a whitelist naming nothing real leaves exactly the"
+             " NONE and FREE actions -- the same exemption"
+             " `acts_despite` makes, and the reason a free action is not"
+             " *taking an action* in the sense these cards mean",
+             f"{len(left)} left,"
+             f" costs {sorted({str(a.cost) for a in left})}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+    assert Powers is not None
+
+
 def concealment_can_be_capped_rather_than_waived(out: Result) -> None:
     """`f3452`: *"when you are blinded or in darkness, creatures within 2
     squares of you have concealment rather than **total** concealment,
@@ -136515,6 +136636,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "only_these_actions": (
+        a_bar_with_a_hole_in_it_is_a_whitelist,
+        "i3560p1 leaves exactly the second wind and the form's own"
+        " exit on the menu (#1529)",
     ),
     "concealment_capped": (
         concealment_can_be_capped_rather_than_waived,

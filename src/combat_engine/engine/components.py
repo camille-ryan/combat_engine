@@ -1997,6 +1997,30 @@ class Powers:
     #: Written by `Cast.no_augment`, which lays the hold that clears it.
     #: #1527.
     no_augment: set[str] = field(default_factory=set)
+    #: **The only things this creature may do**, as action kinds or refs.
+    #:
+    #: `i3560p1`: *"you can take actions only to spend your second wind
+    #: or to end this effect (a minor action)."* A bar is per action
+    #: **cost** -- `Condition.SHAPED` is `no_standard` and
+    #: `Rules.cannot_move` closes the move half -- and there is no way to
+    #: leave ONE minor action open and close the rest. This is the
+    #: whitelist that says it.
+    #:
+    #: A token matches an `Action.kind` (`"second_wind"`) or an
+    #: `Action.ref` (`"statue"`, the label `Cast.form` gave the hold, so
+    #: the `drop` entry that ends it passes and the `drop` entries for
+    #: every other hold do not). Matching the ref is what makes the
+    #: narrowing exact: permitting the kind would let the creature drop
+    #: anything it was holding.
+    #:
+    #: `ActionType.NONE` and `ActionType.FREE` are exempt, the same
+    #: exemption `acts_despite` makes and for the same reason -- a free
+    #: action is not "taking an action" in the sense these cards mean,
+    #: and `kind="end"` has to stay or the turn cannot be passed.
+    #:
+    #: Written by `Cast.only_action`, read in `actions.legal` beside
+    #: `acts_despite`. #1529.
+    only_actions: set[str] = field(default_factory=set)
     #: **The only attack rows this creature may reach**, by ref, when it is
     #: not empty. *"When it attacks, the target can only make a melee basic
     #: attack"* and *"dominated … but can use only basic attacks"* are the
