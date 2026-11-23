@@ -72892,6 +72892,127 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_surge_buys_two_expiring_points(out: Result) -> None:
+    """*"Once per encounter, as a minor action, you can lose a healing surge
+    to gain 2 power points that expire at the end of your turn."* --
+    `f3625`'s second clause. #1485.
+
+    **An offer, not a granted row.** The marker read `c.grant_inline()` on
+    the reading that this is a card printed inside the feat with no ref of
+    its own. The printed sentence has no target line and no attack: it is
+    a minor action, so `actions.py` is where it lives and nothing has to
+    be coined. `#1484` is the ref question the other three rows on that
+    symbol genuinely wait on.
+
+    **The surge is LOST, not used.** `c.spend_surge` is the verb whose
+    docstring says *"spend a surge and gain nothing for it"*, so hit
+    points must not move -- a `c.surge()` here would heal a quarter of
+    maximum and read as the card working.
+
+    **The points are `expiring=`, which is a different door from the
+    plain call.** They are handed over from outside the pool into
+    `PowerPoints.temporary`, so a character at its maximum still takes
+    them. The first draft of the gate refused anybody with no
+    `PowerPoints` component at all on the reasoning that the pool "has to
+    exist"; `Cast._pool` creates it, so that refused a holder for whom
+    the clause works -- measured on this very board, which deals the feat
+    to a character carrying no pool.
+
+    **And the offer must reach a prone character.** The first draft
+    appended it inside `_movement`, which returns early for a prone
+    creature; nothing about lying down stops a character losing a surge.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, PowerPoints
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import ActionType, Condition
+
+    ROW = "f3625"
+
+    def _menu(world, who: int) -> list:  # noqa: ANN001
+        return [a for a in actions.legal(world, world.encounter, who)
+                if a.kind == "surge_for_points"]
+
+    world, me, _ = _board(ROW, 1)
+    out.that(bool(Cast(world=world, me=me, ref="drv").feat(ROW)),
+             "premise: the board deals the feat, so an absent offer below"
+             " would be the offer's fault and not the hand's",
+             f"{Cast(world=world, me=me, ref='drv').feat(ROW)}")
+    health = world.get(me, Health)
+    out.that(health is not None and health.surges > 0,
+             "premise: the character has a surge to lose",
+             f"{health.surges if health else None}")
+
+    offered = _menu(world, me)
+    out.that(len(offered) == 1 and offered[0].cost is ActionType.MINOR,
+             "the exchange is offered once, as the printed MINOR action",
+             f"{[(a.kind, a.cost) for a in offered]}")
+    if not offered:
+        # **Returns rather than indexing, and this is a plant's doing.**
+        # Dropping `_trading` from `legal()` left `offered` empty and the
+        # rule died on `offered[0]` with a traceback instead of a FAIL --
+        # which is the one outcome a rule must not produce, because a
+        # crash is not a verdict and the suite reports it as neither.
+        out.that(False,
+                 "...so nothing below could be measured: the offer never"
+                 " reached the menu at all",
+                 "no offer")
+        return
+
+    # -- it reaches a prone character -------------------------------------
+    prone_world, prone_me, _ = _board(ROW, 1)
+    Cast(world=prone_world, me=prone_me, ref="drv").condition(
+        Condition.PRONE, on=prone_me)
+    out.that(bool(_menu(prone_world, prone_me)),
+             "and a PRONE character is still offered it -- the clause is"
+             " not a movement, so `_movement`'s early return must not"
+             " reach it",
+             f"{[a.kind for a in _menu(prone_world, prone_me)]}")
+
+    # -- the trade itself --------------------------------------------------
+    before_surges = health.surges
+    before_hp = health.hp
+    did = actions.perform(world, world.encounter, me, offered[0])
+    health = world.get(me, Health)
+    pool = world.get(me, PowerPoints)
+    out.that(did and health.surges == before_surges - 1,
+             "ONE surge goes",
+             f"{before_surges} -> {health.surges}, performed={did}")
+    out.that(health.hp == before_hp,
+             "and hit points do NOT move: the card says lose a surge, which"
+             " is `c.spend_surge` and not `c.surge` -- the latter would"
+             " heal a quarter of maximum and look like the card working",
+             f"{before_hp} -> {health.hp}")
+    out.that(pool is not None and pool.temporary == 2,
+             "2 points land in the EXPIRING bucket, not the pool, so a"
+             " character at its maximum still takes them",
+             f"temporary={pool.temporary if pool else None},"
+             f" points={pool.points if pool else None}")
+
+    # -- once per encounter ------------------------------------------------
+    out.that(not _menu(world, me),
+             "and it is not offered again this encounter -- the cadence is"
+             " `c.once_per_board`, because `Usage` has four members and"
+             " none of them caps a thing that is not a power",
+             f"{[a.kind for a in _menu(world, me)]}")
+
+    # -- no surge, no offer ------------------------------------------------
+    dry_world, dry_me, _ = _board(ROW, 1)
+    dry = dry_world.get(dry_me, Health)
+    dry.surges = 0
+    out.that(not _menu(dry_world, dry_me),
+             "a character with no surge left is not offered the trade, so"
+             " the menu never holds an action that cannot be paid for",
+             f"{[a.kind for a in _menu(dry_world, dry_me)]}")
+
+    # -- and the row carries no marker any more ----------------------------
+    out.that(not REGISTRY[ROW].unfinished,
+             "the row is unmarked, so `blocked.py` no longer counts it",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_keyword_pair_opens_one_cold_window(out: Result) -> None:
     """*"When you hit a target with an arcane fire power, that target gains
     vulnerable 5 cold against the first arcane attack power you use against
@@ -114907,6 +115028,16 @@ UNNAMED_KINDS_OWED = frozenset(
         # either, while the table would claim a decision had been made.
         "aid_attack",
         "aid_defence",
+        # **`surge_for_points` is owed under the same standing ruling**,
+        # and the judgement is unusually sharp: it trades a healing surge
+        # -- which is hit points and a second wind -- for 2 power points
+        # that lapse at the end of the turn. So its worth is entirely a
+        # question of whether the augment they buy wins the fight faster
+        # than the surge would have saved it, which is exactly the
+        # "choose them when they are the better play" capability `#890`
+        # defers. A guessed weight here would be a claim that question
+        # had been answered. `f3625`, `#1485`.
+        "surge_for_points",
         # **`ally_check` is owed for the same reason and by the same
         # standing ruling.** It is `p11546`'s *"as a standard action, an
         # adjacent ally can make a DC 10 Heal check to allow you to use
@@ -129163,6 +129294,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "surge_for_points": (
+        a_surge_buys_two_expiring_points,
+        "f3625 trades a lost healing surge for 2 expiring power points, as"
+        " an offered minor action once an encounter",
     ),
     "keyword_pair_window": (
         a_keyword_pair_opens_one_cold_window,

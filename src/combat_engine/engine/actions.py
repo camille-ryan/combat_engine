@@ -150,6 +150,7 @@ def legal(
     out.extend(_teleports(world, encounter, actor))
     out.extend(_charges(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
+    out.extend(_trading(world, encounter, actor))
     out.extend(_mounting(world, encounter, actor))
     out.extend(_picking(world, encounter, actor))
     out.extend(_sustaining(world, encounter, actor))
@@ -1920,6 +1921,15 @@ GRANTABLE = frozenset({
     # the `perform` branch are both in this file, the base cost is the
     # printed minor, and the once-a-turn half is `Powers.latched`.
     "familiar_switch",
+    # **`surge_for_points` is a trade, which is why it is a kind and not a
+    # verb.** `c.spend_surge` and `c.gain_points(expiring=)` both already
+    # existed; what was missing was somewhere for the character to be
+    # *offered* the exchange. `f3625` is the one card printing it and its
+    # cadence is once per encounter, which is `World.latches` through
+    # `c.once_per_board` rather than any `Usage` member -- the four are
+    # at-will, encounter, daily and recharge, and none of them is a cap on
+    # something that is not a power. #1485.
+    "surge_for_points",
     # **`move_in_zone` moves the CREATURE; `move_zone` moves the zone.**
     # Two words because they are opposite operations that read alike:
     # `move_zone` is the monster line "as a minor action it can move the
@@ -2198,6 +2208,78 @@ def _cheap_aid_open(
             for a in _allies(world, actor)
         )
     return True
+
+
+#: The ref the surge-for-points offer builds its `Cast` under, and so the
+#: first half of its `World.latches` key. Named once because the offer, the
+#: `perform` branch and the peek below all have to agree on it.
+_SURGE_POINTS = "actions:surge_for_points"
+
+
+def _surge_for_points_open(world: World, actor: int) -> bool:
+    """`f3625`'s second clause: *"once per encounter, as a minor action, you
+    can lose a healing surge to gain 2 power points that expire at the end
+    of your turn."*
+
+    **An offer, not a granted row, and that is the correction the marker
+    needed.** The row carried `c.grant_inline()` on the reading that this
+    is "a card printed inside the feat with no ref of its own" -- but the
+    printed sentence has no target line and no attack: it is a *minor
+    action*, which is what this file offers. So nothing has to be coined.
+    `#1484` is the ref question the other three rows on that symbol really
+    do wait on; this row never did.
+
+    **Peeks `World.latches` rather than calling `c.once_per_board`.** That
+    verb is the right store and the wrong direction for a menu: it returns
+    True the first time and *consumes* on asking, so building the offer
+    with it would spend the encounter's one use merely by listing it.
+    `perform` does the consuming, which is the only place a use should be
+    spent.
+
+    The surge is checked because the card spends one. **A `PowerPoints`
+    component is deliberately NOT checked**, and the first draft of this
+    gate did check it -- on the reasoning that `c.gain_points` "clamps
+    into a pool that has to exist". That is true of the plain call and
+    false of this one, which the verb's own docstring says outright:
+    `expiring=` *"hands points over from outside the pool, so a character
+    already at `maximum` must still take them"*, landing them in
+    `PowerPoints.temporary`, and `Cast._pool` creates the component when
+    it is absent. So the check refused a holder for whom the clause works
+    perfectly -- measured on the audit board, which deals `f3625` to a
+    character carrying no pool and had the offer closed.
+    """
+    from .cast import Cast as _Cast
+    from .components import Health as _Health
+
+    if (_SURGE_POINTS, actor) in world.latches:
+        return False
+    health = world.get(actor, _Health)
+    if health is None or health.surges <= 0:
+        return False
+    return bool(_Cast(world=world, me=actor, ref=_SURGE_POINTS).feat("f3625"))
+
+
+def _trading(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """One resource spent to get another, which is nobody else's category.
+
+    `f3625` is the one card so far: a surge for 2 expiring power points.
+    It is neither `_recovery` (which spends a surge to *heal*, and this
+    heals nothing) nor `_spending` (a one-shot `Item` in somebody's hand).
+
+    **Its own function because the first draft put it in `_movement`, and
+    that was a bug rather than untidiness.** `_movement` returns early for
+    a prone creature -- correctly, since a printed line bars shifting --
+    so every offer appended after that point is withheld from anybody
+    lying down. Measured: standing, the offer appears; prone, it does
+    not, and nothing about being prone stops a character losing a surge.
+    `hang_up` and `familiar_switch` are in the same place and have the
+    same bug; moving those two changes a committed menu's order and so
+    owes a replay re-record, which is `#1486` rather than this commit.
+    """
+    if not (_surge_for_points_open(world, actor)
+            and encounter.can_spend(actor, ActionType.MINOR)):
+        return []
+    return [Action(kind="surge_for_points", cost=ActionType.MINOR)]
 
 
 def _lit_worn(world: World, actor: int) -> frozenset[str]:
@@ -4007,6 +4089,22 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             action.ref, light=10, speed=10, leash=10, on=actor,
             until=When.ENCOUNTER,
         ) is not None
+
+    if action.kind == "surge_for_points":
+        # Order matters and the card fixes it: the surge is *lost* and the
+        # points are what it buys, so a holder with no surge to lose must
+        # not be handed the points. `_surge_for_points_open` has already
+        # refused that case; this re-reads the spend's own answer rather
+        # than trusting the gate, because the menu is built once a turn and
+        # a surge can go in between.
+        from .cast import Cast as _Cast
+
+        payer = _Cast(world=world, me=actor, ref=_SURGE_POINTS)
+        if not payer.spend_surge(on=actor):
+            return False
+        payer.once_per_board(actor)
+        payer.gain_points(2, who=actor, expiring=When.EOT)
+        return True
 
     if action.kind == "familiar_switch":
         # **The verb already existed; this is only the menu entry.**

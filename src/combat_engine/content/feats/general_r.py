@@ -2472,8 +2472,7 @@ def f3624(c: Cast) -> None:
 
 
 @power("f3625", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.grant_inline()",))
+       reach=PERSONAL, target=SELF)
 def f3625(c: Cast) -> None:
     """The surge half plays; an augmented at-will is a psionic power like
     any other, so the keyword covers both arms of the printed trigger.
@@ -2484,30 +2483,29 @@ def f3625(c: Cast) -> None:
     beat -- and `i1793p1` is written on it. So the number is no longer
     the problem.
 
-    What is left is the **shape of the offer**, which is a narrower and
-    different gap: the clause is *"once per encounter, as a minor action,
-    you can lose a healing surge to gain 2 power points"*, so it is a
-    card the character may choose to use, printed inside the feat with no
-    ref of its own. That is `c.grant_inline()`, which three item blocks
-    already wait on, and this is the fourth row and the first feat.
+    **The second clause lands, and the marker's framing was the thing in
+    the way.** It read *"a card the character may choose to use, printed
+    inside the feat with no ref of its own"*, and called that
+    `c.grant_inline()`. But the printed sentence -- *"once per encounter,
+    as a minor action, you can lose a healing surge to gain 2 power points
+    that expire at the end of your turn"* -- has no target line and no
+    attack. It is a **minor action**, which `actions.py` offers, so
+    nothing has to be coined and the ref convention that genuinely blocks
+    the other three rows on that symbol was never this row's problem.
+    `#1484` is that question; `#1485` is this.
 
-    **The second-card convention does not rescue it, and a feat is where
-    it would have been most likely to.** `fNNNb` is the tree's ref for a
-    card printed inside another and 227 of them are in `game.db`; this
-    row has no such sibling, because the clause is a sentence of the
-    Benefit rather than a printed card, so the ETL had nothing to mint.
+    Both verbs already existed and neither needed widening:
+    `c.spend_surge` is *"spend a surge and gain nothing for it"*, which is
+    the card's "lose", and `c.gain_points(expiring=)` is the rest. What
+    was missing was a place to be **offered** the exchange --
+    `actions._surge_for_points_open` and the `perform` branch beside it.
 
-    The absent ref is deliberately **not spelled** here: `scripts/leaks.py
-    --refs` reports any ref named in prose that resolves to nothing, and
-    writing it out to say it does not exist is indistinguishable, to that
-    gate, from a dangling citation. It named this line on the first wide
-    sweep after the note was written.
-    `i1188p1`'s note makes the same point from the item side for a
-    different reason: `item_block` carries no `b` refs at all.
+    The cadence is `c.once_per_board` and not a header field, because
+    `Usage` has exactly four members and none of them caps something that
+    is not a power.
 
-    So the group is right rather than convenient. Declaring a row for a
-    ref the database does not have would be a row against a card nothing
-    printed.
+    The body stays the first clause alone: the second is not a thing a
+    trait lays, it is a thing the menu has to hold out.
     """
     _surge_when_it_lands(c, lambda p: Keyword.PSIONIC in p.keywords)
 

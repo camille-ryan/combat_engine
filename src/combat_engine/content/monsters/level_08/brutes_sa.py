@@ -1088,8 +1088,16 @@ def m1820a0(c: Cast) -> None:
 )
 def m1820a1(c: Cast) -> None:
     """"Allies within the aura" with no aura of its own size printed on
-    this block -- read as every r19 ally it has, the only set this line
-    could mean without one."""
+    this block -- read as every ally of its own kind, the only set this
+    line could mean without one.
+
+    **Neither the printed name nor its ref, which is the third wording
+    this line has had.** The name was a tree-wide `leaks.py` finding;
+    replacing it with the ref cleared that and made `--cited` red
+    instead, because the file goes on to match the kind *string* in
+    `c.is_kind` below -- mechanical vocabulary the engine needs -- so
+    citing the ref made the file both name a ref and print its name.
+    Saying "its own kind" needs neither and is what the line means."""
     if not c.strike():
         return
     victim = c.target
