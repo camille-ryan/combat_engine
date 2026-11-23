@@ -1192,7 +1192,7 @@ def _positions(page) -> dict:  # noqa: ANN001
 
 
 def _press_move(page) -> bool:  # noqa: ANN001
-    """Press the Move row in the action list, the way a player would.
+    r"""Press the Move row in the action list, the way a player would.
 
     **A locator, not an `ElementHandle`.** `query_selector_all` hands back
     snapshots of the elements as they were; the action list re-renders on

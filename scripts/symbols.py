@@ -925,6 +925,12 @@ CATEGORIES: dict[str, dict] = {
                 # free action reaches one further. #736, p9344.
                 "pick_up",
                 "stow",
+                # The shelf above is "where the thing is"; this is the one
+                # arrangement where putting it down does **not** stop it
+                # working. `stow` and `equipment.unequip` both unwind what
+                # the item laid, which is what they are for, so neither
+                # could say it. #1475, i1321x1.
+                "leave_hanging",
             ]),
         ],
     },

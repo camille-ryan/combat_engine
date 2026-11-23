@@ -366,7 +366,7 @@ def rt_r2_t4(c: Cast) -> None:
     **One correction to the note this replaces.** It offered `r2`'s absent
     `t1` row as evidence that *"something of the race did not survive
     extraction"*. That is not evidence of anything: `t1` is a trait whose
-    whole printed text is "you have the \<racial power\> power", which the
+    whole printed text is "you have the (racial power) power", which the
     racial-power path handles rather than the trait path, so its ordinal is
     skipped by design. 25 of 52 races have such a gap. Counting them as
     losses would have made `#1420` an order of magnitude bigger than the

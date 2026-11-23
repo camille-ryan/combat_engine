@@ -997,7 +997,6 @@ def i1968p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.extra_area_target()",),
 )
 def i1098x1(c: Cast) -> None:
     """Split: the bonus half plays and the second target does not.
@@ -1012,6 +1011,15 @@ def i1098x1(c: Cast) -> None:
     interrupt*, where this is a standing property whose extra target is a
     conjuration or a zone. `running_below` refuses it outright from a
     trait, and the target line being widened is not a creature line.
+
+    **Written now, in `p2273`'s own body, which is where this note said
+    it had to land.** `c.granted_via` is the ref of the row that lent the
+    use -- `i1098p1` -- so *"through this tome"* is provenance rather than
+    a guess about what the caster is carrying, and that was the reader
+    the note said had no `c.feat` equivalent. `#1477`.
+
+    The reasoning below is kept because it is what made the fix short,
+    and because it correctly rules out the two near misses:
 
     **And there is no target line to widen, which is narrower still.**
     `p2273` is declared `target=NO_TARGET`: it gathers the zones and

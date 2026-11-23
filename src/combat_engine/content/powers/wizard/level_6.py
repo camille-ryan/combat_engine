@@ -242,18 +242,45 @@ def p2273(c: Cast) -> None:
     for eid, conj in c.world.each(Conjuration):
         if c.distance(to=eid) <= 10:
             found.append((eid, conj.by, conj.ref, "conjuration"))
-    picked = c.choose(sorted(found), "what to unmake")
-    if picked is None:
-        return
-    which, owner, label, kind = picked
-    if not c.strike(on=owner):
-        return
-    for effect in list(c.world.effects.live.values()):
-        if effect.source == owner and label and label in effect.label:
-            c.world.effects.end(effect, c.ref)
-    if kind == "zone" and c.world.get(which, Zone) is not None:
-        c.world.zones.end(which, c.ref)
-    c.note(f"p2273: the {kind} is unmade")
+    def unmake(pool: list[tuple[int, int, str, str]]) -> tuple | None:
+        """Pick one of them and take it apart. The chosen one, or None.
+
+        Returned on a **miss** as well as a hit, because the card spends
+        the choice either way -- a second target must not be allowed to
+        re-pick the thing the first attack missed.
+        """
+        picked = c.choose(sorted(pool), "what to unmake")
+        if picked is None:
+            return None
+        which, owner, label, kind = picked
+        if not c.strike(on=owner):
+            return picked
+        for effect in list(c.world.effects.live.values()):
+            if effect.source == owner and label and label in effect.label:
+                c.world.effects.end(effect, c.ref)
+        if kind == "zone" and c.world.get(which, Zone) is not None:
+            c.world.zones.end(which, c.ref)
+        c.note(f"p2273: the {kind} is unmade")
+        return picked
+
+    # **"You can target two conjurations or zones instead of one"** --
+    # `i1098x1`, and only when this power is used *through that tome*.
+    # `c.granted_via` is the ref of the row that lent the use, which is
+    # `i1098p1`, so the provenance is the printed "through this tome"
+    # rather than a guess about what the caster is carrying.
+    #
+    # The clause lands **here** and not on the item, which is `#550`'s
+    # convention and the only place it can be: this row is
+    # `target=NO_TARGET` and gathers its own candidates, so there is no
+    # printed target line for `c.extra_target` to widen. `i1098x1`'s own
+    # note worked that out and kept its marker for want of this. `#1477`.
+    how_many = 2 if c.granted_via == "i1098p1" else 1
+    left = list(found)
+    for _ in range(how_many):
+        taken = unmake(left)
+        if taken is None:
+            break
+        left = [f for f in left if f != taken]
 
 
 def _free_near(c: Cast, origin: tuple[int, int], radius: int) -> list[tuple[int, int]]:

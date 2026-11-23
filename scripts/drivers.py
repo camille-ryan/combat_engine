@@ -72892,6 +72892,156 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_tome_unmakes_two_zones_instead_of_one(out: Result) -> None:
+    """*"When you use the p2273 power through this tome, you can target
+    two conjurations or zones instead of one"* -- `i1098x1`. #1477.
+
+    **The clause lands in `p2273`'s body, which is the only place it
+    can.** That row is `target=NO_TARGET` and gathers its own candidates
+    -- a zone is not a creature, so it cannot be a printed target -- and
+    offers **one** through `c.choose`. So there is no target line for
+    `c.extra_target` to widen and no `Effect.retarget` replacement that
+    could reach it. `i1098x1`'s own note worked all of that out and kept
+    its marker for want of one reader.
+
+    **`c.granted_via` is that reader, and it is provenance rather than a
+    guess.** It holds the ref of the row that lent this use, which is
+    `i1098p1` -- the tome's own granting row -- so *"through this tome"*
+    is answered by how the power was reached and not by rummaging in the
+    caster's gear. `#550`'s convention for a feat naming one power, one
+    layer over to an item.
+
+    **A miss still spends the choice**, which is the arm worth having:
+    `unmake` hands its pick back whether the attack hit or not, so the
+    second target cannot re-pick the thing the first attack missed. A
+    `return None` on a miss would have let one zone be chosen twice.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Miss, Note
+    from combat_engine.engine.zones import Zone
+
+    ROW, TOME, GRANT = "p2273", "i1098x1", "i1098p1"
+
+    def used(*, via: str, roll: int = 20) -> tuple[list[str], int]:
+        """The power used, with two candidate zones in reach.
+
+        Two, because the card is about targeting a *second* one -- with
+        a single candidate on the board both arms would unmake one and
+        the rule could not tell them apart.
+        """
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref="drv")
+        foes = sorted(cast.enemies())
+        for n, foe in enumerate(foes[:2]):
+            Cast(world=world, me=foe, ref=f"drv:z{n}").zone(
+                [(cast.here[0] + 1 + n, cast.here[1])],
+                label=f"drv zone {n}", until=When.ENCOUNTER,
+            )
+        standing = sum(1 for _e, _z in world.each(Zone))
+        said: list[str] = []
+        world.bus.on(Note, lambda e: said.append(e.text))
+        world.rng.loaded = roll
+        dsl.use(world, me, ROW, spend=False, granted_via=via)
+        return [t for t in said if "unmade" in t], standing
+
+    # -- the premise -------------------------------------------------------
+    through, standing = used(via=GRANT)
+    out.that(standing >= 2,
+             "premise: two zones stand in reach, so 'a second target' is"
+             " a thing the board can offer -- with one candidate both"
+             " arms would unmake one and prove nothing",
+             f"{standing} zone(s)")
+
+    # -- THE arms ----------------------------------------------------------
+    out.that(len(through) == 2,
+             "used THROUGH the tome it unmakes two -- *'two conjurations"
+             " or zones instead of one'*",
+             f"{len(through)}: {through}")
+    plain, _ = used(via="")
+    out.that(len(plain) == 1,
+             "and used any other way it unmakes one, which is the arm"
+             " that makes the line above the tome's rather than the"
+             " row's",
+             f"{len(plain)}: {plain}")
+
+    # -- the same one is not picked twice ---------------------------------
+    # **The board's OWN zones are cleared first**, which the first draft
+    # of this arm did not do: `audit.board` arms every `action=NONE` row
+    # and some of them lay one, so a board meant to hold a single
+    # candidate held two and the tome correctly unmade both. The arm read
+    # as a broken exclusion and was a mis-staged board.
+    world, me, _ = _board(ROW, 1)
+    for zid, _z in list(world.zones.all()):
+        world.zones.end(zid, "driver")
+    cast = Cast(world=world, me=me, ref="drv")
+    foe = sorted(cast.enemies())[0]
+    Cast(world=world, me=foe, ref="drv:one").zone(
+        [(cast.here[0] + 1, cast.here[1])], label="drv lone zone",
+        until=When.ENCOUNTER)
+    lone = sum(1 for _e, _z in world.each(Zone))
+    out.that(lone == 1,
+             "premise: exactly one candidate stands on the board",
+             f"{lone} zone(s)")
+    said: list[str] = []
+    world.bus.on(Note, lambda e: said.append(e.text))
+    world.rng.loaded = 20
+    dsl.use(world, me, ROW, spend=False, granted_via=GRANT)
+    out.that(len([t for t in said if "unmade" in t]) == 1,
+             "and the tome unmakes it ONCE and stops -- the pick is"
+             " removed from the pool, so a second target cannot re-take"
+             " the same zone",
+             f"{[t for t in said if 'unmade' in t]}")
+
+    # -- a miss still spends the choice -----------------------------------
+    missed, _ = used(via=GRANT, roll=1)
+    out.that(not missed,
+             "a loaded 1 unmakes nothing, so the arms above are about the"
+             " attack landing rather than about the choice being offered",
+             f"{missed}")
+
+    # **Miss first, then hit**, which is the only way to see that a miss
+    # *spends* the choice rather than freeing it. Both readings unmake 0
+    # when every attack misses, so the arm above cannot tell them apart
+    # -- measured: the plant that frees the pick on a miss passed it.
+    # `Rng.loaded` is a single face, so the second roll is loaded from a
+    # listener on the first `Miss`.
+    w2, me2, _ = _board(ROW, 1)
+    for zid, _z in list(w2.zones.all()):
+        w2.zones.end(zid, "driver")
+    c2 = Cast(world=w2, me=me2, ref="drv")
+    for n, foe2 in enumerate(sorted(c2.enemies())[:2]):
+        Cast(world=w2, me=foe2, ref=f"drv:m{n}").zone(
+            [(c2.here[0] + 1 + n, c2.here[1])],
+            label=f"drv miss zone {n}", until=When.ENCOUNTER,
+        )
+    out.that(sum(1 for _e, _z in w2.each(Zone)) == 2,
+             "premise: two candidates, so there is a second one to reach"
+             " after the first attack misses",
+             f"{sum(1 for _e, _z in w2.each(Zone))}")
+    told: list[str] = []
+    w2.bus.on(Note, lambda e: told.append(e.text))
+    w2.bus.on(Miss, lambda _e: setattr(w2.rng, "loaded", 20), once=True)
+    w2.rng.loaded = 1
+    dsl.use(w2, me2, ROW, spend=False, granted_via=GRANT)
+    out.that(len([t for t in told if "unmade" in t]) == 1,
+             "THE arm: the first attack misses and the second still lands"
+             " on the OTHER candidate -- one unmade. A miss that freed the"
+             " pick would end the loop and unmake nothing, which is what"
+             " the plant does",
+             f"{[t for t in told if 'unmade' in t]}")
+
+    # -- the item's own half ----------------------------------------------
+    out.that(not REGISTRY[TOME].unfinished,
+             f"and {TOME} carries no marker: its bonus half already"
+             " played, gated on this ref, and the second target was the"
+             " rest",
+             f"{REGISTRY[TOME].unfinished}")
+
+
 def crawling_in_beast_form_opens_no_window(out: Result) -> None:
     """*"You do not provoke opportunity attacks when crawling while in
     beast form."* -- `f2282`. #1476.
@@ -128587,6 +128737,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "tome_two_zones": (
+        a_tome_unmakes_two_zones_instead_of_one,
+        "i1098x1's tome lets p2273 unmake two zones instead of one, read"
+        " off how the use was granted (#1477)",
     ),
     "beast_crawl": (
         crawling_in_beast_form_opens_no_window,
