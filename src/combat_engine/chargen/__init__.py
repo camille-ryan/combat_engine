@@ -4145,6 +4145,38 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     # `cls`, so this cannot give two answers for one key.
     if "source" in node:
         return str(node["source"]).strip().lower() == power_source(who.cls)
+    # **The role, which is `source`'s twin in every respect** -- one
+    # column, derivable from `cls` alone, so it cannot give two answers
+    # for one memo key. Reached only through a `term` atom today, because
+    # the compendium prints *"controller role"* as a prerequisite **term**
+    # rather than as a role field. #1537.
+    if "role" in node:
+        return str(node["role"]).strip().lower() == class_role(who.cls)
+    # **The race's printed size.** `RaceLine.size` is a `Size`, and the
+    # atom's value is the enum's own word -- compared as a string so a
+    # term table never has to import the enum.
+    #
+    # A character with no race answers False rather than defaulting to
+    # medium: *"you must be Small"* is a real narrowing and guessing it
+    # would deal a feat to somebody whose size nothing recorded.
+    if "size" in node:
+        line = RACES.get(who.race)
+        return line is not None and str(line.size.value).strip().lower() == \
+            str(node["size"]).strip().lower()
+    # **A prerequisite TERM, which is an alias for a node this function
+    # can already read.** `prereq_term` holds 247 of them with a `kind`
+    # apiece and no machine-readable referent, so the pairing is
+    # hand-written in `TERM_MEANS` -- one entry per term, refs only, for
+    # `OPTION_PACT`'s reasons.
+    #
+    # **Unlisted terms still answer False**, which is the whole design:
+    # 286 heroic feats are dealt to nobody on this atom and admitting it
+    # unconditionally would deal every one of them to characters that do
+    # not qualify. A wrongly dealt feat fires its clauses. So this grows
+    # a kind at a time, each slice with its own negative control. #1537.
+    if "term" in node:
+        stands_for = TERM_MEANS.get(str(node["term"]))
+        return meets(stands_for, who, powers) if stands_for else False
     # **A trained skill, on the set that is DERIVABLE and not on the pool
     # picks.** `#1113`, and the narrowing is deliberate and measured.
     #
@@ -4410,7 +4442,118 @@ def domains_of(deity: str) -> frozenset[str]:
                      for w in json.loads(row["domains"] or "[]"))
 
 
+#: What a printed prerequisite **term** stands for, as a node `meets`
+#: already reads.
+#:
+#: `prereq_term` holds 247 terms with a `kind` apiece and **no
+#: machine-readable referent** -- the printed name is the only thing that
+#: says which race or which role a given `qN` is, and a name may not enter
+#: a tracked file. So the pairing is hand-written here, refs and system
+#: words only, exactly as `OPTION_PACT` and `feature_alias()` are. A ref
+#: is not a name.
+#:
+#: **Unlisted terms answer False**, which is the design and not a gap:
+#: 286 heroic feats are dealt to nobody on this atom (`#1537`), and
+#: admitting it unconditionally would deal every one of them to characters
+#: that do not qualify. It grows a kind at a time, each slice with its own
+#: negative control.
+#:
+#: This slice is three kinds, 24 of the 247 terms and 67 of the 453 uses:
+#:
+#: * **role** -- 4 terms. `class_role` is the reader, derived from `cls`
+#:   the way `power_source` is, so there is no table to drift.
+#: * **size** -- 3 terms, read off `RaceLine.size`.
+#: * **racial** -- 17 terms, each naming a racial **trait**. Every one is
+#:   paired by matching the term's printed name against `racial_trait`'s,
+#:   and the trait's own `race` column gives the race -- so these are
+#:   derived rather than guessed, and the two that several races print
+#:   (`q101`, `q126`) come out as a real `any`. The answer is the `race`
+#:   atom, **not** hand membership: a racial trait is deliberately not a
+#:   declared row -- `features/racial.py`'s charter puts the mechanics on
+#:   the sheet -- so asking the hand would be a hard False for ever.
+#:
+#: **Four `racial` terms are deliberately absent.** `q72`, `q119`, `q228`
+#: and `q229` match no trait name: two name a *choice made within* a
+#: trait (*"you must have chosen a melee attack power for your
+#: dilettante"*), which is a build option rather than a race, and two name
+#: a feature whose trait is spelled differently or absent. They stay
+#: unlisted and keep failing closed rather than being approximated to the
+#: race that has the trait, which would hand a feat to a character who
+#: made the other choice.
+TERM_MEANS: dict[str, dict[str, Any]] = {
+    # -- role: the class's printed role ----------------------------------
+    "q73": {"role": "controller"},
+    "q77": {"role": "defender"},
+    "q128": {"role": "leader"},
+    "q203": {"role": "striker"},
+    # -- size: the race's printed size -----------------------------------
+    "q143": {"size": "medium"},
+    "q200": {"size": "small"},
+    "q201": {"size": "small"},
+    # -- one `other` term that is plainly a race --------------------------
+    # **`q60` is kind `other` and is a race**, which is worth one line
+    # because it shows what that bucket holds. It did not match a race
+    # name outright: the term is one word and the race's printed name is
+    # two, so the pairing is a containment and exactly one race matches
+    # it. Checked both directions -- the other race carrying the same
+    # second word is named by the `{"race": "r68"}` branch sitting beside
+    # this term in `f3788`'s own `any`, so the card reads "either of the
+    # two" and now does.
+    "q60": {"race": "r67"},
+    # -- racial: the races that print the named trait ---------------------
+    # Paired off `racial_trait.race`, one line per term, with the trait
+    # ref in the comment so the pairing is checkable without a name.
+    "q38": {"race": "r67"},                      # rt:r67-t0
+    "q40": {"race": "r35"},                      # rt:r35-t1
+    "q59": {"race": "r8"},                       # rt:r8-t0
+    "q65": {"race": "r68"},                      # rt:r68-t3
+    "q74": {"race": "r49"},                      # rt:r49-t0
+    "q78": {"race": "r6"},                       # rt:r6-t3
+    "q88": {"race": "r1"},                       # rt:r1-t1
+    "q99": {"race": "r24"},                      # rt:r24-t0
+    "q101": {"any": [{"race": "r3"},             # rt:r3-t3
+                     {"race": "r4"},             # rt:r4-t2
+                     {"race": "r16"}]},          # rt:r16-t0
+    "q111": {"race": "r6"},                      # rt:r6-t1
+    "q112": {"race": "r36"},                     # rt:r36-t1
+    "q126": {"any": [{"race": "r67"},            # rt:r67-t1
+                     {"race": "r68"}]},          # rt:r68-t0
+    "q130": {"race": "r16"},                     # rt:r16-t1
+    "q152": {"race": "r44"},                     # rt:r44-t2
+    "q192": {"race": "r69"},                     # rt:r69-t1
+    "q198": {"race": "r18"},                     # rt:r18-t3
+    "q211": {"race": "r49"},                     # rt:r49-t4
+}
+
+
 @cache
+
+
+def class_role(cls: str) -> str:
+    """Which role a class plays -- *controller*, *defender*, *leader*,
+    *striker* -- or `""`. The twin of `power_source` below, and the same
+    argument: one column in one SELECT rather than a hand-written table
+    that drifts from the import.
+
+    Off `class.role`, which the compendium populates for all 25. Matched
+    case-insensitively against `Character.cls`, which is a slug where the
+    table's key is the printed word -- `#339`'s reason, and the same
+    lookup `power_source` does.
+
+    An unknown class answers `""`, which matches no prerequisite rather
+    than raising: a monster has no entry here and is not meant to. #1537.
+    """
+    from combat_engine.db import game
+
+    want = (cls or "").strip().lower()
+    if not want:
+        return ""
+    for row in game().execute("SELECT name, role FROM class"):
+        if (row["name"] or "").strip().lower() == want:
+            return (row["role"] or "").strip().lower()
+    return ""
+
+
 def power_source(cls: str) -> str:
     """Which power source a class draws on, or `""`. `#1094`.
 
@@ -5944,7 +6087,6 @@ OPTION_PACT: dict[str, str | tuple[str, ...]] = {
     "cf:warlock-hexblade-f10s7": "star",
     "cf:warlock-hexblade-f10s8": "fey",
 }
-
 
 
 #: Rows whose printed text grants a bonus feat **and waives its
@@ -7918,7 +8060,6 @@ def _is_class_heal(p) -> bool:  # noqa: ANN001
     )
 
 
-
 def _shield_for(line: ClassLine, weapons: list[Weapon]) -> int:
     """A shield, unless what the build carries makes one impossible.
 
@@ -8049,7 +8190,6 @@ def _class_skill_pool(db: sqlite3.Connection, printed: str) -> set[str]:
             (printed.lower(),),
         ).fetchall()
     return {r["skill"] for r in rows}
-
 
 
 #: Skills a **class feature** trains, by the row, since the import

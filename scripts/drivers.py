@@ -52942,6 +52942,136 @@ def concealment_denied_without_cover(out: Result) -> None:
         )
 
 
+def a_prerequisite_term_resolves(out: Result) -> None:
+    """A printed prerequisite **term** is an alias for a node `meets` reads.
+
+    `chargen.meets` answers twelve atom kinds and falls through to
+    **False** for anything else, which is the honest direction and its own
+    docstring says so. `term` was one it could not answer, and measured
+    over every heroic declared playable feat whose gate holds one: 310
+    carry a `term`, **286** are refused on that atom alone, and 308 of the
+    310 carry no marker -- so every gate reported them finished while they
+    were dealt to nobody. `#1537`.
+
+    `prereq_term` classifies each term by kind and carries no referent, so
+    the pairing is `chargen.TERM_MEANS` -- hand-written, refs and system
+    words only, and a `term` atom now recurses through it.
+
+    Five arms, and the shape of them matters more than the count:
+
+    * every listed term resolves to a node `meets` can read, asserted by
+      **evaluating** it rather than by inspecting the table;
+    * a term is satisfied by the character it names and **refused by one
+      it does not** -- a role term against the wrong role, a race term
+      against the wrong race;
+    * an **unlisted** term still answers False, which is the design: 286
+      feats hang on this atom and a wildcard would deal every one of them
+      to characters that do not qualify;
+    * the slice moves real feats -- `f3788` is legal for both races its
+      card names and for no other;
+    * and the four `racial` terms that match no trait are **absent on
+      purpose**, so they are asserted absent rather than left to be
+      filled in by a later pass that does not know why.
+    """
+    from combat_engine import chargen
+    from combat_engine.chargen import TERM_MEANS, Character, meets
+    from combat_engine.chargen.choices import legal_feats
+
+    _board("f3788", 1)
+
+    # -- every listed term resolves, by evaluation -----------------------
+    # Asserted by running `meets` on the alias rather than by reading the
+    # table's shape: a node with a key `meets` does not know would sit in
+    # the table looking fine and answer False for ever.
+    dead = []
+    for term, alias in sorted(TERM_MEANS.items()):
+        # A character built to satisfy the alias, from the alias itself.
+        want = alias.get("any", [alias])
+        satisfied = False
+        for leaf in want:
+            if "role" in leaf:
+                who = next(
+                    (Character(cls=c, level=10, race="r2")
+                     for c in sorted(chargen.CLASSES)
+                     if chargen.class_role(c) == leaf["role"]), None)
+            elif "race" in leaf:
+                who = Character(cls="fighter", level=10, race=leaf["race"])
+            elif "size" in leaf:
+                who = next(
+                    (Character(cls="fighter", level=10, race=ref)
+                     for ref, line in sorted(chargen.RACES.items())
+                     if str(line.size.value) == leaf["size"]), None)
+            else:
+                who = None
+            if who is not None and meets({"term": term}, who, []):
+                satisfied = True
+                break
+        if not satisfied:
+            dead.append(term)
+    out.that(
+        not dead,
+        "every term the table lists resolves to a node `meets` can read --"
+        " evaluated, not inspected, so an alias with an unknown key cannot"
+        " sit there answering False for ever",
+        f"{len(TERM_MEANS)} listed; never satisfiable: {dead}",
+    )
+
+    # -- and refused by a character it does not name ----------------------
+    wrong_role = Character(cls="fighter", level=10, race="r2")
+    right_role = Character(cls="wizard", level=10, race="r2")
+    wrong_race = Character(cls="fighter", level=10, race="r1")
+    right_race = Character(cls="fighter", level=10, race="r44")
+    out.that(
+        meets({"term": "q73"}, right_role, [])
+        and not meets({"term": "q73"}, wrong_role, [])
+        and meets({"term": "q152"}, right_race, [])
+        and not meets({"term": "q152"}, wrong_race, []),
+        "a role term passes for that role and not another, and a racial"
+        " term for that race and not another -- which is the half that"
+        " keeps 286 feats from being handed out indiscriminately",
+        f"role {meets({'term': 'q73'}, right_role, [])}/"
+        f"{meets({'term': 'q73'}, wrong_role, [])}; "
+        f"race {meets({'term': 'q152'}, right_race, [])}/"
+        f"{meets({'term': 'q152'}, wrong_race, [])}",
+    )
+
+    # -- an unlisted term still fails closed ------------------------------
+    unlisted = sorted(
+        r["ref"] for r in chargen.game_terms()
+    ) if hasattr(chargen, "game_terms") else ["q227", "q197", "q107"]
+    still_shut = [t for t in unlisted[:3] if t not in TERM_MEANS]
+    out.that(
+        bool(still_shut)
+        and not any(meets({"term": t}, right_role, []) for t in still_shut),
+        "an UNLISTED term still answers False -- the design, not a gap:"
+        " a wildcard here would deal all 286 to characters that do not"
+        " qualify, and a wrongly dealt feat fires its clauses",
+        f"checked {still_shut}",
+    )
+
+    # -- it moves a real feat, and only for the right races ---------------
+    build = chargen.BUILDS["fighter"][0]
+    legal = {race: "f3788" in legal_feats("fighter", 10, build, race)
+             for race in ("r67", "r68", "r1", "r44")}
+    out.that(
+        legal["r67"] and legal["r68"] and not legal["r1"] and not legal["r44"],
+        "`f3788` is in the legal pool for both races its card names and"
+        " for neither of two others -- through `legal_feats`, so the whole"
+        " gate is asked and not only the atom",
+        f"{legal}",
+    )
+
+    # -- the four deliberate absences --------------------------------------
+    ABSENT = ("q72", "q119", "q228", "q229")
+    out.that(
+        not any(t in TERM_MEANS for t in ABSENT),
+        "the four `racial` terms that match no trait name stay unlisted --"
+        " two name a choice made WITHIN a trait, so pairing them to the"
+        " race would hand the feat to a character that chose the other",
+        f"listed of {ABSENT}: {[t for t in ABSENT if t in TERM_MEANS]}",
+    )
+
+
 def a_printed_flight_speed_reaches_the_sheet(out: Result) -> None:
     """"You gain a flight speed of 6 squares (altitude limit 1)."
 
@@ -136331,6 +136461,11 @@ DRIVERS = {
         a_printed_flight_speed_reaches_the_sheet,
         "a race's printed flight speed and its altitude limit reach the"
         " sheet, and f3788 raises the ceiling",
+    ),
+    "prereq_term": (
+        a_prerequisite_term_resolves,
+        "a printed prerequisite term resolves to a node meets reads, and"
+        " an unlisted one still fails closed",
     ),
     "no_concealment": (
         concealment_denied_without_cover,
