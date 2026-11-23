@@ -2553,39 +2553,50 @@ def i2401p1(c: Cast) -> None:
 
 
 @power("i2413x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.hidden_from(sense=)",))
+       reach=PERSONAL, target=SELF)
 def i2413x1(c: Cast) -> None:
-    """Re-pointed off `c.unseen_by(sense=)`, which arrived and is not this
-    row's gap.
+    """No sight needed by a tremorsense creature to detect you -- which
+    every creature on this board already needs, so the body is
+    deliberately empty.
 
-    **That verb hides one creature from a sense that answers the *light*
-    question**, which is `p16491`'s card -- *"creatures can't use
-    darkvision, blindsight, or tremorsense to detect you"*, and it has an
-    observable effect because darkness conceals again once the sense stops
-    answering. This card is the other sentence: *"creatures that have
-    tremorsense must have **line of sight** to detect you"*, which takes a
-    **bypass** away. There is no bypass.
+    **Unmarked, and the marker was the reachability bug rather than the
+    record of a gap.** `todo=` means refused in play, so an armour
+    property whose benefit nobody could lose was the one thing its
+    wearer could not have. #1501, the third instance of #1499.
 
-    So the two rows shared a symbol for one word and want opposite things,
-    and the gate caught it: `todo.py` reported `c.unseen_by(sense=)` arrived
-    while this row was still unfinished. `query.hidden_from(sense=)` names
-    what is actually missing -- a sense that finds a hidden creature
-    *without* line of sight, for this card to then forbid.
+    `query.sees_through` is the one thing that finds a hidden creature,
+    and it consults `sees_invisible` and three `truesight*` keys and
+    nothing else. Tremorsense is read in exactly two places --
+    `query.sees_in` and `query.has_sense` -- and neither is on that
+    path, so a creature with tremorsense cannot detect a hidden wearer
+    *with or without* this armour. There is no bypass for the card to
+    take away.
 
-    The gap is one level in: `sees_in` makes tremorsense answer the light
-    question and nothing else, so a creature with it already needs line of
-    sight exactly as this card demands. Writing anything here would either
-    do nothing or invent a rule the engine does not have.
+    Measured rather than read off the source, wearer hidden, asking
+    whether the foe is still in `hidden_from(world, wearer)`:
 
-    **Re-measured, because the obvious write is a per-enemy one.**
-    `c.has_sense("tremorsense", on=foe)` asks the question and works, so a
-    body could skip a hide for each such enemy -- and it would skip
-    nothing. Going unseen is `c.hide` -> `c.invisible` -> `query.hidden_from`,
-    and the only thing that sees through it is the separate `see_invisible`
-    key (`c.see_invisible`, `c.truesight`). Tremorsense is read in exactly
-    two places, `query.sees_in` and `query.has_sense`, and neither is on
-    that path -- so a creature with tremorsense cannot find a hidden wearer
-    today, with or without this armour."""
+    | granted to the foe | still hidden |
+    |---|---|
+    | nothing | yes |
+    | tremorsense | yes |
+    | truesight 10 | no |
+    | see_invisible | no |
+
+    The last two are what keep it from being vacuous: something *can*
+    see through a hide, and tremorsense is not it.
+
+    **Why the symbol kept moving**, so the next reader does not move it
+    again. It was `c.unseen_by(sense=)`, which arrived -- and `todo.py`
+    was right to report an arrived symbol on an unfinished row, because
+    that verb serves the **opposite** sentence. `p16491` prints
+    *"creatures can't use darkvision, blindsight, or tremorsense to
+    detect you"*, which takes a sense away and does something, since
+    darkness conceals again once the sense stops answering. This card
+    takes a *bypass* away. Two rows, one word, opposite needs.
+
+    `drivers.tremorsense_does_not_see_through_a_hide` is the guarantee
+    and the condition for the `KNOWN_SILENT` entry: the day tremorsense
+    is added to `sees_through`, it reds and names this row."""
 
 
 @power("i2413p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,

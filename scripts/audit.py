@@ -143,6 +143,24 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **A third row of #1499's shape**, found by sweeping the marked rows
+    # for notes that had already concluded the clause grants nothing.
+    # `i2413x1` prints "creatures that have tremorsense must have line of
+    # sight to detect you" -- and tremorsense is no bypass to begin with:
+    # `query.sees_through` consults `sees_invisible` and three `truesight*`
+    # keys and nothing else, so it never finds a hidden creature with or
+    # without this armour.
+    #
+    # `drivers.tremorsense_does_not_see_through_a_hide` is the proof, and
+    # it carries two positive controls -- truesight and `see_invisible`
+    # each do reveal the wearer -- because "still hidden" on its own
+    # passes on any board where nothing sees through a hide. #1501.
+    "i2413x1": "the card forbids a tremorsense bypass and there is no "
+               "bypass: `query.sees_through` reads `sees_invisible` and "
+               "`truesight*` only, so tremorsense finds no hidden "
+               "creature with or without this armour. "
+               "drivers.tremorsense_does_not_see_through_a_hide is the "
+               "proof, with truesight as the control. #1501",
     # **Two rows whose printed benefit this engine already grants every
     # creature, so their bodies are deliberately empty.** Both carried
     # `todo=` for it, which refuses a row in play -- so a benefit nobody

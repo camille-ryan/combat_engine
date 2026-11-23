@@ -4545,6 +4545,79 @@ def a_called_initiative_parity_pays_on_the_die_not_the_count(out: Result) -> Non
         f"paid on face {hit_face}, refused on face {miss_face}")
 
 
+def tremorsense_does_not_see_through_a_hide(out: Result) -> None:
+    """`i2413x1` is an empty body, and this is why that is safe.
+
+    *"Creatures that have tremorsense must have line of sight to detect
+    you."* The card takes a bypass away and there is no bypass:
+    `query.sees_through` consults `sees_invisible` and three `truesight*`
+    keys and nothing else, so tremorsense never finds a hidden creature
+    with or without this armour. #1501, #1499.
+
+    **Three arms, and the last two are the whole point.** "Still hidden
+    with tremorsense granted" is worthless alone -- it passes on a board
+    where nothing at all sees through a hide, which is most boards. So
+    truesight and `see_invisible` are positive controls: each must
+    actually reveal the wearer, or the tremorsense arm is vacuous.
+
+    `hidden_from` keys on a relation rather than on light, and
+    `audit.board` can arrive with the wearer already hidden from
+    somebody -- so the hide is laid here and the question is asked of
+    one named foe rather than of the set.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import has_sense, hidden_from
+
+    def arm(grant: str) -> tuple[bool, bool, bool]:
+        """Hide, grant the sense, and ask whether that foe still cannot see.
+
+        Returns hidden-before, hidden-after, and whether the grant took.
+        """
+        world, me, _ = _board("i2413x1", 1)
+        c = Cast(world=world, me=me, ref="drivers")
+        foe = sorted(c.enemies())[0]
+        c.hide()
+        before = foe in hidden_from(world, me)
+        if grant == "tremorsense":
+            c.tremorsense(10, on=foe)
+        elif grant == "truesight":
+            c.truesight(10, on=foe)
+        elif grant == "see_invisible":
+            c.see_invisible(on=foe)
+        took = has_sense(world, foe, "tremorsense") if grant == "tremorsense" \
+            else True
+        return before, foe in hidden_from(world, me), took
+
+    bare_before, bare_after, _ = arm("")
+    out.that(bare_before and bare_after,
+             "a hidden wearer is hidden from that foe, and stays hidden with"
+             " nothing granted -- the premise",
+             f"before={bare_before}, after={bare_after}")
+
+    tr_before, tr_after, took = arm("tremorsense")
+    out.that(took, "tremorsense really was granted to the foe, so the arm"
+                   " below is about the sense and not about a failed grant")
+    out.that(tr_before and tr_after,
+             "and a foe WITH tremorsense still cannot see the hidden wearer,"
+             " which is what i2413x1 prints and what makes its body"
+             " correctly empty: `sees_through` reads `sees_invisible` and"
+             " `truesight*` and tremorsense is on neither path",
+             f"before={tr_before}, after={tr_after}")
+
+    ts_before, ts_after, _ = arm("truesight")
+    out.that(ts_before and not ts_after,
+             "truesight DOES reveal the wearer -- the positive control,"
+             " without which the arm above passes on any board where"
+             " nothing sees through a hide",
+             f"before={ts_before}, after={ts_after}")
+
+    si_before, si_after, _ = arm("see_invisible")
+    out.that(si_before and not si_after,
+             "and so does see_invisible, which is the other door into"
+             " `sees_through` and a second control rather than a repeat",
+             f"before={si_before}, after={si_after}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -132706,6 +132779,10 @@ DRIVERS = {
     "a_called_initiative_parity_pays_on_the_die_not_the_count": (
         a_called_initiative_parity_pays_on_the_die_not_the_count,
         "f2807 reads the initiative d20's face, not the finished count",
+    ),
+    "tremorsense_does_not_see_through_a_hide": (
+        tremorsense_does_not_see_through_a_hide,
+        "i2413x1's empty body: tremorsense never finds a hidden creature",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,
