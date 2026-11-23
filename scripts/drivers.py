@@ -52942,6 +52942,122 @@ def concealment_denied_without_cover(out: Result) -> None:
         )
 
 
+def a_printed_flight_speed_reaches_the_sheet(out: Result) -> None:
+    """"You gain a flight speed of 6 squares (altitude limit 1)."
+
+    `chargen._MODE` matched one of the two printed spellings -- `Fly 6
+    squares`, which is what a `Speed:` line says -- and read it off the
+    `Speed:` line only. `r67` and `r68` print the other spelling on their
+    own racial trait's Benefits line, and both are **variants**, composed
+    by `replace(stock, ...)` from a parent that prints no wings at all. So
+    two races printing flight were dealt as walkers, and **1 of 55** races
+    came out of `_races_from_the_book` with any movement mode.
+
+    Five arms, and the census one is what keeps the wider read honest:
+
+    * exactly **three** races print a mode anywhere in their block, and
+      all three now carry it -- a count, so a pattern that admits a false
+      positive reds here rather than passing quietly;
+    * all three also print `(altitude limit 1)` and now carry it on the
+      sheet;
+    * `spawn` lays that ceiling where `falling._altitude_limit` reads it;
+    * a race printing neither gets neither, which is the control;
+    * `f3788` raises the ceiling to **2**, and only for a character
+      holding it.
+
+    **`r61` is the arm worth reading twice.** It has had its fly speed all
+    along and never had the ceiling the same sentence prints, so this was
+    not only two new fliers -- one existing race was stronger than its own
+    page. #1508.
+    """
+    from combat_engine import chargen
+    from combat_engine.content import loader
+    from combat_engine.engine import falling
+    from combat_engine.engine.components import Movement, Powers
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import Bus
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.rng import Rng
+    from combat_engine.engine.turns import Encounter
+
+    # The content package has to be imported before `chargen` is asked
+    # anything about rows -- see `a_leg_feat_is_dealable`.
+    _board("f3788", 1)
+
+    lines = chargen._races_from_the_book()
+    with_modes = sorted(ref for ref, line in lines.items() if line.modes)
+    out.that(
+        with_modes == ["r61", "r67", "r68"],
+        "exactly the three races whose block prints a movement mode carry"
+        " one -- a census, so a pattern admitting a false positive reds"
+        " here",
+        f"{len(with_modes)} race(s): {with_modes}",
+    )
+    # **Over the LITERAL three and not over `with_modes`.** The first
+    # draft quantified over the census it had just read, so a pattern
+    # that lost a spelling shrank the set to `['r61']` and the
+    # all-of-them assertion came out true over one element -- vacuous
+    # under exactly the plant it was written for.
+    WINGED = ("r61", "r67", "r68")
+    out.that(
+        all(lines[r].modes == {"fly": 6} for r in WINGED)
+        and all(lines[r].altitude == 1 for r in WINGED),
+        "all three carry the printed speed AND the printed ceiling, which"
+        " is what keeps the two new fliers from being stronger than the"
+        " page -- and `r61` had the speed without the ceiling until now",
+        f"{[(r, lines[r].modes, lines[r].altitude) for r in WINGED]}",
+    )
+    out.that(
+        lines["r67"].parent == "r1" and not lines["r1"].modes,
+        "and two of them are VARIANTS whose parent prints no wings, so"
+        " the mode can only have come from their own block",
+        f"r67 parent {lines['r67'].parent!r}, r1 modes {lines['r1'].modes}",
+    )
+
+    def played(race: str, *, feat: bool) -> tuple[bool, dict, int]:
+        """Deal the race, start a fight, and read the board back.
+
+        Through a started `Encounter`, because the feat is a **trait**: its
+        body runs from `_arm_traits`, so calling it by hand would raise the
+        ceiling for a character that does not hold the feat.
+        """
+        world = World(grid=Grid(24, 24), rng=Rng(seed=1), bus=Bus())
+        who = chargen.Character(cls="fighter", level=5, race=race,
+                                feats=("f3788",) if feat else ())
+        eid = chargen.spawn(world, who, (4, 4))
+        loader.spawn(world, "m145", (9, 4))
+        held = "f3788" in world.need(eid, Powers).all
+        world.encounter = Encounter(world)
+        world.encounter.start()
+        moving = world.get(eid, Movement)
+        return held, dict(moving.modes if moving else {}), \
+            falling._altitude_limit(world, eid)
+
+    _h, winged, ceiling = played("r68", feat=False)
+    out.that(
+        winged == {"fly": 6} and ceiling == 1,
+        "a dealt character of that race flies 6 and is capped at 1 --"
+        " `spawn` lays the ceiling where `falling._altitude_limit` reads"
+        " it, which `c.altitude_limit` alone would not do before a fight",
+        f"modes {winged}, ceiling {ceiling}",
+    )
+    _h2, walker, no_cap = played("r1", feat=False)
+    out.that(
+        walker == {} and no_cap == 0,
+        "**and a race printing neither gets neither**, which is the"
+        " control: a mode read off the whole block must not invent one",
+        f"modes {walker}, ceiling {no_cap}",
+    )
+    held, _m, raised = played("r68", feat=True)
+    out.that(
+        held and raised == 2 and ceiling == 1,
+        "f3788 raises that ceiling to 2 for a character holding it, and"
+        " `falling` takes the LOWEST cap standing -- so the feat has to"
+        " move the race's own number rather than lay a second one",
+        f"held {held}, with the feat {raised}, without {ceiling}",
+    )
+
+
 def a_leg_feat_is_dealable(out: Result) -> None:
     """A feat gated on a `cf:` build leg reaches the character on that leg.
 
@@ -136210,6 +136326,11 @@ DRIVERS = {
     "leg_feat_dealable": (
         a_leg_feat_is_dealable,
         "a feat gated on a cf: build leg reaches that leg and no sibling",
+    ),
+    "printed_flight": (
+        a_printed_flight_speed_reaches_the_sheet,
+        "a race's printed flight speed and its altitude limit reach the"
+        " sheet, and f3788 raises the ceiling",
     ),
     "no_concealment": (
         concealment_denied_without_cover,

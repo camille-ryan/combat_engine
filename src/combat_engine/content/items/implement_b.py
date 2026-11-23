@@ -2566,10 +2566,26 @@ def i2305p1(c: Cast) -> None:
     **inside** that window or after it decides whether there is anything
     left to end, and that is one probe rather than an investigation.
 
-    `dropped=` stands and the symbol stands, because if the answer is
-    "after" then forgoing really does need a door the engine does not
-    have. What has changed is that the next pass starts from a
-    measurement instead of from "there is no moment".
+    **Probed, and the answer is "inside".** `#1536` holds it. On a
+    `cf:warlock-f1c10` board the boon's payout is laid *inside* this
+    row's window -- **0** boon-attributed effects before the drop and
+    **7** when the reaction runs, all still standing -- so
+    `Effects.of` plus `c.end_effect` reach it with no new verb.
+
+    Two caveats, both board artefacts rather than findings about the
+    boon, and both are why `dropped=` stands anyway. The earlier
+    measurement quoted above took no **before** reading: on
+    `cf:warlock-f1` and `cf:warlock-f1s4` the boon-attributed effects
+    *predate* the drop, so "standing inside the window" was true of
+    effects that were already there. And this card names
+    `cf:warlock-hexblade-f1`, whose payout is a `c.grant_row` --
+    unobservable on `audit.board`, which already grants the row under
+    test and most others besides. A dealt hexblade in a fresh world
+    cannot answer it either: triggers are armed by `Encounter.start`.
+
+    So what is left is one board-construction problem -- a hexblade with
+    a started encounter and a grant the board has not already made --
+    rather than an engine door. "There is no moment" is retired.
     """
     c.bonus("attack", 1, kind="power", on=c.me, until=When.ENCOUNTER, once=True)
 

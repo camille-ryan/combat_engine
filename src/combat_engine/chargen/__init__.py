@@ -1937,6 +1937,19 @@ class RaceLine:
     speed: int
     #: Extra movement modes and their speeds, e.g. `{"fly": 6}`.
     modes: dict[str, int]
+    #: The printed ceiling on how high this race may fly -- *"(altitude
+    #: limit 1)"* -- or `0` for none.
+    #:
+    #: **On the sheet and not in a trait row**, for `initiative`'s reason
+    #: one field down and for one of its own: `features/racial.py`'s
+    #: charter puts a fly speed *"on the sheet or in `RaceLine.granted`"*,
+    #: and a ceiling that lived anywhere else would be read off a
+    #: different place from the speed it limits.
+    #:
+    #: `falling._altitude_limit` is the only reader, and it takes the
+    #: **lowest** standing limit rather than the sum -- so `f3788` raising
+    #: this to 2 has to displace the 1 rather than add to it. #1508.
+    altitude: int
     #: The printed word -- "Normal", "Low-light", "Darkvision". **Carried,
     #: not applied.** This engine keeps no light level and no senses, so
     #: `c.darkvision()` and `c.low_light()` are symbols several rows in the
@@ -2182,7 +2195,53 @@ class RaceLine:
 
 
 _SPEED_LINE = re.compile(r"^Speed\s*:\s*(.+)$", re.M)
-_MODE = re.compile(r"\b(fly|swim|climb|burrow)\s+(\d+)\s+squares", re.I)
+#: A movement mode and its speed, in **either** printed spelling.
+#:
+#: `Fly 6 squares` is the one the `Speed:` line uses; `a flight speed of 6
+#: squares` is the one a racial trait's Benefits line uses, and reading only
+#: the first gave **1 of 55** races any movement mode at all. `r67` and
+#: `r68` print the second and are variants, so their own line is the only
+#: place it appears -- the parent's `Speed:` line says nothing about wings.
+#:
+#: Read over the **whole spec** rather than the `Speed:` line, which is
+#: what the second spelling needs. Measured before loosening it: exactly
+#: three races match anywhere in their spec (`r61`, `r67`, `r68`) and all
+#: three are the real thing, so the wider read admits no false positive
+#: today. The near miss it has to survive is in the same sentence --
+#: *"you cannot use this fly speed if you are carrying more than a normal
+#: load"* -- and it carries no number, so neither branch matches it.
+#:
+#: `flight` rather than `fly` in the second branch because that is the noun
+#: the page uses there, and the mode is still keyed `fly`. #1508.
+_MODE = re.compile(
+    r"\b(?:(fly|swim|climb|burrow)\s+(\d+)\s+squares"
+    r"|(flight|swim|climb|burrow)(?:ing)?\s+speed\s+of\s+(\d+)\s+squares)",
+    re.I,
+)
+
+#: The printed ceiling on how high a flier may go -- *"(altitude limit 1)"*.
+#:
+#: All three races that print a mode print this too, and `r61` has had its
+#: fly speed all along with no ceiling, so it is **not** only new races
+#: that were stronger than the page. `falling._altitude_limit` is the
+#: reader and `0` means no limit. #1508.
+_ALTITUDE = re.compile(r"altitude\s+limit\s+(\d+)", re.I)
+
+
+def _modes_of(spec: str) -> dict[str, int]:
+    """Every movement mode this race's block prints, keyed by mode word.
+
+    Both `_MODE` branches land in one dict, with `flight` normalised to
+    `fly` -- `Movement.modes` is keyed on the mode word the engine uses
+    and not on the noun the page happened to pick.
+    """
+    out: dict[str, int] = {}
+    for one, speed_one, two, speed_two in _MODE.findall(spec):
+        word = (one or two).lower()
+        if word == "flight":
+            word = "fly"
+        out[word] = int(speed_one or speed_two)
+    return out
 _VISION_LINE = re.compile(r"^Vision\s*:\s*(.+)$", re.M)
 _SKILL_LINE = re.compile(r"^Skill Bonuses\s*:\s*(.+)$", re.M)
 _SKILL = re.compile(r"\+(\d+)\s+([A-Z][a-z]+)")
@@ -2352,7 +2411,8 @@ def _races_from_the_book() -> dict[str, RaceLine]:
             ref=row["ref"],
             size=Size(row["size"]),
             speed=int(found.group(1)) if found else 6,
-            modes={m.lower(): int(n) for m, n in _MODE.findall(printed)},
+            modes=_modes_of(spec),
+            altitude=int(alt.group(1)) if (alt := _ALTITUDE.search(spec)) else 0,
             vision=(vision.group(1).strip() if vision else "").removesuffix(" vision"),
             fixed=fixed,
             choices=choices,
@@ -2399,6 +2459,28 @@ def _races_from_the_book() -> dict[str, RaceLine]:
             continue
         out[row["ref"]] = replace(
             stock, ref=row["ref"], parent=kin, replaces=swapped,
+            # **Its own movement modes on top of the parent's**, which is
+            # the only place two of them appear: `r67` and `r68` print *"a
+            # flight speed of 6 squares (altitude limit 1)"* on their own
+            # trait's Benefits line, and the parent's `Speed:` line says
+            # nothing about wings. Inheriting `modes` wholesale therefore
+            # dealt both races as ordinary walkers -- which is why **1 of
+            # 55** races came out of here with any mode at all.
+            #
+            # Merged rather than replaced: the trait prints *"this benefit
+            # replaces rt:r1-t1"*, which swaps a **trait** and says nothing
+            # about speed, so the flight is an addition.
+            modes={**stock.modes, **_modes_of(row["spec"] or "")},
+            # Its own ceiling when it prints one, else the parent's. Both
+            # of these print `altitude limit 1` in the same sentence as the
+            # speed, and shipping the speed without the ceiling would make
+            # them stronger than the page -- the one direction `#1508` says
+            # to avoid.
+            altitude=(
+                int(alt.group(1))
+                if (alt := _ALTITUDE.search(row["spec"] or ""))
+                else stock.altitude
+            ),
             # **Its own racial powers, not the parent's.** The power table
             # keys on the race, so a variant that prints one has it; one
             # that prints none inherits nothing here on purpose -- the
@@ -8971,6 +9053,25 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
             mods.items.append(
                 Mod(what=f"skill:{skill}", value=value, kind="racial", label=race.ref)
             )
+    # **The printed altitude limit, in `Mods` for the racial bonus's
+    # reasons and one of its own.** All three races that print a fly speed
+    # print *"(altitude limit 1)"* in the same sentence, and
+    # `falling._altitude_limit` reads `what == "altitude_limit"` straight
+    # off this list -- deliberately not through `Mods.total`, because two
+    # cards each capping a height both apply and the **stricter** binds.
+    #
+    # So this cannot be a trait row: a row arms at the top of an encounter
+    # and a character may be lifted before one starts, and `r61` has had
+    # its fly speed with no ceiling for as long as it has been dealt --
+    # which made it stronger than its own page rather than only the two
+    # races this change gives wings to. #1508.
+    if race is not None and race.altitude:
+        from combat_engine.engine.components import Mod as _AltMod
+
+        world.need(eid, Mods).items.append(
+            _AltMod(what="altitude_limit", value=race.altitude,
+                    kind="racial", label=race.ref)
+        )
     # **The background's +2, in `Mods` for every reason the racial bonus
     # is**: it is a sheet number rather than a thing that happens in a
     # fight, `engine/skills.py` reads `skill:<name>` off exactly this list,

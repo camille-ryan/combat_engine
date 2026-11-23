@@ -110,7 +110,7 @@ from combat_engine.engine import (
     hits_me,
     power,
 )
-from combat_engine.engine.components import Health, PowerPoints
+from combat_engine.engine.components import Health, Mods, PowerPoints
 from combat_engine.engine.dsl import Power
 from combat_engine.engine.grid import spread
 from combat_engine.engine.query import has_combat_advantage, immune_to, team
@@ -2874,8 +2874,7 @@ def f3787(c: Cast) -> None:
 
 
 @power("f3788", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("chargen.RaceLine.modes(flight speed)",))
+       reach=PERSONAL, target=SELF)
 def f3788(c: Cast) -> None:
     """`engine/equipment.py` puts no speed penalty on heavy armour, so the
     first clause has nothing to cancel. What is left is an altitude limit
@@ -2957,7 +2956,38 @@ def f3788(c: Cast) -> None:
     trait and it is that one. `rt:r67-t1` is the other half of the data
     finding above -- both refs are in `game.db` and neither is declared --
     and **what wants it was not re-checked here**, so it is recorded as a
-    fact about the database rather than as a second wait on this row."""
+    fact about the database rather than as a second wait on this row.
+
+    ## Written: the sheet carries the speed and its ceiling now
+
+    Which is what every re-aim above was waiting for. `_MODE` read one of
+    the two printed spellings, so `r67` and `r68` -- which print *"a
+    flight speed of 6 squares (altitude limit 1)"* on their own trait's
+    Benefits line -- came out of `_races_from_the_book` as ordinary
+    walkers; and a variant inherited its parent's empty `modes`
+    wholesale, which was the second half nobody had looked at. Both are
+    fixed, `RaceLine.altitude` carries the printed `1`, and `spawn` lays
+    it as a `Mods` item. #1508.
+
+    **`max`, written in place, and not a second `c.altitude_limit`.**
+    `falling._altitude_limit` takes the **lowest** standing cap rather
+    than the sum -- deliberately, so two cards each capping a height both
+    apply and the stricter binds -- so laying a 2 beside the racial 1
+    would leave `min(1, 2) == 1` and the feat would be worth nothing.
+    The printed word is *"increases to 2"*, so the race's own number is
+    what moves.
+
+    Idempotent, which a trait has to be: this body runs at the top of
+    every encounter and `max` sets rather than adds. Gated on the racial
+    cap existing, so a character holding the feat without the trait
+    raises nothing rather than minting a ceiling the page never gave
+    it."""
+    held = c.world.get(c.me, Mods)
+    if held is None:
+        return
+    for mod in held.items:
+        if mod.what == "altitude_limit" and mod.kind == "racial":
+            mod.value = max(mod.value, 2)
 
 
 @power("f3789", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
