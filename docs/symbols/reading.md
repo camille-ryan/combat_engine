@@ -67,6 +67,10 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Every race of that printed size, by ref, in ref order.
 - `query.scenery(world: 'World', kind: 'str' = '', *, within: 'int' = 0, of: 'int | None' = None, loose: 'bool' = False, material: 'str' = '', min_size: 'Size | None' = None) -> 'list[int]'`
   - What is standing on the map that is not a creature.
+- `query.set_items_on(world: 'World', eid: 'int', set_ref: 'str', *, carried: 'bool' = False) -> 'int'`
+  - How many items of that set the creature **wears or wields**.
+- `query.set_of(item_ref: 'str') -> 'str'`
+  - Which printed set an item belongs to, or `""` for the ones in none.
 - `query.stat_block(world: 'World', eid: 'int') -> 'dict[str, Any]'`
   - The compendium row behind a creature, or `{}` if it has none.
 - `query.targetable(world: 'World', eid: 'int') -> 'bool'`

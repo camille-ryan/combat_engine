@@ -1475,10 +1475,25 @@ def i1225x1(c: Cast) -> None:
        trigger="an ally within 5 squares would be bloodied by an attack",
        on=Trigger(DamageRolled, _ally_about_to_be_bloodied,
                   "an ally within 5 squares would be bloodied"),
-       dropped=("c.item_set()",))
+       dropped=("etl.item.paired_item()",))
 def i1492p1(c: Cast) -> None:
-    """"The wearer of the attuned circlet" is a paired item and nothing
-    links two items together, so this answers for any ally in range."""
+    """A paired item: nothing links two items together, so this answers for
+    any ally in range, which is wider than print.
+
+    **The marker used to read `c.item_set()` and that was the wrong gap.**
+    `item_set` landed and `c.item_set()` is written (#1479), and it does
+    not help here: `i1492` is a member of **no** printed set, and the verb
+    now raises rather than answering 0 for exactly that case. One symbol
+    was serving two different needs -- a set of five objects, and a card
+    printed as one of a *pair* -- which is the thing a marker is not
+    allowed to do.
+
+    So the gap is named where it is, and it is **in the ETL**: nothing in
+    `game.db` says which item this one is paired with. `i1492`'s own
+    `item.spec` is empty, no `item_block` spec anywhere names `i1492`, and
+    the partner survives only as a common noun inside this card's own
+    sentence. No reader can be written from that. `etl.monster.item_identity()`
+    on `m3448a1` is the same shape of marker. #1480."""
     ally = getattr(c.trigger, "target", None)
     if ally is None:
         return

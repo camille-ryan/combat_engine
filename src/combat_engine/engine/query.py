@@ -21,6 +21,7 @@ from .components import (
     # resistance. `Defenses` above is AC/Fortitude/Reflex/Will.
     Defences,
     Defenses,
+    Gear,
     Health,
     Initiative,
     Mods,
@@ -1780,6 +1781,87 @@ def _type_word(raw: str) -> str:
     filed as a 393-block ETL bug. The live reader had been right all along.
     """
     return raw.strip("() ,.").lower()
+
+
+@lru_cache(maxsize=1)
+def _item_sets() -> dict[str, tuple[str, ...]]:
+    """`item_set`, members by set ref and in printed order. One read, cached.
+
+    Empty when the table is absent, which is a database built before the
+    `item_set` importer landed and **not** a game with no sets. `set_of`
+    returning `""` cannot tell those apart, which is why the raise is on
+    `Cast.item_set` rather than here: a row whose own item is in no set is
+    an authoring fault, and an empty table is a stale `game.db`.
+
+    Four of the 68 members name an item with no row in `game.db` at all.
+    They stay in the mapping: membership is what the set page printed, and
+    an item the game does not hold simply never turns up in `Gear`, which
+    is the right count rather than a missing one. #1478.
+    """
+    from combat_engine.db import game
+
+    out: dict[str, list[str]] = {}
+    try:
+        rows = game().execute(
+            "SELECT set_ref, member_ref FROM item_set ORDER BY set_ref, ord"
+        )
+    except Exception:
+        return {}
+    for set_ref, member in rows:
+        out.setdefault(set_ref, []).append(member)
+    return {ref: tuple(members) for ref, members in out.items()}
+
+
+@lru_cache(maxsize=512)
+def set_of(item_ref: str) -> str:
+    """Which printed set an item belongs to, or `""` for the ones in none.
+
+    Takes the **entry** ref — `i2176`, not `i2176x1` — because a set groups
+    objects and not the rows printed on them. `dsl.entry_of` turns one into
+    the other and `Cast.item_set` is where that happens.
+
+    Cached per ref rather than built as a reverse mapping: 15 sets is a
+    short walk, and a reverse dict would have to decide what to do about an
+    item in two sets. Nothing in the data is, and inventing an answer for
+    it here would be a guess nobody could see.
+    """
+    for set_ref, members in _item_sets().items():
+        if item_ref in members:
+            return set_ref
+    return ""
+
+
+def set_items_on(
+    world: World, eid: int, set_ref: str, *, carried: bool = False
+) -> int:
+    """How many items of that set the creature **wears or wields**.
+
+    `Gear.worn` is the one honest place to count from and
+    `equipment.equip`'s own comment is why: it records *every* magic item
+    on the creature **including the one that is a weapon**, because the
+    weapon additionally carries the bonus but "what magic is this creature
+    carrying" has to have one answer. `i433` is the case that needs it —
+    five members across feet, implement, weapon and neck — so a set
+    spanning hands and body counts from one read rather than four.
+
+    `carried=True` adds `Gear.carried`, the pack rather than the body. One
+    of the three printed clauses says *have* where the other two say *wears
+    or wields*, and that is the difference.
+
+    `Gear.left_hanging` is deliberately counted by **neither**: a lantern
+    left working on the floor is on no other list by construction (#1475),
+    and no printed set clause asks about a set item put down.
+    """
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return 0
+    members = _item_sets().get(set_ref, ())
+    if not members:
+        return 0
+    have = {magic.ref for magic in gear.worn.values()}
+    if carried:
+        have |= set(gear.carried)
+    return sum(1 for ref in members if ref in have)
 
 
 @lru_cache(maxsize=1)

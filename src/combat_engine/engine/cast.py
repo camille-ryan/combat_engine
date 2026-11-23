@@ -56,6 +56,8 @@ from .query import (
     enemies,
     is_,
     line_of_sight,
+    set_items_on,
+    set_of,
     squares,
 )
 from .resolve import AttackResult, attack, deal_damage, heal, settle, temp_hp
@@ -25036,6 +25038,52 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             return 0
         known.daily_cap = (cls, count)
         return count
+
+    def item_set(self, *, on: int, carried: bool = False) -> int:
+        """How many items of **this row's own set** that creature has.
+
+        *"...equal to the number of items you have from this set"*,
+        `i2176x1`, and *"if the triggering ally wears or wields one or more
+        items from this set"*, `i2358p1` and `i2777x1`. Three printed
+        clauses and they are the whole population — measured over every
+        `item_block` spec, so this is not a sample.
+
+        The set is the calling row's, read off its own entry: `i2176x1` is
+        printed on `i2176`, which `item_set` lists under `i407`. Nothing is
+        passed in, because a card saying *this set* can only mean the one
+        its own object belongs to.
+
+        **`on=` is required, and that is deliberate.** Each of the three
+        clauses asks about a different creature — the wearer for the count,
+        the triggering ally for the other two — so there is no default that
+        is right more often than it is wrong. `c.wielding` and `c.wearing`
+        are the cautionary pair: two siblings defaulting opposite ways, with
+        every caller in the tree passing `on=` anyway to stay out of the
+        trap. This verb skips the trap instead of documenting it.
+
+        `carried=True` counts the pack as well as the body, which is the
+        `i2176x1` reading — *have*, where the other two say *wears or
+        wields*.
+
+        **Raises if the calling row's item is in no set**, for the reason
+        `c.wearing` raises on an unrecognised word: the answer would be 0 in
+        every fight and the row would look written. `i1492p1` is the row
+        that proves the raise earns its keep — it carried
+        `dropped=("c.item_set()",)` for a *paired* item, "the wearer of the
+        attuned circlet", which is one symbol serving two different needs
+        and not this one. Its item is in no printed set.
+        """
+        from .dsl import entry_of
+
+        mine = entry_of(self.ref)
+        set_ref = set_of(mine)
+        if not set_ref:
+            raise ValueError(
+                f"{self.ref}: {mine} belongs to no printed item set, so "
+                "`c.item_set()` has nothing to count. A card pairing two "
+                "named items is a different gap -- see i1492p1."
+            )
+        return set_items_on(self.world, on, set_ref, carried=carried)
 
     def gains_proficiency(self, *refs: str, on: int | None = None) -> int:
         """"If you are not already proficient with these weapons, you gain

@@ -1718,7 +1718,6 @@ def i2776p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.item_set()",),
 )
 def i2777x1(c: Cast) -> None:
     """"Nothing on `Cast` or `query` reads a character's race" is stale:
@@ -1728,14 +1727,25 @@ def i2777x1(c: Cast) -> None:
     `race:<ref>` that `Build.choices` carries, which is the question this
     card asks about the ally rather than about the caster.
 
-    The set half stays dropped; a completed item set is still not a thing
-    the engine holds."""
+    **The set half lands now.** *"A completed item set is still not a
+    thing the engine holds"* was the note, and the card never asked for a
+    completed one -- it asks for *one or more*, which `item_set` answers:
+    `i2777` is the third of `i433`'s five. Asked of the **ally** being
+    healed, like the race half above and unlike the wearer.
+
+    Both increases are +5 and they are **independent**, so an ally who is
+    both gets 15. The card prints them as two separate sentences, which is
+    what makes them add rather than being two readings of one clause."""
 
     def ward(ev: Healed) -> None:
         if ev.source != c.me or not _my_side(c.world, c.me, ev.target):
             return
         pick = c.choose(list(_ELEMENTS), "which damage type")
-        amount = 5 + (5 if c.race_of(on=ev.target) == "r1" else 0)
+        amount = 5
+        if c.race_of(on=ev.target) == "r1":
+            amount += 5
+        if c.item_set(on=ev.target):
+            amount += 5
         c.resist(amount, pick or DamageType.FIRE, on=ev.target, until=When.EONT)
 
     c.watch(Healed, ward, until=When.ENCOUNTER)

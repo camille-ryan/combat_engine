@@ -51,6 +51,7 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     ENCOUNTER,
+    FORT,
     FREE,
     INTERRUPT,
     MINOR,
@@ -60,6 +61,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     STANDARD,
+    WILL,
     ActionType,
     AttackDeclared,
     Bloodied,
@@ -101,6 +103,13 @@ ITEM = "item"
 
 
 # -- shared reading of the board --------------------------------------------
+
+
+#: "All defenses" on `i2176x1`, which is four modifiers and one
+#: printed line. The tree's convention for it -- see
+#: `powers/avenger/level_6.py` -- rather than a `"defences"` key, which
+#: `Mods` has for a *lend* and `c.bonus` does not read.
+_DEFENCES = (AC, FORT, REF, WILL)
 
 
 def _skills(c: Cast, value: int, *names: str, kind: str = "item") -> None:
@@ -666,10 +675,33 @@ def i1445p1(c: Cast) -> None:
 
 
 @power("i2176x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.item_set()",))
+       reach=PERSONAL, target=SELF)
 def i2176x1(c: Cast) -> None:
-    """The size of the bonus is how many items of one set are worn, and
-    nothing groups items into sets."""
+    """The marker this replaces said *"nothing groups items into sets"*,
+    and the `item_set` table now does -- `i2176` is the second of `i407`'s
+    four.
+
+    `carried=True` because this card says *have*, where the two others in
+    the tree say *wears or wields*.
+
+    "All defenses" is four modifiers, which is `_DEFENCES` and not a
+    `"defences"` key -- see that constant's note. Each carries the
+    opportunity-attack gate, which is the file's established shape
+    (`i2123p1` above).
+
+    **Guarded on the count rather than trusting it to be at least one.**
+    Anybody this row is running for is wearing `i2176`, so the honest
+    answer is never 0 -- the set counts this item too. If it ever is, the
+    creature does not have the boots the engine thinks it does, and four
+    worthless modifiers reporting "fired" would hide that where silence
+    shows it.
+    """
+    worn = c.item_set(on=c.me, carried=True)
+    if not worn:
+        return
+    for defence in _DEFENCES:
+        c.bonus(defence, worn, on=c.me, until=When.ENCOUNTER, kind="item",
+                when=lambda ctx: bool(ctx.get("opportunity")))
 
 
 @power("i2176p1", level=6, cls=ITEM, usage=DAILY, action=MOVE,

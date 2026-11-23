@@ -131,6 +131,8 @@ Things a creature spends, and the budget it spends them from.
   - Make taking a weapon up cost less than the printed minor action.
 - `c.give(self, ref: 'str' = '', fn: 'Callable[[int], None] | None' = None, *, on: 'int | None' = None, uses: 'int' = 1, cost: 'ActionType' = <ActionType.MINOR: 'minor'>) -> 'int'`
   - Put a one-shot in somebody's hands for them to spend later.
+- `c.item_set(self, *, on: 'int', carried: 'bool' = False) -> 'int'`
+  - How many items of **this row's own set** that creature has.
 - `c.leave_hanging(self, ref: 'str', *, light: 'int' = 0, speed: 'int' = 0, leash: 'int' = 0, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'int | None'`
   - Put a worn item down and leave it working. `i1321x1`.
 - `c.loads_free(self, *, cost: 'ActionType' = <ActionType.FREE: 'free'>, per_turn: 'int' = -1, only: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

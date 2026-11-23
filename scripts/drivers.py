@@ -72892,6 +72892,255 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_set_clause_counts_what_the_creature_wears(out: Result) -> None:
+    """*"...equal to the number of items you have from this set"* and *"if
+    the triggering ally wears or wields one or more items from this set"*
+    -- `i2176x1`, `i2358p1`, `i2777x1`. #1479.
+
+    **Three printed clauses and that is the whole population**, measured
+    over every `item_block` spec rather than sampled, so this rule covers
+    the mechanism's every caller.
+
+    **`Gear.worn` is the one place to count from** and
+    `equipment.equip`'s own comment is the argument: it records every
+    magic item on the creature *including the one that is a weapon*,
+    because the weapon additionally carries the bonus but "what magic is
+    this creature carrying" has to have one answer. `i433` is the set
+    that needs it -- five members across feet, implement, weapon and
+    neck.
+
+    **The audit cannot see any of this**, which is why the rule exists.
+    `audit.board` equips the item under test, so the wearer's own count
+    is always 1 and the two ally clauses are asked of a creature wearing
+    nothing from the set -- count 0, the increase never pays, and all
+    three rows report green on their other clauses.
+
+    **`on=` is required on the verb and the rule asserts why**: the three
+    clauses ask about two different creatures, so a default would be
+    wrong for one of them whichever way it went.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import AC, dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import (
+        Defences,
+        Gear,
+        Magic,
+        Mods,
+    )
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.equipment import equip
+    from combat_engine.engine.events import AttackDeclared, Healed
+
+    # -- the table itself -------------------------------------------------
+    sets = query._item_sets()
+    out.that(len(sets) >= 15,
+             "the `item_set` table is present, so the premise of every arm"
+             " below holds -- an absent table would make each count 0 and"
+             " each assertion vacuous",
+             f"{len(sets)} set(s)")
+    out.that(query.set_of("i2176") == "i407"
+             and query.set_of("i2358") == "i433"
+             and query.set_of("i2777") == "i433",
+             "each of the three rows' own items resolves to a printed set,"
+             " taken off the ENTRY ref rather than the block's",
+             f"{query.set_of('i2176')}, {query.set_of('i2358')},"
+             f" {query.set_of('i2777')}")
+    out.that(query.set_of("i1492") == "",
+             "and `i1492` resolves to NO set, which is the row that proves"
+             " the verb's raise earns its keep: `i1492p1` wore"
+             " `c.item_set()` for a PAIRED item, one symbol serving two"
+             " different needs",
+             f"{query.set_of('i1492')!r}")
+
+    # -- the wearer's own count, i2176x1 ----------------------------------
+    world, me, _ = _board("i2176x1", 1)
+    gear = world.get(me, Gear)
+    out.that(gear is not None and any(m.ref == "i2176" for m in gear.worn.values()),
+             "premise: the board has the boots on the wearer, so a count of"
+             " 1 below is the set working and not an empty `Gear`",
+             f"{sorted(m.ref for m in gear.worn.values()) if gear else None}")
+    one = query.set_items_on(world, me, "i407", carried=True)
+    equip(world, me, Magic(ref="i2177", slot="head", plus=1))
+    two = query.set_items_on(world, me, "i407", carried=True)
+    out.that((one, two) == (1, 2),
+             "the count RISES when a second member of the same set is put"
+             " on -- a fixed number would pass every other arm here",
+             f"{one} then {two}")
+    # **`carried=` has to be shown to do something or it is decoration.**
+    # Every set item on this board is WORN, so `carried=True` changes
+    # nothing here and the arms above would pass with the keyword deleted.
+    gear.carried.append("i2178")
+    packed_default = query.set_items_on(world, me, "i407")
+    packed_counted = query.set_items_on(world, me, "i407", carried=True)
+    out.that((packed_default, packed_counted) == (2, 3),
+             "a set member in the PACK is counted by `carried=True` and not"
+             " by the default -- which is the difference between the card"
+             " that says \"have\" and the two that say \"wears or wields\"",
+             f"default {packed_default}, carried {packed_counted}")
+    gear.carried.remove("i2178")
+
+    other = query.set_items_on(world, me, "i433", carried=True)
+    out.that(other == 0,
+             "and a DIFFERENT set counts 0 on the same creature, so the"
+             " number is about membership and not about how much magic is"
+             " being worn",
+             f"{other}")
+
+    # -- the bonus the count sizes ---------------------------------------
+    mods = world.get(me, Mods)
+    before = {id(m) for m in (mods.items if mods else [])}
+    out.that(bool(before),
+             "premise: the board lays modifiers of its own BEFORE the row"
+             " runs, so the arm below diffs the list rather than counting"
+             " it -- a count would have read 16 here and passed",
+             f"{len(before)} mod(s) already standing")
+    dsl.use(world, me, "i2176x1", spend=False)
+    mods = world.get(me, Mods)
+    laid = [m for m in (mods.items if mods else []) if id(m) not in before]
+    keys = sorted(m.what for m in laid)
+    out.that(len(laid) == 4 and {m.value for m in laid} == {2},
+             "FOUR modifiers and each worth the risen count of 2, which is"
+             " \"all defenses\" as four keys rather than a `defences` key"
+             " `c.bonus` does not read",
+             f"{len(laid)}: {keys} at {sorted({m.value for m in laid})}")
+    out.that(all(m.when is not None for m in laid),
+             "and every one carries the opportunity-attack gate, so the"
+             " bonus is not standing against an ordinary swing",
+             f"{[m.when is not None for m in laid]}")
+
+    # **`carried=True` THROUGH THE ROW.** The arm further up proves the
+    # keyword changes `set_items_on`'s answer; it says nothing about
+    # `i2176x1` passing it. Measured: dropping `carried=True` from the row
+    # left that arm green, so this is the one that holds the row to the
+    # word its card prints.
+    def _defence_bonus(packed: bool) -> int | None:
+        w, who, _ = _board("i2176x1", 1)
+        g = w.get(who, Gear)
+        if g is None:
+            return None
+        if packed:
+            g.carried.append("i2178")
+        mods_before = {id(m) for m in (w.get(who, Mods).items
+                                       if w.get(who, Mods) else [])}
+        dsl.use(w, who, "i2176x1", spend=False)
+        after = w.get(who, Mods)
+        fresh = [m.value for m in (after.items if after else [])
+                 if id(m) not in mods_before]
+        return max(fresh) if fresh else None
+
+    bare_pack, full_pack = _defence_bonus(False), _defence_bonus(True)
+    out.that((bare_pack, full_pack) == (1, 2),
+             "the ROW's bonus rises when a set member is put in the PACK,"
+             " which is `carried=True` reaching the card's \"have\"."
+             " Dropping the keyword leaves every other arm here green",
+             f"{bare_pack} then {full_pack}")
+
+    # -- the ally clauses, which the audit board cannot reach -------------
+    import audit as _audit
+    from combat_engine.engine.dsl import entry_of
+
+    for ref in ("i2358p1", "i2777x1"):
+        mine = entry_of(ref)
+        their_set = query.set_of(mine)
+        w2, caster, _ = _board(ref, 1)
+        mates = [a for a in sorted(_audit._allies_of(w2, caster)) if a != caster]
+        out.that(bool(mates),
+                 f"{ref}: premise: the board fields an ally to ask about",
+                 f"{mates}")
+        if not mates:
+            continue
+        friend = mates[0]
+        bare = query.set_items_on(w2, friend, their_set)
+        out.that(bare == 0,
+                 f"{ref}: premise: the ally wears NOTHING from {their_set} on"
+                 " an untouched board, which is exactly why the audit cannot"
+                 " see this clause -- it reports green on the row's other"
+                 " half",
+                 f"{bare}")
+        sibling = next(m for m in sets[their_set] if m != mine)
+        equip(w2, friend, Magic(ref=sibling, slot=f"drv:{sibling}", plus=1))
+        now = query.set_items_on(w2, friend, their_set)
+        out.that(now == 1,
+                 f"{ref}: and {sibling} DOES count once it is on the ally."
+                 " The clause reads \"one or more\", so this is the whole"
+                 " of its condition",
+                 f"{now}")
+
+    def _payout(w: World, caster: int, friend: int, ref: str) -> int | None:
+        """What the row lands on `friend`, in the row's own currency.
+
+        Two different shapes and no generic read covers both. `i2358p1`
+        is an interrupt on a declared attack and lays an attack bonus;
+        `i2777x1` arms a `Healed` watch and lays a resistance. So this
+        fires each the way the board would and reads the one number its
+        clause sizes.
+        """
+        if ref == "i2358p1":
+            ev = AttackDeclared(attacker=friend, target=caster,
+                                power="drv", vs=AC)
+            dsl.use(w, caster, ref, spend=False, trigger=ev)
+            mods = w.get(friend, Mods)
+            laid = [m.value for m in (mods.items if mods else [])
+                    if m.what == "attack"]
+            return max(laid) if laid else None
+        dsl.use(w, caster, ref, spend=False)
+        w.bus.emit(Healed(source=caster, target=friend, amount=5, hp=5))
+        res = w.get(friend, Defences)
+        return max(res.resist.values()) if res and res.resist else None
+
+    # -- THROUGH THE ROWS, which is the half the reader cannot stand in for
+    #
+    # `query.set_items_on` rising is not the clause paying out. Each row is
+    # run twice over a fresh board -- ally bare, then ally wearing one
+    # sibling -- and the difference in what lands on the ally is the
+    # printed increase. Without this the rule would assert a verb and say
+    # nothing about either body.
+    for ref, want in (("i2358p1", 2), ("i2777x1", 5)):
+        mine = entry_of(ref)
+        their_set = query.set_of(mine)
+        sibling = next(m for m in sets[their_set] if m != mine)
+        got = []
+        for dressed in (False, True):
+            w3, caster, _ = _board(ref, 1)
+            mates = [a for a in sorted(_audit._allies_of(w3, caster))
+                     if a != caster]
+            if not mates:
+                break
+            friend = mates[0]
+            if dressed:
+                equip(w3, friend, Magic(ref=sibling, slot="drv:set", plus=1))
+            got.append(_payout(w3, caster, friend, ref))
+        out.that(len(got) == 2 and None not in got and got[1] - got[0] == want,
+                 f"{ref}: the ROW pays {want} more to an ally wearing a"
+                 f" sibling from {their_set} than to one wearing none."
+                 " Measured off what lands on the ally, not off the"
+                 " counter",
+                 f"{got}")
+
+    # -- the verb refuses a row whose item is in no set -------------------
+    w3, who, _ = _board("i1492p1", 1)
+    try:
+        Cast(world=w3, me=who, ref="i1492p1").item_set(on=who)
+        refused = ""
+    except ValueError as exc:
+        refused = str(exc)
+    out.that("no printed item set" in refused,
+             "the verb RAISES for a row whose own item is in no set, rather"
+             " than answering 0 forever and leaving the row looking"
+             " written -- `c.wearing`'s reason for raising on an"
+             " unrecognised word",
+             f"{refused[:60]!r}")
+
+    # -- and the three rows carry no marker any more ----------------------
+    still = {ref: REGISTRY[ref].unfinished
+             for ref in ("i2176x1", "i2358p1", "i2777x1")}
+    out.that(not any(still.values()),
+             "all three rows are unmarked, so `blocked.py` no longer counts"
+             " them and `todo.py` has nothing to report ready",
+             f"{still}")
+
+
 def a_tome_unmakes_two_zones_instead_of_one(out: Result) -> None:
     """*"When you use the p2273 power through this tome, you can target
     two conjurations or zones instead of one"* -- `i1098x1`. #1477.
@@ -128737,6 +128986,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "item_set_count": (
+        a_set_clause_counts_what_the_creature_wears,
+        "the three printed `from this set` clauses count what the creature"
+        " wears, which the audit board cannot see",
     ),
     "tome_two_zones": (
         a_tome_unmakes_two_zones_instead_of_one,

@@ -6643,16 +6643,28 @@ def i2139x1(c: Cast) -> None:
         "an ally swings",
         window=Window.BEFORE,
     ),
-    dropped=("c.item_set()",),
 )
 def i2358p1(c: Cast) -> None:
     """Answered on the declaration rather than on the roll, so the bonus is
-    installed before the die is read. Which other items the ally is wearing
-    is not a question the board answers."""
+    installed before the die is read.
+
+    *"Which other items the ally is wearing is not a question the board
+    answers"* is what the marker said, and `item_set` answers it now:
+    `i2358` is the fourth of `i433`'s five, and the +2 is asked of the
+    **ally** rather than of the wearer. `Gear.worn` is where it is counted
+    from, which is why a set spanning a blade and a holy symbol is one
+    read -- see `query.set_items_on`.
+
+    The whole bonus is one number, so the increase is folded into
+    `amount` rather than laid as a second modifier: two `kind=`-less
+    bonuses on one key would stack, and the card prints one bonus that is
+    larger, not two bonuses."""
     ally = getattr(c.trigger, "attacker", None)
     if ally is None:
         return
     amount = max(c.cha_mod, c.str_mod)
+    if c.item_set(on=ally):
+        amount += 2
     c.bonus("attack", amount, on=ally, until=When.EOT, once=True)
     c.bonus("damage", amount, on=ally, until=When.EOT, once=True)
 

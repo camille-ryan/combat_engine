@@ -982,6 +982,22 @@ printed a number the run did not measure.
 Default 250 before a push, `--tries 40` per commit. The next rule worth
 cutting is `trap_budget`, and it has not been looked at. `#1196`.
 
+**What the per-commit cadence actually costs, measured 2026-11-22 at
+`--tries 40` over 866 rules: 1,174s.** Quoted separately rather than
+folded into the table above, because the two are not comparable — that
+table is at the default 250 and `--tries` is the one knob known to move
+a single rule by 5.3x, so overwriting it with a 40-run would be the
+error this whole section is about. The 866 is worth knowing on its own:
+the table's `474` was correct when written and the suite has grown by
+83% since, so **do not read a percentage off it as a current share**.
+
+And the ranking has moved, which is the reason to re-measure rather
+than to reason from the table. At 40 the slowest twelve are 47% of the
+run (against 68% at 250) and `fight_aftermath` leads at 11.9% — it is
+joint-fourth at 6.8% above. `trap_budget` is second at 9.3%, so the
+"next rule worth cutting" line still points at a real cost; it is no
+longer pointing at the biggest one.
+
 This said *"ten minutes for all 12,197 rows"*, which was wrong on both
 numbers and in the direction that matters: a reader pricing an engine change
 off 12,197 rows and ten minutes is pricing **half the corpus at 40% of the

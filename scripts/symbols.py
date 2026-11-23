@@ -931,6 +931,11 @@ CATEGORIES: dict[str, dict] = {
                 # the item laid, which is what they are for, so neither
                 # could say it. #1475, i1321x1.
                 "leave_hanging",
+                # Not "where the thing is" but **how many of a printed
+                # group** the creature has, which is the one question the
+                # four above cannot be composed into: a set spans slots.
+                # #1479.
+                "item_set",
             ]),
         ],
     },
@@ -1387,6 +1392,14 @@ READERS: dict[str, list[str]] = {
         # of the same question -- the target pool, the win condition and
         # now the initiative roster. #956.
         "turn_takers",
+        # **Here rather than beside `block_categories`**, which is the
+        # choice that one's own note is about. The three clauses these
+        # serve pay out in three different places -- a defence bonus, an
+        # attack bonus, a resistance -- so no clause-side section holds
+        # them; what they share is answering what the *creature* has, like
+        # `feats_of` and `race_of` above. `set_of` takes the ENTRY ref,
+        # never the block's. #1479.
+        "set_items_on", "set_of",
     ],
     "where, and how far": [
         # `terrain` is not a distance, and it is here because it is the one
