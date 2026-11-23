@@ -2730,7 +2730,7 @@ def f3640(c: Cast) -> None:
 
 
 @power("f3641", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=("Gear.ranged(thrown=)",),
+       reach=PERSONAL, target=SELF,
        proficiency=("w3607",))
 def f3641(c: Cast) -> None:
     """The implement half plays: `c.as_implement` writes the fact onto
@@ -2759,7 +2759,26 @@ def f3641(c: Cast) -> None:
     question hands a rogue a ranged basic attack it does not have."* That is
     the site, and it is a `Gear`/basic-attack change rather than a weapon
     field. #643.
+    **Written now, on Camille's ruling.** `#838`, asked directly,
+    2026-11-23:
+
+    > *"the first"*
+
+    -- open the gate and check with `replay` rather than the win rate.
+    The blocker was never a weapon field: it was the ranged basic attack
+    refusing a thrown melee weapon, which `#520` unblocked by making a
+    throw cost a copy.
+
+    Both halves are the printed sentence and both are selected by the
+    weapon's own ref, which the header already names as the
+    proficiency: `heavy thrown` so `Attack(Pick.BY_WEAPON)` rolls
+    Strength -- `basic.py` reads light thrown as Dexterity -- and the
+    6/12 range the card prints rather than the 5/10 of `f1841`, which is
+    why the two rows cannot share a helper. #1493.
     """
+    c.gains_property("heavy thrown", ref="w3607", on=c.me)
+    c.weapon_range(thrown=(6, 12), ref="w3607", on=c.me,
+                   until=When.ENCOUNTER)
     if _holding(c, "hammer"):
         c.as_implement(on=c.me)
 

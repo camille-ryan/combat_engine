@@ -2720,6 +2720,29 @@ class Power:
 
                 return bool(gear.melee) and ready_to_throw(world, actor)
             if gear.ranged is None:
+                # **"As long as it has something to throw OR shoot."**
+                # The compendium's Basic Attack entry, verbatim, and this
+                # branch only ever had the shooting half -- so a rogue
+                # holding five throwing blades could not make a ranged
+                # basic attack at all. `dsl._reach` has always disagreed
+                # with it, substituting a thrown weapon's range for a
+                # `Ranged weapon` row ("fired first, then thrown"), so
+                # the engine computed a range for a branch this gate
+                # would never open.
+                #
+                # **Opened only now because a throw finally costs
+                # something.** `#838` built this, measured it and took it
+                # back out: with the dagger free and infinite the policy
+                # spammed the attack and played measurably worse at level
+                # 10. `#520` is what fixed the premise --
+                # `ammunition.hurl` spends a copy, `Gear.thrown_left`
+                # holds the count, `THROWN = 5`, and `chargen` stocks
+                # five per throwable -- so `ready_to_throw` refuses the
+                # sixth. Camille's call on `#838`, 2026-11-23.
+                from .query import ready_to_throw
+
+                if gear.thrown is not None:
+                    return ready_to_throw(world, actor)
                 return False
             # **And it has to be loaded**, which is the half that makes the
             # load worth modelling at all. Three weapons print `load

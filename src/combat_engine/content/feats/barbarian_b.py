@@ -616,7 +616,7 @@ def f2884(c: Cast) -> None:
 
 
 @power("f1841", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Gear.ranged(thrown=)",))
+       reach=PERSONAL, target=SELF)
 def f1841(c: Cast) -> None:
     """Throw an off-hand blade like a handaxe, at 5/10.
 
@@ -684,7 +684,42 @@ def f1841(c: Cast) -> None:
     question hands a rogue a ranged basic attack it does not have."* That is
     the site, and it is a `Gear`/basic-attack change rather than a weapon
     field. #643.
+    **The gate is open now and the clause is written.** Camille's call on
+    `#838`, 2026-11-23, asked directly:
+
+    > *"the first"*
+
+    -- the first of three options, which was *open it and check with the
+    cheap test*: `replay` rather than the 45-minute win rate. What
+    unblocked it is `#520`: a throw costs a copy now -- `ammunition.hurl`
+    spends one, `Gear.thrown_left` holds the count, `THROWN = 5`, and
+    `chargen` stocks five per throwable -- so the free infinite ranged
+    attack that made the AI measurably worse the first time this was
+    built no longer exists.
+
+    **`off_hand=` is a new selector and `ref=` was the wrong one.** Both
+    verbs took `group`, `ref`, `every`, `held` and `mine`, and the first
+    draft of this row pointed `ref=` at `Gear.off`'s weapon. A
+    two-weapon character very often holds the **same weapon in both
+    hands** -- a dealt ranger carries `w3611` twice -- so that lent the
+    property to the main hand as well, which is strictly more than this
+    card says. Measured: both copies came back `heavy thrown` at 5/10.
+    Identity against `Gear.off` is the only thing that tells two
+    otherwise identical weapons apart.
+
+    Heavy thrown rather than light, because the card says so and the
+    keyword decides the ability: `basic.py` reads a light thrown weapon
+    as Dexterity and a heavy thrown one as Strength. #1493.
     """
+    from combat_engine.engine import Gear as _Gear
+
+    gear = c.world.get(c.me, _Gear)
+    off = gear.off if gear is not None else None
+    if off is None:
+        return
+    c.gains_property("heavy thrown", off_hand=True, on=c.me)
+    c.weapon_range(thrown=(5, 10), off_hand=True, on=c.me,
+                   until=When.ENCOUNTER)
 
 
 @power("f1843", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

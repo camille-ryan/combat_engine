@@ -72892,6 +72892,191 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def something_to_throw_opens_a_ranged_basic(out: Result) -> None:
+    """*"A creature can make a ranged basic attack as long as it has
+    something to throw **or** shoot."* -- the compendium's Basic Attack
+    entry, verbatim. `dsl.can_branch` only ever had the shooting half.
+    `#838`, `#1493`.
+
+    **Opened on Camille's ruling and not before.** `#838` built this,
+    measured it and took it back out: with a thrown weapon free and
+    infinite the policy spammed the attack and played measurably worse at
+    level 10. `#520` removed that premise -- a throw costs a copy now --
+    and Camille, asked directly on 2026-11-23, answered *"the first"*:
+    open it and check with `replay` rather than the 45-minute win rate.
+
+    **The cap is what makes it safe, so the arm that matters is the sixth
+    throw.** Five copies per throwable, stocked by `chargen`, and
+    `query.ready_to_throw` refuses once they are gone -- so the gate
+    closes again mid-fight rather than offering a free attack forever.
+    """
+
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.components import Powers as _Powers
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import Bus
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.rng import Rng
+
+    rba = get("rba")
+    out.that(rba is not None and not rba.thrown_by_hand,
+             "premise: `rba` is NOT a `thrown_by_hand` row, so it takes the"
+             " shooting branch and this gate is the one that decides it",
+             f"{rba.thrown_by_hand if rba else None}")
+
+    def dealt(cls: str, level: int = 5, seed: int = 1,
+              hold: tuple[str, ...] = ()) -> tuple[World, int, Gear | None]:
+        """A dealt character, optionally **holding** some rows.
+
+        `hold` matters more than it looks: `dsl.use` refuses a feat the
+        character does not know, so a probe that deals a bare class and
+        then uses the feat gets `False` and a body that never ran. The
+        first draft of the two arms below did exactly that and failed
+        with `(False, None) -> (False, None)`.
+        """
+        world = World(Grid(12, 12), Rng(seed), Bus())
+        who = chargen.Character(cls, level, list(hold))
+        eid = chargen.spawn(world, who, (6, 8))
+        return world, eid, world.get(eid, Gear)
+
+    # -- a thrower, which could not make one before ------------------------
+    world, eid, gear = dealt("rogue")
+    out.that(gear is not None and gear.ranged is None
+             and gear.thrown is not None,
+             "premise: the dealt rogue carries something to THROW and"
+             " nothing to shoot, which is the case the old gate refused",
+             f"ranged={gear.ranged.ref if gear and gear.ranged else None},"
+             f" thrown={gear.thrown.ref if gear and gear.thrown else None}")
+    out.that(rba.can_branch(world, eid),
+             "THE arm: it can make a ranged basic attack",
+             f"{rba.can_branch(world, eid)}")
+
+    # -- and the cap closes it again ---------------------------------------
+    out.that(gear.thrown_left.get(gear.thrown.ref) == 5,
+             "premise: five copies, which is `ammunition.THROWN` and"
+             " Camille's own number on `#520`",
+             f"{dict(gear.thrown_left)}")
+    gear.thrown_left[gear.thrown.ref] = 0
+    out.that(not rba.can_branch(world, eid),
+             "the cap ARM: thrown down to zero, the gate shuts again -- so"
+             " this is not the free infinite attack that made `#838`"
+             " revert the first time",
+             f"{rba.can_branch(world, eid)}")
+
+    # -- a creature with neither is still refused --------------------------
+    bare, bare_eid, bare_gear = dealt("cleric")
+    out.that(bare_gear is not None and bare_gear.ranged is None
+             and bare_gear.thrown is None,
+             "premise: the dealt cleric carries neither",
+             f"ranged={bare_gear.ranged if bare_gear else None},"
+             f" thrown={bare_gear.thrown if bare_gear else None}")
+    out.that(not rba.can_branch(bare, bare_eid),
+             "and it is REFUSED -- the sentence is \"something to throw or"
+             " shoot\", not \"anybody\"",
+             f"{rba.can_branch(bare, bare_eid)}")
+
+    # -- a shooter is unaffected -------------------------------------------
+    shot, shot_eid, shot_gear = dealt("barbarian", seed=1)
+    out.that(shot_gear is not None and shot_gear.ranged is not None,
+             "premise: the dealt barbarian carries a real ranged weapon",
+             f"{shot_gear.ranged.ref if shot_gear and shot_gear.ranged else None}")
+    out.that(rba.can_branch(shot, shot_eid),
+             "and the shooting half still answers, which it did before this"
+             " change -- measured both ways, this class was True already",
+             f"{rba.can_branch(shot, shot_eid)}")
+
+    # -- the two rows the gate was blocking --------------------------------
+    #
+    # **Each is measured on the weapon, not just on its marker.** The
+    # first draft asserted only `unfinished == ()`, and both row plants --
+    # gutting each body to `pass` -- PASSED against it: a cleared marker
+    # says nothing about whether the clause pays.
+    from combat_engine.engine import dsl
+
+    for ref in ("f1841", "f3641"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker any more",
+                 f"{REGISTRY[ref].unfinished}")
+
+    # `f1841` lends the property to whatever is in the OFF hand.
+    w1, e1, g1 = dealt("ranger", seed=3, hold=("f1841",))
+    if g1 is not None and g1.off is None and g1.weapons:
+        g1.weapons.append(replace(g1.weapons[0], ref="drv-off"))
+    off = g1.off if g1 is not None else None
+    out.that(off is not None,
+             "premise: the character has an off-hand weapon for `f1841` to"
+             " lend to",
+             f"{off.ref if off else None}")
+    known1 = w1.get(e1, _Powers)
+    out.that(known1 is not None and "f1841" in (known1.all or ()),
+             "premise: the dealt character actually KNOWS the feat --"
+             " `dsl.use` refuses one it does not, and a dropped"
+             " prerequisite looks exactly like a row that does nothing",
+             f"{sorted(k for k in (known1.all if known1 else ()) if k[0] == 'f')[:6]}")
+    if off is not None:
+        was = ("heavy thrown" in off.properties, off.thrown)
+        fired = dsl.use(w1, e1, "f1841", spend=False)
+        out.that(fired,
+                 "premise: and the use was accepted rather than refused",
+                 f"{fired}")
+        # **Re-read, never held.** Both verbs rebuild `Gear.weapons` with
+        # `replace` copies, so a reference taken before the use points at
+        # a discarded object -- which is how this arm first failed with
+        # `(False, None) -> (False, None)` while the row worked.
+        g1b = w1.get(e1, Gear)
+        fresh = g1b.off if g1b is not None else None
+        now = (("heavy thrown" in fresh.properties, fresh.thrown)
+               if fresh is not None else (False, None))
+        out.that(now == (True, (5, 10)) and was != now,
+                 "f1841 makes the OFF-hand weapon heavy thrown at 5/10,"
+                 " the printed band -- and it was neither before",
+                 f"{was} -> {now}")
+        main = g1b.main if g1b is not None else None
+        out.that(main is not None
+                 and "heavy thrown" not in main.properties
+                 and main.thrown is None,
+                 "and the MAIN hand is untouched, which is the arm that"
+                 " `ref=` failed: this character holds the same weapon in"
+                 " both hands, so selecting by ref lent the property to"
+                 " both and gave away more than the card does",
+                 f"{(main.ref, 'heavy thrown' in main.properties, main.thrown) if main else None}")
+
+    # `f3641` names its weapon by ref.
+    w2, e2, g2 = dealt("fighter", seed=1, hold=("f3641",))
+    if g2 is not None and not any(w.ref == "w3607" for w in g2.weapons):
+        g2.weapons.append(replace(g2.weapons[0], ref="w3607"))
+    hammer = next((w for w in (g2.weapons if g2 else []) if w.ref == "w3607"),
+                  None)
+    out.that(hammer is not None,
+             "premise: the character carries the weapon `f3641` names",
+             f"{hammer.ref if hammer else None}")
+    known2 = w2.get(e2, _Powers)
+    out.that(known2 is not None and "f3641" in (known2.all or ()),
+             "premise: and this one knows its feat too",
+             f"{sorted(k for k in (known2.all if known2 else ()) if k[0] == 'f')[:6]}")
+    if hammer is not None:
+        was = ("heavy thrown" in hammer.properties, hammer.thrown)
+        fired = dsl.use(w2, e2, "f3641", spend=False)
+        out.that(fired,
+                 "premise: and that use was accepted too",
+                 f"{fired}")
+        g2b = w2.get(e2, Gear)
+        fresh2 = next((w for w in (g2b.weapons if g2b else [])
+                       if w.ref == "w3607"), None)
+        now = (("heavy thrown" in fresh2.properties, fresh2.thrown)
+               if fresh2 is not None else (False, None))
+        out.that(now == (True, (6, 12)) and was != now,
+                 "f3641 makes it heavy thrown at 6/12 -- a DIFFERENT band"
+                 " from f1841's, which is why the two cannot share a"
+                 " helper",
+                 f"{was} -> {now}")
+
+
 def a_grab_may_reach_two_and_need_no_hand(out: Result) -> None:
     """*"Gain reach 2 for purposes of grab attacks. Also, you do not need a
     free hand to make a grab attack."* -- `i2393x1`. #1491.
@@ -129898,6 +130083,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "thrown_rba": (
+        something_to_throw_opens_a_ranged_basic,
+        "something to throw opens a ranged basic attack, and the five-copy"
+        " cap shuts it again",
     ),
     "grab_reach": (
         a_grab_may_reach_two_and_need_no_hand,

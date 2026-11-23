@@ -25486,10 +25486,21 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         every: bool = False,
         held: bool = False,
         mine: bool = False,
+        off_hand: bool = False,
         against: Callable[[int], bool] | None = None,
         on: int | None = None,
     ) -> int:
         """Lay a printed weapon property on that creature's weapons. Returns how many.
+
+        **`off_hand=` names ONE hand and `ref=` cannot.** `f1841` prints
+        *"you can use any one-handed off-hand weapon as a heavy thrown
+        weapon"*, and a two-weapon character very often holds the same
+        weapon in both hands -- a dealt ranger carries `w3611` twice --
+        so selecting by ref lends the property to the main hand as well,
+        which is strictly more than the card says. Measured: both copies
+        came back `heavy thrown` at 5/10. Matched by identity against
+        `Gear.off`, which is the only thing that distinguishes two
+        otherwise identical weapons. #1493.
 
         `weapon_dice`'s mechanism, and the same argument for doing it this
         way: `Gear.weapons` holds per-character `replace(w)` copies, so the
@@ -25615,6 +25626,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         # properties and are laid through here. #842.
         laid = 0
         out: list[Any] = []
+        # Captured before the loop, because the loop replaces the objects.
+        _off = gear.off if off_hand else None
         for weapon in gear.weapons:
             if (
                 every
@@ -25622,6 +25635,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 or (ref and weapon.ref == ref)
                 or (held and weapon.ref not in gear.stowed)
                 or (mine and weapon.item == self._my_item)
+                or (off_hand and weapon is _off)
             ):
                 had = weapon.properties
                 # **Who paid for the word, beside the word itself.** Two
@@ -25771,10 +25785,17 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         ref: str = "",
         held: bool = False,
         mine: bool = False,
+        off_hand: bool = False,
         on: int | None = None,
         until: When | None = None,
     ) -> int:
         """Give that creature's weapons a printed range. Returns how many.
+
+        **`off_hand=` names one hand**, for the reason
+        `c.gains_property`'s own note gives: a two-weapon character often
+        holds the same weapon in both hands, so `ref=` reaches the main
+        hand too and lends it a range the card gave only to the off one.
+        `f1841` is the card. #1493.
 
         The third of the `weapon_dice` family, after `gains_property`, and
         the same argument a third time: `Gear.weapons` holds `replace(w)`
@@ -25841,11 +25862,14 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         changed = 0
         out: list[Any] = []
         before: dict[str, dict[str, Any]] = {}
+        # Captured before the loop, which replaces the objects.
+        _off = gear.off if off_hand else None
         for weapon in gear.weapons:
             if not ((group and weapon.group == group)
                     or (ref and weapon.ref == ref)
                     or (held and weapon.ref not in gear.stowed)
-                    or (mine and weapon.item == self._my_item)):
+                    or (mine and weapon.item == self._my_item)
+                    or (off_hand and weapon is _off)):
                 out.append(weapon)
                 continue
             changed += 1

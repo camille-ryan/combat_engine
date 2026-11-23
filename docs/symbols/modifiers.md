@@ -186,7 +186,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You gain no benefit from using your second wind."
 - `c.forgo_second_wind_heal(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You can choose to regain no hit points" from your second wind.
-- `c.gains_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, mine: 'bool' = False, against: 'Callable[[int], bool] | None' = None, on: 'int | None' = None) -> 'int'`
+- `c.gains_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, mine: 'bool' = False, off_hand: 'bool' = False, against: 'Callable[[int], bool] | None' = None, on: 'int | None' = None) -> 'int'`
   - Lay a printed weapon property on that creature's weapons. Returns how many.
 - `c.ignore_requirement(self, ref: 'str', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[Any, int], bool] | None' = None) -> 'Effect | None'`
   - One named row's printed Requirement is met, while `when` holds.
