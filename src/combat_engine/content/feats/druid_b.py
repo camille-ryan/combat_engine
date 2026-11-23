@@ -57,6 +57,7 @@ from combat_engine.engine.events import (
     Moved,
     PowerUsed,
     RoundStart,
+    Summoned,
 )
 from combat_engine.engine.query import allies, team
 from combat_engine.engine.triggers import both, by_charge, by_me, by_melee, targets_me
@@ -470,39 +471,50 @@ def f2284(c: Cast) -> None:
 
 
 @power("f1876", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.on_instinctive()",))
+       reach=PERSONAL, target=SELF)
 def f1876(c: Cast) -> None:
     """An attack bonus for a summon acting on its own.
 
-    Re-aimed. Whose summons are whose *is* recorded -- `Companion.owner`
-    holds it, `c.companions(of=)` reads it back and `Summoned` carries
-    the summoner -- so `c.summoned_by_me()` named nothing missing. What
-    is left is the narrowing: `c.instinctive` sets a standing summon
-    going, and the attack it then makes is announced as an ordinary
-    attack by an ordinary creature, so the bonus cannot be held to the
-    instinctive action the card charges it to.
+    Two halves, and only the second was ever missing. Whose summons are
+    whose *is* recorded -- `Companion.owner` holds it and `Summoned`
+    carries both ends -- so the bonus is laid at the **arrival**, which
+    is also what makes it reach a creature summoned later in the fight.
+    `f2998` and `f2984` collect their summons the same way and for the
+    same reason.
 
-    **`query.acting_independently` is not the reader, and this is
-    measured rather than argued.** It is the obvious candidate -- "is
-    this companion acting on its own this round?", `Companion.commanded
-    != world.round`, and `turns._uncommanded` reads exactly it to decide
-    whether to run the instinctive effect at all. But the instinctive
-    effect reaches its attack through `Cast.command`, which stamps
-    `commanded = world.round` **before** it rolls. Probed on an
-    `m145a0` board with a `c.bonus("attack", ..., when=)` gate recording
-    what it saw: independent `True` before `Cast.instinctive`, and the
-    gate read `False` at the roll. A *commanded* swing stamps the same
-    field, by the same line for a summon and by `actions.perform`'s
-    `"command"` branch for a beast -- so the gate is False for both
-    kinds of attack, a uniformly dead gate, which is the one shape
-    worse than no clause at all.
+    **The narrowing is `ctx["instinctive"]`, and the reader it is not is
+    worth keeping written down.** `query.acting_independently` is the
+    obvious candidate -- "is this companion acting on its own this
+    round?", `Companion.commanded != world.round`, and
+    `turns._uncommanded` reads exactly it to decide whether to run the
+    instinctive effect at all. It is a **uniformly dead gate** here, and
+    this was measured rather than argued: the instinctive effect reaches
+    its attack through `Cast.command`, which stamps `commanded =
+    world.round` *before* it rolls. Probed on an `m145a0` board with a
+    `when=` gate recording what it saw -- independent `True` before
+    `Cast.instinctive`, and `False` at the roll. A *commanded* swing
+    stamps the same field by the same line, so the gate reads False for
+    both kinds of attack, which is the one shape worse than no clause at
+    all.
 
-    So the gap is unchanged: nothing marks an attack as *instinctive*
-    while it is being rolled. `ctx` carries `power`, `granted_by` and
-    `granted_via`, and the instinctive and commanded paths are
-    identical in all three -- both roll the summoning block's own
-    `summon=` line under that block's ref."""
+    Nothing else on the board separates them either: `power`,
+    `granted_by` and `granted_via` are identical, both rolling the
+    block's own `summon=` line under the block's ref. So
+    `Cast.instinctive_action` is set by the rebinding that *starts* an
+    instinctive effect, survives the `c.command` inside it -- which
+    calls `self.attack` rather than rebinding again -- and arrives as
+    `ctx["instinctive"]`. #1498."""
+    me = c.me
+
+    def arrived(ev: Summoned) -> None:
+        if ev.actor != me:
+            return
+        c.bonus(
+            "attack", 1, on=ev.summon, until=When.ENCOUNTER,
+            when=lambda ctx: bool(ctx.get("instinctive")),
+        )
+
+    c.watch(Summoned, arrived, until=When.ENCOUNTER, on=me, label=f"{c.ref} host")
 
 
 @power("f2033", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

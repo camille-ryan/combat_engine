@@ -4340,6 +4340,118 @@ def a_companion_left_to_its_own_devices(out: Result) -> None:
                  " beast's printed rule and nobody else's")
 
 
+def an_instinctive_swing_is_told_from_a_commanded_one(out: Result) -> None:
+    """`f1876`: "+1 to the attack roll" on the instinctive action alone.
+
+    The companion to the rule above, and the half it could not reach.
+    `_uncommanded` runs a summon's printed Instinctive Effect; that effect
+    rolls through `Cast.command`, and **nothing on the board distinguished
+    the swing it makes from one its owner paid an action for**. `power`,
+    `granted_by` and `granted_via` are identical -- both roll the block's
+    own `summon=` line under the block's ref.
+
+    `query.acting_independently` is the obvious reader and is a
+    **uniformly dead gate** here, which was measured rather than argued:
+    `c.command` stamps `commanded = world.round` *before* it rolls, so the
+    gate reads False on the instinctive path too, and a dead gate is the
+    one shape worse than no clause at all. `Cast.instinctive_action` is
+    the answer -- set by the rebinding that *starts* an instinctive
+    effect, carried through the `c.command` inside it, and read as
+    `ctx["instinctive"]`. #1498.
+
+    Four arms, and the two that matter are the diagonal:
+
+    * uncommanded, no feat -- the baseline the instinctive swing rolls at;
+    * uncommanded **with** the feat -- one higher;
+    * commanded, no feat -- the other baseline;
+    * commanded **with** the feat -- unchanged, which is the control. A
+      gate that is simply always True passes the first three and fails
+      only this one.
+
+    `summon_inline` rather than `use("p5366")`, because the feat and the
+    druid daily cannot both be held on one board: `audit.board` grants the
+    row under test, so `use` refuses whichever is not it. `p5366`'s own
+    body reaches the block the same way.
+
+    And the swing has to be **staged**, or the probe measures the wrong
+    clause: `_p5366_instinct` charges the nearest *bloodied* enemy it is
+    not already standing next to, so an unhurt foe or an adjacent summon
+    falls through to `hunt` and no attack is rolled at all. Three readings
+    of "the feat does nothing" in one session were that, not the feat.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Health, Position
+    from combat_engine.engine.dsl import get, use
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import squares
+
+    SUMMON = "p5366"
+
+    def swing(feat: bool, commanded: bool) -> list[int]:
+        world, me, _ = _board("f1876", 1)
+        if feat and not use(world, me, "f1876", spend=False):
+            return []
+        pet = Cast(world=world, me=me, ref=SUMMON).summon_inline(
+            get(SUMMON).summon)
+        if not pet:
+            return []
+        c = Cast(world=world, me=me, ref=SUMMON)
+        foes = c.enemies()
+        if not foes:
+            return []
+        foe = sorted(foes)[0]
+        hurt = world.need(foe, Health)
+        hurt.hp = hurt.max_hp // 2
+        there = world.need(foe, Position).square
+        world.need(pet, Position).square = (there[0] + 3, there[1])
+        world.grid.place(pet, frozenset(squares(world, pet)))
+
+        seen: list[int] = []
+        # Bound as a default rather than closed over -- `B023`, and the
+        # board is rebuilt per pass, so the listener must see this pass's
+        # entity.
+        world.bus.on(AttackRolled, lambda ev, into=seen, who=pet: (
+            into.append(ev.bonus) if ev.attacker == who else None))
+        world.turn = me
+        if commanded:
+            world.need(pet, Companion).commanded = -1
+            c.command(pet, on=foe)
+        else:
+            Cast(world=world, me=me,
+                 ref=world.need(pet, Companion).ref).instinctive(pet)
+        return seen
+
+    plain_inst = swing(feat=False, commanded=False)
+    feat_inst = swing(feat=True, commanded=False)
+    plain_cmd = swing(feat=False, commanded=True)
+    feat_cmd = swing(feat=True, commanded=True)
+
+    out.that(len(plain_inst) == 1 and len(feat_inst) == 1,
+             "the instinctive effect rolls an attack on both arms, so"
+             " there is something to compare -- the premise, because"
+             " `_p5366_instinct` rolls nothing at all unless its charge"
+             " clause is staged",
+             f"no feat: {plain_inst}, feat: {feat_inst}")
+    out.that(len(plain_cmd) == 1 and len(feat_cmd) == 1,
+             "and a commanded swing rolls on both arms too",
+             f"no feat: {plain_cmd}, feat: {feat_cmd}")
+    if not (plain_inst and feat_inst and plain_cmd and feat_cmd):
+        return
+
+    out.that(feat_inst[0] == plain_inst[0] + 1,
+             "f1876 puts +1 on the attack roll of a summon swinging on its"
+             " own Instinctive Effect, which nothing could gate on before:"
+             " `ctx['instinctive']` is set by the rebinding in"
+             " `Cast.instinctive` and survives the `c.command` inside it",
+             f"{plain_inst[0]} -> {feat_inst[0]}")
+    out.that(feat_cmd[0] == plain_cmd[0],
+             "and NOT on a swing its owner spent an action commanding --"
+             " the control, and the whole of the narrowing. A gate that is"
+             " always True passes every other assertion here and fails"
+             " this one",
+             f"{plain_cmd[0]} -> {feat_cmd[0]}")
+
+
 def the_last_two_target_lines_of_that_census(out: Result) -> None:
     """The two rows #656 left behind, and neither wanted a new idea.
 
@@ -132279,6 +132391,11 @@ DRIVERS = {
     "a_reach_that_changes_with_the_creature_s_state": (
         a_reach_that_changes_with_the_creature_s_state,
         "a printed range whose size a state decides"),
+    "an_instinctive_swing_is_told_from_a_commanded_one": (
+        an_instinctive_swing_is_told_from_a_commanded_one,
+        "f1876's +1 reaches a summon's instinctive attack and not a"
+        " commanded one",
+    ),
     "a_companion_left_to_its_own_devices": (
         a_companion_left_to_its_own_devices,
         "what an uncommanded beast does, and the feats that waive it"),

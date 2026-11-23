@@ -305,6 +305,10 @@ CONTEXT = {
     "origin": "the square an area was aimed at.",
     "charge": "is this use a charge?",
     "opportunity": "is this use an opportunity attack?",
+    "instinctive_action": (
+        "is a summon swinging on its own Instinctive Effect? Reaches the"
+        " attack context as `ctx['instinctive']`"
+    ),
     "branch": "which half of a melee-or-ranged row is being used.",
     "augment": "how many power points this use was augmented by, or 0 -- "
                "set by `dsl.use` for a row that declares `augments=`.",

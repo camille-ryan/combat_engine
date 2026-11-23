@@ -298,6 +298,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Roll a raw ability check. Truthy when it beat the DC.
 - `c.check(self, skill: 'str', dc: 'int' = 0, *, who: 'int | None' = None, bonus: 'int' = 0, against: 'int | None' = None)`
   - Roll a skill check. Truthy when it beat the DC.
+- `c.instinctive_action: bool`
+  - is a summon swinging on its own Instinctive Effect? Reaches the attack context as `ctx['instinctive']`
 - `c.knowledge_check(self, *, on: 'int | None' = None, learn: 'str' = 'name', who: 'int | None' = None) -> 'CheckResult | bool'`
   - Identify a creature. Truthy when the check beat the printed DC.
 - `c.opportunity: bool`

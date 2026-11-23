@@ -804,7 +804,8 @@ CATEGORIES: dict[str, dict] = {
                 "declared_feats", "me", "ref", "targets", "world",
             ]),
             ("rolling and the trigger", [
-                "ability_check", "check", "knowledge_check", "opportunity", "ranged", "roll",
+                "ability_check", "check", "instinctive_action",
+                "knowledge_check", "opportunity", "ranged", "roll",
                 "struck_by", "struck_by_property", "struck_with",
                 "substitute_check", "trigger",
             ]),
@@ -1081,6 +1082,12 @@ CTX_KEYS: dict[str, str] = {
     "effect": "the effect being asked about.",
     "from_attack": "did this come out of an attack.",
     "granted_by": "who handed this creature the attack, or -1.",
+    "instinctive": (
+        "is a summon swinging on its own Instinctive Effect, rather "
+        "than on a command its owner paid an action for. The two are "
+        "identical in `power`, `granted_by` and `granted_via`, so this "
+        "is the only thing that separates them."
+    ),
     "granted_via": (
         "the ref of the row that handed it over -- an attack, or "
         "since #672 a **saving throw**. `Cast.save` writes it from "

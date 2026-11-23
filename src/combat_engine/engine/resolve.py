@@ -582,6 +582,7 @@ def attack(
     weapon: str = "",
     augment: int = 0,
     finisher: bool = False,
+    instinctive: bool = False,
     origin: frozenset[Square] = frozenset(),
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
@@ -701,6 +702,15 @@ def attack(
                 getattr(window, "provoker", None),
             ) if window is not None else "",
             "charge": charge,
+            # **Is a summon swinging on its own Instinctive Effect.**
+            # `power`, `granted_by` and `granted_via` are identical on
+            # the instinctive and the commanded path -- both roll the
+            # block's `summon=` line under the block's ref -- so a card
+            # charging a bonus to the instinctive action alone had
+            # nothing to gate on, and `acting_independently` reads
+            # False for both. `Cast.instinctive` is the one place that
+            # knows. #1498.
+            "instinctive": instinctive,
             # Who handed this swing over, and through which row. A bonus
             # to "the melee basic attack granted by your Combat
             # Challenge" is a gate on these two and nothing else, and

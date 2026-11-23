@@ -486,6 +486,21 @@ class Cast:
     #: True when this use *is* an opportunity attack. Read by the attack
     #: context, so "+2 to AC against opportunity attacks" can be written.
     opportunity: bool = False
+    #: True while a summon's own Instinctive Effect is running. Set by
+    #: `c.instinctive` on the cast it rebinds, so it survives the
+    #: `c.command` inside -- which calls `self.attack` rather than
+    #: rebinding again -- and reaches the attack context as
+    #: `ctx["instinctive"]`.
+    #:
+    #: **A field rather than something derivable, which was measured.**
+    #: `query.acting_independently` is the obvious reader and is a
+    #: uniformly dead gate here: `c.command` stamps `commanded =
+    #: world.round` *before* it rolls, so the instinctive and the
+    #: commanded path are both False at the roll. Nothing else on the
+    #: board distinguishes them -- `power`, `granted_by` and
+    #: `granted_via` are identical, both rolling the block's own
+    #: `summon=` line under the block's ref. #1498.
+    instinctive_action: bool = False
     #: Who handed this use over, and through which row. Set by the three
     #: methods that make somebody swing out of turn -- `c.grant_attack`,
     #: `c.basic` and `c.charge_at` -- and carried onto `PowerUsed`,
@@ -5746,6 +5761,13 @@ class Cast:
             ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
             keep=keep, hand=hand, as_=as_,
+            # **Whether a summon is swinging on its own Instinctive
+            # Effect**, for "when a creature you summon uses an
+            # instinctive action to attack". Read off the cast rather
+            # than passed, because the row paying for the action and the
+            # row holding the attack line are different ones and only
+            # the rebinding in `c.instinctive` knows.
+            instinctive=self.instinctive_action,
             # **Whether this swing is a coup de grace**, which nothing on
             # the board could say: the verb rolls the finisher through an
             # ordinary `strike`, so the damage context looked identical to
@@ -15203,7 +15225,18 @@ class Cast:
             act = mine.lent_instinctive
         if act is None:
             return False
-        act(replace(self, ref=mine.ref, targets=[], target=None, result=None), who)
+        act(
+            replace(
+                self, ref=mine.ref, targets=[], target=None, result=None,
+                # **What marks the swing instinctive**, which nothing on
+                # the board could say. See the field's own note: the
+                # commanded and the instinctive path are identical at
+                # the roll, so the only honest place to record the
+                # difference is the rebinding that starts one.
+                instinctive_action=True,
+            ),
+            who,
+        )
         return True
 
     def beast_independent(
