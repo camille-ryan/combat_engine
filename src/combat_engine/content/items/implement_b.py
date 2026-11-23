@@ -2785,7 +2785,6 @@ def i2339x1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, by_keyword(Keyword.ARCANE)), "you hit with an arcane power"
     ),
-    dropped=("c.add_target(pending=)",),
 )
 def i2339p1(c: Cast) -> None:
     """Re-aimed and written. `p1448` is declared, so the racial attack is
@@ -2819,6 +2818,15 @@ def i2339p1(c: Cast) -> None:
     if foe is None or not c.cursed(on=foe):
         return
     c.cast_from(foe, on=c.me, until=When.EONT, rows=("p1448",), blast=True)
+    # **"The attack also targets the affected creature."** `pending=` is
+    # the half that could not be said: this clause is about a use that has
+    # not begun, so `c.add_target`'s append -- which reaches the power
+    # running underneath -- had nothing to append to. Recorded against
+    # `p1448` for the same window the borrowed origin holds, and unioned
+    # in by `dsl.use` with no legality test, which is the point: the
+    # creature is standing at the blast's own origin and a close blast
+    # would never otherwise cover it. #1524.
+    c.add_target(foe, pending="p1448", until=When.EONT)
 
 
 @power(

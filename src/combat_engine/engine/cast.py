@@ -5270,8 +5270,20 @@ class Cast:
                 if effect is not None:
                     self.world.effects.end(effect, "the granted attack is over")
 
-    def add_target(self, who: int) -> bool:
+    def add_target(
+        self, who: int, *, pending: str = "",
+        until: When = When.EONT,
+    ) -> bool:
         """"The ally also becomes a target of the power."
+
+        **`pending` is the other printed sentence and needs a different
+        mechanism.** Without it this appends to the use running
+        underneath, which only an immediate interrupt or a free action
+        answering a power can reach. `i2339p1` says it about a use that
+        has **not begun** -- *"until the end of your next turn, when you
+        attack with your `p1448`, ... the attack also targets the
+        affected creature"* -- so there is nothing to append to, and it is
+        recorded against that row's ref until the hold ends. #1524.
 
         Adds a creature to the use this one is nested **inside**. An
         immediate interrupt runs while the power it answers is still walking
@@ -5287,8 +5299,51 @@ class Cast:
         the *outer* power, so there is nothing in the log that points back
         here. Same shape as `c.restore_use` before `UseRestored`.
         """
+        from .components import Powers
         from .dsl import running_below
         from .events import TargetAdded
+
+        if pending:
+            # **A use that has NOT begun**, which is the other printed
+            # sentence and cannot be an append: `i2339p1` says *"until the
+            # end of your next turn, when you attack with your `p1448`,
+            # ... the attack also targets the affected creature"*, and
+            # there is nothing running underneath to append to when that
+            # is laid.
+            #
+            # `Powers.pending_targets` is the store and `dsl.use` unions
+            # it in where it assembles `chosen`. NOT spent by one use --
+            # the printed window is a duration and covers every attack
+            # inside it -- so the hold's own clock is what ends it.
+            mine = self.world.get(self.me, Powers)
+            if mine is None:
+                return False
+            owed = mine.pending_targets.setdefault(pending, [])
+            if who in owed:
+                return False
+            owed.append(who)
+
+            def forget() -> None:
+                left = mine.pending_targets.get(pending)
+                if left and who in left:
+                    left.remove(who)
+
+            held = self.world.effects.apply(
+                self.me, self.me, until,
+                label=f"{self.ref} adds a target to {pending}",
+                on_end=[forget],
+                by=self.ref,
+            )
+            if held is None:
+                forget()
+                return False
+            # The same announcement the append makes, for the same
+            # reason: a row whose whole printed Effect is this one line
+            # would otherwise emit nothing the audit counts.
+            self.world.bus.emit(
+                TargetAdded(who=who, power=pending, by=self.ref)
+            )
+            return True
 
         outer = running_below(self)
         if outer is None or outer is self or who in outer.targets:

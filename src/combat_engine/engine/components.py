@@ -1928,6 +1928,28 @@ class Powers:
     #: Written by `Cast.immune_power`, which also lays the hold that
     #: clears it. #1517.
     proof_against: dict[str, int] = field(default_factory=dict)
+    #: **Creatures a named row's NEXT uses also target**, keyed by that
+    #: row's ref.
+    #:
+    #: `c.add_target` appends to a use that is already running underneath
+    #: the caller -- an immediate interrupt catching the power mid-list.
+    #: `i2339p1` is the other sentence: *"until the end of your next turn,
+    #: when you attack with your `p1448`, ... the attack also targets the
+    #: affected creature."* That is said about a use which has **not
+    #: begun**, so there is nothing running to append to.
+    #:
+    #: Read by `dsl.use` where it assembles `chosen`, and unioned in
+    #: **without a legality test** -- the card says the attack *also
+    #: targets* the creature, which is not an invitation to check whether
+    #: it could have been aimed at. The whole point on `i2339p1` is a
+    #: creature standing at the blast's own origin, which a close blast
+    #: would never otherwise cover.
+    #:
+    #: Written by `Cast.add_target(pending=)`, which lays the hold that
+    #: clears it; the entries are NOT spent by one use, because the
+    #: printed window is a duration and covers every attack inside it.
+    #: #1524.
+    pending_targets: dict[str, list[int]] = field(default_factory=dict)
     #: **The only attack rows this creature may reach**, by ref, when it is
     #: not empty. *"When it attacks, the target can only make a melee basic
     #: attack"* and *"dominated … but can use only basic attacks"* are the

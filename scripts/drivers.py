@@ -5783,6 +5783,172 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_power_can_be_told_to_target_somebody_before_it_runs(out: Result) -> None:
+    """`i2339p1`: *"until the end of your next turn, when you attack with
+    your `p1448`, ... the attack also targets the affected creature."*
+
+    `c.add_target` appends to the use running **underneath** the caller,
+    which only an immediate interrupt or a free action answering a power
+    can reach. This clause is about a use that has **not begun**, so
+    there was nothing to append to -- which is exactly what the row's
+    marker said.
+
+    `Powers.pending_targets` is keyed by the row's ref and `dsl.use`
+    unions it in where it assembles `chosen`. **With no legality test**,
+    which is the arm worth reading: the card says the attack *also
+    targets* the creature, and on this row the creature is standing at
+    the blast's own origin -- a square a close blast would never
+    otherwise cover. #1524.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import (
+        Hit,
+        PowerResolved,
+        TargetAdded,
+    )
+
+    REF = "i2339p1"
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    foes = sorted(c.enemies())
+    owed = foes[0]
+
+    mine = world.need(me, Powers)
+    out.that(not mine.pending_targets,
+             "the premise: nothing is owed a target on this board yet, so"
+             " the arms below are a before-and-after rather than a guess",
+             f"{dict(mine.pending_targets)}")
+
+    before = len(world.bus.log)
+    laid = Cast(world=world, me=me, ref=REF).add_target(
+        owed, pending="drv:probe", until=When.EONT)
+    said = [e for e in world.bus.log[before:] if isinstance(e, TargetAdded)]
+    out.that(laid and mine.pending_targets.get("drv:probe") == [owed],
+             "THE arm: the creature is recorded against that ROW's ref,"
+             " with nothing running underneath -- which the append half"
+             " of this verb refuses outright",
+             f"{dict(mine.pending_targets)}")
+    out.that(said and said[0].power == "drv:probe",
+             "and it announces `TargetAdded` naming the row, for the"
+             " reason the append half does: a row whose whole printed"
+             " Effect is this one line would otherwise emit nothing the"
+             " audit counts",
+             f"{[(e.who, e.power) for e in said]}")
+    out.that(Cast(world=world, me=me, ref=REF).add_target(
+                 owed, pending="drv:probe") is False,
+             "CONTROL: and the same creature twice is refused, so a"
+             " clause laid again does not double the list",
+             "refused")
+
+    # -- the use really targets it ----------------------------------------
+    #
+    # **Driven on a row this character can actually use, with a creature
+    # measured to be OUTSIDE its natural target list.** The first draft
+    # used `p1448` -- the row the card names -- and got `[]`: that is a
+    # racial breath this wielder does not hold, so the use never
+    # resolved and the arm read as the union not working. And the first
+    # control picked the lowest-numbered foe, which a single-target row
+    # aims at anyway, so it was asserting target geometry rather than
+    # the keying.
+    def aimed(ref: str) -> list[int]:
+        """Who a use of `ref` ends up resolving against."""
+        mark = len(world.bus.log)
+        world.turn = me
+        _dsl.use(world, me, ref, spend=False)
+        done = [e for e in world.bus.log[mark:]
+                if isinstance(e, PowerResolved) and e.power == ref]
+        return list(done[-1].targets) if done else []
+
+    usable = [r for r in sorted(world.need(me, Powers).known)
+              if (q := REGISTRY.get(r)) is not None
+              and q.attack is not None and q.target is not None
+              and not q.target.everyone and not q.unfinished]
+    posed: tuple[str, int, list[int], list[int], int] | None = None
+    for ref in usable:
+        natural = aimed(ref)
+        spare = [f for f in foes if f not in natural]
+        if not natural or len(spare) < 2:
+            continue
+        # **TWO spares, and the second is what makes the keying control
+        # observable.** The first draft left `p1448` owing the
+        # lowest-numbered foe, which the measured row targets anyway --
+        # so a plant that unioned EVERY pending entry regardless of ref
+        # added nothing new and the control stayed green. The other
+        # clause has to owe a creature this row would not otherwise
+        # touch.
+        Cast(world=world, me=me, ref=REF).add_target(
+            spare[0], pending=ref, until=When.EONT)
+        Cast(world=world, me=me, ref=REF).add_target(
+            spare[1], pending="p1448", until=When.EONT)
+        posed = (ref, spare[0], natural, aimed(ref), spare[1])
+        break
+
+    out.that(posed is not None,
+             "the premise: this board fields a row the character can use"
+             " whose natural target list leaves at least one foe out --"
+             " the only shape on which an ADDED target is a difference",
+             f"{posed[:3] if posed else None}")
+    if posed is not None:
+        ref, extra, natural, after, elsewhere = posed
+        out.that(extra in after,
+             "THE arm: a use of that row now targets the added creature,"
+             " which its own target line did not choose -- `dsl.use`"
+             " unions the owed creatures in where it assembles `chosen`,"
+             " so the body runs for it with the attack roll and the"
+             " damage. NO legality test, which is the point: the card"
+             " says the attack *also targets* it",
+             f"{ref}: {sorted(natural)} -> {sorted(after)}")
+        out.that(all(t in after for t in natural),
+             "and the row's own targets are still there, so this adds"
+             " rather than replaces -- `c.drop_target` is the other half"
+             " and is a different verb",
+             f"{sorted(natural)} all still in {sorted(after)}")
+        out.that(elsewhere not in after,
+             "CONTROL: and the creature owed to a DIFFERENT row is NOT"
+             " picked up -- the store is keyed by ref, so the sentence"
+             " speaks for the row the card names and no other. A union"
+             " that read every pending entry would have pulled this one"
+             " in",
+             f"{elsewhere} owed to p1448, {ref} aimed at {sorted(after)}")
+
+    # -- and the ROW lays it ----------------------------------------------
+    #
+    # **This arm exists because a plant showed the others could not see
+    # the row.** Everything above calls `c.add_target` itself, so
+    # deleting the row's own line reddened nothing.
+    #
+    # The body is driven directly: `audit` reports this row "never usable
+    # here", because its printed Requirement wants a cursed creature hit
+    # with an arcane power using this implement, and no board poses that.
+    # So the trigger and the curse are staged and the body is called.
+    def the_row() -> list[int]:
+        world2, me2, _ = _board(REF, 1)
+        c2 = Cast(world=world2, me=me2, ref="drv")
+        victim = sorted(c2.enemies())[0]
+        Cast(world=world2, me=me2, ref="drv").curse(on=victim)
+        cast = Cast(world=world2, me=me2, ref=REF)
+        cast.trigger = Hit(attacker=me2, target=victim, power="drv",
+                           critical=False)
+        REGISTRY[REF].body(cast)
+        return list(world2.need(me2, Powers).pending_targets.get("p1448", []))
+
+    owed_by_row = the_row()
+    out.that(owed_by_row,
+             "THE row arm: the row itself records the struck, cursed"
+             " creature against `p1448` -- the printed *the attack also"
+             " targets the affected creature*, said about a use that has"
+             " not begun",
+             f"p1448 owes {owed_by_row}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_transferred_hold_can_re_aim_its_relation(out: Result) -> None:
     """`f305b`: *"hand the effect just saved against to an enemy."*
 
@@ -135862,6 +136028,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "target_added_before_the_use": (
+        a_power_can_be_told_to_target_somebody_before_it_runs,
+        "i2339p1 makes p1448 also target a creature, said before"
+        " that use begins (#1524)",
     ),
     "transfer_re_aims": (
         a_transferred_hold_can_re_aim_its_relation,

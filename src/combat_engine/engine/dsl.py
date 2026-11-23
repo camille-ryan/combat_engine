@@ -6315,6 +6315,25 @@ def use(
         chosen, origin = _auto_targets(world, actor, p, origin, branch, augment,
                                        source)
         chosen = list(chosen)
+
+    # **Creatures a standing clause says this row ALSO targets.**
+    # `Powers.pending_targets` is keyed by the row's ref and written by
+    # `Cast.add_target(pending=)`; see that field for why a use which has
+    # not begun cannot be reached by the append half of that verb.
+    #
+    # Unioned in with **no legality test**, deliberately: the card says
+    # the attack *also targets* the creature, which is not an invitation
+    # to re-ask whether it could have been aimed at. On `i2339p1` the
+    # whole point is a creature standing at the blast's own origin, which
+    # a close blast would never otherwise cover.
+    #
+    # After both branches, so a row whose targets were named explicitly
+    # gets the addition too -- the printed sentence is about the row, not
+    # about how its other targets were chosen. #1524.
+    _owed = world.get(actor, Powers)
+    if _owed is not None and _owed.pending_targets.get(ref):
+        chosen = [*chosen, *(t for t in _owed.pending_targets[ref]
+                             if t not in chosen)]
     # **"You cannot be forced to attack an ally under any circumstances."**
     # `cf:cleric-warpriest-f1s8`, and this is the one place the refusal can
     # live: a compelled swing reaches the board through `Cast.grant_attack`
