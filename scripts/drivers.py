@@ -4843,6 +4843,111 @@ def a_defence_bonus_another_row_laid_can_be_raised(out: Result) -> None:
              f"the ally contributed {ally}")
 
 
+def a_wall_can_be_lengthened_where_a_burst_is_widened(out: Result) -> None:
+    """`i526x1`: *"the area of a zone **or a wall** cast with this staff"*.
+
+    Two quantities, not one. A wall's size is its **length** and the
+    three burst kinds' is a radius, so `blast_size` was the wrong key to
+    reuse -- `_stretched` had no `wall` entry at all and returned 0 for
+    every wall in the tree. `"wall": "wall_size"` is the whole of the
+    engine change; `dsl` already called `_stretched` for a wall and
+    already applied the result to `Range.size`. #1504.
+
+    Four arms, and the two negatives are what stop this reading as "one
+    modifier grew everything":
+
+    * a wall cast by the staff's carrier is longer by the enhancement;
+    * a **burst** is NOT also lengthened by `wall_size` -- the keys are
+      separate, which is the whole argument for a second term;
+    * and a wall is NOT grown by `blast_size`, the mirror of that;
+    * with neither modifier standing the wall is its printed length.
+
+    **No keyword gate on the wall half, and this rule is where that is
+    justified.** The zone half gates on `Keyword.ZONE`; 9 rows in the
+    tree are wall-kind and only 2 carry it, so reusing that test would
+    have been true for 2 of 9. `wall_size` is read only for a wall
+    range, which is the narrowing by construction.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, area_of, use
+    from combat_engine.engine.durations import When
+
+    WALL = "p2860"
+
+    def sized(ref: str, key: str = "", amount: int = 2) -> int:
+        """How many squares a BURST covers, with `key` standing.
+
+        Right for a burst and wrong for a wall, which is the first thing
+        this rule got wrong: `area_of` for a wall returns every square a
+        wall could be PLACED in -- the whole clipped board, 272 of them,
+        unchanged by any stretch. A wall is measured by laying it, below.
+        """
+        world, me, _ = _board("i526x1", 1)
+        c = Cast(world=world, me=me, ref="drv")
+        if key:
+            c.bonus(key, amount, on=me, until=When.ENCOUNTER)
+        return len(area_of(world, me, REGISTRY[ref]))
+
+    def wall_squares(key: str = "", amount: int = 2) -> int:
+        """How long the wall actually comes out, by laying it.
+
+        The only honest observable for a length: `c.wall` settles the
+        size and lays the zone, so the zone's own footprint is what the
+        card is about. `reach_of` reports the printed figure whatever is
+        standing, and `area_of` reports where the wall may go.
+        """
+        world, me, _ = _board(WALL, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        if key:
+            c.bonus(key, amount, on=me, until=When.ENCOUNTER)
+        before = {i for i, _ in world.zones.all()}
+        use(world, me, WALL, spend=False)
+        made = [z for i, z in world.zones.all() if i not in before]
+        return max((len(z.squares) for z in made), default=0)
+
+    # **The board is built BEFORE the registry is searched**, and that
+    # ordering is load-bearing: `dsl.REGISTRY` holds **3** rows until a
+    # board has been built -- the two basics and the beast -- because
+    # content is imported lazily by `_board`. Picking the burst first
+    # found nothing and the arm read as "the tree has no area burst".
+    bare_wall = wall_squares()
+    burst = next(
+        (r for r, row in sorted(REGISTRY.items())
+         if getattr(row.reach_of(0), "kind", "") == "area_burst"
+         and row.level <= 10),
+        "")
+    out.that(bool(burst), "the tree holds an area burst to compare against"
+                          " -- the premise", f"{burst}")
+    out.that(bare_wall > 0,
+             "with nothing standing the wall covers its printed length --"
+             " the baseline, so the arms below are measuring a change",
+             f"{bare_wall} square(s), printed length"
+             f" {REGISTRY[WALL].reach_of(0).size}")
+
+    grown = wall_squares("wall_size")
+    out.that(grown > bare_wall,
+             "THE arm: a `wall_size` modifier lengthens the wall, which"
+             " returned 0 for every wall before `_stretched` had a term"
+             " for one",
+             f"{bare_wall} -> {grown}")
+
+    out.that(wall_squares("blast_size") == bare_wall,
+             "and `blast_size` does NOT lengthen a wall -- the keys are"
+             " separate, which is the whole reason the card's two halves"
+             " are two terms",
+             f"{bare_wall} -> {wall_squares('blast_size')}")
+    if burst:
+        bare_burst = sized(burst)
+        out.that(sized(burst, "wall_size") == bare_burst,
+                 "nor does `wall_size` widen a BURST, which is the mirror"
+                 " and the arm that stops one modifier growing everything",
+                 f"{bare_burst} -> {sized(burst, 'wall_size')}")
+        out.that(sized(burst, "blast_size") > bare_burst,
+                 "while `blast_size` still widens it, so the burst half"
+                 " this card already had is undisturbed",
+                 f"{bare_burst} -> {sized(burst, 'blast_size')}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -133017,6 +133122,10 @@ DRIVERS = {
     "defence_bonus_raise": (
         a_defence_bonus_another_row_laid_can_be_raised,
         "f1398 and f2074 raise a defence bonus another row laid",
+    ),
+    "wall_length": (
+        a_wall_can_be_lengthened_where_a_burst_is_widened,
+        "i526x1 lengthens a wall with its own term, not blast_size",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,

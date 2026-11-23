@@ -481,7 +481,6 @@ def _boon_drop(leg: str):  # noqa: ANN202
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.lengthen_wall()",),
 )
 def i526x1(c: Cast) -> None:
     """**The zone half is written and the old note had the mechanism
@@ -507,14 +506,23 @@ def i526x1(c: Cast) -> None:
     `power`, which its docstring offers for exactly this ("the range of
     your **arcane** powers" is a gate rather than a blanket stretch).
 
-    **The wall half is what is left, and it is a different quantity rather
-    than the same one missing a case.** `dsl`'s own note on
-    `AREA_OR_CLOSE` says so: the `blast_size` set is
-    `("close_burst", "close_blast", "area_burst")` deliberately, because
-    "a wall's size is its length rather than a radius", and `_stretched`
-    returns 0 for `kind == "wall"`. So the marker names a term of its own
-    instead of a parameter on the burst verb. Two rows in the tree are
-    wall-kind zones.
+    **The wall half is written now, and it was a different quantity
+    rather than the same one missing a case.** `_stretched` maps a range
+    kind to the modifier key that grows it and had no `wall` entry, so
+    it returned 0 for every wall in the tree. `blast_size` was the wrong
+    key to reuse rather than an oversight: a wall's size is its LENGTH
+    where the three burst kinds' is a radius, and one key serving both
+    would make "add 2 to a burst" and "add 2 to a wall" one modifier
+    where this card prints them as two things. So `"wall": "wall_size"`,
+    and the rest of the plumbing was already there -- `dsl` calls
+    `_stretched` for a wall and applies the result to `Range.size` for
+    every kind but melee and ranged. `#1504`.
+
+    **Nine rows are wall-kind, not two**, which the old sentence here
+    got wrong -- two of the nine are *zones*. That matters because it is
+    why the wall half carries no keyword gate: reusing the zone half's
+    `Keyword.ZONE` test would have been a near-dead gate, true for 2 of
+    9. It needs none, since `wall_size` is read only for a wall range.
 
     `_keywords_of` reads the header rather than `dsl.keywords_of`, as the
     rest of this file's gates do. Nothing grants `ZONE` to a row that was
@@ -525,6 +533,18 @@ def i526x1(c: Cast) -> None:
         on=c.me,
         until=When.ENCOUNTER,
         when=lambda ctx: Keyword.ZONE in _keywords_of(ctx.get("power")),
+    )
+    # **The wall half, and it carries NO keyword gate on purpose.** The
+    # card says "a zone **or a wall**", two things, and reusing the gate
+    # above would be a near-dead one: 9 rows in the tree are wall-kind
+    # and only 2 of them carry `Keyword.ZONE`. It needs none --
+    # `wall_size` is read only for a range whose kind is `wall`, which is
+    # the narrowing by construction.
+    c.bonus(
+        "wall_size",
+        c.enhancement,
+        on=c.me,
+        until=When.ENCOUNTER,
     )
 
 

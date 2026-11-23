@@ -4117,6 +4117,15 @@ def _stretched(
         "close_burst": "blast_size",
         "close_blast": "blast_size",
         "area_burst": "blast_size",
+        # **A wall's own term, not `blast_size`.** A wall's size is its
+        # LENGTH where the three above are a radius, so one key serving
+        # both would make "add 2 squares to a burst" and "add 2 squares
+        # to a wall" the same modifier -- and `i526x1` prints them as
+        # two things: *"the area of a zone **or a wall**"*. The call
+        # site already applies whatever comes back to `Range.size` for
+        # every kind but melee and ranged, so this entry is the whole
+        # of what was missing. #1504.
+        "wall": "wall_size",
         "within": "within",
     }
     key = keys.get(kind)

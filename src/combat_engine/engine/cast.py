@@ -27842,6 +27842,22 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         from .dsl import within_of
 
         size = size or (reach.size if reach is not None else 5)
+        # **And through the stretch, for the same reason `within_of` is
+        # used for the placement below.** The length was read straight off
+        # the header, so `i526x1`'s *"add squares ... to the area of a
+        # zone **or a wall**"* had nothing to reach: `dsl._stretched`
+        # gained a `wall` term and no caller asked it. The kind is passed
+        # as `"wall"` rather than `reach.kind` because what is being sized
+        # here IS a wall whatever range line the row printed; the printed
+        # kind stays in the context so a gate can still read it. #1504.
+        from .dsl import _stretched as _stretch_size
+
+        size += _stretch_size(
+            self.world, self.me, "wall",
+            {"power": p.ref if p is not None else "",
+             "range_kind": reach.kind if reach is not None else "wall"},
+            printed=size,
+        )
         # Through `within_of` rather than the field, so a row lengthening
         # where an area line may be placed moves the wall too -- and so this
         # agrees with the `aim_points` that offered the action. #738.
