@@ -86,6 +86,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
 
 ## the caster's own numbers
 
+- `c.ability_bonus(self, a: 'Ability', amount: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, kind: 'str' = 'item') -> 'Effect | None'`
+  - "Add 1 to any value a power calls on your Intelligence modifier
 - `c.ability_for(self, ref: 'str' = '', *, on: 'int | None' = None) -> 'Ability'`
   - Which ability a row's attack line rolls, for this creature.
 - `c.b_mod(self, a: 'Ability | None' = None) -> 'int'`
@@ -117,7 +119,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
 - `c.level`
   - (no docstring)
 - `c.mod(self, a: 'Ability') -> 'int'`
-  - (no docstring)
+  - An ability modifier, **after anything raising it**.
 - `c.primary`
   - The ability this character's class attacks with.
 - `c.primary_mod`

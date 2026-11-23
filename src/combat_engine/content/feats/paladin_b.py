@@ -873,7 +873,7 @@ def f2128(c: Cast) -> None:
     """
     known = c.world.get(c.me, Powers)
     basic = (known.basic if known is not None else "") or "mba"
-    if c.stats.mod(CHA) > c.stats.mod(STR):
+    if c.mod(CHA) > c.mod(STR):
         c.rolls_with(basic, CHA, on=c.me, until=When.ENCOUNTER)
     c.grant_row("f2128b", on=c.me, until=When.ENCOUNTER)
 

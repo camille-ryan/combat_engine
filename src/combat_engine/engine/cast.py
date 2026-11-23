@@ -4063,7 +4063,90 @@ class Cast:
         return self.world.need(self.me, Stats)
 
     def mod(self, a: Ability) -> int:
-        return self.stats.mod(a)
+        """An ability modifier, **after anything raising it**.
+
+        `c.ability_bonus` is the writer and this is one of the seven
+        readers -- the six `c.str_mod`-style properties are the others and
+        all seven come through `_raised_mod`.
+
+        `c._attack_bonus` deliberately does **not**, which is the printed
+        exception and the reason this took a read rather than a number:
+        `i2814x1` says *"to determine a value other than your attack
+        bonus"*. #1518.
+        """
+        return self._raised_mod(a)
+
+    def _raised_mod(self, a: Ability) -> int:
+        """`Stats.mod` plus any `c.ability_bonus` laid on this creature.
+
+        **One door for all seven readers**, because the alternative was
+        measured and does not work: adding to `Stats.mod` itself would pay
+        the attack bonus too, which the card excepts, and adding to
+        `c.mod` alone would miss every `c.int_mod` in the tree -- which is
+        most of the call sites.
+
+        `ability:<value>` is the key, so "+1 to your Intelligence
+        modifier" is one modifier rather than a field on `Stats`. That
+        matters for the printed last sentence: *"this does not change your
+        Intelligence modifier for any other purpose"*, so the score and
+        the attack bonus are both untouched.
+
+        **The known limit**: a reader that goes straight to
+        `Stats.mod`/`c.stats.mod` rather than through here misses the
+        raise. Measured at the time of writing: five sites in `content/`
+        did, of which the three on a `Cast` were converted, and the two
+        remaining are monster helpers that take a bare `Stats`. #1518.
+        """
+        # **`on=self.me`, not the default.** `c.total` falls through to
+        # `c.target` like almost everything here, and `self.stats` is the
+        # CASTER's -- so without this the raise was read off the wrong
+        # creature and `c.int_mod` came back unchanged. Caught by the
+        # rule's own arm; it is the second time this default has caught
+        # me inside the engine today.
+        return self.stats.mod(a) + self.total(
+            f"ability:{a.value}", on=self.me)
+
+    def ability_bonus(
+        self,
+        a: Ability,
+        amount: int = 1,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        kind: str = "item",
+    ) -> Effect | None:
+        """"Add 1 to any value a power calls on your Intelligence modifier
+        for, other than your attack bonus."
+
+        `i2814x1` prints it and nothing could say it: an ability modifier
+        is read straight off `Stats` wherever a row asks, and nothing in
+        that read consulted a modifier.
+
+        **The exception is the whole difficulty** and is why this is a
+        read rather than a number added to `Stats`. All three kinds of
+        caller went to `Stats.mod` directly -- the six `c.*_mod`
+        properties, `c.mod(ability)` for a row naming one at runtime, and
+        `c._attack_bonus`, which is the one the card excludes. So adding
+        to `Stats.mod` would pay the excepted case, and adding to `c.mod`
+        alone would miss every `c.int_mod` in the tree. `Cast._raised_mod`
+        is the one door the first two share and the third does not.
+
+        **And the score is untouched**, which is the card's last sentence:
+        *"this does not change your Intelligence modifier for any other
+        purpose"*. `c.score` reads `Stats.score` and does not come
+        through here, so a printed Requirement of "Intelligence 15" is
+        unaffected.
+
+        `kind="item"` because the printed case is an item, and it is a
+        real non-stacking category here rather than decoration: two such
+        items would not add up. #1518.
+        """
+        who = self._who(on) if on is not None else self.me
+        if who is None or not amount:
+            return None
+        return self.bonus(
+            f"ability:{a.value}", amount, on=who, until=until, kind=kind,
+        )
 
     def score(self, a: Ability) -> int:
         """The raw ability score -- 15, 18 -- not its modifier or bonus.
@@ -4249,27 +4332,27 @@ class Cast:
 
     @property
     def str_mod(self) -> int:
-        return self.stats.mod(Ability.STR)
+        return self._raised_mod(Ability.STR)
 
     @property
     def con_mod(self) -> int:
-        return self.stats.mod(Ability.CON)
+        return self._raised_mod(Ability.CON)
 
     @property
     def dex_mod(self) -> int:
-        return self.stats.mod(Ability.DEX)
+        return self._raised_mod(Ability.DEX)
 
     @property
     def int_mod(self) -> int:
-        return self.stats.mod(Ability.INT)
+        return self._raised_mod(Ability.INT)
 
     @property
     def wis_mod(self) -> int:
-        return self.stats.mod(Ability.WIS)
+        return self._raised_mod(Ability.WIS)
 
     @property
     def cha_mod(self) -> int:
-        return self.stats.mod(Ability.CHA)
+        return self._raised_mod(Ability.CHA)
 
     @property
     def level(self) -> int:

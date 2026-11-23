@@ -5783,6 +5783,92 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def an_ability_modifier_can_be_raised_but_not_the_attack(out: Result) -> None:
+    """`i2814x1`: *"when a power or class feature calls on your Intelligence
+    modifier to determine a value other than your attack bonus, add 1 to
+    that value. This does not change your Intelligence modifier for any
+    other purpose."*
+
+    **The exception is the whole difficulty.** An ability modifier was
+    read straight off `Stats` wherever a row asked, and all three kinds
+    of caller went there directly: the six `c.*_mod` properties, which is
+    what content actually writes; `c.mod(ability)` for a row naming one at
+    runtime; and `c._attack_bonus`, which is the one the card excludes.
+    So adding to `Stats.mod` would pay the excepted case and adding to
+    `c.mod` alone would miss most of the call sites.
+    `Cast._raised_mod` is the one door the first two share and the third
+    does not. #1518.
+
+    The last two arms are the card's last sentence, and they are the ones
+    worth reading: a raise that reached the score or the attack bonus
+    would be a different and stronger card.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Ability
+
+    REF = "i2814x1"
+    # **A board built for a DIFFERENT ref, because this one arms the row.**
+    # `i2814x1` is `action=NONE`, so `audit.board(REF)` lays the +1 before
+    # the rule sees anything -- the "before" reading was already raised,
+    # and `kind="item"` is non-stacking so a second +1 of mine changed
+    # nothing. Every arm read `2 -> 2` and the verb looked dead. Proven by
+    # the premise below rather than assumed.
+    world, me, _ = _board("f419", 1)
+    c = Cast(world=world, me=me, ref="drv")
+    out.that(c.total("ability:int", on=me) == 0
+             and c.int_mod == c.stats.mod(Ability.INT),
+             "the premise: nothing on this board has raised an ability"
+             " modifier yet, so a before-and-after is clean. The board"
+             " built for the row's OWN ref arms it, which made every arm"
+             " below read 2 -> 2",
+             f"total={c.total('ability:int', on=me)}")
+
+    was = (c.int_mod, c.mod(Ability.INT), c.int_, c.score(Ability.INT),
+           c.wis_mod)
+    c.ability_bonus(Ability.INT, 1, on=me)
+    now = (c.int_mod, c.mod(Ability.INT), c.int_, c.score(Ability.INT),
+           c.wis_mod)
+
+    out.that(now[0] == was[0] + 1,
+             "THE arm: `c.int_mod` is 1 higher -- the property is what"
+             " content actually writes, and adding to `c.mod` alone would"
+             " have missed every one of them",
+             f"{was[0]} -> {now[0]}")
+    out.that(now[1] == was[1] + 1,
+             "and `c.mod(INT)` too, which is the row that names its"
+             " ability at runtime. Both come through `_raised_mod`",
+             f"{was[1]} -> {now[1]}")
+    out.that(now[2] == was[2],
+             "and the ATTACK BONUS is unchanged, which is the printed"
+             " exception -- *a value other than your attack bonus*."
+             " `c._attack_bonus` reads `Stats.mod` raw and is the one"
+             " caller that does not come through the new door",
+             f"{was[2]} -> {now[2]}")
+    out.that(now[3] == was[3],
+             "and the SCORE is unchanged, which is the card's last"
+             " sentence. A printed Requirement of *Intelligence 15* reads"
+             " `c.score`, and the raise is a `Mod` rather than a field on"
+             " `Stats`",
+             f"{was[3]} -> {now[3]}")
+    out.that(now[4] == was[4],
+             "CONTROL: and another ability is untouched, so the key"
+             " carries which modifier it raises",
+             f"wis {was[4]} -> {now[4]}")
+
+    # -- the row ----------------------------------------------------------
+    world2, me2, _ = _board(REF, 1)
+    c2 = Cast(world=world2, me=me2, ref="drv")
+    out.that(c2.int_mod == c2.stats.mod(Ability.INT) + 1,
+             "and the ROW lays the printed +1 on its wearer -- read"
+             " against `Stats.mod` directly, since the board arms the row"
+             " and there is no unraised moment on it to compare with",
+             f"{c2.stats.mod(Ability.INT)} -> {c2.int_mod}")
+    out.that(not REGISTRY[REF].unfinished,
+             "and carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def proof_against_one_named_power(out: Result) -> None:
     """`c.immune_power`, which two cards print and neither `c.immune` nor
     `c.resist` could say -- one takes conditions, the other damage types,
@@ -135219,6 +135305,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "ability_modifier_raised": (
+        an_ability_modifier_can_be_raised_but_not_the_attack,
+        "i2814x1 raises every value read off a modifier except the"
+        " attack bonus, and leaves the score alone (#1518)",
     ),
     "proof_against_a_power": (
         proof_against_one_named_power,

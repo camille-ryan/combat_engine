@@ -968,7 +968,7 @@ def p14193b(c: Cast) -> None:
     """
     if not c.strike():
         return
-    c.damage("1d8", max(c.stats.mod(STR), c.stats.mod(DEX)))
+    c.damage("1d8", max(c.mod(STR), c.mod(DEX)))
     c.ongoing(5)
 
 

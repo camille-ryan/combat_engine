@@ -80,6 +80,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    Ability,
     ActionPointSpent,
     ActionType,
     Attack,
@@ -3102,31 +3103,37 @@ def i2727p1(c: Cast) -> None:
 
 
 @power("i2814x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ability_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i2814x1(c: Cast) -> None:
-    """An ability modifier is read straight off `Stats` wherever a row asks
-    for it, and nothing in that read consults a modifier.
+    """*"When a power or class feature calls on your Intelligence modifier
+    to determine a value other than your attack bonus, add 1 to that
+    value. This does not change your Intelligence modifier for any other
+    purpose."*
 
-    **Re-measured, because "one place to add to" is the wrong reading of
-    it and makes the gap sound smaller than it is.** The card excepts the
-    attack bonus -- *"to determine a value other than your attack
-    bonus"* -- so what it needs is a read that can tell the two apart, and
-    there is no such read. `Stats.mod` is the single point, and all three
-    kinds of caller go to it directly:
+    **Written, and the marker's analysis was right about the shape.** An
+    ability modifier was read straight off `Stats` wherever a row asked,
+    and nothing in that read consulted a modifier. The card excepts the
+    attack bonus, so what it needed was a read that could tell the two
+    apart, and all three kinds of caller went to `Stats.mod` directly:
 
-    * the six `c.str_mod` ... `c.cha_mod` properties, which is what content
-      actually writes;
+    * the six `c.str_mod` ... `c.cha_mod` properties, which is what
+      content actually writes;
     * `c.mod(ability)`, for the row that names the ability at runtime;
     * `c._attack_bonus`, which is the one the card excludes.
 
-    So adding to `Stats.mod` pays the excepted case as well, and adding to
-    `Cast.mod` alone misses every `c.int_mod` in the tree -- which is most
-    of them. A verb to lay the point is the half this marker names; a read
-    carrying what it is for is the half that decides whether the verb can
-    be honoured, and neither exists.
+    `Cast._raised_mod` is the one door the first two share and the third
+    does not, so adding to it pays every `c.int_mod` in the tree and
+    leaves the attack bonus alone. Adding to `Stats.mod` would have paid
+    the excepted case; adding to `c.mod` alone would have missed most of
+    the call sites. #1518.
 
-    `kind="item"` and non-stacking are not the question: an ability
-    modifier is not a `Mod` key at all."""
+    **The last printed sentence falls out of the shape.** The raise is a
+    `Mod` under `ability:int`, not a field on `Stats`, so `c.score` --
+    which a printed "Intelligence 15" Requirement reads -- is untouched.
+
+    `kind="item"` is a real non-stacking category here rather than
+    decoration: two such items would not add up."""
+    c.ability_bonus(Ability.INT, 1, on=c.me)
 
 
 def _starts_a_charge(world: World, me: int, ev: Any) -> bool:

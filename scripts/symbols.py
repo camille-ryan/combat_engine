@@ -724,7 +724,13 @@ CATEGORIES: dict[str, dict] = {
                 "range_to",
             ]),
             ("the caster's own numbers", [
-                "ability_for", "b_mod", "cha_", "cha_mod", "con_", "con_mod",
+                "ability_for",
+                # Beside the six `*_mod` properties because it is the one
+                # writer they all read: `Cast._raised_mod` is the door,
+                # and `c._attack_bonus` deliberately does not come
+                # through it -- the printed exception on `i2814x1`. #1518.
+                "ability_bonus",
+                "b_mod", "cha_", "cha_mod", "con_", "con_mod",
                 "dex_", "dex_mod", "int_", "int_mod", "level", "mod",
                 "primary", "primary_mod", "score", "stats", "str_", "str_mod",
                 "total", "total_defence", "weapon_dice", "weapon_group",
