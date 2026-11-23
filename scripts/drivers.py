@@ -72892,6 +72892,153 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_lapsing_arcane_hold_is_sustained_free(out: Result) -> None:
+    """*"Trigger: on your turn, you fail to sustain an arcane implement
+    power you could sustain. Effect: you sustain the effect until the end
+    of your next turn."* -- `i3553p2`. #1490.
+
+    **The marker was stale in both halves.** It read that *"sustaining
+    somebody else's standing effect from outside it, and noticing that it
+    was not sustained, are both absent"*. `events.SustainDue` is the
+    noticing and `Effects.sustain` is the doing, and `i2740p1` -- the
+    same card without the keyword -- has been written on both for a
+    while.
+
+    **The duration needs no work**, which is the arm worth having:
+    `Effects.sustain` stamps `sustained = world.round`, so
+    `_on_turn_end` leaves the hold alone and it rides to its own next
+    boundary. That *is* "until the end of your next turn", and the proof
+    is that a hold which would have ended is still live afterwards.
+
+    Neither row can be audited: the board never lets a sustainable hold
+    lapse, so both report `never usable here` -- `i2740p1` too, which is
+    the control for that claim rather than a worry about this row.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import SustainDue
+    from combat_engine.engine.types import ActionType, Keyword
+
+    ROW, SIBLING = "i3553p2", "i2740p1"
+    row = REGISTRY[ROW]
+    out.that(row.on is not None and row.on.event is SustainDue,
+             "the row declares its trigger on `SustainDue`, the moment"
+             " `Effects._on_turn_end` announces before ending an"
+             " unsustained hold",
+             f"{row.on.event.__name__ if row.on else None}")
+    out.that(not row.unfinished,
+             "and it carries no marker any more",
+             f"{row.unfinished}")
+    out.that(REGISTRY[SIBLING].on is not None
+             and REGISTRY[SIBLING].on.event is SustainDue,
+             f"premise: {SIBLING} is the written sibling on the same"
+             " event, so the machinery is not new here",
+             f"{REGISTRY[SIBLING].on.event.__name__}")
+
+    # -- the predicate, asked of the DECLARED trigger ---------------------
+    gate = row.on.when if row.on else None
+    world, me, _ = _board(ROW, 1)
+    c = Cast(world=world, me=me, ref="drv")
+
+    arcane = next((r for r in sorted(REGISTRY)
+                   if r.startswith("p")
+                   and Keyword.ARCANE in REGISTRY[r].keywords), "")
+    plain = next((r for r in sorted(REGISTRY)
+                  if r.startswith("p")
+                  and Keyword.ARCANE not in REGISTRY[r].keywords), "")
+    out.that(bool(arcane and plain),
+             "premise: the corpus holds an arcane row and a non-arcane one"
+             " to label a lapsing hold with",
+             f"arcane={arcane}, plain={plain}")
+
+    def lapsing(by: str, cost: ActionType | None = ActionType.MINOR,
+                who: int | None = None) -> SustainDue:
+        """A hold of `me`'s, laid by `by`, with a sustain cost.
+
+        **`hold` is attached after construction, not passed in**, and
+        getting that wrong is how this rule first failed. `SustainDue`
+        declares only `who`, `effect` and `by`; the live `Effect` rides
+        as a plain attribute so it never reaches `Event.wire()` and the
+        fixtures -- the event's own docstring says so, citing `#703`. A
+        `SustainDue(..., hold=eff)` raises, and copying the kwarg shape
+        from the row's `getattr(ev, "hold", None)` is what suggested it.
+        """
+        eff = world.effects.apply(
+            me, me, When.ENCOUNTER, label=f"drv {by}",
+            sustain_cost=cost, by=by,
+        )
+        due = SustainDue(who=me if who is None else who,
+                         effect=f"drv {by}", by=by)
+        due.hold = eff
+        return due
+
+    for name, by, want in (("an ARCANE hold", arcane, True),
+                           ("a non-arcane hold", plain, False)):
+        ev = lapsing(by)
+        got = bool(gate(world, me, ev)) if gate else False
+        out.that(got is want,
+                 f"{name} {'opens' if want else 'does NOT open'} it -- the"
+                 " keyword is read off the hold's own `by` ref, which is"
+                 " the row that laid it",
+                 f"{by} -> {got}")
+
+    ev = lapsing(arcane, cost=None)
+    out.that(not gate(world, me, ev) if gate else False,
+             "a hold with NO printed sustain cost does not open it: there"
+             " was nothing to fail to sustain",
+             f"cost=None -> {bool(gate(world, me, ev)) if gate else None}")
+
+    foes = sorted(c.enemies())
+    if foes:
+        ev = lapsing(arcane, who=foes[0])
+        out.that(not gate(world, me, ev) if gate else False,
+                 "and SOMEBODY ELSE's lapsing hold does not -- the card"
+                 " says \"you fail to sustain\"",
+                 f"who={foes[0]} -> "
+                 f"{bool(gate(world, me, ev)) if gate else None}")
+
+    # -- THROUGH THE ROW: the hold survives -------------------------------
+    w2, me2, _ = _board(ROW, 1)
+    held = w2.effects.apply(
+        me2, me2, When.ENCOUNTER, label="drv lapsing",
+        sustain_cost=ActionType.MINOR, by=arcane,
+    )
+    # **Wound back deliberately, and the premise arm is why.** A freshly
+    # applied hold comes out stamped `sustained == world.round` -- so it
+    # would survive `_on_turn_end` on its own, and the arm below passed
+    # VACUOUSLY on the first run: it asserted a stamp the row had not
+    # put there. Measured: `sustained=1, round=1` before the row ever
+    # fired.
+    held.sustained = w2.round - 1
+    out.that(held is not None and not held.ended
+             and held.sustained < w2.round,
+             "premise: a live arcane hold of the caster's that has NOT"
+             " been sustained this round, so the stamp below is the row's"
+             " doing and not the apply's",
+             f"ended={held.ended if held else None},"
+             f" sustained={held.sustained if held else None},"
+             f" round={w2.round}")
+    due = SustainDue(who=me2, effect="drv lapsing", by=arcane)
+    due.hold = held
+    dsl.use(w2, me2, ROW, spend=False, trigger=due)
+    out.that(held is not None and held.sustained == w2.round,
+             "THE arm: the row stamps the hold as sustained this round, so"
+             " `_on_turn_end` leaves it standing -- which is the printed"
+             " \"until the end of your next turn\" with no duration work",
+             f"sustained={held.sustained if held else None},"
+             f" round={w2.round}")
+    out.that(held is not None and not held.ended,
+             "and the hold is still live rather than ended",
+             f"{held.ended if held else None}")
+    out.that(get(arcane) is not None,
+             "and the ref the hold was labelled with is a real row, so the"
+             " keyword test above was asked of something",
+             f"{arcane}")
+
+
 def being_inside_a_creature_is_a_relation(out: Result) -> None:
     """*"If you are inside a creature that has swallowed you, and you
     release the seed, the creature immediately disgorges you and is dazed
@@ -129575,6 +129722,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "sustain_lapse": (
+        a_lapsing_arcane_hold_is_sustained_free,
+        "i3553p2 catches an arcane hold about to lapse unsustained and"
+        " keeps it, off SustainDue",
     ),
     "swallowed_relation": (
         being_inside_a_creature_is_a_relation,

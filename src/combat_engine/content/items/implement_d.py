@@ -101,6 +101,7 @@ from combat_engine.engine import (
     SavingThrow,
     Size,
     SkillCheck,
+    SustainDue,
     Trigger,
     TurnEnd,
     TurnStart,
@@ -2997,6 +2998,24 @@ def i3553p1(c: Cast) -> None:
     c.light(10, on=c.me, until=When.ENCOUNTER)
 
 
+def _arcane_sustain_lapsing(world: World, me: int, ev: Any) -> bool:
+    """A hold of mine, from an **arcane** row, about to lapse unsustained.
+
+    `_my_sustain_lapsing` in `items/neck.py` is the same predicate without
+    the keyword, for `i2740p1`, which prints no narrowing. Kept separate
+    rather than parameterised: a predicate is handed to `Trigger` by
+    reference and the two cards differ by one clause, so a shared factory
+    would be a closure per row to save one line.
+    """
+    hold = getattr(ev, "hold", None)
+    if getattr(ev, "who", None) != me or hold is None:
+        return False
+    if hold.sustain_cost is None:
+        return False
+    row = get(getattr(hold, "by", "") or "")
+    return row is not None and Keyword.ARCANE in row.keywords
+
+
 @power(
     "i3553p2",
     level=10,
@@ -3006,12 +3025,44 @@ def i3553p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you fail to sustain an arcane implement power you could sustain",
-    todo=("c.sustain_free()",),
+    on=Trigger(SustainDue, _arcane_sustain_lapsing,
+               "an arcane hold of mine is about to lapse unsustained"),
 )
 def i3553p2(c: Cast) -> None:
-    """`c.on_sustain` is what happens when an effect *this row* made is
-    sustained; sustaining somebody else's standing effect from outside it,
-    and noticing that it was not sustained, are both absent."""
+    """**Both halves the old note called absent now exist.** It read:
+    *"`c.on_sustain` is what happens when an effect this row made is
+    sustained; sustaining somebody else's standing effect from outside
+    it, and noticing that it was not sustained, are both absent."*
+
+    `events.SustainDue` is the noticing -- emitted by
+    `Effects._on_turn_end` immediately before `end(eff, "not
+    sustained")`, which is the only moment this card's sentence can act
+    in -- and `Effects.sustain` is the doing, reached off the live
+    `Effect` the event carries as `ev.hold`. `i2740p1` is written on
+    exactly those two and is the row to read beside this one. #1490.
+
+    **"Until the end of your next turn" needs no duration work**, which
+    is the part worth saying rather than building. `Effects.sustain`
+    stamps `sustained = world.round`, so `_on_turn_end` leaves the hold
+    alone and it rides to its own next boundary -- which is what a paid
+    sustain does and what the printed sentence describes. Re-stamping a
+    `When` here would be a second mechanism for the duration the hold
+    already has.
+
+    **"You can still sustain the effect as normal" is true by
+    construction.** The event fires *because* the sustain was not paid,
+    so there is no spent action for this to hand back and no second use
+    to protect -- the normal sustain is still on the menu next round,
+    untouched.
+
+    The narrowing to **arcane** is read off the hold's own `by` ref
+    rather than guessed from the wearer: `Effect.by` is the row that laid
+    it, so the keyword is that row's. The implement half is the wearer
+    holding this item, which is what lets the power be used at all."""
+    hold = getattr(c.trigger, "hold", None)
+    if hold is None or hold.ended:
+        return
+    c.world.effects.sustain(hold)
 
 
 @power(
