@@ -407,11 +407,9 @@ def i654x1(c: Cast) -> None:
 
 
 @power("i3523x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("cf:vampire-f3",))
+       reach=PERSONAL, target=SELF)
 def i3523x1(c: Cast) -> None:
-    """The regeneration this raises belongs to a class feature, and that
-    feature is not declared.
+    """Raises the regeneration a class feature hands out.
 
     **Re-pointed twice, and the second obstacle is now the only one.** This
     waited on `c.class_feature()`, then on `chargen.CLASSES.vampire`
@@ -462,7 +460,45 @@ def i3523x1(c: Cast) -> None:
     its regeneration amount read through `c.amount_for`, not written as a
     literal. A `c.change_amount` against a body that hard-codes its number
     is a modifier nothing consults, which the verb's own docstring calls
-    this component's commonest bug."""
+    this component's commonest bug.
+
+    ## Written
+
+    `cf:vampire-f3` is declared now, in `features/strikers_sb.py`, and it
+    does owe exactly that line -- its amount is
+    `c.amount_for(c.ref, c.cha_mod)`. So this row is the
+    `c.change_amount` half the paragraphs above predicted, and no verb
+    was ever missing. `#1509`.
+
+    1, 2 from 13th and 3 from 23rd: the page prints three numbers, so it
+    is a flat read of the level rather than a scaling table -- the same
+    arithmetic `rt:r67-t0` beside it uses, and the reason it is written
+    as the card's own sum rather than as three branches.
+
+    **"Increases by" has to be written as the total, because
+    `c.change_amount` sets the amount TO its argument.** Measured: with
+    a Charisma modifier of 2, `c.change_amount(ref, 1)` makes the
+    feature heal **1** and not 3. So the printed default is added to
+    here -- which is what this row's own note predicted ("'increases by
+    1' needs the printed default to add to") and what
+    `feats/general_s.f3791` does off a constant. The default is
+    `c.cha_mod`, the same read the feature makes, and the wearer is the
+    same character.
+
+    **`compute=` and not a number**, so the sum is taken when the
+    feature pays rather than when this trait armed. Both of these are
+    `action=NONE` traits and `arm_traits` runs them in an order no card
+    states; a number settled here would lose that race, and a Charisma
+    that moved mid-fight would be read from the wrong moment.
+
+    Only the **one** feature, by ref. The vampire's other 25 features are
+    still undeclared and this row does not care: it raises a number that
+    exists."""
+    step = 1 + (c.level >= 13) + (c.level >= 23)
+    c.change_amount(
+        "cf:vampire-f3", on=c.me, until=When.ENCOUNTER,
+        compute=lambda: c.cha_mod + step,
+    )
 
 
 @power("i640x1", level=3, cls=ITEM, action=ActionType.NONE,

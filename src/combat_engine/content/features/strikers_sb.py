@@ -871,3 +871,57 @@ def monk_tradition(c: Cast) -> None:
     """
     if c.build("f0s0"):
         c.bonus(FORT, 1 + _tier(c.level), until=When.ENCOUNTER, on=c.me, kind="untyped")
+
+
+# ==========================================================================
+# the vampire -- the one striker class whose features are not in this file
+# yet, and this is the first of them
+# ==========================================================================
+
+
+@power(
+    "cf:vampire-f3",
+    level=0,
+    cls="vampire",
+    # A trait: simply true of a vampire, switched on when the fight starts.
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+)
+def cf_vampire_f3(c: Cast) -> None:
+    """*"While you are bloodied, you gain regeneration equal to your
+    Charisma modifier. If you take radiant damage, your regeneration does
+    not function until the end of your next turn."*
+
+    **Both printed conditions are parameters `c.regeneration` already
+    has**, which is the whole of why this row is three lines: the verb
+    takes `while_bloodied=` for the first sentence and
+    `unless_damaged_by=` for the second, and its own docstring is where
+    the until-the-end-of-your-next-turn window lives.
+
+    **The amount goes through `c.amount_for`, and that is not
+    decoration.** `i3523x1` prints *"the regeneration you gain from your
+    cf:vampire-f3 feature increases by 1"*, and that row's own note
+    records the trap: a `c.change_amount` aimed at a body that hard-codes
+    its number is a modifier nothing consults, which this component's
+    notes call its commonest bug. So the number is asked for by ref, with
+    the printed Charisma modifier as the default.
+
+    First of the vampire's features in the tree. The other 25 are still
+    undeclared; this one is written because `i3523x1` could not be
+    finished without it, and declaring one feature of a class is how
+    every other class here grew. #1509.
+    """
+    # **A callable, not a number.** Read at each tick, so a raise laid
+    # after this trait armed still applies -- `i3523x1` is another
+    # `action=NONE` trait and `arm_traits` runs them in an order no card
+    # states, so a number settled here would lose a race nobody can see.
+    # `c.regeneration` reads a callable at the tick for this reason.
+    c.regeneration(
+        lambda: c.amount_for(c.ref, c.cha_mod),
+        on=c.me,
+        until=When.ENCOUNTER,
+        while_bloodied=True,
+        unless_damaged_by=(DamageType.RADIANT,),
+    )

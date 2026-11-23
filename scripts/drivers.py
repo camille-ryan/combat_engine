@@ -5289,6 +5289,167 @@ def a_flight_height_can_be_capped(out: Result) -> None:
                  f"asked 9, got {carrying}")
 
 
+def a_features_regeneration_can_be_raised_from_an_item(out: Result) -> None:
+    """`cf:vampire-f3` and `i3523x1`: a number one row hands out, raised
+    from another.
+
+    The feature prints *"while you are bloodied, you gain regeneration
+    equal to your Charisma modifier"*; the belt prints *"the regeneration
+    you gain from your cf:vampire-f3 feature increases by 1"*. The
+    feature was undeclared, and the waiting row's own note had already
+    said what its author would owe: the amount read through
+    `c.amount_for`, because `c.change_amount` against a body that
+    hard-codes its number is a modifier nothing consults. #1509.
+
+    **Two boards, because no single board poses both rows.** The feature
+    is dealt to a vampire and the belt to whoever the item board hands
+    it to; `use(belt)` on the feature's board returns False outright.
+    So each half is proved where it can be:
+
+    * on the **feature's** board -- it regenerates the Charisma
+      modifier, honours both printed conditions, and **grows when a
+      raise is laid by hand**. That last arm is the chain: it shows the
+      body reads `c.amount_for` rather than its own literal, which is
+      the one thing the waiting row asked for;
+    * on the **belt's** board -- using it moves what
+      `c.amount_for("cf:vampire-f3", ...)` answers, by the printed step.
+
+    Measured on the **healing** on the first board, not on the modifier:
+    reading `c.amount_for` back alone would pass a feature that stored
+    the raise and regenerated its printed figure anyway.
+    """
+    from combat_engine.engine import DamageType
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import TurnStart
+
+    FEATURE, BELT = "cf:vampire-f3", "i3523x1"
+
+    def regenerated(*, bloodied: bool, radiant: bool, raise_by: int = 0) -> int:
+        """How much the feature heals at the start of the owner's turn.
+
+        A synthetic `TurnStart` is the established shape -- `c.regeneration`
+        installs no effect to step, its whole effect is a handler on that
+        event, and `drivers.durations` drives it the same way.
+
+        Room to heal into is left deliberately: a creature at full hit
+        points cannot be healed, so an arm run at `max_hp` reads 0
+        whatever the feature did.
+        """
+        world, me, _ = _board(FEATURE, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        hp = world.need(me, Health)
+        hp.hp = (hp.max_hp // 2) if bloodied else hp.max_hp - 1
+        if raise_by:
+            # **The TOTAL, because `c.change_amount` sets the amount TO
+            # its argument rather than adding to it.** Measured: with a
+            # Charisma modifier of 2, `change_amount(ref, 1)` makes the
+            # feature heal 1 and not 3. The first draft of this arm
+            # passed 1 and read `2 -> 2`, which looked like the feature
+            # ignoring the raise. `i3523x1` adds to the printed default
+            # for the same reason.
+            c.change_amount(FEATURE, c.cha_mod + raise_by,
+                            on=me, until=When.ENCOUNTER)
+        if radiant:
+            c.damage(0, 1, dtype=DamageType.RADIANT, on=me)
+        was = world.need(me, Health).hp
+        world.turn = me
+        world.bus.emit(TurnStart(actor=me, round=world.round))
+        return world.need(me, Health).hp - was
+
+    world, me, _ = _board(FEATURE, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    cha = c.cha_mod
+    out.that(cha > 0,
+             "the dealt vampire has a positive Charisma modifier -- the"
+             " premise, since the feature regenerates that much and a"
+             " modifier of 0 would make every arm below read 0",
+             f"cha_mod={cha}")
+    if cha <= 0:
+        return
+
+    plain = regenerated(bloodied=True, radiant=False)
+    out.that(plain == cha,
+             "bloodied, the feature regenerates the Charisma modifier --"
+             " the printed figure",
+             f"healed {plain}, cha {cha}")
+
+    raised = regenerated(bloodied=True, radiant=False, raise_by=1)
+    out.that(raised == plain + 1,
+             "THE chain: a raise laid against the feature's ref moves what"
+             " it heals, so the body reads `c.amount_for` and not its own"
+             " literal -- which is exactly what i3523x1's note asked its"
+             " author for, and what a `c.change_amount` against a"
+             " hard-coded number would have silently failed to do",
+             f"{plain} -> {raised}")
+
+    out.that(regenerated(bloodied=False, radiant=False, raise_by=1) == 0,
+             "and an UNBLOODIED vampire regenerates nothing even with a"
+             " raise standing, which is the feature's first printed"
+             " condition and the half a raise must not switch on",
+             f"healed {regenerated(bloodied=False, radiant=False, raise_by=1)}")
+    out.that(regenerated(bloodied=True, radiant=True, raise_by=1) == 0,
+             "and radiant damage switches it off, which is the second --"
+             " `unless_damaged_by=`, a parameter the verb already had",
+             f"healed {regenerated(bloodied=True, radiant=True, raise_by=1)}")
+
+    # ---- the belt's own board: it is what lays the raise
+    world2, me2, _ = _board(BELT, 1)
+    c2 = Cast(world=world2, me=me2, ref="drv")
+    known = world2.get(me2, Powers)
+    out.that(FEATURE not in (known.all or ()),
+             "the belt's board does NOT hold the vampire feature -- which"
+             " is why this is two boards: `use(belt)` on the feature's"
+             " board returns False outright",
+             f"holds the feature: {FEATURE in (known.all or ())}")
+    step = 1 + (c2.level >= 13) + (c2.level >= 23)
+    over = c2.amount_for(FEATURE, 0)
+    out.that(over == c2.cha_mod + step,
+             "and the belt raises what `c.amount_for` answers for that"
+             " feature's ref -- the printed default plus the step, 1 and"
+             " 2 from 13th and 3 from 23rd. Already applied by the board,"
+             " which arms every `action=NONE` row including the one under"
+             " test, so there is no before to read here",
+             f"level {c2.level}, step {step}, cha {c2.cha_mod},"
+             f" amount_for over 0 = {over}")
+
+    # **And it is the DEFAULT plus the step, not the step.** The arm
+    # above cannot tell those apart on this board: the wearer's Charisma
+    # modifier is 0, so `cha_mod + step` and `step` are the same number
+    # -- a plant setting the step alone passed all seven assertions.
+    # `compute=` is a late read, so moving the Charisma must move the
+    # answer; under the plant it would not budge.
+    from combat_engine.engine.components import Stats
+
+    stats = world2.get(me2, Stats)
+    out.that(stats is not None, "the wearer has a Stats component to move")
+    if stats is not None:
+        before_cha = c2.cha_mod
+        scores = dict(stats.scores)
+        key = next((k for k in scores if str(k).lower().startswith("cha")), None)
+        out.that(key is not None,
+                 "and a Charisma score to raise -- the premise for the arm"
+                 " below",
+                 f"scores keyed {sorted(str(k) for k in scores)[:6]}")
+        if key is not None:
+            stats.scores[key] = scores[key] + 4   # +2 to the modifier
+            moved = c2.cha_mod - before_cha
+            out.that(moved == 2,
+                     "raising the score by 4 moves the modifier by 2 --"
+                     " the premise, since the arm below is measured in"
+                     " modifier points",
+                     f"cha {before_cha} -> {c2.cha_mod}")
+            out.that(c2.amount_for(FEATURE, 0) == over + moved,
+                     "THE arm: the raise follows the Charisma modifier, so"
+                     " the belt adds to the feature's PRINTED DEFAULT and"
+                     " does not simply set the step. `compute=` is read"
+                     " when the feature pays, which is also what keeps"
+                     " this out of a race with arming order",
+                     f"{over} -> {c2.amount_for(FEATURE, 0)}"
+                     f" after +{moved} Charisma")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -133502,6 +133663,10 @@ DRIVERS = {
         a_flight_height_can_be_capped,
         "a flight height can be capped, and m115827a0 only while it"
         " is grabbing",
+    ),
+    "feature_regen_raised": (
+        a_features_regeneration_can_be_raised_from_an_item,
+        "i3523x1 raises the regeneration cf:vampire-f3 hands out",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,

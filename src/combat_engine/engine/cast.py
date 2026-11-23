@@ -19230,7 +19230,7 @@ class Cast:
 
     def regeneration(
         self,
-        amount: int,
+        amount: int | Callable[[], int],
         *,
         until: When = When.ENCOUNTER,
         on: int | None = None,
@@ -19372,7 +19372,15 @@ class Cast:
                 return
             if (unless_struck_by or unless_damaged_by) and suppressed():
                 return
-            self.heal(amount, on=who)
+            # **Read at the tick when it is a callable**, which is what
+            # lets another row raise it. A number closed over here is
+            # settled when the regeneration was laid, so a
+            # `c.change_amount` arriving afterwards loses a race nobody
+            # can see -- and both of these are `action=NONE` traits that
+            # `arm_traits` runs in an order no card states.
+            # `cf:vampire-f3` passes `lambda: c.amount_for(...)` for
+            # exactly that reason, and `i3523x1` raises it. #1509.
+            self.heal(amount() if callable(amount) else amount, on=who)
 
         from .events import TurnStart
 
