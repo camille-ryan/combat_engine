@@ -224,8 +224,17 @@ def _crit_rider(world, eid: int, magic: Magic) -> None:  # noqa: ANN001
     critical hit.
 
     **The individual faces are kept, not just the total**, because
-    `c.reroll_crit_die` swaps one of them and this is the only place they
-    exist. `Roll.bonus` is carried separately for the same reason: a crit
+    `_may_reroll_a_crit_die` swaps one of them and this is the only place
+    they exist. The hold it reads is laid by
+    `c.reroll_ones(crit_dice=True)`.
+
+    This said `c.reroll_crit_die`, which **does not exist** -- named in
+    this one docstring and nowhere else in the tree. A reader looking for
+    it would either find nothing or, worse, take the facility for granted:
+    `i1761p1` wants a *reactive* crit-dice reroll and the thing that
+    exists is a standing hold, which is exactly the distinction its own
+    marker turns on. Naming the real reader keeps that distinction
+    readable. `Roll.bonus` is carried separately for the same reason: a crit
     rider printed as `1d6+2` would lose its `+2` to a faces-only sum.
     """
     if not magic.crit or not magic.plus:
