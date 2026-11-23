@@ -2149,8 +2149,7 @@ def i1392x1(c: Cast) -> None:
 
 
 @power("i1392p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       todo=("chargen.BUILD_OPTIONS.i1392p1",))
+       reach=PERSONAL, target=SELF)
 def i1392p1(c: Cast) -> None:
     """**Re-pointed off `c.racial_row()`, which is a different gap.**
 
@@ -2175,7 +2174,39 @@ def i1392p1(c: Cast) -> None:
     `c.restore_use` on it for the printed second sentence when the wearer's
     own race already granted it. The entry belongs to `chargen/`, so it is
     not this file's to add, and `todo=` rather than `dropped=` because
-    without the choice there is no ref and nothing at all to hand over."""
+    without the choice there is no ref and nothing at all to hand over.
+
+    ## Written
+
+    `BUILD_OPTIONS["i1392p1"]` carries the five manifestation refs --
+    a gated copy of `races.powers_a.MANIFESTATIONS`, since `chargen`
+    cannot import `content` -- so `_build_options` puts
+    `option:i1392p1:<ref>` on `Build.choices` and `c.chosen_option`
+    reads it back. `#1506`.
+
+    Two calls, which is what the paragraph above predicted:
+    `c.grant_row` on the chosen ref, and `c.restore_use` for the printed
+    second sentence. **In that order and both, not one or the other.**
+    `c.grant_row` lends a row to somebody who does not have it; a genasi
+    of that manifestation already **has** it, so for them the grant is
+    the no-op and `restore_use` is the whole of the card -- *"if you
+    already have that racial power, you can use it a second time"*. The
+    row cannot know which case it is in without asking, and asking is
+    `c.knows`.
+
+    `until=When.ENCOUNTER` is the printed *"until the end of the
+    encounter"*, and it is `c.grant_row`'s default; passed explicitly
+    because the card says it."""
+    chosen = c.chosen_option(c.ref)
+    if not chosen:
+        return
+    if c.knows(chosen) is None:
+        c.grant_row(chosen, on=c.me, until=When.ENCOUNTER)
+    else:
+        # Already a manifestation power of this wearer's: the grant would
+        # hand back a row they hold, so the card's second sentence is the
+        # one that pays.
+        c.restore_use(chosen, on=c.me)
 
 
 @power("i1674p1", level=4, cls=ITEM, usage=DAILY, action=FREE,

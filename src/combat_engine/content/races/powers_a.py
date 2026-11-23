@@ -246,6 +246,16 @@ def _until_you_attack(c: Cast, held: Effect | None) -> None:
 
 # -- r33: the elemental manifestations ---------------------------------------
 
+#: The five manifestation encounter powers, in ref order. **The canonical
+#: list**, copied into `chargen.BUILD_OPTIONS["i1392p1"]` for the armour
+#: whose card says *"the racial encounter power associated with the
+#: armor's elemental manifestation"* -- `chargen` cannot import `content`,
+#: so the copy is gated by `drivers.build_options_mirror` and a sixth
+#: manifestation landing here reddens there rather than being silently
+#: unavailable. Same arrangement, and the same reason, as the monk's
+#: `FLURRIES`.
+MANIFESTATIONS = ("p10043", "p10046", "p14075", "p1766", "p1770")
+
 
 @power(
     "p10043",

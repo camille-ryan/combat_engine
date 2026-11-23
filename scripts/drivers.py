@@ -5074,6 +5074,87 @@ def one_named_rows_burst_grows_and_no_others(out: Result) -> None:
              f"{with_points} -> {emptied} at {c.points()} point(s)")
 
 
+def an_armours_manifestation_is_granted_or_restored(out: Result) -> None:
+    """`i1392p1`: the racial power of the armour's own manifestation.
+
+    *"You can use the racial encounter power associated with the armor's
+    elemental manifestation. If you already have that racial power, you
+    can use it a second time during this encounter."*
+
+    The choice is **build-time** -- settled when the armour was made --
+    so it rides `Build.choices` as `option:i1392p1:<ref>` and
+    `c.chosen_option` reads it back. One `BUILD_OPTIONS` entry was the
+    whole of what was missing. #1506.
+
+    **Two branches, and the card's two sentences are not the same
+    call.** `c.grant_row` lends a row to somebody who does not have it,
+    so for a wearer who already holds that manifestation the grant is a
+    no-op and the printed second sentence is the entire card. The row
+    asks `c.knows` and does one or the other -- which is why both arms
+    are here and why a rule testing only the grant would pass a row that
+    never restores anything.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import use
+
+    REF = "i1392p1"
+
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref=REF)
+    chosen = c.chosen_option(REF)
+    out.that(bool(chosen),
+             "the armour carries a chosen manifestation -- the premise,"
+             " and the one thing that was missing: with no"
+             " `BUILD_OPTIONS` entry `c.chosen_option` answered None and"
+             " the body returned on its first line",
+             f"{chosen}")
+    if not chosen:
+        return
+
+    # ---- the wearer does NOT hold it: the row is granted
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref=REF)
+    known = world.need(me, Powers)
+    out.that(c.knows(chosen) is None,
+             "this wearer does not already hold that manifestation -- the"
+             " premise for the grant arm, and the branch the row picks",
+             f"knows={c.knows(chosen)}")
+    if c.knows(chosen) is None:
+        use(world, me, REF, spend=False)
+        out.that(chosen in (known.all or ()),
+                 "THE arm: using the armour hands over the manifestation's"
+                 " own racial power, by ref, for the encounter",
+                 f"{chosen} in the hand: {chosen in (known.all or ())}")
+
+    # ---- the wearer DOES hold it, and has spent it
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref=REF)
+    known = world.need(me, Powers)
+    c.grant_row(chosen, on=me)
+    # **Spent through `use`, because `Powers` has no `spend`** -- and
+    # `times(ref)` counts uses TAKEN, not uses left, so a restore makes
+    # it go DOWN. The first draft called a non-existent `known.spend`,
+    # read 0 -> 0 and blamed the row for restoring nothing when nothing
+    # had been spent.
+    use(world, me, chosen, spend=True)
+    taken_before = known.times(chosen)
+    out.that(taken_before > 0,
+             "the manifestation has been used once, so there is a use to"
+             " hand back -- the premise for the restore arm, and without"
+             " it the arm below is vacuous",
+             f"uses taken: {taken_before}")
+    if taken_before > 0:
+        use(world, me, REF, spend=False)
+        taken_after = known.times(chosen)
+        out.that(taken_after < taken_before,
+                 "and for a wearer who ALREADY holds it the armour hands"
+                 " back a use instead -- the card's second sentence, which"
+                 " `c.grant_row` alone could never have paid because the"
+                 " row is already in the hand",
+                 f"uses taken {taken_before} -> {taken_after}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -79355,6 +79436,27 @@ def a_build_option_naming_rows_matches_the_rows(out: Result) -> None:
              " read as a working choice",
              f"{[r for r in _cg.BUILD_OPTIONS.get('f2694', ()) if r not in _REG]}")
 
+    # **The second row-naming entry, and the first on an ITEM power.**
+    # `i1392p1`'s card names "the racial encounter power associated with
+    # the armor's elemental manifestation", so the same copy-and-gate
+    # arrangement applies for the same reason: `chargen` cannot import
+    # `content`, so a sixth manifestation would otherwise be silently
+    # unavailable to the armour. #1506.
+    from combat_engine.content.races.powers_a import MANIFESTATIONS
+
+    out.that(_cg.BUILD_OPTIONS.get("i1392p1") == MANIFESTATIONS,
+             "**`BUILD_OPTIONS['i1392p1']` is exactly the race file's own"
+             " `MANIFESTATIONS`** -- the item-power case of the same copy,"
+             " gated so a sixth manifestation reddens here rather than"
+             " being unreachable by the armour that chooses among them",
+             f"table {_cg.BUILD_OPTIONS.get('i1392p1')}"
+             f" vs races {MANIFESTATIONS}")
+    out.that(all(r in _REG for r in _cg.BUILD_OPTIONS.get("i1392p1", ())),
+             "and every manifestation ref it names is a declared row, so"
+             " `c.grant_row` has something to hand over",
+             f"{[r for r in _cg.BUILD_OPTIONS.get('i1392p1', ())
+                 if r not in _REG]}")
+
 
 def a_carried_disease_arms_its_stage_on_the_next_board(out: Result) -> None:
     """The dispatcher `#948` step 3 was blocked on. `#948`.
@@ -133256,6 +133358,11 @@ DRIVERS = {
     "named_burst_grows": (
         one_named_rows_burst_grows_and_no_others,
         "f3321 grows the mantle it names and no other burst",
+    ),
+    "manifestation_choice": (
+        an_armours_manifestation_is_granted_or_restored,
+        "i1392p1 grants the chosen manifestation, or restores a use"
+        " to a wearer who holds it",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,

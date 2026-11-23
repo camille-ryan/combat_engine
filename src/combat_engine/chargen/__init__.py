@@ -5210,6 +5210,20 @@ BUILD_OPTIONS: dict[str, tuple[str, ...] | Callable[[], tuple[str, ...]]] = {
     # `_build_options` below takes the first by design -- see its docstring.
     # `#314` is where choosing well lives.
     "f2694": ("p7448", "p11207", "p13123", "p16131", "p16132"),
+    # **An ITEM power, and the second entry here that names rows rather
+    # than values.** `i1392p1` says *"you can use the racial encounter
+    # power associated with the armor's elemental manifestation"* -- the
+    # armour's, settled when it was made, which is exactly what
+    # `Build.choices` records as `option:<ref>:<value>` and what
+    # `Cast.chosen_option` reads back. `_build_options` already fills this
+    # for an item power and not only for a feat (`#1112` widened it), and
+    # the entry was the one thing missing.
+    #
+    # A copy of `content.races.powers_a.MANIFESTATIONS` for `f2694`'s
+    # reason -- `chargen` cannot import `content` -- and gated the same
+    # way, so a sixth manifestation reddens `drivers.build_options_mirror`
+    # instead of being quietly unavailable to the armour.
+    "i1392p1": ("p10043", "p10046", "p14075", "p1766", "p1770"),
     # **`cf:artificer-f2` is here now, and what unblocked it was the
     # chooser rather than the scorer.** The note this replaces said the
     # entry could not be added because *"`_build_options` records the
