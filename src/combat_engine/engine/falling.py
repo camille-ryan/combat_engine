@@ -64,13 +64,52 @@ def height(world: World, eid: int) -> int:
 
 
 def lift(world: World, eid: int, squares: int) -> int:
-    """Raise a creature off the ground without moving it sideways."""
+    """Raise a creature off the ground without moving it sideways.
+
+    **Clamped by a standing altitude limit.** *"You gain a flight speed
+    of 6 squares (altitude limit 1)"* is printed on two racial traits and
+    two monsters print a ceiling while carrying a rider, and nothing
+    capped a height -- so `c.rise(4)` took a creature whose card says 1
+    four squares up. This is the one door: `Cast.rise` calls it,
+    `Cast.hover` calls `rise`, and the mount path lifts its rider
+    through it too.
+
+    **0 means no limit, not a limit of nothing**, because `Mods.total`
+    answers 0 for an absent key and the two cannot be told apart. Safe
+    here: a printed altitude limit is 1, 2 or 4, and a creature limited
+    to 0 is one that does not fly. Said rather than left implicit,
+    because the same ambiguity has bitten this tree before. #1507.
+    """
     pos = world.get(eid, Position)
     if pos is None:
         return 0
-    pos.height = world.grid.floor(pos.square) + max(0, squares)
+    squares = max(0, squares)
+    ceiling = _altitude_limit(world, eid)
+    if ceiling:
+        squares = min(squares, ceiling)
+    pos.height = world.grid.floor(pos.square) + squares
     world.bus.emit(Note(text=f"{eid} is {squares} squares up"))
     return pos.height
+
+
+def _altitude_limit(world: World, eid: int) -> int:
+    """How high this creature may fly, or 0 for no limit.
+
+    The **lowest** limit standing, not the sum and not the largest: two
+    cards each capping a height both apply, and the stricter is the one
+    that binds. `Mods.total` would add them, so the mods are read
+    directly -- which is also what lets `Cast.altitude_limit` be laid
+    twice without the second raising the first.
+    """
+    from .components import Mods
+
+    held = world.get(eid, Mods)
+    if held is None or not held.items:
+        return 0
+    caps = [m.amount() for m in held.items
+            if m.what == "altitude_limit" and m.applies({})]
+    caps = [n for n in caps if n > 0]
+    return min(caps) if caps else 0
 
 
 def _acrobatic_softening(world: World, eid: int) -> int:

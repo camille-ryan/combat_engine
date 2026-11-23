@@ -5155,6 +5155,140 @@ def an_armours_manifestation_is_granted_or_restored(out: Result) -> None:
                  f"uses taken {taken_before} -> {taken_after}")
 
 
+def a_flight_height_can_be_capped(out: Result) -> None:
+    """`c.altitude_limit`: four rows print a ceiling and none could say it.
+
+    `c.height` read the distance and `c.rise`/`c.hover` set it; `c.leash`
+    bounds distance from a creature or a square and **not** altitude,
+    which was the near miss. So `c.rise(4)` took a creature whose card
+    says 1 four squares up. `falling.lift` is the one reader and the one
+    door -- `c.rise` calls it, `c.hover` calls `c.rise`, and a mount
+    lifts its rider through it too. #1507.
+
+    Nine arms. The ones that matter are the two gates, because both
+    printed cards say *"while"*: a limit that applied when it should not
+    is as wrong as one that never applies, and only a negative arm can
+    tell them apart.
+
+    * no limit standing, so a rise goes as far as it was asked;
+    * a limit standing clamps it;
+    * the **lowest** of two limits binds, not the sum and not the
+      largest -- two cards each capping a height both apply;
+    * `c.hover` is clamped too, which is the arm that proves `lift` is
+      the single door rather than `rise` being patched;
+    * `m115827a0` caps at 6 **only while grabbing**;
+    * `m4737a3` caps at 2 **only while carrying a rider**.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+
+    # ---- the facility
+    world, me, _ = _board("m145a0", 1)
+    c = Cast(world=world, me=me, ref="drv")
+    c.rise(4, on=me)
+    out.that(c.height(on=me) == 4,
+             "with no limit standing a creature rises as far as it was"
+             " asked -- the baseline, and what every flier did before",
+             f"height {c.height(on=me)}")
+
+    world, me, _ = _board("m145a0", 1)
+    c = Cast(world=world, me=me, ref="drv")
+    c.altitude_limit(1, on=me, until=When.ENCOUNTER)
+    c.rise(4, on=me)
+    out.that(c.height(on=me) == 1,
+             "THE arm: a standing altitude limit clamps the rise to its"
+             " own ceiling",
+             f"asked 4, got {c.height(on=me)}")
+
+    c.altitude_limit(2, on=me, until=When.ENCOUNTER)
+    c.rise(4, on=me)
+    out.that(c.height(on=me) == 1,
+             "and a SECOND, looser limit does not raise the first -- the"
+             " lowest standing binds, which is why the mods are read"
+             " directly rather than through `Mods.total`, and what lets"
+             " f3788's 'increases to 2' be a change to the number rather"
+             " than a second cap",
+             f"limits 1 and 2 standing, height {c.height(on=me)}")
+
+    world, me, _ = _board("m145a0", 1)
+    c = Cast(world=world, me=me, ref="drv")
+    c.altitude_limit(1, on=me, until=When.ENCOUNTER)
+    c.hover(4, on=me, until=When.ENCOUNTER)
+    out.that(c.height(on=me) == 1,
+             "and `c.hover` is clamped by the same limit, which is the arm"
+             " that shows `falling.lift` is the one door rather than"
+             " `c.rise` having been patched on its own",
+             f"hovered 4, height {c.height(on=me)}")
+
+    # ---- m115827a0: only while grabbing
+    def grabbing_height(grab: bool) -> int:
+        world2, me2, _ = _board("m115827a0", 1)
+        c2 = Cast(world=world2, me=me2, ref="drv")
+        if grab:
+            foes = c2.enemies()
+            if foes:
+                c2.grab(on=sorted(foes)[0])
+        c2.rise(9, on=me2)
+        return c2.height(on=me2)
+
+    free = grabbing_height(False)
+    held = grabbing_height(True)
+    out.that(free == 9,
+             "m115827a0 with nobody in its grip rises as far as it likes"
+             " -- the card says 'while ... grabbing' and this is the half"
+             " a limit laid unconditionally would have broken",
+             f"height {free}")
+    out.that(held == 6,
+             "and while it IS grabbing it stops at the printed 6, asked"
+             " live at the moment it climbs rather than when the trait"
+             " armed",
+             f"asked 9, got {held}")
+
+    # ---- m4737a3: only while carrying a rider
+    def mounted_height(ridden: bool) -> tuple[int, bool]:
+        """Rise 9 with or without a rider. Returns the height and whether
+        anybody was on its back.
+
+        **The board seats a rider already** -- `audit.board` spawns
+        creatures in relationships, somebody astride the mount among
+        them -- so the "alone" arm has to put them DOWN rather than
+        simply not mounting one. The first draft read `rider=True,
+        height 2` on the arm that was meant to show no cap.
+        """
+        world2, me2, _ = _board("m4737a3", 1)
+        c2 = Cast(world=world2, me=me2, ref="drv")
+        if ridden:
+            if c2.rider() is None:
+                mates = [a for a in c2.allies() if a != me2]
+                if mates:
+                    Cast(world=world2, me=mates[0], ref="drv").ride(on=me2)
+        else:
+            seated = c2.rider()
+            if seated is not None:
+                Cast(world=world2, me=seated, ref="drv").dismount()
+        c2.rise(9, on=me2)
+        return c2.height(on=me2), c2.rider() is not None
+
+    alone, no_rider = mounted_height(False)
+    out.that(not no_rider and alone == 9,
+             "m4737a3 with nobody on its back rises as far as it likes --"
+             " the other 'while' gate, and the half an unconditional"
+             " limit would have broken",
+             f"rider={no_rider}, height {alone}")
+    carrying, has_rider = mounted_height(True)
+    out.that(has_rider,
+             "somebody is on its back -- the premise, and without it the"
+             " arm below passes for the wrong reason",
+             f"rider={has_rider}")
+    if has_rider:
+        out.that(carrying == 2,
+                 "and while it IS carrying a rider it stops at the"
+                 " printed 2, which is the second card the one verb"
+                 " serves -- the reason `c.max_height()` was retired as a"
+                 " synonym",
+                 f"asked 9, got {carrying}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -133363,6 +133497,11 @@ DRIVERS = {
         an_armours_manifestation_is_granted_or_restored,
         "i1392p1 grants the chosen manifestation, or restores a use"
         " to a wearer who holds it",
+    ),
+    "altitude_limit": (
+        a_flight_height_can_be_capped,
+        "a flight height can be capped, and m115827a0 only while it"
+        " is grabbing",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,

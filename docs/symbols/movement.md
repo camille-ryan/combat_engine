@@ -7,6 +7,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
 
 ## voluntary -- the creature spends its own movement
 
+- `c.altitude_limit(self, squares_: 'int', *, when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You gain a flight speed of 6 squares (**altitude limit 1**)."
 - `c.charge: bool`
   - is this use a charge?
 - `c.charge_at(self, victim: 'int', ref: 'str' = '', *, who: 'int | None' = None, ignoring: 'Condition | None' = None) -> 'bool'`

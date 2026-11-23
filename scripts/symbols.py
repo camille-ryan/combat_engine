@@ -177,7 +177,8 @@ CATEGORIES: dict[str, dict] = {
             # both docstrings are about being seen, not about moving.
             ("voluntary -- the creature spends its own movement", [
                 "charge", "charge_at", "charge_through", "dismount",
-                "flee", "hover", "jump", "move", "moving_as", "overrun",
+                "altitude_limit", "flee", "hover", "jump", "move",
+                "moving_as", "overrun",
                 "ride", "rise", "run_at", "running_start", "shift",
                 # Beside `teleport` because both put a creature in a
                 # square it is not next to, and apart from it because

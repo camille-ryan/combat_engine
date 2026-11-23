@@ -368,20 +368,41 @@ def m1070a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.altitude_limit()",),
 )
 def m115827a0(c: Cast) -> None:
-    """A ceiling on how high it may fly while it is holding somebody.
-    `c.height` reads the distance and `c.rise`/`c.hover` set it; `c.leash`
-    bounds distance from a creature or a square and not altitude. Nothing
-    caps a height, so the whole of this trait is the thing that is missing.
+    """*"While the m115827 is grabbing a creature, it can't fly higher
+    than 6 squares above the ground."*
+
+    **Written.** `c.height` read the distance and `c.rise`/`c.hover` set
+    it; `c.leash` bounds distance from a creature or a square and **not**
+    altitude, which was the near miss. Nothing capped a height, so the
+    whole of this trait was the thing that was missing.
+    `c.altitude_limit` is that cap, read by `falling.lift` -- the one
+    door, since `c.hover` goes through `c.rise` and a mount lifts its
+    rider through it too. `#1507`.
 
     **Re-pointed from `c.max_height()`, which was a synonym of its own
-    making.** m4737a3 prints the same clause -- a ceiling while carrying a
-    rider -- and has waited on `c.altitude_limit()` since the day before
-    this row was written, so the two were one gap under two names and
-    neither group could go green for the other. The older symbol wins.
+    making.** `m4737a3` prints the same clause -- a ceiling while
+    carrying a rider -- and had waited on `c.altitude_limit()` since the
+    day before this row was written, so the two were one gap under two
+    names and neither group could go green for the other. The older
+    symbol won, and both land together.
+
+    **"While grabbing" is a live gate.** A grab is taken and lost, so the
+    predicate asks `c.grabbing()` at the moment the creature tries to
+    climb rather than when the trait armed. It ignores the context, which
+    `falling.lift` leaves empty -- a lift is not an attack.
+
+    Six and not this creature's own limit: the card gives a *number*,
+    where `m4737a3` gives the printed phrase. Both go through the same
+    verb, and the lowest limit standing binds if a second one ever
+    applies.
     """
+    me = c.me
+    c.altitude_limit(
+        6, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: bool(c.grabbing()),
+    )
 
 
 @power(

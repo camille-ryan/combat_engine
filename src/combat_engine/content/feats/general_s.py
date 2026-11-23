@@ -2875,7 +2875,7 @@ def f3787(c: Cast) -> None:
 
 @power("f3788", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("rt:r68-t0",))
+       todo=("chargen.RaceLine.modes(flight speed)",))
 def f3788(c: Cast) -> None:
     """`engine/equipment.py` puts no speed penalty on heavy armour, so the
     first clause has nothing to cancel. What is left is an altitude limit
@@ -2897,9 +2897,44 @@ def f3788(c: Cast) -> None:
     One marker, one gap: the undeclared trait. #581 is the sibling where
     the sub-option has no ref at all, which this is **not**.
 
-    **Re-spelled, and the old spelling could never have gone green.** The
-    symbol was `content.rt_r68_t0`, which names the right gap in a form
-    nothing can resolve: `blocked._surface` indexes `engine/`, `chargen/`,
+    ## Re-pointed a third time, and the second aim was wrong in both halves
+
+    It said the hold was *"no content row declares either"* trait and
+    that *"once the trait exists, this is the `c.change_amount` /
+    `c.amount_for` pair and not a facility gap"*. Measured, both halves
+    are false:
+
+    * **The fly speed is deliberately NOT a row.** `features/racial.py`'s
+      own section header says so for these two races in as many words --
+      *"a fly speed (twice) ... belong on the sheet or in
+      `RaceLine.granted`, which is this file's charter"*. Declaring
+      `rt:r68-t0` would have put in a row what that file had already
+      ruled out.
+    * **And there was no altitude to limit.** Nothing capped a height at
+      all -- `c.leash` bounds distance from a creature or a square, not
+      altitude -- so declaring the trait would have given this feat a
+      number nothing read. That half is built now:
+      `c.altitude_limit`, read by `falling.lift`, `#1507`.
+
+    **What is actually missing is measured and is one spelling.** The fly
+    speed never reaches a character, so there is no ceiling on them to
+    raise. `chargen._MODE` matches the four mode words followed by a
+    number and the word "squares", and reads the race block:
+
+        r61  "Fly 6 squares (altitude limit 1)"              -> {'fly': 6}
+        r67  "flight speed of 6 squares (altitude limit 1)"  -> {}
+        r68  the same sentence                               -> {}
+
+    One printed mechanic, two spellings, one read -- and **1 of the races
+    in the book comes out with any movement mode at all**, which is the
+    size of it. So this row waits on the sheet carrying the speed and its
+    printed limit, not on a row and not on a verb.
+
+    `#1508`.
+
+    **Re-spelled twice, and the first spelling could never have gone
+    green.** The symbol was `content.rt_r68_t0`, which names a gap in a
+    form nothing can resolve: `blocked._surface` indexes `engine/`, `chargen/`,
     `etl/` and `spec`, there is no `content` key in it at all, and the
     wrong-module fallback below that demands the owner be an engine module
     -- so `_one("content.rt_r68_t0", _surface())` is a hard **False for

@@ -970,13 +970,34 @@ def m4737a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.altitude_limit()",),
 )
 def m4737a3(c: Cast) -> None:
-    """Refused in play: the whole of this row is a ceiling on how high the
-    creature may fly while carrying a rider, and nothing caps a height.
-    `c.hover` holds a creature up and `c.rise` puts it there; neither refuses
-    to go further, so there is nothing here to write half of."""
+    """*"While mounted, a m4737 has altitude limit 2 while flying."*
+
+    **Written.** The whole of this row was a ceiling on how high the
+    creature may fly while carrying a rider, and nothing capped a height:
+    `c.hover` holds a creature up and `c.rise` puts it there, and neither
+    refused to go further. `c.altitude_limit` is that cap and
+    `falling.lift` is its one reader -- which is also the one door, since
+    `c.hover` goes through `c.rise` and a mount lifts its rider through
+    it too. `#1507`.
+
+    **"While mounted" is a live gate, not a condition of arming.** A
+    rider gets on and off, so the predicate asks `c.rider()` at the
+    moment the creature tries to climb rather than when the trait armed.
+    It ignores the context it is handed, which is empty -- a lift is not
+    an attack and carries none -- so a gate written against a ctx key
+    would have been silently false.
+
+    `c.rider()` and not `c.mount()`: this creature is the one being
+    ridden. Reading the other way round would have been true for a
+    m4737 that had climbed onto something else and false in the case
+    the card is about."""
+    me = c.me
+    c.altitude_limit(
+        2, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: c.rider() is not None,
+    )
 
 
 # ==========================================================================

@@ -27974,6 +27974,57 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         return lift(self.world, on if on is not None else self.me, squares_)
 
+    def altitude_limit(
+        self,
+        squares_: int,
+        *,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You gain a flight speed of 6 squares (**altitude limit 1**)."
+
+        A ceiling on how high this creature may be lifted. `falling.lift`
+        is the one reader and the one door -- `c.rise` calls it, `c.hover`
+        calls `c.rise`, and a mount lifts its rider through it -- so a
+        limit laid here binds every way of getting off the ground.
+
+        Four rows print this and none could say it: the two racial traits
+        whose wings *"are neither large enough nor strong enough to
+        sustain flight for long"*, and `m115827a0` and `m4737a3`, which
+        cap a height while carrying a rider. `c.height` read the distance
+        and `c.rise`/`c.hover` set it; `c.leash` bounds distance from a
+        creature or a square and **not** altitude, which is the near miss
+        worth naming.
+
+        **The lowest limit standing binds**, not the sum and not the
+        largest -- two cards each capping a height both apply and the
+        stricter wins. So this may be laid twice without the second
+        raising the first, and `f3788`'s *"your altitude limit increases
+        to 2"* is written as `c.change_amount` against the trait's own
+        number rather than as a second, looser cap.
+
+        **A limit of 0 is not expressible and does not need to be**: a
+        printed altitude limit is 1, 2 or 4, and a creature limited to 0
+        is one that does not fly. `falling.lift` reads 0 as "no limit",
+        because `Mods.total` cannot tell an absent key from a zero.
+
+        **`when` is for a limit that comes and goes**, which is what both
+        monster cards print -- *"while the m115827 is grabbing a
+        creature"* and *"while mounted"*. It is handed the context
+        `falling.lift` has, which is **empty**: a lift is not an attack
+        and carries none. So the predicate reads **live state** off the
+        board and ignores its argument, the way `f3321`'s pool gate does
+        -- `c.grabbing()` and `c.rider()` answer at the moment the
+        creature tries to climb, which is what "while" means. A gate
+        written against a ctx key would be silently false here. #1507.
+        """
+        return self.bonus(
+            "altitude_limit", squares_,
+            on=on if on is not None else self.me, until=until,
+            kind="untyped", when=when,
+        )
+
     def hover(
         self,
         squares_: int = 0,
