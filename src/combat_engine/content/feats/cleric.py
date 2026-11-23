@@ -145,8 +145,8 @@ def f1498(c: Cast) -> None:
     c.watch(Miss, missed, on=me, until=When.EOT, once=True)
 
 
-@power("f1500", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.retarget(power=)",),
+@power("f1500", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, 
        trigger="you use p1448",
        on=Trigger(PowerUsed, _i_used("p1448"), "you use p1448"))
 def f1500(c: Cast) -> None:
@@ -162,7 +162,15 @@ def f1500(c: Cast) -> None:
 
     Targets are chosen before the body runs, so `ev.targets` is
     trustworthy in the window `PowerUsed` opens.
-    """
+
+    **`AT_WILL`, not `ENCOUNTER`, and `lint.py` named it.** A declared
+    trigger is skipped by `turns.arm_traits`, so an encounter usage is
+    spent on the row's first firing -- and this card prints no limit.
+    `f2176`, the sibling feat on the same racial power, already had it
+    right. Immaterial in play today, because `p1448` is itself an
+    encounter power and so fires once a fight anyway; wrong the moment
+    anything grants a second use of it, which is exactly the silent
+    narrowing the component rules describe. #1497."""
     friends = set(allies(c.world, c.me))
     for who in c.trigger.targets:
         if who in friends:

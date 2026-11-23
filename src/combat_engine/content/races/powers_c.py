@@ -211,6 +211,29 @@ def p1448(c: Cast) -> None:
     needs a second key and this power has only one ref to offer -- see the
     entry's own note. Recorded here rather than left to be rediscovered.
     """
+    # **Two feats narrow this blast to enemies, and they do it HERE.**
+    # `f1500` prints *"your p1448 racial power targets only enemies"* and
+    # `f2176` *"targets enemies in the area, instead of all creatures"*.
+    # `#550`'s convention -- a feat naming one power writes its clause
+    # into that power -- and in this case the convention is also the only
+    # correct route. #1497.
+    #
+    # **Narrowing the real target line would break both feats' other
+    # halves.** Each pays its allies something -- temporary hit points,
+    # a +1 to attack -- and both read that off `PowerUsed.targets`
+    # intersected with the caster's side. `f1500`'s own note says why
+    # that is exact rather than approximate: a blast is a quarter of the
+    # squares within its size, so *"allies within the blast"* is a set no
+    # other reading of the board gives. Take the allies out of the target
+    # line and the only thing that knows which allies were in the blast
+    # is gone.
+    #
+    # So they stay targets and simply are not struck, which is what the
+    # printed sentence does in play. `dsl.candidates` is left alone --
+    # its own comment invites the change and this is the case that shows
+    # the change would be wrong for.
+    if c.target in c.allies() and (c.feat("f1500") or c.feat("f2176")):
+        return
     if c.strike():
         c.damage(
             "1d6", c.con_mod,

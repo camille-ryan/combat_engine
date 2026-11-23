@@ -453,8 +453,7 @@ def f2131(c: Cast) -> None:
 @power("f2176", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1448",
-       on=Trigger(PowerResolved, _resolved("p1448"), "you use that power"),
-       dropped=("c.retarget_side()",))
+       on=Trigger(PowerResolved, _resolved("p1448"), "you use that power"))
 def f2176(c: Cast) -> None:
     """The ally bonus plays. Narrowing the racial power to enemies only
     does not. That the allies are in the area is what makes them targets

@@ -72906,6 +72906,113 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_blast_spares_allies_and_still_pays_them(out: Result) -> None:
+    """Two feats narrow one racial blast to enemies and pay its allies
+    something: `f1500` *"targets only enemies ... allies within the blast
+    gain temporary hit points equal to your Strength modifier"*, `f2176`
+    *"targets enemies in the area ... allies in the area gain a +1 bonus
+    to attack"*. #1497.
+
+    **Written into `p1448`'s body, which is `#550`'s convention and also
+    the only correct route.** Narrowing the real target line would break
+    both feats' *other* halves: each reads its allies off
+    `PowerUsed.targets` intersected with the caster's side, and
+    `f1500`'s own note says why that is exact -- a blast is a quarter of
+    the squares within its size, so *"allies within the blast"* is a set
+    no other reading of the board gives. Take the allies out of the
+    target line and the only thing that knows which allies were in the
+    blast is gone.
+
+    So the allies stay targets and are simply not struck. `dsl.candidates`
+    is left reading the printed line -- its own comment invites being
+    re-pointed at the per-creature door *"the day a `retarget` moves
+    `side`"*, and this is the case showing that change would be wrong
+    here: it would narrow the pool and silence the ally halves.
+
+    **Both arms matter together**, which is why this rule measures damage
+    and the benefit in the same run rather than in two.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Mods, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    ROW = "p1448"
+    for ref in ("f1500", "f2176", ROW):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker any more",
+                 f"{REGISTRY[ref].unfinished}")
+
+    out.that(REGISTRY[ROW].target is not None
+             and REGISTRY[ROW].target.side != "enemy",
+             "premise: the printed target line is NOT enemies-only, so the"
+             " narrowing below is the feats' doing and not the header's",
+             f"side={REGISTRY[ROW].target.side if REGISTRY[ROW].target else None}")
+
+    def struck(hold: str | None) -> dict:
+        world, me, _ = _board(ROW, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        mates = [a for a in c.allies() if a != me]
+        foes = sorted(c.enemies())
+        if not mates or not foes:
+            return {}
+        here = world.get(me, Position).square
+        ally, foe = mates[0], foes[0]
+        world.get(ally, Position).square = (here[0] + 1, here[1])
+        world.get(foe, Position).square = (here[0] + 1, here[1] + 1)
+        kn = world.get(me, Powers)
+        for f in ("f1500", "f2176"):
+            while f in kn.known:
+                kn.known.remove(f)
+        if hold:
+            kn.known.append(hold)
+        hp = {w: world.get(w, Health).hp for w in (ally, foe)}
+        world.rng.loaded = 20
+        dsl.use(world, me, ROW, spend=False, targets=[ally, foe])
+        world.rng.loaded = None
+        mods = world.get(ally, Mods)
+        return {
+            "ally": hp[ally] - world.get(ally, Health).hp,
+            "foe": hp[foe] - world.get(foe, Health).hp,
+            "temp": world.get(ally, Health).temp,
+            "atk": mods.total("attack", {}) if mods else 0,
+        }
+
+    bare = struck(None)
+    out.that(bare and bare["ally"] > 0 and bare["foe"] > 0,
+             "premise: WITHOUT either feat the blast strikes the ally as"
+             " well as the foe, which is the printed \"each creature in"
+             " the blast\"",
+             f"{bare}")
+    if not bare:
+        return
+
+    first = struck("f1500")
+    out.that(first["ally"] == 0 and first["foe"] > 0,
+             "f1500: the ally takes NOTHING and the foe is still struck",
+             f"{first}")
+    out.that(first["temp"] > 0,
+             "and the ally is still paid its temporary hit points -- which"
+             " is the half that would have been lost if the narrowing had"
+             " been done by rewriting the target line",
+             f"temp={first['temp']}")
+
+    second = struck("f2176")
+    out.that(second["ally"] == 0 and second["foe"] > 0,
+             "f2176: the same narrowing",
+             f"{second}")
+    out.that(second["atk"] == 1,
+             "and its own benefit lands instead -- a +1 to the ally's"
+             " attack, not temporary hit points, so the two feats are not"
+             " paying each other's clause",
+             f"atk={second['atk']}, temp={second['temp']}")
+    out.that(second["temp"] == 0 and first["atk"] == 0,
+             "and neither pays the other's: no temp from f2176, no attack"
+             " bonus from f1500",
+             f"f2176 temp={second['temp']}, f1500 atk={first['atk']}")
+
+
 def a_zone_offers_one_attack_a_round(out: Result) -> None:
     """*"On each of your turns, you can take a minor action once per round
     to make the following attack against an enemy in the zone. Attack:
@@ -130462,6 +130569,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "blast_spares_allies": (
+        a_blast_spares_allies_and_still_pays_them,
+        "two feats narrow p1448 to enemies in its own body and still pay"
+        " the allies in the blast",
     ),
     "zone_attack_a_round": (
         a_zone_offers_one_attack_a_round,
