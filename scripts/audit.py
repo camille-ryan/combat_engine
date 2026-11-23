@@ -143,6 +143,36 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **Two cards printed inside another item's card, which this board
+    # cannot pose.** `i3569p1:slide` and `i3569p1:pull` are the minor
+    # actions two of that egg's seven printed varieties grant, declared
+    # under coined refs on Camille's ruling (`#1484`, `#1494`). Each
+    # finds its parent's zone by owner and label -- the parent lays it
+    # with `label=c.ref` -- and the board lays no egg, so both return on
+    # their first line.
+    #
+    # Nothing is wrong with either row and nothing about the board needs
+    # changing: a granted row whose subject is a zone its parent laid
+    # cannot be exercised by a harness that arms rows one at a time.
+    #
+    # `drivers.egg_granted_minor` is the proof, which is the condition
+    # `scripts/CLAUDE.md` sets before a silent row may be recorded as
+    # known. It uses the parent to lay the zone, grants each variety's
+    # own action and measures both: the slide moves a slowed creature and
+    # leaves an unslowed one, and the pull drags one four squares out two
+    # closer while a creature one square from the centre falls prone
+    # *instead* of moving. Six plants, all red. #1495.
+    #
+    # `i526p1` a few lines down is the same shape and the precedent --
+    # *"reshapes a wall the caster cast; the board lays no wall"* -- so
+    # this is an existing category rather than a new excuse.
+    "i3569p1:slide": "a minor action printed inside the egg's own card; "
+                     "it finds the parent's zone by label and the board "
+                     "lays no egg -- drivers.egg_granted_minor is the "
+                     "proof. #1495",
+    "i3569p1:pull": "the other variety's granted minor action, silent "
+                    "here for the same reason and proved by the same "
+                    "rule. #1495",
     # **A feat whose whole effect is a second racial pick**, settled when
     # the character is built. `f604` prints *"select a new elemental
     # manifestation"*, and `chargen.MORE_MANIFESTATIONS` plus

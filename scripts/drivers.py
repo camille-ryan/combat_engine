@@ -72906,6 +72906,146 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def an_egg_variety_grants_its_own_minor_action(out: Result) -> None:
+    """Two of `i3569p1`'s seven printed varieties grant a minor action of
+    their own, printed in full with no id: *"you slide each slowed
+    creature in the zone up to 3 squares"* and *"you pull each creature in
+    the zone up to 2 squares toward the zone's central square. A creature
+    that would be pulled into the zone's central square falls prone
+    instead."* #1484, #1495.
+
+    **Coined refs named for the mechanic, not the variety.** The obvious
+    formulaic ref is the printed variety name and all seven of those are
+    printed names, so `slide` and `pull` carry the same information
+    without putting one in a tracked file.
+
+    **Neither can be audited and that is the board, not the rows.** They
+    find their parent's zone by owner and label, and the audit board lays
+    no egg -- so both report SILENT there. This rule is what proves them,
+    which is the condition `scripts/CLAUDE.md` sets before a silent row
+    may be recorded as known.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Condition
+
+    PARENT = "i3569p1"
+    SLIDE, PULL = "i3569p1:slide", "i3569p1:pull"
+
+    for ref in (SLIDE, PULL):
+        out.that(ref in REGISTRY,
+                 f"{ref} is declared under a coined ref",
+                 f"{ref in REGISTRY}")
+    out.that(not REGISTRY[PARENT].unfinished,
+             "and the parent carries no marker any more",
+             f"{REGISTRY[PARENT].unfinished}")
+
+    def egg(pick: int):  # noqa: ANN202
+        """The parent used, with variety `pick` chosen. The zone and owner."""
+        world, me, _ = _board(PARENT, 1)
+        world.decider = (
+            lambda who, kind, pool, what="":
+            pool[pick] if len(pool) > pick else pool[0])
+        dsl.use(world, me, PARENT, spend=False)
+        found = next(((i, z) for i, z in world.zones.all()
+                      if z.label == PARENT), None)
+        return world, me, found
+
+    # -- the variety decides which is granted, and four grant none -------
+    granted_by = {}
+    for pick in range(6):
+        world, me, _found = egg(pick)
+        known = world.get(me, Powers)
+        granted_by[pick] = sorted(
+            k for k in (known.all or ()) if k.startswith(f"{PARENT}:"))
+    out.that(granted_by[2] == [SLIDE] and granted_by[3] == [PULL],
+             "the two varieties that print a minor action grant exactly"
+             " their own -- the fourth element on `_EGGS`, which that"
+             " table's own comment predicted it would need",
+             f"{granted_by[2]}, {granted_by[3]}")
+    out.that(all(not granted_by[p] for p in (0, 1, 4, 5)),
+             "and the other four grant NOTHING, so a variety that prints"
+             " no such action does not quietly get one",
+             f"{[granted_by[p] for p in (0, 1, 4, 5)]}")
+
+    # -- the slide: every SLOWED creature, and only those ----------------
+    world, me, found = egg(2)
+    out.that(found is not None,
+             "premise: the egg laid its zone, which is what the granted"
+             " rows find by owner and label",
+             f"{found[1].label if found else None}")
+    if found is None:
+        return
+    zid, _zone = found
+    c = Cast(world=world, me=me, ref="drv")
+    inside = [f for f in sorted(c.enemies())
+              if f in world.zones.occupants(zid)]
+    out.that(len(inside) >= 2,
+             "premise: two foes stand in the zone, so the arm below can"
+             " tell 'each slowed creature' from 'everybody'",
+             f"{inside}")
+    if len(inside) < 2:
+        return
+    slowed, awake = inside[0], inside[1]
+    c.slowed(on=slowed)
+    out.that(c.is_(Condition.SLOWED, on=slowed)
+             and not c.is_(Condition.SLOWED, on=awake),
+             "premise: one is slowed and one is not",
+             f"{slowed} slowed, {awake} not")
+    was = {w: world.get(w, Position).square for w in (slowed, awake)}
+    dsl.use(world, me, SLIDE, spend=False)
+    now = {w: world.get(w, Position).square for w in (slowed, awake)}
+    out.that(now[slowed] != was[slowed],
+             "THE arm: the slowed creature is slid",
+             f"{was[slowed]} -> {now[slowed]}")
+    out.that(now[awake] == was[awake],
+             "and the one that is NOT slowed stays put -- the card says"
+             " 'each slowed creature', not each creature",
+             f"{was[awake]} -> {now[awake]}")
+
+    # -- the pull, and its substitution rider -----------------------------
+    world, me, found = egg(3)
+    if found is None:
+        out.that(False, "premise: the pull variety laid its zone", "none")
+        return
+    zid, zone = found
+    c = Cast(world=world, me=me, ref="drv")
+    squares = sorted(zone.squares)
+    centre = squares[len(squares) // 2]
+    inside = [f for f in sorted(c.enemies())
+              if f in world.zones.occupants(zid)]
+    if len(inside) < 2:
+        out.that(False, "premise: two foes in the pull variety's zone",
+                 f"{inside}")
+        return
+    near, far = inside[0], inside[1]
+    world.get(near, Position).square = (centre[0] + 1, centre[1])
+    world.get(far, Position).square = (centre[0] + 4, centre[1])
+    out.that(c.distance(near) >= 0 and world.get(near, Position).square
+             == (centre[0] + 1, centre[1]),
+             "premise: one creature stands one square from the centre, so"
+             " a single step of pull would land it there",
+             f"centre={centre}, near={world.get(near, Position).square}")
+    dsl.use(world, me, PULL, spend=False)
+    out.that(world.get(near, Position).square == (centre[0] + 1, centre[1])
+             and c.is_(Condition.PRONE, on=near),
+             "THE rider: it falls prone INSTEAD of moving -- the printed"
+             " word is 'instead', so it is a substitution and not a knock"
+             " down on arrival",
+             f"{world.get(near, Position).square},"
+             f" prone={c.is_(Condition.PRONE, on=near)}")
+    pulled = world.get(far, Position).square
+    out.that(max(abs(pulled[0] - centre[0]), abs(pulled[1] - centre[1])) == 2
+             and not c.is_(Condition.PRONE, on=far),
+             "and one four squares out is pulled two closer and is NOT"
+             " knocked down, because it never reaches the centre",
+             f"{pulled} is {max(abs(pulled[0] - centre[0]), abs(pulled[1] - centre[1]))}"
+             f" from {centre}, prone={c.is_(Condition.PRONE, on=far)}")
+
+
 def a_card_printed_inside_another_gets_a_coined_ref(out: Result) -> None:
     """A card printed inside an item block, with no id of its own, declared
     under a **coined** ref. Camille's call on `#1484`, 2026-11-23:
@@ -130220,6 +130360,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "egg_granted_minor": (
+        an_egg_variety_grants_its_own_minor_action,
+        "two egg varieties grant a minor action printed inside their own"
+        " card, under coined refs",
     ),
     "coined_inline_ref": (
         a_card_printed_inside_another_gets_a_coined_ref,

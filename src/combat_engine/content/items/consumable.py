@@ -104,12 +104,14 @@ from combat_engine.engine import (
     Melee,
     Moved,
     MoveEnd,
+    Position,
     PowerResolved,
     PowerUsed,
     Ranged,
     Relation,
     SavingThrow,
     SkillCheck,
+    Square,
     SurgeSpent,
     Trigger,
     TurnEnd,
@@ -1906,7 +1908,22 @@ def i3300p1(c: Cast) -> None:
 #: `True` for the four varieties that print **no** exemption, which is the
 #: honest label there: nobody is at home in that ground and nobody is meant
 #: to be.
-_EGGS: tuple[tuple[tuple[DamageType, ...], str, bool | str], ...] = (
+#: **The two varieties that print a granted minor action of their own**,
+#: as coined refs. The fourth element on `_EGGS` is what the table's own
+#: comment predicted: *"a fourth element on this tuple is what would tell
+#: two otherwise identical signatures apart."*
+#:
+#: **Named for the mechanic, not the variety.** The obvious formulaic ref
+#: here is the printed variety name, and all seven of those are printed
+#: names -- so `i3569p1:<variety>` would put one in a tracked file.
+#: "slide" and "pull" are rules words and carry the same information.
+#: The ref convention is `#1484`'s and `#1494` is the worked example.
+_EGG_SLIDE = "i3569p1:slide"
+_EGG_PULL = "i3569p1:pull"
+
+_EGGS: tuple[
+    tuple[tuple[DamageType, ...], str, bool | str, str], ...
+] = (
     # **One entry for the two untyped varieties, and what it now means has
     # narrowed.** Both print the same damage, the same save-or-fall-prone
     # and the same earth-walk exemption; they differ in one clause each,
@@ -1918,13 +1935,109 @@ _EGGS: tuple[tuple[tuple[DamageType, ...], str, bool | str], ...] = (
     # than an engine gap and so takes no symbol: `c.cannot_stand` already
     # says the other one's clause exactly, and a fourth element on this
     # tuple is what would tell two otherwise identical signatures apart.
-    ((DamageType.UNTYPED,), "", "rubble"),
-    ((DamageType.COLD,), Light.DARK, "ice"),
-    ((DamageType.COLD, DamageType.LIGHTNING), Light.DIM, True),
-    ((DamageType.LIGHTNING, DamageType.THUNDER), "", True),
-    ((DamageType.FIRE, DamageType.POISON), Light.DIM, True),
-    ((DamageType.FIRE,), "", True),
+    ((DamageType.UNTYPED,), "", "rubble", ""),
+    ((DamageType.COLD,), Light.DARK, "ice", ""),
+    ((DamageType.COLD, DamageType.LIGHTNING), Light.DIM, True, _EGG_SLIDE),
+    ((DamageType.LIGHTNING, DamageType.THUNDER), "", True, _EGG_PULL),
+    ((DamageType.FIRE, DamageType.POISON), Light.DIM, True, ""),
+    ((DamageType.FIRE,), "", True, ""),
 )
+
+
+def _egg_zone(c: Cast):  # noqa: ANN202
+    """The zone this egg laid, or `None`.
+
+    Found by **owner and label**, which is what the parent gives it:
+    `c.zone(..., label=c.ref)`. A granted row runs later and in its own
+    `Cast`, so it cannot be handed the zone object -- and reading
+    `zones.all()` is the idiom content already uses for this.
+    """
+    for zid, zone in c.world.zones.all():
+        if zone.owner == c.me and zone.label == "i3569p1":
+            return zid, zone
+    return None
+
+
+@power(_EGG_SLIDE, level=8, cls=ITEM, usage=AT_WILL, action=MINOR,
+       reach=PERSONAL, target=NO_TARGET)
+def i3569p1_slide(c: Cast) -> None:
+    """*"As a minor action, you slide each slowed creature in the zone up
+    to 3 squares."* One of the two varieties' granted actions, printed
+    inside `i3569p1` with no id of its own. #1484, #1495.
+
+    **Every slowed creature, not a chosen one**, which is the printed
+    word: the card says *each*. So no `c.choose` and no target line --
+    the pool is the zone's occupants filtered by the condition.
+
+    `at-will` because the card prints no limit on it, and the grant's own
+    `When.ENCOUNTER` is what ends it. The sibling `_EGG_PULL` is the
+    other variety's and they are deliberately two rows: the two clauses
+    differ in verb, distance and rider, so one row with a branch would
+    have to ask which variety laid the zone.
+    """
+    found = _egg_zone(c)
+    if found is None:
+        return
+    zid, _zone = found
+    for who in sorted(c.world.zones.occupants(zid)):
+        if c.is_(Condition.SLOWED, on=who):
+            c.slide(3, on=who)
+
+
+@power(_EGG_PULL, level=8, cls=ITEM, usage=AT_WILL, action=MINOR,
+       reach=PERSONAL, target=NO_TARGET)
+def i3569p1_pull(c: Cast) -> None:
+    """*"As a minor action, you pull each creature in the zone up to 2
+    squares toward the zone's central square. A creature that would be
+    pulled into the zone's central square falls prone instead."* #1495.
+
+    **The rider is a substitution, not an addition** -- *"falls prone
+    **instead**"* -- so a creature whose pull would land it on the centre
+    is knocked down where it stands rather than moved and then knocked
+    down. Read before the pull, because afterwards the two are
+    indistinguishable.
+
+    The centre is the zone's own, which `Zone.squares` gives: the burst
+    was laid from one square and that square is the one the card means.
+    Taken as the median of the footprint rather than remembered
+    separately, so a zone that has been moved still answers.
+
+    **`anchor=` and not `to=`**, which is the near miss worth naming:
+    `to=` means *land exactly here*, so a creature four squares out was
+    asked to cross four on a pull of two and simply did not move --
+    measured, it stayed put with no error. `anchor=` is the point being
+    pulled toward, which is what *"toward the zone's central square"*
+    says.
+    """
+    found = _egg_zone(c)
+    if found is None:
+        return
+    zid, zone = found
+    squares = sorted(zone.squares)
+    if not squares:
+        return
+    centre = squares[len(squares) // 2]
+    for who in sorted(c.world.zones.occupants(zid)):
+        here = c.world.get(who, Position)
+        if here is None:
+            continue
+        if _toward(here.square, centre) == centre:
+            c.prone(on=who)
+            continue
+        c.pull(2, on=who, anchor=centre)
+
+
+def _toward(here: Square, centre: Square) -> Square:
+    """Where one square of pull from `here` lands, going to `centre`.
+
+    One step on each axis, which is how a pull moves: a creature two
+    squares diagonal of the centre reaches it in two, so "would be pulled
+    into the central square" is asked of the step rather than of the
+    distance.
+    """
+    dx = (centre[0] > here[0]) - (centre[0] < here[0])
+    dy = (centre[1] > here[1]) - (centre[1] < here[1])
+    return (here[0] + dx, here[1] + dy)
 
 
 def _egg_rider(c: Cast, kinds: tuple[DamageType, ...], who: int) -> None:
@@ -1946,8 +2059,7 @@ def _egg_rider(c: Cast, kinds: tuple[DamageType, ...], who: int) -> None:
 
 
 @power("i3569p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=AreaBurst(5, 10), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.grant_inline()",))
+       reach=AreaBurst(5, 10), target=NO_TARGET, keywords=[Keyword.ZONE])
 def i3569p1(c: Cast) -> None:
     """Seven eggs on one card, asked of the decider the way `_element`
     asks for a damage type -- the choice *is* the variety.
@@ -2010,18 +2122,32 @@ def i3569p1(c: Cast) -> None:
     clause exactly -- so it takes no symbol here, because a symbol would
     claim an engine gap that does not exist.
 
-    **Still dropped: `c.grant_inline()`.** Two other varieties print a
-    granted minor action of their own -- a slide of every slowed creature
-    in the zone, and a pull of every creature toward its central square
-    with a fall for anything pulled into it. Those are actions printed in
-    full with no ref of their own, offered to the owner for the rest of the
-    encounter, which is the gap `items/misc.i2980p1` and
-    `i1188p1` already carry and is a different question from this trigger.
-    The old marker named neither of them.
+    **The two granted minor actions land now.** Two varieties print one
+    of their own -- a slide of every slowed creature in the zone, and a
+    pull of every creature toward its central square with a fall for
+    anything pulled into it -- printed in full with no id of their own.
+    Camille's ruling on `#1484` settled how such a card gets a ref, so
+    they are `_EGG_SLIDE` and `_EGG_PULL`, declared above and handed over
+    by `c.grant_row` for the encounter. `#1494` is the worked example and
+    `#1495` is this.
+
+    The **fourth element** on `_EGGS` names which -- and that is the
+    element the table's own comment predicted it would need, *"to tell
+    two otherwise identical signatures apart."* Four of the six entries
+    carry `""`, because five of the seven printed varieties grant
+    nothing.
     """
-    kinds, dark, rough = c.choose(list(_EGGS), "the egg's element") or _EGGS[0]
+    kinds, dark, rough, granted = (
+        c.choose(list(_EGGS), "the egg's element") or _EGGS[0])
     zone = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER,
                   difficult=rough, obscured=dark)
+    # **The variety's own minor action, handed over for the encounter.**
+    # Printed in full inside this card with no id of its own, so it is
+    # declared under a coined ref -- `#1484`'s ruling, `#1494`'s shape.
+    # Two of the seven varieties print one and the rest print none, which
+    # is the `""` on four of the `_EGGS` rows.
+    if granted:
+        c.grant_row(granted, on=c.me, until=When.ENCOUNTER)
 
     def at_dawn(ev: TurnStart) -> None:
         who = ev.actor
