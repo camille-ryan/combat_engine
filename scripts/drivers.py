@@ -72892,6 +72892,149 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def an_area_centred_where_the_card_says(out: Result) -> None:
+    """*"Area burst 1 centered on the ally hit by the triggering attack"*
+    -- `i1531p1`. #1474.
+
+    **The aim is settled before any body runs, which is why the marker
+    could never have been a verb.** `dsl.use` calls `_auto_targets`,
+    which walks `aim_points` and keeps whichever origin catches the most
+    creatures, and *then* calls the body once per target. So
+    `c.area_origin()` -- a `Cast` verb a body calls to move its own area
+    -- would always have been too late. The row's own note had worked out
+    that much and kept the marker; what it needed was a **header field**.
+
+    `Power.centred_on` is that field, read in `use` before the aim rather
+    than inside it, so the aim keeps one job.
+
+    **A closed vocabulary with one word**, because one printed card asks
+    for it. `CENTRES` exists so a misspelling raises at import instead of
+    leaving the row aiming exactly as it did -- `#583`'s shape, and the
+    same reason `DIFFICULT_LABELS` and `LIQUID_WORDS` are closed.
+
+    **The trigger's TARGET, not its actor.** The event is an ally being
+    hit, so the creature the card means is who was hit. Reading `actor`
+    would centre the burst on the enemy that swung, which is a different
+    square on every board where this matters.
+
+    **It falls back rather than refusing.** A trigger with no target, or
+    a creature with no square, leaves `origin` as None and the ordinary
+    aim takes over -- weaker than the card and never stronger, which is
+    the direction this project takes when it cannot read something.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import CENTRES, REGISTRY
+    from combat_engine.engine.events import Hit, PowerResolved
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import allies, squares
+
+    ROW = "i1531p1"
+
+    def fired(*, centred: bool, real_target: bool = True) -> tuple:
+        """The row used off a triggering hit, and where it aimed.
+
+        The ally is moved six squares away so the two candidate origins
+        -- the ally, and wherever the aim does most -- are different
+        squares. Without that the arm cannot tell them apart.
+        """
+        world, me, _ = _board(ROW, 1)
+        row = REGISTRY[ROW]
+        was = row.centred_on
+        row.centred_on = "trigger_target" if centred else ""
+        try:
+            cast = Cast(world=world, me=me, ref="drv")
+            mate = sorted(allies(world, me))[0]
+            foe = sorted(cast.enemies())[0]
+            here = must(world.get(me, Position), "the caster stands").square
+            away = (min(world.grid.width - 2, here[0] + 6), here[1])
+            place(world, mate, away)
+            seen: list = []
+            world.bus.on(PowerResolved,
+                         lambda e: seen.append(getattr(e, "origin", None)))
+            ev = Hit(attacker=foe, target=mate if real_target else None,
+                     power="mba", critical=False)
+            dsl.use(world, me, ROW, trigger=ev, spend=False)
+            aims = [tuple(o) for o in seen if o]
+            return min(squares(world, mate)), here, aims
+        finally:
+            row.centred_on = was
+
+    # -- the premise -------------------------------------------------------
+    ally, caster, aims = fired(centred=True)
+    out.that(ally != caster,
+             "premise: the ally stands six squares from the caster, so"
+             " 'centred on the ally' and 'centred where the aim does"
+             " most' are different squares -- without that the arms below"
+             " cannot tell one from the other",
+             f"ally {ally}, caster {caster}")
+    out.that(bool(aims),
+             "premise: the row resolves off the triggering hit and"
+             " announces where it aimed",
+             f"{aims}")
+
+    # -- THE arm -----------------------------------------------------------
+    out.that(aims and ally in aims[0],
+             "the burst is centred on the ALLY who was hit, which is what"
+             " the card prints and what the engine's own aim does not do",
+             f"aimed {aims[0] if aims else None}, ally {ally}")
+
+    # -- the control -------------------------------------------------------
+    _ally2, _c2, plain = fired(centred=False)
+    out.that(plain and ally not in plain[0],
+             "while without the field the same board aims it somewhere"
+             " else entirely -- `_auto_targets` keeping whichever origin"
+             " catches the most creatures. This is the arm that makes the"
+             " one above about the card rather than about the board",
+             f"aimed {plain[0] if plain else None}, ally {ally}")
+
+    # -- the fallback ------------------------------------------------------
+    # **Caught, so a raise inside becomes a FAIL rather than no output.**
+    # The plant for this arm makes a missing target fatal in `dsl.use`,
+    # and an exception propagating out of a rule prints no FAIL line at
+    # all -- so the plant read as "no output" and could have been taken
+    # for a pass. Same correction `familiar_switch`'s bare `next()`
+    # needed.
+    try:
+        _a3, _c3, nobody = fired(centred=True, real_target=False)
+    except Exception as blew:
+        nobody = []
+        out.that(False,
+                 "a trigger carrying no target must not raise -- it did:"
+                 f" {type(blew).__name__}", f"{blew}")
+    out.that(nobody,
+             "a trigger carrying no target still resolves: the centre"
+             " falls back to the ordinary aim rather than refusing, which"
+             " keeps the row weaker than its card and never stronger",
+             f"{nobody}")
+
+    # -- the vocabulary ----------------------------------------------------
+    out.that(frozenset({"trigger_target"}) == CENTRES,
+             "`CENTRES` holds the one word a printed card asks for, and"
+             " is closed so a misspelling raises at import instead of"
+             " leaving the row aiming exactly as it did",
+             f"{sorted(CENTRES)}")
+    bad = False
+    try:
+        dsl.power("drv:centre-probe", level=1, cls="",
+                  centred_on="nowhere")(lambda c: None)
+    except ValueError:
+        bad = True
+    finally:
+        REGISTRY.pop("drv:centre-probe", None)
+    out.that(bad,
+             "and a word outside it is refused when the row is declared,"
+             " rather than carried and never read",
+             "raised")
+
+    out.that(REGISTRY[ROW].centred_on == "trigger_target"
+             and not REGISTRY[ROW].unfinished,
+             f"and {ROW} declares it and carries no marker",
+             f"{REGISTRY[ROW].centred_on!r}, {REGISTRY[ROW].unfinished}")
+
+
 def switching_a_familiar_is_an_action_the_menu_offers(out: Result) -> None:
     """*"You can switch your familiar between passive mode and active mode
     with a free action on your turn instead of a minor action. You can do
@@ -128165,6 +128308,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "area_centre": (
+        an_area_centred_where_the_card_says,
+        "a declared area is centred where the card says, not where the"
+        " aim does most (#1474)",
     ),
     "familiar_switch": (
         switching_a_familiar_is_an_action_the_menu_offers,

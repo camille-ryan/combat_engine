@@ -2334,12 +2334,23 @@ def i1461p1(c: Cast) -> None:
     attack=Attack(WIS, vs=FORT),
     trigger="an ally within 10 squares of you that you can see is hit",
     on=Trigger(Hit, _ally_hit_within(10), "an ally within 10 squares is hit"),
-    dropped=("c.area_origin()",),
+    centred_on="trigger_target",
 )
 def i1531p1(c: Cast) -> None:
     """The burst is printed as centred on the ally who was hit; nothing
     moves a declared area's origin, so the engine aims it and only the
     push is measured from the ally.
+
+    **Written as a header field, because the aim is settled before any
+    body runs.** `dsl.use` calls `_auto_targets` -- which keeps whichever
+    origin catches the most creatures -- and only then calls the body, so
+    `c.area_origin()` as a `Cast` verb was always too late. The note
+    below worked that out and kept the marker anyway; `Power.centred_on`
+    is the declarative answer, read just before the aim. Measured with
+    the ally six squares off: `(12, 8)` with the field, `(6, 8)` without.
+    `#1474`.
+
+    The old note, kept because its diagnosis was right:
 
     **Marker confirmed rather than re-derived.** `c.area_origin()` is the
     *writer* half of a split `i1832x1` records: a row that **reads** another

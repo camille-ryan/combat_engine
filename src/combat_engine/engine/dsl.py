@@ -1843,6 +1843,17 @@ def _requirement_waived(world: World, actor: int, ref: str) -> bool:
     return any(when is None or when(world, actor)
                for when in known.waived_requires.get(ref, ()))
 
+#: The closed set of words `Power.centred_on` takes -- where a declared
+#: area is centred when it is not where the aim lands most.
+#:
+#: **One word, because one printed card asks for it.** `i1531p1`:
+#: *"area burst 1 centered on the ally hit by the triggering attack"*.
+#: The set exists so a misspelling raises at import rather than leaving
+#: the row aiming exactly as it did, which is `#583`'s shape and the
+#: reason `DIFFICULT_LABELS` and `LIQUID_WORDS` are closed too. #1474.
+CENTRES: frozenset[str] = frozenset({"trigger_target"})
+
+
 @dataclass
 class Power:
     ref: str
@@ -2107,6 +2118,24 @@ class Power:
     #: Set on the few rows whose printed text says they do not provoke,
     #: despite being ranged or area.
     no_provoke: bool = False
+    #: **Where a declared area is centred, when it is not where the aim
+    #: lands most.** One word, from a closed set, and `""` is the ordinary
+    #: behaviour -- `_auto_targets` walking `aim_points` and keeping the
+    #: origin that catches the most creatures.
+    #:
+    #: `i1531p1` is the card: *"area burst 1 centered on the ally hit by
+    #: the triggering attack"*. The engine aimed it wherever it did most,
+    #: which is a different square on most boards, and the row could not
+    #: say otherwise -- the aim is settled by `_auto_targets` **before**
+    #: any body runs, so `c.area_origin()` could never have been a verb a
+    #: body calls. That is what this row's marker named and why it is a
+    #: header field instead. #1474.
+    #:
+    #: `"trigger_target"` is the only word, because it is the only thing
+    #: one printed card asks for. An unrecognised word **raises** at
+    #: import, for `#583`'s reason: a word no reader looks for would be
+    #: carried, cost nothing and leave the row aiming exactly as it did.
+    centred_on: str = ""
     #: True for a row that does nothing in a fight and is not supposed to --
     #: a cantrip that lights a torch, a ritual. Declared rather than
     #: inferred, so `scripts/audit.py` can tell "deliberately inert" from
@@ -2874,6 +2903,7 @@ def power(
     once_per_round: bool = False,
     group: str = "",
     no_provoke: bool = False,
+    centred_on: str = "",
     out_of_combat: bool = False,
     also_chosen: bool = False,
     summon: Summon | None = None,
@@ -3127,6 +3157,13 @@ def power(
                 )
         if ref in REGISTRY:
             raise ValueError(f"{ref} declared twice")
+        if centred_on and centred_on not in CENTRES:
+            raise ValueError(
+                f"{ref}: centred_on={centred_on!r} is a word no reader in"
+                f" `dsl.use` looks for, so the row would aim exactly as it"
+                f" does today and nothing would say so. One of"
+                f" {sorted(CENTRES)}."
+            )
         REGISTRY[ref] = Power(
             ref=ref,
             body=body,
@@ -3165,6 +3202,7 @@ def power(
             once_per_round=once_per_round,
             group=group,
             no_provoke=no_provoke,
+            centred_on=centred_on,
             out_of_combat=out_of_combat,
             also_chosen=also_chosen,
             summon=summon,
@@ -6186,6 +6224,13 @@ def use(
         if targets and not chosen:
             return False
     else:
+        # **A card that names its own centre gets it before the aim.**
+        # `_auto_targets` keeps whichever origin catches the most
+        # creatures, which is right for every area power that prints no
+        # centre and wrong for the one that does. Resolved here rather
+        # than inside the aim so the aim keeps one job. #1474.
+        if not origin and p.centred_on == "trigger_target":
+            origin = _triggered_centre(world, trigger)
         chosen, origin = _auto_targets(world, actor, p, origin, branch, augment,
                                        source)
         chosen = list(chosen)
@@ -6572,6 +6617,29 @@ def _survive_provoking(world: World, actor: int, ref: str) -> bool:
             finally:
                 world.provocation = prior
     return can_act(world, actor)
+
+
+def _triggered_centre(world: World, trigger: Any) -> Square | None:
+    """The square of the creature a trigger was about. `#1474`.
+
+    `i1531p1` centres its burst *"on the ally hit by the triggering
+    attack"*, so the centre is the trigger's **target** and not its
+    actor: the event is somebody else being hit.
+
+    `None` when the trigger carries no target or the creature has no
+    square -- a power that cannot find its printed centre falls back to
+    the ordinary aim rather than refusing, which keeps it weaker than its
+    card and never stronger.
+    """
+    if trigger is None:
+        return None
+    from .query import squares as _squares_of
+
+    who = getattr(trigger, "target", None)
+    if not isinstance(who, int):
+        return None
+    held = _squares_of(world, who)
+    return min(held) if held else None
 
 
 def _auto_targets(
