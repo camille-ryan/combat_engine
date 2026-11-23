@@ -104,6 +104,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - "You take your turn as though you were not stunned, dazed or
 - `c.immune(self, *conditions: 'Condition', until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None, dtype: 'DamageType | Sequence[DamageType]' = (), keyword: 'Keyword | Sequence[Keyword]' = ()) -> 'Effect | None'`
   - "You cannot be marked or slowed until the end of your next turn."
+- `c.immune_power(self, *refs: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, instead_temp_hp: 'int' = 0) -> 'Effect | None'`
+  - Proof against one or more **named rows**. `c.immune_power("m1a2")`.
 - `c.save(self, *, on: 'int | None' = None, bonus: 'int' = 0, against: 'str' = '', bare: 'bool' = False, when_: 'str' = 'end', against_trap: 'bool' = False, avoiding: 'Sequence[Condition]' = ()) -> 'bool'`
   - Roll a saving throw now against one save-ends effect.
 - `c.save_early(self, when: 'Callable[[dict[str, Any]], bool]', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

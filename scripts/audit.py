@@ -165,6 +165,24 @@ KNOWN_SILENT = {
     # with no selector and pays nothing there, and lands in the off hand
     # with `onto="off"` and pays its enhancement. Two plants, both red.
     # #1492.
+    # **The pool this row picks from is the OPPOSITION's arcane attack
+    # powers, and the board's enemies hold none.** Measured on
+    # `audit.board("m6272a0", 1)`: its seven enemies hold 17 attack
+    # powers between them and **0** carry `Keyword.ARCANE`. So the row
+    # runs, finds nothing to be made proof against, and correctly does
+    # nothing.
+    #
+    # **It oscillates with the draw**, which is said outright because
+    # `scripts/CLAUDE.md` asks for it: a board that deals a wizard or a
+    # sorcerer gives it a pool and it fires. `drivers.proof_against_a_power`
+    # is the proof where no draw can move it -- it stages 0, 2 and 6
+    # arcane attack powers opposite the creature and asserts 0, 2 and the
+    # printed ceiling of 4. Do not delete this entry on the strength of
+    # one green draw. #1517.
+    "m6272a0": "is made proof against the OPPOSITION's arcane attack "
+               "powers and the board's enemies hold none -- 17 attack "
+               "powers, 0 arcane, measured. Oscillates with the draw; "
+               "drivers.proof_against_a_power is the proof. #1517",
     "i3037x1": "pays only while its weapon is in the off hand, and the "
                "board deals one weapon, so `gear.off` is None and the "
                "gate is correctly False. drivers.off_hand_item stages a "

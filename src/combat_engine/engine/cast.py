@@ -20279,6 +20279,75 @@ class Cast:
         ]
         return mine[-1] if mine else 0
 
+    def immune_power(
+        self,
+        *refs: str,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        instead_temp_hp: int = 0,
+    ) -> Effect | None:
+        """Proof against one or more **named rows**. `c.immune_power("m1a2")`.
+
+        Neither `c.immune` nor `c.resist` could say this: one takes
+        conditions and the other damage types, and a card naming a *power*
+        is neither. Two print it:
+
+        * `i3555x1` -- *"a m4197's stone dead power cannot stop this
+          weapon"*. That power disarms whoever felled the creature, and
+          this wielder is exempt;
+        * `m6272a0` -- *"can be made immune to up to four arcane attack
+          powers at the time of its creation. When such a power is used on
+          it, the power's only effect is to grant it 5 temporary hit
+          points"*, which is `instead_temp_hp=5`.
+
+        **Read in `resolve.attack` and nowhere else, which is a stated
+        limit.** Both printed clauses are attacks, so cancelling the
+        attack is the whole of what they ask -- and it is cancelled
+        *before the roll*, because the card says the power's only effect
+        is the temporary hit points and an `AttackRolled` that misses is
+        still a swing a rider can answer. A power that reached the
+        creature **without attacking it** -- a zone laid over its square,
+        an effect applied off a target line -- is not covered. A second
+        read site wants a card that prints the case.
+
+        `instead_temp_hp` is a number rather than a callable on purpose:
+        the one card that substitutes anything substitutes temporary hit
+        points, and a callable stored on a component is a closure nothing
+        can inspect. The day a card substitutes something else is the day
+        to widen it.
+
+        Defaults to the **caster**, since both cards are about their own
+        holder. #1517.
+        """
+        from .components import Powers
+
+        who = self._who(on) if on is not None else self.me
+        if who is None or not refs:
+            return None
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        wanted = [r for r in refs if r and r not in known.proof_against]
+        if not wanted:
+            return None
+        for ref in wanted:
+            known.proof_against[ref] = max(0, instead_temp_hp)
+
+        def forget() -> None:
+            for ref in wanted:
+                known.proof_against.pop(ref, None)
+
+        held = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} proof against {len(wanted)} row(s)",
+            on_end=[forget],
+            by=self.ref,
+        )
+        if held is None:
+            forget()
+            return None
+        return held
+
     def suppress_aura(
         self,
         *,

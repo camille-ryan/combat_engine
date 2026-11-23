@@ -309,7 +309,13 @@ CATEGORIES: dict[str, dict] = {
             # this one moves the end-of-turn throw to the start, where
             # `cf:warden-f0` adds a second one and leaves the first. #671.
             ("getting out, and not getting out", [
-                "cure", "escape", "immune", "ignore_condition", "save",
+                "cure", "escape", "immune", "ignore_condition",
+                # Beside `immune` because it is the same word about a
+                # different kind of thing: that one takes a condition and
+                # `c.resist` takes a damage type, and neither can name a
+                # printed POWER. #1517.
+                "immune_power",
+                "save",
                 # Beside `unsave` because it is the distinction
                 # that verb does NOT draw: failing a throw spends
                 # the effect's chance and escalates a burn, where

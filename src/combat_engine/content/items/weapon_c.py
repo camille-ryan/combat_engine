@@ -3450,7 +3450,6 @@ def i3510p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.immune_power()",),
 )
 def i3555x1(c: Cast) -> None:
     """The resistance gates on `source`, which the damage context carries.
@@ -3466,9 +3465,21 @@ def i3555x1(c: Cast) -> None:
     there -- which is the right way round: the bonus is printed "against
     draconians and dragons" and a check about nobody is not that.
 
-    Still dropped: nothing makes a weapon proof against one named monster
-    row.
+    **The third clause is written now.** *"A m4197's stone dead power
+    cannot stop this weapon"* -- that power is declared, fires when the
+    creature drops to 0, and makes an attack that **disarms whoever
+    felled it with a weapon**. So "cannot stop this weapon" is exactly
+    that attack not happening to this wielder, and
+    `c.immune_power("m4197a2")` is the door: `resolve.attack` cancels an
+    attack whose power the target is proof against. Neither `c.immune`
+    nor `c.resist` could say it -- one takes conditions, the other damage
+    types, and a card naming a *power* is neither. #1517.
+
+    **The ref and not a description.** The clause names one printed power
+    on one printed creature, so there is nothing to generalise: a second
+    statue with the same trick would be a second ref.
     """
+    c.immune_power("m4197a2", on=c.me)
     c.resist(5, on=c.me, when=_dealt_by(c, "dragon", "draconian"))
     c.bonus(
         "skill:intimidate", c.enhancement, kind="item", on=c.me,

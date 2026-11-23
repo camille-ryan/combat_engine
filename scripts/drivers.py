@@ -5783,6 +5783,139 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def proof_against_one_named_power(out: Result) -> None:
+    """`c.immune_power`, which two cards print and neither `c.immune` nor
+    `c.resist` could say -- one takes conditions, the other damage types,
+    and a card naming a *power* is neither.
+
+    * `i3555x1`: *"a m4197's stone dead power cannot stop this weapon."*
+      That power is declared, fires when the creature drops to 0, and
+      disarms whoever felled it with a weapon.
+    * `m6272a0`: *"can be made immune to up to four arcane attack powers
+      at the time of its creation. When such a power is used on it, the
+      power's only effect is to grant it 5 temporary hit points."*
+
+    `resolve.attack` is the one read site and cancels **before the
+    roll**, which is what "the power's only effect" asks for. The limit
+    is stated rather than hidden: a power reaching the creature without
+    attacking it is not covered. #1517.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled, TempHP
+    from combat_engine.engine.types import Defense, Keyword
+
+    # -- the verb ---------------------------------------------------------
+    def swung(*, proof: bool, instead: int = 0,
+              at: str = "drv:power") -> tuple[bool, int, int]:
+        """Attack a creature with `at`. Returns (rolled, temp hp, hp lost).
+
+        `proof` makes it immune to `"drv:power"` specifically, so passing
+        a different `at` is the control that shows the ref is read rather
+        than every attack being refused.
+        """
+        world, me, _ = _board("i3555x1", 1)
+        c = Cast(world=world, me=me, ref="drv")
+        victim = sorted(c.enemies())[0]
+        if proof:
+            Cast(world=world, me=victim, ref="drv").immune_power(
+                "drv:power", on=victim, instead_temp_hp=instead)
+        health = world.need(victim, Health)
+        was = health.hp
+        before = len(world.bus.log)
+        world.rng.loaded = 20
+        Cast(world=world, me=me, ref=at).attack(50, Defense.AC, on=victim)
+        rolled = any(isinstance(e, AttackRolled) and e.target == victim
+                     for e in world.bus.log[before:])
+        gained = sum(getattr(e, "amount", 0) for e in world.bus.log[before:]
+                     if isinstance(e, TempHP) and e.target == victim)
+        return rolled, gained, was - health.hp
+
+    bare_rolled, _bare_temp, bare_lost = swung(proof=False)
+    out.that(bare_rolled and bare_lost >= 0,
+             "the premise: an ordinary attack on that creature reaches a"
+             " roll, so a cancelled one is a difference rather than a"
+             " board that never got going",
+             f"rolled={bare_rolled}")
+    off_rolled, _off_temp, _off_lost = swung(proof=True)
+    out.that(not off_rolled,
+             "THE arm: a creature proof against that named row is not"
+             " attacked by it at all -- cancelled BEFORE the roll, which"
+             " is what 'the power's only effect' asks for. An"
+             " `AttackRolled` that missed would still be a swing a rider"
+             " could answer",
+             f"rolled={off_rolled}")
+    other_rolled, _o_temp, _o_lost = swung(proof=True, at="drv:other")
+    out.that(other_rolled,
+             "CONTROL: and an attack by a DIFFERENT row still lands on"
+             " the same creature, so the ref is read rather than every"
+             " attack being refused",
+             f"rolled={other_rolled}")
+    _s_rolled, sub_temp, _s_lost = swung(proof=True, instead=5)
+    out.that(sub_temp == 5,
+             "and `instead_temp_hp` pays the printed substitution -- 5"
+             " temporary hit points and no attack, which is `m6272a0`'s"
+             " whole sentence",
+             f"temp hp {sub_temp}")
+
+    # -- the two rows -----------------------------------------------------
+    world, me, _ = _board("i3555x1", 1)
+    _dsl.use(world, me, "i3555x1", spend=False)
+    known = world.need(me, Powers)
+    out.that(known.proof_against.get("m4197a2") == 0,
+             "`i3555x1` makes its wielder proof against `m4197a2` and owes"
+             " it nothing -- that power disarms whoever felled the"
+             " creature, and 'cannot stop this weapon' is exactly that"
+             " attack not happening",
+             f"{dict(known.proof_against)}")
+
+    def picks(arcane: int) -> tuple[int, int]:
+        """`m6272a0` with `arcane` arcane attack powers opposite it."""
+        world, me, _ = _board("m6272a0", 1)
+        c = Cast(world=world, me=me, ref="m6272a0")
+        foes = sorted(c.enemies())
+        pool = sorted(r for r, p in REGISTRY.items()
+                      if p.attack is not None
+                      and Keyword.ARCANE in (p.keywords or ()))[:arcane]
+        if pool and foes:
+            theirs = world.need(foes[0], Powers)
+            # `Powers.known` is a LIST, not a set -- `.add` raised.
+            for ref in pool:
+                if ref not in theirs.known:
+                    theirs.known.append(ref)
+        _dsl.use(world, me, "m6272a0", spend=False)
+        mine = world.need(me, Powers)
+        return len(mine.proof_against), len(pool)
+
+    none_held, _ = picks(0)
+    out.that(none_held == 0,
+             "`m6272a0` is proof against NOTHING when the opposition"
+             " holds no arcane attack power -- which is the audit board,"
+             " measured: 17 attack powers among its enemies and 0 of them"
+             " arcane. That is why it reads silent there, and the"
+             " entry in `audit.KNOWN_SILENT` points here",
+             f"{none_held}")
+    six_held, offered = picks(6)
+    out.that(offered == 6 and six_held == 4,
+             "and FOUR when six are on offer, which is the printed"
+             " ceiling -- 'up to four', so a longer list does not buy a"
+             " fifth",
+             f"{offered} offered, {six_held} taken")
+    two_held, offered2 = picks(2)
+    out.that(offered2 == 2 and two_held == 2,
+             "and two when only two exist: 'up to' four, so a short pool"
+             " is not padded",
+             f"{offered2} offered, {two_held} taken")
+
+    out.that(not REGISTRY["i3555x1"].unfinished
+             and not REGISTRY["m6272a0"].unfinished,
+             "and neither row carries a marker",
+             f"{REGISTRY['i3555x1'].unfinished}"
+             f" {REGISTRY['m6272a0'].unfinished}")
+
+
 def an_aura_is_switched_off_without_being_destroyed(out: Result) -> None:
     """`i1299p1`: *"you make an attack against any creature with a fire
     aura in the area: +6 vs. Reflex; on a hit, the target's fire aura is
@@ -135086,6 +135219,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "proof_against_a_power": (
+        proof_against_one_named_power,
+        "i3555x1 and m6272a0 are proof against named rows, and one"
+        " of them takes temporary hit points instead (#1517)",
     ),
     "aura_switched_off": (
         an_aura_is_switched_off_without_being_destroyed,

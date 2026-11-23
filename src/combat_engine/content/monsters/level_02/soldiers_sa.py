@@ -74,6 +74,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.components import Powers
 from combat_engine.engine.events import (
     ActionPointSpent,
     AttackDeclared,
@@ -2079,14 +2080,63 @@ def m6032a8(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.immune_power()",),
 )
 def m6272a0(c: Cast) -> None:
-    """Immunity to four *named rows*, chosen when the creature was built, and
-    the rows turning into temporary hit points instead. Nothing can say
-    either half: `c.immune` takes conditions, `c.resist` takes damage types,
-    and neither takes a ref. The whole row waits on one verb, so it is a
-    `todo` and is refused in play rather than half-resolving."""
+    """*"Can be made immune to up to four arcane attack powers at the time
+    of its creation. When such a power is used on it, the power's only
+    effect is to grant it 5 temporary hit points."*
+
+    **Written.** Both halves are `c.immune_power`: proof against named
+    rows, and `instead_temp_hp=5` for the substitution. Neither
+    `c.immune` nor `c.resist` could say it -- one takes conditions, the
+    other damage types, and a card naming a *power* is neither.
+    `resolve.attack` is the read site and cancels the attack **before the
+    roll**, which is what "the power's only effect" asks for. #1517.
+
+    **"At the time of its creation" is asked of the decider**, the way
+    `i3305p1` asks for the creature type its scroll was made against:
+    nothing on a stat block carries the four refs, so there is no column
+    to read them from.
+
+    **And the pool is what the OPPOSITION actually holds, not the whole
+    corpus.** Every arcane attack power in the tree is thousands of
+    options, which is a decision no player or policy can be handed. The
+    creature can only ever be proof against a power somebody present can
+    use, so the pool is the arcane attack powers its enemies know -- the
+    same answer, asked of a list a reader can see. A fight where nobody
+    casts arcane leaves it proof against nothing, which is the honest
+    outcome rather than four wasted picks.
+
+    `c.immune_power` is called once with every pick, so one hold covers
+    all four and they come back together."""
+    me = c.me
+    theirs: set[str] = set()
+    for foe in c.enemies():
+        # `Powers.known` read directly, because there is no `c.powers_of`
+        # -- `items.alchemical._block_of` reaches the same field the same
+        # way and says so.
+        theirs_known = c.world.get(foe, Powers)
+        for ref in sorted(theirs_known.known if theirs_known else ()):
+            declared = get(ref)
+            if declared is None or declared.attack is None:
+                continue
+            if Keyword.ARCANE in (declared.keywords or ()):
+                theirs.add(ref)
+    picked: list[str] = []
+    for nth in range(4):
+        left = sorted(theirs - set(picked))
+        if not left:
+            break
+        choice = c.choose(
+            left,
+            f"{c.ref}: which arcane attack power it was made proof"
+            f" against ({nth + 1} of 4)",
+        )
+        if choice is None:
+            break
+        picked.append(choice)
+    if picked:
+        c.immune_power(*picked, on=me, instead_temp_hp=5)
 
 
 @power(

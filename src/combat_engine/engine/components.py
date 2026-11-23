@@ -1905,6 +1905,29 @@ class Powers:
     #: therefore an **allow**-list where the set above is a deny-list, and
     #: the two are read in the same place. `#1473`.
     acts_despite: set[ActionType] = field(default_factory=set)
+    #: **Named rows this creature is proof against**, mapped to the
+    #: temporary hit points the power grants it instead (0 for none).
+    #:
+    #: Two cards print it and neither is a condition or a damage type, so
+    #: neither `c.immune` nor `c.resist` could say it. `i3555x1`:
+    #: *"a m4197's stone dead power cannot stop this weapon"* -- that
+    #: power disarms the creature that felled it, and this wielder is
+    #: exempt. `m6272a0`: *"can be made immune to up to four arcane
+    #: attack powers at the time of its creation. When such a power is
+    #: used on it, the power's only effect is to grant it 5 temporary hit
+    #: points."*
+    #:
+    #: **Read in `resolve.attack` and nowhere else**, which is the honest
+    #: limit: both printed clauses are attacks, so cancelling the attack
+    #: is the whole of what they ask. A power that reached this creature
+    #: without attacking it -- a zone laid over its square, an effect
+    #: applied off a target line -- is NOT covered, and that is a stated
+    #: limit rather than an oversight. A second read site would want a
+    #: card that prints the case.
+    #:
+    #: Written by `Cast.immune_power`, which also lays the hold that
+    #: clears it. #1517.
+    proof_against: dict[str, int] = field(default_factory=dict)
     #: **The only attack rows this creature may reach**, by ref, when it is
     #: not empty. *"When it attacks, the target can only make a melee basic
     #: attack"* and *"dominated … but can use only basic attacks"* are the

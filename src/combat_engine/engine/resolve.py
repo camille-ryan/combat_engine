@@ -632,6 +632,37 @@ def attack(
         if (not dying and not can_act(world, attacker)) or not alive(world, target):
             result.cancelled = True
             return
+        # **Proof against this named row.** `Powers.proof_against` maps a
+        # ref to the temporary hit points the power grants instead, and
+        # this is its only read site -- see that field for why, and for
+        # the limit it states. Two cards print the clause and both are
+        # attacks: `i3555x1`'s wielder is exempt from the disarm
+        # `m4197a2` makes, and `m6272a0` turns up to four named arcane
+        # attack powers into 5 temporary hit points.
+        #
+        # Before the roll, so nothing is announced: the card says the
+        # power's only effect is the temporary hit points, and an
+        # `AttackRolled` that misses is still a swing a rider can answer.
+        # Cancelled the same way a dead target cancels it, which is the
+        # one path callers already handle.
+        from .components import Powers as _Powers
+
+        _proof = world.get(target, _Powers)
+        _owed = (_proof.proof_against or {}).get(power) if _proof else None
+        if _owed is not None:
+            result.cancelled = True
+            if _owed > 0:
+                from .cast import Cast as _Cast
+
+                # **`on=target` and not the default.** `c.temp_hp`
+                # falls through to `c.target`, which is None on a
+                # freshly built `Cast` -- so without this the grant
+                # silently did nothing and the substitution read 0.
+                # Almost every `Cast` method defaults this way and it is
+                # the commonest single mistake in this tree.
+                _Cast(world=world, me=target, ref=power).temp_hp(
+                    _owed, on=target)
+            return
 
         ca = (
             has_combat_advantage(world, attacker, target, power, hand)
