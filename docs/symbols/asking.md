@@ -298,6 +298,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Roll a raw ability check. Truthy when it beat the DC.
 - `c.check(self, skill: 'str', dc: 'int' = 0, *, who: 'int | None' = None, bonus: 'int' = 0, against: 'int | None' = None)`
   - Roll a skill check. Truthy when it beat the DC.
+- `c.deferring: bool`
+  - is this use rolling every attack before any of its damage? Set by `dsl.use` for an area or several-targets line (Camille's ruling, #1394), and while it is set `c.damage` and `c.half_damage` QUEUE and return 0 -- so do not read what they returned inside one
 - `c.instinctive_action: bool`
   - is a summon swinging on its own Instinctive Effect? Reaches the attack context as `ctx['instinctive']`
 - `c.knowledge_check(self, *, on: 'int | None' = None, learn: 'str' = 'name', who: 'int | None' = None) -> 'CheckResult | bool'`

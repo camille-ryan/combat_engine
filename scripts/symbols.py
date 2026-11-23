@@ -806,7 +806,8 @@ CATEGORIES: dict[str, dict] = {
                 "declared_feats", "me", "ref", "targets", "world",
             ]),
             ("rolling and the trigger", [
-                "ability_check", "check", "instinctive_action",
+                "ability_check", "check", "deferring",
+                "instinctive_action",
                 "knowledge_check", "opportunity", "ranged", "roll",
                 "struck_by", "struck_by_property", "struck_with",
                 "substitute_check", "trigger",
@@ -1235,6 +1236,18 @@ CTX_KEYS: dict[str, str] = {
         "if a destination-gated extension counted there, every one of the "
         "528 rows calling `c.teleport` would be longer. "
         "`drivers.reach_per_square` plants exactly that."
+    ),
+    "on": (
+        "**who the defence bonus is being laid on** -- on the ctx a "
+        "`c.raise_defence_bonus(when=)` gate is handed, and on no other. "
+        "Written by `Cast._defence_raise`, beside `what`, `kind`, `power` "
+        "and `by`.\n\n"
+        "`f2074`'s gate is the printed *\"to you\"*: a rogue power of "
+        "this character's that buffs an **ally's** defence is not that "
+        "feat, and without this key the raise would pay on either. The "
+        "key existed in the engine and not in this list, so the gate was "
+        "reported dead while working -- found only once an earlier pass "
+        "of this instrument stopped failing above it. #1503."
     ),
     "kind": (
         "**which kind of movement is asking to enter the square** -- on "

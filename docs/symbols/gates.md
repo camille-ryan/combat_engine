@@ -80,6 +80,9 @@ Two keys rather than one because all four printed lines forbidding a mark differ
 - `ctx['mover']` -- who is trying to enter a square. `movement.may_enter`.
 - `ctx['natural']` -- the d20 face of the check being resolved. Written by `skills.check` and `skills.ability_check` from inside their resolve callbacks, so it is **absent on a standalone read** of `skills.modifier` -- which is the right way round: a gate on the face is a contingency on a die that has not been thrown. It is the paying half of `CheckDeclared`, where the calling half happens. #693.
 - `ctx['occupant']` -- who is standing in it. The other half of `mover`.
+- `ctx['on']` -- **who the defence bonus is being laid on** -- on the ctx a `c.raise_defence_bonus(when=)` gate is handed, and on no other. Written by `Cast._defence_raise`, beside `what`, `kind`, `power` and `by`.
+
+`f2074`'s gate is the printed *"to you"*: a rogue power of this character's that buffs an **ally's** defence is not that feat, and without this key the raise would pay on either. The key existed in the engine and not in this list, so the gate was reported dead while working -- found only once an earlier pass of this instrument stopped failing above it. #1503.
 - `ctx['ongoing']` -- is this ongoing damage rather than a blow.
 - `ctx['opportunity']` -- is this an opportunity attack.
 - `ctx['origin']` -- the squares this swing comes **from**, as a frozenset. Not the attacker's square: a ranged attack's origin moves with `c.cast_from` or `c.cast_from_square`, and an area power's is the square it was **placed** at, which may hold no creature at all.
