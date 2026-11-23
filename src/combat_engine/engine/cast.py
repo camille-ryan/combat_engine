@@ -20279,6 +20279,95 @@ class Cast:
         ]
         return mine[-1] if mine else 0
 
+    def suppress_aura(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.EOTNT,
+        which: Callable[[Any], bool] | None = None,
+        label: str = "",
+    ) -> int:
+        """Switch **somebody else's** aura off without destroying it.
+
+        *"The target's fire aura is deactivated and can't be reactivated
+        until the end of the target's next turn."* `i1299p1` prints it and
+        nothing could say it: `c.resize_aura` and `c.my_aura` both resolve
+        through the **caster's own** aura, `c.aura` only makes a new one at
+        a radius this row does not know, and `c.dispel` is the opposite
+        direction -- it destroys the region and unwinds every hold its
+        maker laid, with nothing to put it back. A monster aura is armed
+        once by `Encounter.start`, so destroying it is permanent and
+        strictly stronger than a card that gives it back next turn.
+
+        `Zone.asleep` is the lever and it is reversible by construction:
+        an aura's footprint is recomputed from its owner on every
+        `Zones.refresh`, so clearing the flag draws it again. While it is
+        set the region gets no squares at all, which is what
+        "deactivated" comes to for every reader -- and everybody standing
+        in it is announced out of it, so a row paying "while you are in
+        the aura" stops.
+
+        **"Can't be reactivated" is the duration, not a second lock.**
+        Nothing in this engine lets a creature re-light its own aura
+        mid-fight -- an aura is armed once -- so the only thing that could
+        bring it back is this effect ending, and `until` is when. A lock
+        on top would be a second mechanism for the same fact.
+
+        `which` narrows to one of several, which is how a card naming an
+        **element** picks: `Zone` carries no element, so the row resolves
+        `Zone.label` to a ref and reads its keywords. `label` is the
+        cheaper narrowing when the name is enough. A plain zone is left
+        alone -- `z.aura` is what tells an aura from a patch of ground
+        somebody made, exactly as `c.my_aura` has it.
+
+        Returns **how many were switched off**, which is a real answer at
+        0: a row that suppresses an aura does nothing to a creature
+        without one. #1516.
+        """
+        who = self._who(on)
+        if who is None:
+            return 0
+        off = 0
+        for zid, zone in self.world.zones.all():
+            if not zone.aura or zone.owner != who or zone.asleep:
+                continue
+            if label and label not in (zone.label or ""):
+                continue
+            if which is not None and not which(zone):
+                continue
+            zone.asleep = True
+
+            def wake(_z: Any = zone) -> None:
+                _z.asleep = False
+
+            held = self.world.effects.apply(
+                who, self.me, until,
+                label=f"{self.ref} suppresses aura {zid}",
+                on_end=[wake],
+                by=self.ref,
+            )
+            if held is None:
+                # Put it straight back rather than leaving an aura off
+                # with nothing to turn it on: a refused hold is a clause
+                # that did not happen.
+                zone.asleep = False
+                continue
+            off += 1
+        if off:
+            # **Refreshed here, so the switching-off is immediate.**
+            # Otherwise the aura keeps its squares until whatever ticks
+            # next, and a creature standing in it takes one more turn of
+            # something the card has already stopped.
+            self.world.zones.refresh()
+            # The `Note` is for a human reading the log. What makes this
+            # **attributable** is the `EffectApplied` that
+            # `effects.apply` above announces with `by=self.ref` -- a
+            # `Note` carries no `by`, which is why `c.douse` is silent to
+            # the audit while working, and why this verb does not lean on
+            # one.
+            self.note(f"{self.ref}: {off} aura(s) switched off")
+        return off
+
     def resize_aura(
         self, label: str = "", *, plus: int = 0, to: int = 0, cap: int = 0
     ) -> int:

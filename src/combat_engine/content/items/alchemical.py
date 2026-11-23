@@ -626,11 +626,9 @@ def i1113p1(c: Cast) -> None:
 
 
 @power("i1299p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=AreaBurst(1, 10), target=NO_TARGET,
-       dropped=("c.suppress_aura()",))
+       reach=AreaBurst(1, 10), target=NO_TARGET)
 def i1299p1(c: Cast) -> None:
-    """Four printed clauses. Three are written and the fourth keeps its
-    marker, with the reason re-measured.
+    """All four printed clauses are written.
 
     **The zone clause was three times stronger than the card and all three
     were silent.** `c.conjurations()` is every zone, aura and conjuration
@@ -662,10 +660,11 @@ def i1299p1(c: Cast) -> None:
     "extinguished" and in the right direction. No attack and no roll: the
     card does not ask for one on this line.
 
-    **`c.suppress_aura()` stands, and here is what was checked.** The
-    clause is "the target's fire aura is deactivated and can't be
-    reactivated until the end of the target's next turn" -- a suspension
-    with a lock, on **somebody else's** aura:
+    **`c.suppress_aura()` is written now, and here is what it had to
+    be.** The clause is "the target's fire aura is deactivated and can't
+    be reactivated until the end of the target's next turn" -- a
+    suspension on **somebody else's** aura, and none of the three things
+    that look like it would do:
 
     * `c.resize_aura` and `c.my_aura` both resolve through
       `self.my_aura(label)`, which is the **caster's own** aura. Neither
@@ -677,8 +676,20 @@ def i1299p1(c: Cast) -> None:
       turn.
     * `c.aura` only makes a new one, at a radius this row does not know.
 
-    So the gap is a real one and it is a suspend-and-relock, not a
-    teardown.
+    So it is a suspension and not a teardown. `Zone.asleep` is the lever
+    and it is reversible by construction: an aura's footprint is
+    recomputed from its owner on every `Zones.refresh`, so clearing the
+    flag draws it again. A sleeping region gets no squares at all, which
+    is what "deactivated" comes to for every reader, and everybody
+    standing in it is announced out of it so a row paying "while you are
+    in the aura" stops.
+
+    **"Can't be reactivated" turned out to be the duration rather than a
+    second lock.** Nothing here lets a creature re-light its own aura
+    mid-fight -- an aura is armed once -- so the only thing that could
+    bring it back is the hold ending, and `When.EOTNT` is when the card
+    says. A lock on top would be a second mechanism for one fact. That is
+    the one thing this note had wrong about the shape of the gap. #1516.
 
     **And the row now reads SILENT on the audit board, which is the
     instrument and not the row.** Proven: on `audit.board` seed 1 the
@@ -700,21 +711,65 @@ def i1299p1(c: Cast) -> None:
         sq = _square_of(c, fire)
         if sq is not None and sq in area:
             c.douse(on=fire)
+    def is_fire(zone: Zone) -> bool:
+        """Is this region a fire one? Factored out for the two loops.
+
+        `Zone` carries no element, so this asks the row that laid it:
+        `Zone.label` defaults to the maker's own ref, which `get`
+        resolves to a header carrying `Keyword.FIRE`. `hindering_type` is
+        the second door, for a region that burns without the keyword. A
+        label that is not a ref falls through and is left alone, which is
+        the safe direction -- this row destroys things.
+        """
+        if zone.hindering_type == DamageType.FIRE.value:
+            return True
+        made = get(zone.label)
+        return made is not None and Keyword.FIRE in made.keywords
+
     for thing in c.conjurations():
         zone = c.world.get(thing, Zone)
         if zone is None or zone.aura is not None:
             continue
         if not zone.squares & area:
             continue
-        made = get(zone.label)
-        burns = zone.hindering_type == DamageType.FIRE.value
-        if not burns and (made is None or Keyword.FIRE not in made.keywords):
+        if not is_fire(zone):
             continue
         owner = c.made_by(thing)
         if owner is None or owner == c.me:
             continue
         if c.attack(6, REF, on=owner):
             c.dispel(thing)
+
+    # **The aura clause, which used to be the dropped one.** "You make an
+    # attack against any creature with a fire aura in the area: +6 vs.
+    # Reflex; on a hit, the target's fire aura is deactivated and can't be
+    # reactivated until the end of the target's next turn."
+    #
+    # `c.suppress_aura` is the verb and `Zone.asleep` the lever: the
+    # region keeps existing and gets no squares, so it is switched off
+    # rather than destroyed. `c.dispel` above is the other clause and is
+    # the right verb for it -- that one says "the zone is destroyed" --
+    # and using it here would have been permanent, since a monster aura
+    # is armed once by `Encounter.start`. #1516.
+    #
+    # `zone.owner` rather than `c.made_by`: an aura belongs to the
+    # creature it hangs on, which is the creature the card attacks.
+    for thing in c.conjurations():
+        halo = c.world.get(thing, Zone)
+        if halo is None or not halo.aura:
+            continue
+        if not halo.squares & area:
+            continue
+        if not is_fire(halo):
+            continue
+        owner = halo.owner
+        if not owner or owner == c.me:
+            continue
+        if c.attack(6, REF, on=owner):
+            c.suppress_aura(
+                on=owner, until=When.EOTNT,
+                which=lambda z, _it=halo: z is _it,
+            )
 
 
 @power("i1403p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,

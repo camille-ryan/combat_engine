@@ -386,6 +386,11 @@ CATEGORIES: dict[str, dict] = {
                 # dim light". #687.
                 "dim", "illuminate", "light", "line", "move_zone", "origin",
                 "resize_aura",
+                # Beside `resize_aura` because they are the two levers on a
+                # standing region: that one changes a radius, this one
+                # switches a region off without destroying it, and
+                # `c.dispel` is the third and is a teardown. #1516.
+                "suppress_aura",
                 # Beside `resize_aura` because it is the same question about
                 # another row's area: that one changes a size, this one
                 # changes the shape. #614.

@@ -61,6 +61,27 @@ class Zone:
     squares: frozenset[Square] = frozenset()
     #: Set for an aura: its radius around the owner, recomputed as it moves.
     aura: int | None = None
+    #: **Switched off without being destroyed.** `i1299p1` is the card:
+    #: *"the target's fire aura is deactivated and can't be reactivated
+    #: until the end of the target's next turn."*
+    #:
+    #: `Zones.refresh` gives a sleeping region no squares, so nothing is
+    #: inside it, nothing triggers off it and every reader that asks about
+    #: a square finds it clear. Everyone who was inside gets a
+    #: `ZoneExited`, which is the announcement a row answering "while you
+    #: are in the aura" needs in order to stop.
+    #:
+    #: **Not `Zones.end`**, which is what `c.dispel` does: that destroys
+    #: the region and unwinds every hold its maker laid, and nothing puts
+    #: it back. A monster aura is armed once by `Encounter.start`, so
+    #: destroying it is permanent -- strictly stronger than a card that
+    #: gives it back next turn. Sleeping is reversible by construction,
+    #: because an aura's footprint is recomputed from the owner on every
+    #: refresh: clear the flag and the next refresh draws it again.
+    #:
+    #: Written by `Cast.suppress_aura`, cleared when that effect ends.
+    #: #1516.
+    asleep: bool = False
     #: False, True, or what sort of going it is -- see `Grid.difficult`.
     difficult: bool | str = False
     blocks_sight: bool = False
@@ -900,7 +921,15 @@ class Zones:
                 ):
                     self.end(eid, "its owner died")
                     continue
-            if zone.aura is not None:
+            if zone.asleep:
+                # **Emptied rather than skipped**, so the diff below still
+                # runs: everybody who was standing in it gets a
+                # `ZoneExited`, which is what a row reading "while you are
+                # in the aura" needs in order to stop paying. Skipping
+                # would leave `self.inside` stale and the aura switched
+                # off for geometry while still announced as occupied.
+                zone.squares = frozenset()
+            elif zone.aura is not None:
                 zone.squares = spread(squares(self.world, zone.owner), zone.aura)
             was = self.inside.setdefault(eid, set())
             now = {c for c in creatures(self.world) if squares(self.world, c) & zone.squares}

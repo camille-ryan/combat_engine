@@ -5783,6 +5783,163 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def an_aura_is_switched_off_without_being_destroyed(out: Result) -> None:
+    """`i1299p1`: *"you make an attack against any creature with a fire
+    aura in the area: +6 vs. Reflex; on a hit, the target's fire aura is
+    deactivated and can't be reactivated until the end of the target's
+    next turn."*
+
+    None of the three verbs that look like this would do it, which the
+    row's own note worked out: `c.resize_aura` and `c.my_aura` both
+    resolve through the **caster's** aura, `c.aura` only makes a new one
+    at a radius the row does not know, and `c.dispel` destroys the region
+    and unwinds every hold its maker laid. A monster aura is armed once
+    by `Encounter.start`, so a teardown is permanent -- strictly stronger
+    than a card that gives it back next turn.
+
+    `Zone.asleep` is the lever and the **reversibility is by
+    construction**: an aura's footprint is recomputed from its owner on
+    every `Zones.refresh`, so clearing the flag draws it again. That is
+    the arm that distinguishes this from `c.dispel`, and it is the one
+    worth reading. #1516.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.types import Keyword
+    from combat_engine.engine.zones import Zone
+
+    REF = "i1299p1"
+
+    # A real ref whose header carries the fire keyword, because that is
+    # how the row identifies a fire region: `Zone.label` resolves through
+    # `dsl.get` and the keywords are read off the header. Picked from the
+    # corpus rather than invented, so the rule cannot pass on a label the
+    # row would not accept.
+    #
+    # **Chosen inside `staged`, after the board exists.** `dsl.REGISTRY`
+    # holds three rows until the first board import, so reading it at the
+    # top of this rule found no fire power at all and the premise arm
+    # reported an empty label while every other arm stayed green -- the
+    # staging quietly using a label the row would have rejected.
+    fiery = ""
+
+    def staged() -> tuple[Any, ...]:
+        nonlocal fiery
+        world, me, _ = _board(REF, 1)
+        if not fiery:
+            fiery = next((r for r, p in sorted(REGISTRY.items())
+                          if Keyword.FIRE in (p.keywords or ())), "")
+        c = Cast(world=world, me=me, ref="drv")
+        here = sorted(c.enemies())
+        burning, cold = here[0], here[1]
+        # Put the foes where the burst will reach them, so "in the area"
+        # is true rather than hoped for.
+        for foe, step in ((burning, 1), (cold, 2)):
+            want = [sq for sq in world.reachable_squares(me, 3)
+                    if world.grid.occupant(sq) is None]
+            if len(want) >= step:
+                world.grid.lift(foe)
+                from combat_engine.engine import movement as _mv
+                _mv.place(world, foe, want[step - 1])
+        hot = world.zones.aura(burning, fiery, 1)
+        # **A SECOND aura on the SAME creature, and not a decoration.**
+        # Without it the `which=` filter is untested: a plant deleting it
+        # left every arm green, because `on=` alone already excluded the
+        # other foe's aura and the caster's. One creature with two auras
+        # is the only board on which the narrowing can be wrong.
+        also = world.zones.aura(burning, "drv:not-fire", 1)
+        chill = world.zones.aura(cold, "drv:not-fire", 1)
+        mine = world.zones.aura(me, fiery, 1)
+        world.zones.refresh()
+        return world, me, burning, hot, chill, mine, also
+
+    world, me, burning, hot, chill, mine, also = staged()
+    before = len(world.get(hot, Zone).squares)
+    out.that(before > 0 and fiery
+             and world.get(hot, Zone).squares
+             and not world.get(hot, Zone).asleep,
+             "the premise: the marked foe carries a live fire aura with"
+             " squares, labelled with a real ref whose header declares"
+             " the fire keyword -- which is how the row tells a fire"
+             " region from any other",
+             f"label={fiery} squares={before}")
+
+    # Driven through the verb directly for the arms about the verb, and
+    # through the row below for the arm about the row.
+    c = Cast(world=world, me=me, ref="drv")
+    off = c.suppress_aura(on=burning, until=When.EOTNT,
+                          which=lambda z: z.label == fiery)
+    out.that(off == 1,
+             "THE arm: one aura is switched off, and the count is the"
+             " return -- 0 is a real answer for a creature without one"
+             " rather than a failure",
+             f"{off}")
+    out.that(world.get(hot, Zone) is not None
+             and not world.get(hot, Zone).squares,
+             "and it has no squares, which is what `deactivated` comes to"
+             " for every reader -- nothing is inside it and nothing"
+             " triggers off it",
+             f"squares={len(world.get(hot, Zone).squares)}")
+    out.that(world.get(hot, Zone) is not None,
+             "and it STILL EXISTS, which is the whole difference from"
+             " `c.dispel`: that destroys the region and unwinds its"
+             " maker's holds, and a monster aura armed once by"
+             " `Encounter.start` would never come back",
+             "the Zone is still on the world")
+    out.that(len(world.get(also, Zone).squares) > 0,
+             "CONTROL, and the one that tests `which=`: the SAME foe's"
+             " other, non-fire aura is untouched. Without a second aura"
+             " on one creature this arm was the other foe's, which `on=`"
+             " already excluded -- so deleting the filter reddened"
+             " nothing",
+             f"squares={len(world.get(also, Zone).squares)}")
+    out.that(len(world.get(chill, Zone).squares) > 0,
+             "CONTROL: and the other foe's aura is untouched, which is"
+             " `on=` doing its own job",
+             f"squares={len(world.get(chill, Zone).squares)}")
+    out.that(len(world.get(mine, Zone).squares) > 0,
+             "CONTROL: and the caster's own aura is untouched -- `on=` is"
+             " the creature whose aura it is, not the creature casting",
+             f"squares={len(world.get(mine, Zone).squares)}")
+
+    # -- reversible, which is the point --------------------------------
+    for eff in list(world.effects.of(burning)):
+        if "suppresses aura" in (eff.label or ""):
+            world.effects.end(eff, "the control")
+    world.zones.refresh()
+    out.that(len(world.get(hot, Zone).squares) == before,
+             "and ending the hold draws the aura again, at the same"
+             " footprint -- reversible by construction, because an aura's"
+             " squares are recomputed from its owner on every refresh",
+             f"{before} -> {len(world.get(hot, Zone).squares)}")
+
+    # -- and the row ----------------------------------------------------
+    world2, me2, burning2, hot2, _c2, _m2, _o2 = staged()
+    world2.rng.loaded = 20
+    # **Aimed at the foe, because the burst's origin decides the area.**
+    # Left to the headless decider it takes the first option, which on
+    # this board is nowhere near the aura -- so the row correctly did
+    # nothing and the arm read as the clause not working. `c.area()` is 9
+    # squares and the aura's are 9; they have to overlap.
+    from combat_engine.engine.components import Position as _Pos
+
+    aimed = world2.get(burning2, _Pos)
+    _dsl.use(world2, me2, REF, spend=False,
+             origin=aimed.square if aimed is not None else None)
+    out.that(world2.get(hot2, Zone) is not None
+             and world2.get(hot2, Zone).asleep,
+             "and the ROW switches it off on a hit, through the clause"
+             " that used to carry the marker -- the die is loaded, since"
+             " the card makes an attack at +6 vs Reflex for it",
+             f"asleep={world2.get(hot2, Zone).asleep}")
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker: all four printed clauses are"
+             " written",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_charge_knows_who_it_is_charging(out: Result) -> None:
     """`i1333x1`: *"when charging an enemy marked by you, you gain a +2
     item bonus to speed."*
@@ -134929,6 +135086,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "aura_switched_off": (
+        an_aura_is_switched_off_without_being_destroyed,
+        "i1299p1 deactivates a fire aura without destroying it"
+        " (#1516)",
     ),
     "charge_knows_its_victim": (
         a_charge_knows_who_it_is_charging,
