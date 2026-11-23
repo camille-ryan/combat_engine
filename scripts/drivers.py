@@ -45041,6 +45041,24 @@ def at_most_one_applies(out: Result) -> None:
 ANY_CREDIT = "<computed>"
 
 UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
+    # **`p1448` WITHHOLDS a strike from an ally; withholding is not an
+    # effect.** `f1500` and `f2176` each print *"targets only enemies"*,
+    # written into this power per #550 (`#1497`), as a `return` in front
+    # of `c.strike()` when the target is an ally and either feat is held.
+    # So when a feat is present nothing is laid at all, and when it is
+    # absent the damage laid is the power's own -- there is no moment at
+    # which an effect belongs to the feat. A `c.credit` block would wrap
+    # an empty stack.
+    #
+    # Same shape as `f3636` below and the inverse direction of the
+    # documented early-out: there the clause fires when the ref is
+    # ABSENT, here the skip fires when it is PRESENT. Both end in nothing
+    # laid being the ref's doing, which is the test this dict applies.
+    #
+    # Each feat's own body lays its own half -- temporary hit points,
+    # a +1 to attack -- under its own label, so neither reports silent
+    # for want of a block here.
+    "p1448": ("f1500", "f2176"),
     # **`f3636` REFUSES a spend; refusing is not an effect.** `p9400`'s
     # `invoke` closure ends in `c.spend_shrouds()`, and f3636's clause
     # (written there per #550, 2026-11-20) gates a `return` in front of it so
