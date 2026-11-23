@@ -505,11 +505,11 @@ def f2415(c: Cast) -> None:
 
 
 @power("f2417", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("movement.step(per_square=True)",))
+       reach=PERSONAL, target=SELF)
 def f2417(c: Cast) -> None:
     """No opportunity attack for circling an enemy you are already
-    beside -- which every creature on the board already has.
+    beside -- which every creature on the board already has, so the body
+    is deliberately empty.
 
     `movement.step` opens the window only when the mover leaves the
     watcher's *reach*, never when it merely leaves a threatened square:
@@ -518,11 +518,27 @@ def f2417(c: Cast) -> None:
     enemy for anybody. `risk_along` and `_provokes_step` make the same
     test, so the interface and the pathfinder agree with it.
 
-    Writing the row would grant a permission already held. The marker
-    names the rule whose absence makes the feat free, the way f2462
-    names the restriction it lifts, so the day the engine counts
-    squares this is the row that exempts the ranger.
-    """
+    **Unmarked, and that is the fix rather than a concession.** It was
+    `todo=("movement.step(per_square=True)",)`, which named the rule
+    whose *absence* makes the feat free -- and `todo=` means refused in
+    play, so a printed feat whose benefit every creature already enjoys
+    was the one thing a character could not have. Nothing was waiting
+    for a symbol: there is no clause to write, today or on any planned
+    change, because a per-square model is not something anybody is
+    building (see `_hop_provokes`, where this engine's escaping-reach
+    reasoning and the measurement behind it live).
+
+    Measured on an `f2417` board rather than read off the source, and
+    the measurement needed two corrections worth recording. `AttackRolled`
+    is the wrong listener -- a window can open and the watcher decline
+    it, so a silent arm says nothing -- and the assertion has to be made
+    **per watcher**: circling a foe to one of its other adjacent squares
+    can still leave a *different* creature's reach, which is exactly what
+    the first arm caught and misread as the engine provoking.
+
+    `drivers.circling_a_foe_provokes_nothing_from_it` is the guarantee,
+    and it is the reason an empty body is safe: the day `step` starts
+    counting squares, that rule reds and names this row. #1499."""
 
 
 @power("f2419", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

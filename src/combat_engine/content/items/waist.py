@@ -1866,11 +1866,11 @@ def i2208p2(c: Cast) -> None:
 
 
 @power("i3469x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("movement.teleport(needs_sight)",))
+       reach=PERSONAL, target=SELF)
 def i3469x1(c: Cast) -> None:
     """No sight needed to a space you have seen, and a teleport aimed at an
-    occupied space fails and spends the power.
+    occupied space fails and spends the power. **Both clauses already hold,
+    so the body is deliberately empty.**
 
     **Re-pointed, because the old marker named a restriction that is not
     there.** It was `c.teleport(no_sight=)`, off a note reading
@@ -1886,11 +1886,19 @@ def i3469x1(c: Cast) -> None:
     waiver to write.
 
     What is genuinely unwritable is the **cost**. An occupied square is
-    filtered out of `options` before the decider sees one, so the attempt
-    the penalty is about cannot be made: `share=True` is the only way into
-    an occupied square and it belongs to the teleporting row, not to a
-    property its wearer carries. A gate written on it would be a gate that
-    can never be true.
+    refused, so the attempt the penalty is about cannot be made:
+    `share=True` is the only way into one and it belongs to the
+    teleporting row, not to a property its wearer carries. A gate written
+    on it would be a gate that can never be true.
+
+    **Refused twice, and this paragraph used to name only the first.** It
+    said "filtered out of `options` before the decider sees one", which
+    is true and is not what carries it: loosening that filter alone left
+    `drivers.a_teleport_asks_nothing_about_sight` entirely green, because
+    `c.teleport` then calls `movement.teleport`, whose
+    `step(..., through=share)` refuses the square again at `_clear`. Two
+    independent guards, so breaking either is invisible -- found by the
+    plant passing, which is the only way that shape shows up.
 
     So the wait is for `c.teleport` to consult a standing hold when it
     decides what counts as a destination. That is the same machinery
@@ -1921,16 +1929,29 @@ def i3469x1(c: Cast) -> None:
     teleport needs no sight to where it is going and the card's waiver
     grants every creature what it already has.
 
-    So the marker names the layer that would enforce the requirement. A
-    `c.teleport(...)` parameter would report ARRIVED without the
-    requirement existing, which is the mistake all three previous markers
-    on this row made in three different ways.
+    ## Unmarked on the fourth pass, which is what the three before it
+    ## were each circling
 
-    **528 rows call `c.teleport`**, so requiring sight is a behaviour
-    change reaching every one of them and a balance decision as much as a
-    rules one. Two things to settle with it, both on the issue: sight to a
-    **square** rather than to a creature, and *"a space you have seen"*
-    being a **memory** that nothing records."""
+    Every previous marker named *the layer that would enforce the
+    requirement* -- and that is not this row's gap. **528 rows call
+    `c.teleport`**, so requiring sight is a behaviour change reaching
+    every one of them and a balance decision as much as a rules one, with
+    two more things to settle beside it: sight to a **square** rather than
+    to a creature, and *"a space you have seen"* being a **memory** that
+    nothing records. That is `#1439`, which is open and owns it.
+
+    What the marker was doing meanwhile is the fault. `todo=` means
+    refused in play, so an item whose two printed clauses **both already
+    hold** was the one thing its wearer could not have, waiting on an
+    engine-wide decision the row does not own and would not need to read
+    the result of -- if sight ever is required, this card is the waiver
+    and its body is written then, from print, with nothing lost by its
+    being empty now.
+
+    `drivers.a_teleport_asks_nothing_about_sight` is the guarantee and
+    the condition for the `KNOWN_SILENT` entry: it asserts both printed
+    clauses as properties of the engine, so the day either moves the rule
+    reds and names this row. #1499."""
 
 
 @power("i3469p1", level=8, cls=ITEM, usage=DAILY, action=MOVE,

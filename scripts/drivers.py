@@ -4452,6 +4452,183 @@ def an_instinctive_swing_is_told_from_a_commanded_one(out: Result) -> None:
              f"{plain_cmd[0]} -> {feat_cmd[0]}")
 
 
+def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
+    """`f2417` is an empty body, and this is why that is safe.
+
+    *"Whenever you are adjacent to an enemy and move to another square
+    adjacent to that enemy, you do not provoke an opportunity attack
+    from that enemy for leaving your square."* Every creature on this
+    board already has that, so the row has no clause to write -- and it
+    carried `todo=` for it, which **refused a printed feat in play**
+    over a rule nobody is building. #1499.
+
+    What makes it true: `movement.step` computes `left` against the
+    *destination*, so a watcher's window opens on escaping its reach and
+    not on vacating a threatened square. The guarantee the empty body
+    needs is that this stays true, which is what this rule is for -- the
+    day `step` counts squares, it reds and names the row.
+
+    **Asserted per watcher, which is the correction that mattered.** The
+    first draft took "any window at all" as the observable and read the
+    engine as provoking: circling a foe to one of *its* other adjacent
+    squares can still escape a **different** creature's reach, and on
+    this board it does. So the question is only ever about the foe being
+    circled.
+
+    **And `OpportunityWindow`, not `AttackRolled`.** A window can open
+    and the watcher decline it, so an arm that listens for the swing is
+    silent on a board where nobody takes the shot -- which is this one.
+    The first control "passed" that way while never moving at all.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.events import OpportunityWindow
+    from combat_engine.engine.movement import reachable, step
+    from combat_engine.engine.query import squares
+
+    def circle(out_of_reach: bool) -> tuple[bool, list[int], Square]:
+        """Step to a neighbour that does or does not escape the foe's reach.
+
+        Returns whether the foe opened a window, everyone who did, and
+        where the mover went.
+        """
+        world, me, _ = _board("f2417", 1)
+        c = Cast(world=world, me=me, ref="drivers")
+        foe = sorted(c.enemies())[0]
+        there = world.need(foe, Position).square
+        start = (there[0] + 1, there[1])
+        world.need(me, Position).square = start
+        world.grid.place(me, frozenset(squares(world, me)))
+        world.turn = me
+
+        def far(sq: Square) -> bool:
+            return max(abs(sq[0] - there[0]), abs(sq[1] - there[1])) > 1
+
+        want = [sq for sq in sorted(reachable(world, me, 1))
+                if far(sq) == out_of_reach]
+        if not want:
+            return False, [], start
+        dest = want[0]
+        seen: list[int] = []
+        world.bus.on(OpportunityWindow, lambda ev, into=seen: into.append(
+            ev.actor))
+        if not step(world, me, dest):
+            return False, [], start
+        return foe in seen, seen, dest
+
+    stayed, all_stayed, where_stayed = circle(out_of_reach=False)
+    left, all_left, where_left = circle(out_of_reach=True)
+
+    out.that(where_stayed != where_left,
+             "the two arms step somewhere different, so there is a"
+             " comparison to make -- the premise, and it fails on a board"
+             " that offers no free square of one of the two kinds",
+             f"circling to {where_stayed}, leaving to {where_left}")
+    out.that(left,
+             "a step that escapes the foe's reach DOES open its window --"
+             " the positive control, and without it the arm below would"
+             " pass on a board that never provokes at all",
+             f"watchers who opened one: {sorted(all_left)}")
+    out.that(not stayed,
+             "and moving to another square adjacent to the SAME foe opens"
+             " nothing from that foe, which is what f2417 prints and what"
+             " makes its body correctly empty: `left` is computed against"
+             " the destination, so vacating a threatened square is not"
+             " escaping reach",
+             f"watchers who opened one: {sorted(all_stayed)} -- the foe is"
+             f" not among them")
+    out.that(not stayed and sorted(all_stayed) != sorted(all_left),
+             "and the two arms are genuinely different sets, so the arm"
+             " above is not passing because nothing ever opens a window",
+             f"{sorted(all_stayed)} vs {sorted(all_left)}")
+
+
+def a_teleport_asks_nothing_about_sight(out: Result) -> None:
+    """`i3469x1` is an empty body, and these are the two clauses it prints.
+
+    *"You do not need line of sight to a space you have seen"* and a
+    teleport into an occupied space *"fails and spends the power"*. Both
+    already hold for every creature, so the row has nothing to write --
+    and it carried `todo=` for it, refusing the item's property in play.
+    #1499.
+
+    The engine-wide question of whether a teleport **should** require
+    sight is `#1439`: open, 528 calling rows, and a balance decision. This
+    rule asserts only what is true today, which is what an empty body
+    rests on.
+
+    Two arms, and the second is the one that could silently stop meaning
+    anything: a teleport onto an occupied square must fail **and** the use
+    must still be gone. `dsl.use` spends after the body whatever it
+    returned, so the second half is about `use` and not about `c.teleport`.
+
+    **The occupancy refusal is enforced TWICE, which a passing plant is
+    what found.** Removing `Cast.teleport`'s own
+    `grid.occupant(s) in (None, mover)` test from `fits` left all five
+    assertions green: with the square back in `options`, `c.teleport`
+    goes on to call `movement.teleport`, whose `step(..., through=share)`
+    reaches `_clear` and refuses it there. So the row's clause holds on
+    two independent guards and breaking either one alone is invisible,
+    which also means this rule's first draft attributed the refusal to
+    the wrong one of them.
+
+    Both arms do red with **both** off (`fits` loosened and `through=True`
+    forced), which is the honest plant for a doubly-guarded property: the
+    assertion moves when the behaviour moves, and not when one of two
+    redundant gates is removed.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.movement import reachable
+    from combat_engine.engine.query import line_of_sight
+
+    # ---- sight is not consulted for a destination
+    world, me, _ = _board("i3469x1", 1)
+    c = Cast(world=world, me=me, ref="drivers")
+    here = world.need(me, Position).square
+    blind = [sq for sq in sorted(reachable(world, me, 6))
+             if sq != here and not line_of_sight(world, me, sq)]
+    out.that(bool(blind),
+             "the board offers a square this creature cannot see -- the"
+             " premise, because an arm that teleports somewhere visible"
+             " asserts nothing about sight",
+             f"{len(blind)} unseen reachable square(s), e.g. {blind[:3]}")
+    if blind:
+        reach = max(abs(blind[0][0] - here[0]), abs(blind[0][1] - here[1]))
+        went = c.teleport(reach, who=me, to=blind[0])
+        out.that(bool(went) and world.need(me, Position).square == blind[0],
+                 "and a teleport lands there anyway: nothing in"
+                 " `movement.py` consults `line_of_sight` for a"
+                 " destination, so i3469x1's waiver grants what every"
+                 " creature already has",
+                 f"teleported={went}, now at"
+                 f" {world.need(me, Position).square}")
+
+    # ---- an occupied square fails, and the use is gone regardless
+    world, me, _ = _board("i3469x1", 1)
+    c = Cast(world=world, me=me, ref="drivers")
+    foes = c.enemies()
+    out.that(bool(foes), "somebody else is standing somewhere -- the premise")
+    if foes:
+        taken = world.need(sorted(foes)[0], Position).square
+        before = world.need(me, Position).square
+        reach = max(abs(taken[0] - before[0]), abs(taken[1] - before[1]))
+        went = c.teleport(reach, who=me, to=taken)
+        out.that(not went and world.need(me, Position).square == before,
+                 "a teleport aimed at an occupied space fails and nobody"
+                 " moves, which is the half of i3469x1's card that reads"
+                 " as a penalty. Refused TWICE -- `fits` keeps the square"
+                 " out of `options`, and `step`'s `_clear` refuses it"
+                 " again -- so this reds only with both guards off",
+                 f"teleported={went}, still at"
+                 f" {world.need(me, Position).square}")
+        out.that(world.need(me, Position).square == before,
+                 "and the mover is where it started rather than somewhere"
+                 " else the decider liked, so the refusal is a refusal and"
+                 " not a redirect",
+                 f"{before} -> {world.need(me, Position).square}")
+
+
 def the_last_two_target_lines_of_that_census(out: Result) -> None:
     """The two rows #656 left behind, and neither wanted a new idea.
 
@@ -132391,6 +132568,16 @@ DRIVERS = {
     "a_reach_that_changes_with_the_creature_s_state": (
         a_reach_that_changes_with_the_creature_s_state,
         "a printed range whose size a state decides"),
+    "circling_a_foe_provokes_nothing_from_it": (
+        circling_a_foe_provokes_nothing_from_it,
+        "f2417's empty body: escaping reach provokes, vacating a"
+        " threatened square does not",
+    ),
+    "a_teleport_asks_nothing_about_sight": (
+        a_teleport_asks_nothing_about_sight,
+        "i3469x1's empty body: no sight is needed to a destination, and an"
+        " occupied one fails",
+    ),
     "an_instinctive_swing_is_told_from_a_commanded_one": (
         an_instinctive_swing_is_told_from_a_commanded_one,
         "f1876's +1 reaches a summon's instinctive attack and not a"

@@ -143,6 +143,35 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **Two rows whose printed benefit this engine already grants every
+    # creature, so their bodies are deliberately empty.** Both carried
+    # `todo=` for it, which refuses a row in play -- so a benefit nobody
+    # could lose was the one thing a character could not have. #1499.
+    #
+    # These are not "unfinished and excused". There is no clause to
+    # write: the restriction each card waives does not exist here, and
+    # the day one does, the card is the waiver and its body gets written
+    # then from print, with nothing lost by its being empty now.
+    #
+    # The condition `scripts/CLAUDE.md` sets for an entry here is that a
+    # driver proves the row. For an inert row the only thing there is to
+    # prove is the **property it relies on**, and each has a rule doing
+    # exactly that -- so the day either model changes, the rule reds and
+    # names the row rather than this entry quietly covering it.
+    "f2417": "no opportunity attack for circling an enemy you are "
+             "already beside, which `movement.step` gives everybody: "
+             "`left` is computed against the destination, so vacating a "
+             "threatened square is not escaping reach. "
+             "drivers.circling_a_foe_provokes_nothing_from_it is the "
+             "proof, planted per-square and red on the circling arm "
+             "with the control still green. #1499",
+    "i3469x1": "both printed clauses already hold -- nothing in "
+               "`movement.py` consults `line_of_sight` for a "
+               "destination, and an occupied square is refused twice "
+               "over while `dsl.use` spends the use regardless. "
+               "drivers.a_teleport_asks_nothing_about_sight is the "
+               "proof. Whether a teleport SHOULD need sight is #1439, "
+               "open, 528 calling rows, and not this row's gap. #1499",
     # **Two cards printed inside another item's card, which this board
     # cannot pose.** `i3569p1:slide` and `i3569p1:pull` are the minor
     # actions two of that egg's seven printed varieties grant, declared
