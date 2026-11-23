@@ -1703,6 +1703,22 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # The cheaper cost **replaces** the minor rather than joining it, for
     # `_manoeuvres`' reason: two entries differing only in what they
     # spend is a choice no player makes the expensive way round.
+    # **Hanging a lit worn item up, which the card prints no cost for.**
+    # `i1321x1`'s lantern *"hangs where you leave it"* -- a property, not
+    # a priced action -- so the cost is read off this engine's own
+    # treatment of putting a light down rather than invented:
+    # `shed_light`'s hold carries `drop_cost = ActionType.FREE`, which is
+    # the printed *"until you end the light as a free action"*. Same
+    # thing one layer over, so the same price. #1475.
+    #
+    # Offered only to a creature actually wearing something it has lit,
+    # which is `Gear.lit_worn` -- otherwise every character would carry
+    # an entry for a lantern nobody has.
+    for lit in sorted(_lit_worn(world, actor)):
+        if encounter.can_spend(actor, ActionType.FREE):
+            out.append(Action(kind="hang_up", cost=ActionType.FREE,
+                              ref=lit))
+
     cheap_switch = next(
         (cost for (what, cost) in _granted(world, actor)
          if what == "familiar_switch" and cost is not ActionType.MINOR),
@@ -2182,6 +2198,26 @@ def _cheap_aid_open(
             for a in _allies(world, actor)
         )
     return True
+
+
+def _lit_worn(world: World, actor: int) -> frozenset[str]:
+    """Worn items this creature has lit, and so could hang up. `#1475`.
+
+    A worn ref whose own light is standing -- `c.illuminate` labels its
+    hold with the row that laid it, and the lantern's row is the item's.
+    Empty for everybody wearing nothing lit, which is every creature on
+    every board until a row lights something it wears.
+    """
+    from .components import Gear as _Gear
+
+    gear = world.get(actor, _Gear)
+    if gear is None or not gear.worn:
+        return frozenset()
+    lit = {e.by for e in world.effects.of(actor) if e.by}
+    return frozenset(
+        m.ref for m in gear.worn.values()
+        if any(by.startswith(m.ref) for by in lit)
+    )
 
 
 def _switch_open(world: World, actor: int, cost: ActionType) -> bool:
@@ -3955,6 +3991,22 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             # no room, a condition -- does not burn the turn's one use.
             walker.latch("move_companion", per_turn=True)
         return bool(moved)
+
+    if action.kind == "hang_up":
+        # `c.leave_hanging` is the whole of it: `equipment.unequip` takes
+        # the item off, `Gear.left_hanging` records that it is still
+        # working, and the object carries the light and the leash. The
+        # radius and the tether are the card's, read off the hold the
+        # item's own row laid rather than restated here.
+        from .cast import Cast as _Cast
+
+        if not action.ref:
+            return False
+        hanger = _Cast(world=world, me=actor, ref="actions:hang_up")
+        return hanger.leave_hanging(
+            action.ref, light=10, speed=10, leash=10, on=actor,
+            until=When.ENCOUNTER,
+        ) is not None
 
     if action.kind == "familiar_switch":
         # **The verb already existed; this is only the menu entry.**

@@ -17196,6 +17196,74 @@ class Cast:
         ev.vs = defence
         return True
 
+    def leave_hanging(
+        self,
+        ref: str,
+        *,
+        light: int = 0,
+        speed: int = 0,
+        leash: int = 0,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> int | None:
+        """Put a worn item down and leave it working. `i1321x1`.
+
+        *"A lantern that lights 10 squares, hangs where you leave it, and
+        can be sent ahead."* Four pieces of this engine already existed
+        and none of them was the state in between:
+
+        * `equipment.unequip` takes an item off and unwinds everything it
+          laid -- the **opposite** of leaving it working, which is what
+          it exists for;
+        * `c.conjure` makes an object with a `Position`, a `Movement` its
+          creator may spend a move action on, and a duration;
+        * `c.light` lights the board from whatever carries the radius,
+          and `query.light_level` walks **every** entity with one rather
+          than only combatants;
+        * `c.leash` tethers a thing to a creature, which is *"not more
+          than 10 squares from the commanding creature"*.
+
+        So this composes those and adds the one thing missing:
+        `Gear.left_hanging`. `worn` means held-and-working and `stowed`
+        is weapon refs on a belt, so neither could say a lantern is on
+        neither list and lit.
+
+        **The item leaves `worn` through `unequip`**, so whatever it was
+        granting the wearer stops -- a lantern on the floor is not
+        lighting from your hand any more. The light is laid again, on the
+        **object**, which is the whole point: `c.light(..., on=thing)`
+        rather than on the wearer.
+
+        Returns the object's entity id, or None when the ref is not worn
+        -- a card that puts down something nobody is wearing is a
+        Requirement failing, not an effect.
+        """
+        from .components import Gear as _Gear
+        from .components import Position as _Pos
+        from .equipment import unequip as _unequip
+
+        who = self.me if on is None else on
+        gear = self.world.get(who, _Gear)
+        if gear is None or not any(
+            m.ref == ref for m in gear.worn.values()
+        ):
+            return None
+        seat = self.world.get(who, _Pos)
+        where = seat.square if seat is not None else None
+        _unequip(self.world, who, ref)
+        gear.left_hanging.add(ref)
+        thing = self.conjure(
+            at=where, label=f"{self.ref} hanging", until=until,
+            sustain=None, speed=speed,
+        )
+        if thing is None:
+            return None
+        if light:
+            self.light(light, on=thing, until=until)
+        if leash:
+            self.leash(leash, to=who, on=thing, until=until)
+        return thing
+
     def leash(
         self,
         radius: int,

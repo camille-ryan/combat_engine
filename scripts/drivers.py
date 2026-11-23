@@ -72892,6 +72892,165 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_lit_item_put_down_goes_on_lighting(out: Result) -> None:
+    """*"A lantern that lights 10 squares, hangs where you leave it, and
+    can be sent ahead."* -- `i1321x1`. #1475.
+
+    **Four pieces of this engine were already there and the state in
+    between was not**, which is exactly what the row's own note said:
+
+    * `equipment.unequip` takes an item off and unwinds everything it
+      laid -- the **opposite** of leaving it working, which is what it
+      exists for;
+    * `c.conjure` makes an object with a `Position` and a `Movement` its
+      creator may spend a move action on;
+    * `query.light_level` walks **every** entity carrying a light radius
+      rather than only combatants, so a thing on the floor lights the
+      board;
+    * `Leash` and `query.leash_of` tether it, which is the printed *"not
+      more than 10 squares from the commanding creature"*.
+
+    `Gear.left_hanging` is the missing state: `worn` means
+    held-and-working and `stowed` is weapon refs on a belt, so neither
+    could say a lantern is on neither list and lit.
+
+    **Two of the note's claims were stale and are worth the correction.**
+    It said the leash *"has no home either"* -- it has one, from `#512` --
+    and that `unequip` had *"no caller anywhere in the tree and no `Cast`
+    door"*, where `c.destroy(armour=True)` goes through it.
+
+    **The free action is a reading rather than an invented number.** The
+    card prints no cost for hanging it up, and this engine already treats
+    putting a light down as free: `shed_light`'s hold carries
+    `drop_cost = ActionType.FREE` for the printed *"until you end the
+    light as a free action"*.
+
+    **The arm that matters is the light moving off the wearer.** Carried,
+    it lights from the character; hung up and sent ahead, it lights from
+    the object and the character stands in the dark. That is the whole
+    card and the one thing no composition of the four pieces gave for
+    free.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import actions as _A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import leash_of, light_level
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType, Light
+
+    ROW, LANTERN = "i1321x1", "i1321"
+
+    def dark() -> tuple:
+        """A pitch-dark board, and the wearer's own light taken off.
+
+        **The board arms every `action=NONE` row, this one included**, so
+        the wearer arrives already carrying the lantern's light -- and
+        with it every square round them reads bright whatever the object
+        does. Measured: both ends read `bright` until this cleared it,
+        and the arm below could not have failed.
+        """
+        world, me, _ = _board(ROW, 1)
+        for eff in list(world.effects.of(me)):
+            world.effects.end(eff, "driver")
+        for y in range(world.grid.height):
+            for x in range(world.grid.width):
+                world.grid.light[(x, y)] = Light.DARK.value
+        return world, me
+
+    # -- the premises ------------------------------------------------------
+    world, me = dark()
+    gear = must(world.get(me, Gear), "the character has gear")
+    here = must(world.get(me, Position), "the character stands").square
+    out.that(any(m.ref == LANTERN for m in gear.worn.values()),
+             "premise: the board deals the lantern and it is WORN -- the"
+             " card is about putting down something you are wearing",
+             f"{sorted(m.ref for m in gear.worn.values())}")
+    out.that(light_level(world, here) == "dark",
+             "premise: the board is dark and the wearer's own light has"
+             " been taken off, so anything bright below is the object's",
+             f"{light_level(world, here)}")
+    out.that(not gear.left_hanging,
+             "premise: nothing is hanging yet",
+             f"{gear.left_hanging}")
+
+    # -- the door ----------------------------------------------------------
+    cast = Cast(world=world, me=me, ref="drv")
+    thing = cast.leave_hanging(LANTERN, light=4, speed=10, leash=10,
+                               on=me, until=When.ENCOUNTER)
+    out.that(thing is not None,
+             "`c.leave_hanging` puts it down and hands back the object",
+             f"{thing}")
+    if thing is None:
+        return
+    out.that(LANTERN in gear.left_hanging
+             and not any(m.ref == LANTERN for m in gear.worn.values()),
+             "the item leaves `worn` and lands in `left_hanging` -- on"
+             " neither of the two lists that existed, which is the state"
+             " the marker named",
+             f"hanging {gear.left_hanging}, worn"
+             f" {sorted(m.ref for m in gear.worn.values())}")
+    out.that(leash_of(world, thing) is not None
+             and leash_of(world, thing)[1] == 10,
+             "and it is tethered to the wearer -- *'not more than 10"
+             " squares from the commanding creature'*, which the note"
+             " said had no home and `#512` had already built",
+             f"{leash_of(world, thing)}")
+
+    # -- THE arm: the light goes with the object --------------------------
+    away = (min(world.grid.width - 2, here[0] + 6), here[1])
+    place(world, thing, away)
+    out.that(light_level(world, away) == "bright",
+             "sent ahead, the object lights the board where IT stands --"
+             " `query.light_level` walks every entity with a radius, not"
+             " only combatants",
+             f"{light_level(world, away)} at {away}")
+    out.that(light_level(world, here) == "dark",
+             "THE arm: and the wearer is left in the dark. Carried, the"
+             " light is the character's; hung up and sent ahead it is the"
+             " object's, and that swap is the whole card",
+             f"{light_level(world, here)} at {here}")
+
+    # -- the action ---------------------------------------------------------
+    w2, me2 = dark()
+    REGISTRY[ROW].body(Cast(world=w2, me=me2, ref=ROW))
+    enc2 = Encounter(w2)
+    offers = [o for o in _A.legal(w2, enc2, me2) if o.kind == "hang_up"]
+    out.that([o.ref for o in offers] == [LANTERN]
+             and offers[0].cost is ActionType.FREE,
+             "the menu offers hanging up the ONE worn item that is lit,"
+             " as a free action -- not the other three the board deals,"
+             " which is what `_lit_worn` is for",
+             f"{[(o.ref, o.cost.value) for o in offers]}")
+    if offers:
+        out.that(_A.perform(w2, enc2, me2, offers[0]),
+                 "and taking it hangs the lantern up",
+                 "taken")
+        gear2 = must(w2.get(me2, Gear), "gear")
+        out.that(LANTERN in gear2.left_hanging
+                 and not [o for o in _A.legal(w2, enc2, me2)
+                          if o.kind == "hang_up"],
+                 "after which it is not offered again -- the item is no"
+                 " longer worn, so there is nothing left to put down",
+                 f"{gear2.left_hanging}")
+
+    # -- the refusal --------------------------------------------------------
+    w3, me3 = dark()
+    bare = Cast(world=w3, me=me3, ref="drv")
+    out.that(bare.leave_hanging("i-no-such-item", light=4, on=me3) is None,
+             "putting down something nobody is wearing is refused rather"
+             " than conjuring an object out of nothing -- the card's own"
+             " Requirement, not an edge case",
+             "refused")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def an_area_centred_where_the_card_says(out: Result) -> None:
     """*"Area burst 1 centered on the ally hit by the triggering attack"*
     -- `i1531p1`. #1474.
@@ -114122,6 +114281,14 @@ UNNAMED_KINDS_OWED = frozenset(
         # rule is that a declared 0.0 claims the kind was priced at
         # nothing.
         "familiar_switch",
+        # **`hang_up` is owed on the same standing ruling.** `i1321x1`
+        # puts its lit lantern down and leaves it working -- `#1475`.
+        # What that is worth is a positional judgement nothing here can
+        # make: the light stops following the party and starts lighting
+        # one place, which helps whoever benefits from seeing that place
+        # and hurts the carrier. #1098's rule is that a declared 0.0
+        # claims the kind was priced at nothing.
+        "hang_up",
         # **`move_companion` is owed on exactly the same standing ruling**,
         # and it arrived here the day it landed -- which is this list
         # working rather than a lapse. `f1336` prints *"once per turn, you
@@ -128308,6 +128475,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "hung_light": (
+        a_lit_item_put_down_goes_on_lighting,
+        "a lit worn item put down goes on lighting from where it was"
+        " left, and the wearer does not (#1475)",
     ),
     "area_centre": (
         an_area_centred_where_the_card_says,

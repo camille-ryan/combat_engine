@@ -2877,6 +2877,17 @@ class Gear:
     #: `Weapon` -- it is a longsword with properties -- so this holds the
     #: armour, the neck, and the eight small slots that had nowhere to go.
     worn: dict[str, Magic] = field(default_factory=dict)
+    #: **Worn items put down and still working**, by ref. `worn` means
+    #: held-and-working and `stowed` is weapon refs on a belt, so neither
+    #: could say a lantern is on neither list and lit.
+    #:
+    #: `i1321x1` is the card -- a lantern that *"hangs where you leave
+    #: it"* and goes on lighting. `equipment.unequip` was the near miss
+    #: and is the opposite: it exists to end everything the item laid.
+    #:
+    #: Empty for every creature until a row puts something down, and
+    #: `c.leave_hanging` is the only writer. #1475.
+    left_hanging: set[str] = field(default_factory=set)
     #: Magic ammunition, in the order it is drawn. Not in `worn`, because
     #: a worn item is on the creature for the whole fight and a piece of
     #: ammunition is gone the moment it is loosed.

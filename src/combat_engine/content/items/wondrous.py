@@ -916,8 +916,7 @@ def i1312x1(c: Cast) -> None:
 
 
 @power("i1321x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("Gear.left_hanging",))
+       reach=PERSONAL, target=SELF)
 def i1321x1(c: Cast) -> None:
     """A lantern that lights 10 squares, hangs where you leave it, and can
     be sent ahead.
@@ -933,9 +932,29 @@ def i1321x1(c: Cast) -> None:
     That is folded into the one remaining marker rather than given its own,
     because it is the same missing idea.
 
-    **The floating lantern** is an object left on the board that keeps
-    lighting and can be commanded to move: a conjuration in everything but
-    name, and `Gear` has no notion of an item put down and still working.
+    **The floating lantern is written now, and the note below had the
+    design right.** `Gear.left_hanging` is the state it names -- `worn`
+    means held-and-working and `stowed` is weapon refs on a belt, so
+    neither could say a lantern is on neither list and lit. The door is
+    `c.leave_hanging`, which composes the four pieces the note correctly
+    said were already there: `equipment.unequip`, `c.conjure`, `c.light`
+    on the object, and `c.leash`. `actions.hang_up` is the moment of
+    letting go, offered to a creature wearing something it has lit.
+
+    **Two of the note's "no home" claims were stale.** The leash has one
+    -- `Leash` and `query.leash_of`, from `#512` -- and `equipment.unequip`
+    had a `Cast` door after all, through `c.destroy(armour=True)`. What
+    was genuinely absent was the state in between, which is what the
+    marker named.
+
+    **The free action is a reading, not an invented number.** The card
+    prints no cost for hanging it, and this engine already treats putting
+    a light down as free: `shed_light`'s hold carries
+    `drop_cost = ActionType.FREE` for the printed *"until you end the
+    light as a free action"*. Same thing one layer over, so the same
+    price. `#1475`.
+
+    The old note, kept because its reasoning is what made this short:
 
     The object half needs nothing new, which is worth saying so the next
     reader does not go looking for it. `c.conjure(speed=10,
