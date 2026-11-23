@@ -219,6 +219,52 @@ def _resilience(c: Cast) -> None:
         c.bonus(AC, step, until=When.ENCOUNTER, on=c.me, kind="untyped")
 
 
+def _rolled_soul(c: Cast) -> int:
+    """The d10 the wild soul rolls, after `f2806`'s call if it is held.
+
+    *"When you roll for your Wild Soul resistance, choose 1-5 or 6-10. If
+    the result of your first die roll is within the range selected, you
+    can choose any result to replace that die roll."*
+
+    **The clause lives here rather than in the feat**, which is this
+    tree's convention for a feat naming one power: *"a feat that names
+    one power writes its clause into that power, gated on
+    `c.feat(...)`"*. The feat's own note called the gap "the moment" --
+    the roll happens while the trait arms and is announced to nobody, so
+    a call made from the feat could only come after the answer was known
+    and would be free every time. Written here, the call is taken
+    **before** `c.roll`, which is the only place that moment exists.
+    #1532.
+
+    So no engine change: `c.on_feature_roll()` named a facility for
+    reaching into this roll from outside, and the convention says the
+    clause comes inside instead.
+
+    **No `c.credit("f2806")` block, deliberately.** That was the first
+    draft and it was decorative: `credit` stamps whatever
+    `Effects.apply` lays inside the block, and this clause lays nothing
+    -- it changes which *number* comes back, and the resistance is
+    `wear_soul`'s a step later. Crediting that to the feat would say the
+    feat granted the resistance, which it does not; the feat only chose
+    its type. `implemented_in=` on `f2806` is what stops it reporting
+    SILENT.
+
+    Ten types for ten faces, so *"any result"* is any of them.
+    """
+    if not c.feat("f2806"):
+        return c.roll("1d10")
+    half = c.choose(["1-5", "6-10"], f"{SOUL}: call a half of the die")
+    rolled = c.roll("1d10")
+    low = rolled <= 5
+    if half is None or (half == "1-5") is not low:
+        return rolled
+    picked = c.choose(
+        list(range(1, len(ROLLED_TYPES) + 1)),
+        f"{SOUL}: the call landed -- choose any result",
+    )
+    return picked if picked is not None else rolled
+
+
 @power(
     SOUL,
     level=0,
@@ -231,6 +277,8 @@ def _resilience(c: Cast) -> None:
     target=NO_TARGET,
     keywords=ARCANE,
 )
+
+
 def sorcerer_soul(c: Cast) -> None:
     """Everything the chosen source is, bar the clause nothing can hear.
 
@@ -251,7 +299,7 @@ def sorcerer_soul(c: Cast) -> None:
         _scales(c)
     elif c.build("wild"):
         ability = c.dex_mod
-        kind = ROLLED_TYPES[(c.roll("1d10") - 1) % len(ROLLED_TYPES)]
+        kind = ROLLED_TYPES[(_rolled_soul(c) - 1) % len(ROLLED_TYPES)]
         _chaos_burst(c)
     else:
         return

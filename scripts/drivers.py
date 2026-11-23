@@ -52942,6 +52942,114 @@ def concealment_denied_without_cover(out: Result) -> None:
         )
 
 
+def the_called_soul_die(out: Result) -> None:
+    """"Choose 1-5 or 6-10 ... you can choose any result to replace it."
+
+    `f2806` calls a half of the d10 the **wild** soul rolls for its
+    resistance, before the die is rolled, and replaces the result when
+    the call lands. It has no body: the clause is written into
+    `souls._rolled_soul`, which is the convention for a feat naming one
+    power, and the row carries `implemented_in=("cf:sorcerer-f0",)`.
+
+    Its old `todo=("c.on_feature_roll()",)` named a facility for reaching
+    into the roll from outside, and the note gave the reason -- the roll
+    happens while the trait arms and is announced to nobody, so a call
+    taken from the feat's own body could only come after the answer was
+    known and would be free every time. Written inside the feature the
+    call is taken **before** `c.roll`, so no such facility is wanted.
+
+    Three arms, which are the printed sentence's three outcomes, plus the
+    premise:
+
+    * the board deals this sorcerer the **wild** leg -- without it the
+      other branch rolls no die and all three arms would agree for the
+      wrong reason;
+    * the call lands, and the sorcerer wears the **replacement** type;
+    * the call misses, and the rolled type stands;
+    * no feat, and no call is offered at all.
+
+    The observable is the sworn-to marker `wear_soul` lays, not the
+    number `_rolled_soul` returns: a rule reading the helper's return
+    would pass with the feature's own call site deleted. #1532.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import use
+
+    def play(*, feat: bool, call: str | None, die: int,
+             ) -> tuple[bool, list[str], list[str]]:
+        """Arm the trait and report what the sorcerer ended up sworn to.
+
+        `rng.die` is patched rather than `rng.loaded`, which only forces a
+        **d20** -- a loaded 20 leaves the d10 random and the arms would
+        disagree run to run. Patching an input is safe here because the
+        observable is laid by the row.
+        """
+        world, me, _ = _board("cf:sorcerer-f0", 1)
+        wild = Cast(world=world, me=me, ref="drivers:soul").build("wild")
+        if feat:
+            world.need(me, Powers).known.append("f2806")
+        plain = world.rng.die
+        world.rng.die = lambda faces: die if faces == 10 else plain(faces)
+        asked: list[str] = []
+
+        def decide(actor: int, kind: str, options: list[Any],
+                   prompt: str) -> Any:
+            asked.append(prompt)
+            if "call a half" in prompt:
+                return call
+            # The tenth face, so the replacement is never the rolled type
+            # whatever `die` is -- an arm answering with the die's own
+            # face would pass against a replacement that did nothing.
+            if "any result" in prompt:
+                return 10
+            return sorted(options, key=str)[0]
+
+        world.decider = decide
+        use(world, me, "cf:sorcerer-f0")
+        sworn = sorted(e.label for e in world.effects.of(me)
+                       if e.label.startswith("cf:sorcerer-f0 is "))
+        return wild, sworn, [p for p in asked if "half of the die" in p]
+
+    wild, no_feat, no_call = play(feat=False, call=None, die=3)
+    out.that(
+        wild,
+        "the board deals this sorcerer the wild leg, which is the only leg"
+        " that rolls a die for its resistance",
+        f"c.build('wild') {wild}",
+    )
+    out.that(
+        no_feat == ["cf:sorcerer-f0 is fire"] and no_call == [],
+        "without the feat the rolled face stands and no call is offered",
+        f"sworn {no_feat}; calls offered {no_call}",
+    )
+
+    _, landed, landed_calls = play(feat=True, call="1-5", die=3)
+    out.that(
+        landed == ["cf:sorcerer-f0 is thunder"] and len(landed_calls) == 1,
+        "the call lands on a 3 called low, and the sorcerer wears the"
+        " REPLACEMENT type rather than the rolled one",
+        f"sworn {landed}; calls offered {landed_calls}",
+    )
+
+    _, missed, missed_calls = play(feat=True, call="6-10", die=3)
+    out.that(
+        missed == ["cf:sorcerer-f0 is fire"] and len(missed_calls) == 1,
+        "the same 3 called high is a miss: the call was offered and the"
+        " ROLLED type stands",
+        f"sworn {missed}; calls offered {missed_calls}",
+    )
+    # **One sworn marker, not two.** `wear_soul` ends whatever the soul
+    # was sworn to before, so a replacement that laid a second resistance
+    # beside the first would satisfy every arm above if they matched on
+    # membership instead of equality.
+    out.that(
+        len(landed) == 1 and len(missed) == 1,
+        "and exactly one type is sworn to in each case",
+        f"landed {landed}, missed {missed}",
+    )
+
+
 def the_wild_magic_clause(out: Result) -> None:
     """"If you rolled an even number on the attack roll, ..."
 
@@ -135662,6 +135770,10 @@ DRIVERS = {
     "wild_magic": (
         the_wild_magic_clause,
         "the sorcerer's even-roll clause, its gate and its declaration",
+    ),
+    "called_soul": (
+        the_called_soul_die,
+        "f2806 calls a half of the wild soul's d10 before it is rolled",
     ),
     "no_concealment": (
         concealment_denied_without_cover,

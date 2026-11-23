@@ -538,16 +538,28 @@ def f3433(c: Cast) -> None:
 
 
 @power("f2806", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_feature_roll()",))
+       reach=PERSONAL, target=SELF, implemented_in=("cf:sorcerer-f0",))
 def f2806(c: Cast) -> None:
     """Calls a half of the class feature's d10 before it is rolled and
     replaces the result when the call lands.
 
-    Unusually, the feature itself *is* modelled -- `souls.sorcerer_soul`
-    rolls the die and `souls.wear_soul` would swear the replacement. What
-    is missing is the moment: the roll happens while the trait arms and
-    is announced to nobody, so the call can only be made after the answer
-    is known, which would make the choice free every time.
+    **Written, and not here.** The feature itself is modelled --
+    `souls.sorcerer_soul` rolls the die -- and the note below was right
+    that the gap was *the moment*: the roll happens while the trait arms
+    and is announced to nobody, so a call made from this row could only
+    come after the answer was known and would be free every time.
+
+    The convention answers it. This file's own rules say *"a feat that
+    names one power writes its clause into that power, gated on
+    `c.feat(...)`"*, and inside `souls._rolled_soul` the call is taken
+    **before** `c.roll` -- which is the only place that moment exists.
+    So `c.on_feature_roll()` named a facility for reaching into the roll
+    from outside, and no such facility is wanted.
+
+    `implemented_in=` rather than a body, which is what that convention
+    makes this row: a pointer -- and it is also what keeps this row from
+    reporting SILENT, since the clause lays no effect of its own for a
+    `c.credit` block to stamp. #1532.
     """
 
 
