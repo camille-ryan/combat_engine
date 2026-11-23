@@ -1450,14 +1450,21 @@ def f633(c: Cast) -> None:
 
 
 @power("f715", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("dsl.use(attacks_before_damage)",))
+       reach=PERSONAL, target=SELF)
 def f715(c: Cast) -> None:
     """*"You can use your `p1450` racial power to reroll the attack rolls
     of a single arcane attack power against every target you choose."*
 
-    **Written for every target from the triggering roll onward, so the
-    marker drops to `dropped=`.** `#1394`'s last comment asked for exactly
+    **Written for EVERY target now, and what unblocked the residue was
+    the resolution order.** `dsl.use` rolls every attack of an area or
+    several-targets line before any of its damage (Camille's ruling,
+    `#1394`), so a roll that was turned from a hit into a miss costs
+    that target nothing even though it rolled first. Until then the
+    earlier targets' damage was already paid and there was nothing a
+    reroll could change, which is what the marker named.
+
+    **Written for every target from the triggering roll onward, which
+    was the half that always worked.** `#1394`'s last comment asked for exactly
     this reading to be checked before the issue was planned against, and
     it holds: `p1450` is `on=Trigger(AttackRolled, by_me)` and `dsl.use`
     calls a body once per target, so an area power rolls **in sequence**
@@ -1550,8 +1557,33 @@ def f715(c: Cast) -> None:
         declared = get(power)
         if declared is None or declared.attack is None:
             return
-        if Keyword.ARCANE in (declared.keywords or ()):
-            spread.add(power)
+        if Keyword.ARCANE not in (declared.keywords or ()):
+            return
+        spread.add(power)
+        # **And the targets already rolled, which is the residue the
+        # marker named.** `dsl.use` calls one body per target, so by the
+        # time `p1450` fires the earlier targets of an area power have
+        # rolled -- and until `#1394` their damage was already paid, so
+        # there was nothing a reroll could still change. It is not now:
+        # an area or several-targets line rolls every attack before any
+        # of its damage, so an earlier roll turned from a hit into a miss
+        # still costs that target nothing.
+        #
+        # Bounded by this use's own `PowerUsed`, walking back from the
+        # end of the log, so a roll the same power made earlier in the
+        # fight is not rerolled. `PowerUsed` is announced before the
+        # body runs, which is what makes it the right fence.
+        earlier: list[Any] = []
+        for past in reversed(c.world.bus.log):
+            if isinstance(past, PowerUsed) and past.actor == me \
+                    and past.power == power:
+                break
+            if (isinstance(past, AttackRolled) and past.attacker == me
+                    and past.power == power and past is not ev):
+                earlier.append(past)
+        for past in reversed(earlier):
+            with c.credit(c.ref):
+                c.reroll_attack(ev=past)
 
     c.watch(AttackRolled, every_target, on=me, until=When.ENCOUNTER,
             window=Window.AFTER, label=f"{c.ref} every target")

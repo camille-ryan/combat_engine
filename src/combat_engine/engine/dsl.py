@@ -6492,6 +6492,37 @@ def use(
     _IN_FLIGHT.add((actor, ref))
     _RUNNING.append(cast)
     rolls: list[Any] = []
+    # **Every attack roll before any damage, for an area or a
+    # several-targets line.** Camille's ruling on `#1394`:
+    #
+    # > *"every attack roll before any damage for an area or a
+    # > several-targets line -- blast, burst, 'N creatures within M' --
+    # > and not for a sequential one, where the second attack is
+    # > conditional on the first having hit."*
+    #
+    # The loop below calls one body per target and the body does both the
+    # attack and the damage, so this cannot be had by reordering it: a
+    # Python function does not come apart. `Cast.deferring` makes
+    # `c.damage` **queue**, and the queue is paid in the `finally` once
+    # every target has been swung at.
+    #
+    # `everyone` is the area deciding -- blast, burst, wall -- and
+    # `count > 1` is the printed *"N creatures within M"*. A **sequential**
+    # line is neither: a secondary attack conditional on the primary is a
+    # branch or a second body, and each use resolves its own targets, so
+    # nothing here touches it. That is the half of the ruling that says
+    # when NOT to do this.
+    #
+    # Two heroic rows are only expressible in this order and both said so
+    # in their own notes: `f1123` (*"+2 to that power's damage rolls"* on
+    # hitting two or more -- the first target's damage was already paid
+    # when the second hit became known) and `f715` (*"reroll the attack
+    # rolls against every target"* -- the others were resolved by the
+    # time the reroll happened).
+    deferred_here = bool(p.target is not None
+                         and (p.target.everyone or p.target.count > 1))
+    if deferred_here:
+        cast.deferring = True
     try:
         if not chosen:
             p.body_of(branch)(cast)
@@ -6563,6 +6594,21 @@ def use(
             rolls.extend(made)
             landed = landed or any(r.hit for r in made)
     finally:
+        # **Paid before `_RUNNING` is popped and before `PowerResolved`.**
+        # A queued blow is still this use's damage, so everything reading
+        # `dsl.running()` -- credit, the laying ref, a rider asking which
+        # power dealt it -- has to see the same answer it would have seen
+        # had the blow been immediate.
+        #
+        # Cleared first, so the `c.damage` inside each thunk applies
+        # instead of queueing itself again. In its own `try` because a
+        # body that raised must not leave the queue standing on the next
+        # use of the same row.
+        if deferred_here:
+            cast.deferring = False
+            owed, cast._deferred = list(cast._deferred), []
+            for pay in owed:
+                pay()
         _RUNNING.pop()
         if fresh:
             _IN_FLIGHT.discard((actor, ref))

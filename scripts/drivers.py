@@ -5783,6 +5783,141 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def every_attack_rolls_before_any_damage(out: Result) -> None:
+    """Camille's ruling on `#1394`, asked directly:
+
+    > *"every attack roll before any damage for an area or a
+    > several-targets line -- blast, burst, 'N creatures within M' -- and
+    > not for a sequential one, where the second attack is conditional on
+    > the first having hit."*
+
+    `dsl.use` calls one body per target and the body does both halves, so
+    this cannot be had by reordering the loop -- a Python function does
+    not come apart. `Cast.deferring` makes `c.damage` queue and the loop
+    pays the queue once every target has been swung at.
+
+    **Two heroic rows were only expressible in this order** and both said
+    so in their own notes: `f1123` (*"+2 to that power's damage rolls"* on
+    hitting two or more -- the first target's damage was already paid when
+    the second hit became known) and `f715` (*"reroll the attack rolls
+    against every target"* -- the others were resolved by the time the
+    reroll happened).
+
+    **The return value is the cost.** A queued `c.damage` returns 0.
+    Measured before the change: of 3,258 call sites, 8 read the return
+    and every one is in a single-target or no-target row, so none can be
+    reached with `deferring` set. Asserted below rather than left as a
+    count in a commit message.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled, DamageApplied
+
+    def order(ref: str, world: Any, me: int) -> tuple[int, int, int]:
+        """Rolls, damages, and how many damages landed BEFORE the last roll."""
+        world.turn = me
+        before = len(world.bus.log)
+        _dsl.use(world, me, ref, spend=False)
+        seq = [e for e in world.bus.log[before:]
+               if isinstance(e, (AttackRolled, DamageApplied))
+               and getattr(e, "attacker", getattr(e, "source", None)) == me]
+        rolls = [n for n, e in enumerate(seq) if isinstance(e, AttackRolled)]
+        hurts = [n for n, e in enumerate(seq)
+                 if isinstance(e, DamageApplied)]
+        if not rolls or not hurts:
+            return (len(rolls), len(hurts), -1)
+        return (len(rolls), len(hurts),
+                sum(1 for h in hurts if h < rolls[-1]))
+
+    # -- an area line -----------------------------------------------------
+    world, me, _ = _board("f1123", 1)
+    kn = world.need(me, Powers)
+    wide = [r for r in sorted(kn.known)
+            if (p := _dsl.REGISTRY.get(r)) is not None
+            and p.target is not None
+            and (p.target.everyone or p.target.count > 1)]
+    posed = None
+    for ref in wide:
+        rolls, hurts, early = order(ref, world, me)
+        if rolls >= 2 and hurts >= 1 and early >= 0:
+            posed = (ref, rolls, hurts, early)
+            break
+    out.that(posed is not None,
+             "the premise: the board fields a several-targets power that"
+             " rolled at least two attacks and dealt damage, which is the"
+             " only shape this ruling is about",
+             f"{posed}")
+    if posed is not None:
+        ref, rolls, hurts, early = posed
+        out.that(early == 0,
+             "THE arm: NO damage landed before the last attack roll of a"
+             " several-targets use -- the printed order, and the thing"
+             " `dsl.use`'s per-target loop could not do, since the body"
+             " does both halves for target one before target two is"
+             " touched",
+             f"{ref}: {rolls} rolls, {hurts} blows, {early} of them early")
+
+    # -- a single-target line is untouched --------------------------------
+    world2, me2, _ = _board("f1123", 1)
+    one = [r for r in sorted(world2.need(me2, Powers).known)
+           if (p := _dsl.REGISTRY.get(r)) is not None
+           and p.target is not None
+           and not p.target.everyone and p.target.count == 1
+           and p.attack is not None]
+    held = None
+    for ref in one:
+        c = Cast(world=world2, me=me2, ref=ref)
+        rolls, hurts, _early = order(ref, world2, me2)
+        if rolls == 1 and hurts >= 1:
+            held = (ref, c.deferring)
+            break
+    out.that(held is not None and held[1] is False,
+             "and a single-target use never defers -- the other half of"
+             " the ruling, which says NOT to do this for a sequential"
+             " line. Read off `Cast.deferring` rather than inferred from"
+             " an ordering one target cannot show",
+             f"{held}")
+
+    # -- the queue cannot outlive the use ---------------------------------
+    world3, me3, _ = _board("f1123", 1)
+    c3 = Cast(world=world3, me=me3, ref="drv")
+    out.that(c3.deferring is False and not c3._deferred,
+             "a fresh `Cast` defers nothing and owes nothing, so the flag"
+             " is per use rather than per creature",
+             f"deferring={c3.deferring} owed={len(c3._deferred)}")
+
+    # -- the 8 return-reading rows are all single-target -------------------
+    readers = ("p5335", "p7259", "m5837a2", "m1139a4", "p4311")
+    shapes = {}
+    for ref in readers:
+        p = _dsl.REGISTRY.get(ref)
+        if p is None or p.target is None:
+            shapes[ref] = "no target line"
+            continue
+        shapes[ref] = (p.target.everyone, p.target.count)
+    # **`count <= 1`, which is exactly the predicate `dsl.use` defers on
+    # inverted.** Written as `== 1` first and two of the five reds: a
+    # `NO_TARGET` line carries `count == 0`, so the assertion was
+    # narrower than the thing it is about and said two safe rows were
+    # unsafe.
+    out.that(all(v == "no target line"
+                 or (v[0] is False and v[1] <= 1)
+                 for v in shapes.values()),
+             "and every row in the tree that READS what `c.damage`"
+             " returned is single-target or no-target -- the exact"
+             " inverse of what `dsl.use` defers on -- so none of them can"
+             " be reached with the flag set, which is what makes a queued"
+             " blow returning 0 safe rather than merely quiet",
+             f"{shapes}")
+
+    out.that(not REGISTRY["f715"].unfinished
+             and not REGISTRY["f1123"].unfinished,
+             "and the two rows that waited on this order carry no marker",
+             f"{REGISTRY['f715'].unfinished} {REGISTRY['f1123'].unfinished}")
+
+
 def a_move_already_under_way_can_be_lengthened(out: Result) -> None:
     """`c.extend_move(mid_move=)`, which `f820` and `m2341a4` both wanted.
 
@@ -76329,11 +76464,19 @@ def being_inside_a_creature_is_a_relation(out: Result) -> None:
              "m6109a3 still names `c.waive(cannot_act)` -- migrating it"
              " onto the relation did not touch its own dropped clause",
              f"{shared}")
-    out.that(any("cannot_act" in sym
-                 for sym in REGISTRY["i3578p1"].unfinished),
-             "and `i3578p1` waits on the SAME symbol rather than a new"
-             " one, so one gap has one name and `todo.py` cannot report"
-             " half the family ready",
+    # **`i3578p1` is finished and this arm used to assert it was not.**
+    # It asked that the row wait on the SAME symbol as `m6109a3`, so one
+    # gap had one name -- correct when written and stale since
+    # `a89e5dcd`, which built `c.act_despite` and cleared the row. The
+    # assertion is inverted rather than deleted, because "this row no
+    # longer waits on that symbol" is the fact a future reader of the
+    # paragraph above needs; `m6109a3` still carries it and the arm above
+    # still holds that half.
+    out.that(not REGISTRY["i3578p1"].unfinished,
+             "and `i3578p1` is FINISHED -- it used to wait on the same"
+             " `c.waive(cannot_act)` symbol as `m6109a3`, which is why"
+             " that arm names it, and `a89e5dcd` built the clause. One"
+             " gap still has one name; one of its two rows has left it",
              f"{REGISTRY['i3578p1'].unfinished}")
     still = {r: REGISTRY[r].unfinished
              for r in ("m3511a0", "m2237a2", "m3932a2")}
@@ -124511,16 +124654,31 @@ def a_passive_only_bonus_is_blind_to_a_rolled_check(out: Result) -> None:
     before_rolled = skills.modifier(world, me, "perception", natural=11)
     before_other = skills.passive(world, me, "stealth")
 
+    # **Counted by what the hold MODIFIES, not by how many the row laid.**
+    # This asked for exactly one hold and that was correct when written:
+    # the row had one clause. `a89e5dcd` gave it a second -- the
+    # `c.act_despite` half -- so the count went to 2 and the premise
+    # failed on a row that had been correctly finished. The question the
+    # arms below actually need is narrower and does not decay: of the
+    # row's holds, exactly one touches Perception, so ending all of them
+    # is still a clean before-and-after for a Perception read.
     ended = 0
+    on_perception = 0
     for eff in list(world.effects.of(me)):
         stamp = f"{getattr(eff, 'by', '')}{getattr(eff, 'label', '')}"
-        if "i2656x1" in stamp:
-            world.effects.end(eff, "the control")
-            ended += 1
-    out.that(ended == 1,
-             "the premise: the row laid exactly one hold on this board, so"
-             " ending it is a clean before-and-after rather than a guess",
-             f"ended {ended}")
+        if "i2656x1" not in stamp:
+            continue
+        if any(m.what == "skill:perception"
+               for _who, m in getattr(eff, "mods", ())):
+            on_perception += 1
+        world.effects.end(eff, "the control")
+        ended += 1
+    out.that(ended >= 1 and on_perception == 1,
+             "the premise: the row laid at least one hold on this board"
+             " and exactly ONE of them touches Perception, so ending them"
+             " all is a clean before-and-after for a Perception read"
+             " rather than a guess",
+             f"ended {ended}, of which {on_perception} touch Perception")
 
     after_passive = skills.passive(world, me, "perception")
     after_rolled = skills.modifier(world, me, "perception", natural=11)
@@ -134652,6 +134810,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "attacks_before_damage": (
+        every_attack_rolls_before_any_damage,
+        "an area or several-targets line rolls every attack before"
+        " any of its damage (#1394)",
     ),
     "move_lengthened_in_flight": (
         a_move_already_under_way_can_be_lengthened,

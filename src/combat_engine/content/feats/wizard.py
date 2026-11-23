@@ -216,33 +216,75 @@ def f677(c: Cast) -> None:
 
 
 @power("f1123", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("dsl.use(attacks_before_damage)",))
+       reach=PERSONAL, target=SELF)
 def f1123(c: Cast) -> None:
-    """A damage bonus when one power hits two or more creatures. `Hit` is
-    announced per target and the damage for each is rolled as it goes,
-    so by the time the second hit is known the first has already been
-    paid.
+    """*"When you use an arcane attack power and hit two or more creatures,
+    you gain a +2 bonus to that power's damage rolls."* +3 at 11th, +4 at
+    21st, read off the level the way every other scaling feat bonus is.
 
-    **Re-pointed to `dsl.use(attacks_before_damage)`, 2026-11-19: three
-    feats, one cause.** `dsl.use` sets `cast.target` and calls the body
-    **once per target**, so a body that strikes and then damages does both
-    for target one before target two is touched. The printed rules resolve
-    an area power the other way -- every attack roll, then damage -- and
-    each of these three sentences is only expressible in that order:
+    **Written now, and what unblocked it was the resolution order rather
+    than anything about counting.** `Hit` is announced per target and the
+    damage for each used to be rolled as it went, so by the time the
+    second hit was known the first was already paid -- the bonus could
+    only ever reach the targets after the second one. `dsl.use` rolls
+    every attack of an area or several-targets line before any of its
+    damage now (Camille's ruling, `#1394`), so the whole count is in
+    before the first damage roll.
 
-    * `f1123` *"+2 to **that power's** damage rolls"* on hitting two or
-      more: the first target's damage is already paid when the second hit
-      becomes known;
-    * `f1858` *"reducing the damage ... **before you roll damage**"*: the
-      choice sits between the attack and the damage roll;
-    * `f715` *"reroll the attack rolls ... against **every** target"*: the
-      others are resolved by the time the reroll happens.
-
-    **`f1138` is the control and it needs none of this.** It prints nearly
-    `f1123`'s sentence with the bonus on *later* attacks, is written, and
+    **`f1138` is the control and needed none of this.** It prints nearly
+    this sentence with the bonus on *later* attacks, is written, and
     carries no marker -- so counting hits across a use was never the gap.
-    `f1123` differs from it by the words "that power's". `#1394`.
+    This row differs from it by the words *"that power's"*.
+
+    Gated on the power rather than laid flat, which is those two words:
+    `ctx["power"]` on the damage side is `detail or self.ref`, so a row
+    passing its own `detail=` string would be missed. None of the arcane
+    attack powers does, and the honest caveat is here rather than
+    nowhere.
+
+    Ended on that power's `PowerResolved` -- the queue is paid before
+    that is announced, so the bonus covers exactly the use that earned
+    it and no later one.
     """
+    me = c.me
+    step = 2 + sum(c.level >= n for n in (11, 21))
+    #: Targets hit, per arcane attack power, within the use being
+    #: resolved. A closure of this arming, so it cannot outlive the board
+    #: -- the fault `c.once_per_board` exists for.
+    struck: dict[str, set[int]] = {}
+    laid: dict[str, Any] = {}
+
+    def counted(ev: Hit) -> None:
+        if ev.attacker != me:
+            return
+        power = ev.power or ""
+        declared = get(power)
+        if declared is None or declared.attack is None:
+            return
+        if Keyword.ARCANE not in (declared.keywords or ()):
+            return
+        seen = struck.setdefault(power, set())
+        seen.add(ev.target)
+        if len(seen) < 2 or power in laid:
+            return
+        held = c.bonus(
+            "damage", step, kind="feat", on=me, until=When.ENCOUNTER,
+            when=lambda ctx, _p=power: ctx.get("power") == _p,
+        )
+        if held is not None:
+            laid[power] = held
+
+    def finished(ev: PowerResolved) -> None:
+        if ev.actor != me:
+            return
+        held = laid.pop(ev.power, None)
+        if held is not None:
+            c.world.effects.end(held, "the use ended")
+        struck.pop(ev.power, None)
+
+    c.watch(Hit, counted, on=me, until=When.ENCOUNTER, label=c.ref)
+    c.watch(PowerResolved, finished, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} use ended")
 
 
 @power("f1134", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

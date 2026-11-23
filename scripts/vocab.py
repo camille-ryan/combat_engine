@@ -309,6 +309,12 @@ CONTEXT = {
         "is a summon swinging on its own Instinctive Effect? Reaches the"
         " attack context as `ctx['instinctive']`"
     ),
+    "deferring": (
+        "is this use rolling every attack before any of its damage? Set by"
+        " `dsl.use` for an area or several-targets line (Camille's ruling,"
+        " #1394), and while it is set `c.damage` and `c.half_damage` QUEUE"
+        " and return 0 -- so do not read what they returned inside one"
+    ),
     "branch": "which half of a melee-or-ranged row is being used.",
     "augment": "how many power points this use was augmented by, or 0 -- "
                "set by `dsl.use` for a row that declares `augments=`.",

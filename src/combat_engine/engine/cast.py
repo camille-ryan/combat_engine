@@ -477,6 +477,26 @@ class Cast:
     #: as the miss. Appending here rather than sampling there is the fix.
     #: #810.
     swings: list[AttackResult] = field(default_factory=list)
+    #: **True while this use rolls every attack before any damage**, which
+    #: is the printed order for an area or a several-targets line. Camille's
+    #: ruling on `#1394`:
+    #:
+    #: > *"every attack roll before any damage for an area or a
+    #: > several-targets line -- blast, burst, 'N creatures within M' -- and
+    #: > not for a sequential one, where the second attack is conditional
+    #: > on the first having hit."*
+    #:
+    #: Set by `dsl.use` around the target loop and cleared before the queue
+    #: is paid. While it is set, `c.damage` **queues** rather than applies
+    #: and returns 0 -- see its own note for what that costs and why it is
+    #: safe. #1394.
+    deferring: bool = field(default=False, repr=False)
+    #: The queued blows, paid in the order they were asked for once every
+    #: target has been attacked. Thunks rather than argument tuples,
+    #: because what has to be restored is the per-target state `c.damage`
+    #: reads -- `target`, `result` and `index` -- and a closure is the only
+    #: thing that carries all three with the arguments.
+    _deferred: list[Any] = field(default_factory=list, repr=False)
     #: The event this row was offered in answer to, for a triggered power.
     #: None for everything used on its own turn.
     trigger: Any = None
@@ -6194,6 +6214,47 @@ class Cast:
         # "when you deal damage" rider answer it.
         if self._take_harmless():
             return 0
+        # **Queued, not applied, while this use is rolling every attack
+        # first.** The printed order for an area or several-targets line
+        # is every attack roll and then all the damage, which `dsl.use`
+        # cannot get by reordering its loop -- the loop calls one body per
+        # target and the body does both halves. So the damage defers and
+        # the loop pays the queue once every target has been swung at.
+        # Camille's ruling and the measurement are on `#1394`.
+        #
+        # **Below `_take_harmless`, deliberately.** A "this swing deals no
+        # damage" hold is a *read* that `Cast.basic` lifts in a `finally`,
+        # so it would be gone by the time a queued blow was paid and the
+        # damage the card forbids would go through. Asking before queueing
+        # means such a swing never joins the queue at all.
+        #
+        # **It returns 0, which is a lie about the amount**, and that is
+        # the cost of the change. Measured before making it: of 3,258
+        # `c.damage` call sites in the tree, **8** read the return and
+        # every one of them is in a single-target or no-target row --
+        # `p5335`, `p7259`, `m5837a2` are `One creature`, `m1139a4` and
+        # `p4311` take none, and `feats/rogue_b._pay`'s one caller throws
+        # the value away. None can be reached with `deferring` set, so no
+        # site in the tree reads a queued blow's 0.
+        #
+        # `target`, `result` and `index` are frozen into the closure
+        # because they are what this method reads about the blow -- `who`
+        # is `self.target` and `self.crit` is `self.result.critical` -- and
+        # the loop will have moved all three on by the time the queue is
+        # paid.
+        if self.deferring:
+            frozen = (self.target, self.result, self.index)
+
+            def pay(_args: tuple[Any, ...] = (dice, bonus, dtype,
+                                              tuple(dtypes), on, detail),
+                    _at: tuple[Any, ...] = frozen) -> None:
+                self.target, self.result, self.index = _at
+                _dice, _bonus, _dtype, _dtypes, _on, _detail = _args
+                self.damage(_dice, _bonus, dtype=_dtype, dtypes=_dtypes,
+                            on=_on, detail=_detail)
+
+            self._deferred.append(pay)
+            return 0
         roll: Roll | None = None
         if self.crit:
             amount = _max_of(dice) + bonus + self._high_crit()
@@ -6321,6 +6382,32 @@ class Cast:
         """
         who = self._who(on)
         if who is None:
+            return 0
+        # **Queued with the hits, because a miss line deals damage.**
+        # `c.damage` above has the whole argument; this is the second of
+        # the four `deal_damage` doors and it has to defer or the ruling
+        # is half-kept. Found by measuring rather than by reading: on
+        # `i471p1`, a burst, two blows landed before the last attack roll
+        # and both carried `detail='i471p1 (half)'`.
+        #
+        # `c.flat` and `c.absorb` are the other two doors and they do
+        # NOT defer, deliberately. `c.flat` is mostly a price the
+        # character elects to pay -- hit points for an ally's healing,
+        # for pulling an attack onto itself -- and a cost paid now is not
+        # this power's damage to its targets. `c.absorb` is a redirect of
+        # somebody else's blow. #1394.
+        if self.deferring:
+            frozen = (self.target, self.result, self.index)
+
+            def pay(_args: tuple[Any, ...] = (dice, bonus, dtype,
+                                              tuple(dtypes), on),
+                    _at: tuple[Any, ...] = frozen) -> None:
+                self.target, self.result, self.index = _at
+                _dice, _bonus, _dtype, _dtypes, _on = _args
+                self.half_damage(_dice, _bonus, dtype=_dtype,
+                                 dtypes=_dtypes, on=_on)
+
+            self._deferred.append(pay)
             return 0
         roll: Roll | None = None
         if dice:
