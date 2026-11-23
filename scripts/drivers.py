@@ -53050,6 +53050,221 @@ def the_called_soul_die(out: Result) -> None:
     )
 
 
+def unfettered_on_the_face(out: Result) -> None:
+    """"On a natural 20 you slide the target 1 and knock it prone; on a
+    natural 1 you must push each creature within 5 squares of you."
+
+    The wild sorcerer soul's fourth printed clause. `docs/blocked.json`
+    carried it as `cf:sorcerer-soul-nat20`, wanting *"an event announcing
+    a power use's finished effects, carrying the natural roll"* -- and
+    that event exists: `PowerResolved` is emitted after the body has run
+    and carries every `AttackResult`, each with its own `natural` and
+    `target`. So the printed *"after applying the attack's other
+    effects"* is the event's own moment.
+
+    Driven through `p3162`, an arcane sorcerer attack, with the d20
+    forced. Four arms:
+
+    * a natural 20 slides the target **and** knocks it prone, on top of
+      whatever the power itself did;
+    * a natural 1 pushes **everybody within 5 but the sorcerer** -- the
+      card says *each creature*, so allies too, and says *must*, so
+      nothing is offered;
+    * an ordinary face does neither, which is the control that keeps the
+      first two from passing on a clause that always fires;
+    * `f2805` -- *"targets you slide with sorcerer attacks or your
+      Unfettered Power take a -2 penalty to AC"* -- fires **twice** on the
+      natural 20 and once on the ordinary face. That is its second printed
+      source arriving, and it is the arm that proves the slide is a real
+      `ForcedMove` rather than a teleport.
+
+    **The board's own encounter is reused, not replaced.** Building a
+    second `Encounter` over `_board`'s arms the dispatcher a second time
+    and every trigger row then fires twice -- which reads exactly like a
+    row paying out twice, and did, for `f2805`, `f806` and `f2711` alike
+    before this was understood. #1533.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import ForcedMove, Hit, PowerUsed, Window
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.types import Condition
+
+    def play(face: int, *, ref: str = "p3162",
+             uncritically: bool = False) -> tuple[bool, list, list, int, int]:
+        """Swing once with the d20 forced, and report what the soul did.
+
+        `ref="basic"` swings the **basic** attack, which carries no arcane
+        keyword -- the negative control for the gate. `uncritically` makes
+        an ordinary face a critical hit without touching the face, which
+        separates *"a natural 20"* from *"a critical hit"*.
+
+        That second knob goes through `c.crit_becomes` **on `Hit`** and
+        not by assigning `AttackResult.critical` on `AttackRolled`: the
+        outcome is recomputed from the die after the interrupt window, so
+        the earlier write is thrown away and the control was silently
+        vacuous -- it passed the plant it was written to catch.
+        """
+        world, me, _ = _board("p3162", 1)
+        rig = Cast(world=world, me=me, ref="drivers:unf")
+        wild = rig.build("wild")
+        known = world.need(me, Powers)
+        if "f2805" not in known.known:
+            known.known.append("f2805")
+        swing = known.basic if ref == "basic" else ref
+        shoves: list[tuple[str, int, str]] = []
+        used: list[str] = []
+        world.bus.on(ForcedMove, lambda ev: shoves.append(
+            (str(ev.how), ev.target, ev.power)))
+        world.bus.on(PowerUsed, lambda ev: used.append(ev.power))
+        if uncritically:
+            world.bus.on(Hit, lambda ev: rig.crit_becomes(True, ev=ev),
+                         window=Window.AFTER)
+        plain = world.rng.die
+        world.rng.die = lambda f: face if f == 20 else plain(f)
+        foes = sorted(enemies(world, me))
+        use(world, me, swing, targets=foes[:1])
+        prone = [f for f in foes if is_(world, f, Condition.PRONE)]
+        return wild, shoves, prone, used.count("f2805"), foes[0]
+
+    SOUL = "cf:sorcerer-f0"
+    wild, crit, prone, crit_f2805, aimed = play(20)
+    out.that(
+        wild,
+        "the board deals this sorcerer the wild leg, which is the only"
+        " source whose page prints this clause",
+        f"c.build('wild') {wild}",
+    )
+    mine = [s for s in crit if s[2] == SOUL]
+    out.that(
+        mine == [("slide", aimed, SOUL)] and prone == [aimed],
+        "a natural 20 slides the attack's target and knocks it prone,"
+        " credited to the feature and not to the power",
+        f"feature shoves {mine}; prone {prone}; all shoves {crit}",
+    )
+
+    _wild, one, one_prone, _f, _aimed = play(1)
+    pushed = sorted(s[1] for s in one if s[2] == SOUL and s[0] == "push")
+    out.that(
+        len(pushed) > 1 and not one_prone
+        and all(s[0] == "push" for s in one if s[2] == SOUL),
+        "a natural 1 pushes every creature within 5 squares and knocks"
+        " nobody prone -- the other half of the sentence, and it is a"
+        " push rather than a slide",
+        f"pushed {pushed}; prone {one_prone}",
+    )
+
+    _w, plain_shoves, plain_prone, plain_f2805, _a = play(10)
+    out.that(
+        not [s for s in plain_shoves if s[2] == SOUL] and not plain_prone,
+        "**and an ordinary face does neither**, which is the control: the"
+        " clause is keyed on the printed faces and not on every attack",
+        f"feature shoves {[s for s in plain_shoves if s[2] == SOUL]};"
+        f" prone {plain_prone}",
+    )
+    out.that(
+        crit_f2805 == 2 and plain_f2805 == 1,
+        "f2805 answers the Unfettered slide as well as the power's own --"
+        " its second printed source, and the proof that the slide is a"
+        " real ForcedMove",
+        f"fires on a 20 {crit_f2805}, on a 10 {plain_f2805}",
+    )
+
+    # -- the two gates, each with the control that can see it -------------
+    # **Both of these were missing and both plants passed without them.**
+    # `p3162` is arcane and a natural 20 is a critical hit on this board,
+    # so neither `Keyword.ARCANE` nor `natural == 20` could be falsified
+    # by anything the arms above swing.
+    _w2, mundane, mundane_prone, _f2, _a2 = play(20, ref="basic")
+    out.that(
+        not [s for s in mundane if s[2] == SOUL] and not mundane_prone,
+        "**a natural 20 on a non-arcane attack does nothing** -- the"
+        " basic attack carries no arcane keyword, which is the only arm"
+        " that can falsify the gate",
+        f"feature shoves {[s for s in mundane if s[2] == SOUL]};"
+        f" prone {mundane_prone}",
+    )
+    _w3, forced, forced_prone, _f3, _a3 = play(10, uncritically=True)
+    out.that(
+        not [s for s in forced if s[2] == SOUL] and not forced_prone,
+        "**and a critical hit on a 10 does nothing either** -- the card"
+        " names the FACE, so a widened critical range must not pay it",
+        f"feature shoves {[s for s in forced if s[2] == SOUL]};"
+        f" prone {forced_prone}",
+    )
+
+
+def the_called_initiative(out: Result) -> None:
+    """"Before rolling an initiative check, choose even or odd numbers."
+
+    `f2807`, and the point is **which roll it reaches**. It was a trait --
+    `action=NONE` with no `on=`, so its body ran from `_arm_traits()`,
+    which `Encounter.start` calls *after* `_roll_initiative()` -- and it
+    therefore paid out only on a mid-fight `reroll_initiative`. Declared
+    as a trigger row it is armed by `self.triggers.arm()`, which `start`
+    calls **before** the rolls, and `_roll_initiative` sets `self.order`
+    provisionally before its emit loop so the offers land.
+
+    So this rule is about the opening roll specifically, and the board
+    has to be taken back to before one: `_board` hands back a world whose
+    encounter is already started and armed, so the probe **disarms it**
+    and builds a fresh `Encounter`. Leaving the old arming in place
+    subscribes the dispatcher twice and the row pays twice -- `rolled`
+    came back 29 against a control's 23, which is +6 for a +3 clause.
+
+    Three arms: the clause pays on the opening roll when the face matches
+    the fixed call, does nothing when it does not, and nothing at all for
+    a character who does not hold the feat. #1534.
+    """
+    from combat_engine.engine.components import Initiative, Powers
+    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.turns import Encounter
+
+    def opening(*, feat: bool, face: int) -> tuple[int, int, int]:
+        world, me, _ = _board("f2807", 1)
+        world.encounter.triggers.disarm()
+        world.encounter = None
+        known = world.need(me, Powers).known
+        while "f2807" in known:
+            known.remove("f2807")
+        if feat:
+            known.append("f2807")
+        plain = world.rng.die
+        world.rng.die = lambda f: face if f == 20 else plain(f)
+        used: list[str] = []
+        world.bus.on(PowerUsed, lambda ev: used.append(ev.power))
+        world.encounter = Encounter(world)
+        world.encounter.start()
+        init = world.need(me, Initiative)
+        return used.count("f2807"), init.natural, init.rolled
+
+    fired, face, paid = opening(feat=True, face=20)
+    _none, _f, bare = opening(feat=False, face=20)
+    out.that(
+        fired == 1 and face == 20 and paid > bare,
+        "the clause fires ONCE on the fight's own opening roll and raises"
+        " the count, which a trait armed after the roll could not do",
+        f"fired {fired}, natural {face}, rolled {paid} against {bare}",
+    )
+    odd_fired, odd_face, odd_paid = opening(feat=True, face=19)
+    _n, _f2, odd_bare = opening(feat=False, face=19)
+    out.that(
+        odd_fired == 1 and odd_face == 19 and odd_paid == odd_bare,
+        "**and pays nothing when the face misses the call** -- offered,"
+        " taken, and worth zero, which is the printed condition rather"
+        " than the row declining to fire",
+        f"fired {odd_fired}, natural {odd_face}, rolled {odd_paid}"
+        f" against {odd_bare}",
+    )
+    out.that(
+        _none == 0 and _n == 0,
+        "a character without the feat is never offered it on either face,"
+        " which is the control the board would otherwise supply for free",
+        f"fires without the feat: {_none} on a 20, {_n} on a 19",
+    )
+
+
 def the_wild_magic_clause(out: Result) -> None:
     """"If you rolled an even number on the attack roll, ..."
 
@@ -135774,6 +135989,15 @@ DRIVERS = {
     "called_soul": (
         the_called_soul_die,
         "f2806 calls a half of the wild soul's d10 before it is rolled",
+    ),
+    "unfettered": (
+        unfettered_on_the_face,
+        "the wild soul's natural 20 and natural 1 riders, and f2805's"
+        " second source",
+    ),
+    "called_initiative": (
+        the_called_initiative,
+        "f2807 reaches the fight's own opening initiative roll",
     ),
     "no_concealment": (
         concealment_denied_without_cover,

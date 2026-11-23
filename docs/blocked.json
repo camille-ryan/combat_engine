@@ -1,10 +1,10 @@
 {
   "cf:artificer-infusions": {
-    "wants": "c.restore_per_day(ref) to hand back one of the day's infusions at a short rest, and chargen.deal_build_option() so a build can take the card the page offers in place of another",
-    "why": "the shared allowance this entry was mostly about is written, and it needed no engine facility: c.spend_per_day keyed on cf:artificer-f2's own ref is one pool the three declared cards draw on, and c.latch on one shared label is the printed single use per round. group= counting to one therefore stopped being the obstacle -- the pool is keyed on the ref, not on the row, so it works while the row is refused. Two clauses are left. The replenishment -- during a short rest, you or an ally can spend a healing surge to replenish one expended infusion -- has its moment (events.ShortRested) and its price (c.spend_surge) and no way to return a spent Powers.per_day use; c.restore_charge is the per-encounter store and c.restore_use is a row's own use. The swap is recorded and readable -- chargen.BUILD_OPTIONS plus c.chosen_option, both driven -- and cannot be acted on: _build_options records the first printed option unconditionally, so an exclusion in either direction fires for every dealt artificer and moves p10187 and f3023 from firing to UNUSED, neither of them in audited.json's never_refs, while the one direction the card prints never fires at all and leaves the row newly silent",
     "covered_by": [
       "cf:artificer-f2"
-    ]
+    ],
+    "wants": "c.restore_per_day(ref) to hand back one of the day's infusions at a short rest, and chargen.deal_build_option() so a build can take the card the page offers in place of another",
+    "why": "the shared allowance this entry was mostly about is written, and it needed no engine facility: c.spend_per_day keyed on cf:artificer-f2's own ref is one pool the three declared cards draw on, and c.latch on one shared label is the printed single use per round. group= counting to one therefore stopped being the obstacle -- the pool is keyed on the ref, not on the row, so it works while the row is refused. Two clauses are left. The replenishment -- during a short rest, you or an ally can spend a healing surge to replenish one expended infusion -- has its moment (events.ShortRested) and its price (c.spend_surge) and no way to return a spent Powers.per_day use; c.restore_charge is the per-encounter store and c.restore_use is a row's own use. The swap is recorded and readable -- chargen.BUILD_OPTIONS plus c.chosen_option, both driven -- and cannot be acted on: _build_options records the first printed option unconditionally, so an exclusion in either direction fires for every dealt artificer and moves p10187 and f3023 from firing to UNUSED, neither of them in audited.json's never_refs, while the one direction the card prints never fires at all and leaves the row newly silent"
   },
   "cf:artificer-items": {
     "wants": "magic items in the engine: an item with a daily power, Gear recording what is worn or carried, and an event announcing that an item's daily power was used",
@@ -15,11 +15,11 @@
     "why": "the second of the two printed methods is a granted row -- p14372, which chargen.loadout already deals -- plus the loss of every encounter attack power in the class. The grant half is written as a c.forbid on the other leg; the loss half would be a hand-listed set of refs that goes stale the moment a level is added, and a half-written version would leave an assassin holding the encounter powers its method says it never learned"
   },
   "cf:barbarian-might-rest": {
-    "wants": "the cf:barbarian-f1s0 row, which is the one option of the four nobody has declared",
-    "why": "filed when the compendium carried only the first option's text and the class had two derived legs. Both are fixed: class_feature carries cf:barbarian-f1s0 .. f1s3 and chargen.BUILDS[\"barbarian\"] has five named legs that 23 riders ask about. Three of the four sub-option rows are written in features/primal_shadow.py; the fourth is named by a feat as todo=(\"cf:barbarian-f1s0\",) and has no declaration",
     "covered_by": [
       "cf:barbarian-f1s0"
-    ]
+    ],
+    "wants": "the cf:barbarian-f1s0 row, which is the one option of the four nobody has declared",
+    "why": "filed when the compendium carried only the first option's text and the class had two derived legs. Both are fixed: class_feature carries cf:barbarian-f1s0 .. f1s3 and chargen.BUILDS[\"barbarian\"] has five named legs that 23 riders ask about. Three of the four sub-option rows are written in features/primal_shadow.py; the fourth is named by a feat as todo=(\"cf:barbarian-f1s0\",) and has no declaration"
   },
   "cf:druid-at-wills": {
     "wants": "a per-class at-will count in chargen.SLOTS, and a composition rule chargen.loadout can honour",
@@ -56,10 +56,6 @@
   "cf:seeker-bond-rest": {
     "wants": "the second bond's text on the imported class page",
     "why": "the page prints one of the two bonds in full and cf:seeker-f1 writes all of it -- the granted row, the exclusivity, and the standing minor-action shift. The other bond is not in the imported text at all. Its granted row is identifiable without it, p11462 being the only other level-0 seeker row and the one that spends the Strength modifier its riders spend, so the exclusivity is written both ways; whatever else that bond gives is not on the page and is not guessed at"
-  },
-  "cf:sorcerer-soul-nat20": {
-    "wants": "an event announcing a power use's finished effects (the p10354 gap), carrying the natural roll",
-    "why": "each source ends with a rider on a natural 20 -- and one of them a second on a natural 1 -- that lands after the attack's other effects. AttackRolled is the only event carrying the natural and it fires before the damage, so a slide-and-prone hung there would resolve in the wrong order, and Hit carries no natural at all"
   },
   "cf:sorcerer-soul-pierce": {
     "wants": "c.ignore_resistance(dtype, up_to=), read by resolve.damage before Defences.resist is subtracted",

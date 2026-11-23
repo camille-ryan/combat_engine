@@ -13,15 +13,22 @@ roll was a d6 over six types. The ladder turns out to be right -- 5, then
 10 at 11th and 15 at 21st, on both legs. The roll was wrong: one leg picks
 from six types and the other rolls a **d10** over ten.
 
-**Two printed clauses are not here** and both are in `docs/blocked.json`.
+**One printed clause is not here**, and it is in `docs/blocked.json`.
 `cf:sorcerer-soul-pierce` is the sentence each source ends on -- the
 caster's arcane powers ignore a target's resistance to the sworn type up
 to the value of this one -- which `resolve.damage` has no way to be told.
-`cf:sorcerer-soul-nat20` is the pair of riders that fire on a natural 20
-or a natural 1 *after* the attack's other effects, which is a moment
-nothing announces. The page prints two further sources, and
-`cf:sorcerer-soul-rest` says why neither has a leg in `chargen.BUILDS`;
-nothing is invented for them here.
+The page prints two further sources, and `cf:sorcerer-soul-rest` says why
+neither has a leg in `chargen.BUILDS`; nothing is invented for them here.
+
+**It used to be two, and the second was the wild leg's Unfettered Power**
+-- the riders on a natural 20 and a natural 1, held back on the reading
+that they land *after* the attack's other effects and nothing announces
+that moment. `PowerResolved` does, and carries every `AttackResult` with
+its own `natural`, so `_unfettered` is written. That entry also said
+*"each source ends with a rider on a natural 20"*: only one does. The
+dragon leg's four printed clauses are Draconic Power, Draconic
+Resilience, Dragon Soul and Scales of the Dragon, and all four are here.
+#1533.
 
 The type is held twice over: once in `c.resist`, which has nowhere to
 record which type it covered, and once in a marker effect whose label names
@@ -49,7 +56,11 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.events import AttackRolled, Bloodied
+from combat_engine.engine.events import (
+    AttackRolled,
+    Bloodied,
+    PowerResolved,
+)
 
 #: The armours the resilience clause rules out. Named rather than inverted
 #: from the light list, because "not heavy" is the printed wording.
@@ -201,6 +212,60 @@ def _chaos_burst(c: Cast) -> None:
     c.watch(AttackRolled, on_roll, until=When.ENCOUNTER, on=me, label=SOUL)
 
 
+def _unfettered(c: Cast) -> None:
+    """"When you roll a natural 20 on an attack roll for an arcane power,
+    you slide the target 1 square and knock it prone after applying the
+    attack's other effects. When you roll a natural 1 ... you must push
+    each creature within 5 squares of you 1 square."
+
+    **`PowerResolved`, which is the whole of why this is writable now.**
+    `docs/blocked.json` carried this clause as `cf:sorcerer-soul-nat20`,
+    wanting *"an event announcing a power use's finished effects, carrying
+    the natural roll"* -- on the reading that `AttackRolled` is the only
+    event carrying the natural and fires before the damage, while `Hit`
+    carries none at all. Both halves of that are still true and the
+    conclusion no longer is: `PowerResolved` is emitted after the body has
+    run and carries **every** `AttackResult` the use produced, each with
+    its own `natural` and `target`. So the printed *"after applying the
+    attack's other effects"* is the event's own moment rather than
+    something to arrange.
+
+    **`natural`, not `critical`.** The card names the face. A row that
+    widens the critical range -- or a `crit_becomes` -- makes a 19 a crit
+    and does not make it a natural 20, and reading `critical` here would
+    pay the slide on it.
+
+    **No latch, and that is measured rather than assumed.** A rider is a
+    `use` of its own and announces its own `PowerResolved` with its own
+    result object, so one swing's roll is never carried by two events --
+    checked on `p3162` under a loaded die: one event, one roll. Each
+    attack roll therefore counts once, which is what the card says.
+
+    `side="other"` for the natural 1: *"each creature within 5 squares of
+    you"* is everybody but the sorcerer, allies included, and the card
+    says **must**, so nothing is offered.
+    """
+    me = c.me
+
+    def done(ev: PowerResolved) -> None:
+        from combat_engine.engine.dsl import get
+
+        if ev.actor != me:
+            return
+        row = get(ev.power)
+        if row is None or Keyword.ARCANE not in (row.keywords or ()):
+            return
+        for res in ev.rolls:
+            if res.natural == 20 and res.target:
+                c.slide(1, on=res.target)
+                c.prone(on=res.target)
+        if any(res.natural == 1 for res in ev.rolls):
+            for who in c.within(5, side="other"):
+                c.push(1, on=who)
+
+    c.watch(PowerResolved, done, until=When.ENCOUNTER, on=me, label=SOUL)
+
+
 def _resilience(c: Cast) -> None:
     """"While you are not wearing heavy armor, you can use your Strength
     modifier in place of your Dexterity or Intelligence modifier to
@@ -301,6 +366,7 @@ def sorcerer_soul(c: Cast) -> None:
         ability = c.dex_mod
         kind = ROLLED_TYPES[(_rolled_soul(c) - 1) % len(ROLLED_TYPES)]
         _chaos_burst(c)
+        _unfettered(c)
     else:
         return
     c.bonus(

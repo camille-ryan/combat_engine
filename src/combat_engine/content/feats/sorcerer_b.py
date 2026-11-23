@@ -69,6 +69,7 @@ from combat_engine.engine.events import (
     ForcedMove,
     InitiativeRolled,
 )
+from combat_engine.engine.triggers import about_me
 from combat_engine.engine.types import Usage
 
 
@@ -322,11 +323,27 @@ def f2805(c: Cast) -> None:
     creature, both ends of the step and `kind_`, and no source at all, so
     "targets **you** slide" could not be asked of it.
 
-    The feature named beside the attacks has a ref -- the prerequisite
-    prints `cf:sorcerer-f0s3` -- and no row: that soul is one of the four
-    the class page prints and only two are declared. So the dropped
-    clause names the row it is waiting for rather than the shape of the
-    absence. The day that leg lands, this is one line.
+    **Both printed sources land, and the second one needed no widening.**
+    The card is *"targets you slide with sorcerer attacks or your
+    Unfettered Power"*, and Unfettered Power is the wild soul's natural-20
+    rider -- written now, in `souls._unfettered`, laid through the
+    feature's own `Cast`. So the `ForcedMove` it announces carries
+    `power="cf:sorcerer-f0"`, whose `cls` is `sorcerer`, and
+    `_my_sorcerer_slide` already answers it. Measured: this row fires
+    twice on a natural 20 and once on an ordinary face.
+
+    **`cls`-wide and not narrowed to `p.attack is not None`**, which was
+    the tempting tightening and is wrong: a slide printed on a sorcerer
+    attack's *hit* is often laid by a **feature** row's `Cast` --
+    `p16224`, `p11834` and `cf:sorcerer-elementalist-f2s3` are the three
+    -- so testing for a declared attack would drop exactly those.
+
+    **`dropped=` is now the dealability alone.** The printed prerequisite
+    is `{"ref": "cf:sorcerer-f0s3"}` in an `all`, and no declared row
+    carries that ref: the wild soul is a *leg* of `cf:sorcerer-f0`,
+    answered by `c.build("wild")`, and `chargen.meets` reads a dealt hand
+    which never holds a leg ref. So the clause is complete and nobody can
+    hold it -- `#1447`'s census, `#235`'s axis. #1533.
     """
     c.penalty(AC, 2, on=c.trigger.target, until=When.EONT)
 
@@ -564,8 +581,9 @@ def f2806(c: Cast) -> None:
 
 
 @power("f2807", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("turns.arm_before_initiative", "cf:sorcerer-f0s3"))
+       reach=PERSONAL, target=SELF, dropped=("cf:sorcerer-f0s3",),
+       trigger="you roll initiative",
+       on=Trigger(InitiativeRolled, about_me, "you roll initiative"))
 def f2807(c: Cast) -> None:
     """Call the parity of your initiative d20 and add Charisma if it lands.
 
@@ -587,12 +605,24 @@ def f2807(c: Cast) -> None:
     inventing a decision for the AI to get wrong -- see
     `scripts/CLAUDE.md` on what the measurement instruments are for.
 
-    **`dropped=`, and the missing half is the opening roll.**
-    `Encounter.start` calls `_roll_initiative()` *before* `_arm_traits()`,
-    so no trait is listening when the fight's own order is decided; the
-    clause pays out on `reroll_initiative`, which is the printed "make a
-    new initiative check" and is reached. That ordering is the engine's
-    and reaches every trait of this shape, not this row -- `#1500`.
+    **The opening roll is reached now, and the symbol that said otherwise
+    was about the wrong half of the dispatcher.** This was a *trait* --
+    `action=NONE` with no `on=`, so its body ran from `_arm_traits()`,
+    which `Encounter.start` calls **after** `_roll_initiative()`. That
+    ordering is real and `#1500` is still about it. But a row declaring
+    `on=Trigger(InitiativeRolled, ...)` is armed by `self.triggers.arm()`,
+    which `start` calls **before** the rolls, and `_roll_initiative` sets
+    `self.order` provisionally before its emit loop precisely so those
+    offers land. Measured: `p10887` -- a warlord row of exactly this
+    shape -- fires on the opening roll of a fresh board. So the clause
+    does not need the trait ordering moved; it needs to stop being a
+    trait. `#1534`.
+
+    **The call being made after the die is still faithful**, by the
+    paragraph above: the choice is fixed at even, and a d20 is uniform, so
+    there is nothing a late call can exploit. That is what makes the
+    trigger shape available at all -- a row whose call mattered could not
+    use it.
 
     `Initiative.natural` is 0 for a creature whose count was *copied*
     rather than rolled, so the gate reads no match there rather than
@@ -609,8 +639,8 @@ def f2807(c: Cast) -> None:
     granting the leg from its parent is refused there is that it would
     hand a sorcerer on another fork a feat printed for this one.
 
-    So two symbols, because they are two gaps: the ordering one above,
-    and this. `#1447` holds the census."""
+    One symbol now, not two: the ordering gap was not this row's and the
+    dealability one is. `#1447` holds the census."""
     me = c.me
     # Even, by the argument in the docstring: the call is free.
     want_even = True
@@ -624,8 +654,7 @@ def f2807(c: Cast) -> None:
             return
         c.initiative(c.cha_mod, on=me)
 
-    c.watch(InitiativeRolled, rolled, until=When.ENCOUNTER, on=me,
-            label=f"{c.ref} call")
+    rolled(c.trigger)
 
 
 @power("f1162", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
