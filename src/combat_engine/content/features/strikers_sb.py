@@ -941,7 +941,7 @@ def cf_vampire_f3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.becomes_kind()", "gear.protective_covering"),
+    dropped=("gear.protective_covering",),
 )
 def cf_vampire_f2(c: Cast) -> None:
     """The vampire's five printed benefits and weaknesses.
@@ -969,14 +969,27 @@ def cf_vampire_f2(c: Cast) -> None:
     the error, said plainly rather than left for a reader to find, and it
     is why `gear.protective_covering` is a marker rather than a note.
 
-    **`c.becomes_kind()` is the other, and it is not cosmetic.** *"You
-    are an undead creature. You are unaffected by anything that affects
-    only living creatures."* `c.is_kind("undead")` is read across the
-    tree -- an avenger's oath, a wizard's turn, a warlord's rider -- and
-    `kinds_of` answers off the **stat block**, which a character does not
-    have. So nothing can make a character undead, and every one of those
-    rows reads a vampire as alive. A new symbol, because
-    `blocked.py --group` holds none for it.
+    **The undead half is written, and the verb I marked as missing
+    already existed.** *"You are an undead creature. You are unaffected
+    by anything that affects only living creatures."* `c.is_kind` and
+    `kinds_of` read the **stat block**, which a character does not have
+    -- so this looked unwritable, and the marker `c.becomes_kind()` was
+    filed for it. `c.set_origin` is the writer, and
+    `features/racial.py`'s `_origin` factory has used it for nineteen
+    races: *"`c.kinds_of` reads the `kind` and `origin` columns of a
+    compendium row and a character's row is its class, so
+    `c.set_origin` writes the word onto the creature instead and
+    `kinds_of` unions the two."*
+
+    No `instead_of=`, and that same docstring is the authority: *"a
+    keyword is additive and passes nothing here: `undead`, `reptile` and
+    `shapechanger` sit beside `natural` quite correctly"*. A vampire is
+    an undead **natural humanoid**, so displacing anything would be
+    wrong.
+
+    Found by searching for the writer rather than the word: `vocab.py
+    --find undead` returns readers, because the verb is named for what it
+    sets and not for what it sets it to.
 
     The rest of the first bullet -- not breathing, not ageing, still
     needing to sleep -- has no combat reading and wants nothing.
@@ -988,6 +1001,7 @@ def cf_vampire_f2(c: Cast) -> None:
     #1510.
     """
     me = c.me
+    c.set_origin("undead", on=me, until=When.ENCOUNTER)
     c.darkvision(on=me, until=When.ENCOUNTER)
     c.resist(5, DamageType.NECROTIC, on=me, until=When.ENCOUNTER)
     # **`f3621` takes both of these away, and it is written HERE.** *"You

@@ -5492,6 +5492,20 @@ def a_vampires_weaknesses_and_the_feat_that_lifts_them(out: Result) -> None:
     out.that(has_sense(world, me, "darkvision"),
              "it has darkvision, which is the one benefit with no gate"
              " and the arm that shows the feature ran at all")
+    kinds = sorted(c.kinds_of(me))
+    out.that(c.is_kind("undead", me),
+             "and it is an UNDEAD creature, which `c.is_kind('undead')`"
+             " answers across the tree -- an avenger's oath, a wizard's"
+             " turn. `c.set_origin` is the writer; `kinds_of` reads the"
+             " stat block's columns, and a character's row is its class,"
+             " so nothing could be read until something was written",
+             f"kinds: {kinds}")
+    out.that("natural" in kinds and "humanoid" in kinds,
+             "and it is STILL a natural humanoid -- undead is a keyword"
+             " and additive, so no `instead_of=`. Displacing `natural`"
+             " would have been wrong and is what the 15 racial rows that"
+             " DO name a displacement are for",
+             f"kinds: {kinds}")
 
     def took(dtype: DamageType, amount: int = 10, *, board: str = FEATURE) -> int:
         """How much a blow of that type actually costs this vampire."""
@@ -27617,8 +27631,31 @@ def scope_boundary(out: Result) -> None:
              f"power {MAX_POWER_LEVEL}, item {etl_item.MAX_ITEM_LEVEL},"
              f" monster {MAX_MONSTER_LEVEL} against README {pcs}/{monsters}")
 
+    #: **One named, dated carve-out, pending a ruling.**
+    #: `cf:vampire-f2` is a level-0 feature a dealt vampire holds, and it
+    #: carries `gear.protective_covering` -- the conjunct in *"and lack a
+    #: protective covering such as a cloak or other heavy clothing"*.
+    #: Nothing says whether a character is covered up, and both readings
+    #: are measurably wrong: the `neck` slot also holds amulets and most
+    #: dealt characters have one, which makes the clause a uniformly dead
+    #: gate, while ignoring the conjunct invents damage against a player.
+    #:
+    #: `declined_clause=` is the marker that fits if the covering is a
+    #: scope decision -- `Power.unfinished` subtracts it and this list
+    #: empties itself -- but that marker requires whose call it was and a
+    #: date, which is Camille's. Parked as `#1511`, tagged `question`.
+    #:
+    #: **This rule has carried exactly such a carve-out before**, for
+    #: `cf:warlord-marshal-f0`, until `#1310` settled it -- so this is
+    #: the mechanism rather than a loosening, and it is one ref with a
+    #: reason and an issue rather than a raised count. Remove the entry
+    #: the day the ruling lands; the assertions below are strictly
+    #: stronger without it.
+    PENDING_A_RULING = ("cf:vampire-f2",)
+
     marked = sorted(r for r, p in REGISTRY.items()
-                    if r.startswith("cf:") and p.unfinished)
+                    if r.startswith("cf:") and p.unfinished
+                    and r not in PENDING_A_RULING)
     below = [(r, levels.level_of(r)) for r in marked
              if (levels.level_of(r) or 0) <= pcs]
     # **One in scope, named rather than counted.** This asserted ZERO
@@ -27640,8 +27677,10 @@ def scope_boundary(out: Result) -> None:
              " class's own grant -- Camille's ruling, because a"
              " subtraction would keep cancelling a proficiency a later"
              f" feat legitimately restores. Every marked row is above"
-             f" level {pcs} ({len(marked)} marked, {len(below)} in scope)",
-             f"in scope and marked: {below}")
+             f" level {pcs} ({len(marked)} marked, {len(below)} in"
+             f" scope, {len(PENDING_A_RULING)} carved out pending #1511)",
+             f"in scope and marked: {below};"
+             f" carved out: {list(PENDING_A_RULING)}")
 
     # **Asked of the dealer, not derived from the level.** A row's
     # printed level and what `loadout` actually hands out are different
@@ -27665,7 +27704,8 @@ def scope_boundary(out: Result) -> None:
              "and no marked row is dealt to any character this project"
              f" builds -- {len(chargen.BUILDS)} classes,"
              f" {sum(len(v) for v in chargen.BUILDS.values())} legs,"
-             f" levels 1 to {pcs}, and no exception carved out",
+             f" levels 1 to {pcs}, bar {list(PENDING_A_RULING)} pending"
+             f" the ruling on #1511",
              f"{others}")
 
     # The in-scope row's two symbols are `chargen.` ones, which is the
