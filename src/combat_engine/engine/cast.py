@@ -7811,7 +7811,16 @@ class Cast:
                 self._nearest_first(sorted(paths), toward, away_from, mover),
                 f"{self.ref}: move {squares_}",
             )
-            return walk(self.world, mover, paths[dest])
+            # **The ordering is handed down, so a lengthened move obeys
+            # the same `toward` the first leg did.** `walk` picks the
+            # continuation's destination itself, and leaving that to
+            # `sorted` is the mistake 13 rows were measured making --
+            # walking away from the thing they were about to swing at.
+            return walk(
+                self.world, mover, paths[dest],
+                prefer=lambda options: self._nearest_first(
+                    options, toward, away_from, mover),
+            )
         finally:
             if lent is not None:
                 self.world.effects.end(lent, "the move ended")
@@ -17792,8 +17801,28 @@ class Cast:
         until: When = When.ENCOUNTER,
         when: Callable[[dict[str, Any]], bool] | None = None,
         one_target: bool = False,
+        mid_move: bool = False,
     ) -> Effect | None:
         """Make a named row move you further. `c.extend_move("p1449", 5)`.
+
+        **`mid_move` is the other half and takes no duration.** Everything
+        below is a standing modifier on a named row's printed distance,
+        read by `c.squares_for` **inside that row's body** -- so it is read
+        before the move starts and can do nothing for a clause that fires
+        *during* one. `f820` prints *"for that move"* on a trigger that
+        only fires once the move is under way (being caught on the way
+        out) and `m2341a4` owes a square for a missed opportunity attack;
+        both carried a marker saying a move already under way cannot be
+        lengthened.
+
+        With `mid_move=True` the squares go straight to
+        `Movement.lengthened_in_flight`, which `movement.walk` reads when
+        a leg finishes. **It returns None**, because there is nothing to
+        hold: the squares are spent by the move that is happening or lost
+        with it, and `walk` zeroes the field at `MoveStart` so a grant
+        with no move in flight cannot leak into the next one. `ref`,
+        `until`, `when` and `one_target` are all ignored -- this is not a
+        modifier on a row. #1514.
 
         The sibling of `change_dice` and the same argument: the distance a
         row moves you is an **argument inside its own body**, so "one more
@@ -17821,9 +17850,15 @@ class Cast:
         not. `change_dice` still takes `_who`, which is right for it because
         a row may change the dice of somebody else's power.
         """
-        from .components import Powers
+        from .components import Movement, Powers
 
         who = self.me if on is None else on
+        if mid_move:
+            mv = self.world.get(who, Movement)
+            if mv is None:
+                return None
+            mv.lengthened_in_flight += squares_
+            return None
         known = self.world.get(who, Powers)
         if known is None:
             return None

@@ -136,6 +136,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Melee,
+    Miss,
     Mod,
     Moved,
     MoveStart,
@@ -1663,21 +1664,43 @@ def m2341a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.extend_move(mid_move=)",),
 )
 def m2341a4(c: Cast) -> None:
     """"A +5 racial bonus" -- the word in front of "bonus" is the type, and
-    this one prints it. The extra square owed for a missed opportunity
-    attack is the dropped clause: a move already under way cannot be
-    lengthened."""
+    this one prints it.
+
+    **The extra square is written now.** The card owes one *"during the
+    movement that provoked"* when the opportunity attack misses, and this
+    said a move already under way cannot be lengthened. It can:
+    `c.extend_move(mid_move=True)` hands the square to
+    `Movement.lengthened_in_flight` and `walk` spends it when the leg it
+    is on finishes. #1514.
+
+    **Both halves gate on `opportunity` alone and not on "provoked by
+    movement"**, which is the narrower printed phrase. `world.provocation`
+    is what knows the difference and it is read inside `resolve.attack`,
+    not hung on the outcome -- so the event this watch sees cannot say.
+    The two halves agree with each other, which is the thing worth
+    holding: an attack the AC bonus applied to is one the square is owed
+    for."""
+    me = c.me
     c.bonus(
         AC,
         5,
         kind="racial",
-        on=c.me,
+        on=me,
         until=When.ENCOUNTER,
         when=lambda ctx: bool(ctx.get("opportunity")),
     )
+
+    def dodged(ev: Miss) -> None:
+        # `getattr`, because `resolve.attack` hangs `opportunity` on the
+        # outcome as a plain attribute rather than declaring it a field.
+        if ev.target != me or not getattr(ev, "opportunity", False):
+            return
+        c.extend_move(c.ref, 1, mid_move=True)
+
+    c.watch(Miss, dodged, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

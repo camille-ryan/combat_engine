@@ -331,23 +331,37 @@ def f2075(c: Cast) -> None:
 
 
 @power("f820", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.extend_move(mid_move=)",),
+       reach=PERSONAL, target=SELF,
        trigger="an opportunity attack hits you while you are moving",
        on=Trigger(Hit, _at_me, "you are hit"))
 def f820(c: Cast) -> None:
-    """Being caught on the way out makes you faster.
+    """*"If you are hit by an opportunity attack while moving, you gain a
+    +1 bonus to speed for that move. This benefit is cumulative if you
+    are hit multiple times."*
 
-    Untyped and `stacks=True` by default, which is the printed
-    "cumulative if you are hit multiple times" -- and `AT_WILL`, because
-    a triggered row declared `ENCOUNTER` fires once a fight and
-    "cumulative" is the card saying outright that it does not. That was
-    the bug: the second hit laid nothing. `When.EOT` rather than the
-    printed "for that move": the move in flight has already had its
-    budget measured, so what is dropped is the retroactive half and what
-    plays is the rest of the turn.
+    `AT_WILL`, because a triggered row declared `ENCOUNTER` fires once a
+    fight and "cumulative" is the card saying outright that it does not.
+    That was the bug: the second hit laid nothing.
+
+    **"For that move", which it now is.** This used to lay
+    `c.bonus("speed", 1, until=When.EOT)` and say the retroactive half
+    was dropped because "the move in flight has already had its budget
+    measured". That was true of `walk`, not of the card: the budget is a
+    path chosen before the first step, so a speed bonus arriving
+    mid-walk reached nothing -- and `When.EOT` then paid it over the
+    *rest of the turn*, which is wider than print in exchange. Two
+    wrongs, not a narrowing.
+
+    `c.extend_move(mid_move=True)` is the door: the square goes to
+    `Movement.lengthened_in_flight` and `walk` picks a further
+    destination when the leg it is on finishes. Cumulative by
+    construction, since the field is added to rather than set. And a hit
+    taken while **not** moving grants nothing that can be spent --
+    `walk` zeroes the field at `MoveStart`, so there is no move for it to
+    leak into, which is what "while moving" comes to here. #1514.
     """
     if _was_opportunity(c.trigger):
-        c.bonus("speed", 1, on=c.me, until=When.EOT)
+        c.extend_move(c.ref, 1, mid_move=True)
 
 
 @power("f2077", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

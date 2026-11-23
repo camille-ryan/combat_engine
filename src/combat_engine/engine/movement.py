@@ -27,6 +27,7 @@ and `settle` puts anything still overlapping into the nearest square it fits.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from .components import Movement, Position
@@ -981,12 +982,41 @@ def mode_of(world: World, eid: int, mode: str | None) -> str:
 
 
 def walk(
-    world: World, eid: int, path: list[Square], *, kind: str = "walk", mode: str | None = None
+    world: World, eid: int, path: list[Square], *, kind: str = "walk",
+    mode: str | None = None,
+    prefer: Callable[[list[Square]], list[Square]] | None = None,
 ) -> int:
     """Walk a path one square at a time. Returns how many squares were covered.
 
     Difficult terrain costs an extra square, so the budget is spent here
     rather than checked by the caller.
+
+    **A move already under way can be lengthened**, which it could not be
+    before: `Movement.lengthened` is squares handed to the move *in
+    flight*, and when the path runs out this picks a further destination
+    and keeps going. `f820` prints *"for that move"* on a trigger that
+    fires **during** it -- being caught on the way out -- and `m2341a4`
+    prints the extra square owed for a missed opportunity attack. Both
+    had carried a marker saying a move under way cannot be lengthened.
+
+    **Done here and not by calling `walk` twice**, which was the first
+    design and is wrong in four places at once: a second call emits a
+    second `MoveStart` and a second `MoveEnd`, so a row reading *"when
+    you end your move"* fires twice; `mv.went` is zeroed at the start, so
+    the Stealth distance would restart mid-move; and
+    `free_difficult_left` would hand out the per-move allowance of free
+    rough going again. One move action is one `walk`.
+
+    **And it does not terminate.** Proven by planting it: pointing the
+    continuation at `walk` gives a `RecursionError`, because each nested
+    call announces its own `MoveStart` and a row whose clause fires there
+    grants again. The bound below cannot help -- each recursion gets a
+    fresh one.
+
+    `prefer` is the caller's ordering over destinations, so a
+    continuation obeys the same `toward`/`away_from` the first leg did --
+    `c.move`'s own reason, and the thing 13 rows were measured getting
+    wrong when the order was left to `sorted`. #1514.
     """
     if not can_move(world, eid):
         return 0
@@ -1009,6 +1039,16 @@ def walk(
     if kind in ("walk", "charge") and not can_walk(world, eid):
         return 0
     mode = mode_of(world, eid, mode)
+    # **The in-flight grant is cleared BEFORE `MoveStart` is announced**,
+    # not beside the other per-move counters below, and the difference is
+    # load-bearing: a handler on `MoveStart` is inside the printed window
+    # ("during that movement"), so clearing after the emit would wipe the
+    # one grant a row of that shape had just made. A grant left over from
+    # an earlier move -- a hit taken while standing still, say -- dies
+    # here, which is the leak this has to stop. #1514.
+    stale = world.get(eid, Movement)
+    if stale is not None:
+        stale.lengthened_in_flight = 0
     # The return is read. "You can cancel that movement as an immediate
     # interrupt" is a printed line on several rows, and the event was
     # emitted and thrown away -- the fourth time this session that a
@@ -1020,7 +1060,8 @@ def walk(
         actor=eid, kind_=kind, to=path[-1] if path else None,
     )).cancelled:
         return 0
-    spent = 0
+    # `spent` is computed at the bottom now: the per-step total lives in
+    # `spent_box` so a leg helper can add to it across legs.
     # Held past the end of the move, not just during it. "Requirement: the
     # creature must be climbing" is checked when a power is *used*, and the
     # creature is standing still at that moment -- a flag that only held
@@ -1070,55 +1111,101 @@ def walk(
     #
     # Set before `step`, because `step` is what opens the opportunity
     # window and what moves the creature into the zone that burns it.
-    hops = mode == "fly" and len(path) > 1
-    last = len(path) - 1
+    spent_box = [0]
+
+    def cover(leg: list[Square]) -> bool:
+        """Walk one leg. False if a step was refused, which ends the move.
+
+        Everything in here was the body of a single `for`; it is a
+        function so a lengthened move can run it again without a second
+        `MoveStart`. `frm` and `spent` are the only state that crosses a
+        leg boundary, which is why they are `nonlocal` and boxed.
+        """
+        nonlocal frm
+        hops = mode == "fly" and len(leg) > 1
+        last = len(leg) - 1
+        # **The printed exception**, hoisted for the same reason `price`
+        # is: five rows lay a zone that is rough going *even for
+        # creatures that fly*, and without this the general rule would
+        # silently invert them. Empty on any board laying no such zone.
+        # See `Zone.difficult_in_flight`.
+        sticky = world.zones.catches_fliers() if hops else frozenset()
+        for n, sq in enumerate(leg):
     # **The printed exception**, hoisted for the same reason `price` is:
     # five rows lay a zone that is rough going *even for creatures that
     # fly*, and without this the general rule would silently invert them.
     # Empty on any board laying no such zone. See `Zone.difficult_in_flight`.
-    sticky = world.zones.catches_fliers() if hops else frozenset()
-    for n, sq in enumerate(path):
-        # The square this creature will not stop on, which is what the
-        # cost and hazard waivers key on -- both are paid on *entering* a
-        # square, so the one it lands on is `n == last` and pays in full.
-        #
-        # The provocation half is **not** here: it is provoked by leaving,
-        # and by escaping a watcher's reach rather than per square, so no
-        # per-step flag can carry it. `step` tests `went_from` instead.
-        over = hops and n != last
-        if mv is not None:
-            mv.passing = over
-        if not step(world, eid, sq, kind=kind, mode=mode):
+            # The square this creature will not stop on, which is what
+            # the cost and hazard waivers key on -- both are paid on
+            # *entering* a square, so the one it lands on is `n == last`
+            # and pays in full.
+            #
+            # The provocation half is **not** here: it is provoked by
+            # leaving, and by escaping a watcher's reach rather than per
+            # square, so no per-step flag can carry it. `step` tests
+            # `went_from` instead.
+            over = hops and n != last
             if mv is not None:
-                mv.passing = False
+                mv.passing = over
+            if not step(world, eid, sq, kind=kind, mode=mode):
+                if mv is not None:
+                    mv.passing = False
+                return False
+            # **The cost waiver is the one the exception narrows, and the
+            # hazard waiver above is not.** The printed sentence is about
+            # difficult *terrain*, so a zone that both slows and burns
+            # still waives its damage for a flier passing over and
+            # charges for the ground.
+            step_cost = 1 if (over and sq not in sticky) else price(frm, sq)
+            # **The per-move allowance, spent here and only here.** A
+            # square that cost extra for being rough costs one less while
+            # the budget lasts -- *"you ignore 1 square of difficult
+            # terrain when you move"*. Charged against the surcharge
+            # rather than the whole step, so a zone that taxes a crossing
+            # for a different reason still charges it.
+            #
+            # `price(frm, sq) - 1` is the comparison rather than
+            # `sq in world.rough()`, because `crossing` is the one owner
+            # of what a step costs and a second opinion here is the
+            # disagreement that function exists to prevent.
+            if (mv is not None and mv.free_difficult_left > 0
+                    and step_cost > 1 and not over):
+                step_cost -= 1
+                mv.free_difficult_left -= 1
+            spent_box[0] += step_cost
+            frm = sq
+            # Squares entered, not budget spent -- `spent` charges 2 for
+            # rough ground and the printed penalty counts squares.
+            if mv is not None:
+                mv.went += 1
+        return True
+
+    going = cover(path)
+    # **The move in flight grows here**, once each leg finishes, so a row
+    # that reacted to something *during* the move is read after it has
+    # had the chance to react. Bounded rather than `while True`: a handler
+    # that grants a square on every `MoveStart` of its own making would
+    # otherwise walk the creature off the board, and no printed card
+    # lengthens one move more than a handful of times. Reaching the bound
+    # drops the remaining grant, which is the safe direction.
+    for _again in range(8):
+        if not going or mv is None or mv.lengthened_in_flight <= 0:
             break
-        # **The cost waiver is the one the exception narrows, and the
-        # hazard waiver above is not.** The printed sentence is about
-        # difficult *terrain*, so a zone that both slows and burns still
-        # waives its damage for a flier passing over and charges for the
-        # ground.
-        step_cost = 1 if (over and sq not in sticky) else price(frm, sq)
-        # **The per-move allowance, spent here and only here.** A square
-        # that cost extra for being rough costs one less while the budget
-        # lasts -- *"you ignore 1 square of difficult terrain when you
-        # move"*. Charged against the surcharge rather than the whole
-        # step, so a zone that taxes a crossing for a different reason
-        # still charges it.
-        #
-        # `price(frm, sq) - 1` is the comparison rather than
-        # `sq in world.rough()`, because `crossing` is the one owner of
-        # what a step costs and a second opinion here is the
-        # disagreement that function exists to prevent.
-        if (mv is not None and mv.free_difficult_left > 0
-                and step_cost > 1 and not over):
-            step_cost -= 1
-            mv.free_difficult_left -= 1
-        spent += step_cost
-        frm = sq
-        # Squares entered, not budget spent -- `spent` charges 2 for rough
-        # ground and the printed penalty counts squares.
-        if mv is not None:
-            mv.went += 1
+        further, mv.lengthened_in_flight = mv.lengthened_in_flight, 0
+        onward = world.reachable_paths(eid, further)
+        if not onward:
+            break
+        choices = sorted(onward)
+        if prefer is not None:
+            choices = prefer(choices)
+        where = world.decide(
+            eid, "move", choices, f"lengthened by {further}",
+        )
+        leg = onward.get(where) if isinstance(onward, dict) else None
+        if not leg:
+            break
+        going = cover(leg)
+    spent = spent_box[0]
     # **Cleared before `MoveEnd`**, not after: `Zones.refresh` is
     # subscribed to that event, so a `ZoneEntered` can still be announced
     # from inside the emit below -- and the creature has landed by then.

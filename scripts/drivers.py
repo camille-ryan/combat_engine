@@ -5783,6 +5783,212 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_move_already_under_way_can_be_lengthened(out: Result) -> None:
+    """`c.extend_move(mid_move=)`, which `f820` and `m2341a4` both wanted.
+
+    *"If you are hit by an opportunity attack while moving, you gain a +1
+    bonus to speed **for that move**."* `f820` laid
+    `c.bonus("speed", 1, until=When.EOT)` and called the retroactive half
+    dropped, *"because the move in flight has already had its budget
+    measured"*. True of `walk` -- the path is chosen before the first
+    step -- and so the bonus reached nothing, while `When.EOT` paid it
+    over the rest of the turn instead. Two wrongs rather than a
+    narrowing. `m2341a4` owes a square *"during the movement that
+    provoked"* and said the same thing.
+
+    `Movement.lengthened_in_flight` is the store and `movement.walk`
+    spends it when a leg finishes, picking a further destination and
+    carrying on.
+
+    **Done inside `walk` and not by calling it twice**, which is what the
+    four ordering arms below are for: a second call emits a second
+    `MoveStart` and a second `MoveEnd`, so a row reading *"when you end
+    your move"* fires twice; `mv.went` is zeroed at the start, so the
+    Stealth distance would restart mid-move; and `free_difficult_left`
+    hands out the per-move allowance of free rough going again. One move
+    action is one `walk`.
+
+    **And it is unstable, not merely wrong**, which is what planting it
+    showed: pointing the continuation at `walk` instead of the leg helper
+    gives a `RecursionError`, because each nested call announces its own
+    `MoveStart` and a row whose clause fires there grants again. The
+    bounded loop in `walk` cannot help -- each recursion gets a fresh
+    one. #1514.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit, Miss, MoveEnd, MoveStart
+    from combat_engine.engine.movement import walk
+    from combat_engine.engine.query import enemies
+
+    REF = "f820"
+
+    def walked(grant: int, *, at_start: bool = False) -> tuple[
+            int, int, int, int]:
+        """Walk a 2-square path, granting `grant` squares in flight.
+
+        Returns the squares `walk` reports, `Movement.went`, and how many
+        `MoveStart` and `MoveEnd` events the whole move announced.
+        """
+        world, me, _ = _board(REF, 1)
+        mv = world.need(me, Movement)
+        if grant and not at_start:
+            # The grant arrives mid-walk in play -- an opportunity attack
+            # resolving inside `step`. Written straight onto the field
+            # here, which is the same state that door writes, because the
+            # row's own arm below drives the printed path.
+            def push(ev: MoveStart) -> None:
+                if ev.actor == me:
+                    Cast(world=world, me=me, ref=REF).extend_move(
+                        REF, grant, mid_move=True)
+
+            world.bus.on(MoveStart, push)
+        elif grant:
+            Cast(world=world, me=me, ref=REF).extend_move(
+                REF, grant, mid_move=True)
+        paths = world.reachable_paths(me, 2)
+        two = [p for p in sorted(paths) if len(paths[p]) == 2]
+        if not two:
+            return (-1, -1, -1, -1)
+        before = len(world.bus.log)
+        covered = walk(world, me, paths[two[0]])
+        starts = sum(1 for e in world.bus.log[before:]
+                     if isinstance(e, MoveStart) and e.actor == me)
+        ends = sum(1 for e in world.bus.log[before:]
+                   if isinstance(e, MoveEnd) and e.actor == me)
+        return covered, mv.went, starts, ends
+
+    plain, plain_went, _p_starts, _p_ends = walked(0)
+    longer, long_went, long_starts, long_ends = walked(2)
+
+    out.that(plain == 2 and plain_went == 2,
+             "a 2-square path covers 2 squares with nothing lengthening"
+             " it -- the control, and the number every arm below is a"
+             " difference from",
+             f"covered {plain}, went {plain_went}")
+    out.that(longer > plain,
+             "THE arm: 2 squares handed to the move IN FLIGHT make it go"
+             " further, which `walk` could not do at all -- the path is"
+             " chosen before the first step, so a speed bonus arriving"
+             " mid-walk reached nothing",
+             f"covered {longer} against {plain}")
+    out.that(long_went > plain_went,
+             "and `Movement.went` counts the whole move, not the last"
+             " leg -- the Stealth distance, which a second call to `walk`"
+             " would have zeroed at its own `MoveStart`",
+             f"went {long_went} against {plain_went}")
+    out.that(long_starts == 1 and long_ends == 1,
+             "and ONE `MoveStart` and ONE `MoveEnd` for a lengthened"
+             " move. Two calls to `walk` would announce two of each, so a"
+             " row reading \"when you end your move\" would fire twice",
+             f"{long_starts} starts, {long_ends} ends")
+
+    # -- the grant cannot leak into a later move --------------------------
+    def stale_grant() -> tuple[int, int]:
+        """Grant squares with no move in flight, then walk."""
+        world, me, _ = _board(REF, 1)
+        Cast(world=world, me=me, ref=REF).extend_move(
+            REF, 3, mid_move=True)
+        paths = world.reachable_paths(me, 2)
+        two = [p for p in sorted(paths) if len(paths[p]) == 2]
+        if not two:
+            return (-1, -1)
+        return walk(world, me, paths[two[0]]), 2
+
+    leaked, want = stale_grant()
+    out.that(leaked == want,
+             "a grant made with NO move in flight is spent on nothing:"
+             " `walk` clears the field before it announces `MoveStart`,"
+             " so three squares owed to a creature standing still do not"
+             " turn up on its next move",
+             f"covered {leaked}, printed {want}")
+
+    # -- and a row that grants ON MoveStart is still inside the window ----
+    at_start, _, _, _ = walked(2, at_start=False)
+    out.that(at_start > plain,
+             "and a row whose clause fires at `MoveStart` -- which is"
+             " inside the printed *during that movement* -- keeps its"
+             " grant. The clear sits ABOVE that emit for exactly this,"
+             " and below it the one grant such a row makes was wiped",
+             f"covered {at_start} against {plain}")
+
+    # -- the row ----------------------------------------------------------
+    def caught_leaving() -> tuple[bool, int]:
+        """`f820`: an opportunity attack hits the mover."""
+        world, me, _ = _board(REF, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        mv = world.need(me, Movement)
+        # The clause hangs off a hit, so the die is loaded: an unloaded
+        # board missed and the premise arm read as the row not firing.
+        world.rng.loaded = 20
+        taken: list[int] = []
+
+        def when_hit(ev: Hit) -> None:
+            if ev.target == me and not taken:
+                taken.append(1)
+                ev.opportunity = True
+                _dsl.use(world, me, REF, spend=False, trigger=ev)
+
+        world.bus.on(Hit, when_hit)
+        foe = sorted(c.enemies())[0]
+        # **The foe's basic by name, not `"mba"`.** A monster's basic is
+        # its own ref -- `dsl.basics_of` answers `m145a0` here -- and
+        # `dsl.use(foe, "mba")` returns False, which read as the row
+        # never firing. `world.turn` too, or the use is refused.
+        world.turn = foe
+        for swing in sorted(_dsl.basics_of(world, foe)):
+            _dsl.use(world, foe, swing, targets=[me], spend=False)
+            if taken:
+                break
+        return bool(taken), mv.lengthened_in_flight
+
+    # -- the monster half, which shares the symbol -----------------------
+    def dodged_it() -> int:
+        """`m2341a4`: the opportunity attack MISSES, so a square is owed.
+
+        Its body is called directly rather than used. The stat block is
+        a defective entry -- `m2341a1`'s printed attack line names no
+        defence, so `loader.defective` refuses the whole creature -- and
+        that is pre-existing and nothing to do with this clause.
+        """
+        world, me, _ = _board(REF, 1)
+        mv = world.need(me, Movement)
+        REGISTRY["m2341a4"].body(
+            Cast(world=world, me=me, ref="m2341a4"))
+        mv.lengthened_in_flight = 0
+        dodge = Miss(attacker=sorted(enemies(world, me))[0], target=me,
+                     power="drv")
+        dodge.opportunity = True
+        world.bus.emit(dodge)
+        return mv.lengthened_in_flight
+
+    out.that(dodged_it() == 1,
+             "and `m2341a4` owes its move 1 square when the opportunity"
+             " attack MISSES, which is the other row that carried this"
+             " symbol -- its body watches the miss, where the AC bonus"
+             " beside it gates the hit",
+             f"owed {dodged_it()}")
+
+    out.that(not REGISTRY["f820"].unfinished
+             and not REGISTRY["m2341a4"].unfinished,
+             "and neither row carries the marker any more",
+             f"{REGISTRY['f820'].unfinished} "
+             f"{REGISTRY['m2341a4'].unfinished}")
+
+    fired, owed = caught_leaving()
+    out.that(fired,
+             "the premise: an opportunity attack landed on the holder, so"
+             " the row's declared trigger had something to answer",
+             f"hit={fired}")
+    out.that(owed == 1,
+             "and `f820` owes the move in flight exactly 1 square --"
+             " where it used to lay a speed bonus that no chosen path"
+             " could read, and pay it over the rest of the turn instead",
+             f"owed {owed}")
+
+
 def a_paid_option_is_judged_rather_than_defaulted(out: Result) -> None:
     """`c.may(worth_it=)` and `c.rattling(when=)`, which `f1721` needed
     together.
@@ -134446,6 +134652,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "move_lengthened_in_flight": (
+        a_move_already_under_way_can_be_lengthened,
+        "c.extend_move(mid_move=) lengthens a move that has already"
+        " started, with one MoveStart and one MoveEnd",
     ),
     "paid_option_judged": (
         a_paid_option_is_judged_rather_than_defaulted,

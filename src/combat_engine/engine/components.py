@@ -617,6 +617,23 @@ class Movement:
     #: squares is the printed run-up.
     went: int = 0
     went_kind: str = ""
+    #: **Squares handed to the move that is happening right now.**
+    #:
+    #: Not `Powers.lengthened`, which is a standing modifier on a named
+    #: row's printed distance and is read by `c.squares_for` *inside that
+    #: row's body* -- before the move starts. This is the other half: a
+    #: clause that fires **during** a move and makes it go further.
+    #: `f820` prints *"for that move"* on a trigger that only fires once
+    #: the move is under way (being caught on the way out), and `m2341a4`
+    #: owes a square for a missed opportunity attack. Both carried a
+    #: marker saying a move already under way cannot be lengthened.
+    #:
+    #: Spent and zeroed by `movement.walk`, which reads it when a leg
+    #: finishes and picks a further destination. Zeroed again at
+    #: `MoveStart` beside the other per-move counters, so a grant that
+    #: arrives with no move in flight cannot be carried into the next
+    #: one. #1514.
+    lengthened_in_flight: int = 0
     #: Where this creature's current move action **started**, for the one
     #: printed clause that asks about displacement rather than distance.
     #:
