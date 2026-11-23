@@ -1232,6 +1232,23 @@ class Initiative:
 
     bonus: int = 0
     rolled: int = 0
+    #: The **d20 face**, where `rolled` is the finished count with the
+    #: modifier and the level term already in it. One card asks about the
+    #: face and nothing recorded it: `f2807` prints *"choose even numbers
+    #: or odd numbers ... if the result of the d20 roll for that
+    #: initiative check matches"*, which cannot be read off a total.
+    #: (`f2806` is the same shape over a class feature's d10, which is a
+    #: different roll in a different place and not this field.)
+    #:
+    #: **On the component rather than on `InitiativeRolled`**, which is
+    #: the cheaper of two correct places: the event is in three `replay`
+    #: fixtures, so a field there costs a re-record, and a row answering
+    #: the event can reach the component anyway. 0 for a creature whose
+    #: count was *copied* rather than rolled -- `Encounter.join`'s
+    #: `beside=`, which is "Initiative as conjurer" -- because there was
+    #: no d20, and a parity gate must read that as no match rather than
+    #: as even.
+    natural: int = 0
     scale: str = "pc"
 
 

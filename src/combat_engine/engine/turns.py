@@ -385,8 +385,9 @@ class Encounter:
         order = list(turn_takers(self.world))
         for eid in order:
             init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
+            init.natural = self.world.rng.d20().total
             init.rolled = (
-                self.world.rng.d20().total
+                init.natural
                 + init.bonus
                 + level_term(self.world, eid, init.scale)
             )
@@ -461,6 +462,9 @@ class Encounter:
         first = self.world.get(a, Initiative) or self.world.add(a, Initiative())
         second = self.world.get(b, Initiative) or self.world.add(b, Initiative())
         first.rolled, second.rolled = second.rolled, first.rolled
+        # The face travels with the count, or the two disagree for
+        # anything reading `natural` after a swap.
+        first.natural, second.natural = second.natural, first.natural
         if self.started and self.index in (i, j):
             self.index -= 1
         return True
@@ -480,8 +484,9 @@ class Encounter:
             self.order.pop(was)
             if was < self.index:
                 self.index -= 1
+        init.natural = self.world.rng.d20().total
         init.rolled = (
-            self.world.rng.d20().total
+            init.natural
             + init.bonus
             + level_term(self.world, eid, init.scale)
         )
@@ -520,10 +525,15 @@ class Encounter:
         init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
         theirs = self.world.get(beside, Initiative) if beside is not None else None
         if theirs is not None and beside in self.order:
+            # **`natural` stays 0 on a copied count**, which is the honest
+            # answer rather than copying the conjurer's face: no d20 was
+            # rolled for this creature, so a card gating on the face must
+            # read no match. See `Initiative.natural`.
             init.rolled = theirs.rolled
         else:
+            init.natural = self.world.rng.d20().total
             init.rolled = (
-                self.world.rng.d20().total
+                init.natural
                 + init.bonus
                 + level_term(self.world, eid, init.scale)
             )

@@ -15,9 +15,14 @@ call even or odd before a roll and pay out when the call lands. One of the
 three is an attack roll, which `AttackRolled.natural` announces before the
 damage is rolled, so it is writable. The other two are still held, for
 different reasons: the class feature's d10 is rolled inside the feature
-and announced to nobody, while an initiative check *is* announced --
-`InitiativeRolled` -- and carries the finished number rather than the
-die, which is the half the parity needs.
+and announced to nobody, while the initiative check is **written** now: it
+was announced all along -- `InitiativeRolled` -- and what was missing was
+the die rather than the moment, since the event carries the finished
+count. `Initiative.natural` records the face, so `f2807` reads it off
+the component. One half of that card is still owed and it is the
+engine's ordering, not the parity: `Encounter.start` rolls before
+`_arm_traits`, so no trait is listening for the fight's own opening
+roll. `#1500`.
 
 `usage=AT_WILL` throughout -- none of these prints a once-per-encounter
 limit, and a triggered row is asked `usable` every time it is offered.
@@ -47,6 +52,7 @@ from combat_engine.engine import (
     Forced,
     Gear,
     Hit,
+    Initiative,
     Keyword,
     Miss,
     Skills,
@@ -61,6 +67,7 @@ from combat_engine.engine.events import (
     Bloodied,
     CheckDeclared,
     ForcedMove,
+    InitiativeRolled,
 )
 from combat_engine.engine.types import Usage
 
@@ -546,18 +553,53 @@ def f2806(c: Cast) -> None:
 
 @power("f2807", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("events.InitiativeRolled.natural",))
+       dropped=("turns.arm_before_initiative",))
 def f2807(c: Cast) -> None:
-    """The same call against an initiative check.
+    """Call the parity of your initiative d20 and add Charisma if it lands.
 
-    Re-aimed. The roll *is* announced -- `InitiativeRolled` exists and
-    `turns._roll_initiative` emits one per creature -- so naming the
-    absence of the moment was naming the wrong thing. What the event
-    carries is `rolled`, the finished number with the modifier and the
-    level term already in it, and the parity the card asks about is the
-    d20's. The second half of the hold is the ordering: `start` rolls
-    before `_arm_traits`, so a trait is not listening yet whatever the
-    event carries."""
+    **Written.** The face is recorded now -- `Initiative.natural`, set at
+    the three sites that roll a d20 and traded by `swap_initiative`
+    alongside the count -- where the event's `rolled` is the finished
+    number with the modifier and the level term already in it and cannot
+    be read for parity.
+
+    On the event and not in the body, which is what this file's own rule
+    about a before-the-fight clause says: `c.initiative` re-splices the
+    order, so laying it in the body would move a count that had not been
+    rolled against the call yet.
+
+    **The call is fixed rather than offered, and that is faithful.** The
+    card has the character choose before the roll, and a d20 is uniform:
+    ten faces are even and ten are odd, so neither call is better than
+    the other and nothing is lost by making one. An offer would be
+    inventing a decision for the AI to get wrong -- see
+    `scripts/CLAUDE.md` on what the measurement instruments are for.
+
+    **`dropped=`, and the missing half is the opening roll.**
+    `Encounter.start` calls `_roll_initiative()` *before* `_arm_traits()`,
+    so no trait is listening when the fight's own order is decided; the
+    clause pays out on `reroll_initiative`, which is the printed "make a
+    new initiative check" and is reached. That ordering is the engine's
+    and reaches every trait of this shape, not this row -- `#1500`.
+
+    `Initiative.natural` is 0 for a creature whose count was *copied*
+    rather than rolled, so the gate reads no match there rather than
+    even, which is why the parity test asks for a face at all."""
+    me = c.me
+    # Even, by the argument in the docstring: the call is free.
+    want_even = True
+
+    def rolled(ev: InitiativeRolled) -> None:
+        if ev.actor != me:
+            return
+        init = c.world.get(me, Initiative)
+        face = init.natural if init else 0
+        if not face or (face % 2 == 0) != want_even:
+            return
+        c.initiative(c.cha_mod, on=me)
+
+    c.watch(InitiativeRolled, rolled, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} call")
 
 
 @power("f1162", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

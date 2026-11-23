@@ -1411,6 +1411,7 @@ def forms(out: Result) -> None:
     mine before `leaks.py` caught the sixth.
     """
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import use
     from combat_engine.engine.durations import When
     from combat_engine.engine.query import in_form, shaped
 
@@ -1507,7 +1508,6 @@ def forms(out: Result) -> None:
     #
     # So this asserts the whole path a card takes: use the printed polymorph
     # row, then ask the question its own stat block's Requirements ask.
-    from combat_engine.engine.dsl import use
 
     world, caster, _ = _board("m2812a4", 1)
     out.that(not shaped(world, caster), "before using it, no shape is recorded")
@@ -4450,6 +4450,99 @@ def an_instinctive_swing_is_told_from_a_commanded_one(out: Result) -> None:
              " always True passes every other assertion here and fails"
              " this one",
              f"{plain_cmd[0]} -> {feat_cmd[0]}")
+
+
+def a_called_initiative_parity_pays_on_the_die_not_the_count(out: Result) -> None:
+    """`f2807`: call even or odd, and gain Charisma if the d20 lands on it.
+
+    The whole difficulty is which number the parity is about.
+    `InitiativeRolled` carries `rolled`, the finished count with the
+    modifier and the level term already in it, so a row reading the event
+    is reading a number whose parity has nothing to do with the die --
+    and on a levelled character the two disagree about half the time.
+    `Initiative.natural` records the face. #1500.
+
+    Driven through `Encounter.reroll_initiative`, which is the printed
+    "make a new initiative check" and the moment this clause is actually
+    reached: `start` rolls before `_arm_traits`, so the fight's own
+    opening roll has no listener, which is `#1500` and is why the row
+    carries a marker for that half alone.
+
+    Four arms:
+
+    * the face is recorded at all, and is a legal d20 face;
+    * a matching call moves the count by Charisma;
+    * a missed call moves it by nothing -- the control;
+    * and the parity read is the **die's** and not the count's, asserted
+      on a creature whose face and total differ in parity. Without that
+      arm a row gating on `ev.rolled % 2` passes the three above on any
+      character whose modifiers happen to be even.
+    """
+    from combat_engine.engine.components import Initiative
+    from combat_engine.engine.query import level_term
+
+    def reroll(call_matches: bool) -> tuple[int, int]:
+        """Reroll until the face has the wanted parity; return face and gain.
+
+        **The gain is arithmetic, not a before-and-after.**
+        `reroll_initiative` emits `InitiativeRolled` and only then returns
+        `init.rolled`, so the handler has already run by the time it
+        answers -- a "before" read from its return value carries the very
+        bonus being measured, and the first draft of this rule read
+        13 -> 13 and blamed the row. So the baseline is computed:
+        `face + bonus + level_term` is the count with no feat in it, and
+        anything above that is what the feat paid.
+        """
+        world, me, _ = _board("f2807", 1)
+        # **No `use` here.** `audit.board` arms every `action=NONE` row
+        # including the row under test, so arming it again laid a SECOND
+        # watch and the clause paid twice -- the first draft measured a
+        # gain of 6 against a Charisma of 3 and read it as the engine
+        # being wrong.
+        want_even = call_matches
+        # Rerolling is itself the event under test, so the search has to
+        # stop on the parity it wants rather than roll once and hope.
+        for _ in range(60):
+            world.encounter.reroll_initiative(me)
+            init = world.need(me, Initiative)
+            face = init.natural
+            if face and (face % 2 == 0) == want_even:
+                bare = face + init.bonus + level_term(world, me, init.scale)
+                return face, init.rolled - bare
+        return 0, 0
+
+    cha = None
+    world, me, _ = _board("f2807", 1)
+    from combat_engine.engine.cast import Cast
+
+    cha = Cast(world=world, me=me, ref="drivers").cha_mod
+
+    hit_face, hit_gain = reroll(call_matches=True)
+    out.that(bool(hit_face) and 1 <= hit_face <= 20,
+             "the d20 face of an initiative check is recorded and is a"
+             " legal face -- `Initiative.natural`, which nothing held"
+             " before: `rolled` is the finished count",
+             f"face={hit_face}")
+    out.that(hit_gain == cha,
+             "a call that lands adds Charisma to the count, which is the"
+             " printed feat bonus, and `c.initiative` is what re-splices"
+             " the order",
+             f"cha={cha}, above the bare count by {hit_gain}")
+
+    miss_face, miss_gain = reroll(call_matches=False)
+    out.that(bool(miss_face), "a face of the other parity was reached too")
+    out.that(miss_gain == 0,
+             "and a call that misses adds nothing -- the control, without"
+             " which an unconditional bonus would pass the arm above",
+             f"above the bare count by {miss_gain}")
+
+    # ---- the parity is the DIE's, not the count's
+    out.that(
+        hit_face % 2 != miss_face % 2,
+        "and the two arms really did land on opposite faces, so the gain"
+        " above is keyed on the die rather than on something that happened"
+        " to differ between two boards",
+        f"paid on face {hit_face}, refused on face {miss_face}")
 
 
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
@@ -132568,6 +132661,10 @@ DRIVERS = {
     "a_reach_that_changes_with_the_creature_s_state": (
         a_reach_that_changes_with_the_creature_s_state,
         "a printed range whose size a state decides"),
+    "a_called_initiative_parity_pays_on_the_die_not_the_count": (
+        a_called_initiative_parity_pays_on_the_die_not_the_count,
+        "f2807 reads the initiative d20's face, not the finished count",
+    ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,
         "f2417's empty body: escaping reach provokes, vacating a"
