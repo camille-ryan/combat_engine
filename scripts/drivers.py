@@ -73539,6 +73539,8 @@ def an_egg_variety_grants_its_own_minor_action(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Position, Powers
     from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import ForcedMove
+    from combat_engine.engine.query import squares as squares_of
     from combat_engine.engine.types import Condition
 
     PARENT = "i3569p1"
@@ -73559,6 +73561,16 @@ def an_egg_variety_grants_its_own_minor_action(out: Result) -> None:
             lambda who, kind, pool, what="":
             pool[pick] if len(pool) > pick else pool[0])
         dsl.use(world, me, PARENT, spend=False)
+        # **The decider goes away once the variety is chosen**, and
+        # leaving it installed is what made two arms here wrong. It
+        # answers EVERY choice on this board, so the granted minor
+        # action's own "which square" was being answered `pool[2]` by
+        # the variety picker -- a non-move on this board, so the slide
+        # moved nobody and the pull travelled the wrong distance. Both
+        # arms had passed on the accident that `pool[2]` used to be a
+        # real square, and a later commit arming two more rows on the
+        # board changed the pool.
+        world.decider = None
         found = next(((i, z) for i, z in world.zones.all()
                       if z.label == PARENT), None)
         return world, me, found
@@ -73631,28 +73643,58 @@ def an_egg_variety_grants_its_own_minor_action(out: Result) -> None:
                  f"{inside}")
         return
     near, far = inside[0], inside[1]
-    world.get(near, Position).square = (centre[0] + 1, centre[1])
-    world.get(far, Position).square = (centre[0] + 4, centre[1])
+    # **Placed on the grid, not just assigned.** `Position.square` alone
+    # leaves the grid index holding the old squares, so anything measuring
+    # from the index disagrees with anything measuring from the component.
+    for who, off in ((near, 1), (far, 4)):
+        # **`lift` first.** `Grid.place` only ADDS -- its docstring says it
+        # never overwrites somebody else -- so placing without lifting
+        # leaves the creature indexed in its old square AND its new one.
+        world.grid.lift(who)
+        world.get(who, Position).square = (centre[0] + off, centre[1])
+        world.grid.place(who, frozenset(squares_of(world, who)))
     out.that(c.distance(near) >= 0 and world.get(near, Position).square
              == (centre[0] + 1, centre[1]),
              "premise: one creature stands one square from the centre, so"
              " a single step of pull would land it there",
              f"centre={centre}, near={world.get(near, Position).square}")
+    # What the row ASKED for, per target. `forced()` adds the source's
+    # `forcing` modifier to it, so the distance actually travelled is a
+    # statement about the board and the printed number is only readable
+    # here.
+    asked: dict[int, int] = {}
+    world.bus.on(ForcedMove, lambda ev, into=asked: into.setdefault(
+        ev.target, ev.squares))
     dsl.use(world, me, PULL, spend=False)
-    out.that(world.get(near, Position).square == (centre[0] + 1, centre[1])
-             and c.is_(Condition.PRONE, on=near),
+    out.that(c.is_(Condition.PRONE, on=near)
+             and near not in asked,
              "THE rider: it falls prone INSTEAD of moving -- the printed"
-             " word is 'instead', so it is a substitution and not a knock"
-             " down on arrival",
-             f"{world.get(near, Position).square},"
-             f" prone={c.is_(Condition.PRONE, on=near)}")
+             " word is 'instead', so NO forced movement is asked for at"
+             " all. Asserted on the absence of its `ForcedMove` and not on"
+             " where it ended: a plant that made the clause fall through"
+             " and pull as WELL left every arm green, because the centre"
+             " square is occupied on this board and the extra pull moved"
+             " it nowhere",
+             f"prone={c.is_(Condition.PRONE, on=near)},"
+             f" ForcedMove asked={asked.get(near)},"
+             f" at {world.get(near, Position).square}")
     pulled = world.get(far, Position).square
-    out.that(max(abs(pulled[0] - centre[0]), abs(pulled[1] - centre[1])) == 2
-             and not c.is_(Condition.PRONE, on=far),
-             "and one four squares out is pulled two closer and is NOT"
-             " knocked down, because it never reaches the centre",
-             f"{pulled} is {max(abs(pulled[0] - centre[0]), abs(pulled[1] - centre[1]))}"
-             f" from {centre}, prone={c.is_(Condition.PRONE, on=far)}")
+    was_far = max(abs(centre[0] + 4 - centre[0]), 0) or 4
+    now_far = max(abs(pulled[0] - centre[0]), abs(pulled[1] - centre[1]))
+    out.that(asked.get(far) == 2,
+             "the row ASKS for two squares, which is the printed number --"
+             " read off its own `ForcedMove` rather than off where the"
+             " creature ended, because `forced()` adds the source's"
+             " `forcing` modifier and this board lays one (`f3146`, +1),"
+             " so a pull printed as 2 correctly travels 3 here",
+             f"ForcedMove.squares={asked.get(far)}")
+    out.that(0 < now_far < was_far and not c.is_(Condition.PRONE, on=far),
+             "and one four squares out is dragged CLOSER but not onto the"
+             " centre, so the prone rider does not fire -- which is the"
+             " 'instead' the card prints, asserted on arrival rather than"
+             " on a distance the board can move",
+             f"{was_far} -> {now_far} from {centre},"
+             f" prone={c.is_(Condition.PRONE, on=far)}")
 
 
 def a_card_printed_inside_another_gets_a_coined_ref(out: Result) -> None:
