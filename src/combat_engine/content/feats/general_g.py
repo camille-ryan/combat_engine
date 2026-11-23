@@ -1488,20 +1488,23 @@ def f715(c: Cast) -> None:
     touches, and this feat says the one reroll applies to all of them. There
     is no second roll to find: the others have already been resolved and
     their results are not on the triggering event.
-    
 
     **Re-pointed to `dsl.use(attacks_before_damage)`, 2026-11-19: three
-    feats, one cause.** `dsl.use` sets `cast.target` and calls the body
+    feats, one cause -- and it is TWO now.** `f1858` was the third and its
+    own note corrected the grouping: its sentence reads *"reducing the
+    damage **to that target**"*, so it is per-target by print and the
+    per-target loop is the order it wants. It is written and unmarked.
+    This row and `f715` are the two that genuinely need the reordering.
+
+    `dsl.use` sets `cast.target` and calls the body
     **once per target**, so a body that strikes and then damages does both
     for target one before target two is touched. The printed rules resolve
     an area power the other way -- every attack roll, then damage -- and
-    each of these three sentences is only expressible in that order:
+    both of these sentences are only expressible in that order:
 
     * `f1123` *"+2 to **that power's** damage rolls"* on hitting two or
       more: the first target's damage is already paid when the second hit
       becomes known;
-    * `f1858` *"reducing the damage ... **before you roll damage**"*: the
-      choice sits between the attack and the damage roll;
     * `f715` *"reroll the attack rolls ... against **every** target"*: the
       others are resolved by the time the reroll happens.
 
