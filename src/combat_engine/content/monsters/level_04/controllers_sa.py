@@ -3495,7 +3495,7 @@ def m6397a4(c: Cast) -> None:
     reach=Ranged(5),
     target=Target(
         "ally", 1,
-        label="one spider ally or drow ally",
+        label="one spider ally or r16 ally",
         kinds=frozenset({"spider", "drow"}),
     ),
     keywords=[Keyword.HEALING],

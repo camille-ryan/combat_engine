@@ -1086,7 +1086,7 @@ def m5445a2(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=Target(
-        side="ally", count=1, label="kobold ally",
+        side="ally", count=1, label="r23 ally",
         kinds=frozenset({"kobold"}),
     ),
 )

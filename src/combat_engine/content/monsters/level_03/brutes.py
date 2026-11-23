@@ -699,7 +699,7 @@ def m2979a3(c: Cast) -> None:
         c.hit()
 
 
-_M2979_ESCORT = "an attack is made against a drow ally adjacent to the m2979"
+_M2979_ESCORT = "an attack is made against a r16 ally adjacent to the m2979"
 
 
 def _adjacent_drow_ally(world: World, me: int, ev: AttackDeclared) -> bool:

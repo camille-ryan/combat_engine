@@ -821,7 +821,7 @@ def m1138a3(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    # "an orc ally or one of its own kind" -- the union, which one
+    # "an r25 ally or one of its own kind" -- the union, which one
     # field cannot say. `ONE_ALLY` plus the two tests. #570.
     target=Target(side="team", count=1, kinds=frozenset({"orc"}),
                   ident="own", kind_or_ident=True),

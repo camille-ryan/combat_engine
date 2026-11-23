@@ -1088,7 +1088,7 @@ def m1820a0(c: Cast) -> None:
 )
 def m1820a1(c: Cast) -> None:
     """"Allies within the aura" with no aura of its own size printed on
-    this block -- read as every gnoll ally it has, the only set this line
+    this block -- read as every r19 ally it has, the only set this line
     could mean without one."""
     if not c.strike():
         return

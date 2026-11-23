@@ -2041,7 +2041,7 @@ def m4683a2(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m4683a3(c: Cast) -> None:
-    """"Each dwarf ally" is a kind rather than a stat block, so `c.is_kind`
+    """"Each r2 ally" is a kind rather than a stat block, so `c.is_kind`
     answers it and no ref has to be named."""
     for mate in c.allies():
         if mate == c.me or distance_between(c.world, c.me, mate) > 5:
