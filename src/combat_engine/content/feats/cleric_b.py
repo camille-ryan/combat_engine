@@ -509,12 +509,28 @@ def f1960(c: Cast) -> None:
 
 
 @power("f1962", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("feat.associated_powers",))
+       reach=PERSONAL, target=SELF, todo=("etl.feat.associated_powers()",))
 def f1962(c: Cast) -> None:
     """An attack bonus with the at-will powers a domain is associated
     with. The class feature it rides on is a ref, but nothing records
-    which domain a character took or which rows that domain names --
-    the same list `f2071` wanted."""
+    which rows a domain names -- the same list `f2071` wanted.
+
+    **The symbol is narrowed from `feat.associated_powers`, which three
+    rows shared and which meant three different things.** #1481. This row
+    is the one of the three that is a real ETL gap, and the data is
+    there: 39 feat pages mention a domain and carry an Associated
+    section, every one linking exactly **4** powers, and
+    `build._links_resolve` already proves the resolver reads them --
+    478 of 478 members with a heroic row. What is missing is a
+    *queryable* store, so a row can ask which at-wills a given domain
+    feat names. The `href` ids are the answer sheet rather than a parse,
+    which is `_links_resolve`'s own argument for existing.
+
+    **The other half it needs already exists**, which is why this is one
+    gap and not two: `query.feats_of` answers which feats the character
+    holds, and the nine domains are declared as
+    `cf:cleric-warpriest-f1s0` .. `f1s8`, reached through `f3589` and
+    `_chose_a_domain`. Only the feat-to-powers edge is absent."""
 
 
 @power("f1964", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

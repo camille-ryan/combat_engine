@@ -60,10 +60,18 @@ NOTHING_IN_SCOPE = 3
 #: enough that a substring test would pass a comment that merely mentions
 #: asking. Three spellings because the section has been written three ways
 #: and renaming them all is churn for nothing.
+#: The accepted spellings, as the **one** source of truth. `MARKERS` is
+#: built from this and the failure message prints it, so the two cannot
+#: drift -- which they did the moment the message was first written with
+#: its own hand-copied list beside it.
+SPELLINGS = (
+    "Plain version", "Plain English", "In plain terms", "ELI5",
+    "What I need from you", "Your options",
+)
+
 MARKERS = re.compile(
     r"^\s{0,3}(?:#{1,4}\s*|\*\*)\s*"
-    r"(plain version|plain english|in plain terms|eli5"
-    r"|what i need from you|your options)",
+    r"(" + "|".join(re.escape(s) for s in SPELLINGS) + r")",
     re.I | re.M,
 )
 
@@ -172,6 +180,15 @@ def main() -> int:
         print("  a plain-language version as its LAST comment: what is broken,")
         print("  what is being asked, what each option means, and a pick.")
         print("  Camille's ask, 2026-11-06 -- see this file's docstring.")
+        # **Name the headings, because the requirement is not the matcher.**
+        # `#1471` was reported NO ELI5 while carrying a complete plain
+        # version -- four parts, signed -- under the heading "In plain
+        # words", which is not one of the spellings `MARKERS` accepts. The
+        # message above states what to write, so the author re-reads their
+        # own prose, finds it already says all of that, and has no way to
+        # learn that only the heading was wrong. One line saves that.
+        print("  It is found by its HEADING, so use one of: "
+              + ", ".join(SPELLINGS) + ".")
     if answered:
         print("  An ANSWERED one is not waiting on Camille. Act on the ruling")
         print("  and remove the tag, or re-ask -- leaving it tagged makes the")

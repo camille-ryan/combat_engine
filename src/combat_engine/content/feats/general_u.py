@@ -310,7 +310,8 @@ def f3424(c: Cast) -> None:
 
 
 @power("f3425", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=ASSOCIATED,
+       reach=PERSONAL, target=SELF,
+       dropped=("compendium.associated_powers(f3425)",),
        trigger="you drop an enemy you have cursed to 0 hit points",
        on=Trigger(Dropped, both(by_me, cursed_by_me),
                   "you drop an enemy you have cursed"))
@@ -319,10 +320,26 @@ def f3425(c: Cast) -> None:
     killer and `cursed_by_me` the creature going down -- which is the two
     halves of the printed sentence and the reason both are declared.
 
-    This is the one of the three whose page prints **no** Associated
-    Powers list at all -- its two siblings print one and it arrived as
-    refs -- so `feat.associated_powers` here is permanent rather than
-    pending.
+    **This row's gap is permanent, and the sentence that used to say so
+    got its evidence wrong.** It read *"its two siblings print one and it
+    arrived as refs"*. Measured against `compendium.sqlite`, **none** of
+    the three pages carries an Associated Powers section and all three
+    link **zero** powers -- so the siblings are not the contrast this
+    claimed, and the three differ in what they *need* rather than in what
+    their pages hold. #1481.
+
+    What is true is the conclusion: this page says *"any power associated
+    with this feat"* and lists none, so there is nothing to extract and
+    no parser closes it. The symbol is therefore its **own**, not the one
+    `f1962` waits on -- sharing it would make `todo.py` report this row
+    ready the day that store lands, which is the exact fault one symbol
+    serving two needs produces.
+
+    **And no marker actually fits this**, which is parked on Camille as
+    `#1482`: `dropped=` promises a symbol that can never arrive, `defect=`
+    drops a working row, and `declined_clause=` records a decision nobody
+    made. `dropped=` with a per-ref symbol is the least wrong of the six
+    until that is ruled on.
 
     **The augment marker is gone from this row too, and it was never its
     gap.** `c.augment_with(resource)` named nothing missing -- the spend is

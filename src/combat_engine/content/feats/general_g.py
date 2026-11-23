@@ -61,6 +61,7 @@ from combat_engine.engine import (
     Bloodied,
     Cast,
     Condition,
+    DamageApplied,
     DamageType,
     Defences,
     Dropped,
@@ -1194,15 +1195,87 @@ def _associated(ref: str, *, listed: bool = True) -> None:
 # which was all ten of these.
 
 
-@power("f1113", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=ASSOCIATED)
+def _two_keywords_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """I hit with a power carrying **both** of the keywords `f1113` names.
+
+    `_used_close_arcane` below is the same construction read the same
+    way -- a printed phrase of the form "a close arcane attack power" is
+    a shape and a keyword, not a list of rows.
+    """
+    row = get(getattr(ev, "power", ""))
+    return (
+        ev.attacker == me
+        and row is not None
+        and Keyword.ARCANE in row.keywords
+        and Keyword.FIRE in row.keywords
+    )
+
+
+@power("f1113", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you hit with a power carrying both the arcane and the fire"
+               " keyword",
+       on=Trigger(Hit, _two_keywords_hit,
+                  "I hit with an arcane power that is also fire"))
 def f1113(c: Cast) -> None:
-    """"When you hit a target with an f1113 power" -- the ETL resolved the
-    printed name in that sentence to the feat's own ref, which is how it
-    reads when a feat names itself. So the clause is a rider on the
-    feat's associated powers, and the page prints no list against this
-    one. `c.vulnerable` would say the payout; nothing says which rows
-    it hangs on."""
+    """**The marker this replaces was wrong, and the reason is in its own
+    first sentence.** It read: *"the ETL resolved the printed name in that
+    sentence to the feat's own ref, which is how it reads when a feat
+    names itself. So the clause is a rider on the feat's associated
+    powers"*. The observation is right and the inference does not follow.
+    The printed phrase is a **pair of keywords** whose words happen to
+    spell this feat's own name, so the substitution made a keyword gate
+    look like a self-reference.
+
+    Settled off the source page, which carries no `Associated` section and
+    links **zero** powers -- so an associated-powers reading had nothing
+    behind it in the first place. 58 of the 622 arcane attack rows carry
+    the second keyword too, so the gate is neither empty nor everything.
+    `_used_close_arcane` below reads the identical construction this way
+    already. #1483.
+
+    **Two different keyword sets, which is the clause's whole shape.** The
+    trigger wants both; the payout applies to *"the first **arcane
+    attack** power you use against it"*, which is the one keyword and
+    `from_attack`. Reading the trigger's pair on both halves would have
+    narrowed the vulnerability to fire powers the card does not mention.
+
+    **"The first" is a latch closed over by the gate**, not a dictionary
+    anywhere: `spent` lives in this call's frame, the `when=` predicate
+    reads it and the `DamageApplied` watch sets it, and both die with the
+    effect at `When.EONT`. The content rules forbid `id(c.world)` as a
+    key and this needs no key at all -- there is exactly one of these
+    per trigger, and the pair of closures is the scope.
+
+    `DamageApplied` rather than `Hit` for the consuming half: the
+    vulnerability has to be read *into* the blow that spends it, so the
+    latch may only close once the damage is off hit points. A `Hit` watch
+    fires before `_scoped_vuln` is consulted and would have spent the
+    clause on the attack it exists to help.
+    """
+    foe = getattr(c.trigger, "target", None)
+    if foe is None:
+        return
+    me = c.me
+    spent = False
+
+    def first_arcane(ctx: dict[str, Any]) -> bool:
+        if spent or ctx.get("source") != me or not ctx.get("from_attack"):
+            return False
+        row = get(ctx.get("power") or "")
+        return row is not None and Keyword.ARCANE in row.keywords
+
+    def consume(ev: Any) -> None:
+        nonlocal spent
+        if spent or ev.target != foe or ev.source != me:
+            return
+        row = get(getattr(ev, "detail", ""))
+        if row is not None and Keyword.ARCANE in row.keywords:
+            spent = True
+
+    c.vulnerable(5, DamageType.COLD, on=foe, until=When.EONT,
+                 when=first_arcane)
+    c.watch(DamageApplied, consume, until=When.EONT)
 
 
 # -- "while under the effect of your racial power" --------------------------

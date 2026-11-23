@@ -72892,6 +72892,183 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def a_keyword_pair_opens_one_cold_window(out: Result) -> None:
+    """*"When you hit a target with an arcane fire power, that target gains
+    vulnerable 5 cold against the first arcane attack power you use against
+    it before the end of your next turn."* -- `f1113`. #1483.
+
+    **Two different keyword sets, which is the whole shape of the clause.**
+    The trigger wants a power carrying **both** printed keywords; the
+    payout applies to *"the first **arcane attack** power"*, which is one
+    of them. Reading the pair on both halves would narrow the window to
+    fire powers the card does not mention, and reading the single keyword
+    on both would fire the trigger off any arcane power at all.
+
+    **The window is the first arcane attack, whatever damage it deals.**
+    So an arcane blow of some other type spends the window and gains
+    nothing -- the card gives a window, not a saved-up bonus -- and that
+    is the arm most likely to be written the other way by accident.
+
+    The latch is a closure in the row's own frame, read by the `when=`
+    gate and set by a `DamageApplied` watch, both dying at `When.EONT`.
+    `DamageApplied` and not `Hit`: the vulnerability has to be read into
+    the blow that spends it, so a `Hit` watch would close the latch
+    before `_scoped_vuln` is ever consulted.
+    """
+    import audit as _audit
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import Keyword, dsl
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import enemies as c_enemies
+    from combat_engine.engine.resolve import deal_damage
+    from combat_engine.engine.types import DamageType
+
+    ROW = "f1113"
+
+    def _pick(*, arcane: bool, fire: bool) -> str:
+        for ref in sorted(REGISTRY):
+            p = REGISTRY[ref]
+            if p.attack is None or not ref.startswith("p"):
+                continue
+            if (Keyword.ARCANE in p.keywords) is not arcane:
+                continue
+            if (Keyword.FIRE in p.keywords) is not fire:
+                continue
+            return ref
+        return ""
+
+    BOTH = _pick(arcane=True, fire=True)
+    ARCANE_ONLY = _pick(arcane=True, fire=False)
+    NEITHER = _pick(arcane=False, fire=False)
+    out.that(all((BOTH, ARCANE_ONLY, NEITHER)),
+             "premise: the corpus holds an attack row for each of the three"
+             " keyword combinations this rule needs, so none of the arms"
+             " below is asking about a row that does not exist",
+             f"both={BOTH}, arcane={ARCANE_ONLY}, neither={NEITHER}")
+    if not all((BOTH, ARCANE_ONLY, NEITHER)):
+        return
+
+    def _struck(*, trigger_with: str, blow: str, by_ally: bool = False,
+                dtype: DamageType = DamageType.COLD,
+                twice: bool = False) -> tuple[int, int]:
+        """Fire the feat off `trigger_with`, then land `blow`. Two hp drops.
+
+        The second drop is the control: the identical blow on a board
+        where the feat never fired. A single number could not tell a
+        vulnerability from a board that simply deals more.
+        """
+        drops = []
+        for armed in (True, False):
+            world, me, _ = _board(ROW, 1)
+            foes = sorted(c_enemies(world, me))
+            if not foes:
+                return (-1, -1)
+            foe = foes[0]
+            mates = [a for a in sorted(_audit._allies_of(world, me))
+                     if a != me]
+            hitter = (mates[0] if mates else me) if by_ally else me
+            if armed:
+                dsl.use(world, me, ROW, spend=False,
+                        trigger=Hit(attacker=me, target=foe,
+                                    power=trigger_with, critical=False))
+            health = world.get(foe, Health)
+            before = health.hp if health else 0
+            rounds = 2 if twice else 1
+            for _ in range(rounds):
+                deal_damage(world, hitter, foe, 10, dtype=dtype, detail=blow,
+                            from_attack=True)
+            health = world.get(foe, Health)
+            drops.append(before - (health.hp if health else 0))
+        return (drops[0], drops[1])
+
+    # -- the payout, and the control beside it ----------------------------
+    armed, bare = _struck(trigger_with=BOTH, blow=ARCANE_ONLY)
+    out.that(armed - bare == 5,
+             "a cold arcane blow after the trigger takes 5 MORE than the"
+             " identical blow on a board where the feat never fired",
+             f"{armed} vs {bare}")
+
+    # -- the trigger wants BOTH keywords ----------------------------------
+    #
+    # **Asked of the DECLARED predicate, not by firing the body.** Measured
+    # the other way first and both arms failed at 15 vs 10: `dsl.use(...,
+    # trigger=ev)` runs the body and never consults `Power.on.when`, which
+    # is only reached when the dispatcher offers the row. So an arm written
+    # that way cannot test the trigger at all -- it tests the payout twice
+    # and reports the trigger green. `REGISTRY[ROW].on.when` is the real
+    # thing rather than a copy of it, which is the other half of the point:
+    # a re-implemented predicate here would pass whatever this rule
+    # believed.
+    row = REGISTRY[ROW]
+    out.that(row.on is not None and row.on.event is Hit,
+             "premise: the row declares a trigger on `Hit`, so the"
+             " predicate below is the one the dispatcher would consult",
+             f"{row.on.event.__name__ if row.on else None}")
+    world, me, _ = _board(ROW, 1)
+    foes = sorted(c_enemies(world, me))
+    out.that(bool(foes), "premise: the board fields a foe to be hit",
+             f"{foes[:1]}")
+    if not foes or row.on is None:
+        return
+    gate = row.on.when
+    for name, ref, want in (("BOTH keywords", BOTH, True),
+                            ("arcane but not fire", ARCANE_ONLY, False),
+                            ("neither keyword", NEITHER, False)):
+        ev = Hit(attacker=me, target=foes[0], power=ref, critical=False)
+        got = bool(gate(world, me, ev))
+        out.that(got is want,
+                 f"a power with {name} {'opens' if want else 'does NOT open'}"
+                 " the window -- the trigger reads the PAIR, where the"
+                 " payout reads one of them",
+                 f"{ref} -> {got}")
+    # **A real third party, asserted as a premise.** Written first as
+    # `... if other[0] != me else True`, which is a vacuous pass on any
+    # board fielding a single foe -- and this one does.
+    somebody = next((e for e in sorted(c_enemies(world, me)) if e != me), None)
+    out.that(somebody is not None and somebody != me,
+             "premise: there is a creature other than the caster to swing,"
+             " so the arm below is not asserting True against itself",
+             f"other={somebody}, me={me}")
+    if somebody is not None:
+        ev = Hit(attacker=somebody, target=foes[0], power=BOTH,
+                 critical=False)
+        out.that(not gate(world, me, ev),
+                 "and SOMEBODY ELSE hitting with the pair does not open it"
+                 " -- the printed sentence is \"when YOU hit\"",
+                 f"attacker={somebody} -> {bool(gate(world, me, ev))}")
+
+    # -- the window is scoped, three ways ---------------------------------
+    a, b = _struck(trigger_with=BOTH, blow=NEITHER)
+    out.that(a == b,
+             "a NON-arcane cold blow gains nothing: the payout's keyword is"
+             " read on the blow and not only on the trigger",
+             f"{a} vs {b}")
+
+    a, b = _struck(trigger_with=BOTH, blow=ARCANE_ONLY, by_ally=True)
+    out.that(a == b,
+             "an ALLY's cold arcane blow gains nothing -- `source == me` is"
+             " the printed \"you use against it\" and an unscoped"
+             " vulnerability would hand it to everybody",
+             f"{a} vs {b}")
+
+    a, b = _struck(trigger_with=BOTH, blow=ARCANE_ONLY,
+                   dtype=DamageType.FIRE)
+    out.that(a == b,
+             "and a FIRE arcane blow gains nothing, because the card makes"
+             " the target vulnerable to cold and not to the attack",
+             f"{a} vs {b}")
+
+    # -- "the first", which is the latch ----------------------------------
+    once, control = _struck(trigger_with=BOTH, blow=ARCANE_ONLY, twice=True)
+    out.that(once - control == 5,
+             "TWO cold arcane blows take 5 more in total, not 10: the"
+             " window is spent by the first one. This is the arm the latch"
+             " exists for",
+             f"{once} vs {control}")
+
+
 def a_set_clause_counts_what_the_creature_wears(out: Result) -> None:
     """*"...equal to the number of items you have from this set"* and *"if
     the triggering ally wears or wields one or more items from this set"*
@@ -128986,6 +129163,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "keyword_pair_window": (
+        a_keyword_pair_opens_one_cold_window,
+        "f1113's trigger reads a keyword PAIR and its payout one keyword,"
+        " and the cold window is spent by the first arcane blow",
     ),
     "item_set_count": (
         a_set_clause_counts_what_the_creature_wears,
