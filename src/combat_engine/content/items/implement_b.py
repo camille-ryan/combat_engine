@@ -2537,6 +2537,39 @@ def i2305p1(c: Cast) -> None:
     benefit" and had already coined the symbol for exactly this. One
     symbol, one gap, so the two rows share it rather than this one riding a
     verb that cannot reach it. #641.
+
+    ## Measured, and *"there is no earlier moment"* is too strong
+
+    The paragraph above rules out registering a substitution and is
+    right about that. It does **not** follow that the payout is
+    unreachable, because forgoing it does not have to happen before it:
+    the payout **lays effects**, and an effect can be ended.
+
+    Driven on a warlock board, listening on the `Dropped` the boon pays
+    on and reading `world.effects.of(me)` filtered by
+    `Effect.by in features.warlock.BOONS`:
+
+        cf:warlock-f1c10 board   during the event: ['cf:warlock-f1c10']
+                                 after:            ['cf:warlock-f1c10']
+        hexblade board           during the event: ['cf:warlock-f1']
+                                 after:            []
+
+    So the boon's own effect **is standing inside that window**, is
+    attributable by `by`, and `Effects.of` plus `c.end_effect` already
+    reach it -- no new verb for the finding and no substitution needed.
+
+    **What is genuinely left is one question, and it is narrow.** The
+    reading above is taken from a bus handler. This row is a daily
+    immediate reaction, so it is offered through `dsl.use` *answering*
+    that trigger -- and the hexblade line shows the boon's effect is
+    gone by the time the event finishes. So whether a reaction row runs
+    **inside** that window or after it decides whether there is anything
+    left to end, and that is one probe rather than an investigation.
+
+    `dropped=` stands and the symbol stands, because if the answer is
+    "after" then forgoing really does need a door the engine does not
+    have. What has changed is that the next pass starts from a
+    measurement instead of from "there is no moment".
     """
     c.bonus("attack", 1, kind="power", on=c.me, until=When.ENCOUNTER, once=True)
 
