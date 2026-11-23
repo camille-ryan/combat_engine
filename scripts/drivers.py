@@ -5783,6 +5783,142 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def half_a_blow_comes_out_as_another_type(out: Result) -> None:
+    """`i991x1`: *"half the damage dealt with this weapon is radiant
+    damage."*
+
+    A blow carries one `DamageType`, or a set of types that are **all of
+    it at once**, and neither is a split -- so the row's old note was
+    right that this could not be said, and right that `c.deals` was not
+    the near miss: an override recolours the whole blow, which here is
+    strictly stronger than the page.
+
+    `c.deals(half=True)` rides the same hold with a `half` mark, and the
+    two kinds are mutually invisible to `_retyped`, which takes a
+    `want_half` selector for exactly that. `resolve.deal_damage` does the
+    partition **after** every modifier and after any halving, so it is
+    half of what the blow comes to rather than half of the dice.
+
+    **Resistance is the only thing that can tell a split from an
+    override**, which is why the arms are a 2x3 table. Against a creature
+    that resists neither type both deal the same total, so an arm reading
+    amount alone proves nothing at all. #1522.
+
+    **The board is built for an unrelated ref, and that is load-bearing.**
+    `i991x1` is `action=NONE`, so `audit.board("i991x1")` arms it and the
+    hold is already standing -- the first draft's "no split" control was
+    not one, and instrumenting `deal_damage` showed `half_as=radiant` in
+    *both* arms while every reading looked plausible. Fourth time that
+    board has pre-set the thing under test in this batch.
+    """
+    from combat_engine.engine.cast import Cast
+
+    # **`Defences`, not `Defenses`.** They are two components and only
+    # this one holds `resist`/`immune`; reaching for the other raises
+    # `AttributeError`, which is how this was found.
+    from combat_engine.engine.components import Defences, Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import DamageType
+
+    REF = "i991x1"
+
+    def struck(*, split: bool, resists: DamageType | None) -> int:
+        """What one 10-point FIRE blow takes off a foe.
+
+        Driven with `ref="mba"` so the blow comes from a declared WEAPON
+        row: `c.deals`'s default scope speaks for weapon rows, so a
+        synthetic `ref="drv"` Cast has no keywords and the hold is
+        correctly skipped -- which looked exactly like the split not
+        working.
+        """
+        world, me, _ = _board("f419", 1)
+        c = Cast(world=world, me=me, ref="drv")
+        foe = sorted(c.enemies())[0]
+        if resists is not None:
+            soak = world.get(foe, Defences) or world.add(foe, Defences())
+            soak.resist[resists] = 100
+        if split:
+            Cast(world=world, me=me, ref=REF).deals(
+                DamageType.RADIANT, half=True, on=me)
+        health = world.need(foe, Health)
+        was = health.hp
+        Cast(world=world, me=me, ref="mba").damage(
+            0, 10, dtype=DamageType.FIRE, on=foe)
+        return was - health.hp
+
+    whole = struck(split=False, resists=None)
+    out.that(whole > 1,
+             "the premise: the fire blow lands and is worth more than a"
+             " point, so a half of it is a number. NOT asserted as 10 --"
+             " `c.damage` adds the caster's enhancement to its flat"
+             " argument, so the figure is the board's",
+             f"the whole blow is {whole}")
+    out.that(struck(split=False, resists=DamageType.FIRE) == 0,
+             "and resisting FIRE soaks all of it while nothing is"
+             " re-typed, which is the baseline the split is measured"
+             " against",
+             f"{struck(split=False, resists=DamageType.FIRE)}")
+    out.that(struck(split=False, resists=DamageType.RADIANT) == whole,
+             "and resisting RADIANT soaks none of it -- so the numbers"
+             " below are the re-typing rather than resistance being read"
+             " twice",
+             f"{struck(split=False, resists=DamageType.RADIANT)}")
+
+    out.that(struck(split=True, resists=None) == whole,
+             "with the split laid, a foe resisting neither type takes the"
+             " SAME total -- a split moves no amount, which is why no arm"
+             " here reads one on its own",
+             f"{struck(split=True, resists=None)} vs {whole}")
+    out.that(struck(split=True, resists=DamageType.FIRE) == whole // 2,
+             "THE arm: a foe resisting FIRE now takes the radiant half --"
+             " its resistance cannot soak what is no longer fire, which"
+             " is the whole of what the printed split means",
+             f"{struck(split=True, resists=DamageType.FIRE)}"
+             f" of {whole}")
+    out.that(struck(split=True, resists=DamageType.RADIANT)
+             == whole - whole // 2,
+             "and the mirror: a foe resisting RADIANT takes the fire half"
+             " instead. An OVERRIDE would have left it taking nothing, so"
+             " this is the arm that tells the two mechanisms apart -- and"
+             " it is the larger share, because an odd blow puts the extra"
+             " point in the original type",
+             f"{struck(split=True, resists=DamageType.RADIANT)}"
+             f" of {whole}")
+
+    # -- and the ROW lays it, not just the verb ---------------------------
+    #
+    # **This arm exists because a plant showed the others could not see
+    # the row.** Every reading above lays the hold itself through
+    # `c.deals`, so deleting the row's own call reddened nothing. The two
+    # boards differ in exactly one thing: whether `i991x1` is held, since
+    # `audit.board` arms it on its own board and not on `f419`'s.
+    def resisted_fire(board: str) -> int:
+        world, me, _ = _board(board, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        foe = sorted(c.enemies())[0]
+        soak = world.get(foe, Defences) or world.add(foe, Defences())
+        soak.resist[DamageType.FIRE] = 100
+        health = world.need(foe, Health)
+        was = health.hp
+        Cast(world=world, me=me, ref="mba").damage(
+            0, 10, dtype=DamageType.FIRE, on=foe)
+        return was - health.hp
+
+    held = resisted_fire(REF)
+    absent = resisted_fire("f419")
+    out.that(absent == 0 and held > 0,
+             "THE row arm: a fire-resisting foe takes nothing from a fire"
+             " blow on a board where this item is not held, and takes the"
+             " radiant half on the board that arms it -- so the split is"
+             " the ROW's doing and not the rule's",
+             f"item held {held}, item absent {absent}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker: the split and the"
+             " holy-symbol half are both written",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_damage_rider_reads_which_aiming_was_chosen(out: Result) -> None:
     """`f2202`: *"you can choose to make it a close blast 1 instead of a
     close blast 3. If you do, add 2 to the damage roll."*
@@ -135560,6 +135696,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "half_a_blow_retyped": (
+        half_a_blow_comes_out_as_another_type,
+        "i991x1 deals half its damage as radiant, which a type"
+        " override cannot say (#1522)",
     ),
     "damage_reads_the_aiming": (
         a_damage_rider_reads_which_aiming_was_chosen,

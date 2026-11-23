@@ -6413,6 +6413,19 @@ class Cast:
         if not dtypes:
             dtype, *rest = self._typed(dtype)
             dtypes = (dtype, *rest) if rest else ()
+        # **Half the blow re-typed, read beside the override and OUTSIDE
+        # the block above.** A `c.deals(half=True)` hold is a SPLIT, so it
+        # must not reach `_typed` -- that would recolour the whole blow --
+        # and the partition is `deal_damage`'s, so the label format stays
+        # here.
+        #
+        # Written inside the `if not dtypes` branch first, which is a
+        # silent no-op for every blow that already carries a type: a
+        # measured melee basic came out 46 untyped with the hold standing
+        # and the split never ran. The read has nothing to do with
+        # whether the card named a type. #1522.
+        halves_into = self._halved_into(
+            self.keywords_of(self._declared()), dtype)
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, detail or self.ref,
             dtypes=dtypes,
@@ -6420,7 +6433,7 @@ class Cast:
             by_attack=bool(self.result and self.result.hit),
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
-            crit=self.crit, branch=self.branch,
+            crit=self.crit, branch=self.branch, half_as=halves_into,
             # Read off the result the attack stamped, so a rider inside
             # the finisher inherits it and an ordinary critical does not.
             finisher=bool(self.result and self.result.finisher),
@@ -27023,12 +27036,27 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         from_: DamageType | Sequence[DamageType] | None = None,
         once: bool = False,
         add: bool = False,
+        half: bool = False,
         ranged: bool = False,
         ref: str = "",
         vs_kind: str = "",
         when: Callable[[dict], bool] | None = None,
     ) -> Effect | None:
         """This creature's weapon attacks deal that type from now on.
+
+        **`half=True` is a SPLIT, not an override.** *"Half the damage
+        dealt with this weapon is radiant damage"* -- `i991x1` prints it,
+        and everything else this method does recolours the **whole** blow,
+        which for that card would be strictly stronger than the page. A
+        split holds half the amount as `dtype` and leaves the rest as
+        whatever it was, so the target shrugs off only the half it resists.
+
+        It rides the same hold, the same narrowing fields and the same
+        `when=` as an override -- so "half the damage dealt **by powers
+        using this implement**" needs nothing new -- and the two kinds are
+        mutually invisible to `_retyped`, which takes a `want_half`
+        selector for exactly that. `Cast._halved_into` is the reader and
+        `resolve.deal_damage` does the partition. #1522.
 
         The printed line is "all damage dealt by this weapon is fire
         damage", and it is an *override*, not an addition -- which is why
@@ -27198,7 +27226,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             who, self.me, until,
             label=(f"deals:{types[0].value}|{narrowing}"
                    f"|{','.join(t.value for t in types[1:])}"
-                   f"|{','.join(f for f, on in (('once', once), ('add', add)) if on)}"),
+                   f"|{','.join(f for f, on in (('once', once), ('add', add),
+                                               ('half', half)) if on)}"),
             # A structured key, not a ref: `by` carries the row. #580
             by=self.ref,
         )
@@ -27272,8 +27301,19 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         # a type error, which is how it was found. #721.
         keywords: Collection[Keyword] | None,
         printed: DamageType = DamageType.UNTYPED,
+        *,
+        want_half: bool = False,
     ) -> tuple[DamageType, ...] | None:
         """The override a `c.deals` laid down, if it covers this row.
+
+        **`want_half` picks which holds this speaks for**, and the two
+        kinds must not see each other: a `c.deals(half=True)` hold is not
+        an override -- *"half the damage dealt with this weapon is radiant
+        damage"* leaves the other half alone -- so returning it here would
+        recolour the whole blow and be strictly stronger than the card.
+        The gating, the narrowing fields and the `when=` are identical,
+        which is why this is one loop with a selector rather than two
+        copies of the same twelve lines. #1522.
 
         Separate from `_weapon_dtype` because the two halves of that
         method were one lookup doing opposite jobs: this one wins over a
@@ -27375,6 +27415,11 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             # **A set, comma-joined, and any of them matches.** One card
             # prints "the next necrotic or poison power", and with a single
             # type the row had to be written as a blanket override.
+            if ("half" in marks) != want_half:
+                # The two kinds of hold are mutually invisible -- see the
+                # docstring. A `half` hold reached from the override path
+                # would recolour the whole blow.
+                continue
             if only and printed.value not in only.split(","):
                 continue
             if scope == "ranged" and not self.ranged:
@@ -27414,6 +27459,27 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 self.world.effects.end(eff, "the retype is spent")
             return answer
         return None
+
+    def _halved_into(
+        self,
+        keywords: Collection[Keyword] | None,
+        printed: DamageType = DamageType.UNTYPED,
+    ) -> DamageType | None:
+        """The type **half** this blow comes out as, or None.
+
+        *"Half the damage dealt with this weapon is radiant damage"* --
+        `i991x1` prints it and nothing could say it: a blow carries one
+        `DamageType`, or a set of types that are all of it at once, and
+        neither is a split. `c.deals` was not the near miss its old note
+        claimed either, because an override recolours the whole blow.
+
+        One type, not a tuple: a card splitting a blow names one thing
+        for the other half, and `c.deals`'s `also` list is about a blow
+        that is several types **at once**. The first is taken if a hold
+        somehow carries more. #1522.
+        """
+        answer = self._retyped(keywords, printed, want_half=True)
+        return answer[0] if answer else None
 
     def _weapon_dtype(self) -> DamageType | None:
         """What a blow from the thing in hand comes out as.

@@ -1637,6 +1637,13 @@ def deal_damage(
     #: Two keys move with it: `branch` itself, and `ranged`, which was
     #: computing off branch 0 by hand. #1521.
     branch: int = 0,
+    #: **Half of this blow comes out as this type instead**, for a card
+    #: printing a split rather than an override: *"half the damage dealt
+    #: with this weapon is radiant damage"*. `Cast._halved_into` is the
+    #: reader and `Cast.deals(half=True)` lays the hold; this only does
+    #: the partition, so the label format stays `cast.py`'s business.
+    #: #1522.
+    half_as: DamageType | None = None,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -1826,6 +1833,28 @@ def deal_damage(
         halved = True
         amount = amount // 2
         parts = _rescale(parts, amount)
+
+    # **Half the blow re-typed, which is a SPLIT and not an override.**
+    # `i991x1` prints *"half the damage dealt with this weapon is radiant
+    # damage"*, and nothing could say it: a blow carries one type, or a
+    # set of types that are all of it at once, and neither is a split.
+    #
+    # Done **here**, after every modifier and after the halving above, so
+    # it is half of what the blow actually comes to rather than half of
+    # the dice. One part is taken out proportionally and handed back
+    # re-typed, so the target shrugs off only the half it resists and the
+    # other half meets its own resistance -- which is the whole point of
+    # the clause.
+    #
+    # `amount // 2` is the re-typed share, so an odd blow puts the extra
+    # point in the ORIGINAL type. That is the conservative reading: the
+    # card grants the new type, and granting it the rounding as well would
+    # be the holder's gain on every odd number.
+    if half_as is not None and amount > 0:
+        share = amount // 2
+        if share > 0:
+            kept = _rescale(parts, amount - share)
+            parts = [*[(t, v) for t, v in kept if v > 0], ((half_as,), share)]
 
     # **Who is taking credit for this blow, when it is not the row dealing
     # it.** A feat's damage clause written into the power it names is dealt

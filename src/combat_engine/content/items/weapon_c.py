@@ -2426,14 +2426,31 @@ def i968p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(half=)",),
 )
 def i991x1(c: Cast) -> None:
-    """Half of one blow being radiant and half not cannot be said: a blow
-    carries one `DamageType`, or a set of types that are all of it at
-    once, and neither is a split. `c.deals` is not the near miss the old
-    note claimed either -- it would recolour the untyped part whole and
-    leave a typed power alone."""
+    """*"Half the damage dealt with this weapon is radiant damage. You can
+    use this weapon as a holy symbol."*
+
+    **The split is written.** A blow carries one `DamageType`, or a set of
+    types that are all of it at once, and neither is a split -- so the
+    old note was right that this could not be said, and right that
+    `c.deals` was not the near miss: an override recolours the **whole**
+    blow, which here would be strictly stronger than the page.
+
+    `c.deals(half=True)` is a split on the same hold: half the amount
+    comes out radiant and the rest stays whatever it was, so the target
+    shrugs off only the half it resists. `resolve.deal_damage` partitions
+    after every modifier and after any halving, so it is half of what the
+    blow actually comes to rather than half of the dice -- and an odd
+    blow puts the extra point in the ORIGINAL type, which is the
+    conservative reading. #1522.
+
+    `ref=` is not passed, because the card is about the **weapon** rather
+    than one row: every blow dealt with it splits, which is what
+    `c.deals`'s default scope already means.
+
+    The holy-symbol half is `c.as_implement` and was already written."""
+    c.deals(DamageType.RADIANT, half=True, on=c.me)
     c.as_implement(on=c.me)
 
 
