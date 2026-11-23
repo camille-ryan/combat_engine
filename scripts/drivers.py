@@ -5783,6 +5783,129 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def concealment_can_be_capped_rather_than_waived(out: Result) -> None:
+    """`f3452`: *"when you are blinded or in darkness, creatures within 2
+    squares of you have concealment rather than **total** concealment,
+    provided you have line of effect to the creature's space and it is
+    not invisible for a reason other than darkness or blindness."*
+
+    **A ceiling, and the existing reader is a threshold.**
+    `query.concealment_waived` sends the whole penalty to zero at or
+    below its grade: waiving at `PARTIAL` leaves total concealment
+    untouched, and waiving at `SUPERIOR` clears it altogether and makes
+    the feat far stronger than print. Neither is "-5 becomes -2". So it
+    is a separate `min` read after the waiver, through `Mods.cap` --
+    which takes the **smallest**, because summing two ceilings or taking
+    the larger would both loosen one.
+
+    **`#468`'s >=3 threshold was not a prohibition**, which is why this
+    is built for one row: that issue is closed and its title says what it
+    was -- *"the >=3 threshold that orders the work"*, a way of choosing
+    which family to build first out of 2,141 marked rows. #1528.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import (
+        concealment_cap,
+        distance_between,
+    )
+    from combat_engine.engine.types import Cover, Defense
+
+    REF = "f3452"
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    foe = sorted(c.enemies())[0]
+
+    # -- Mods.cap is a minimum, not a sum ---------------------------------
+    mods = world.need(me, Mods)
+    out.that(mods.cap("drv:none") is None,
+             "the premise: `Mods.cap` answers None where no card laid a"
+             " ceiling -- None and not 0, because a ceiling of 0 on a"
+             " concealment penalty would waive it altogether and a"
+             " caller must not be able to confuse the two",
+             f"{mods.cap('drv:none')}")
+    Cast(world=world, me=me, ref="drv").bonus(
+        "drv:ceiling", 5, on=me, until=When.ENCOUNTER, kind="untyped")
+    Cast(world=world, me=me, ref="drv2").bonus(
+        "drv:ceiling", 2, on=me, until=When.ENCOUNTER, kind="untyped")
+    out.that(mods.cap("drv:ceiling") == 2,
+             "THE arm for the reader: two ceilings give the SMALLER."
+             " `Mods.total` would have summed them to 7 and a"
+             " largest-wins rule would have given 5 -- both looser than"
+             " either card",
+             f"{mods.cap('drv:ceiling')} from 5 and 2")
+    out.that(mods.total("drv:ceiling") == 7,
+             "and `Mods.total` really does sum them, so the two readers"
+             " are answering different questions rather than one being a"
+             " rename of the other",
+             f"total {mods.total('drv:ceiling')}")
+
+    # -- the verb's distance gate -----------------------------------------
+    Cast(world=world, me=me, ref="drv3").concealment_cap(
+        Cover.PARTIAL, within=2, on=me, until=When.ENCOUNTER)
+    near = concealment_cap(world, me, foe, {"target": foe})
+    far = [f for f in sorted(c.enemies())
+           if distance_between(world, me, f) > 2]
+    out.that(near == int(Cover.PARTIAL),
+             "and the verb's ceiling is readable for a creature within"
+             " the printed 2 squares",
+             f"{near} for a foe at {distance_between(world, me, foe)}")
+    out.that(far and concealment_cap(
+                 world, me, far[0], {"target": far[0]}) is None,
+             "CONTROL: and NOT for one further off -- `within=` is built"
+             " into the gate here because measuring it needs the world,"
+             " where a `when=` sees only the context",
+             f"{None if not far else concealment_cap(world, me, far[0], {'target': far[0]})}"
+             f" for a foe at {distance_between(world, me, far[0]) if far else '?'}")
+
+    # -- and the penalty on a real roll ------------------------------------
+    #
+    # **This arm is the claim.** The readings above test `Mods.cap` and
+    # the verb's gate; neither reaches the `min` in `resolve`, which is
+    # where "-5 becomes -2" actually happens. A plant on that branch
+    # would leave every one of them green.
+    def rolled(*, capped: bool) -> int:
+        """The attack bonus against a totally-concealed foe."""
+        world2, me2, _ = _board(REF, 1)
+        c2 = Cast(world=world2, me=me2, ref="drv")
+        victim = sorted(c2.enemies())[0]
+        # Total concealment on the victim, laid the way a row does.
+        Cast(world=world2, me=me2, ref="drv").conceal(
+            total=True, on=victim, until=When.ENCOUNTER)
+        if capped:
+            Cast(world=world2, me=me2, ref="drv2").concealment_cap(
+                Cover.PARTIAL, within=0, on=me2, until=When.ENCOUNTER)
+        world2.rng.loaded = 10
+        mark = len(world2.bus.log)
+        Cast(world=world2, me=me2, ref="mba").attack(
+            0, Defense.AC, on=victim)
+        rolls = [e for e in world2.bus.log[mark:]
+                 if isinstance(e, AttackRolled) and e.target == victim]
+        return rolls[-1].bonus if rolls else 10 ** 6
+
+    total_only = rolled(capped=False)
+    with_cap = rolled(capped=True)
+    out.that(total_only < 10 ** 5 and with_cap < 10 ** 5,
+             "both rolls happened, so the difference below is the"
+             " ceiling rather than a board that never swung",
+             f"{total_only} and {with_cap}")
+    out.that(with_cap == total_only + (int(Cover.SUPERIOR)
+                                       - int(Cover.PARTIAL)),
+             "THE arm: the attack is 3 better against a totally-concealed"
+             " foe once the ceiling stands -- -5 becomes -2, which is"
+             " exactly what the printed sentence says and what neither"
+             " grade of `concealment_waived` can express",
+             f"{total_only} -> {with_cap},"
+             f" expected +{int(Cover.SUPERIOR) - int(Cover.PARTIAL)}")
+
+    out.that(not REGISTRY[REF].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def one_row_can_be_barred_from_being_augmented(out: Result) -> None:
     """`f2731`: a chosen 1st-level at-will of another class, once per
     encounter, *"and you cannot augment it."*
@@ -136392,6 +136515,10 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "concealment_capped": (
+        concealment_can_be_capped_rather_than_waived,
+        "f3452 caps concealment at the partial grade instead of waiving it (#1528)",
     ),
     "one_row_not_augmentable": (
         one_row_can_be_barred_from_being_augmented,

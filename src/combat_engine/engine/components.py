@@ -1555,6 +1555,35 @@ class Mods:
             penalties = min(0, penalties + clip)
         return out + sum(best.values()) + penalties
 
+    def cap(
+        self, what: str, ctx: dict[str, Any] | None = None
+    ) -> int | None:
+        """The **smallest** applicable value of `what`, or None if none is.
+
+        `total` sums with 4e's stacking rules and is right for a bonus or
+        a penalty. A **ceiling** is neither: *"creatures within 2 squares
+        have concealment rather than total concealment"* (`f3452`) is a
+        cap on a number `resolve` has already worked out, and summing two
+        caps or taking the larger would both loosen it.
+
+        So the smallest wins, which is the strictest reading and the only
+        one that cannot make a ceiling weaker than any single card that
+        laid it. One card prints this today; the rule is chosen for the
+        second one rather than for that.
+
+        None rather than a sentinel number, so a caller cannot mistake
+        "no cap" for a cap of 0 -- which on a concealment penalty would
+        waive it altogether. #1528.
+        """
+        ctx = ctx or {}
+        found: int | None = None
+        for m in self.items:
+            if m.what != what or not m.applies(ctx):
+                continue
+            value = m.amount()
+            found = value if found is None else min(found, value)
+        return found
+
     def split(
         self, what: str, ctx: dict[str, Any] | None = None
     ) -> dict[tuple[DamageType, ...], int]:

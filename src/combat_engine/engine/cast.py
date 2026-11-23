@@ -20432,6 +20432,62 @@ class Cast:
         ]
         return mine[-1] if mine else 0
 
+    def concealment_cap(
+        self,
+        cap: Cover = Cover.PARTIAL,
+        *,
+        within: int = 0,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """A **ceiling** on the concealment this creature's targets get.
+
+        `f3452`: *"when you are blinded or in darkness, creatures within 2
+        squares of you have concealment rather than **total**
+        concealment."* `Cover.PARTIAL` is "concealment" and
+        `Cover.SUPERIOR` is "total", so the printed sentence is
+        `cap=Cover.PARTIAL`.
+
+        **Not `c.ignore_cover` and not a waiver.** `query.concealment_waived`
+        is a *threshold*: at or below it the penalty goes to zero. Waiving
+        at the partial grade leaves total concealment untouched, and
+        waiving at the total grade clears it altogether and makes this
+        feat far stronger than print. Neither is "-5 becomes -2", which
+        is why this is a separate `min` read after the waiver.
+
+        Laid on the **attacker**, because the printed sentence is about
+        what the holder sees, and defaulting to the caster for the same
+        reason.
+
+        `within` is the printed distance and is built into the gate here
+        rather than left to the row, because the predicate needs the
+        world to measure it and a `when=` sees only the context. It
+        compounds with `when`: both must hold, which is what a card
+        printing a distance *and* a condition means. 0 is every distance.
+
+        Read through `Mods.cap`, so two ceilings give the **smaller** --
+        summing them or taking the larger would both loosen one. #1528.
+        """
+        from .query import distance_between
+
+        who = self._who(on) if on is not None else self.me
+        if who is None:
+            return None
+
+        def ceiling(ctx: dict[str, Any]) -> bool:
+            victim = ctx.get("target")
+            if victim is None:
+                return False
+            if within and distance_between(self.world, who, victim) > within:
+                return False
+            return when(ctx) if when is not None else True
+
+        return self.bonus(
+            "concealment_cap", int(cap), on=who, until=until,
+            kind="untyped", when=ceiling,
+        )
+
     def no_augment(
         self, ref: str, *, on: int | None = None,
         until: When = When.ENCOUNTER,

@@ -43,6 +43,7 @@ from .query import (
     alive,
     attack_penalty,
     can_act,
+    concealment_cap,
     concealment_of,
     concealment_waived,
     cover_between,
@@ -256,6 +257,18 @@ def situational_attack(
         if from_concealment <= concealment_waived(
                 world, attacker, target, ctx):
             from_concealment = 0
+        # **A ceiling, read AFTER the waiver.** `f3452` prints
+        # "creatures within 2 squares have concealment rather than TOTAL
+        # concealment", which is neither a waiver nor a penalty: the
+        # waiver is a threshold that sends the whole thing to zero, and
+        # at the total grade it would clear the penalty altogether and
+        # make the feat far stronger than print.
+        #
+        # After, so a card that waives concealment outright still does;
+        # a ceiling on something already zero changes nothing. #1528.
+        _ceiling = concealment_cap(world, attacker, target, ctx)
+        if _ceiling is not None and from_concealment > _ceiling:
+            from_concealment = max(0, _ceiling)
         worst = max(from_cover, from_concealment)
         # **A cap, which the waiver above cannot express.** `f2354` prints
         # "ignore cover and concealment and take only a -2 penalty against

@@ -4194,6 +4194,43 @@ def cover_capped(
     return max(0, mine.total("cover_cap", ctx))
 
 
+def concealment_cap(
+    world: World, attacker: int, target: int,
+    ctx: dict[str, Any] | None = None,
+) -> int | None:
+    """The most concealment this attacker will grant that target, or None.
+
+    `f3452` prints *"while you are blinded or in darkness, creatures
+    within 2 squares of you have concealment rather than **total**
+    concealment"* -- a **ceiling** on a number `resolve` has already
+    worked out, and the existing reader cannot express it.
+
+    `concealment_waived` is a **threshold**: `if from_concealment <=
+    waived` it goes to zero. Waiving at the partial grade leaves total
+    concealment untouched, and waiving at the total grade clears it
+    altogether and makes the feat far stronger than print. Neither is
+    "-5 becomes -2".
+
+    So this is read **after** the waiver and applied with `min`, and it
+    is `Mods.cap` rather than `Mods.total` because summing two ceilings
+    or taking the larger would both loosen one. None means no card has
+    laid a ceiling, which a caller must not confuse with a ceiling of
+    0 -- that would waive the penalty altogether. #1528.
+
+    Laid on the **attacker**, because the printed sentence is about what
+    the holder sees.
+    """
+    from .components import Mods
+
+    mods = world.get(attacker, Mods)
+    if mods is None:
+        return None
+    asked = dict(ctx or {})
+    asked.setdefault("attacker", attacker)
+    asked.setdefault("target", target)
+    return mods.cap("concealment_cap", asked)
+
+
 def concealment_waived(
     world: World, attacker: int, target: int, ctx: dict[str, Any] | None = None
 ) -> int:

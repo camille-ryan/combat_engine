@@ -147,6 +147,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Can this creature see at all?
 - `query.can_hear(world: 'World', listener: 'int', speaker: 'int') -> 'bool'`
   - Can `listener` hear `speaker`? Three cards print it that way.
+- `query.concealment_cap(world: 'World', attacker: 'int', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int | None'`
+  - The most concealment this attacker will grant that target, or None.
 - `query.concealment_of(world: 'World', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'Cover'`
   - How hard this creature is to see, as an attack penalty.
 - `query.concealment_waived(world: 'World', attacker: 'int', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`

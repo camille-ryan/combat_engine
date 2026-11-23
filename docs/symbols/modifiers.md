@@ -98,6 +98,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You gain concealment." -2 to attacks against you, -5 if total.
 - `c.conceal_in(self, zone: 'int', *, side: 'str' = 'team', total: 'bool' = False) -> 'None'`
   - "You and your allies have concealment while within the zone."
+- `c.concealment_cap(self, cap: 'Cover' = <Cover.PARTIAL: 2>, *, within: 'int' = 0, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - A **ceiling** on the concealment this creature's targets get.
 - `c.counts_as_nearest(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Let a creature count `who` among its nearest enemies.
 - `c.cover(self, *, when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, superior: 'bool' = False) -> 'Effect | None'`

@@ -554,7 +554,14 @@ CATEGORIES: dict[str, dict] = {
             # eleven were read one by one and every one is genuinely about
             # advantage, cover or concealment.
             ("advantage, cover and concealment", [
-                "conceal", "conceal_in", "cover", "cover_in",
+                "conceal",
+                # Beside `conceal` because it is the third thing a card
+                # can do to concealment, and the one the other two
+                # cannot say: `conceal` GRANTS a grade,
+                # `c.ignore_cover` WAIVES at a threshold, and this CAPS
+                # an amount already worked out -- "-5 becomes -2". #1528.
+                "concealment_cap",
+                "conceal_in", "cover", "cover_in",
                 "damage_disadvantage",
                 "gains_advantage", "grants_advantage", "had_advantage",
                 # Beside `grants_advantage` because an author's question is
@@ -1536,7 +1543,8 @@ READERS: dict[str, list[str]] = {
         # moved. Both landed with `#1253`'s wave and neither was placed.
         "nearest_enemy", "counts_as_nearest",
         "displaced_this_action",
-        "concealment_waived", "cover_capped", "cover_waived",
+        "concealment_cap", "concealment_waived", "cover_capped",
+        "cover_waived",
         "has_sense", "hidden_from",
         "light_concealment",
         "light_level", "revealed", "sees_in", "sees_invisible",

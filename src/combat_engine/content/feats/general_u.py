@@ -77,6 +77,7 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     Condition,
+    Cover,
     DamageApplied,
     DamageRolled,
     DamageType,
@@ -105,7 +106,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.durations import keywords_of
-from combat_engine.engine.query import light_level
+from combat_engine.engine.query import light_level, line_of_effect
 from combat_engine.engine.types import Light
 
 #: **Retired. `c.augment_with(resource)` never named a gap**, and this
@@ -849,8 +850,7 @@ def f3451(c: Cast) -> None:
 
 
 @power("f3452", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.concealment_cap(within=, when=)",))
+       reach=PERSONAL, target=SELF)
 def f3452(c: Cast) -> None:
     """Re-pointed: the gap is a **cap** on the grade, not a level to step.
 
@@ -874,11 +874,64 @@ def f3452(c: Cast) -> None:
     `min()` against a cap, read after the waiver, plus the gate -- within
     2, the holder blinded or in darkness, line of effect to the square.
 
-    A singleton: a census of every marked row whose note mentions total
-    concealment found exactly this one, so it stays marked under #468's
-    >=3 threshold rather than having a modifier key, a reader and a
-    `resolve` branch built for one row. Filed so the shape is not
-    re-derived."""
+    **Written, and the >=3 threshold was not a prohibition.** This note
+    said the row "stays marked under #468's >=3 threshold rather than
+    having a modifier key, a reader and a `resolve` branch built for one
+    row". `#468` is **closed**, and its own title says what it was:
+    *"the >=3 threshold that orders the work"* -- a way of choosing which
+    family to build first out of 2,141 marked rows, not a rule that a
+    singleton may never be built. With the tail down to double figures
+    and the standing order being that every feat and item is complete,
+    the threshold has done its job. #1528.
+
+    So the modifier key, the reader and the `resolve` branch exist:
+    `c.concealment_cap`, `query.concealment_cap` read through `Mods.cap`,
+    and a `min` in `resolve` after the waiver.
+
+    **All four printed narrowings are in the gate**, and the last one is
+    the reason it is four rather than three:
+
+    * **within 2 squares** -- built into `c.concealment_cap(within=)`,
+      because measuring it needs the world and a `when=` sees only the
+      context;
+    * **blinded or in darkness** -- the holder's own condition, or the
+      light in the square it stands in;
+    * **line of effect to the creature's space** -- `query.line_of_effect`;
+    * **and not invisible for a reason other than darkness or
+      blindness.** Measured rather than waved at: every one of the 212
+      `c.invisible` calls in the tree takes the default `how`, and the
+      hold is labelled `unseen:<how>` -- while darkness and blindness lay
+      no such hold at all, since `query.unseen_by` composes those from
+      the light and the condition. So "invisible for another reason" is
+      exactly "carries an `unseen:` hold", and omitting this clause would
+      have made the feat stronger than print on the one case it names."""
+    me = c.me
+
+    def dimly(ctx: dict[str, Any]) -> bool:
+        """Blinded or in darkness, with line of effect, and not otherwise
+        invisible."""
+        victim = ctx.get("target")
+        if victim is None:
+            return False
+        here = c.world.get(me, Position)
+        # `query.light_level`, not `Grid.light` -- darkness is
+        # overwhelmingly *laid* as a zone rather than built into a board,
+        # and that reader takes the worst of the two. Reading the map
+        # alone would miss every darkness a power created.
+        dark = (here is not None
+                and light_level(c.world, here.square) is Light.DARK)
+        if not dark and not c.is_(Condition.BLINDED, on=me):
+            return False
+        if not line_of_effect(c.world, me, victim):
+            return False
+        return not any(
+            "unseen:" in (eff.label or "")
+            for eff in c.world.effects.of(victim)
+        )
+
+    c.concealment_cap(Cover.PARTIAL, within=2, on=me,
+                      until=When.ENCOUNTER, when=dimly)
+
 
 
 # -- the channel divinity pair ----------------------------------------------
