@@ -2,7 +2,7 @@
   "sha": "c490b34605f4b32e82649d680dd3b099fb2b07eb",
   "refs": 22295,
   "fired": 21131,
-  "silent": 454,
+  "silent": 453,
   "never": 506,
   "never_refs": [
     "cf:barbarian-f2c0",
@@ -974,7 +974,6 @@
     "i1536p1",
     "i1564p1",
     "i1663p2",
-    "i1676p1",
     "i1701p1",
     "i1761x1",
     "i1771p1",
