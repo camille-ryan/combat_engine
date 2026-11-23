@@ -7372,6 +7372,23 @@ def treasure(who: Character, rng: Random) -> list:
         if arm is not None:
             wanted.insert(0, ("attack_damage", arm))
 
+    # **Items whose printed clause is about the OFF hand**, and which are
+    # therefore dealt only to a character carrying two weapons. Camille's
+    # ruling, #1492:
+    #
+    #   "Yeah, we should be tracking what hand items are in. But for this
+    #    specific item, it should only be dealt for `f173`
+    #    loadouts, so that it is in the offhand."
+    #
+    # `i3037`: *"while you wield this weapon in your off hand, you gain an
+    # item bonus to AC against opportunity attacks"*. Dealt to a
+    # single-weapon character it sat in the main hand and its clause could
+    # never be true -- and the row paid out anyway, which is the direction
+    # that matters.
+    #
+    # A set rather than a column, because one item prints this today and
+    # the general facility -- tracking which hand everything is in -- is
+    # the other half of her ruling and is not this function's job.
     out = []
     for enh_to, arm in wanted:
         pool = [
@@ -7426,6 +7443,37 @@ def _blocks_of(ref: str) -> tuple[str, ...]:
         "SELECT ref FROM item_block WHERE item_ref = ? ORDER BY idx", (ref,)
     )
     return tuple(r["ref"] for r in rows if r["ref"] in REGISTRY)
+
+
+#: Items whose printed clause is about the **off** hand, dealt only to a
+#: character carrying two weapons and equipped into that hand. Camille's
+#: ruling, `#1492`:
+#:
+#:   *"Yeah, we should be tracking what hand items are in. But for this
+#:    specific item, it should only be dealt for `f173`
+#:    loadouts, so that it is in the offhand."*
+#:
+#: `i3037`: *"while you wield this weapon in your off hand, you gain an
+#: item bonus to AC against opportunity attacks"*. Dealt to a
+#: single-weapon character it sat in the main hand and its clause could
+#: never be true -- and `i3037x1` paid out anyway, which is the direction
+#: that matters.
+#:
+#: Read by `spawn`, which passes `onto="off"` when it equips one. A set
+#: rather than a column, because one item prints this today and the
+#: general facility -- tracking which hand everything is in -- is the
+#: other half of that ruling and is not chargen's to build.
+#:
+#: **It deliberately does NOT filter the dealing pool, and that is a
+#: measured decision rather than an omission.** A filter was written --
+#: keep such an item out of a one-weapon character's pool -- and a plant
+#: removing it changed nothing: `i3037` was dealt 2 times to two-weapon
+#: loadouts and **0 times to one-weapon ones either way**, because
+#: `_fits_base` already matches the item's printed base against what the
+#: character carries. So the filter was a code path with no effect, which
+#: is worse than none -- `#1447` reverted one for the same reason. The
+#: half that does something is the hand.
+OFF_HAND_ONLY = frozenset({"i3037"})
 
 
 def _pick_item(pool: list, cls: str, rng: Random):  # noqa: ANN202
@@ -8980,7 +9028,13 @@ def spawn(world: World, who: Character, square: tuple[int, int], *,
     # #1101.
     for magic in (who.gear or treasure(
             who, Random(f"{world.rng.seed}:{who.ref}:{who.level}:gear"))):
-        equip(world, eid, magic)
+        # **The off hand is named by the reserved selector, not by a
+        # ref.** `equipment._base_for` matches `Weapon.ref`, and the
+        # commonest two-weapon hand this tree deals is two of the SAME
+        # ref -- where that match takes the main hand every time, which
+        # is why `i3037x1`'s clause was unreachable. #1492.
+        equip(world, eid, magic,
+              onto="off" if magic.ref in OFF_HAND_ONLY else "")
     place(world, eid, square)
     return eid
 

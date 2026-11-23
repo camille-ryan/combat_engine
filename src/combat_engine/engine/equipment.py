@@ -154,6 +154,21 @@ def _base_for(gear: Gear, magic: Magic, onto: str) -> Weapon | None:
     exists because `main` answers the wrong question for a creature
     holding both -- a cleric with a mace and a holy symbol.
     """
+    # **`"off"` is a reserved selector, not a weapon ref.** The lookup
+    # below matches `Weapon.ref`, and the commonest two-weapon hand this
+    # tree deals is **two of the same ref** -- a ranger on the `b:c5-4` leg with
+    # two shortswords -- where that match takes the first and so always
+    # the main hand. So a caller that means "the off hand" cannot say it
+    # by naming a weapon, which is why `i3037x1`'s *"while you wield
+    # this weapon in your off hand"* was unreachable by any dealt
+    # character. Camille's ruling, #1492: *"for this specific item, it
+    # should only be dealt for `f173` loadouts, so that it
+    # is in the offhand."*
+    #
+    # No ref can collide with it: every weapon ref in the tree is
+    # `w<digits>` or a `w:`-prefixed constant.
+    if onto == "off":
+        return gear.off
     if onto:
         return next((w for w in gear.weapons if w.ref == onto), None)
     if magic.slot == "implement":

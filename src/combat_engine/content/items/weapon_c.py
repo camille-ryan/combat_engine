@@ -85,6 +85,7 @@ from combat_engine.engine import (
     EffectApplied,
     Forced,
     ForcedMove,
+    Gear,
     Healed,
     Health,
     Hit,
@@ -455,7 +456,6 @@ def i2989p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("chargen.spawn(onto=)",),
 )
 def i3037x1(c: Cast) -> None:
     """**Which hand a weapon is in CAN be asked, and the old marker said it
@@ -484,14 +484,43 @@ def i3037x1(c: Cast) -> None:
     is on `gear.main` and the gate is False, with it named the gate is
     True -- so the symbol names the thing that would pay the clause.
 
-    Necessary and not sufficient for one kit, which is worth knowing
-    before building it: `_base_for` matches `onto` against `Weapon.ref`,
-    and the commonest two-weapon hand this tree deals is **two of the same
-    ref**, where that lookup takes the first and so always the main hand.
+    ## Written, and the gate is live
 
-    So the bonus is laid for any wielder, which is this file's standing
-    reading of "using this weapon". The attack context carries
-    `opportunity`, which is the half that is exact."""
+    Camille's ruling, `#1492`:
+
+    > *"Yeah, we should be tracking what hand items are in. But for this
+    > specific item, it should only be dealt for `f173`
+    > loadouts, so that it is in the offhand."*
+
+    So `chargen.spawn` passes `onto="off"` for the items in
+    `chargen.OFF_HAND_ONLY`, and `equipment._base_for` takes `"off"` as a
+    **reserved selector** rather than a weapon ref. That second half is
+    what the paragraph above had right and is why naming a ref was not
+    enough: the match is on `Weapon.ref` and the commonest two-weapon
+    hand here is **two of the same ref**, where it takes the main hand
+    every time. Measured both ways on a hand of two identical refs --
+    `onto=""` lays the item on `weapons[0]`, `onto="off"` on
+    `weapons[1]` and `gear.off.item` reads it.
+
+    The gate is therefore `c.my_weapon()` against `gear.off`: which hand
+    the **item's own** weapon is in, which is the question this row asks
+    and not the one `c.off_hand()` answers.
+
+    **The dealing half of her ruling needed no code, which a plant
+    proved.** A pool filter was written -- keep this item out of a
+    one-weapon character's pool -- and removing it changed nothing:
+    `i3037` comes out 2 times to two-weapon loadouts and **0 times to
+    one-weapon ones either way**, because `_fits_base` already matches
+    the printed base against what the character carries. Reverted; a
+    code path with no effect is worse than none.
+
+    The attack context carries `opportunity`, which was always the exact
+    half."""
+    mine = c.my_weapon()
+    gear = c.world.get(c.me, Gear)
+    off = gear.off if gear is not None else None
+    if mine is None or off is None or off is not mine:
+        return
     c.bonus(
         AC, c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER,
         when=_opportunity,

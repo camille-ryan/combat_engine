@@ -143,6 +143,32 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **`i3037x1` pays only while its weapon is in the OFF hand, and the
+    # board deals one weapon.** *"While you wield this weapon in your off
+    # hand, you gain an item bonus to AC against opportunity attacks"* --
+    # so `gear.off` is None here and the gate is correctly False.
+    #
+    # It is **newly** silent on purpose: the row used to lay the bonus for
+    # any wielder, because `equipment._base_for` matched `onto` against
+    # `Weapon.ref` and no caller could name the off hand at all -- the
+    # commonest two-weapon hand this tree deals is two of the SAME ref,
+    # where that match takes the main hand every time. So a gate would
+    # have been False forever and the row over-applied instead. Camille's
+    # ruling on `#1492` settled which way to fix it:
+    #
+    #   "we should be tracking what hand items are in. But for this
+    #    specific item, it should only be dealt for `f173`
+    #    loadouts, so that it is in the offhand."
+    #
+    # `drivers.off_hand_item` is the proof and stages the hard case -- two
+    # identical refs -- measuring that the item lands in the main hand
+    # with no selector and pays nothing there, and lands in the off hand
+    # with `onto="off"` and pays its enhancement. Two plants, both red.
+    # #1492.
+    "i3037x1": "pays only while its weapon is in the off hand, and the "
+               "board deals one weapon, so `gear.off` is None and the "
+               "gate is correctly False. drivers.off_hand_item stages a "
+               "two-weapon hand and is the proof. #1492",
     # **The board cannot put this item's own weapon in the wielder's
     # hand.** `i2730`'s printed base is the `bow` *group* rather than one
     # weapon, so `audit.board` equips an axe -- and the row's first line

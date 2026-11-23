@@ -5588,6 +5588,84 @@ def a_vampires_weaknesses_and_the_feat_that_lifts_them(out: Result) -> None:
              f"took {sunburn(feat=True)}")
 
 
+def an_off_hand_item_pays_only_in_that_hand(out: Result) -> None:
+    """`i3037x1`: *"while you wield this weapon in your off hand"*.
+
+    Camille's ruling, `#1492`: *"we should be tracking what hand items
+    are in. But for this specific item, it should only be dealt for two
+    weapon fighting loadouts, so that it is in the offhand."*
+
+    **The selector, not a ref, is what made the clause reachable.**
+    `equipment._base_for` matched `onto` against `Weapon.ref`, and the
+    commonest two-weapon hand this tree deals is **two of the same
+    ref** -- where that match takes the main hand every time. So no
+    caller could name the off hand, and the row paid out for any wielder
+    because a gate would have been False forever. `"off"` is a reserved
+    selector now and `chargen.spawn` passes it for the items in
+    `chargen.OFF_HAND_ONLY`.
+
+    Four arms, on a hand of **two identical refs** deliberately -- that
+    is the case the ref match loses, so an arm built on two different
+    weapons would pass without testing the fix.
+    """
+    from combat_engine.engine import AC
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Magic, Mods, Weapon
+    from combat_engine.engine.equipment import equip
+
+    ITEM = "i3037"
+
+    def laid(onto: str) -> tuple[str | None, int]:
+        """Where the item landed, and the AC it pays on an opportunity."""
+        world, me, _ = _board("i3037x1", 1)
+        gear = world.need(me, Gear)
+        gear.weapons = [
+            Weapon(ref="w3593", group="light blade", granted_by=""),
+            Weapon(ref="w3593", group="light blade", granted_by=""),
+        ]
+        equip(world, me, Magic(ref=ITEM, slot="weapon", plus=2,
+                               enh_to="attack_damage", crit="", powers=(),
+                               base='["short sword"]'), onto=onto)
+        gear = world.need(me, Gear)
+        where = None
+        if gear.off is not None and gear.off.item == ITEM:
+            where = "off"
+        elif gear.main is not None and gear.main.item == ITEM:
+            where = "main"
+        # The row is armed by hand because the board armed it against the
+        # single weapon it deals, before this hand was staged.
+        from combat_engine.engine.dsl import REGISTRY
+
+        REGISTRY["i3037x1"].body(Cast(world=world, me=me, ref="i3037x1"))
+        held = world.get(me, Mods)
+        return where, (held.total(AC.value, {"opportunity": True})
+                       - held.total(AC.value, {"opportunity": False})
+                       if held else 0)
+
+    main_where, main_ac = laid("")
+    out.that(main_where == "main",
+             "with no hand named the item lands in the MAIN hand, which"
+             " is what `_base_for` does by default and what made this"
+             " clause unreachable",
+             f"landed in the {main_where} hand")
+    out.that(main_ac == 0,
+             "and it pays NOTHING against an opportunity attack there --"
+             " the card says 'in your off hand', and this is the"
+             " over-application the row used to have",
+             f"AC against an opportunity: +{main_ac}")
+
+    off_where, off_ac = laid("off")
+    out.that(off_where == "off",
+             "THE fix: `onto='off'` lands it in the off hand even though"
+             " both weapons carry the SAME ref -- the case a ref match"
+             " loses, and the reason a reserved selector was needed",
+             f"landed in the {off_where} hand")
+    out.that(off_ac > 0,
+             "and there it pays its enhancement against an opportunity"
+             " attack, which is the whole of the printed clause",
+             f"AC against an opportunity: +{off_ac}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -133853,6 +133931,10 @@ DRIVERS = {
         a_vampires_weaknesses_and_the_feat_that_lifts_them,
         "cf:vampire-f2 pays its printed weaknesses and f3621 lifts"
         " two of them",
+    ),
+    "off_hand_item": (
+        an_off_hand_item_pays_only_in_that_hand,
+        "i3037x1 pays only while its weapon is in the off hand",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,
