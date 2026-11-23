@@ -72892,6 +72892,118 @@ def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
              f"{REGISTRY[REF].unfinished}")
 
 
+def crawling_in_beast_form_opens_no_window(out: Result) -> None:
+    """*"You do not provoke opportunity attacks when crawling while in
+    beast form."* -- `f2282`. #1476.
+
+    **Nothing new was built. Three things already existed and the row's
+    note said the first of them did not.** It read *"crawling is not a
+    move the engine has"* and that `actions._movement` *"returns an empty
+    list for a prone creature before it reaches any branch"* -- and
+    `#995` gave a prone creature the crawl, priced and walked as an
+    ordinary move. `f2604`, one file over, already records that this
+    premise had gone.
+
+    * the opportunity window a move opens carries `move_kind`, which is
+      `"crawl"` for a crawl -- deliberately not `kind`, since one key
+      carrying four vocabularies cost a wrong bug report and three hours
+      (`#547`, `#639`);
+    * `c.no_provoke(when=)` reads that context, and has since 13 rows
+      asked for one;
+    * `in_beast_form` is the strict label test and `feats/druid_b.py`
+      already imported it.
+
+    **`in_beast_form` rather than `c.in_form("beast")`, which is the trap
+    worth the arm below.** `query.in_form` is deliberately *permissive*
+    about an unrecorded shape -- its own note says a Requirement should
+    not refuse an attack on the strength of something nobody printed --
+    and that permissiveness widens a **benefit**: it would hand this feat
+    to a druid who never shifted. The label test answers False there, and
+    the arm asserts it.
+
+    The three negatives are one per clause of the predicate, because a
+    predicate of three cannot be tested by one.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.powers.druid.forms import (
+        in_beast_form,
+        take_beast_form,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import OpportunityWindow
+    from combat_engine.engine.query import in_form
+
+    ROW = "f2282"
+
+    def opened(*, kind: str, beast: bool) -> bool:
+        """Does a window of that move kind survive, with the feat armed?
+
+        Returns whether the window was **cancelled** -- the feat vetoing
+        it is the printed "you do not provoke".
+        """
+        world, me, _ = _board(ROW, 1)
+        cast = Cast(world=world, me=me, ref=ROW)
+        if beast:
+            # **`take_beast_form`, the helper all 13 of the class's
+            # callers use, not a hand-laid `c.form`.** `in_beast_form`
+            # compares the label exactly against the module's own
+            # constant, so a form staged with the literal `"beast"` was
+            # invisible to it -- the decisive arm failed and read as a
+            # broken row rather than a mis-staged board.
+            take_beast_form(cast)
+        REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+        foe = sorted(cast.enemies())[0]
+        window = OpportunityWindow(actor=foe, provoker=me,
+                                   why="moved away", kind_=kind, mode="walk")
+        world.bus.emit(window)
+        return bool(window.cancelled)
+
+    # -- the premise -------------------------------------------------------
+    world, me, _ = _board(ROW, 1)
+    probe = Cast(world=world, me=me, ref="drv")
+    out.that(not in_beast_form(world, me),
+             "premise: the board's druid is NOT in beast form to start"
+             " with, so the beast-form arms below are about the shape"
+             " rather than about the board",
+             f"{in_beast_form(world, me)}")
+    out.that(in_form(world, me, "beast"),
+             "and `query.in_form` says it IS -- permissive about an"
+             " unrecorded shape, by design. This is the trap: the same"
+             " question, two readers, opposite answers, and only one of"
+             " them is right for a benefit",
+             f"{in_form(world, me, 'beast')}")
+    del probe
+
+    # -- THE arm -----------------------------------------------------------
+    out.that(opened(kind="crawl", beast=True),
+             "crawling in beast form opens no window -- the feat vetoes"
+             " it, which is the printed 'you do not provoke'",
+             "cancelled")
+
+    # -- one negative per clause ------------------------------------------
+    out.that(not opened(kind="walk", beast=True),
+             "walking in beast form still provokes: the card says"
+             " *crawling*, and a row reading only the shape would make a"
+             " druid immune to openings for every step it takes",
+             "not cancelled")
+    out.that(not opened(kind="crawl", beast=False),
+             "and crawling OUT of beast form provokes too -- which is the"
+             " arm the permissive reader would have failed, because"
+             " `c.in_form` on a form name answers True for a creature"
+             " never shifted",
+             "not cancelled")
+    out.that(not opened(kind="shift", beast=True),
+             "and a shift is not a crawl either, which is the third"
+             " clause and the one a `move_kind in (...)` written loosely"
+             " would swallow",
+             "not cancelled")
+
+    out.that(not REGISTRY[ROW].unfinished,
+             f"and {ROW} carries no marker: nothing was built for it",
+             f"{REGISTRY[ROW].unfinished}")
+
+
 def a_lit_item_put_down_goes_on_lighting(out: Result) -> None:
     """*"A lantern that lights 10 squares, hangs where you leave it, and
     can be sent ahead."* -- `i1321x1`. #1475.
@@ -128475,6 +128587,11 @@ DRIVERS = {
     "affinity_offer": (
         an_elemental_affinity_is_offered_when_the_power_is_used,
         "an elemental affinity is offered when the power is used (cf:warlock-f1s1)",
+    ),
+    "beast_crawl": (
+        crawling_in_beast_form_opens_no_window,
+        "crawling in beast form opens no opportunity window, and the"
+        " permissive form reader would have widened it (#1476)",
     ),
     "hung_light": (
         a_lit_item_put_down_goes_on_lighting,

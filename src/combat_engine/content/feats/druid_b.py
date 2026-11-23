@@ -398,17 +398,44 @@ def f1884(c: Cast) -> None:
 
 
 @power("f2282", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.crawl()",))
+       reach=PERSONAL, target=SELF)
 def f2282(c: Cast) -> None:
     """The Acrobatics half is written, so the row plays rather than being
     refused: `skill:acrobatics` is a key the engine consults and "feat" is
     the word the card prints in front of "bonus".
 
-    Still dropped, and `todo=` was overstating it -- crawling is not a move
-    the engine has. `actions._movement` returns an empty list for a prone
-    creature before it reaches any branch, so there is no crawl to exempt
-    from provoking, and `c.no_provoke` has no moment to narrow to."""
+    **The crawl half is written too, and the note below was stale at both
+    ends.** It said *"crawling is not a move the engine has"* and that
+    `actions._movement` *"returns an empty list for a prone creature
+    before it reaches any branch"*. `#995` gave a prone creature the
+    crawl -- half speed, priced, walked as an ordinary move, emitted with
+    `kind="crawl"` -- and `f2604`'s own note already recorded that this
+    premise had gone. Two rows one file apart, one of them saying the
+    other's blocker was dead.
+
+    So the clause is three things that all existed:
+
+    * the opportunity window carries `move_kind`, which is `"crawl"` for
+      a crawl, and `c.no_provoke(when=)` reads it. Deliberately **not**
+      `kind`: one key carrying four vocabularies cost a wrong bug report
+      and three hours (`#547`, `#639`);
+    * `in_beast_form` is the strict label test, which this file already
+      imports for `f2207`;
+    * and `c.no_provoke` has had a `when=` since 13 rows asked for one.
+
+    **`in_beast_form` and not `c.in_form("beast")`**, which is the trap
+    here. `query.in_form` is deliberately *permissive* about an
+    unrecorded shape -- right for a Requirement, which should not refuse
+    an attack, and wrong for a benefit, because it would hand this feat
+    to a druid who never shifted. The label test answers False there.
+    `#1476`."""
     c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+
+    def crawling_as_a_beast(ctx: dict[str, Any]) -> bool:
+        return (ctx.get("move_kind") == "crawl"
+                and in_beast_form(c.world, c.me))
+
+    c.no_provoke(on=c.me, until=When.ENCOUNTER, when=crawling_as_a_beast)
 
 
 @power("f2281", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
