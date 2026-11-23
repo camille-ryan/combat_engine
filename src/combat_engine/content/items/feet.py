@@ -614,12 +614,36 @@ def i772p1(c: Cast) -> None:
 
 
 @power("i1333x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.charge_target()",))
+       reach=PERSONAL, target=SELF)
 def i1333x1(c: Cast) -> None:
-    """`query.speed` is handed `{"charge": True}` and nothing else, so the
-    run is longer against every enemy rather than only a marked one."""
-    c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="item",
-            when=lambda ctx: bool(ctx.get("charge")))
+    """*"When charging an enemy marked by you, you gain a +2 item bonus to
+    speed."*
+
+    **Both halves of the printed sentence are in the gate now.** This
+    asked only `ctx["charge"]`, because that was the whole of what
+    `query.speed` was handed -- so the run was longer against every
+    enemy rather than only a marked one, which is strictly stronger than
+    print on the half the card is actually about.
+
+    `target` is the key, written by all four sites that measure a
+    charge: `actions.legal` asks per foe, `_trample_charge` takes the
+    victim, `Cast.charge` has always known it, and `dsl` measures per foe
+    inside its reachability test. An ordinary move passes neither key, so
+    this is correctly false for one. #1515.
+
+    `c.marked(on=victim)` is the read and its default is the printed
+    narrowing: *"marked -- by you, unless told otherwise"*, so a creature
+    somebody else marked is correctly not this."""
+    me = c.me
+
+    def charging_my_mark(ctx: dict[str, Any]) -> bool:
+        if not ctx.get("charge"):
+            return False
+        victim = ctx.get("target")
+        return victim is not None and c.marked(on=victim, by=me)
+
+    c.bonus("speed", 2, on=me, until=When.ENCOUNTER, kind="item",
+            when=charging_my_mark)
 
 
 @power("i1333p1", level=6, cls=ITEM, usage=DAILY, action=REACTION,

@@ -1258,6 +1258,18 @@ def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
     would have been a bonus to all movement, which is not the printed line.
     The three places that measure a charge's run pass the word; everything
     else measures an ordinary move and passes nothing.
+
+    **And `target` now, which is WHO is being charged.** `i1333x1` prints
+    *"when charging an enemy marked by you, you gain a +2 item bonus to
+    speed"* -- a gate on the victim, not on the charge -- and the context
+    carried only the word, so the run was longer against every enemy. All
+    four sites that measure a charge know their victim or can be asked
+    per foe; `actions.legal` reads the base once and re-measures only
+    when a creature's answer differs, so a board with no such row pays
+    one extra `speed` call per enemy and nothing else. #1515.
+
+    An ordinary move passes neither key, so a gate on `target` is
+    correctly false for it.
     """
     mv = world.get(eid, Movement)
     if mv is None:

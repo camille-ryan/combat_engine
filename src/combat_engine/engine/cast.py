@@ -14642,7 +14642,14 @@ class Cast:
         beside = spread(squares(self.world, victim), 1)
         # Measured as a charge: `c.speed_of` is the ordinary question and a
         # bonus gated on charging is correctly false for it.
-        paths = self.world.reachable_paths(runner, _speed(self.world, runner, {"charge": True}))
+        # `target` as well as the word: "+2 to speed when charging an
+        # enemy marked by you" is a gate on the victim and this is the
+        # one site that has always known it. #1515.
+        paths = self.world.reachable_paths(
+            runner,
+            _speed(self.world, runner,
+                   {"charge": True, "target": victim}),
+        )
         best = min(
             (
                 (len(path), dest, path)

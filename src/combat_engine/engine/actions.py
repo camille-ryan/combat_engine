@@ -2413,6 +2413,7 @@ def _bodies_on(world: World, actor: int, path: list[Square]) -> list[int]:
 def _trample_charge(
     world: World, actor: int, here: Square,
     lands: frozenset[Square] | set[Square], swing: Any,
+    victim: int = -1,
 ) -> tuple[Square, list[Square], int] | None:
     """The straight line that charges **through** one body, or None. #1057.
 
@@ -2452,7 +2453,13 @@ def _trample_charge(
     mine = world.get(actor, Position)
     if mine is None:
         return None
-    reach = speed(world, actor, {"charge": True})
+    # `victim` is who the charge is aimed at, so "+2 to speed when
+    # charging an enemy marked by you" reaches the trample line as well as
+    # the ordinary one. -1 means the caller did not say, which keeps a
+    # gate on `target` correctly false rather than guessing. #1515.
+    reach = speed(world, actor,
+                  {"charge": True, "target": victim}
+                  if victim >= 0 else {"charge": True})
     bodies = {
         s: other
         for other in creatures(world) if other != actor
@@ -2572,10 +2579,27 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
     if here is None:
         return []
     out: list[Action] = []
+    # **The base run, re-measured per foe only when it differs.**
+    # `i1333x1` prints "+2 to speed when charging an enemy marked by you",
+    # so the reachability above -- computed once, with no victim -- was
+    # the wrong number against exactly the creature the card is about.
+    # Asking `speed` per enemy is cheap; rebuilding `reachable_paths` is
+    # not, so it is rebuilt only when the answer actually moved, which is
+    # never on a board carrying no such row. #1515.
+    base_run = speed(world, actor, {"charge": True})
+    # Held separately, because `reachable` is reassigned below: written as
+    # `else reachable` first, which carried ONE foe's longer map forward
+    # to every later foe whose run was the ordinary length.
+    base_reachable = reachable
     for foe in sorted(enemies(world, actor)):
         if not alive(world, foe):
             continue
         space = squares(world, foe)
+        run = speed(world, actor, {"charge": True, "target": foe})
+        reachable = (
+            world.reachable_paths(actor, run, kind="charge")
+            if run != base_run else base_reachable
+        )
 
         def closes(path: list[Square], at: tuple[int, int] = here,
                    toward: frozenset = space) -> bool:
@@ -2621,7 +2645,8 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
             # them; they are computed from the straight line, which is
             # what `movement.overrun` actually walks.
             if trample:
-                through = _trample_charge(world, actor, here, lands, swing)
+                through = _trample_charge(world, actor, here, lands, swing,
+                                          foe)
                 if through is not None:
                     dest, line, _victim = through
                     out.append(

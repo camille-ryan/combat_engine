@@ -5517,10 +5517,18 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
         # `switched` alone is half the resolution: it applies the
         # state-switch and not the reshape, so a reshaped size read as the
         # printed one. #894.
-        far = (reach_of(world, actor, p, branch, augment).size
-               + speed(world, actor, {"charge": True}))
+        # **Measured per foe, because the run can be longer against one
+        # of them.** `i1333x1` prints "+2 to speed when charging an enemy
+        # marked by you", so a single `far` computed outside the loop
+        # would refuse the row against exactly the creature the card is
+        # about -- or offer it against all of them if the bonus were
+        # ungated. #1515.
+        swung = reach_of(world, actor, p, branch, augment).size
         return any(
-            distance_between(world, actor, foe) <= far for foe in enemies(world, actor)
+            distance_between(world, actor, foe)
+            <= swung + speed(world, actor,
+                             {"charge": True, "target": foe})
+            for foe in enemies(world, actor)
         )
     return bool(candidates(world, actor, p, None, branch, augment))
 

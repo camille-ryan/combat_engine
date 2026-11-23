@@ -5783,6 +5783,125 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_charge_knows_who_it_is_charging(out: Result) -> None:
+    """`i1333x1`: *"when charging an enemy marked by you, you gain a +2
+    item bonus to speed."*
+
+    The row asked only `ctx["charge"]`, because that was the whole of
+    what `query.speed` was handed -- so the run was longer against every
+    enemy rather than only a marked one, which is strictly stronger than
+    print on the half the card is about. `target` is the key, and all
+    four sites that measure a charge pass it now. #1515.
+
+    **Measured on `query.speed` itself, which is the one place a speed
+    resolves.** Its own docstring says so, and the alternative -- counting
+    squares a charge actually covered -- would make the arms depend on
+    board geometry and on which foe `actions.legal` happened to rank
+    first.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import speed
+
+    REF = "i1333x1"
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    foes = sorted(c.enemies())
+    marked, spared = foes[0], foes[1]
+    _dsl.use(world, me, REF, spend=False)
+
+    plain = speed(world, me, {})
+    charging = speed(world, me, {"charge": True})
+    at_spared = speed(world, me, {"charge": True, "target": spared})
+
+    Cast(world=world, me=me, ref="drv").mark(on=marked)
+    at_marked = speed(world, me, {"charge": True, "target": marked})
+    still_spared = speed(world, me, {"charge": True, "target": spared})
+
+    out.that(c.marked(on=marked) and not c.marked(on=spared),
+             "the premise: one foe is marked by this character and the"
+             " other is not, which is the only difference the arms below"
+             " are allowed to turn on",
+             f"marked={c.marked(on=marked)}"
+             f" spared={c.marked(on=spared)}")
+    out.that(at_marked == plain + 2,
+             "THE arm: the run is 2 longer when the charge is aimed at a"
+             " foe this character marked -- read off `query.speed`, which"
+             " is the one place a speed resolves",
+             f"plain {plain} -> charging the mark {at_marked}")
+    out.that(still_spared == plain,
+             "and the printed length against a foe nobody marked, which"
+             " is the narrowing the row did not have: it paid on every"
+             " charge",
+             f"plain {plain} -> charging an unmarked foe {still_spared}")
+    out.that(charging == plain and at_spared == plain,
+             "and a charge with NO victim named gets nothing either --"
+             " `actions.legal` reads that once as its base and only"
+             " rebuilds the reachability when a foe's answer differs, so"
+             " a board with no such row pays one extra `speed` call",
+             f"no victim {charging}, unmarked victim {at_spared}")
+    out.that(speed(world, me, {"target": marked}) == plain,
+             "and an ORDINARY move toward the marked foe is the printed"
+             " length -- the gate reads both keys, so a card about"
+             " charging cannot pay for walking",
+             f"{speed(world, me, {'target': marked})} against {plain}")
+    # -- and the plumbing, which the arms above do not reach ---------------
+    #
+    # **Asserted as the ASK, not as an outcome.** The arms above read
+    # `query.speed` directly, so a plant making `actions.legal` stop
+    # re-measuring per foe left every one of them green -- a rule testing
+    # the facility and not its caller, which is a trap this tree has
+    # recorded. Going through `legal`'s own output does not work either:
+    # it offers a charge against that foe at every distance tried (7, 8
+    # and 9 squares, marked and unmarked alike), so the geometry cannot
+    # separate a longer run from a shorter one on this board.
+    #
+    # What CAN be separated is whether the enumeration asks the question.
+    # `actions.py` imports `speed` function-locally, so replacing it on
+    # the module records every context the charge enumeration builds.
+    from combat_engine.engine import actions as _actions
+    from combat_engine.engine import query as _query
+
+    seen: list[dict[str, Any]] = []
+    real = _query.speed
+
+    def spy(world_: Any, eid: int,
+            ctx: dict[str, Any] | None = None) -> int:
+        if ctx and ctx.get("charge"):
+            seen.append(dict(ctx))
+        return real(world_, eid, ctx)
+
+    world4, me4, _ = _board(REF, 1)
+    _dsl.use(world4, me4, REF, spend=False)
+    world4.turn = me4
+    _query.speed = spy
+    try:
+        _actions.legal(world4, world4.encounter, me4)
+    finally:
+        _query.speed = real
+
+    named = [ctx for ctx in seen if "target" in ctx]
+    out.that(seen and named,
+             "`actions.legal`'s charge enumeration asks `query.speed`"
+             " WHO is being charged -- the plumbing, which the arms above"
+             " cannot reach because they read `speed` directly. A plant"
+             " making it re-use the base run left all five of them green",
+             f"{len(seen)} charge measurements, {len(named)} naming a"
+             f" victim")
+    out.that(any(ctx.get("target") == foe for foe in sorted(
+                 Cast(world=world4, me=me4, ref='drv').enemies())
+                 for ctx in named),
+             "and it names the actual enemies rather than a placeholder,"
+             " so the key the row gates on is the one the enumeration"
+             " writes",
+             f"{sorted({ctx.get('target') for ctx in named})}")
+
+    out.that(not REGISTRY["i1333x1"].unfinished,
+             "and the row carries no marker",
+             f"{REGISTRY['i1333x1'].unfinished}")
+
+
 def every_attack_rolls_before_any_damage(out: Result) -> None:
     """Camille's ruling on `#1394`, asked directly:
 
@@ -134810,6 +134929,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "charge_knows_its_victim": (
+        a_charge_knows_who_it_is_charging,
+        "i1333x1 lengthens a charge only against a foe this"
+        " character marked (#1515)",
     ),
     "attacks_before_damage": (
         every_attack_rolls_before_any_damage,
