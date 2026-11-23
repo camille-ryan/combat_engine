@@ -1276,17 +1276,48 @@ def f2073(c: Cast) -> None:
 
 
 @power("f2074", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.on_power_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f2074(c: Cast) -> None:
     """Adds one to a power bonus to defences while a light shield is
     carried.
 
-    **Down to one gap.** Which shield it is can be asked now --
-    `c.shield_bonus() == 1` is the light one. What is still missing is the
-    other half: a bonus being laid announces nothing a row can answer.
-    `Mods` records the number and its kind, not the act of granting it, so
-    there is no moment at which to add the +1."""
+    **Written.** Which shield it is was already askable --
+    `c.shield_bonus() == 1` is the light one -- and the half that was
+    missing is now `c.raise_defence_bonus()`: a bonus being laid
+    announces nothing, so the raise is read inside `c.bonus` at the
+    moment one is laid rather than from an event. `#1503`.
+
+    All four narrowings this card prints go in the gate, and all four are
+    in the context the verb hands it:
+
+    * a **rogue** power -- `Power.cls == "rogue"`, which is the printed
+      class ref read as the slug the header carries;
+    * a **power** bonus, which is the word the granting card prints
+      before "bonus" and is `ctx["kind"]`;
+    * **to you**, so a rogue power of this character's that buffs an
+      ally's defence is not this feat;
+    * and the shield, asked **in the gate** rather than at arming,
+      because a shield can change hands mid-fight and a trait is armed
+      once.
+
+    `>= 1` and not `== 1` would be wrong here: `c.shield_bonus()` returns
+    the printed figure, 1 for a light shield and 2 for a heavy one, so
+    the equality is what "light shield" says.
+
+    The sibling limit from the verb's note applies and does not bite: a
+    raise does not reach a bonus already standing, and this is a trait
+    armed before any power has granted anything."""
+    def mine(ctx: dict[str, Any]) -> bool:
+        p = get(str(ctx.get("power") or ""))
+        return (
+            p is not None
+            and p.cls == "rogue"
+            and ctx.get("kind") == "power"
+            and ctx.get("on") == c.me
+            and c.shield_bonus() == 1
+        )
+
+    c.raise_defence_bonus(1, when=mine, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f2405", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

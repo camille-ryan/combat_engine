@@ -494,6 +494,7 @@ CATEGORIES: dict[str, dict] = {
                 "amount_for", "attack_mod", "bonus", "boost_check",
                 "boost_roll", "change_amount", "change_dice", "dice_for",
                 "enhancement", "grants_in", "penalty",
+                "raise_defence_bonus",
                 # `penalty_into` beside `penalty` and `grants_in` rather
                 # than with the zone verbs: it is a number on an attack
                 # roll, and it is the MIRROR of `grants_in` -- that one

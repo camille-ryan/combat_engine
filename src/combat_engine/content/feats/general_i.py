@@ -1481,7 +1481,7 @@ def f1397(c: Cast) -> None:
 
 @power("f1398", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.raise_every_defence_bonus()",))
+)
 def f1398(c: Cast) -> None:
     """The mark half is written; raising every defence bonus is not.
 
@@ -1507,8 +1507,21 @@ def f1398(c: Cast) -> None:
     defence bonus from *any* of the character's rows, most of them bodies
     nobody has written yet, so there is nothing to teach to read a raise.
     A different mechanism and now a different symbol.
+
+    ## Written
+
+    `c.raise_defence_bonus()` is that mechanism: laid on the holder, read
+    inside `c.bonus` at the moment a defence bonus is laid, so it reaches
+    every row without any of them asking. No gate and no `when=`, because
+    the card narrows nothing -- *any* of your powers, *any* defence.
+    `#1503`.
+
+    The one limit, from the verb's own note: a raise does not reach a
+    bonus **already standing**. This is a trait, armed at the start of the
+    fight before any power has granted anything, so it does not notice.
     """
     c.change_amount(MARK_KEY, 3, on=c.me, until=When.ENCOUNTER)
+    c.raise_defence_bonus(1, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1402", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -18524,6 +18524,72 @@ class Cast:
         held.subs.append(self.world.bus.on(AttackRolled, dictate, owner=who))
         return held
 
+    #: The key a defence-bonus raise is laid under. One place, because
+    #: `c.bonus` is its only reader and `c.raise_defence_bonus` its only
+    #: writer -- a modifier key spelled twice is how one ends up with no
+    #: reader at all, which this component's own notes call its commonest
+    #: bug.
+    _DEFENCE_RAISE = "defence_bonus_raise"
+
+    def _defence_raise(self, key: str, kind: str, who: int) -> int:
+        """How much to add to a defence bonus this caster's power grants.
+
+        Read off `self.me` -- the creature whose power is granting it --
+        because that is what *"whenever one of **your** powers grants a
+        bonus to a defense"* is about. The recipient is in the context so
+        a narrower card can ask about it.
+
+        The context carries everything either printed card needs to
+        narrow: which defence, what kind of bonus the card named, who is
+        getting it, and which row is granting it. `f2074` reads all four.
+        """
+        from .components import Mods
+
+        held = self.world.get(self.me, Mods)
+        if held is None or not held.items:
+            return 0
+        return held.total(self._DEFENCE_RAISE, {
+            "what": key,
+            "kind": kind,
+            "on": who,
+            "power": self.ref,
+            "by": self.me,
+        })
+
+    def raise_defence_bonus(
+        self,
+        amount: int = 1,
+        *,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Increase a bonus your powers grant to a defence by 1."
+
+        Laid on the creature whose **powers** are granting the bonuses,
+        which is the holder of the feat and not whoever benefits.
+        `c.bonus` is the only reader, and it reads this at the moment the
+        bonus is laid rather than at the moment it is summed -- see the
+        note there for why.
+
+        `when` narrows it, and the context it is handed carries `what`
+        (which defence), `kind` (the word the granting card printed
+        before "bonus"), `on` (who is receiving it) and `power` (the row
+        granting it). `f2074` is the worked case and needs all four:
+        *"if a rogue power gives **you** a **power** bonus to defenses
+        and you wield a light shield"*.
+
+        **It does not reach a bonus already standing**, which is the one
+        limit worth knowing. Both printed cards are standing traits armed
+        before anything is laid, so neither notices; a card that granted
+        this mid-fight would want a reader at `Mods.total` instead, and
+        that is a cost the whole game pays rather than two rows. #1503.
+        """
+        return self.bonus(
+            self._DEFENCE_RAISE, amount, on=on if on is not None else self.me,
+            until=until, when=when, kind="untyped",
+        )
+
     def bonus(
         self,
         what: str | Defense,
@@ -18700,6 +18766,25 @@ class Cast:
                     f"{self.ref}: c.bonus(onto=, once=True) has no effect "
                     f"of its own to spend. Lay it separately."
                 )
+        # **A raise on a defence bonus one of this caster's own powers
+        # grants.** Two heroic feats print it and neither had anywhere to
+        # put it: "whenever one of your powers grants a bonus to a
+        # defense, increase that bonus by 1" (`f1398`) and the narrower
+        # rogue one (`f2074`). `c.change_amount` cannot say it -- that
+        # names a *mechanic*, and this edits a number somebody else laid.
+        #
+        # Read HERE rather than at `Mods.total`, deliberately. This method
+        # is the one door every defence bonus comes through, where
+        # `Mods.total` is asked for every attack roll, save and check in
+        # the game -- so a second scan there would cost the whole fight to
+        # serve two feats. The trade is that a raise laid *after* a
+        # standing bonus does not reach it; no card prints that, and both
+        # of these are traits armed before anything is laid.
+        #
+        # Off `self.me`, because the sentence is about whose POWER grants
+        # it and not about who receives it. #1503.
+        if isinstance(what, Defense) and value > 0 and not dice:
+            value += self._defence_raise(key, kind, who)
         rng = self.world.rng
         mod = Mod(
             what=key, value=value, kind=kind, when=when,

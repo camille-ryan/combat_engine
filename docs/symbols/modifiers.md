@@ -35,6 +35,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Say what a named row's next die **comes up**.
 - `c.picked(self, ref: 'str' = '') -> 'int'`
   - The face chosen for this row's next die, or 0. **Consumes it.**
+- `c.raise_defence_bonus(self, amount: 'int' = 1, *, when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "Increase a bonus your powers grant to a defence by 1."
 - `c.rolls_with(self, ref: 'str', ability: 'Ability', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[Any, int], bool] | None' = None) -> 'Effect | None'`
   - Make a named row attack with a different ability.
 - `c.settle_attack(self, *, ev: 'Any' = None) -> 'bool'`

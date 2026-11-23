@@ -4734,6 +4734,115 @@ def a_ranged_basics_swing_can_be_replaced(out: Result) -> None:
              f"AttackRolled by power: {printed}")
 
 
+def a_defence_bonus_another_row_laid_can_be_raised(out: Result) -> None:
+    """`f1398` and `f2074`: "increase that bonus by 1".
+
+    One gap, two cards, and the thing neither could reach is a number
+    **somebody else's row laid**. `c.change_amount` names a mechanic and
+    `c.amount_for` needs the laying row to ask -- which cannot serve
+    `f1398`, since it means every defence bonus from any of the holder's
+    rows and most of those bodies are unwritten. `c.raise_defence_bonus`
+    is read inside `c.bonus` at the moment a defence bonus is laid.
+    #1503.
+
+    `f1398` narrows nothing: any power, any defence. `f2074` narrows four
+    ways and each is a separate arm here, because a gate with four
+    clauses needs one negative case per clause or the ones that are never
+    exercised could be anything -- a rogue power, a *power* bonus, laid
+    on **you**, and a **light** shield in hand.
+
+    The raise is read off the **caster** and not the recipient, which the
+    ally arm is what proves: the sentence is about whose power grants the
+    bonus.
+    """
+    from combat_engine.engine import AC
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.durations import When
+
+    def laid(ref: str, *, kind: str = "power", power: str = "p1", who: str = "me",
+             shield: int | None = None) -> int:
+        """Arm `ref`, then lay a +2 AC bonus and report what it came to.
+
+        `power` is the ref the laying cast claims to be, which is how the
+        "a rogue power" clause is exercised without needing a real rogue
+        row for every arm.
+        """
+        world, me, _ = _board(ref, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        if shield is not None:
+            from combat_engine.engine.components import Gear
+
+            # **`Gear.shield` is the printed BONUS, an int, not a word.**
+            # `query.shield_bonus` does `int(gear.shield)`, so "light"
+            # raised rather than reading as a light shield.
+            gear = world.need(me, Gear)
+            gear.shield = shield
+        # **No `use` here.** `audit.board` arms every `action=NONE` row
+        # INCLUDING the row under test, so arming it again laid a second
+        # raise and a +2 came to +4. The control is a board built for a
+        # different ref, which does not arm this one.
+        target = me
+        if who == "ally":
+            mates = [a for a in c.allies() if a != me]
+            if not mates:
+                return -998
+            target = mates[0]
+        # The recipient's OWN baseline, whoever that is. Reading the
+        # caster's and subtracting it from an ALLY's total is how the
+        # ally arm first reported 3: the ally already had a +1 of its own.
+        pool = world.get(target, Mods)
+        before = pool.total(AC.value, {}) if pool else 0
+        Cast(world=world, me=me, ref=power).bonus(
+            AC, 2, on=target, until=When.ENCOUNTER, kind=kind)
+        pool = world.get(target, Mods)
+        after = pool.total(AC.value, {}) if pool else 0
+        return after - before
+
+    # ---- f1398: no gate at all
+    got = laid("f1398")
+    out.that(got == 3,
+             "f1398 turns a +2 defence bonus into +3, laid by a row that"
+             " asks nothing -- which is the whole point: the card names no"
+             " leg, so nothing could be taught to read a raise",
+             f"the laid bonus contributed {got}")
+
+    plain = laid("f2807")
+    out.that(plain == 2,
+             "and a character WITHOUT the feat gets the printed +2 -- the"
+             " control, using an unrelated trait so the board is otherwise"
+             " the same",
+             f"contributed {plain}")
+
+    # ---- f2074: four narrowings, one arm each
+    rogue_power = "p12710"
+    hit = laid("f2074", kind="power", power=rogue_power, shield=1)
+    out.that(hit == 3,
+             "f2074 raises a POWER bonus from a ROGUE power laid on"
+             " YOURSELF while a LIGHT shield is held -- all four of its"
+             " printed narrowings satisfied at once",
+             f"contributed {hit}")
+    out.that(laid("f2074", kind="feat", power=rogue_power, shield=1) == 2,
+             "and not a FEAT bonus: `kind` is the word the granting card"
+             " prints before 'bonus' and the card names 'power'",
+             "the kind clause")
+    out.that(laid("f2074", kind="power", power="p1448", shield=1) == 2,
+             "and not a bonus from a power of another class -- `Power.cls`"
+             " is the printed class ref read as the header's slug",
+             "the class clause")
+    out.that(laid("f2074", kind="power", power=rogue_power, shield=2) == 2,
+             "and not while a HEAVY shield is held: `c.shield_bonus()`"
+             " returns the printed figure, so 1 is light and the equality"
+             " is what the card says",
+             "the shield clause")
+    ally = laid("f2074", kind="power", power=rogue_power, who="ally", shield=1)
+    out.that(ally == 2,
+             "and not a bonus the same rogue power lays on an ALLY -- the"
+             " card says 'gives YOU', and this arm is also what shows the"
+             " raise is read off the caster rather than the recipient",
+             f"the ally contributed {ally}")
+
+
 def circling_a_foe_provokes_nothing_from_it(out: Result) -> None:
     """`f2417` is an empty body, and this is why that is safe.
 
@@ -132904,6 +133013,10 @@ DRIVERS = {
         a_ranged_basics_swing_can_be_replaced,
         "i2730p1 swaps a ranged basic's whole swing for a ranged"
         " at-will",
+    ),
+    "defence_bonus_raise": (
+        a_defence_bonus_another_row_laid_can_be_raised,
+        "f1398 and f2074 raise a defence bonus another row laid",
     ),
     "circling_a_foe_provokes_nothing_from_it": (
         circling_a_foe_provokes_nothing_from_it,
