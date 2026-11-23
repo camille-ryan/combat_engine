@@ -134,7 +134,7 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Has *this* caster cursed that creature?
 - `c.rattled(self, on: 'int | None' = None) -> 'bool'`
   - Is that creature taking the penalty from one of my rattling attacks?
-- `c.rattling(self, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, melee: 'bool' = False) -> 'Effect | None'`
+- `c.rattling(self, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, melee: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "Your attacks gain the rattling keyword."
 - `c.shroud(self, *, on: 'int | None' = None, cap: 'int' = 4) -> 'int'`
   - Lay an assassin's shroud, and say how many that creature now has.

@@ -5783,6 +5783,179 @@ def acting_when_you_could_not_act_at_all(out: Result) -> None:
              f"usable={off_ok} {off_why!r}")
 
 
+def a_paid_option_is_judged_rather_than_defaulted(out: Result) -> None:
+    """`c.may(worth_it=)` and `c.rattling(when=)`, which `f1721` needed
+    together.
+
+    *"When making a melee basic attack, you can choose to take a -2
+    penalty to your attack roll to add the rattling keyword to your
+    attack."* The row laid both halves for the whole encounter, so every
+    melee basic rattled and every melee basic paid -- wider than print in
+    both directions at once.
+
+    **A paid option has no safe default**, which is the half `default=`
+    could not say. A headless `World.decide` takes the first option: a
+    trade declined by default makes a dealt feat drawable and inert, and
+    one accepted by default pays the cost in every fight for a benefit
+    nothing weighed. `worth_it` sets the **order**, never the answer, so
+    the choice is still on the page -- asserted below, because a callable
+    that answered would have removed the one thing `c.may` exists for.
+
+    **And the keyword had to be narrowable.** `c._rattle` read the
+    modifier with no context, which the row's note had measured and taken
+    as the end of the road; it carries `power` and `target` now, so the
+    word is held for the swing it was bought for.
+
+    The judgement is `c.rattled(on=)` and nothing more: the whole of the
+    word is -2 to that creature's attack rolls, so buying it twice on one
+    victim pays for nothing. Anything weighing the two -2s against each
+    other is AI policy and does not belong in a row. #1513.
+    """
+    from combat_engine.engine import dsl as _dsl
+    from combat_engine.engine.basic import MELEE as BASIC_MELEE
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import AttackRolled
+
+    REF = "f1721"
+
+    # -- the verb ----------------------------------------------------------
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    out.that(c.may("x", worth_it=lambda: True) is True
+             and c.may("x", worth_it=lambda: False) is False,
+             "`worth_it` decides the headless answer in both directions,"
+             " which is what a paid option needs -- `default=` can only"
+             " be wrong one way or the other for the same row",
+             "True -> yes, False -> no")
+    out.that(c.may("x", default=True, worth_it=lambda: False) is False
+             and c.may("x", default=False, worth_it=lambda: True) is True,
+             "and it wins over `default=` when both are given, since a"
+             " row passing both means judge it",
+             "both orders overridden")
+
+    seen: list[list[str]] = []
+
+    def watching(actor: int, kind: str, options: list[str],
+                 prompt: str) -> str:
+        seen.append(list(options))
+        return options[0]
+
+    world.decider = watching
+    c.may("x", worth_it=lambda: False)
+    out.that(len(seen) == 1 and len(seen[0]) == 2,
+             "and a real player is still offered BOTH answers -- the"
+             " judgement sets their order and does not answer, which is"
+             " the whole point of `c.may` and would have been destroyed"
+             " by a callable that returned the choice",
+             f"offered {seen}")
+    world.decider = None
+
+    # -- the row -----------------------------------------------------------
+    def swing(*, already: bool,
+              answer: str | None = None) -> tuple[int, bool, bool, int]:
+        """Land a melee basic and report the roll's bonus.
+
+        `already` picks a foe this character has **already** rattled,
+        which is the case the judgement is supposed to decline. `answer`
+        forces the choice through a decider -- `"yes"`, `"no"`, or None
+        for the headless path where `worth_it` sets the order.
+
+        **The board supplies both foes, which is why nothing is staged
+        here.** The first draft staged a `rattled` hold by hand and all
+        three row arms went red: the audit board already rattles one foe,
+        so the "fresh" victim it chose -- the lowest-numbered enemy -- was
+        the rattled one, the trade was correctly declined, and the rule
+        read as a broken row. The judgement was working the whole time.
+
+        **And the control is the same foe with the answer forced, which
+        took two tries.** Comparing the two *victims* made the -2 arm
+        pass under a plant that ignored the judgement entirely -- the
+        foes differ by 2 on this board for reasons of their own, so the
+        arm was reading a board difference and calling it the penalty.
+        Comparing the feat used against the feat unused is worse than
+        useless: this is an `action=NONE` trait and `audit.board` arms
+        every one of those, **including the row under test**, so "unused"
+        is the same world. One foe, one arming, two answers.
+        """
+        world, me, _ = _board(REF, 1)
+        c = Cast(world=world, me=me, ref="drv")
+        rattled_already = set(Cast(world=world, me=me, ref=REF)
+                              .suffering("rattled"))
+        pool = [f for f in sorted(c.enemies())
+                if (f in rattled_already) == already]
+        if not pool:
+            return (10 ** 6, False, False, -1)
+        victim = pool[0]
+        # **Read BEFORE the swing, because that is when the choice is
+        # offered.** Asked afterwards it is False even here: the board's
+        # hold runs to the end of its source's next turn and does not
+        # survive the swing, so an after-the-fact read made this premise
+        # look like the row failing to rattle anybody.
+        was = Cast(world=world, me=me, ref=REF).rattled(on=victim)
+        if answer is not None:
+            want = "yes" if answer == "yes" else "no"
+
+            def forced(actor: int, kind: str, options: list[str],
+                       prompt: str) -> str:
+                for opt in options:
+                    if opt.startswith(want):
+                        return opt
+                return options[0]
+
+            world.decider = forced
+        before = len(world.bus.log)
+        _dsl.use(world, me, BASIC_MELEE, targets=[victim], spend=False)
+        rolls = [e for e in world.bus.log[before:]
+                 if isinstance(e, AttackRolled) and e.attacker == me]
+        rattled = Cast(world=world, me=me, ref=REF).rattled(on=victim)
+        return (rolls[0].bonus if rolls else 10 ** 6,
+                rattled if not already else was, bool(rolls), victim)
+
+    taken, taken_rattled, r1, fresh_who = swing(already=False, answer="yes")
+    refused, refused_rattled, r2, fresh_who2 = swing(
+        already=False, answer="no")
+    judged, judged_rattled, r3, fresh_who3 = swing(already=False)
+    done_judged, done_was, r4, done_who = swing(already=True)
+    done_refused, _, r5, done_who2 = swing(already=True, answer="no")
+
+    out.that(all([r1, r2, r3, r4, r5])
+             and fresh_who == fresh_who2 == fresh_who3
+             and done_who == done_who2 and fresh_who != done_who,
+             "all five swings reached a roll, the three fresh-foe ones"
+             " are the SAME foe and the two declined ones are the same"
+             " other foe -- the premises, since the two foes differ by 2"
+             " on this board for reasons of their own",
+             f"fresh foe {fresh_who}, already-rattled foe {done_who}")
+    out.that(done_was,
+             "and that other foe WAS rattled when the choice was offered"
+             " -- the premise that makes the judgement decline, read"
+             " before the swing because the board's hold does not survive"
+             " it",
+             f"rattled when offered={done_was}")
+    out.that(taken_rattled and not refused_rattled,
+             "the trade taken rattles the foe and the trade refused does"
+             " not, on one board and one foe -- so the keyword really is"
+             " held to the swing it was bought for, which needed"
+             " `c._rattle`'s modifier read to carry a context",
+             f"taken={taken_rattled} refused={refused_rattled}")
+    out.that(taken == refused - 2,
+             "THE arm: the -2 is paid on exactly the swing the trade was"
+             " taken for, measured against the same foe with the same"
+             " feat armed and only the answer changed. A DIFFERENCE,"
+             " because the attack bonus is the draw's",
+             f"taken {taken} vs refused {refused}")
+    out.that(judged == taken and judged_rattled,
+             "and left to `worth_it` the judgement TAKES it on a foe"
+             " nothing has rattled -- the headless path, which is the"
+             " one `default=` could only get wrong",
+             f"judged {judged} vs forced-yes {taken}")
+    out.that(done_judged == done_refused,
+             "and DECLINES it on the foe already rattled, where the"
+             " second -2 would buy nothing. The row used to lay the"
+             " penalty on every melee basic for the encounter",
+             f"judged {done_judged} vs forced-no {done_refused}")
+
+
 def an_orbs_raise_narrows_to_what_it_struck(out: Result) -> None:
     """`i1986p1`: *"on a creature hit by an attack made through this
     implement"*, raising the orb mastery's save penalty by 2.
@@ -134273,6 +134446,11 @@ DRIVERS = {
         acting_when_you_could_not_act_at_all,
         "a cost granted while surprised, and a row whose own card"
         " works while you cannot act",
+    ),
+    "paid_option_judged": (
+        a_paid_option_is_judged_rather_than_defaulted,
+        "c.may(worth_it=) judges a paid option instead of"
+        " defaulting it, and f1721 buys rattling one swing at a time",
     ),
     "orb_raise_narrows": (
         an_orbs_raise_narrows_to_what_it_struck,

@@ -20901,7 +20901,14 @@ class Cast:
         )
         return None if isinstance(picked, _Decline) else picked
 
-    def may(self, what: str, *, who: int | None = None, default: bool = True) -> bool:
+    def may(
+        self,
+        what: str,
+        *,
+        who: int | None = None,
+        default: bool = True,
+        worth_it: Callable[[], bool] | None = None,
+    ) -> bool:
         """Ask whether an optional clause happens. `c.may("spend a surge")`.
 
         Asked of the creature it is about rather than the caster: a heal
@@ -20911,8 +20918,28 @@ class Cast:
         `default` puts that answer first, which matters more than it looks:
         an engine with nobody playing takes the first option, so the order
         is the answer for every fight run headless.
+
+        **`worth_it` is that order, judged instead of fixed**, and it is
+        what a *paid* option needs. A trade -- "take a penalty to gain a
+        keyword" -- has no safe default: declined, a dealt feat is
+        drawable and inert; accepted, the cost is paid in every fight for
+        a benefit nothing weighed. Both are wrong for the same row, which
+        is why `default=` alone could not say it. `f1721` is the printed
+        case and `#1513` has the measurement.
+
+        It sets the order and does **not** answer: a real player is still
+        offered both, in the judged order, so this changes the headless
+        answer and nothing else. That is deliberate -- a callable that
+        returned the answer would make the choice disappear from the
+        page, which is the fault `c.may` itself was written to fix.
+
+        Called once, here, so a judgement that reads the board reads it at
+        the moment the clause is offered. It wins over `default=` when
+        both are given, since a row passing both means "judge it".
         """
         asker = self._who(who) or self.me
+        if worth_it is not None:
+            default = bool(worth_it())
         yes, no = f"yes, {what}", f"no, do not {what}"
         pool = [yes, no] if default else [no, yes]
         return self.world.decide(asker, "may", pool, what) == yes
@@ -23533,12 +23560,29 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         power's damage goes through and the keyword is a property of the
         power, which is only known on this side. The whole of the word is
         -2 to the target's attack rolls until the end of your next turn.
+
+        **The two modifier reads carry a context now, and they carried
+        none.** `f1721` prints *"when making a melee basic attack, you can
+        choose to take a -2 penalty to add the rattling keyword"* -- a
+        choice **per swing**, so what it wants is a `rattling` modifier
+        that holds for the attack it was bought for and no other. A
+        `when=` gate on one was inert: `c.total`'s own docstring says an
+        ungated read counts every such bonus, and that row's note had
+        measured it and concluded the narrowing could not be written.
+
+        `power` and `target` are what the printed narrowings ask about --
+        which attack bought it, and who is being rattled -- and both are
+        already in hand here. A row laying an ungated `c.rattling()` is
+        unaffected, since a modifier with no `when=` ignores the context.
+        #1513.
         """
         p = self._declared()
         rattles = bool(p and Keyword.RATTLING in self.keywords_of(p))
         if not rattles:
-            rattles = bool(self.total("rattling")) or (
-                bool(self.total("rattling melee")) and not self.ranged
+            ctx = {"power": p.ref if p is not None else "", "target": who}
+            rattles = bool(self.total("rattling", ctx=ctx)) or (
+                bool(self.total("rattling melee", ctx=ctx))
+                and not self.ranged
             )
         if not rattles:
             return
@@ -23546,7 +23590,9 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         self.effect("rattled", on=who, until=When.EONT)
 
     def rattling(
-        self, *, until: When = When.ENCOUNTER, on: int | None = None, melee: bool = False
+        self, *, until: When = When.ENCOUNTER, on: int | None = None,
+        melee: bool = False,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """"Your attacks gain the rattling keyword."
 
@@ -23555,10 +23601,18 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         beside the header. `melee` is the narrower printing -- "your melee
         attacks" -- which is the only difference between the two rows that
         say it. Defaults to the caster; every printed one is about its owner.
+
+        **`when=` narrows it to one swing, which it could not do before.**
+        `c._rattle` read the modifier with no context, so a gate here was
+        inert -- `f1721`'s note had measured that and concluded its
+        printed choice could not be written. That read carries `power` and
+        `target` now, so *"the melee basic attack you paid the -2 for"* is
+        one predicate. #1513.
         """
         return self.bonus(
             "rattling melee" if melee else "rattling", 1,
             on=on if on is not None else self.me, until=until, kind="untyped",
+            when=when,
         )
 
     def rattled(self, on: int | None = None) -> bool:

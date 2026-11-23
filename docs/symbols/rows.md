@@ -67,7 +67,7 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
   - Pick one. With `optional`, "none of them" is one of the answers.
 - `c.declare(self, category: 'str', *feats: 'str') -> 'str'`
   - Which feat of one printed category applies to **this use**.
-- `c.may(self, what: 'str', *, who: 'int | None' = None, default: 'bool' = True) -> 'bool'`
+- `c.may(self, what: 'str', *, who: 'int | None' = None, default: 'bool' = True, worth_it: 'Callable[[], bool] | None' = None) -> 'bool'`
   - Ask whether an optional clause happens. `c.may("spend a surge")`.
 - `c.note(self, text: 'str') -> 'None'`
   - (no docstring)

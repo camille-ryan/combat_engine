@@ -1259,48 +1259,80 @@ def f1715(c: Cast) -> None:
 
 
 @power("f1721", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.may(worth_it=)",))
+       reach=PERSONAL, target=SELF)
 def f1721(c: Cast) -> None:
-    """Both halves hold to the melee basic attack exactly, which is the
-    printed scope. The trade is still taken rather than offered, and
-    that is the one clause left.
+    """*"When making a melee basic attack, you can choose to take a -2
+    penalty to your attack roll to add the rattling keyword to your
+    attack."*
 
-    **Re-pointed off `c.rattling(when=)`, which was wrong twice.** A gate
-    there would be inert whichever row used it: `c._rattle` falls back to
-    the modifier with `c.total("rattling")` and **no context**, and
-    `c.total`'s own docstring says an ungated read counts every such
-    bonus -- `ranger_b.f2335` had already measured this and says so in
-    its own note. And the narrowing wants no gate at all. A keyword is
-    header data shared by everybody holding the row, which is what
-    `c.counts_as_keyword` exists to get round: it hands *this* creature's
-    copy of one named row an extra keyword, so naming the engine's melee
-    basic attack says "your melee basic attacks" and nothing wider.
-    `c._rattle` asks `c.keywords_of` before it reaches the modifier, so
-    that is the branch this arrives on.
+    **The choice is per swing, and this row used to lay both halves for
+    the whole encounter.** That was the clause the marker named -- "the
+    trade is still taken rather than offered" -- and it was wider than
+    print in both directions at once: every melee basic rattled, and
+    every melee basic took the -2, whether the trade was worth paying on
+    that swing or not.
 
-    The penalty is held to the same ref instead of `_melee_power`. Both
-    halves used to be wider than print and wider in *different*
-    directions -- the keyword covered every melee attack and the penalty
-    every melee power -- so they disagreed with each other as well as
-    with the card.
+    Two things had to arrive for the printed sentence, and both are
+    #1513:
 
-    Still dropped: the printed **choice**. `c.may` is the facility and is
-    reached inside a handler all over this tree, so the gap is not that
-    nothing can ask. It is that neither answer can be defaulted. The 12
-    `default=False` sites are all "pay a real cost", which this is, and a
-    headless `World.decide` takes the first option -- so a trade declined
-    by default makes a dealt feat **drawable and inert**, which is a
-    fault in its own right. `default=True` is the other way round: a
-    forced -2 on every melee basic attack for a benefit nothing weighs.
-    So the symbol names the parameter a paid option needs -- something
-    that *judges* the trade rather than defaulting it -- rather than a
-    new verb. `barbarian_b.f1858` is parked one step along the same
-    road."""
+    * `c.may(worth_it=)`. A *paid* option has no safe default. The 12
+      `default=False` sites are all "pay a real cost", and a headless
+      `World.decide` takes the first option -- so declined by default a
+      dealt feat is drawable and inert, and accepted by default the -2 is
+      paid in every fight for a benefit nothing weighed. `worth_it` sets
+      the **order** rather than the answer, so a real player is still
+      offered both.
+    * `c.rattling(when=)`. `c._rattle` read the modifier with no context,
+      which this note had measured and taken as the end of the road. It
+      carries `power` and `target` now, so the keyword can be held for
+      the one swing it was bought for.
+
+    **What judges it: whether the target is already rattled.** The whole
+    of the word is -2 to that creature's attack rolls until the end of
+    the attacker's next turn, so buying it twice on one victim pays the
+    -2 for nothing. `c.rattled(on=)` is the existing reader and the
+    judgement is that and nothing more -- deliberately, because anything
+    weighing the two -2s against each other is AI policy and does not
+    belong in a row.
+
+    **The keyword is held to this swing's victim, not to the swing.** A
+    melee basic has one target, so the two come to the same thing here,
+    and `target` is what `_rattle`'s context can actually name -- there
+    is no attack identity on the event to key it under.
+
+    The -2 is `once=True`, spent on the roll it was bought for, and the
+    penalty still names the melee basic by ref rather than `_melee_power`
+    so the two halves cannot drift apart the way they used to."""
     me = c.me
-    c.counts_as_keyword(BASIC_MELEE, Keyword.RATTLING, on=me,
-                        until=When.ENCOUNTER)
-    c.penalty("attack", 2, on=me, until=When.ENCOUNTER,
-              when=lambda ctx: ctx.get("power") == BASIC_MELEE)
+    paid: set[int] = set()
+
+    def bought_for(ctx: dict[str, Any]) -> bool:
+        """Was the -2 paid for a blow on this creature?"""
+        return ctx.get("power") == BASIC_MELEE and ctx.get("target") in paid
+
+    def offer(ev: AttackDeclared) -> None:
+        if ev.attacker != me or ev.power != BASIC_MELEE:
+            return
+        victim = ev.target
+        if not c.may(
+            "take -2 on this swing to rattle it",
+            worth_it=lambda: not c.rattled(on=victim),
+        ):
+            return
+        paid.add(victim)
+        # Spent on the roll this handler stands in front of.
+        c.penalty("attack", 2, on=me, until=When.EONT, once=True)
+
+    # **`Window.BEFORE`, and the default cost a wrong reading first.**
+    # `AttackDeclared` is emitted with the roll as its continuation, and
+    # the AFTER window runs once that continuation is done -- so a
+    # penalty laid there is laid after the d20 and pays nothing. The
+    # keyword half still worked, because `c._rattle` is reached from
+    # `c.damage` later still, so the row looked finished from one side.
+    # Caught by a plant: armed and unarmed read the same bonus.
+    c.watch(AttackDeclared, offer, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
+    c.rattling(melee=True, on=me, until=When.ENCOUNTER, when=bought_for)
 
 
 @power("f1772", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
