@@ -997,8 +997,7 @@
      "diplomacy",
      "heal",
      "insight",
-     "religion",
-     "streetwise"
+     "religion"
     ],
     "worships": "x1_139"
    },
@@ -1170,7 +1169,6 @@
      "diplomacy",
      "heal",
      "insight",
-     "nature",
      "religion"
     ],
     "worships": "x1_56"
