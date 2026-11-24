@@ -318,10 +318,19 @@ CREATE INDEX class_feature_class ON class_feature(class, ord);
 -- `base` is the printed base-item restriction, `Weapon: Heavy blade or
 -- light blade`. It is the whole reason a magic item is not a new weapon:
 -- the item says which existing weapons it may be laid on top of.
+-- `requires_trait` is the racial trait ref an item's printed Requirement
+-- names, or empty. **A column because the fact is prose and two readers
+-- want it.** 15 items print "You must have the <trait> racial trait to use
+-- this item", and nothing parsed it: `chargen.treasure` filters its pool
+-- by `enh_to`, `s.plus` and `_fits_base` and so deals these to any race at
+-- all -- 23 of 420 kits, measured with the race asserted, identical in
+-- both arms. `f443` is the other reader: it counts how many of a race's
+-- components a character carries, and a component IS one of these items.
+-- #1575, #1576.
 CREATE TABLE item (
   ref TEXT PRIMARY KEY, id INTEGER, category TEXT, slot TEXT, rarity TEXT,
   base_level INTEGER, scaling INTEGER, base TEXT, enh_to TEXT, crit TEXT,
-  books TEXT, spec TEXT, score REAL
+  books TEXT, spec TEXT, score REAL, requires_trait TEXT
 );
 CREATE INDEX item_level ON item(base_level, category);
 
@@ -1232,6 +1241,8 @@ class Report:
     #: made of. Deliberately no classification of what each check *does*;
     #: see the table's note. #989.
     countermeasures: int = 0
+    #: Items whose printed Requirement names a racial trait. #1575.
+    requires_trait: int = 0
     #: The two printed rules tables, read out of the glossary. Reported
     #: because a **half**-read one is the dangerous outcome: the gate in
     #: `check.py` would then compare a hand copy against a fragment and
@@ -1561,6 +1572,7 @@ def build() -> Report:
     # not what the table holds. #1018.
     report.census = sum(1 for _ in _census_the_sanitiser_sees())
     report.crossed += _cross_reference_rest(out, names)
+    report.requires_trait = _requires_trait(out)
     # **After `feat.feats` and not beside `_build_powers`.** A leg's section
     # names the feature it takes, the feat it wants and the powers it opens
     # with, and all three have to be resolvable before any of them can be
@@ -5811,6 +5823,69 @@ def _uniquely_owned(low: str, holders: dict[str, int]) -> bool:
     possessive name is not two different owners.
     """
     return holders.get(low, 0) == 1 and len(low.split()) > 2
+
+
+#: The trait ref in an item's printed Requirement. Anchored on "racial
+#: trait" because the sentence is formulaic across all 15 -- "You must have
+#: the <trait> racial trait to use this item" -- and anchoring on the ref
+#: alone would also match a Property that merely mentions one.
+_TRAIT_REQ = re.compile(r"\b(rt:[A-Za-z0-9:_-]+?)\s+racial trait\b")
+
+
+def _requires_trait(out: sqlite3.Connection) -> int:
+    """Fill `item.requires_trait` from each item's printed Requirement.
+
+    **A post-pass, and it has to be, for the names rule.** The printed
+    line reads "You must have the <trait> racial trait to use this item"
+    and names the trait; it is `_cross_reference_rest` that turns that
+    name into a `rt:` ref. Extracting at `item._one_item` time would
+    therefore mean matching the printed name, which may not enter a
+    tracked file. Run here, this function only ever sees a ref.
+
+    15 items carry one in this corpus, every one naming the same trait.
+    Two readers want it and neither could ask: `chargen.treasure` filters
+    its pool by `enh_to`, `s.plus` and `_fits_base`, so it deals these to
+    any race at all -- 23 of 420 kits, measured with the race asserted
+    and identical in both arms -- and `f443` counts how many of a race's
+    components a character carries, a component being one of these very
+    items. #1575, #1576.
+
+    Empty means "prints no such Requirement", which is almost every item,
+    and is the honest default: it is a positive claim about the page, not
+    an absence of information.
+
+    **The `racial trait` anchor is proved by a synthetic counter-example,
+    because the corpus has none.** All 15 rows whose spec mentions the
+    phrase are requirements, so a run over real data cannot tell this
+    pattern from one matching the bare ref -- and a control that cannot
+    distinguish two implementations is not a control. Driven on a copy
+    with two rows added: one carrying the ref inside an ordinary Property
+    and one carrying the printed Requirement. The first stays empty, the
+    second fills. Without the anchor the first would match too, which is
+    how a Property merely mentioning a trait would come to look like a
+    restriction.
+
+    **Nothing reads this column yet, and that is sequencing rather than
+    an oversight** -- a column nothing consults is this tree's commonest
+    bug. It cannot be read until the rebuild creates it: `chargen.treasure`
+    gains the filter and `f443` counts the components afterwards, and the
+    first of those moves the deal, so it owes a `replay` and party
+    re-record of its own.
+    """
+    rows = out.execute(
+        "SELECT ref, spec FROM item WHERE spec LIKE '%racial trait%'"
+    ).fetchall()
+    written = 0
+    for ref, spec in rows:
+        found = _TRAIT_REQ.search(spec or "")
+        if found is None:
+            continue
+        out.execute(
+            "UPDATE item SET requires_trait = ? WHERE ref = ?",
+            (found.group(1), ref),
+        )
+        written += 1
+    return written
 
 
 def _cross_reference_rest(
