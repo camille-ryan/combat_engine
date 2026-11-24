@@ -4163,6 +4163,20 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
         line = RACES.get(who.race)
         return line is not None and str(line.size.value).strip().lower() == \
             str(node["size"]).strip().lower()
+    # **Which class the character multiclassed into**, or any at all with
+    # `"*"`. Reached only through a `term` atom: the compendium prints
+    # *"any multiclass fighter feat"* as a prerequisite **term** and there
+    # is no multiclass field for it to be an atom of.
+    #
+    # `multiclass_from` is the reader and needs no new data -- a character
+    # multiclasses by taking the feat and `feat.category` already says
+    # which class. `powers` is the whole hand, feats included, and
+    # `feats_for` takes feats one at a time precisely so a multiclass feat
+    # taken earlier in a career satisfies a later one. #1537.
+    if "multiclass" in node:
+        took = multiclass_from(powers)
+        want = str(node["multiclass"]).strip().lower()
+        return bool(took) if want == "*" else took == want
     # **A prerequisite TERM, which is an alias for a node this function
     # can already read.** `prereq_term` holds 247 of them with a `kind`
     # apiece and no machine-readable referent, so the pairing is
@@ -4500,6 +4514,37 @@ TERM_MEANS: dict[str, dict[str, Any]] = {
     # this term in `f3788`'s own `any`, so the card reads "either of the
     # two" and now does.
     "q60": {"race": "r67"},
+    # -- multiclass: which class the character multiclassed into ----------
+    # *"Any multiclass fighter feat"*, which `multiclass_from` answers off
+    # `feat.category` with no new data. Every one of these pairs by
+    # containment against the 26 printed class names and exactly one class
+    # matches each.
+    #
+    # **`"*"` for the three that name no class** -- *"any class-specific
+    # multiclass feat"* -- which is the printed sentence rather than an
+    # approximation: it asks that the character multiclassed, not into
+    # what. `q10`, `q11` and `q7` are a *fourth* shape and are **absent**:
+    # their printed text is *"any class-specific multiclass feat for a
+    # class that ..."*, a narrowing on the class's own properties that
+    # neither this atom nor any other can read, and admitting them as
+    # `"*"` would widen the card.
+    "q17": {"multiclass": "avenger"},
+    "q18": {"multiclass": "bard"},
+    "q19": {"multiclass": "battlemind"},
+    "q20": {"multiclass": "cleric"},
+    "q21": {"multiclass": "fighter"},
+    "q22": {"multiclass": "invoker"},
+    "q23": {"multiclass": "monk"},
+    "q24": {"multiclass": "paladin"},
+    "q25": {"multiclass": "psion"},
+    "q26": {"multiclass": "ranger"},
+    "q27": {"multiclass": "rogue"},
+    "q28": {"multiclass": "sorcerer"},
+    "q29": {"multiclass": "swordmage"},
+    "q30": {"multiclass": "warlock"},
+    "q31": {"multiclass": "warlord"},
+    "q32": {"multiclass": "wizard"},
+    "q9": {"multiclass": "*"},
     # -- racial: the races that print the named trait ---------------------
     # Paired off `racial_trait.race`, one line per term, with the trait
     # ref in the comment so the pairing is checkable without a name.

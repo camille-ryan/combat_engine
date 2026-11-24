@@ -52983,27 +52983,54 @@ def a_prerequisite_term_resolves(out: Result) -> None:
     # Asserted by running `meets` on the alias rather than by reading the
     # table's shape: a node with a key `meets` does not know would sit in
     # the table looking fine and answer False for ever.
+    def mc_feat(cls: str) -> str:
+        """A real feat whose category multiclasses into `cls`, or `""`.
+
+        Off the same column `multiclass_from` reads, so the arm cannot
+        pass by handing in something the reader would not accept.
+        """
+        from combat_engine.db import game
+
+        for row in game().execute(
+                "SELECT ref FROM feat WHERE category LIKE 'Multiclass %'"):
+            if chargen.multiclass_from([row["ref"]]) == cls:
+                return str(row["ref"])
+        return ""
+
+    def posed(leaf: dict) -> tuple[Any, list[str]] | None:
+        """A character and a hand that satisfy one alias leaf, or None.
+
+        **Built from the leaf itself**, so adding a kind to `TERM_MEANS`
+        without teaching this builder reds the arm rather than passing
+        quietly -- which is what happened when the `multiclass` kind
+        landed, and is the point.
+        """
+        if "role" in leaf:
+            return next(
+                ((Character(cls=c, level=10, race="r2"), [])
+                 for c in sorted(chargen.CLASSES)
+                 if chargen.class_role(c) == leaf["role"]), None)
+        if "race" in leaf:
+            return Character(cls="fighter", level=10, race=leaf["race"]), []
+        if "size" in leaf:
+            return next(
+                ((Character(cls="fighter", level=10, race=ref), [])
+                 for ref, line in sorted(chargen.RACES.items())
+                 if str(line.size.value) == leaf["size"]), None)
+        if "multiclass" in leaf:
+            want = leaf["multiclass"]
+            took = mc_feat("fighter" if want == "*" else want)
+            if not took:
+                return None
+            return Character(cls="wizard", level=10, race="r2"), [took]
+        return None
+
     dead = []
     for term, alias in sorted(TERM_MEANS.items()):
-        # A character built to satisfy the alias, from the alias itself.
-        want = alias.get("any", [alias])
         satisfied = False
-        for leaf in want:
-            if "role" in leaf:
-                who = next(
-                    (Character(cls=c, level=10, race="r2")
-                     for c in sorted(chargen.CLASSES)
-                     if chargen.class_role(c) == leaf["role"]), None)
-            elif "race" in leaf:
-                who = Character(cls="fighter", level=10, race=leaf["race"])
-            elif "size" in leaf:
-                who = next(
-                    (Character(cls="fighter", level=10, race=ref)
-                     for ref, line in sorted(chargen.RACES.items())
-                     if str(line.size.value) == leaf["size"]), None)
-            else:
-                who = None
-            if who is not None and meets({"term": term}, who, []):
+        for leaf in alias.get("any", [alias]):
+            got = posed(leaf)
+            if got is not None and meets({"term": term}, got[0], got[1]):
                 satisfied = True
                 break
         if not satisfied:
@@ -53061,13 +53088,46 @@ def a_prerequisite_term_resolves(out: Result) -> None:
         f"{legal}",
     )
 
-    # -- the four deliberate absences --------------------------------------
-    ABSENT = ("q72", "q119", "q228", "q229")
+    # -- multiclass, both ways and with the generic one -------------------
+    took_fighter = mc_feat("fighter")
+    bardish = Character(cls="wizard", level=10, race="r2")
+    out.that(
+        bool(took_fighter)
+        and meets({"term": "q21"}, bardish, [took_fighter])
+        and not meets({"term": "q18"}, bardish, [took_fighter])
+        and not meets({"term": "q21"}, bardish, []),
+        "a multiclass term passes for the class the character actually"
+        " multiclassed into, and not for another, and not on an empty"
+        " hand -- `multiclass_from` reads `feat.category`, so this needs"
+        " no new data",
+        f"feat {took_fighter}: fighter"
+        f" {meets({'term': 'q21'}, bardish, [took_fighter])}, bard"
+        f" {meets({'term': 'q18'}, bardish, [took_fighter])}, empty"
+        f" {meets({'term': 'q21'}, bardish, [])}",
+    )
+    out.that(
+        meets({"term": "q9"}, bardish, [took_fighter])
+        and not meets({"term": "q9"}, bardish, []),
+        "and the generic one -- *any* class-specific multiclass feat --"
+        " asks only that the character multiclassed, which is what it"
+        " prints",
+        f"with {took_fighter} {meets({'term': 'q9'}, bardish, [took_fighter])},"
+        f" empty {meets({'term': 'q9'}, bardish, [])}",
+    )
+
+    # -- the deliberate absences -------------------------------------------
+    # Seven, in two families. Four `racial` terms match no trait name, and
+    # two of those name a choice made WITHIN a trait. Three `multiclass`
+    # terms read "any class-specific multiclass feat **for a class that
+    # ...**" -- a narrowing on the class's own properties that no atom can
+    # read, so admitting them as the generic `"*"` would widen the card.
+    ABSENT = ("q72", "q119", "q228", "q229", "q7", "q10", "q11")
     out.that(
         not any(t in TERM_MEANS for t in ABSENT),
-        "the four `racial` terms that match no trait name stay unlisted --"
-        " two name a choice made WITHIN a trait, so pairing them to the"
-        " race would hand the feat to a character that chose the other",
+        "seven terms stay unlisted on purpose -- four name a choice made"
+        " inside a trait or no trait at all, three narrow on a property of"
+        " the class that nothing reads -- so a later pass does not fill"
+        " them in without knowing why",
         f"listed of {ABSENT}: {[t for t in ABSENT if t in TERM_MEANS]}",
     )
 
