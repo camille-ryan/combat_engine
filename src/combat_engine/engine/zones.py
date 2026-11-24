@@ -54,6 +54,44 @@ EXTRA_COST_ON = frozenset({"enter", "leave"})
 EXTRA_COST_FOR = frozenset({"enemies"})
 
 
+def _checked_refusal(
+    closed_to: frozenset[str] | set[str] | None, closed_to_for: str
+) -> frozenset[str]:
+    """`Zone.closed_to`, with the misspelling guard both builders need.
+
+    **One copy, because there are two builders.** `Zones.create` checked
+    this and `Zones.aura` constructs its `Zone` directly, so an aura
+    could have carried a misspelled kind -- which bars nobody and plays
+    as an ordinary region, this component's named failure mode. The
+    guard is the whole reason `closed_to` takes kinds rather than a bool.
+
+    `closed_to_for` has two axes: a **side** (`"enemies"`) and a
+    **type word** (`"kind:<word>"`). The word itself is deliberately not
+    validated -- `kinds_of` is open vocabulary, since a stat block states
+    its own type line -- but the axis is, so `"kind:"` with nothing after
+    it raises instead of quietly refusing everybody.
+    """
+    # Function-local for the reason `create` imports it that way: the
+    # module-level import is a cycle.
+    from .movement import PRICED_KINDS
+
+    bars = frozenset(closed_to or ())
+    unknown = sorted(bars - PRICED_KINDS)
+    if unknown:
+        raise ValueError(
+            f"closed_to={unknown} is not among {sorted(PRICED_KINDS)}"
+        )
+    if closed_to_for.startswith("kind:"):
+        if not closed_to_for[len("kind:"):]:
+            raise ValueError("closed_to_for='kind:' names no type")
+    elif closed_to_for and closed_to_for not in EXTRA_COST_FOR:
+        raise ValueError(
+            f"closed_to_for={closed_to_for!r} is not one of "
+            f"{sorted(EXTRA_COST_FOR)} or 'kind:<word>'"
+        )
+    return bars
+
+
 @dataclass
 class Zone:
     owner: int
@@ -582,19 +620,8 @@ class Zones:
         # spelled wrong bars nobody while reading as a working zone. Imported
         # inside the function for this module's usual reason -- `movement`
         # reaches back into geometry, and a module-level import would cycle.
-        from .movement import PRICED_KINDS
 
-        bars = frozenset(closed_to or ())
-        unknown = sorted(bars - PRICED_KINDS)
-        if unknown:
-            raise ValueError(
-                f"closed_to={unknown} is not among {sorted(PRICED_KINDS)}"
-            )
-        if closed_to_for and closed_to_for not in EXTRA_COST_FOR:
-            raise ValueError(
-                f"closed_to_for={closed_to_for!r} is not one of "
-                f"{sorted(EXTRA_COST_FOR)}"
-            )
+        bars = _checked_refusal(closed_to, closed_to_for)
         # A side with nothing to refuse, the mirror of the check above.
         if closed_to_for and not bars:
             raise ValueError(
@@ -748,6 +775,8 @@ class Zones:
         silences: bool = False,
         obscured: str = "",
         obscured_for: str = "",
+        closed_to: frozenset[str] | set[str] | None = None,
+        closed_to_for: str = "",
     ) -> int:
         """An aura follows its owner. A power that says "enemies adjacent to
         you" is an aura 1 and gets no special mechanism of its own.
@@ -766,10 +795,16 @@ class Zones:
         the fact -- `_difficult_aura`'s docstring describes that workaround
         in as many words. Passed through instead. #507-era triage.
         """
+        # **Validated here too, not only in `create`.** This path builds
+        # its `Zone` directly, so passing a refusal through without the
+        # guard would reopen the hole that guard exists for: a misspelled
+        # kind bars nobody and plays as an ordinary aura.
+        bars = _checked_refusal(closed_to, closed_to_for)
         zone = Zone(owner=owner, label=label, aura=radius,
                     difficult=difficult, silences=silences,
                     obscured=obscured,
-                    obscured_for=obscured_for)
+                    obscured_for=obscured_for,
+                    closed_to=bars, closed_to_for=closed_to_for)
         zone.squares = spread(squares(self.world, owner), radius)
         return self._spawn(zone, when, sustain)
 

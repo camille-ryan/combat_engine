@@ -655,6 +655,20 @@ class World:
                 # unknowns as allies and let the refused creature through.
                 if mine is not None and theirs is not None and theirs == mine:
                     continue
+            elif zone.closed_to_for.startswith("kind:"):
+                # **A type word rather than a side**, which one printed row
+                # needs and `"enemies"` cannot say: `i3305p1`'s scroll
+                # refuses *"an affected creature"* -- the creature type
+                # chosen when the scroll was made -- and that cuts across
+                # both sides. Same `<axis>:<word>` shape `obscured_for`
+                # uses, and the word is read through `kinds_of` so a
+                # stat block's own type line and anything `c.set_origin`
+                # wrote both answer.
+                from .query import kinds_of
+
+                want = zone.closed_to_for[len("kind:"):]
+                if want and want not in kinds_of(self, for_):
+                    continue
             out |= zone.squares
         return frozenset(out)
 

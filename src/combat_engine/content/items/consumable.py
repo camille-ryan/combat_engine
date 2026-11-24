@@ -152,6 +152,11 @@ _CHARGED = "i3576 charged"
 
 #: "Tied to a creature type of the creator's choice."
 _SCROLL_KINDS = ("angel", "demon", "devil", "dragon", "elemental", "undead")
+#: The move kinds a creature chooses to make, which is what *"cannot
+#: enter ... willingly"* refuses. Forced movement is deliberately absent:
+#: a shove may still put an affected creature in the aura, and the
+#: printed word is the one that draws that line.
+_WILLINGLY = frozenset({"walk", "shift", "charge", "run"})
 
 
 def _element(c: Cast, *among: DamageType) -> DamageType:
@@ -967,7 +972,7 @@ def i3283p1(c: Cast) -> None:
 
 @power("i3305p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(2), target=NO_TARGET,
-       dropped=("c.no_enter(zone)",))
+       dropped=("c.must_attack(on=, against=)",))
 def i3305p1(c: Cast) -> None:
     """The creature type is fixed when the scroll is made and carried by
     no column, so it is asked of the decider the way `_element` asks for a
@@ -980,22 +985,52 @@ def i3305p1(c: Cast) -> None:
     creature that joins the fight later is missed, which is the honest
     limit of laying a modifier per enemy.
 
-    Dropped: nothing bars a creature from walking into a zone, so "it
-    cannot enter the aura willingly, and must use its first action to
-    leave by the shortest route" has nowhere to go.
+    **"Nothing bars a creature from walking into a zone" was the claim
+    here and it is false.** `Zone.closed_to` is exactly that refusal --
+    a frozenset of movement kinds out of `movement.PRICED_KINDS`, read by
+    `World.barred`, which **both** `movement.reachable` and
+    `movement.step` consult, so the square is never offered and a
+    scripted move cannot sneak through it either. `c.zone` has taken
+    `closed_to=` and `closed_to_for=` for as long as that field has
+    existed.
 
-    **Re-checked against the two things that look like it and are not.**
-    `c.blocks_entry` is a `Mods` key about **one creature's own space**,
-    read by `movement.blocks_entry`, and says nothing about a region.
-    `movement` does know about a hostile zone and its answer is a *warning*
-    -- "walks into an enemy zone" -- with `policy.doctrine`'s
-    `into_enemy_zone` pricing it at -0.6, so the AI is discouraged and
-    nothing is refused. A prohibition would have to be a decision on the
-    move itself, which is where `c.no_enter(zone)` points."""
+    The old note's "re-checked against the two things that look like it"
+    list is what went wrong: it ruled out `c.blocks_entry` (a `Mods` key
+    about one creature's own space) and the movement *warning* that
+    `policy.doctrine` prices at -0.6, and never reached the field that
+    does the job.
+
+    Both narrow gaps that were left are now built, so **the refusal
+    itself is written**:
+
+    * `c.aura(closed_to=, closed_to_for=)` passes them through, which
+      `c.zone` always did and this did not;
+    * `closed_to_for` takes `"kind:<word>"` beside `"enemies"`, read
+      through `kinds_of` in `World.barred`, because this card refuses
+      *"an affected creature"* -- the type chosen when the scroll was
+      made, which cuts across both sides.
+
+    `_WILLINGLY` is the voluntary move kinds and **forced movement is
+    deliberately absent**: a shove may still put an affected creature
+    inside, which is the line the printed word draws.
+
+    What is still missing is the card's **second** clause, and it is a
+    different family: *"must use its first action to leave the aura by
+    the shortest route"* is a compulsion, which is
+    `c.must_attack(on=, against=)`'s group -- five other rows wait on
+    that one. The marker names it now; it never did before, so this row
+    was under-marked rather than over. #1564."""
     from combat_engine.engine.components import Stats
 
     kind = c.choose(list(_SCROLL_KINDS), "the scroll's creature type")
-    aura = c.aura(2, on=c.me, until=When.ENCOUNTER)
+    # **"Cannot enter the aura willingly" is the ground's refusal**, so it
+    # names the voluntary move kinds and not a creature. Forced movement
+    # is not among them, which is the printed word: a shove may still put
+    # an affected creature inside. `kind:<word>` narrows it to the type
+    # the scroll was made with, which cuts across both sides where
+    # `"enemies"` could not.
+    aura = c.aura(2, on=c.me, until=When.ENCOUNTER,
+                  closed_to=_WILLINGLY, closed_to_for=f"kind:{kind}")
     spent: list[bool] = []
 
     def in_the_aura(ctx: dict[str, Any]) -> bool:

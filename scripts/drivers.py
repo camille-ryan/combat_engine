@@ -136480,6 +136480,126 @@ def the_printed_break_dcs(out: Result) -> None:
     )
 
 
+def an_aura_refuses_one_creature_type(out: Result) -> None:
+    """*"The creature cannot enter the aura willingly."* -- `i3305p1`.
+
+    The row's own note said *"nothing bars a creature from walking into a
+    zone"*, and `Zone.closed_to` has been exactly that refusal all
+    along -- read by `World.barred`, which `movement.reachable` and
+    `movement.step` **both** consult. What was missing was narrower: an
+    aura could not carry it, and the only narrowing was a side.
+
+    So two things are asserted, and neither is about geometry:
+
+    * the refusal **reaches a creature of the named type**, in the search
+      and in the step, because a rule honoured by one and not the other
+      reads correct and plays wrong -- `World.barred`'s own argument;
+    * and it **spares every other type**, which is what `"enemies"`
+      could not express and is the whole reason `kind:<word>` exists.
+
+    Forced movement is deliberately not refused: `_WILLINGLY` names the
+    voluntary kinds only, so a shove may still put an affected creature
+    inside. That is the printed word, and it is asserted too -- otherwise
+    the clause would quietly be stronger than the card.
+
+    Planted three ways:
+
+    | the plant | |
+    |---|---|
+    | the kind narrowing ignored, so everybody is refused | 1 arm red |
+    | the kind branch never fires, so nobody is refused | 1 arm red |
+    | the row refuses forced movement as well | **refused by construction** |
+
+    The third is the stronger outcome and the reason the guard is one
+    helper: adding `"push"` to `_WILLINGLY` raises out of
+    `_checked_refusal` -- *"closed_to=['push'] is not among ['charge',
+    'run', 'shift', 'walk']"* -- so the row cannot express it at all.
+    Forced movement is not a kind a creature **chooses**, and the
+    vocabulary says so rather than a comment saying so.
+
+    One arm in the first draft read `!= here or True`, which is a
+    tautology; it asserts the shove's distance and destination now.
+
+    #1564.
+    """
+    from combat_engine.content.items.consumable import _WILLINGLY
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.query import enemies, kinds_of
+
+    world, me, _ = _board("f419", 1)
+    rig = Cast(world=world, me=me, ref="drivers:aura")
+    foe = sorted(enemies(world, me))[0]
+    words = sorted(kinds_of(world, foe))
+    out.that(
+        bool(words),
+        "the posed foe has a type word to refuse, so the arms below are"
+        " about a real creature rather than an empty set",
+        f"{words}",
+    )
+    if not words:
+        return
+    mine = world.need(me, Position).square
+    rig.aura(2, closed_to=_WILLINGLY, closed_to_for=f"kind:{words[0]}")
+    world.zones.refresh()
+
+    barred = world.barred(foe, "walk")
+    out.that(
+        bool(barred) and mine in barred,
+        "a creature of the named type is refused the aura's squares --"
+        " `World.barred`, which the search and the step both read",
+        f"{len(barred)} square(s) refused, centre included: {mine in barred}",
+    )
+    out.that(
+        not world.barred(me, "walk"),
+        "and a creature of ANOTHER type is refused nothing, which is what"
+        " a side could not say and is the point of `kind:<word>`",
+        f"{len(world.barred(me, 'walk'))} square(s)",
+    )
+
+    # -- forced movement is not willing movement --
+    out.that(
+        "push" not in _WILLINGLY and "slide" not in _WILLINGLY,
+        "forced movement is not among the refused kinds, so a shove may"
+        " still put an affected creature inside -- the printed word, and"
+        " without this arm the clause would be stronger than the card",
+        f"{sorted(_WILLINGLY)}",
+    )
+    # **This arm was `!= here or True` in the first draft, which is a
+    # tautology and asserted nothing.** The claim worth making is that
+    # the creature really does move: if forced movement were refused by
+    # the same aura, the shove would stop dead and the clause would be
+    # stronger than the card prints.
+    here = world.need(foe, Position).square
+    shoved = rig.push(1, on=foe)
+    landed = world.need(foe, Position).square
+    out.that(
+        shoved > 0 and landed != here,
+        "and a shove still moves an affected creature, aura or not --"
+        " forced movement is not refused, so the clause is exactly as"
+        " wide as the printed word and no wider",
+        f"pushed {shoved} square(s), {here} -> {landed}",
+    )
+
+    # -- the misspelling guard, on both builders --
+    from combat_engine.engine.zones import _checked_refusal
+
+    refused = []
+    for bad in (({"stroll"}, ""), ({"walk"}, "kind:"), ({"walk"}, "allies")):
+        try:
+            _checked_refusal(*bad)
+        except ValueError:
+            refused.append(bad[1] or "stroll")
+    out.that(
+        len(refused) == 3,
+        "and the guard still refuses a misspelled kind, an empty type"
+        " word and an unknown side -- it is one helper now because"
+        " `Zones.aura` builds its zone directly and would otherwise have"
+        " skipped the check `create` does",
+        f"refused {refused}",
+    )
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -138550,6 +138670,11 @@ DRIVERS = {
         a_borrowed_power_marks_what_it_hits,
         "the power a dilettante borrowed marks what it hits, and no other"
         " power does",
+    ),
+    "aura_refuses": (
+        an_aura_refuses_one_creature_type,
+        "an aura can refuse one creature type the voluntary move kinds,"
+        " and spares every other type",
     ),
     "break_dcs": (
         the_printed_break_dcs,

@@ -9,7 +9,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
 
 - `c.area(self) -> 'frozenset[Square]'`
   - The squares this power is covering, for the ones that leave
-- `c.aura(self, radius: 'int', *, label: 'str' = '', until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, sustain: 'ActionType | None' = None, difficult: 'bool | str' = False, silences: 'bool' = False, obscured: 'str' = '', obscured_for: 'str' = '') -> 'int'`
+- `c.aura(self, radius: 'int', *, label: 'str' = '', until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, sustain: 'ActionType | None' = None, difficult: 'bool | str' = False, silences: 'bool' = False, obscured: 'str' = '', obscured_for: 'str' = '', closed_to: 'frozenset[str] | set[str] | None' = None, closed_to_for: 'str' = '') -> 'int'`
   - An aura around a creature -- or around anything with a position.
 - `c.barrier(self, zone: 'int') -> 'int | None'`
   - The attackable body of a wall, given the zone `c.wall` returned.

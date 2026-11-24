@@ -20481,6 +20481,13 @@ class Cast:
         silences: bool = False,
         obscured: str = "",
         obscured_for: str = "",
+        #: **The ground's refusal, passed through.** `c.zone` has taken
+        #: these since `Zone.closed_to` landed and `c.aura` did not, which
+        #: is the whole of why `i3305p1`'s *"cannot enter the aura
+        #: willingly"* read as unwritable -- the facility was one method
+        #: over. `closed_to_for` takes `"enemies"` or `"kind:<word>"`.
+        closed_to: frozenset[str] | set[str] | None = None,
+        closed_to_for: str = "",
     ) -> int:
         """An aura around a creature -- or around anything with a position.
 
@@ -20512,6 +20519,8 @@ class Cast:
             silences=silences,
             obscured=obscured,
             obscured_for=obscured_for,
+            closed_to=closed_to,
+            closed_to_for=closed_to_for,
         )
 
     def my_aura(self, label: str = "") -> int:
