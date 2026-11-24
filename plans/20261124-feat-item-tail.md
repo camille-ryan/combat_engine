@@ -1,5 +1,34 @@
 # The feat and item tail, triaged by facility
 
+## The ruling that defines "done" -- 2026-11-24
+
+Three rows could only be finished by ETL work, which the session order
+defers until the tail is done, and the tail contained them. Camille,
+asked whether to let ETL run for those three, take them out of the tail,
+or decline them:
+
+> *"2"*
+
+-- take them out. So **"the engine tail is done" means the 39 rows
+below**, not all 58 marked ones. The deferred families keep their
+markers and are counted with the ETL batch:
+
+```
+total marked feat/item rows      58
+  ETL / source-data deferred     13   f951 f1252 f1962 f2263 f2624 f3425
+                                      f3768 i694x1 i1492p1 i1700x1
+                                      i2611p1 i3475p1 i3560x1
+  story deferred (#787)           4   f3447 i693x1 i1246x1 i1751p1
+  ship deferred (#1387)           2   f979 f1071
+  THE TAIL                       39
+```
+
+**I quoted "the other 55" when putting the options; the tail is 39.**
+The 16 difference is the story and ship families, deferred by `#787` and
+`#1387` before this ruling -- so 55 counted them as tail work when they
+were not. The number to work against is 39.
+
+
 Written 2026-11-24, after clearing five rows and finding that picking
 rows one at a time has stopped paying. 60 feat/item rows carry a marker;
 **43 are actionable** and the rest are in families deferred by ruling.
