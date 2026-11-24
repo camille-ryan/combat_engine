@@ -798,13 +798,21 @@ def _one_item(
 
     score = _score(spec or blocks or enh_to or crit, base or slot, steps)
     out.execute(
-        "INSERT INTO item VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO item VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             ref, row["ID"], category, slot, (row["Rarity"] or "").strip(),
             row["LevelSort"], int(scaling),
             json.dumps(base), enh_to, crit,
             json.dumps([b.strip() for b in (row["Source"] or "").split(",") if b.strip()]),
             spec, score,
+            # **Empty here, filled by `build._requires_trait`.** The printed
+            # Requirement names the trait and only `_cross_reference_rest`
+            # turns that name into a ref, which runs after this -- so the
+            # value cannot be known yet and the column is written in a
+            # post-pass. Not `None`: every other text column in this row is
+            # a string, and `""` is the "prints no such Requirement" the
+            # pass documents. #1575.
+            "",
         ),
     )
     names[ref] = {"name": name, "description": _description(body)}
