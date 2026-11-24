@@ -47,6 +47,10 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.features.strikers_sb import (
+    _undead_benefits,
+    _vampire_regeneration,
+)
 from combat_engine.content.powers.bard.level_0 import aura_of_healing
 from combat_engine.content.powers.druid.forms import take_beast_form
 from combat_engine.content.powers.druid.level_0 import summon_of_your_aspect
@@ -169,7 +173,6 @@ R44 = ("p7441", "p7442", "p7443")
 #: names a class feature by ref: all **26** are undeclared, so the family
 #: is one gap and `cf:vampire-f0` is what resolves when somebody starts
 #: writing it.
-UNDECLARED_CLASS_FEATURE = ("cf:vampire-f1",)
 BERSERKER_FORM = ("cf:barbarian-berserker-f0",)
 # **Retired, twice over: `etl.build_sub_option()` and then
 # `chargen.feature_choice()`. There is no constant here any more because no
@@ -2549,7 +2552,7 @@ def f3625(c: Cast) -> None:
 
 
 @power("f3626", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=UNDECLARED_CLASS_FEATURE,
+       reach=PERSONAL, target=SELF, dropped=("cf:vampire-f1", "chargen.class_surges"),
        proficiency=("w:holy-symbol", "w:ki-focus"))
 def f3626(c: Cast) -> None:
     """Grants three class features, less two of one's sub-clauses, and
@@ -2577,9 +2580,41 @@ def f3626(c: Cast) -> None:
 
     Plus the proficiencies, which are already on this header.
 
-    So three of four are writable today and the row stays `todo=` only
-    because the body is still empty -- `dropped=` would claim it plays.
-    Writing it is #1577; the marker is what blocks the last clause."""
+    **Two of the four are written and the row now plays**, so the marker
+    is `dropped=` rather than `todo=`.
+
+    `_undead_benefits(c, darkvision=False, necrotic=False)` is the first
+    clause including its exceptions -- the two flags exist for this row
+    and this row only. The remaining four sub-clauses, the undead
+    origin, the radiant vulnerability, the sunlight rule and its
+    `c.uncovered` gate, come from one place rather than being written
+    twice; that gate has already been got wrong once.
+    `_vampire_regeneration(c)` is the third clause whole.
+
+    **Both are reached through a helper rather than by granting the
+    rows.** `c.grant_row` would put `cf:vampire-f2` and `cf:vampire-f3`
+    into `Powers.known`, and both are `action=NONE` traits that
+    `turns.arm_traits` arms **once**, at the start of the fight, before
+    this row has run -- so a row granted here would sit in the list
+    unarmed and never lay anything. `cf:vampire-f2`'s own note makes the
+    same argument about `f3621` and calls it a race nobody can see.
+
+    What is left, and what the two symbols name:
+
+    * `cf:vampire-f1` -- undeclared, and its clause is *"once during a
+      short rest"*, so out of combat however it is written;
+    * `chargen.class_surges` -- *"reduce the healing surges granted by
+      your class to 2"*. `Health.max_surges` is written once, at build
+      time, as `line.surges + con + race.surges`, so the **class's**
+      share is only separable where that sum is made. A row cannot
+      reduce one addend of a number it is handed, and overwriting the
+      total would silently eat the Constitution and racial shares. That
+      is a chargen change, and it moves a recorded sheet, so it owes a
+      baseline.
+
+    #1577."""
+    _undead_benefits(c, darkvision=False, necrotic=False)
+    _vampire_regeneration(c)
 
 
 @power("f3627", level=1, cls="", usage=ENCOUNTER, action=NONE,

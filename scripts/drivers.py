@@ -49565,6 +49565,21 @@ UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
     # order no card states, so a body that *ended* the vulnerability
     # would find nothing to end whenever it armed first. #1510.
     "cf:vampire-f2": ("f3621",),
+    # **`f3626` reaches the SAME gate through the same helper**, so it is
+    # the same waiver and not a second judgement. The feat grants
+    # `cf:vampire-f2`'s benefit less two sub-clauses, and the four it does
+    # grant come from `_undead_benefits` in `features/strikers_sb.py` --
+    # which is where the `c.feat("f3621")` above lives. Writing those
+    # clauses a second time in the feat would have duplicated the sunlight
+    # rule and its `c.uncovered` gate, and that gate has been got wrong
+    # once already.
+    #
+    # The test this dict applies is unchanged and still passes: when
+    # `f3621` is held nothing is laid, so a `c.credit` block would wrap an
+    # empty stack. Verified by reading the helper rather than by analogy --
+    # `if not sunproof:` guards the `c.vulnerable`, and the `TurnEnd`
+    # handler returns early on the same flag. #1577.
+    "f3626": ("f3621",),
     # **`p1448` WITHHOLDS a strike from an ally; withholding is not an
     # effect.** `f1500` and `f2176` each print *"targets only enemies"*,
     # written into this power per #550 (`#1497`), as a `return` in front
@@ -136943,6 +136958,159 @@ def a_creature_that_sides_with_nobody(out: Result) -> None:
     )
 
 
+def a_feat_granting_a_feature_withholds_two_of_its_benefits(out: Result) -> None:
+    """`f3626`: granted a class feature *"except that you do not gain
+    darkvision or necrotic resistance"*.
+
+    The feat prints *"you gain the benefit of the cf:vampire-f2 class
+    feature, except that you do not gain darkvision or necrotic
+    resistance. You also gain the cf:vampire-f1 class feature and the
+    cf:vampire-f3 class feature."*
+
+    **Every arm is a delta between two boards**, `f3626`'s and
+    `cf:vampire-f2`'s, and that is the point rather than convenience.
+    Asserting "no darkvision" on one board cannot tell the exception
+    working from the feature never having run, which is precisely how
+    this row's two withheld benefits could read green while the body did
+    nothing. The feature's board is the positive control for each
+    withheld clause: it must have what `f3626`'s board must not.
+
+    Damage is measured against a **control type on the same board**, for
+    the reason `vampire_weaknesses` records: `audit.board` lays its own
+    damage modifiers, so a 10-point blow does not cost 10, and only a
+    difference against an untouched type is the feature's own doing.
+
+    `cf:vampire-f1` is not asserted. It is undeclared, and its clause is
+    *"once during a short rest"* -- out of combat however it is written,
+    so no board can pose it. The surge clause is not asserted either:
+    `Health.max_surges` is written once at build time, so the class's
+    share is only separable where that sum is made. Both are the row's
+    `dropped=` symbols. #1577.
+    """
+    from combat_engine.engine import DamageType
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Stats
+    from combat_engine.engine.events import TurnStart
+    from combat_engine.engine.query import has_sense
+    from combat_engine.engine.types import Ability
+
+    FEAT = "f3626"
+    FEATURE = "cf:vampire-f2"
+
+    world, me, _ = _board(FEAT, 1)
+    c = Cast(world=world, me=me, ref="drv")
+    out.that(not c.feat("f3621"),
+             "the board for f3626 does NOT hold f3621 -- the premise for"
+             " the radiant arm below, since that feat is what lifts the"
+             " vulnerability this row grants",
+             f"holds f3621: {c.feat('f3621')}")
+
+    # ---- the clauses that come THROUGH, which is what shows the body ran
+    out.that(c.is_kind("undead", me),
+             "f3626's holder is an UNDEAD creature -- the first bullet of"
+             " the granted feature, and the arm that shows the shared"
+             " helper ran at all rather than the row being inert",
+             f"kinds: {sorted(c.kinds_of(me))}")
+
+    def took(dtype: DamageType, ref: str, amount: int = 10) -> int:
+        """What a blow of that type costs on that row's board."""
+        w, e, _ = _board(ref, 1)
+        c2 = Cast(world=w, me=e, ref="drv")
+        hp = w.need(e, Health)
+        hp.hp = hp.max_hp
+        c2.damage(0, amount, dtype=dtype, on=e)
+        return hp.max_hp - w.need(e, Health).hp
+
+    feat_cold = took(DamageType.COLD, FEAT)
+    out.that(feat_cold > 0,
+             "a blow of a type neither row mentions costs something on"
+             " f3626's board -- the baseline every damage arm below is"
+             " measured against",
+             f"cold cost {feat_cold}")
+
+    feat_radiant = took(DamageType.RADIANT, FEAT)
+    out.that(feat_radiant > feat_cold,
+             "radiant costs MORE than that baseline, so the vulnerable 5"
+             " radiant the feature grants came through f3626 -- a"
+             " weakness the feat does NOT except out",
+             f"radiant {feat_radiant} vs cold {feat_cold}")
+
+    # ---- the two the feat withholds, each against the feature's own board
+    out.that(has_sense(world, me, "darkvision") is False,
+             "f3626's holder does NOT have darkvision -- the first of the"
+             " two printed exceptions",
+             f"has darkvision: {has_sense(world, me, 'darkvision')}")
+
+    fworld, fme, _ = _board(FEATURE, 1)
+    out.that(has_sense(fworld, fme, "darkvision"),
+             "and the FEATURE's own board DOES have it, which is what"
+             " makes the arm above an exception working rather than a"
+             " body that never ran",
+             f"has darkvision: {has_sense(fworld, fme, 'darkvision')}")
+
+    feat_necrotic = took(DamageType.NECROTIC, FEAT)
+    out.that(feat_necrotic == feat_cold,
+             "necrotic costs f3626's holder exactly what the control type"
+             " does, so the resist 5 necrotic was withheld -- the second"
+             " printed exception",
+             f"necrotic {feat_necrotic} vs cold {feat_cold}")
+
+    feature_cold = took(DamageType.COLD, FEATURE)
+    feature_necrotic = took(DamageType.NECROTIC, FEATURE)
+    out.that(feature_necrotic < feature_cold,
+             "and on the FEATURE's board necrotic costs LESS than the"
+             " control, so the resist is real and the arm above is a"
+             " withholding rather than a resist nothing ever applied",
+             f"necrotic {feature_necrotic} vs cold {feature_cold}")
+
+    # ---- the third granted feature
+    #
+    # **Charisma is staged, and the premise arm is why.** `f3626` is a
+    # generic feat -- `cls=""` -- so `audit.board` deals it to whatever
+    # class it likes, and the class it dealt has a Charisma modifier of
+    # **0**. The regeneration arm then read "healed 0, cha 0" and passed
+    # while measuring nothing, which is the vacuous-assertion trap. The
+    # sibling rule on `cf:vampire-f3` never hit it because that board
+    # deals a vampire, whose Charisma is its attack ability.
+    #
+    # Staged rather than asserted-and-skipped: the printed clause scales
+    # with the modifier, so a board where it is 0 cannot show the clause
+    # at all, and a rule that gives up there is a rule that never runs.
+    CHA = 18
+
+    def regenerated(*, bloodied: bool) -> int:
+        """What f3626's holder heals at the start of its turn."""
+        w, e, _ = _board(FEAT, 1)
+        w.need(e, Stats).scores[Ability.CHA] = CHA
+        hp = w.need(e, Health)
+        hp.hp = (hp.max_hp // 2) if bloodied else hp.max_hp - 1
+        was = w.need(e, Health).hp
+        w.bus.emit(TurnStart(actor=e, round=w.round))
+        return w.need(e, Health).hp - was
+
+    staged, _me2, _ = _board(FEAT, 1)
+    staged.need(_me2, Stats).scores[Ability.CHA] = CHA
+    cha = Cast(world=staged, me=_me2, ref="drv").cha_mod
+    out.that(cha > 0,
+             "the staged Charisma modifier is positive, or the"
+             " regeneration arm below could not tell healing from none"
+             " -- it read 0 against 0 on the dealt board and passed"
+             " vacuously",
+             f"cha_mod {cha} at a score of {CHA}")
+    hurt = regenerated(bloodied=True)
+    out.that(hurt == cha,
+             "bloodied, f3626's holder regenerates its Charisma modifier"
+             " -- the cf:vampire-f3 clause, granted whole",
+             f"healed {hurt}, cha {cha}")
+    whole = regenerated(bloodied=False)
+    out.that(whole == 0,
+             "and unbloodied it heals NOTHING, which is the negative"
+             " control: the printed clause is 'while you are bloodied',"
+             " so a regeneration that always ticked would pass the arm"
+             " above and still be wrong",
+             f"healed {whole} while unbloodied")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -140305,6 +140473,11 @@ DRIVERS = {
         a_vampires_weaknesses_and_the_feat_that_lifts_them,
         "cf:vampire-f2 pays its printed weaknesses and f3621 lifts"
         " two of them",
+    ),
+    "feature_granted_less_two": (
+        a_feat_granting_a_feature_withholds_two_of_its_benefits,
+        "f3626 grants cf:vampire-f2 and cf:vampire-f3 while withholding"
+        " darkvision and necrotic resistance",
     ),
     "off_hand_item": (
         an_off_hand_item_pays_only_in_that_hand,

@@ -885,6 +885,27 @@ def monk_tradition(c: Cast) -> None:
 # ==========================================================================
 
 
+def _vampire_regeneration(c: Cast) -> None:
+    """`cf:vampire-f3`'s regeneration, extracted so `f3626` cannot drift.
+
+    `f3626` grants this feature outright, so the two must stay one
+    clause. `c.ref` is the calling row's, which is what
+    `c.amount_for` wants -- the amount is attributed to whichever row
+    laid it.
+
+    The callable, the `while_bloodied` and the radiant suppression are
+    all the printed sentence and the comment above the call says why
+    the amount is read at the tick rather than settled here. #1577.
+    """
+    c.regeneration(
+        lambda: c.amount_for(c.ref, c.cha_mod),
+        on=c.me,
+        until=When.ENCOUNTER,
+        while_bloodied=True,
+        unless_damaged_by=(DamageType.RADIANT,),
+    )
+
+
 @power(
     "cf:vampire-f3",
     level=0,
@@ -924,13 +945,75 @@ def cf_vampire_f3(c: Cast) -> None:
     # `action=NONE` trait and `arm_traits` runs them in an order no card
     # states, so a number settled here would lose a race nobody can see.
     # `c.regeneration` reads a callable at the tick for this reason.
-    c.regeneration(
-        lambda: c.amount_for(c.ref, c.cha_mod),
-        on=c.me,
-        until=When.ENCOUNTER,
-        while_bloodied=True,
-        unless_damaged_by=(DamageType.RADIANT,),
-    )
+    _vampire_regeneration(c)
+
+
+def _undead_benefits(c: Cast, *, darkvision: bool = True,
+                     necrotic: bool = True) -> None:
+    """`cf:vampire-f2`'s benefits and weaknesses, with two of them optional.
+
+    A helper because **`f3626` grants this feature less exactly those
+    two**: *"you gain the benefit of the cf:vampire-f2 class feature,
+    except that you do not gain darkvision or necrotic resistance"*.
+    Writing the other four clauses a second time there would put the
+    sunlight rule and its `c.uncovered` gate in two places, and that
+    gate has already been got wrong once -- see the row's note.
+
+    `c.ref` inside here is the **calling** row's ref, which is what
+    the watch label and `c.feat("f3621")` both want: the feat that
+    removes the radiant vulnerability names the feature, so it applies
+    however the character came by it.
+
+    The two flags are keyword-only and default to the printed
+    feature, so the class feature reads as it did and only the feat
+    passes anything. #1577.
+    """
+    me = c.me
+    c.set_origin("undead", on=me, until=When.ENCOUNTER)
+    if darkvision:
+        c.darkvision(on=me, until=When.ENCOUNTER)
+    if necrotic:
+        c.resist(5, DamageType.NECROTIC, on=me,
+                 until=When.ENCOUNTER)
+    # **`f3621` takes both of these away, and it is written HERE.** *"You
+    # lose the vulnerable 5 radiant granted by the cf:vampire-f2 class
+    # feature, and you do not take damage from direct sunlight"* -- a
+    # feat naming one power writes its clause into that power, gated on
+    # `c.feat`, which is this file's charter per `#550`.
+    #
+    # **Gated rather than removed, deliberately.** Ending the effect from
+    # the feat's own body would be a race: both are `action=NONE` traits
+    # and `arm_traits` runs them in an order no card states, so a feat
+    # arming first would find nothing to remove. Withholding cannot lose
+    # that race.
+    #
+    # Nothing is laid when the feat is held, so there is no `c.credit`
+    # block to open -- `drivers.UNCREDITED_GATE` carries this pair for
+    # the same reason it carries `p1448`'s.
+    sunproof = c.feat("f3621")
+    if not sunproof:
+        c.vulnerable(5, DamageType.RADIANT, on=me, until=When.ENCOUNTER)
+
+    def burned(ev: TurnEnd) -> None:
+        if ev.actor != me or sunproof or not c.terrain("sunlight"):
+            return
+        # The printed conjunct, read every turn rather than once: a
+        # covering could be lost between one turn and the next.
+        #
+        # **`me`, explicitly.** `c.uncovered()` defaults to `c.target`
+        # like almost everything on `Cast`, and this row's target line is
+        # `NO_TARGET` -- so the bare call asked about nobody and answered
+        # False for every vampire, covered or not. Caught by the rule's
+        # second arm reading 0 damage on an uncovered one.
+        if not c.uncovered(me):
+            return
+        # The radiant vulnerability this feature itself granted adds to
+        # this, which is the card's own parenthetical -- and is why the
+        # damage is typed rather than flat.
+        c.damage(0, 5, dtype=DamageType.RADIANT, on=me)
+        c.weakened(on=me, until=When.SAVE_ENDS)
+
+    c.watch(TurnEnd, burned, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -1011,46 +1094,4 @@ def cf_vampire_f2(c: Cast) -> None:
     neither could be finished against a feature that did not exist.
     #1510.
     """
-    me = c.me
-    c.set_origin("undead", on=me, until=When.ENCOUNTER)
-    c.darkvision(on=me, until=When.ENCOUNTER)
-    c.resist(5, DamageType.NECROTIC, on=me, until=When.ENCOUNTER)
-    # **`f3621` takes both of these away, and it is written HERE.** *"You
-    # lose the vulnerable 5 radiant granted by the cf:vampire-f2 class
-    # feature, and you do not take damage from direct sunlight"* -- a
-    # feat naming one power writes its clause into that power, gated on
-    # `c.feat`, which is this file's charter per `#550`.
-    #
-    # **Gated rather than removed, deliberately.** Ending the effect from
-    # the feat's own body would be a race: both are `action=NONE` traits
-    # and `arm_traits` runs them in an order no card states, so a feat
-    # arming first would find nothing to remove. Withholding cannot lose
-    # that race.
-    #
-    # Nothing is laid when the feat is held, so there is no `c.credit`
-    # block to open -- `drivers.UNCREDITED_GATE` carries this pair for
-    # the same reason it carries `p1448`'s.
-    sunproof = c.feat("f3621")
-    if not sunproof:
-        c.vulnerable(5, DamageType.RADIANT, on=me, until=When.ENCOUNTER)
-
-    def burned(ev: TurnEnd) -> None:
-        if ev.actor != me or sunproof or not c.terrain("sunlight"):
-            return
-        # The printed conjunct, read every turn rather than once: a
-        # covering could be lost between one turn and the next.
-        #
-        # **`me`, explicitly.** `c.uncovered()` defaults to `c.target`
-        # like almost everything on `Cast`, and this row's target line is
-        # `NO_TARGET` -- so the bare call asked about nobody and answered
-        # False for every vampire, covered or not. Caught by the rule's
-        # second arm reading 0 damage on an uncovered one.
-        if not c.uncovered(me):
-            return
-        # The radiant vulnerability this feature itself granted adds to
-        # this, which is the card's own parenthetical -- and is why the
-        # damage is typed rather than flat.
-        c.damage(0, 5, dtype=DamageType.RADIANT, on=me)
-        c.weakened(on=me, until=When.SAVE_ENDS)
-
-    c.watch(TurnEnd, burned, until=When.ENCOUNTER, on=me, label=c.ref)
+    _undead_benefits(c)

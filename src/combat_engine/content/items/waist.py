@@ -441,13 +441,20 @@ def i3523x1(c: Cast) -> None:
     So **nothing in the engine is missing and the wait is the row**:
     `cf:vampire-f3` is a ref in `game.db` and no content row declares it.
     Grepped tree-wide -- the only mention of a `cf:vampire-*` ref anywhere
-    in `content/` is `feats/general_r.UNDECLARED_CLASS_FEATURE`, which is
-    that file's constant for this same absence and is the tree's own
-    convention for naming it.
+    in `content/` was a constant in `feats/general_r.py` for this same
+    absence, which was the tree's own convention for naming it.
 
-    **Named as this feature and not as the family.** `general_r.py` points
-    its two rows at `cf:vampire-f0` because all 26 are undeclared and "the
-    family is one gap" for them. It is not one gap for this row: there is
+    **Both halves of that are now out of date, which the paragraph below
+    says for this row and this says for the other.** The constant is
+    gone: it was `UNDECLARED_CLASS_FEATURE`, it held `cf:vampire-f0` --
+    a ref `f3626`'s card never mentions -- and `f3626` now carries an
+    inline `dropped=("cf:vampire-f1", "chargen.class_surges")` instead.
+    Two of its three named features are declared, so "the family is one
+    gap" stopped being true of it. #1577.
+
+    **Named as this feature and not as the family.** That constant pointed
+    at the family because all 26 were undeclared and "the family is one
+    gap" for them. It is not one gap for this row: there is
     nothing here to raise until *this* feature's regeneration exists, and
     pointing at a sibling would report the item ready the day an unrelated
     one lands -- which is `_one`'s own doctrine ("a declared row is not a
