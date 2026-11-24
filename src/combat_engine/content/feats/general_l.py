@@ -612,7 +612,7 @@ def f2628(c: Cast) -> None:
 
 @power("f2694", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("chargen.PRINTED(implements)",))
+       proficiency=("w:ki-focus",))
 def f2694(c: Cast) -> None:
     """One of the monk's named powers, chosen at build time, plus a
     proficiency.
@@ -629,10 +629,21 @@ def f2694(c: Cast) -> None:
     `c.chosen_option` reads back. The grant was already written four lines
     above, exactly as the old docstring said it would be.
 
-    **What is left is the ki focus**, and it is not this feat's gap: no
-    implement is imported as an arm at all -- `chargen.PRINTED` holds 117
-    weapons and 0 implements, and the `weapon` table has no ki-focus group
-    -- so there is nothing for a proficiency to name. `#1167`.
+    **The ki focus is written, and the marker's premise was true of one
+    table and false of the one that answers.** It read *"no implement is
+    imported as an arm at all -- `chargen.PRINTED` holds 117 weapons and
+    0 implements, and the `weapon` table has no ki-focus group"*. Both
+    counts are exact: `PRINTED` is 117 weapons across 18 groups and none
+    of them an implement, and the `weapon` table has **0** rows whose
+    `grp` is `implement`.
+
+    `chargen.IMPLEMENTS` is the sibling table and holds **all eight**,
+    hand-written, each with `group="implement"` -- `w:ki-focus` among
+    them. And `chargen.proficiency` already resolves a header ref through
+    *both*: `PRINTED.get(want) or IMPLEMENTS.get(want)`, which
+    `armour_opened`'s own docstring quotes as the reason it had to be
+    split out. So the proficiency this card grants needed one header
+    entry and no facility at all. #1547.
 
     The skill-training clause needs nothing: `_trained_skills` already adds
     what a feat trains, reading the feat's own columns.

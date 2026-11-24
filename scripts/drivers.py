@@ -53205,6 +53205,79 @@ def a_story_clause_is_narrative(out: Result) -> None:
     )
 
 
+def a_feat_grants_an_implement(out: Result) -> None:
+    """"In addition, you can wield ki focuses." -- `f2694`.
+
+    The row carried `dropped=("chargen.PRINTED(implements)",)` on this
+    reading: *"no implement is imported as an arm at all --
+    `chargen.PRINTED` holds 117 weapons and 0 implements, and the
+    `weapon` table has no ki-focus group -- so there is nothing for a
+    proficiency to name."*
+
+    **Both counts are exact and the conclusion is false.** `PRINTED` is
+    117 weapons across 18 groups with no implement among them, and the
+    `weapon` table really has 0 rows whose `grp` is `implement`.
+    `chargen.IMPLEMENTS` is the sibling table, holds all eight
+    hand-written, and `chargen.proficiency` resolves a header ref through
+    **both** -- `PRINTED.get(want) or IMPLEMENTS.get(want)`, which
+    `armour_opened`'s docstring quotes as the reason the two were split.
+
+    Four arms:
+
+    * the premise, so the counts the old marker rested on are on the
+      record rather than quoted from it: `PRINTED` carries no implement
+      and `IMPLEMENTS` carries the one this card names;
+    * `chargen.proficiency` hands the implement back for a character
+      holding the feat;
+    * and hands back **nothing** for one that does not, which is the
+      control -- a reader that returned every implement would pass the
+      arm above;
+    * the feat carries no marker now.
+
+    #1547.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY
+
+    _board("f2694", 1)
+    WANT = "w:ki-focus"
+
+    out.that(
+        not any(getattr(w, "group", "") == "implement"
+                for w in chargen.PRINTED.values())
+        and WANT in chargen.IMPLEMENTS
+        and getattr(chargen.IMPLEMENTS[WANT], "group", "") == "implement",
+        "premise: `PRINTED` carries no implement at all and `IMPLEMENTS`"
+        " carries the one this card names -- the two counts the old"
+        " marker rested on, measured here rather than quoted",
+        f"PRINTED {len(chargen.PRINTED)} weapons,"
+        f" IMPLEMENTS {len(chargen.IMPLEMENTS)}, {WANT} present"
+        f" {WANT in chargen.IMPLEMENTS}",
+    )
+    held = [getattr(w, "ref", w) for w in chargen.proficiency(["f2694"])]
+    out.that(
+        held == [WANT],
+        "`chargen.proficiency` hands the implement back for a character"
+        " holding the feat -- through the header, which is where every"
+        " other proficiency grant in the tree lives",
+        f"{held}",
+    )
+    without = [getattr(w, "ref", w) for w in chargen.proficiency([])]
+    out.that(
+        WANT not in without,
+        "and hands back nothing for a character without it -- the"
+        " control, since a reader that returned every implement would"
+        " pass the arm above",
+        f"{without[:4]}",
+    )
+    out.that(
+        not REGISTRY["f2694"].unfinished,
+        "so the feat carries no marker: the clause it was dropped for is"
+        " the one asserted above",
+        f"{REGISTRY['f2694'].unfinished}",
+    )
+
+
 def forced_into_hindering_terrain(out: Result) -> None:
     """A creature forced into hindering terrain saves, and lands prone.
 
@@ -137663,6 +137736,11 @@ DRIVERS = {
         forced_into_hindering_terrain,
         "forced movement into hindering terrain offers a save, and a"
         " success lands the creature prone",
+    ),
+    "feat_implement": (
+        a_feat_grants_an_implement,
+        "a feat granting an implement proficiency resolves it through"
+        " chargen.IMPLEMENTS",
     ),
     "no_concealment": (
         concealment_denied_without_cover,
