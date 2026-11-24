@@ -2926,10 +2926,18 @@ def _clause_words() -> tuple[list[tuple[str, str, str, int]], int, int]:
                 # lookup below cannot speak for it and reported it as "that
                 # ref declares no row". Recorded here so the pairing can ask
                 # the right question instead of the wrong one.
-                by_weapon = any(
-                    kw.arg == "weapon" and literal(kw.value) is not None
-                    for kw in node.keywords
-                )
+                # **Present, not literal.** This required
+                # `literal(kw.value) is not None`, so a registration
+                # whose weapon is computed -- `weapon=bow.ref`, which
+                # `i2730p1` does because it looks the bow up on the
+                # board -- was not recognised as weapon-keyed and fell
+                # through to the row-owner lookup, which then reported
+                # the deliberate `ref=""` as "declares no row". Whether a
+                # registration is keyed on a weapon does not depend on
+                # *which* weapon, so the value is not asked about. The
+                # typo check below is unchanged and is the one that
+                # matters. #1555.
+                by_weapon = any(kw.arg == "weapon" for kw in node.keywords)
                 if ref is not None and what is not None:
                     regs.append((ref, what, str(path), node.lineno, by_weapon))
                 else:
