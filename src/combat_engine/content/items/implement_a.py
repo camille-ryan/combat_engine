@@ -1334,7 +1334,7 @@ def i2609p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.transform_item()",),
+    todo=("etl.item.second_base",),
 )
 def i2611p1(c: Cast) -> None:
     """The base item is a column. Nothing swaps one for another mid-fight,
@@ -1366,7 +1366,27 @@ def i2611p1(c: Cast) -> None:
     reader does not re-derive it: `c.my_weapon()` hands back the `Weapon`
     this block's item sits on, matched by `Weapon.item`. What is missing is
     a writer for what that object *is*, exclusively, and the second base to
-    write."""
+    write.
+
+    ## Which comes first: the base, and it is a DATA gap
+
+    Read off the compendium entry, because the marker named a verb and
+    the first blocker is not one. The structured field carries a single
+    base:
+
+        Implement: Staff
+        Critical: +1d6 damage per plus, or +1d12 damage per plus when
+                  used as a melee weapon
+
+    So the second form lives in the **prose** only -- the entry's own
+    sentence about transforming, and the Power's -- and in no column. The
+    ETL did not drop it; the source does not carry it structurally. And
+    the Critical line really is two values in one printed string, exactly
+    as the paragraph above says.
+
+    Both halves are therefore shaped like extraction rather than engine:
+    a second base to import or declare, and a crit column that can hold
+    a conditional second value. #1570."""
 
 
 @power(
