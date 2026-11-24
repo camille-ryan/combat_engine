@@ -22,6 +22,7 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.query import hindering_at
 
 PSIONIC = [Keyword.PSIONIC]
 PSIONIC_CONJURATION = [Keyword.PSIONIC, Keyword.CONJURATION]
@@ -56,10 +57,25 @@ def p11267(c: Cast) -> None:
     keywords=PSIONIC,
 )
 def p11268(c: Cast) -> None:
-    """"But not into hindering terrain" is a constraint on the destination
-    and the destination is the decider's: `to=` names one square outright,
-    which is a different sentence. Named in the report."""
-    c.slide(3 if c.level >= 21 else 2 if c.level >= 11 else 1)
+    """"But not into hindering terrain" is `c.slide(avoid=)`.
+
+    **Written, and the old note read the gap one layer too high.** It
+    said the constraint is on the destination and *"the destination is
+    the decider's: `to=` names one square outright, which is a different
+    sentence"* -- both true, and the conclusion that there was nothing to
+    pass was not. `movement.forced` has taken `avoid=` all along and
+    filters in `_forced_square` **before** the decider is asked, which is
+    the whole point: the card forbids the square as a **rule**, so
+    leaving it to the policy would let a headless run break the printed
+    line. `c.push` passed it and `c.slide` did not.
+
+    `p11582` is the same printed sentence on a shove and has been
+    written that way; this is its slide. With every square forbidden the
+    slide stops where it stands, so the constraint costs the slide rather
+    than redirecting it. #1544.
+    """
+    c.slide(3 if c.level >= 21 else 2 if c.level >= 11 else 1,
+            avoid=hindering_at)
 
 
 @power(

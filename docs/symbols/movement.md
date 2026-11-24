@@ -58,7 +58,7 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - `to` names the destination outright, for a row that does.
 - `c.push(self, squares_: 'int', *, on: 'int | None' = None, anchor: 'Square | None' = None, to: 'Square | None' = None, by: 'int | None' = None, avoid: 'Callable[[Any, Square], bool] | None' = None) -> 'int'`
   - `to` names the destination outright, for a row that does.
-- `c.slide(self, squares_: 'int', *, on: 'int | None' = None, anchor: 'Square | None' = None, to: 'Square | None' = None, toward: 'int | None' = None, by: 'int | None' = None) -> 'int'`
+- `c.slide(self, squares_: 'int', *, on: 'int | None' = None, anchor: 'Square | None' = None, to: 'Square | None' = None, toward: 'int | None' = None, by: 'int | None' = None, avoid: 'Callable[[Any, Square], bool] | None' = None) -> 'int'`
   - `to` names the destination outright, for a row that does.
 
 ## falling

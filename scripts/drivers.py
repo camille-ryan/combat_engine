@@ -53196,6 +53196,106 @@ def a_story_clause_is_narrative(out: Result) -> None:
     )
 
 
+def a_slide_may_refuse_a_square(out: Result) -> None:
+    """"But not into hindering terrain", on a slide rather than a shove.
+
+    `c.push` has taken `avoid=` since the printed shoves needed it, and
+    `movement.forced` has taken it all along -- it filters in
+    `_forced_square` **before** the decider is asked, because the card
+    forbids the square as a **rule** and leaving it to the policy would
+    let a headless run break the printed line. `c.slide` simply never
+    passed it, so `p11268` dropped its constraint and said so in prose.
+
+    Its old note read the gap one layer too high: *"the destination is
+    the decider's: `to=` names one square outright, which is a different
+    sentence."* Both halves true, and it does not follow that there was
+    nothing to pass.
+
+    Four arms:
+
+    * with every neighbouring square made hindering, a slide carrying
+      `avoid=` moves the creature **nowhere**;
+    * the same board without `avoid=` moves it the full distance, which
+      is the control: without it the arm above passes on a slide that
+      was never going anywhere;
+    * `p11268` itself now refuses those squares, through `use` so the
+      whole row runs rather than the verb alone;
+    * and a slide with `avoid=` over **clear** ground still moves, so
+      the parameter narrows rather than breaking the verb.
+
+    #1544.
+    """
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.grid import neighbours
+    from combat_engine.engine.query import enemies, hindering_at
+
+    def staged(*, hindering: bool) -> tuple[Any, int, int, Any]:
+        """A board whose foe is ringed by hindering squares, or not."""
+        world, me, _ = _board("p11268", 1)
+        rig = Cast(world=world, me=me, ref="drivers:slide")
+        foe = sorted(enemies(world, me))[0]
+        here = world.need(foe, Position).square
+        if hindering:
+            rig.zone(list(neighbours(here)), hindering=True,
+                     until=When.ENCOUNTER)
+            world.zones.refresh()
+        return world, me, foe, here
+
+    world, me, foe, here = staged(hindering=True)
+    ringed = sum(1 for sq in neighbours(here) if hindering_at(world, sq))
+    out.that(
+        ringed == len(list(neighbours(here))),
+        "premise: every square around the creature is hindering, so a"
+        " slide that refuses them has nowhere legal to go",
+        f"{ringed} of {len(list(neighbours(here)))}",
+    )
+    with_avoid = Cast(world=world, me=me, ref="drivers:slide").slide(
+        2, on=foe, avoid=hindering_at)
+    out.that(
+        with_avoid == 0,
+        "a slide carrying `avoid=` moves the creature NOWHERE -- the"
+        " constraint costs the slide rather than redirecting it, which is"
+        " what forced movement already does against a square it cannot"
+        " enter",
+        f"moved {with_avoid}",
+    )
+    bare_world, bare_me, bare_foe, _h = staged(hindering=True)
+    bare = Cast(world=bare_world, me=bare_me, ref="drivers:slide").slide(
+        2, on=bare_foe)
+    out.that(
+        bare > 0,
+        "and the same board WITHOUT `avoid=` moves it the full distance"
+        " -- the control, without which the arm above passes on a slide"
+        " that was going nowhere anyway",
+        f"moved {bare}",
+    )
+
+    # -- the row itself, through `use` ------------------------------------
+    row_world, row_me, row_foe, row_here = staged(hindering=True)
+    use(row_world, row_me, "p11268", targets=[row_foe])
+    out.that(
+        row_world.need(row_foe, Position).square == row_here,
+        "`p11268` itself refuses those squares -- driven through `use`, so"
+        " the row's own body and target line decide it rather than the"
+        " verb being called by hand",
+        f"{row_here} -> {row_world.need(row_foe, Position).square}",
+    )
+
+    # -- and it still moves over clear ground ----------------------------
+    clear_world, clear_me, clear_foe, clear_here = staged(hindering=False)
+    clear = Cast(world=clear_world, me=clear_me, ref="drivers:slide").slide(
+        2, on=clear_foe, avoid=hindering_at)
+    out.that(
+        clear > 0,
+        "and a slide with `avoid=` over clear ground still moves, so the"
+        " parameter narrows the verb rather than breaking it",
+        f"moved {clear} from {clear_here}",
+    )
+
+
 def a_rod_raises_a_racial_attack_bonus(out: Result) -> None:
     """"Your bonus to attack rolls from your `rt:r8-t0` racial trait
     increases by 1."
@@ -137353,6 +137453,11 @@ DRIVERS = {
         a_rod_raises_a_racial_attack_bonus,
         "i2301x1 adds to a racial attack bonus without losing the arming"
         " race",
+    ),
+    "slide_avoids": (
+        a_slide_may_refuse_a_square,
+        "a slide may refuse a square the card forbids, as a shove"
+        " already could",
     ),
     "no_concealment": (
         concealment_denied_without_cover,

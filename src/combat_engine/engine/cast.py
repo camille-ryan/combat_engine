@@ -7028,9 +7028,27 @@ class Cast:
         to: Square | None = None,
         toward: int | None = None,
         by: int | None = None,
+        avoid: Callable[[Any, Square], bool] | None = None,
     ) -> int:
         """`to` names the destination outright, for a row that does.
         `by` names who is doing the moving, when it is not the caster.
+
+        **`avoid` is a square the card forbids**, exactly as on `c.push`
+        above -- *"but not into hindering terrain"* is printed on a slide
+        as often as on a shove, and `query.hindering_at` is the reader
+        both name. The whole of the plumbing was already here:
+        `movement.forced` has taken `avoid=` all along and filters in
+        `_forced_square` **before** the decider is asked, because the
+        card forbids the square as a **rule** and leaving it to the
+        policy would let a headless run break the printed line. This verb
+        simply never passed it, so `p11268` dropped its constraint and
+        said so in prose.
+
+        With every square forbidden the slide stops where it stands,
+        which is what forced movement already does against a square it
+        cannot enter -- so the constraint costs the slide rather than
+        redirecting it, which is `p11582`'s reading of the same sentence
+        one verb over. #1544.
 
         A slide's destination is otherwise the decider's free choice, which
         is right for "slide it 3 squares" and wrong for "slide it into a
@@ -7072,6 +7090,7 @@ class Cast:
         return forced(
             self.world, mover, who,
             Forced.SLIDE, squares_, anchor=anchor, to=to, power=self.ref,
+            avoid=avoid,
         )
 
     def _nearest_first(
