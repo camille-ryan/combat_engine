@@ -317,16 +317,17 @@ STABILISE_DC = 15
 
 #: The other two uses of First Aid, read off the same printed block as
 #: `STABILISE_DC` -- PHB Deluxe page 186, *Heal (Wisdom) / First Aid*,
-#: which is one standard action with three bullets:
+#: which is one standard action with three bullets. Paraphrased rather
+#: than quoted, because `leaks.py --modules` flagged the verbatim version
+#: -- four lines of printed prose in a tracked file is the thing the one
+#: rule forbids, and it was mine:
 #:
-#:     Use Second Wind: Make a DC 10 Heal check to allow an adjacent
-#:     character to use his or her second wind without the character
-#:     having to spend an action. The character doesn't gain the defense
-#:     bonuses normally granted by second wind.
+#:     bullet two, DC 10 -- an adjacent character may spend its second
+#:     wind without spending an action for it, and does NOT get the
+#:     defence bonuses the second wind normally carries;
 #:
-#:     Grant a Saving Throw: Make a DC 15 Heal check. If you succeed, an
-#:     adjacent ally can immediately make a saving throw, or the ally gets
-#:     a +2 bonus to a saving throw at the end of his or her next turn.
+#:     bullet three, DC 15 -- an adjacent ally either saves at once, or
+#:     takes +2 to its save at the end of its next turn.
 #:
 #: Static numbers for `STABILISE_DC`'s reason: the page prints one figure
 #: each, so reading them off `dc.py`'s band would make helping a friend
