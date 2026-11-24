@@ -4123,6 +4123,32 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
         # Unnarrowed, for the reason the atom above gives at length.
         return max(int(getattr(who.line, "shield", 0) or 0),
                    opened_shield) >= want
+    # **One named weapon, by REF.** `weapon_prof` above matches a group, a
+    # category or a slug, and a slug is the printed **name** -- which may
+    # not enter a tracked file, so a term naming one weapon cannot be
+    # paired through it. The ref can: `ClassLine.weapons` holds `Weapon`
+    # objects and every one carries its own.
+    #
+    # Reached only through a `term` atom. The eight that use it are
+    # superior weapons whose prerequisite is *"proficiency with <that
+    # weapon>"*, and a feat granting the proficiency is the ordinary way
+    # to meet it -- which `armour_opened`'s shape does for armour and
+    # nothing yet does for a weapon, so this reads the class line only and
+    # says so. #1537.
+    if "weapon" in node:
+        want_ref = str(node["weapon"]).strip()
+        # **The chassis line AND what a feat opened up**, composed the way
+        # the `armour_prof` atom composes its two sources -- and here that
+        # is not belt-and-braces, it is the only source that answers.
+        # Measured: **no class line carries any of the eight** superior
+        # weapons these terms name, so reading the line alone would have
+        # been a code path with no effect, which `#1447` paid for once
+        # already. `proficiency()` reads each held feat's own
+        # `proficiency=` header.
+        return any(
+            getattr(w, "ref", "") == want_ref
+            for w in [*who.line.weapons, *proficiency(list(powers))]
+        )
     if "weapon_prof" in node:
         wanted = node["weapon_prof"].lower()
         return any(
@@ -4514,6 +4540,27 @@ TERM_MEANS: dict[str, dict[str, Any]] = {
     # this term in `f3788`'s own `any`, so the card reads "either of the
     # two" and now does.
     "q60": {"race": "r67"},
+    # -- proficiency: one named weapon, by ref ----------------------------
+    # Each of these prints *"proficiency with <weapon>"* for one superior
+    # weapon, and each resolves to exactly one `weapon` row. Paired by
+    # **ref** and not by slug: a slug is the printed name.
+    #
+    # **Six of the fourteen `proficiency` terms are NOT here**, and they
+    # are a different question rather than an oversight: *"any heavy
+    # blade that has the high crit property"*, *"any nonspear polearm"*,
+    # *"any one-handed hammer"* and two more are predicates over a group
+    # **and** a property, which neither this atom nor `weapon_prof`
+    # expresses -- `weapon_prof` matches one word against group, category
+    # or slug. `q215` (*"training in chosen skill"*) is a skill and not a
+    # weapon at all.
+    "q184": {"weapon": "w3711"},
+    "q185": {"weapon": "w3716"},
+    "q186": {"weapon": "w3719"},
+    "q187": {"weapon": "w3658"},
+    "q188": {"weapon": "w3720"},
+    "q189": {"weapon": "w3721"},
+    "q190": {"weapon": "w3739"},
+    "q191": {"weapon": "w3623"},
     # -- multiclass: which class the character multiclassed into ----------
     # *"Any multiclass fighter feat"*, which `multiclass_from` answers off
     # `feat.category` with no new data. Every one of these pairs by

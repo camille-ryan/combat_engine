@@ -52975,7 +52975,8 @@ def a_prerequisite_term_resolves(out: Result) -> None:
     """
     from combat_engine import chargen
     from combat_engine.chargen import TERM_MEANS, Character, meets
-    from combat_engine.chargen.choices import legal_feats
+    from combat_engine.chargen.choices import feat_gates, legal_feats
+    from combat_engine.engine.dsl import REGISTRY
 
     _board("f3788", 1)
 
@@ -53023,10 +53024,32 @@ def a_prerequisite_term_resolves(out: Result) -> None:
             if not took:
                 return None
             return Character(cls="wizard", level=10, race="r2"), [took]
+        if "weapon" in leaf:
+            # A feat whose own `proficiency=` header opens that weapon.
+            # **Seven of the eight have none**, so those terms are not
+            # satisfiable today and are listed in `SANS_OPENER` below
+            # rather than reading as dead aliases -- the distinction this
+            # arm exists to make.
+            opener = next(
+                (ref for ref, row in sorted(REGISTRY.items())
+                 if leaf["weapon"] in (getattr(row, "proficiency", ()) or ())),
+                "")
+            if not opener:
+                return None
+            return Character(cls="fighter", level=10, race="r26"), [opener]
         return None
+
+    #: The weapon terms whose weapon no class line carries and no feat
+    #: opens, measured. They are not dead aliases -- the pairing and the
+    #: atom are both right -- so they are named here rather than being
+    #: allowed to red the arm below, and the day one of their granting
+    #: feats carries a `proficiency=` header this list shrinks.
+    SANS_OPENER = ("q184", "q185", "q186", "q187", "q188", "q189", "q190")
 
     dead = []
     for term, alias in sorted(TERM_MEANS.items()):
+        if term in SANS_OPENER:
+            continue
         satisfied = False
         for leaf in alias.get("any", [alias]):
             got = posed(leaf)
@@ -53113,6 +53136,37 @@ def a_prerequisite_term_resolves(out: Result) -> None:
         " prints",
         f"with {took_fighter} {meets({'term': 'q9'}, bardish, [took_fighter])},"
         f" empty {meets({'term': 'q9'}, bardish, [])}",
+    )
+
+    # -- one named weapon, by ref, and the feat that opens it -------------
+    # **`f1252` is the only opener in the tree**, measured: of the eight
+    # superior weapons these terms name, seven are carried by no class
+    # line and opened by no feat's `proficiency=` header -- `SANS_OPENER`
+    # above. So this arm is what keeps the atom from being a code path
+    # with no effect, the fault `#1447` paid for once, and the seven are a
+    # content finding rather than a hole here.
+    armed = Character(cls="fighter", level=10, race="r26")
+    out.that(
+        meets({"term": "q191"}, armed, ["f1252"])
+        and not meets({"term": "q191"}, armed, [])
+        and not meets({"term": "q184"}, armed, ["f1252"]),
+        "a weapon term passes when a held feat opens THAT weapon, and not"
+        " on an empty hand, and not for a different weapon -- paired by"
+        " ref because a slug is the printed name",
+        f"q191 with f1252 {meets({'term': 'q191'}, armed, ['f1252'])},"
+        f" empty {meets({'term': 'q191'}, armed, [])},"
+        f" q184 {meets({'term': 'q184'}, armed, ['f1252'])}",
+    )
+    gates_now = feat_gates()
+    out.that(
+        meets(gates_now["f1237"], armed, ["f1252"])
+        and not meets(gates_now["f1237"], armed, []),
+        "and a real feat turns on it: `f1237` is legal for that race and"
+        " source once the opener is held and not before -- one feat"
+        " satisfying another's prerequisite, which `feats_for` supports by"
+        " taking them one at a time",
+        f"with {meets(gates_now['f1237'], armed, ['f1252'])},"
+        f" without {meets(gates_now['f1237'], armed, [])}",
     )
 
     # -- the deliberate absences -------------------------------------------
