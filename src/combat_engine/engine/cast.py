@@ -45,7 +45,7 @@ from .events import (
 )
 from .grid import Square, spread
 from .grid import distance as _distance
-from .movement import forced, shift, teleport, walk
+from .movement import EDGE_PRONE_WAIVED, forced, shift, teleport, walk
 from .query import (
     UNLIMITED_SENSE,
     adjacent,
@@ -18923,6 +18923,14 @@ class Cast:
     #: reader at all, which this component's own notes call its commonest
     #: bug.
     _DEFENCE_RAISE = "defence_bonus_raise"
+    #: Read by `movement._into_hindering` before it lays the printed prone
+    #: on a successful terrain save. A `Mods` key rather than a condition
+    #: immunity, because the card waives **this one consequence of this
+    #: one save** and not being knocked down generally.
+    #:
+    #: Imported from the reader rather than spelled again here, so the two
+    #: halves cannot drift.
+    _EDGE_PRONE = EDGE_PRONE_WAIVED
 
     def _defence_raise(self, key: str, kind: str, who: int) -> int:
         """How much to add to a defence bonus this caster's power grants.
@@ -18980,6 +18988,40 @@ class Cast:
         """
         return self.bonus(
             self._DEFENCE_RAISE, amount, on=on if on is not None else self.me,
+            until=until, when=when, kind="untyped",
+        )
+
+    def keeps_its_feet(
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"On a save, you don't fall prone" -- the edge save's consequence.
+
+        DMG page 43 gives a creature forced into hindering terrain a save,
+        and *"success leaves the target prone at the edge of the square"*.
+        So the printed success costs something, and one card buys that
+        back: `i2494x1`, *"when you make a saving throw to avoid forced
+        movement ... on a save, you don't fall prone"*.
+
+        **Not a prone immunity, and that is the whole reason this exists.**
+        `c.immune_condition`-shaped proofing would waive every knockdown
+        in the fight, where the card waives one consequence of one save.
+        `movement._into_hindering` is the only reader and it asks at the
+        moment it would lay the condition.
+
+        Laid on the creature that would fall, which is the wearer -- the
+        card is about its own armour. `when` narrows it for a card that
+        waives the prone only sometimes; no printed row does today.
+
+        Written as a `Mods` key for `raise_defence_bonus`'s reason: one
+        door, read where the thing happens, rather than a field on a
+        component every creature carries.
+        """
+        return self.bonus(
+            self._EDGE_PRONE, 1, on=on if on is not None else self.me,
             until=until, when=when, kind="untyped",
         )
 

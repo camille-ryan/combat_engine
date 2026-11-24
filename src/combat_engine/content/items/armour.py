@@ -3635,8 +3635,7 @@ def _at_the_edge(ctx: dict[str, Any]) -> bool:
 
 
 @power("i2494x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("falling.catches_itself(prone=)",))
+       reach=PERSONAL, target=SELF)
 def i2494x1(c: Cast) -> None:
     """The bonus half plays, and the premise it was refused on was wrong.
     This said "forced movement is ... never saved against, so there is no
@@ -3650,16 +3649,32 @@ def i2494x1(c: Cast) -> None:
     exists to tell this throw from the end-of-turn one and the label is a
     word about the hazard.
 
-    Dropped: "on a save, you don't fall prone". The printed rule leaves a
-    creature that catches itself prone in the last square it occupied, and
-    this engine lays nothing -- `catches_itself` returning True stops the
-    step and no fall is announced, so there is no prone for the card to
-    waive and play is already what the card describes. The marker names the
-    engine half rather than a waiver, so the day the prone lands this row
-    goes red and gets its opt-out; naming a waiver that nothing could waive
-    would be a marker for a mechanism nobody should build."""
+    **"On a save, you don't fall prone" is written now, and the marker
+    said in advance what would make that possible.** It read: *"this
+    engine lays nothing -- `catches_itself` returning True stops the step
+    and no fall is announced, so there is no prone for the card to waive
+    ... the day the prone lands this row goes red and gets its opt-out."*
+
+    `#1545` is that day. It implemented DMG page 43, where a creature
+    forced into **hindering terrain** gets this same edge save and
+    *"success leaves the target prone at the edge of the square"* -- so
+    the printed success now costs something and this card buys it back.
+    `c.keeps_its_feet` is the opt-out the old note declined to invent
+    before there was anything to waive, which is why it is one verb with
+    one reader rather than a facility.
+
+    Both halves ride `_at_the_edge`, so both reach **both** edge saves:
+    the fall save in `falling.catches_itself` and the terrain save in
+    `movement._into_hindering` pass the same `when_="edge"`, and the card
+    says *"a saving throw to avoid forced movement"* without naming the
+    hazard. Only the terrain one lays a prone, so the waiver is felt
+    there and is harmless on the other.
+
+    Not a prone immunity: the card waives one consequence of one save,
+    and the forced movement still stops."""
     c.bonus("save", c.enhancement, on=c.me, until=When.ENCOUNTER,
             kind="item", when=_at_the_edge)
+    c.keeps_its_feet(on=c.me, until=When.ENCOUNTER)
 
 
 @power("i2541x1", level=7, cls=ITEM, action=ActionType.NONE,

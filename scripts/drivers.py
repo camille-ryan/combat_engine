@@ -53339,19 +53339,41 @@ def forced_into_hindering_terrain(out: Result) -> None:
     * and reaches **only** it -- a creature outside its zone saves at no
       penalty, which is the geometry half `c.grants_in` carries.
 
-    #1545.
+    **`i2494x1`'s waiver is asserted here too**, because it is the same
+    mechanism from the other side: that row's note predicted this reader
+    before there was a prone to waive, and `#1545` is what made it real.
+
+    Planted four ways and **two were findings about this rule**:
+
+    | the plant | |
+    |---|---|
+    | the waiver is ignored | 2 arms red |
+    | the waiver swallows the whole save | 1 arm red |
+    | the row stops laying the waiver | green until an arm went through the ROW |
+    | the row stops laying its save bonus | green until the arm matched on the label |
+
+    The third is `assert-through-the-caller`: three arms lay the clause
+    themselves to pose the engine, so emptying `i2494x1` left them green
+    -- the rule was supplying what the row exists to supply. The fourth
+    is the board pre-setting what is measured: `audit.board` arms every
+    `action=NONE` row on the wearer, so *something* lays a `"save"`
+    modifier whatever this row does, and the arm had to match
+    `Mod.label` as well as the key.
+
+    #1545, #1557.
     """
     from combat_engine.engine import When
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Position
+    from combat_engine.engine.components import Mods, Position
     from combat_engine.engine.dsl import use
     from combat_engine.engine.events import SavingThrow
     from combat_engine.engine.grid import neighbours
-    from combat_engine.engine.movement import place
+    from combat_engine.engine.movement import EDGE_PRONE_WAIVED, place
     from combat_engine.engine.query import enemies, hindering_at, is_
     from combat_engine.engine.types import Condition
 
-    def shoved(*, hindering: bool, face: int) -> dict[str, Any]:
+    def shoved(*, hindering: bool, face: int,
+               waived: bool = False) -> dict[str, Any]:
         """Slide a foe one square, with the d20 forced, and report.
 
         `rng.loaded` forces a **d20** and the throw is one, so this is the
@@ -53366,6 +53388,13 @@ def forced_into_hindering_terrain(out: Result) -> None:
             rig.zone(list(neighbours(here)), hindering=True,
                      until=When.ENCOUNTER)
             world.zones.refresh()
+        if waived:
+            # `i2494x1`'s clause, laid on the creature that would fall --
+            # the wearer. Laid through the verb rather than by writing the
+            # `Mods` key here, so the rule goes through the same door
+            # content does.
+            Cast(world=world, me=foe, ref="drivers:boots").keeps_its_feet(
+                on=foe, until=When.ENCOUNTER)
         rolled: list[Any] = []
         world.bus.on(SavingThrow, lambda ev: rolled.append(ev))
         world.rng.loaded = face
@@ -53408,6 +53437,74 @@ def forced_into_hindering_terrain(out: Result) -> None:
         " inner loop of every push, pull and slide in the game, so the"
         " cheap test has to come first",
         f"{clear}",
+    )
+
+    # -- `i2494x1`: "on a save, you don't fall prone" --------------------
+    #
+    # **The waiver is of the CONSEQUENCE, not of the throw or the stop**,
+    # which is why three things are read back off one shove. `i2494x1`'s
+    # own note predicted this reader before there was a prone to waive --
+    # *"the day the prone lands this row goes red and gets its opt-out"* --
+    # and `#1545` laid the prone, so the arms are what that opt-out means.
+    kept = shoved(hindering=True, face=20, waived=True)
+    out.that(
+        kept["saves"] == 1 and kept["moved"] == 0 and kept["stayed"]
+        and not kept["prone"],
+        "with `c.keeps_its_feet` held, a successful terrain save still"
+        " rolls ONE throw and still stops the forced movement where the"
+        " creature stood -- and leaves it STANDING, which is `i2494x1`'s"
+        " printed \"on a save, you don't fall prone\"",
+        f"{kept}",
+    )
+    out.that(
+        saved["prone"] and not kept["prone"],
+        "and the two shoves differ in exactly that one field, which is"
+        " what stops this passing on a board where nothing was ever"
+        " knocked down",
+        f"unwaived prone={saved['prone']}, waived prone={kept['prone']}",
+    )
+    missed = shoved(hindering=True, face=1, waived=True)
+    out.that(
+        missed["saves"] == 1 and missed["moved"] > 0
+        and not missed["stayed"],
+        "and it buys nothing on a FAILED save: the creature goes in, so"
+        " the card is not quietly a second save or a refusal to be"
+        " moved",
+        f"{missed}",
+    )
+
+    # **And the ROW lays it, which the three arms above cannot say.**
+    # They call `keeps_its_feet` themselves, so emptying `i2494x1`'s body
+    # left every one of them green -- the rule was supplying the thing
+    # the row exists to supply. Armed through `audit.board`, which runs
+    # the real body, and read off `Mods` by the key the engine reads.
+    wearer, worn, _ = _board("i2494x1", 1)
+    held = wearer.get(worn, Mods)
+    # **Matched on the LABEL as well as the key**, because `audit.board`
+    # arms every `action=NONE` row on the wearer: a bare `what == "save"`
+    # test passed with this row's body emptied, since something else on
+    # the board lays a save modifier too. `Mod.label` is the laying row's
+    # own ref (`c.bonus` sets it), so this asks about THIS row.
+    def laid(key: str) -> list[Any]:
+        return [m for m in (held.items if held else ())
+                if getattr(m, "what", "") == key
+                and str(getattr(m, "label", "")).startswith("i2494x1")]
+
+    waiver = laid(EDGE_PRONE_WAIVED)
+    out.that(
+        bool(waiver),
+        "`i2494x1` itself lays the waiver when it arms -- without this"
+        " arm the three above pass on a row with an empty body, because"
+        " they lay the clause themselves",
+        f"{len(waiver)} waiver modifier(s) on the wearer",
+    )
+    gain = laid("save")
+    out.that(
+        bool(gain),
+        "and its other printed half is there beside it -- the item bonus"
+        " to the throw itself, which is the clause that was already"
+        " playing before the prone existed to waive",
+        f"{len(gain)} save modifier(s)",
     )
 
     # -- i3318p1's printed -2, and the geometry that bounds it -----------

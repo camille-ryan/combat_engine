@@ -252,6 +252,15 @@ CATEGORIES: dict[str, dict] = {
             ("writers -- a condition named after itself", [
                 "blinded", "cannot_shift", "dazed", "immobilized",
                 "insubstantial", "prone", "slowed",
+                # **Beside `prone` because that is what it waives**, and
+                # it is deliberately not under an immunity heading: it
+                # buys back one consequence of one save -- the prone DMG
+                # p43 lays when a creature saves against being forced
+                # into hindering terrain -- and leaves every other
+                # knockdown alone. An author reaching for "this card says
+                # you do not fall prone" should land here and see that
+                # distinction rather than reach for proofing.
+                "keeps_its_feet",
                 # **Beside the conditions it is deliberately not.** A stun
                 # grants combat advantage and a daze costs an action; a
                 # creature that has given up is no easier to hit and acts

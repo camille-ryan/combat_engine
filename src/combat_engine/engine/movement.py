@@ -1539,7 +1539,7 @@ def _into_hindering(
             granted_via=power, keywords=(),
         )
     ).saved
-    if saved:
+    if saved and not _keeps_its_feet(world, target):
         # **Prone, which is the printed success.** The creature is left at
         # the edge -- it has not stepped, so it is already in the last
         # square before the unsafe one and only the condition is owed.
@@ -1548,6 +1548,39 @@ def _into_hindering(
             conditions=[Condition.PRONE], by=power,
         )
     return saved
+
+
+#: The `Mods` key `c.keeps_its_feet` writes and `_keeps_its_feet` reads.
+#: **Defined here and imported by `Cast`**, not spelled in both: the
+#: reader owns the name, and a modifier key hand-kept in two files is the
+#: shape `#492` is about. `cast.py` already imports from this module at
+#: module level, so the direction is the one that works -- `movement`
+#: cannot import `Cast`.
+EDGE_PRONE_WAIVED = "edge_prone_waived"
+
+
+def _keeps_its_feet(world: World, target: int) -> bool:
+    """Has this creature bought back the printed prone? `c.keeps_its_feet`.
+
+    One card does: `i2494x1`, *"on a save, you don't fall prone"*. Its
+    own docstring predicted this reader -- *"the day the prone lands this
+    row goes red and gets its opt-out"* -- and `#1545` is the day, since
+    nothing laid a prone here before it.
+
+    Asked only on a success, so it costs nothing on a failed save and
+    nothing at all on clear ground: the `hindering_at` test above has
+    already returned for every ordinary square, which matters because
+    this sits in the inner loop of every push, pull and slide.
+
+    The save itself is **not** waived -- the card buys back the
+    consequence, not the throw, and the forced movement still stops.
+    """
+    from .components import Mods
+    from .resolve import _mods
+
+    if world.get(target, Mods) is None:
+        return False
+    return bool(_mods(world, target, EDGE_PRONE_WAIVED, {"actor": target}))
 
 
 def _over_an_edge(
