@@ -53196,6 +53196,144 @@ def a_story_clause_is_narrative(out: Result) -> None:
     )
 
 
+def poison_belt_excludes_a_family(out: Result) -> None:
+    """"Nondwarf allies within 3 squares gain a +5 item bonus to saving
+    throws against poison effects."
+
+    `i895x1`. The exclusion carried a marker whose premise was the wrong
+    way round: *"a character's race is a **ref**, and the card prints a
+    **word** [...] so there is nothing for content to match the word
+    against."* Both facts are right and the conclusion is not -- the row
+    does not need the word, it needs **the refs the word names**, and
+    resolving one to the other is the main session's job. A ref in a
+    tracked file is not a name. `#1537`'s term table is built on the same
+    division.
+
+    Four arms:
+
+    * `_I895_EXCLUDED` is the **whole** family and not three refs taken
+      on trust -- asserted against `chargen.RACES`, so a variant
+      imported later reds here rather than quietly collecting a benefit
+      its card withholds;
+    * an ally of that family gets **nothing**;
+    * an ally of another race gets the +5, which is the arm that stops
+      the one above passing on a row that pays nobody;
+    * and the bonus is gated on the damage type, so a save against
+      something else gets nothing -- the printed *"against poison
+      effects"*, and `drivers` has caught a uniformly-open gate here
+      before.
+
+    #1542.
+    """
+    from combat_engine import chargen
+    from combat_engine.content.items.waist import _I895_EXCLUDED
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import DamageType
+
+    _board("i895x1", 1)
+
+    # -- the census, which is what keeps a hand-written ref list honest --
+    base = sorted(_I895_EXCLUDED)
+    family = sorted({r for r in base}
+                    | {ref for ref, line in chargen.RACES.items()
+                       if getattr(line, "parent", "") in _I895_EXCLUDED})
+    out.that(
+        family == base,
+        "the excluded refs are the WHOLE family -- the base race plus"
+        " every variant whose `RaceLine.parent` is it -- so a variant"
+        " imported later reds this line instead of being handed a"
+        " benefit its card withholds",
+        f"listed {base}; derived {family}",
+    )
+    out.that(
+        len(base) > 1,
+        "and the family really is more than one race, so the arm above is"
+        " a census rather than a tautology over a single ref",
+        f"{len(base)} refs",
+    )
+
+    def bonus_for(race: str) -> int:
+        """The save bonus an ally of that race ends up with.
+
+        Read off `Mods` with the row's own context -- a poison save --
+        rather than off a listed effect, because the row lays it with a
+        `when=` gate and an effect's presence says nothing about whether
+        the gate answers.
+        """
+        # **An UNRELATED board**, because `audit.board` arms every
+        # `action=NONE` row including the one under test -- so a board
+        # built for `i895x1` has already paid the ally before the race
+        # can be rewritten, and both arms read 5. Built from a row that
+        # lays no save bonus, with the clean state asserted.
+        w, holder, _ = _board("f419", 1)
+        rig = Cast(world=w, me=holder, ref="drivers:belt")
+        near = set(rig.within(3, side="ally"))
+        mate = next((a for a in rig.allies() if a in near), None)
+        if mate is None:
+            return -1
+        build = w.get(mate, Build)
+        if build is None:
+            return -1
+        build.choices = {t for t in build.choices
+                         if not str(t).startswith("race:")} | {f"race:{race}"}
+        held = w.get(mate, Mods)
+        before = held.total("save", {"dtype": DamageType.POISON}) if held else -1
+        REGISTRY["i895x1"].body(Cast(world=w, me=holder, ref="i895x1"))
+        after = held.total("save", {"dtype": DamageType.POISON}) if held else -1
+        return after - before
+
+    def bonus_other_type(race: str) -> int:
+        """The same measurement for a save against a different type."""
+        w, holder, _ = _board("f419", 1)
+        rig = Cast(world=w, me=holder, ref="drivers:belt")
+        near = set(rig.within(3, side="ally"))
+        mate = next((a for a in rig.allies() if a in near), None)
+        if mate is None:
+            return -1
+        build = w.get(mate, Build)
+        if build is None:
+            return -1
+        build.choices = {t for t in build.choices
+                         if not str(t).startswith("race:")} | {f"race:{race}"}
+        held = w.get(mate, Mods)
+        ctx = {"dtype": DamageType.FIRE}
+        before = held.total("save", ctx) if held else -1
+        REGISTRY["i895x1"].body(Cast(world=w, me=holder, ref="i895x1"))
+        return (held.total("save", ctx) if held else -1) - before
+
+    excluded = bonus_for(sorted(_I895_EXCLUDED)[0])
+    other = bonus_for("r7")
+    out.that(
+        other > 0 and excluded == 0,
+        "an ally of another race gets the bonus and one of the excluded"
+        " family gets nothing -- both directions, since an arm asserting"
+        " only the exclusion passes on a row that pays nobody",
+        f"excluded {excluded}, other {other}",
+    )
+    # **Every variant, not just the base ref.** One member cannot stand
+    # for the family: the row tests membership, so an entry dropped from
+    # the set would still pass an arm that only ever asks about `r2`.
+    all_shut = {r: bonus_for(r) for r in sorted(_I895_EXCLUDED)}
+    out.that(
+        all(v == 0 for v in all_shut.values()),
+        "and EVERY member of the family is shut out, not only the base"
+        " race -- a variant dropped from the set passes an arm that asks"
+        " about one member",
+        f"{all_shut}",
+    )
+    # -- the damage type, which a uniformly-open gate would hide ----------
+    unpoisoned = bonus_other_type("r7")
+    out.that(
+        unpoisoned == 0,
+        "and a save against something other than poison gets nothing --"
+        " the printed *against poison effects*, and the arm that stops"
+        " the bonus above reading as unconditional",
+        f"non-poison save bonus {unpoisoned}",
+    )
+
+
 def a_prerequisite_term_resolves(out: Result) -> None:
     """A printed prerequisite **term** is an alias for a node `meets` reads.
 
@@ -137074,6 +137212,11 @@ DRIVERS = {
         a_vampire_burns_only_uncovered,
         "a vampire burns in sunlight only once the story engine says it"
         " is uncovered",
+    ),
+    "poison_belt": (
+        poison_belt_excludes_a_family,
+        "i895x1 withholds its poison save bonus from one race family, by"
+        " ref",
     ),
     "no_concealment": (
         concealment_denied_without_cover,

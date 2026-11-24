@@ -1548,21 +1548,61 @@ def i648p1(c: Cast) -> None:
     c.watch(TurnEnd, later, until=When.ENCOUNTER, once=True)
 
 
+#: The race family the belt's printed exclusion names, **by ref**.
+#:
+#: The card says *"nondwarf allies"*, and a printed word cannot enter a
+#: tracked file. What the row needs is not the word but the refs the word
+#: names, and resolving one to the other is the main session's job -- the
+#: same division `chargen.TERM_MEANS` is built on. `r2` is the base race
+#: and the other two are the variants whose `RaceLine.parent` is it.
+#:
+#: Hand-written rather than derived: `content` does not import `chargen`,
+#: and deriving it would need the name anyway. `drivers`
+#: `poison_belt_excludes_a_family` asserts this is the *whole* family, so
+#: a variant imported later reds there rather than being silently
+#: included in the benefit the card withholds. #1542.
+_I895_EXCLUDED = frozenset({"r2", "r54", "r55"})
+
+#: The type word a **monster** ally of that family carries on its stat
+#: block. One word, in one place, read by `c.is_kind` -- which is the
+#: half of the printed exclusion that always worked.
+_I895_WORD = "dwarf"
+
+
 @power("i895x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.race_named()",))
+       reach=PERSONAL, target=SELF)
 def i895x1(c: Cast) -> None:
     """The saving-throw context carries the ongoing damage's type, so
     "against poison effects" is a real gate.
 
-    The exclusion is the half nothing can ask, and the marker is re-aimed at
-    why. A character's race **is** on the board -- `c.race_of` reads it off
-    `Build.choices` (#411) -- but it is a **ref**, and the card prints a
-    *word*. The `race` table carries no word at all, unlike `weapon.slug`,
-    so there is nothing for content to match the word against. A monster ally
-    carrying the word on its type line is excluded here; a character of that
-    race is not, and in a party that is the case that matters."""
+    **The exclusion is written now, and the marker's premise was the
+    wrong way round.** It said a character's race is *"a **ref**, and
+    the card prints a *word*. The `race` table carries no word at all
+    [...] so there is nothing for content to match the word against"* --
+    all true, and it does not follow that the clause is unwritable. The
+    row does not need the word: it needs the **refs the word names**,
+    and resolving a printed word to a ref is something the main session
+    does out of band. A ref in a tracked file is not a name, which is
+    the same move `chargen.TERM_MEANS` is built on (`#1537`).
+
+    So `_EXCLUDED` is that family, by ref, and the word stays where it
+    belongs. The two halves of the printed exclusion are then:
+
+    * a **monster** ally carries the word on its type line, which
+      `c.is_kind` reads off the stat block -- the half that already
+      worked;
+    * a **character** ally carries a race ref, which `c.race_of` reads
+      off `Build.choices` (`#411`) -- the half that did not, and the one
+      that matters in a party.
+
+    `drivers.poison_belt_excludes_a_family` asserts the ref list is the
+    *whole* family rather than taking the three on trust: a variant
+    imported later has to appear there or the rule reds. #1542.
+    """
     for friend in c.within(3, side="ally"):
-        if c.is_kind("dwarf", on=friend):
+        if c.is_kind(_I895_WORD, on=friend):
+            continue
+        if c.race_of(on=friend) in _I895_EXCLUDED:
             continue
         c.bonus("save", 5, on=friend, until=When.ENCOUNTER, kind="item",
                 when=_poison_save)
