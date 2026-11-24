@@ -2467,7 +2467,8 @@ def temp_hp(
 
 def _check_down(world: World, eid: int, health: Health,
                 source: int | None = None, crit: bool = False,
-                power: str = "", weapon: str = "") -> None:
+                power: str = "", weapon: str = "",
+                silent: bool = False) -> None:
     from .query import is_
 
     if health.hp > 0:
@@ -2488,6 +2489,9 @@ def _check_down(world: World, eid: int, health: Health,
         # in scope at the one site that calls this, so "but not by a
         # critical hit" costs a parameter rather than a new fact. #428.
         critical=crit,
+        # A destruction nothing may answer -- `Dropped.silent`, read in
+        # `triggers._offer`. #1567.
+        silent=silent,
     )
     # **The weapon it came through, as an attribute rather than a field.**
     # Exactly `Bloodied.weapon` one event over and for its reasons: `power`

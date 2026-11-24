@@ -20084,7 +20084,7 @@ class Cast:
         return False if who is None else shaped(self.world, who)
 
     def kill(self, *, on: int | None = None, critical: bool = False,
-             dead: bool = False) -> bool:
+             dead: bool = False, silent: bool = False) -> bool:
         """Reduce a creature to 0 hit points outright. Returns whether it moved.
 
         "A critical hit automatically reduces the creature to 0 hit points" is
@@ -20145,8 +20145,12 @@ class Cast:
         # right separately, and `_die` is module-private precisely so there
         # is one way in.
         health.hp = health.dying_at if dead else 0
+        # **`silent` is a death nothing may answer**, for the one card that
+        # prints it: *"if the minion has powers or traits triggered by its
+        # destruction, they are not triggered"*. Read in
+        # `triggers._offer`, so no listener needs teaching. #1567.
         _check_down(self.world, who, health, source=self.me, crit=critical,
-                    power=self.ref)
+                    power=self.ref, silent=silent)
         return True
 
     def aftereffect(

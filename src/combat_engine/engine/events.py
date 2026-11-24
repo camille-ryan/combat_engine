@@ -1270,6 +1270,32 @@ class Summoned(Event):
 class Dropped(Event):
     """Went to 0 hit points or below -- dying, or dead outright.
 
+    **`silent` is a death nothing may answer**, which one printed card
+    needs: `i3142x1` destroys an undead minion and says *"if the minion
+    has powers or traits triggered by its destruction, they are not
+    triggered"*.
+
+    **Read centrally, in `triggers._offer`, and that is the whole design
+    decision.** The tree's usual way of saying "this happened but pays
+    out nothing" is a flag each listener checks -- `TurnStart.ghost` and
+    `TurnEnd.ghost`, with five content rows reading `ev.ghost` by hand.
+    Copied here that would fail in the dangerous direction: every row
+    already listening for a death would go on firing until it was taught
+    the field, and one never taught is silently wrong rather than
+    visibly unfinished. One guard where the offers are made means no row
+    needs to know.
+
+    **It suppresses declared triggers and not `c.watch`.** `_offer` is
+    the single door for a header's `on=Trigger(...)`, which is what a
+    monster's death throe is; a `c.watch` subscriber goes through the bus
+    and still hears this. Said rather than hidden: the printed sentence
+    is about *powers and traits*, which are declared rows, and widening
+    it to the bus would mean suppressing a listener that may be
+    bookkeeping rather than a payout.
+
+    Default `False`, so `Event.__str__` skips it on every ordinary death
+    -- no `replay` fixture moves. #1567.
+
     `dead` says which. Emitted for both because every printed row that
     reads it says "drops to 0 hit points or fewer", and a minion is always
     the second kind.
@@ -1336,6 +1362,7 @@ class Dropped(Event):
     critical: bool = False
     #: The row that struck the killing blow. See the note above.
     power: str = ""
+    silent: bool = False
 
 
 @dataclass

@@ -3271,7 +3271,6 @@ def i3134p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.spare_death_trait()",),
 )
 def i3142x1(c: Cast) -> None:
     """The middle clause is writable now that `c.is_minion` reads the stat
@@ -3297,12 +3296,15 @@ def i3142x1(c: Cast) -> None:
     is a dealer question and not a gap in the row, and the row's other
     clauses fire, so it is not a silent one.
 
-    Still dropped: "traits triggered by its destruction are not
-    triggered" -- `Dropped` is announced from one place and nothing
-    suppresses the rows listening to it.
+    **"Traits triggered by its destruction are not triggered" is written
+    now**, and the shape it took is the one the note below argued for:
+    `Dropped.silent`, read once in `triggers._offer` rather than by each
+    listener. So the destruction is `c.kill(silent=True)` and not a
+    point of damage -- the card destroys the minion outright, and a blow
+    that happens to be lethal would announce an ordinary death.
 
-    **And the tree's usual way of saying this will not work here, which
-    is worth recording so nobody tries it.** The convention for "an
+    **The tree's usual way of saying this would not have worked, which
+    is why it went where it did.** The convention for "an
     event that happened but should not pay out" is a flag on the event
     that each listener checks: `TurnStart.ghost` and `TurnEnd.ghost`
     are exactly that, and five content rows read `ev.ghost` by hand.
@@ -3311,10 +3313,13 @@ def i3142x1(c: Cast) -> None:
     go on firing until it was taught the new field, and a row that was
     never taught is silently wrong rather than visibly unfinished.
 
-    So the suppression has to sit in the **trigger machinery**, where no
-    row needs to know, and that is `triggers.py` or the bus -- 193 and
-    373 importers. A cross-cutting change rather than a parameter, which
-    is why this stays marked. #1567.
+    So the suppression sits in the **trigger machinery**, where no row
+    needs to know: one guard in `triggers._offer`, which is the single
+    door a header's `on=Trigger(...)` comes through. A `c.watch`
+    subscriber still hears the death, and that is stated rather than
+    hidden -- the printed sentence is about *powers and traits*, which
+    are declared rows, and suppressing the bus as well would silence
+    listeners that may be bookkeeping rather than payouts. #1567.
     """
     c.bonus(
         "damage", c.enhancement, kind="power", on=c.me, until=When.ENCOUNTER,
@@ -3331,7 +3336,13 @@ def i3142x1(c: Cast) -> None:
             and c.is_minion(on=foe)
             and c.is_kind("undead", on=foe)
         ):
-            c.flat(1, on=foe)
+            # **`c.kill(silent=True)`, not a point of damage.** The card
+            # destroys the minion "whether the attack hits or misses", and
+            # the second half of the sentence is that its death triggers
+            # nothing -- so this is a destruction with the offers
+            # suppressed rather than a blow that happens to be lethal.
+            # `#1567`.
+            c.kill(on=foe, silent=True)
 
     c.watch(Hit, crumble, until=When.ENCOUNTER)
     c.watch(Miss, crumble, until=When.ENCOUNTER)

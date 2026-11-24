@@ -136603,6 +136603,130 @@ def one_attack_is_one_number(out: Result) -> None:
     )
 
 
+def a_destruction_nothing_answers(out: Result) -> None:
+    """*"If the minion has powers or traits triggered by its destruction,
+    they are not triggered."* -- `i3142x1`.
+
+    `Dropped.silent` says it and `triggers._offer` reads it. **The design
+    decision is where it is read, and that is what these arms are
+    about.** The tree's other way of saying "this happened and pays out
+    nothing" is `TurnStart.ghost`, a flag five content rows check by
+    hand. Copied here, every row already watching for a death would have
+    gone on firing until it was taught the field -- silently wrong
+    rather than visibly unfinished. One guard at the door means no row
+    needs to know.
+
+    So the measurement is taken at `Triggers._answers`, the function that
+    decides whether a creature may answer an event, rather than by
+    reading the flag back off the event it was written on:
+
+    * an ordinary death reaches it;
+    * a silent one reaches it for nobody;
+    * and both deaths are still **announced**, because an objective reads
+      `alive()` and a log reads the line -- suppressing the offer must
+      not suppress the death.
+
+    The middle arm alone would pass on a board where nothing was
+    listening, which is why the first and the last are here too.
+
+    #1567.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Dropped
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.triggers import Triggers
+
+    world, me, _ = _board("f419", 1)
+    foe = sorted(enemies(world, me))[0]
+
+    heard: list[bool] = []
+    world.bus.on(Dropped, lambda ev: heard.append(getattr(ev, "silent", False)))
+
+    asked: list[bool] = []
+    original = Triggers._answers
+
+    def spy(self, eid, ev, window):  # noqa: ANN001, ANN202
+        got = list(original(self, eid, ev, window))
+        if isinstance(ev, Dropped):
+            asked.append(getattr(ev, "silent", False))
+        return got
+
+    Triggers._answers = spy
+    try:
+        world.bus.emit(Dropped(actor=foe, dead=True, source=me, power="d"))
+        loud = len(asked)
+        world.bus.emit(Dropped(actor=foe, dead=True, source=me, power="d",
+                               silent=True))
+        quiet = len(asked) - loud
+    finally:
+        Triggers._answers = original
+
+    out.that(
+        heard == [False, True],
+        "both deaths are ANNOUNCED and the flag arrives as written --"
+        " `silent` suppresses the offers and not the event, because an"
+        " objective reads `alive()` and a log reads the line",
+        f"announcements {heard}",
+    )
+    out.that(
+        loud > 0,
+        "an ORDINARY death reaches the offer machinery, which makes the"
+        " arm below a comparison rather than a board where nobody was"
+        " listening",
+        f"{loud} creature(s) asked",
+    )
+    out.that(
+        quiet == 0,
+        "and a SILENT one reaches it for nobody -- the printed clause,"
+        " enforced at the one door so no listening row had to be taught"
+        " a field",
+        f"{quiet} asked on the silent death",
+    )
+    deaths = len([r for r in REGISTRY.values()
+                  if getattr(getattr(r, "on", None), "event", None) is Dropped])
+    out.that(
+        deaths > 100,
+        "and there are hundreds of declared rows triggering on a death,"
+        " so the suppression withholds something rather than nothing",
+        f"{deaths} row(s)",
+    )
+
+    # **And the ROW asks for it**, which none of the arms above can say:
+    # they emit their own `Dropped`, so `i3142x1` destroying loudly left
+    # all four green. Staged with a real undead minion next to the
+    # wielder, which is what the printed clause is about.
+    from combat_engine.content import loader
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import alive, is_minion, kinds_of
+
+    board, wielder, _ = _board("i3142x1", 1)
+    at = board.need(wielder, Position).square
+    spot = (at[0] + 1, at[1])
+    standing = board.grid.occupant(spot)
+    if standing is not None:
+        board.grid.lift(standing)
+    minion = loader.spawn(board, "m414", spot)
+    out.that(
+        is_minion(board, minion) and "undead" in kinds_of(board, minion),
+        "the thing staged beside the wielder really is an undead minion,"
+        " so the arm below is about the printed case",
+        f"minion={is_minion(board, minion)},"
+        f" undead={'undead' in kinds_of(board, minion)}",
+    )
+    flags: list[object] = []
+    board.bus.on(Dropped, lambda ev: flags.append(getattr(ev, "silent", None)))
+    board.bus.emit(Hit(attacker=wielder, target=minion,
+                       power="drivers:atk", critical=False))
+    out.that(
+        not alive(board, minion) and flags == [True],
+        "`i3142x1` destroys it and the death it announces is SILENT --"
+        " without this arm the four above pass on a row that destroys"
+        " loudly, because they emit their own `Dropped`",
+        f"alive={alive(board, minion)}, silent flags {flags}",
+    )
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -139781,6 +139905,11 @@ DRIVERS = {
                       "encounter and ending with the day"),
     "points_regained": (points_regained,
                         "a power point put back, and the cap that refuses one"),
+    "silent_death": (
+        a_destruction_nothing_answers,
+        "a destruction nothing may answer: announced, but offered to no"
+        " declared trigger",
+    ),
     "boon_traded": (boon_traded,
                     "a feat takes a power point instead of the boon's regain"),
     "boon_offered_where_it_is_paid": (

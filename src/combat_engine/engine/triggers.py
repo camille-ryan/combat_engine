@@ -367,6 +367,17 @@ class Triggers:
         sequence. An interrupt that cancels the event ends the round of
         offers: the thing being responded to is no longer happening.
         """
+        # **A death nothing may answer.** `i3142x1` destroys an undead
+        # minion and prints *"if the minion has powers or traits
+        # triggered by its destruction, they are not triggered"*.
+        #
+        # Here rather than on each listener, which is the whole point:
+        # the tree's `ghost` convention has five content rows checking a
+        # flag by hand, and copying it would leave every row already
+        # watching for a death firing until it was taught the field.
+        # One guard at the door means no row needs to know. #1567.
+        if getattr(ev, "silent", False):
+            return
         for eid in list(self.encounter.order):
             if ev.cancelled:
                 return
