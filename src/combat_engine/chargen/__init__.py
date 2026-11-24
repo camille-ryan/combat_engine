@@ -6079,14 +6079,21 @@ def multiclass_from(feats: Iterable[str]) -> str:
     picked up without being listed.
 
     **Filtered against `CLASSES`, which is load-bearing rather than
-    defensive.** 42 categories begin "Multiclass " and only 26 name a
-    class: the rest are `Multiclass Daily`, `Multiclass Encounter`,
-    `Multiclass Utility`, `Multiclass Whip` and a dozen more, which
-    describe what the feat *does* with a multiclass rather than a class
-    to multiclass into. One of them -- "Multiclass Ardent, Battlemind, or
-    Psion" -- names three, and a card offering a choice of three is not a
-    fact this field can hold. All 16 are excluded by the test rather than
-    by a list.
+    defensive.** 42 of the categories begin with the multiclass word and
+    only 26 of those name a class. The other 16 describe what the feat
+    *does* with a multiclass, or which weapon it reaches, rather than a
+    class to multiclass into -- `f341`, `f2697` and `f340` are the three
+    keyed to a power's usage, and `f967`, `f1277`, `f959`, `f963`,
+    `f1288` and `f1252` the six keyed to a weapon. `f3389` names **three**
+    classes at once, and a card offering a choice of three is not a fact
+    this field can hold.
+
+    All 16 are excluded by the test against `CLASSES` rather than by a
+    list -- and they are cited by **ref** rather than by category, which
+    `leaks.py --categories` is the gate on: six of these labels are a
+    printed class or weapon name, so writing them here is a tier-2 leak.
+    This docstring carried four of them until `leaks.py --categories`
+    caught it. #1552.
 
     The first in sorted order wins when a character somehow holds two,
     which no dealt character does: `feats_for` draws one feat per slot

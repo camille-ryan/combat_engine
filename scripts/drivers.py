@@ -44251,12 +44251,17 @@ def multiclassed_into(out: Result) -> None:
     that grant one.
 
     **The `CLASSES` filter is load-bearing and that is what this mostly
-    asserts.** 42 categories begin "Multiclass " and only 26 name a
-    class; the rest say what the feat *does* with a multiclass --
-    `Multiclass Daily`, `Multiclass Encounter`, `Multiclass Whip` -- and
-    one names three classes at once, which is not a fact one field can
-    hold. Every one of the 16 is excluded by the test rather than by a
-    list, so a category added later is handled without being enumerated.
+    asserts.** 42 of the categories begin with the multiclass word and
+    only 26 of those name a class; the other 16 say what the feat *does*
+    with a multiclass (`f341`, `f2697`, `f340`) or which weapon it
+    reaches (`f967`, `f1277`, `f959`), and `f3389` names three classes at
+    once, which is not a fact one field can hold. Every one of the 16 is
+    excluded by the test rather than by a list, so a category added later
+    is handled without being enumerated.
+
+    Cited by **ref** and not by category, because six of those labels are
+    a printed class or weapon name: `leaks.py --categories` is the gate,
+    and it caught three of them in this very docstring. #1552.
     """
     from combat_engine import db
     from combat_engine.chargen import CLASSES, Character, multiclass_from
@@ -53628,16 +53633,19 @@ def a_rod_raises_a_racial_attack_bonus(out: Result) -> None:
     #1543.
     """
     from combat_engine.content.features.racial import vs_bloodied
-    from combat_engine.content.items.implement_d import (
-        _I2301_RACE,
-        _I2301_RAISE,
-    )
+    from combat_engine.content.items.implement_d import _I2301_RACE
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Build, Health, Mods
     from combat_engine.engine.dsl import REGISTRY
 
     TRAIT, ROD = "rt:r8-t0", "i2301x1"
-    PRINTED = 1
+    #: The trait's printed bonus, and what the rod's card raises it to.
+    #: **Written here rather than imported from the row**, which the first
+    #: version did: reading `_I2301_RAISE` back meant a plant that changed
+    #: the row's number moved the expectation with it, and the arm could
+    #: not fail. Both figures are printed -- the trait prints 1 and the
+    #: rod prints "increases by 1".
+    PRINTED, RAISED = 1, 2
 
     def attack_bonus(race: str, *, bloodied: bool = True,
                      rod_first: bool = True) -> int:
@@ -53667,15 +53675,16 @@ def a_rod_raises_a_racial_attack_bonus(out: Result) -> None:
         held = world.get(me, Mods)
         return held.total("attack", {"target": foe}) if held else -99
 
-    want = PRINTED + _I2301_RAISE
+    want = RAISED
     first = attack_bonus(_I2301_RACE)
     second = attack_bonus(_I2301_RACE, rod_first=False)
     out.that(
         first == want,
-        "the race the card names, holding the rod, gets the trait's"
-        " printed bonus plus the rod's -- laid `kind=\"item\"` against"
-        " the trait's `racial`, because two modifiers of one kind are"
-        " non-stacking and the second would be worth nothing",
+        "the race the card names, holding the rod, reads the RAISED"
+        " racial bonus -- a second `kind=\"racial\"` modifier carrying"
+        " the whole total, which `Mods.total` resolves by taking the"
+        " larger of a kind, so it is the printed increase and never the"
+        " sum of two kinds",
         f"{first}, wanted {want}",
     )
     out.that(

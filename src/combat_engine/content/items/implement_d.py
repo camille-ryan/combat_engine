@@ -2224,7 +2224,14 @@ def i2093p1(c: Cast) -> None:
 #: `kind="racial"`. A total would have to be kept in step with the
 #: trait's number by hand. #1543.
 _I2301_RACE = "r8"
-_I2301_RAISE = 1
+#: What `rt:r8-t0`'s racial attack bonus becomes while this rod is held:
+#: the trait's printed 1 raised by the card's 1. Laid as a **second
+#: `kind="racial"` bonus of the whole total**, not as a bonus of the
+#: difference -- `Mods.total` buckets typed bonuses and the larger of a
+#: kind applies, so this reads +2 while the gate holds and the trait's +1
+#: otherwise, and never +3. `f1455`'s row in `shaman_b.py` works the same
+#: identical card out at length.
+_I2301_TOTAL = 2
 
 
 @power(
@@ -2292,13 +2299,21 @@ def i2301x1(c: Cast) -> None:
     # with no target on the board -- so a bare `c.race_of()` answered
     # `""` for every character and the condition was dead.
     if c.race_of(on=c.me) == _I2301_RACE:
-        # `kind="item"`, so it ADDS to the trait's racial one rather than
-        # colliding with it -- two modifiers of one kind are
-        # non-stacking and the second would be worth nothing. And
+        # **`kind="racial"` carrying the whole total, which is a
+        # correction.** This laid `kind="item"` of 1 so it would ADD to
+        # the trait's racial 1 rather than collide with it -- and that
+        # reached the printed +2 by STACKING two kinds, which is a
+        # coincidence of the numbers rather than the printed sentence.
+        # The card raises *the racial bonus*; `Mods.total` applies the
+        # larger of a kind, so a second racial bonus of 2 is exactly
+        # that, and it cannot collide with an unrelated item bonus the
+        # way the old shape could. `bonuses.py` is what caught it.
+        # #1553.
+        #
         # `vs_bloodied` is the trait's own gate, imported rather than
         # copied, so the two halves of the printed sentence cannot
         # disagree about when they apply.
-        c.bonus("attack", _I2301_RAISE, kind="item", on=c.me,
+        c.bonus("attack", _I2301_TOTAL, kind="racial", on=c.me,
                 until=When.ENCOUNTER, when=vs_bloodied(c))
 
 

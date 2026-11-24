@@ -77,6 +77,16 @@ BORROWED = {
     # label cannot be checked against anything, which is how a typo in one
     # survived in a comment. #341.
     ("f2095", "racial"),   # extends rt:r5-t0's save bonus
+    # `i2301x1` raises rt:r8-t0's attack bonus -- *"your bonus to attack
+    # rolls from your <racial trait> increases by 1"* -- so the rod lays a
+    # second `kind="racial"` modifier carrying the whole total and
+    # `Mods.total` takes the larger of a kind. The card names no type
+    # because it grants no bonus of its own, which is this list's subject
+    # exactly. It read `kind="item"` of 1 until this instrument caught it,
+    # reaching the printed +2 by stacking two kinds -- right arithmetic,
+    # wrong mechanism, and it would have collided with an unrelated item
+    # bonus. #1553.
+    ("i2301x1", "racial"),
     ("f3163", "racial"),   # replaces rt:r24-t2's +2
     ("f2398", "racial"),   # raises rt:r8-t0' +1 to +2
     # The same trait, raised by a second feat, and the same reading. Measured
