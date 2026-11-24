@@ -696,7 +696,7 @@ def f1270(c: Cast) -> None:
 # opposite; see the module docstring for the measurement.
 
 
-@_trait("f1252", todo=("etl.weapon_secondary_end",),
+@_trait("f1252", todo=("c.as_double_weapon()",),
         proficiency=("w3623",))
 def f1252(c: Cast) -> None:
     """The proficiency lands: the weapon table carries this one and
@@ -704,10 +704,16 @@ def f1252(c: Cast) -> None:
     *double* weapon -- two ends, two groups, two properties -- and a
     `Weapon` has one of each.
 
-    **Left on `Weapon.double`, which is misnamed and is shared.** `f951`
-    carries the same symbol for the same sentence, so it moves for both
-    rows or for neither, and this file cannot move `general_d.py`. Said
-    here so the next owner does not have to re-measure it:
+    **Re-pointed to `c.as_double_weapon()`, because the ETL symbol it
+    carried is satisfied.** `weapon.secondary_of` exists and is filled
+    for 11 rows, each printed double's off-hand end is its own `weapon`
+    row with `priced=0`, and `build.py:2528` writes the link -- so this
+    row was parked on a symbol that had already landed. The paragraph
+    below had the direction right and the symbol one layer off. `f951`
+    prints the same sentence about a different weapon and shares the new
+    symbol, so it moves for both rows or neither. #1587.
+
+    Said here so the next owner does not have to re-measure it:
 
     * `Weapon.hands` **already carries the word** -- `_HAND_COUNTS` is
       `("two-handed", "one-handed", "double")` and `__post_init__` mirrors

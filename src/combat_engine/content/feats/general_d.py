@@ -425,10 +425,49 @@ def f950(c: Cast) -> None:
 
 
 @power("f951", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("etl.weapon_secondary_end",))
+       reach=PERSONAL, target=SELF, todo=("c.as_double_weapon()",))
 def f951(c: Cast) -> None:
-    """Makes one printed weapon a double weapon -- two ends, each with its
-    own die and properties. `Weapon` is one set of numbers."""
+    """"You can treat the quarterstaff as a double weapon", both ends at
+    1d8, the primary gaining defensive and stout and the secondary the
+    off-hand property.
+
+    **Re-pointed off `etl.weapon_secondary_end`, which is satisfied.**
+    `weapon.secondary_of` exists and is filled for **11** rows, and each
+    printed double's off-hand end is its own `weapon` row with
+    `priced=0` and a `-secondary-end` slug. `build.py:2528` writes the
+    link. So the ETL half of this was done and both rows were parked on
+    a symbol that had already landed -- which no gate can see, because
+    the symbol is a name nobody re-checks.
+
+    **And it was never quite the right gap for these two anyway.** A
+    printed double already has its second end in the table; this card
+    makes a weapon that has **no** printed second end behave like one,
+    so the end has to be minted from the numbers the card itself gives.
+    `f1252`'s own note had the direction right -- *"the owed work is in
+    `Gear`/`chargen`, not on `Weapon`"* -- and named a symbol one layer
+    off.
+
+    What is actually missing, as one gap shared by both rows:
+
+    * **nothing reads `secondary_of`.** Outside the ETL there are zero
+      readers; `Weapon` carries no such field, so an object cannot say
+      what its other end is;
+    * **nothing puts a second end in a hand.** `Gear.held` is filled by
+      the dealer from the primary row, which `general_l.f2794` measured
+      and is why it declares only the primary end;
+    * **and nothing mints one.** `c.as_weapon`'s literal form adds a
+      weapon to the **belt**, and a double weapon's off-hand end is
+      wielded, not stowed.
+
+    `Weapon.hands` is not the problem and this is worth keeping written
+    down: `_HAND_COUNTS` is `("two-handed", "one-handed", "double")` and
+    `__post_init__` mirrors it into `properties`, so 22 table rows read
+    as double today and `c.wielding("double")` answers them. The field
+    can say it; nothing acts on it. #1587.
+
+    Shares the symbol with `f1252`, which prints the same sentence about
+    a different weapon, so it moves for both or for neither.
+    """
 
 
 @power("f910", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
