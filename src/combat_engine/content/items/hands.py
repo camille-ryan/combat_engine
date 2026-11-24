@@ -935,7 +935,7 @@ def i839x1(c: Cast) -> None:
 
 @power("i839p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.double_granted_move(mode=)",))
+       dropped=("query.speed(mode=)", "c.double_granted_move(mode=)"))
 def i839p1(c: Cast) -> None:
     """Climbing at full speed is a movement mode at that speed; doubling
     climb movement somebody *else* grants is the half that is missing.
@@ -961,11 +961,20 @@ def i839p1(c: Cast) -> None:
 
     So the symbol names a facility rather than a parameter, and it took
     the `mode=` with it because a verb that doubled every grant would be
-    stronger than the printed sentence. A singleton, and that is no longer a
-    reason to leave it: `#468`'s `>=3` threshold is retired by its own
-    closing comment -- 810 of the remaining 845 rows want exactly one
-    symbol, so *"finishing the rest means working the tail"*. Nothing
-    else in the tree waited on the old spelling."""
+    stronger than the printed sentence. Nothing else in the tree waited on the
+    old spelling.
+
+    **Not a singleton after all, and it has a prerequisite.** The clause
+    doubles *climbing* movement, and nothing reads a mode's own speed:
+    `query.speed(world, eid, ctx)` takes a context carrying
+    `{"charge": True}` and nothing else, and `Movement.speed` is one
+    int. So before anything can be doubled "for this mode", a mode's
+    distance has to be readable -- which is `i1066p1`'s
+    `query.speed(mode=)`, named here too so `blocked --group` shows the
+    two rows on one facility instead of two unrelated singletons.
+
+    That ordering matters: building the doubling first would have
+    nothing to double. #1572."""
     c.mode("climb", c.speed_of(), on=c.me, until=When.ENCOUNTER)
 
 
