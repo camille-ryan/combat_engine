@@ -3297,9 +3297,24 @@ def i3142x1(c: Cast) -> None:
     is a dealer question and not a gap in the row, and the row's other
     clauses fire, so it is not a silent one.
 
-    Still dropped: "traits triggered by its destruction are not triggered"
-    -- `Dropped` is announced from one place and nothing suppresses the rows
-    listening to it.
+    Still dropped: "traits triggered by its destruction are not
+    triggered" -- `Dropped` is announced from one place and nothing
+    suppresses the rows listening to it.
+
+    **And the tree's usual way of saying this will not work here, which
+    is worth recording so nobody tries it.** The convention for "an
+    event that happened but should not pay out" is a flag on the event
+    that each listener checks: `TurnStart.ghost` and `TurnEnd.ghost`
+    are exactly that, and five content rows read `ev.ghost` by hand.
+    Copying it -- a `triggers=False` on `Dropped` -- fails in the
+    dangerous direction: every row already listening for a death would
+    go on firing until it was taught the new field, and a row that was
+    never taught is silently wrong rather than visibly unfinished.
+
+    So the suppression has to sit in the **trigger machinery**, where no
+    row needs to know, and that is `triggers.py` or the bus -- 193 and
+    373 importers. A cross-cutting change rather than a parameter, which
+    is why this stays marked. #1567.
     """
     c.bonus(
         "damage", c.enhancement, kind="power", on=c.me, until=When.ENCOUNTER,
