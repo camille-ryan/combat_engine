@@ -360,9 +360,6 @@ KNOWN_SILENT = {
     "i526p1": "reshapes a wall the caster cast; the board lays no wall "
               "and one would change every row's pathing -- see "
               "`drivers.reshaped_wall`",
-    "f1120": "rewrites a borrowed power's ability off what the build "
-             "recorded; the board poses no multiclass swap -- see "
-             "`drivers.borrowed_ability`",
     "f3616": "buys an attack power at build time; nothing to do on a "
              "board -- see `drivers.bought_power`, and #1453 for the "
              "vial count its cost needs",

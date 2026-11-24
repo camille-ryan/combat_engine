@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.chargen import LONGSWORD
+from combat_engine.content.feats.general_l import _borrowed
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -397,14 +398,27 @@ def f1120(c: Cast) -> None:
     would. `chargen.power_swap` is the only thing that writes the
     record, and it writes it for exactly those rows.
 
-    **Dropped: paragon multiclassing, and the racial feature with it.**
-    The card names three routes and only one is recorded. Nothing in this
-    tree models paragon multiclassing at all -- no ref carries the word,
-    `Character` has no field for it, and the printed option replaces a
-    paragon path -- so there is no set of powers for it to name.
-    `rt:r6-t3` is declared, but what it grants is not recorded as having
-    come from it either: the same provenance question one route over, and
-    it rides on the same answer.
+    **Dropped: paragon multiclassing alone. The racial route is written,
+    and the claim that it was not was wrong.** This said *"`rt:r6-t3` is
+    declared, but what it grants is not recorded as having come from it
+    either: the same provenance question one route over"*. It is
+    recorded: `#914` made that trait pick a row and `c.borrow_row` stores
+    the pick under the trait's own ref, so `c.stored_row(of=BORROWED)` is
+    the answer -- which five cards in `general_l.py` already read through
+    the shared `_borrowed` helper, and `f1945` is a sixth. The provenance
+    question was answered on that route and open only on the other two.
+
+    So the third limb is `_borrowed`, and the helper rather than a direct
+    read because `turns.arm_traits` may arm this feat before the trait:
+    reading the store at arming time is right for only half the orders,
+    which is the hazard that helper exists for.
+
+    What stays dropped is **paragon multiclassing**, and that one is
+    real: nothing in this tree models it, `Character` has no field for
+    it, and `Character.multiclass`'s own docstring says the narrow reach
+    is deliberate -- *"no feature ladder, no power progression, no
+    paragon multiclassing is implied or wanted here"*. So there is no set
+    of powers for this clause to name. #1560.
 
     `until=When.ENCOUNTER` because the swap is a property of the
     character rather than of one use, and `turns.arm_traits` re-lays it
@@ -423,6 +437,13 @@ def f1120(c: Cast) -> None:
             # `card`, not `power`: that name is the row decorator imported
             # at the top of this file and shadowing it is a ruff error.
             c.rolls_with(card, Ability.CHA, on=c.me, until=When.ENCOUNTER)
+
+    # **The racial route, which is the third thing the card names.** The
+    # pick is recorded under `rt:r6-t3`'s own ref since `#914`, and
+    # `_borrowed` hands it over whenever it becomes known -- arming order
+    # between this feat and the trait is not stated anywhere.
+    _borrowed(c, lambda pick: c.rolls_with(
+        pick, Ability.CHA, on=c.me, until=When.ENCOUNTER))
 
 @power("f1144", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
