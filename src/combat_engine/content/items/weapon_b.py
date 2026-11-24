@@ -6494,8 +6494,43 @@ def i1688p1(c: Cast) -> None:
     dropped=("c.steer()",),
 )
 def i1839p1(c: Cast) -> None:
-    """Choosing the first square a creature moves to on its own turn cannot
-    be said: a move is proposed and refused, never redirected."""
+    """"You determine the first square the creature moves to."
+
+    **The chokepoint is one place, and the note above was wrong about
+    why.** It said *"a move is proposed and refused, never
+    redirected"*. Refusal is indeed all a `Decision` offers, and
+    `MoveStart` is the wrong lever twice over: its `to` is documented as
+    *"the end of the move, not the next square"*, and it is emitted once
+    per move action rather than per square. So nothing there can reach a
+    first square.
+
+    `walk`'s own step loop can. It is `for n, sq in enumerate(leg)`, so
+    `n == 0` **is** the first square, named and in one function, and
+    every piece the clause needs is already built:
+
+    * `World.decide(actor, kind, options, prompt)` takes the deciding
+      creature as its first argument, so the *holder* can be asked about
+      somebody else's move -- which is the whole shape of this card;
+    * `Grid.passable` says which neighbours are legal choices;
+    * `Movement` is where a per-creature movement fact lives, and an
+      `Effect` with `on_end` restoring the default is the ordinary way
+      to give it the printed duration;
+    * `walk` and `shift` are separate functions from `teleport`, so
+      *"other than teleportation"* costs nothing to honour, and
+      `world.turn == eid` is *"on its turn"*.
+
+    **What is genuinely hard is not the hook, it is reconnection.**
+    `walk` is handed a whole `path` by its caller. Substituting `leg[0]`
+    leaves the rest of that path starting from a square the creature is
+    no longer on, so the remainder may not connect -- and a wrong fix
+    here either walks a creature through a wall or hands it more squares
+    than its speed, neither of which raises. That is the design
+    question, and it is why this is not written yet rather than a
+    missing facility.
+
+    So the marker stays, and `c.steer()` is still the right symbol: the
+    verb has to set the fact *and* the engine has to honour it, which is
+    one gap. #1578."""
     if "construct" in c.kinds_of():
         c.damage("1d10")
 

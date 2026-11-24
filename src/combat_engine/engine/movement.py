@@ -1131,10 +1131,6 @@ def walk(
         # See `Zone.difficult_in_flight`.
         sticky = world.zones.catches_fliers() if hops else frozenset()
         for n, sq in enumerate(leg):
-    # **The printed exception**, hoisted for the same reason `price` is:
-    # five rows lay a zone that is rough going *even for creatures that
-    # fly*, and without this the general rule would silently invert them.
-    # Empty on any board laying no such zone. See `Zone.difficult_in_flight`.
             # The square this creature will not stop on, which is what
             # the cost and hazard waivers key on -- both are paid on
             # *entering* a square, so the one it lands on is `n == last`
