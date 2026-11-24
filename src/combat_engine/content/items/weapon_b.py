@@ -6735,6 +6735,21 @@ def i2359x1(c: Cast) -> None:
     ordinary `c.penalty` gated on whether the wielder is the owner; there
     was never a second gap to name.
 
+    **And the clause IS reachable, which I had doubted in writing.** The
+    worry was that nothing hands a character's weapon to another
+    creature, so the penalty would be a clause no board could fire --
+    the trap `i1145p1`'s note names from the other side.
+    `c.disarm(catch=True)` refutes it: it knocks a weapon out of a hand
+    and puts it into the catcher's, which is exactly the printed *"any
+    other creature"* attacking with this blade. So this is worth
+    building rather than a candidate for declining.
+
+    What is still open is **where the modifier lives**, and that is a
+    design question rather than a gap: a penalty is carried by a
+    creature, and this one belongs to the **weapon** -- it should follow
+    the blade to whoever picks it up rather than sit on a list of
+    everybody who might. Settle that before writing it. #1574.
+
     **And it is deliberately NOT `c.bonded()`**, which two rows in
     `weapon_c.py` carry. Those print a different bond: one made during an
     extended rest, specific to the item, with one bonded wielder at a time
