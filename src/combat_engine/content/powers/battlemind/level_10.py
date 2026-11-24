@@ -168,10 +168,29 @@ def p13060(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.PSIONIC, Keyword.STANCE],
+    narrative=("story:falling",),
 )
 def p13061(c: Cast) -> None:
     """Walls and ceilings are a climb speed equal to the walking one, which is
-    what "without having to climb" comes to on a grid."""
+    what "without having to climb" comes to on a grid.
+
+    **The fall clause is narrative, and this row said nothing about it
+    until `#1520`.** *"You fall if you end the stance while on a surface
+    on which you could not normally stand"* -- the same printed mechanic
+    `i3016x1` carries, which was **marked** while this was not. Both
+    cannot be right, which is what that issue was filed about.
+
+    Camille's ruling, asked whether to mark, un-mark or decline it:
+
+        "treat these as having a climb speed in combat, and as a
+         narrative function in the story engine.."
+
+    So neither row waits on anything. A grid square is a floor by
+    construction and walking on walls is a climb speed, so there is no
+    square the grid would call vertical, hence none it would call
+    unsupporting, and no moment at which falling could be provoked; the
+    meaning is the story engine's. `i3016x1` carries the same
+    token now and the two agree."""
     c.stance()
     c.mode("climb", c.speed_of(), until=When.ENCOUNTER)
 

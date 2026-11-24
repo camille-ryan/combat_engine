@@ -1230,7 +1230,7 @@ def i2518p1(c: Cast) -> None:
 
 
 @power("i3016x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("grid.Grid.facing",))
+       reach=PERSONAL, target=SELF, narrative=("story:falling",))
 def i3016x1(c: Cast) -> None:
     """Walking on walls is a climb speed equal to the walking one, which is
     what `i3016p1` below says and what `p13061` -- the same printed card,
@@ -1250,9 +1250,21 @@ def i3016x1(c: Cast) -> None:
     get the property back. `query.on_the_ground` is the printed test --
     height and how the creature is moving, not whether it has a fly speed.
 
-    **Dropped: the fall, and the marker is re-pointed to the half that is
-    still missing.** "If you are not on a horizontal surface sufficient to
-    bear your weight at the end of your move, you fall".
+    **The fall is NARRATIVE, on Camille's ruling, and the marker says so
+    rather than naming a facility.** "If you are not on a horizontal
+    surface sufficient to bear your weight at the end of your move, you
+    fall". Asked on `#1520` whether the clause two rows share should be
+    marked, un-marked or declined:
+
+        "treat these as having a climb speed in combat, and as a
+         narrative function in the story engine.."
+
+    So it is finished rather than waiting, and `p13061` -- the same
+    printed card -- carries the same token, which is what `#1520` was
+    filed about: the two said different things about one clause. On a
+    grid there is no unsupporting square, so falling cannot be provoked
+    here at all. The
+    analysis below is why the ruling is the right reading and is kept.
 
     This used to say *"what a square is made of and which way it faces is
     recorded nowhere"*. **The first half is no longer true** --

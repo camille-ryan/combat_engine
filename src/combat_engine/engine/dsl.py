@@ -2946,9 +2946,34 @@ _SYMBOL = re.compile(
     r"|[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+|x5_\d+"
 )
 
-#: What a `narrative=` element may look like -- `skill:thievery`. See
-#: `Power.narrative` for why this is a closed vocabulary and not a symbol.
-_NARRATIVE = re.compile(r"skill:([a-z]+)")
+#: What a `narrative=` element may look like -- `skill:thievery` or
+#: `story:falling`. See `Power.narrative` for why this is a closed
+#: vocabulary and not a symbol.
+_NARRATIVE = re.compile(r"(?:skill|story):([a-z_]+)")
+
+#: The **story-engine** narrative clauses, which are not skill
+#: circumstances. `Power.narrative`'s own note provides for this -- *"a
+#: new kind of narrative clause costs an edit here rather than a sentence
+#: inline"* -- and this is the first one.
+#:
+#: Camille, asked on `#1520` whether the printed fall clause two rows
+#: share should be marked, un-marked, or declined:
+#:
+#:     "treat these as having a climb speed in combat, and as a narrative
+#:      function in the story engine.."
+#:
+#: So the clause is finished rather than declined, and its meaning lives
+#: in the story engine rather than in a skill's circumstance. Closed for
+#: `skill:`'s reason: prose, an invented word and a wishful verb all stay
+#: refused at import.
+STORY_CLAUSES = frozenset({
+    # *"If you are not on a horizontal surface sufficient to bear your
+    # weight at the end of your move, you fall"* -- `i3016x1` and
+    # `p13061`. A grid square is a floor by construction and walking on
+    # walls is a climb speed, so there is no square the grid calls
+    # vertical and no moment this could fire. #1520.
+    "falling",
+})
 #: A row's own ref, for `implemented_in=`. The shapes the tree actually
 #: uses: a power, monster ability, item block, feat, class-feature leg or
 #: racial trait. Checked rather than taken on trust so that a pointer at a
@@ -3209,13 +3234,20 @@ def power(
     narrative = tuple(narrative)
     skills = []
     for clause in narrative:
-        got = _NARRATIVE.fullmatch(clause.strip())
-        if got is None or got[1] not in SKILLS:
+        word = clause.strip()
+        got = _NARRATIVE.fullmatch(word)
+        known = (got is not None
+                 and (got[1] in SKILLS if word.startswith("skill:")
+                      else got[1] in STORY_CLAUSES))
+        if not known:
             raise ValueError(
-                f"{ref}: narrative={clause!r} is not a skill. An element is "
-                f"skill:<name> for one of the {len(SKILLS)} skills -- "
-                f"skill:thievery -- naming the skill whose circumstance has "
-                f"no combat meaning. Not a symbol: there is no symbol."
+                f"{ref}: narrative={clause!r} is neither a skill nor a "
+                f"story clause. An element is skill:<name> for one of the "
+                f"{len(SKILLS)} skills -- skill:thievery -- naming the "
+                f"skill whose circumstance has no combat meaning, or "
+                f"story:<name> for one of "
+                f"{sorted(STORY_CLAUSES)} where the meaning lives in the "
+                f"story engine instead. Not a symbol: there is no symbol."
             )
         skills.append(got[1])
     if narrative and todo:
@@ -3239,9 +3271,9 @@ def power(
             if len(why) < _REASON or not any(s in why.lower() for s in skills):
                 raise ValueError(
                     f"{ref}: narrative= needs a docstring saying why the "
-                    f"clause has no combat meaning, naming the skill "
-                    f"({', '.join(skills)}). A clause the engine is merely "
-                    f"missing is dropped=, not narrative=."
+                    f"clause has no combat meaning, naming the skill or "
+                    f"story clause ({', '.join(skills)}). A clause the "
+                    f"engine is merely missing is dropped=, not narrative=."
                 )
         if declined_clause:
             # **Whose call and when, in the row.** The same standard

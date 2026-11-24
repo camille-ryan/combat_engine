@@ -52942,6 +52942,137 @@ def concealment_denied_without_cover(out: Result) -> None:
         )
 
 
+def a_story_clause_is_narrative(out: Result) -> None:
+    """A narrative clause whose meaning is the story engine's, not a skill's.
+
+    `#1520`: two declared rows print the same fall clause -- *"if you are
+    not on a horizontal surface sufficient to bear your weight at the end
+    of your move, you fall"* -- and only `i3016x1` carried a marker for
+    it while `p13061` carried none. Both cannot be right.
+
+    Camille's ruling, asked whether to mark it, un-mark it, or declare it
+    a scope decision:
+
+        "treat these as having a climb speed in combat, and as a
+         narrative function in the story engine.."
+
+    So the clause is **finished**, which is `narrative=` -- and that
+    field's vocabulary was closed to `skill:<one of 17>`, because every
+    narrative clause so far has been a skill's *circumstance*. Its own
+    note provides for this: *"a new kind of narrative clause costs an
+    edit here rather than a sentence inline."* `story:falling` is the
+    first, and `dsl.STORY_CLAUSES` is the closed list.
+
+    Four arms, and the last two are the ones that matter: widening a
+    closed vocabulary is only safe if it is still closed.
+
+    * the two rows agree and neither is unfinished -- the whole of what
+      `#1520` was filed about;
+    * an invented story word, an invented skill, prose and a symbol are
+      all still refused **at import**;
+    * the docstring guard still bites, so a row cannot claim the token
+      without saying why;
+    * and `narrative=` with `todo=` is still refused, which is the
+      invariant the widening must not have loosened.
+    """
+    from combat_engine.engine import PERSONAL, SELF, ActionType
+    from combat_engine.engine.dsl import REGISTRY, STORY_CLAUSES, power
+
+    _board("i3016x1", 1)
+
+    pair = {ref: REGISTRY[ref] for ref in ("i3016x1", "p13061")}
+    out.that(
+        all(p.narrative == ("story:falling",) and not p.unfinished
+            for p in pair.values()),
+        "both rows printing the fall clause carry the same narrative"
+        " token and neither is unfinished -- the disagreement `#1520` was"
+        " filed about, settled the way the ruling says",
+        {r: (p.narrative, p.unfinished) for r, p in pair.items()},
+    )
+
+    def declaring(ref: str, doc: str, **kw: Any) -> str:
+        """Declare a throwaway row and report what `power()` said.
+
+        **The docstring is set BEFORE the decorator is applied**, and the
+        first draft set it after -- so `power()` saw a body with no
+        docstring and refused every call for want of a *reason*, which
+        reads exactly like a vocabulary refusal. The plant found it: a
+        version of `dsl` with the story membership test removed left this
+        arm green, because the refusals it was reading had never been
+        about the vocabulary at all.
+
+        A fresh ref per call too: the registry refuses a redeclaration,
+        and that refusal is the other way to pass for the wrong reason.
+        """
+
+        def _row(c: Any) -> None:
+            pass
+
+        _row.__doc__ = doc
+        _row.__name__ = ref.replace(":", "_").replace("-", "_")
+        try:
+            power(ref, level=1, cls="", action=ActionType.NONE,
+                  reach=PERSONAL, target=SELF, **kw)(_row)
+            return ""
+        except ValueError as refused:
+            return str(refused)
+        finally:
+            REGISTRY.pop(ref, None)
+
+    def reason_for(token: str) -> str:
+        """A docstring long enough, and naming the token's own word.
+
+        **Naming it is what isolates the vocabulary**, and the first two
+        drafts did not. The reason guard demands the docstring name the
+        clause, so a fixed docstring mentioning `falling` refused every
+        other token for want of its *word* -- and a plant that opened the
+        story membership test wide left the arm green twice over, because
+        the refusals it read had never been about the vocabulary. Now the
+        only thing that can refuse these is the vocabulary itself.
+        """
+        word = token.split(":")[-1] or token
+        return (f"A docstring long enough to clear the reason guard, and"
+                f" naming {word} so that the vocabulary is the only thing"
+                f" left that can refuse this row.")
+
+    BAD = {
+        "story:invented": ("zz:story-bad", ("story:invented",)),
+        "skill:invented": ("zz:skill-bad", ("skill:invented",)),
+        "prose": ("zz:prose", ("it is just flavour",)),
+        "a symbol": ("zz:symbol", ("c.fall()",)),
+    }
+    refusals = {
+        label: declaring(ref, reason_for(token[0]), narrative=token)
+        for label, (ref, token) in BAD.items()
+    }
+    out.that(
+        all(bool(v) for v in refusals.values()),
+        "an invented story word, an invented skill, prose and a symbol"
+        " are all still refused at import -- the vocabulary is widened"
+        " and still CLOSED, which is the only thing that makes widening"
+        " it safe",
+        {k: (v[:40] or "ACCEPTED") for k, v in refusals.items()},
+    )
+    out.that(
+        bool(STORY_CLAUSES) and "falling" in STORY_CLAUSES,
+        "and the story list holds exactly what the ruling named",
+        sorted(STORY_CLAUSES),
+    )
+
+    no_reason = declaring("zz:no-reason", "Too short.",
+                          narrative=("story:falling",))
+    both = declaring("zz:both", reason_for("story:falling"),
+                     narrative=("story:falling",),
+                     todo=("c.anything()",))
+    out.that(
+        bool(no_reason) and bool(both),
+        "the docstring guard still bites on a story clause, and"
+        " `narrative=` with `todo=` is still refused -- the two"
+        " invariants the widening had to leave alone",
+        f"no reason: {no_reason[:48]!r}; both: {both[:48]!r}",
+    )
+
+
 def a_prerequisite_term_resolves(out: Result) -> None:
     """A printed prerequisite **term** is an alias for a node `meets` reads.
 
@@ -136673,6 +136804,11 @@ DRIVERS = {
         a_prerequisite_term_resolves,
         "a printed prerequisite term resolves to a node meets reads, and"
         " an unlisted one still fails closed",
+    ),
+    "story_narrative": (
+        a_story_clause_is_narrative,
+        "a narrative clause whose meaning is the story engine's, and the"
+        " vocabulary stays closed",
     ),
     "no_concealment": (
         concealment_denied_without_cover,
