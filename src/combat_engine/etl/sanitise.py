@@ -559,6 +559,126 @@ def description(document: str) -> str:
 #: a leak as well as a thing to keep feeding. It is found by position below.
 _ITEM_COLUMNS = ("enhancement bonus", "critical")
 
+#: Lines a `<br/>`-dialect page prints as plain text that the `<p>` dialect
+#: carries as a dropped column. Matched on the whole line, lowercased, up to
+#: the colon -- these pages write `Cost: 30 gp`, not `<b>Cost</b>: 30 gp`, so
+#: `labelled` never sees them and `_ITEM_COLUMNS` cannot reach them.
+_BR_COLUMNS = (
+    "cost", "weight", "level", "rarity", "price", "category", "description",
+)
+
+#: A `<br/>`-run label: the whole segment is a bold word and a colon, with its
+#: value on the **next** segment. `<b>Properties</b>: <br/>Accurate (...)`.
+_BR_LABEL = re.compile(r"^\s*<b>\s*([^<:]+?)\s*</b>\s*:?\s*$", re.I)
+
+#: The same dialect's **inline** label, value in the same segment:
+#: `<b>Damage</b>: 1d8`. Needed as well as `_BR_LABEL` and not instead of
+#: it -- the improvised weapon pages write this form and the superior
+#: implements write the other, so recognising only the split one dropped
+#: all three improvised rows, which are the whole of `#1582`.
+_BR_INLINE = re.compile(r"^\s*<b>\s*([^<:]+?)\s*</b>\s*:\s*(\S.*)$", re.I | re.S)
+
+
+def _br_dialect(body: str) -> list[str]:
+    """The mechanical lines of an item page written as a `<br/>` run.
+
+    **A second dialect, not a variant.** The common item page wraps each
+    line in `<p class="mistat">` and `item_rules` walks those; 43 pages
+    wrap nothing at all and separate their lines with `<br/>`, so
+    `paragraphs` finds no paragraph and the extraction came out **empty**
+    -- which is why every one of them has been absent from `game.db`
+    rather than present and blank. The superior implements are 39 of the
+    43 and the printed improvised weapons are 4. #1581, #1582.
+
+    **Reached only when the paragraph walk found nothing**, which is what
+    makes it safe to add: every page that works today takes the other
+    branch and cannot be touched by this one. Proved by diffing the spec
+    of a control sample byte-for-byte across the change.
+
+    **A label and its value are two segments**, which is the one thing
+    this dialect does that the other does not: the page writes
+    `<b>Properties</b>:` and then the entries after the following
+    `<br/>`. So a label-only segment takes the next segment as its value
+    rather than reading empty.
+
+    Columns are dropped by the same rule as `_ITEM_COLUMNS`, one list
+    over: these pages print `Cost: 30 gp` as plain text, so `labelled`
+    never sees a label and the existing tuple cannot match it.
+
+    **Unlabelled prose is KEPT, flavour and all, and that is a decision
+    rather than an oversight.** The `<p>` dialect tells the two apart by
+    the `miflavor` class; this one marks nothing, and position does not
+    separate them -- measured over the 45 pages, the first plain line is
+    the base-item line on 43, and the later ones are a mix. One page
+    carries *"gains resist cold 10"* and a whole Daily power as plain
+    lines; another carries only "anything you happen to pick up, from a
+    rock to a chair". A rule that dropped everything after the first
+    would lose the first page's mechanics to tidy up the second's.
+
+    So the error is taken in the safe direction: a spec is what an author
+    reads and decides from, so flavour in it is noise while a missing
+    mechanical line is a wrong row. `item_spec`'s scrub still swaps the
+    row's own name for its ref, and `leaks.py --specs` is the gate on
+    what else the prose names.
+    """
+    # **The footer goes by class, exactly as the other branch drops it.**
+    # `paragraphs` skips `publishedIn`; a `<br/>` split does not see
+    # classes at all, so without this the publication line is absorbed
+    # into whichever labelled value it follows -- measured on all 45
+    # pages, every one of them.
+    body = re.sub(r'<p class="publishedIn".*?</p>', " ", body, flags=re.S)
+    raws = re.split(r"<br\s*/?>", body)
+    parts = [text(seg) for seg in raws]
+    lines: list[str] = []
+    kept_labels: list[str] = []
+    pending = ""
+    for raw, seg in zip(raws, parts, strict=True):
+        label = _BR_LABEL.match(raw)
+        if label is not None:
+            pending = label.group(1).strip()
+            continue
+        inline = _BR_INLINE.match(raw)
+        if inline is not None and not pending:
+            name = inline.group(1).strip()
+            if name.lower() in _BR_COLUMNS:
+                continue
+            kept_labels.append(name)
+            lines.append(f"{name}: {text(inline.group(2))}".strip())
+            continue
+        if not seg:
+            continue
+        if pending:
+            was, pending = pending, ""
+            # **The column filter applies to a LABELLED line too.** It did
+            # not, and the A/B against the 2,110 rows the item importer
+            # really processes caught 5 gear pages gaining
+            # `Category: Price : 10 gp` and a `Description` -- columns and
+            # flavour, on rows whose spec is empty today and rightly so.
+            if was.lower() in _BR_COLUMNS:
+                continue
+            kept_labels.append(was)
+            lines.append(f"{was}: {seg}")
+            continue
+        head = seg.split(":", 1)[0].strip().lower()
+        if head in _BR_COLUMNS:
+            continue
+        lines.append(seg)
+    # **At least one labelled line, or this is not the dialect.** Without
+    # this test the branch fires on any page whose paragraph walk came
+    # out empty, which is **433 already-imported rows** -- base armour
+    # and weapon pages whose only `<br/>` content is a `Description`.
+    # Those specs are empty today and correctly so; giving them a line of
+    # flavour would be a 433-row change to shipped data made as a side
+    # effect of reaching 43 new ones.
+    #
+    # Measured, not reasoned: the first draft of this function claimed to
+    # be unreachable for working rows "by construction" and the A/B
+    # against the whole table said 433.
+    if not kept_labels:
+        return []
+    return [line for line in lines if line.strip()]
+
+
 
 def item_rules(document: str) -> str:
     """One item's printed mechanical lines, **names left in**.
@@ -611,6 +731,14 @@ def item_rules(document: str) -> str:
             continue
         lines.append(f"{pair[0]}: {pair[1]}".strip())
     kept = [line for line in lines if line.strip()]
+    # **The second dialect, reached only when the first found nothing.**
+    # See `_br_dialect`: 43 item pages wrap no line in a paragraph and
+    # separate them with `<br/>`, so the walk above returns empty and the
+    # row has always come out specless. Placed here rather than branched
+    # on up front so that every page working today is untouched by
+    # construction.
+    if not kept:
+        kept = _br_dialect(body)
     return "\n".join(kept)
 
 

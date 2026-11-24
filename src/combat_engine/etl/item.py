@@ -662,12 +662,39 @@ def items(
     for ident, label in source.execute("SELECT ID, Name FROM Item"):
         if label:
             by_name.setdefault(label.strip().lower(), f"i{ident}")
+    # **The level-0 rows the other two importers will not take.** `#876`
+    # widened the band once, for `Category = 'Equipment'` only: all 233
+    # gear rows carry `LevelSort = 0` and `BETWEEN 1 AND` dropped them.
+    # The same clause still drops every other level-less row, and there
+    # are 45 of them -- 39 superior implements, the 3 printed improvised
+    # weapon profiles, a level-0 boon, a wondrous item printing no level.
+    #
+    # **Asked of `out`, not guessed from the page.** `_weapons` and
+    # `_armour` run at build positions 5 and 6 and this runs at 11, so by
+    # now they have taken everything they intend to. `_weapons` selects
+    # `Category IN ('Weapon','Equipment')` with no level filter and then
+    # skips any row without an arm line, a damage and a proficiency --
+    # which is exactly correct for a weapon and exactly why an implement
+    # falls through it. So the test is "did they take it", which cannot
+    # drift when either of their predicates changes.
+    #
+    # The alternative was `OR LevelSort = 0`, and it is wrong: 494 rows
+    # carry it, of which 259 are base weapons and armour already in their
+    # own tables, so it would duplicate them into `item`. #1581, #1582.
+    taken = {
+        str(ident)
+        for table in ("weapon", "armour")
+        for (ident,) in out.execute(f"SELECT id FROM {table}")
+    }
     for row in source.execute(
         "SELECT ID, Name, Category, Rarity, LevelSort, Source, Txt FROM Item "
         "WHERE (LevelSort BETWEEN 1 AND ?) OR Category = 'Equipment' "
+        "   OR LevelSort = 0 "
         "ORDER BY ID",
         (MAX_ITEM_LEVEL,),
     ):
+        if str(row["LevelSort"]).strip() == "0" and str(row["ID"]) in taken:
+            continue
         scores.append(_one_item(dict(row), out, report, names, by_name))
     report.scores["item"] = sum(scores) / max(1, len(scores))
 
