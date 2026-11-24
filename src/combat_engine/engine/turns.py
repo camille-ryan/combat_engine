@@ -479,18 +479,32 @@ class Encounter:
         from .query import level_term
 
         init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
-        was = self.order.index(eid) if eid in self.order else None
-        if was is not None:
-            self.order.pop(was)
-            if was < self.index:
-                self.index -= 1
         init.natural = self.world.rng.d20().total
         init.rolled = (
             init.natural
             + init.bonus
             + level_term(self.world, eid, init.scale)
         )
+        # **Announced while the creature is still IN the order**, which is
+        # the same fault `_roll_initiative` records for the opening roll
+        # and fixes the same way. `Triggers._offer` walks
+        # `encounter.order` and nobody else, so lifting the creature out
+        # first -- which this did, before computing the roll -- announced
+        # its own reroll to a room it was not in. A **trait** never
+        # noticed: `c.watch` listens on the bus directly and bypasses the
+        # dispatcher, so the only rows this silenced were the ones
+        # declaring `on=Trigger(InitiativeRolled, ...)`, which is the
+        # shape `#1534` moved `f2807` to. #1539.
         self.world.bus.emit(InitiativeRolled(actor=eid, rolled=init.rolled))
+        # Lifted out only now, and by its CURRENT index: a listener that
+        # answered the event may have called `c.initiative`, and
+        # `adjust_initiative` re-splices, so an index read before the
+        # emit would point at the wrong slot.
+        was = self.order.index(eid) if eid in self.order else None
+        if was is not None:
+            self.order.pop(was)
+            if was < self.index:
+                self.index -= 1
         self._splice(eid, init.rolled)
         return init.rolled
 

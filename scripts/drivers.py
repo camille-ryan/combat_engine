@@ -53787,7 +53787,7 @@ def the_called_initiative(out: Result) -> None:
     a character who does not hold the feat. #1534.
     """
     from combat_engine.engine.components import Initiative, Powers
-    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.events import InitiativeRolled, PowerUsed
     from combat_engine.engine.turns import Encounter
 
     def opening(*, feat: bool, face: int) -> tuple[int, int, int]:
@@ -53831,6 +53831,40 @@ def the_called_initiative(out: Result) -> None:
         "a character without the feat is never offered it on either face,"
         " which is the control the board would otherwise supply for free",
         f"fires without the feat: {_none} on a 20, {_n} on a 19",
+    )
+
+    # -- and on a REROLL, which is a second path and was broken ----------
+    # **`reroll_initiative` lifted the creature out of the order before
+    # announcing**, and `Triggers._offer` walks `encounter.order` and
+    # nobody else -- so a trigger row was offered its own reroll in a
+    # room it was not in. A *trait* never noticed, because `c.watch`
+    # listens on the bus and bypasses the dispatcher, which is why
+    # converting this row to a trigger (`#1534`) is what exposed it.
+    # `#1539`. The emit moves above the lift now.
+    def on_a_reroll() -> tuple[int, bool]:
+        from combat_engine.engine.components import Initiative
+        from combat_engine.engine.query import level_term
+
+        world, me, _ = _board("f2807", 1)
+        seen_in_order: list[bool] = []
+        world.bus.on(InitiativeRolled, lambda ev: seen_in_order.append(
+            ev.actor in world.encounter.order))
+        for _ in range(60):
+            world.encounter.reroll_initiative(me)
+            init = world.need(me, Initiative)
+            if init.natural and init.natural % 2 == 0:
+                bare = (init.natural + init.bonus
+                        + level_term(world, me, init.scale))
+                return init.rolled - bare, all(seen_in_order)
+        return 0, all(seen_in_order)
+
+    gain, in_order = on_a_reroll()
+    out.that(
+        gain > 0 and in_order,
+        "and the clause is offered on a REROLL too -- the creature is"
+        " still in the order when its own reroll is announced, which is"
+        " what `Triggers._offer` walks",
+        f"gain {gain}; in the order at every emit: {in_order}",
     )
 
 
@@ -56735,11 +56769,11 @@ def replaying_a_resolved_outcome(out: Result) -> None:
         )
 
     out.that(
-        get("i1676p1").unfinished == ("resolve.retract_miss()",),
-        "while i1676p1 keeps a NARROWER marker, which is the triage rather"
-        " than an oversight: it rerolls nothing and wants the miss half of"
-        " a resolved use taken off, with its use-handback half already"
-        " written. #1332",
+        not get("i1676p1").unfinished,
+        "while i1676p1 carries no marker any more -- it wanted the miss"
+        " half of a resolved use taken off (`resolve.retract_miss()`,"
+        " #1332) and that landed, so the row this arm exists to hold"
+        " apart from the one above is finished rather than narrower",
         f"i1676p1 marker: {get('i1676p1').unfinished}",
     )
 
@@ -78880,14 +78914,47 @@ def something_to_throw_opens_a_ranged_basic(out: Result) -> None:
         eid = chargen.spawn(world, who, (6, 8))
         return world, eid, world.get(eid, Gear)
 
+    #: The classes to search for each shape. More than one, because which
+    #: arms a class is dealt is not fixed: this rule pinned `rogue` for
+    #: the thrower and `barbarian` for the shooter, and both moved the
+    #: day the feat pool changed -- the rogue came to carry a bow as well
+    #: as a dagger, the barbarian stopped carrying a bow at all. The
+    #: SHAPE is what the rule is about, so it is searched for.
+    _CLASSES = ("rogue", "ranger", "fighter", "warlord", "barbarian",
+                "cleric", "wizard", "sorcerer")
+
+    def find(want: str) -> tuple[World, int, Gear | None, str]:
+        """A dealt character of the wanted gear shape, searched for.
+
+        `thrower` is something to throw and nothing to shoot, `shooter`
+        is a real ranged weapon, `neither` is neither. Returns the class
+        and seed it found so the arm can say which character it measured.
+        """
+        for seed in range(1, 9):
+            for cls in _CLASSES:
+                w, e, g = dealt(cls, seed=seed)
+                if g is None:
+                    continue
+                shape = ("shooter" if g.ranged is not None else
+                         "thrower" if g.thrown is not None else "neither")
+                if shape == want:
+                    return w, e, g, f"{cls} seed {seed}"
+        return World(Grid(12, 12), Rng(1), Bus()), -1, None, "none found"
+
     # -- a thrower, which could not make one before ------------------------
-    world, eid, gear = dealt("rogue")
+    world, eid, gear, whom = find("thrower")
     out.that(gear is not None and gear.ranged is None
              and gear.thrown is not None,
-             "premise: the dealt rogue carries something to THROW and"
-             " nothing to shoot, which is the case the old gate refused",
-             f"ranged={gear.ranged.ref if gear and gear.ranged else None},"
+             "premise: SOME dealt character carries something to THROW and"
+             " nothing to shoot, which is the case the old gate refused --"
+             " searched for rather than pinned to one class and seed",
+             f"{whom}:"
+             f" ranged={gear.ranged.ref if gear and gear.ranged else None},"
              f" thrown={gear.thrown.ref if gear and gear.thrown else None}")
+    if gear is None or gear.thrown is None:
+        out.skip("no dealt character in the search space throws without"
+                 " also shooting")
+        return
     out.that(rba.can_branch(world, eid),
              "THE arm: it can make a ranged basic attack",
              f"{rba.can_branch(world, eid)}")
@@ -78905,11 +78972,11 @@ def something_to_throw_opens_a_ranged_basic(out: Result) -> None:
              f"{rba.can_branch(world, eid)}")
 
     # -- a creature with neither is still refused --------------------------
-    bare, bare_eid, bare_gear = dealt("cleric")
+    bare, bare_eid, bare_gear, barely = find("neither")
     out.that(bare_gear is not None and bare_gear.ranged is None
              and bare_gear.thrown is None,
-             "premise: the dealt cleric carries neither",
-             f"ranged={bare_gear.ranged if bare_gear else None},"
+             "premise: SOME dealt character carries neither",
+             f"{barely}: ranged={bare_gear.ranged if bare_gear else None},"
              f" thrown={bare_gear.thrown if bare_gear else None}")
     out.that(not rba.can_branch(bare, bare_eid),
              "and it is REFUSED -- the sentence is \"something to throw or"
@@ -78917,10 +78984,11 @@ def something_to_throw_opens_a_ranged_basic(out: Result) -> None:
              f"{rba.can_branch(bare, bare_eid)}")
 
     # -- a shooter is unaffected -------------------------------------------
-    shot, shot_eid, shot_gear = dealt("barbarian", seed=1)
+    shot, shot_eid, shot_gear, shooter = find("shooter")
     out.that(shot_gear is not None and shot_gear.ranged is not None,
-             "premise: the dealt barbarian carries a real ranged weapon",
-             f"{shot_gear.ranged.ref if shot_gear and shot_gear.ranged else None}")
+             "premise: SOME dealt character carries a real ranged weapon",
+             f"{shooter}:"
+             f" {shot_gear.ranged.ref if shot_gear and shot_gear.ranged else None}")
     out.that(rba.can_branch(shot, shot_eid),
              "and the shooting half still answers, which it did before this"
              " change -- measured both ways, this class was True already",
@@ -96213,9 +96281,12 @@ def an_origin_lent_to_one_named_row(out: Result) -> None:
     out.that(not REGISTRY["f2025"].unfinished,
              "so `f2025` carries no marker",
              f"{REGISTRY['f2025'].unfinished}")
-    out.that(REGISTRY["i2339p1"].unfinished == ("c.add_target(pending=)",),
-             "and `i2339p1` keeps exactly one -- its other clause names a"
-             " use that has not begun, which this change does not reach",
+    out.that(not REGISTRY["i2339p1"].unfinished,
+             "and `i2339p1` carries none either now -- it kept one for a"
+             " clause naming a use that had not begun"
+             " (`c.add_target(pending=)`) and that landed, so the pair"
+             " this arm holds apart is both finished rather than one"
+             " finished and one narrower",
              f"{REGISTRY['i2339p1'].unfinished}")
 
 
@@ -97087,13 +97158,33 @@ def a_type_word_that_only_helps(out: Result) -> None:
              f"any {finds('any', foe)}, other {finds('other', foe)}")
 
     # -- the ordinary unconditional word still works ------------------------
+    # **The word is derived from the board, not chosen.** This arm laid
+    # `fey` and asserted it was read back, and the day the feat draw
+    # moved it broke: the board's character came to hold `f3559`, whose
+    # whole clause is `unorigin:` over five origins including that one,
+    # so `kinds_of` added the word and subtracted it again. The arm was
+    # hostage to which feats the dealer happened to deal. Any word the
+    # creature does not already strip proves the same thing, so the arm
+    # finds one.
     plain, who, _ = _board(ROW, 1)
-    Cast(world=plain, me=who, ref="drv").set_origin("fey", on=who)
-    out.that("fey" in kinds_of(plain, who)
-             and "fey" in kinds_of(plain, who, friendly=True),
+    stripped = {e.label.split("unorigin:", 1)[1]
+                for e in plain.effects.of(who) if "unorigin:" in e.label}
+    word = next((w for w in ("fey", "aberrant", "elemental", "immortal",
+                             "natural", "shadow")
+                 if w not in stripped), "")
+    out.that(
+        bool(word),
+        "premise: the board's own character leaves at least one origin"
+        " word un-stripped, so there is something to lay",
+        f"stripped {sorted(stripped)}",
+    )
+    if word:
+        Cast(world=plain, me=who, ref="drv").set_origin(word, on=who)
+    out.that(bool(word) and word in kinds_of(plain, who)
+             and word in kinds_of(plain, who, friendly=True),
              "and a word laid WITHOUT the qualifier is unchanged -- read"
              " both ways, which is every other caller of this verb",
-             f"{sorted(kinds_of(plain, who))}")
+             f"laid {word!r}; now {sorted(kinds_of(plain, who))}")
 
     out.that(not REGISTRY[ROW].unfinished,
              "so the row carries no marker: the clause it was dropped for"
@@ -98033,14 +98124,14 @@ def an_intimidate_check_names_who_it_cowed(out: Result) -> None:
     out.that(not REGISTRY["f1704"].unfinished,
              "and `f1704` carries no marker",
              f"{REGISTRY['f1704'].unfinished}")
-    out.that(REGISTRY["f2130b"].unfinished == ("triggers.Trigger(events=)",),
-             "while `f2130b` is re-pointed rather than cleared: its card"
-             " triggers on an Intimidate check OR a hit, and `Trigger`"
-             " carries one event class. `either(...)` composes"
-             " predicates, not event types, and the `c.watch` escape"
-             " `f3313` took is shut here -- a DAILY spends its use when"
-             " the declared trigger fires, so a trait would change what"
-             " the row costs as well as when it runs",
+    out.that(not REGISTRY["f2130b"].unfinished,
+             "and `f2130b` carries none now either. It was re-pointed"
+             " rather than cleared, on the ground that its card triggers"
+             " on an Intimidate check OR a hit while `Trigger` carried"
+             " one event class -- `triggers.Trigger(events=)` is that"
+             " gap and it landed, so a declared trigger spanning two"
+             " classes no longer needs the `c.watch` escape that would"
+             " have changed what a DAILY costs",
              f"{REGISTRY['f2130b'].unfinished}")
 
 
@@ -128669,11 +128760,12 @@ def an_enemy_follows_the_ally_a_virtue_slid(out: Result) -> None:
         f"{declared.action} {[t.event.__name__ for t in declared.triggers]}",
     )
     out.that(
-        declared.dropped == ("cf:bard-f1s0",)
-        and declared.unfinished == ("cf:bard-f1s0",),
-        "PREMISE: the row still names ONE gap, its dealability -- an"
-        " undeclared printed prerequisite -- so nothing below is evidence"
-        " about the whole card",
+        not declared.unfinished,
+        "PREMISE: the row names NO gap now -- it used to carry its"
+        " dealability, on the premise that `chargen.meets` could never"
+        " answer a `cf:` build-leg prerequisite, and `#1535` measured"
+        " that `#1427` had already made the hand hold the leg ref. So"
+        " everything below is evidence about the whole card",
         f"dropped={declared.dropped} unfinished={declared.unfinished}",
     )
 
