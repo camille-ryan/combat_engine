@@ -1811,6 +1811,65 @@ def inside_count(world: World, eid: int) -> int:
 
 
 @lru_cache(maxsize=1)
+def _trait_gated() -> dict[str, str]:
+    """Item ref -> the racial trait ref its printed Requirement names.
+
+    `item.requires_trait`, one read, cached. Empty when the column is
+    absent, which is a database built before that importer landed rather
+    than a game whose items restrict nothing -- the same distinction
+    `_item_sets` draws above, and harmless here because the one reader
+    counts and a count of zero is the honest answer either way.
+    """
+    from combat_engine.db import game
+
+    try:
+        rows = game().execute(
+            "SELECT ref, requires_trait FROM item WHERE requires_trait != ''"
+        ).fetchall()
+    except Exception:
+        return {}
+    return {ref: trait for ref, trait in rows}
+
+
+def trait_gated_worn(world: World, eid: int) -> int:
+    """How many worn items name a racial trait this creature **has**.
+
+    `f443` prints *"for each r28 component you have, your p2485 racial
+    power grants 1 extra temporary hit point"*. A component is an ordinary
+    magic item whose printed Requirement names a racial trait -- the
+    category page says they *"have categories, such as armor, weapons,
+    implements, clothing, rings, and wondrous items, and they occupy
+    [its] item slots"* -- so counting them is a `Gear.worn` read and not a
+    new component. #1576, #1585.
+
+    **Gated on holding the trait, not on matching the race.** The trait
+    ref embeds its race (`rt:<race>-<n>`), so a prefix test on
+    `race_of` would get the same answer on this corpus and would be
+    answering a different question: a character who somehow wears a
+    component without the trait is not entitled to the bonus, and the
+    trait is what the page names. `Powers.known` carries racial traits by
+    ref -- the same place `race_of`'s docstring records three rows
+    scanning for an `rt:<race>-` entry -- so this asks it directly.
+
+    `Gear.worn` rather than `Gear.carried`: a component is *"attached to
+    or embedded in"* the creature and occupies a slot, which is what
+    `worn` means. `equipment.equip`'s own comment is why one read is
+    enough -- it records **every** magic item on the creature, the
+    wielded weapon included.
+
+    0 for a creature with no `Gear` or no `Powers`, which is every
+    monster.
+    """
+    gear = world.get(eid, Gear)
+    powers = world.get(eid, Powers)
+    if gear is None or powers is None:
+        return 0
+    held = set(powers.known)
+    gated = _trait_gated()
+    return sum(1 for magic in gear.worn.values() if gated.get(magic.ref) in held)
+
+
+@lru_cache(maxsize=1)
 def _item_sets() -> dict[str, tuple[str, ...]]:
     """`item_set`, members by set ref and in printed order. One read, cached.
 

@@ -1523,6 +1523,13 @@ READERS: dict[str, list[str]] = {
         # `feats_of` and `race_of` above. `set_of` takes the ENTRY ref,
         # never the block's. #1479.
         "set_items_on", "set_of",
+        # **Beside those two for their own reason**: it answers what the
+        # creature wears *and qualifies for*, which is one question about
+        # the creature rather than one about any clause. Gated on holding
+        # the trait rather than on matching the race -- a component worn
+        # without the trait earns nothing, and the trait is what the page
+        # names. #1585.
+        "trait_gated_worn",
         # The **Requirement** reader for a swallow's capacity: `requires=`
         # is handed `(world, eid)` and has no `Cast`, so `c.swallowed_by`
         # cannot serve it. Here rather than with the conditions because

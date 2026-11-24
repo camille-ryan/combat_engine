@@ -49565,6 +49565,19 @@ UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
     # order no card states, so a body that *ended* the vulnerability
     # would find nothing to end whenever it armed first. #1510.
     "cf:vampire-f2": ("f3621",),
+    # **`p2485` reads `f443`'s gate to RAISE a number it then lays;
+    # raising is not laying.**
+    # *"For each r28 component you have, your p2485 racial power grants 1
+    # extra temporary hit point"* -- written into `p2485` per `#550`, as
+    # `temp += min(trait_gated_worn(...), c.con_mod)` in front of the one
+    # `c.temp_hp` call. The feat lays no effect of its own; it changes an
+    # argument, and the temporary hit points are the power's either way.
+    # A `c.credit` block would wrap an empty stack.
+    #
+    # Same test as the entries around it, arrived at from the third
+    # direction: `cf:vampire-f2` withholds, `p1448` skips, `f3636`
+    # refuses, and this one augments. #1585.
+    "p2485": ("f443",),
     # **`f3626` reaches the SAME gate through the same helper**, so it is
     # the same waiver and not a second judgement. The feat grants
     # `cf:vampire-f2`'s benefit less two sub-clauses, and the four it does
@@ -137111,6 +137124,134 @@ def a_feat_granting_a_feature_withholds_two_of_its_benefits(out: Result) -> None
              f"healed {whole} while unbloodied")
 
 
+def a_component_worn_raises_the_racial_temp_hp_and_not_the_heal(out: Result) -> None:
+    """`f443` into `p2485`: +1 temporary hit point per component worn,
+    capped at Constitution, with the bloodied heal untouched.
+
+    The feat prints *"for each r28 component you have, your p2485 racial
+    power grants 1 extra temporary hit point, up to a maximum equal to
+    your Constitution modifier"*, written into `p2485` per `#550`. A
+    component is an ordinary magic item whose printed Requirement names a
+    racial trait, which `item.requires_trait` is the column for -- `#1581`
+    is the importer and `#1585` the row.
+
+    **Everything is staged and every premise is asserted**, because the
+    board deals `p2485`'s own race and not a character wearing
+    components: the items go into `Gear.worn`, the feat and the trait go
+    into `Powers.known`, and Constitution is set on `Stats`. A staged
+    number that silently failed to take would make every arm below read
+    as the clause working.
+
+    The last two arms are the controls that matter. Without the feat the
+    bonus is gone; **with the feat and the items but without the trait**
+    it is also gone, which is what shows `trait_gated_worn` asking whether
+    the creature *holds* the trait rather than whether the item merely
+    names one.
+    """
+    from combat_engine.engine.components import Gear, Health, Magic, Powers, Stats
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import _trait_gated
+    from combat_engine.engine.types import Ability
+
+    ROW = "p2485"
+    gated = _trait_gated()
+    out.that(len(gated) >= 3,
+             "the database knows at least three trait-gated items, or the"
+             " per-component arms cannot vary the count",
+             f"{len(gated)} gated item(s)")
+    refs = sorted(gated)[:3]
+    trait = gated[refs[0]]
+    out.that(len({gated[r] for r in refs}) == 1,
+             "the sampled components all name one trait, which is what"
+             " lets a single staged trait cover every arm",
+             f"traits: {sorted({gated[r] for r in refs})}")
+
+    def grants(*, components: int, con: int,
+               feat: bool = True, with_trait: bool = True) -> tuple[int, int]:
+        """`p2485`'s (temporary hit points, hit points healed)."""
+        world, me, _ = _board(ROW, 1)
+        world.need(me, Stats).scores[Ability.CON] = con
+        gear = world.need(me, Gear)
+        gear.worn.clear()
+        for n, ref in enumerate(refs[:components]):
+            gear.worn[f"slot{n}"] = Magic(ref=ref, slot=f"slot{n}")
+        powers = world.need(me, Powers)
+        for ref, want in ((trait, with_trait), ("f443", feat)):
+            if want and ref not in powers.known:
+                powers.known.append(ref)
+            while not want and ref in powers.known:
+                powers.known.remove(ref)
+        hp = world.need(me, Health)
+        hp.hp = max(1, hp.max_hp // 3)      # bloodied, so the heal runs
+        hp.temp = 0
+        was = hp.hp
+        use(world, me, ROW, spend=False)
+        after = world.need(me, Health)
+        return after.temp, after.hp - was
+
+    # ---- the premises, asserted before anything is read off them
+    world, me, _ = _board(ROW, 1)
+    from combat_engine.engine.cast import Cast
+    probe = Cast(world=world, me=me, ref="drv")
+    out.that(not probe.feat("f443"),
+             "the dealt board does NOT hold f443, so every bonus below is"
+             " the staging and not the deal",
+             f"holds f443: {probe.feat('f443')}")
+
+    base_temp, base_heal = grants(components=0, con=16, feat=False)
+    out.that(base_temp > 0,
+             "p2485 grants temporary hit points with no feat and no"
+             " components -- the baseline every arm is measured against",
+             f"temp {base_temp}")
+    out.that(base_heal > 0,
+             "and it heals a bloodied character, so the heal clause is"
+             " actually running and the arm that watches it is not"
+             " vacuous",
+             f"healed {base_heal}")
+
+    # ---- the clause
+    one_temp, one_heal = grants(components=1, con=16)
+    out.that(one_temp == base_temp + 1,
+             "one component worn raises the temporary hit points by"
+             " exactly 1 -- the printed per-component bonus",
+             f"{base_temp} -> {one_temp}")
+    out.that(one_heal == base_heal,
+             "and the bloodied heal is UNCHANGED, which is the clause"
+             " this rule exists for: the card grants an extra temporary"
+             " hit point and the heal is a separate printed sentence"
+             " paying 3 + half your level",
+             f"healed {base_heal} -> {one_heal}")
+
+    three_temp, _ = grants(components=3, con=16)
+    out.that(three_temp == base_temp + 3,
+             "three components raise it by 3, so the bonus counts items"
+             " rather than merely noticing one",
+             f"{base_temp} -> {three_temp}")
+
+    # ---- the cap, which is on the bonus and not on the count
+    capped_temp, _ = grants(components=3, con=12)
+    out.that(capped_temp == base_temp + 1,
+             "three components with a Constitution modifier of 1 raise it"
+             " by 1, not 3 -- 'up to a maximum equal to your Constitution"
+             " modifier' caps the bonus, not the component count",
+             f"{base_temp} -> {capped_temp}")
+
+    # ---- both controls
+    none_temp, _ = grants(components=3, con=16, feat=False)
+    out.that(none_temp == base_temp,
+             "without the feat, three components are worth nothing -- the"
+             " clause is gated and not a property of the items",
+             f"temp {none_temp} against a baseline of {base_temp}")
+
+    untrait_temp, _ = grants(components=3, con=16, with_trait=False)
+    out.that(untrait_temp == base_temp,
+             "and with the feat and the items but WITHOUT the racial"
+             " trait it is also nothing, which is what shows the reader"
+             " asks whether the creature HOLDS the trait rather than"
+             " whether the item names one",
+             f"temp {untrait_temp} against a baseline of {base_temp}")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -140468,6 +140609,11 @@ DRIVERS = {
     "feature_regen_raised": (
         a_features_regeneration_can_be_raised_from_an_item,
         "i3523x1 raises the regeneration cf:vampire-f3 hands out",
+    ),
+    "racial_components": (
+        a_component_worn_raises_the_racial_temp_hp_and_not_the_heal,
+        "f443 raises p2485's temporary hit points per component worn,"
+        " capped at Constitution, leaving the bloodied heal alone",
     ),
     "vampire_weaknesses": (
         a_vampires_weaknesses_and_the_feat_that_lifts_them,

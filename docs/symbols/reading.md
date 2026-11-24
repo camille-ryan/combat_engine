@@ -81,6 +81,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Can a power be aimed at this, and land on it?
 - `query.team(world: 'World', eid: 'int') -> 'Team | None'`
   - (no docstring)
+- `query.trait_gated_worn(world: 'World', eid: 'int') -> 'int'`
+  - How many worn items name a racial trait this creature **has**.
 - `query.turn_takers(world: 'World') -> 'list[int]'`
   - The initiative roster: who gets a slot in the order.
 

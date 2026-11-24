@@ -329,7 +329,7 @@ def f445(c: Cast) -> None:
 
 
 @power("f443", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("etl.item.requires_trait",))
+       reach=PERSONAL, target=SELF, implemented_in=("p2485",))
 def f443(c: Cast) -> None:
     """Scales `p2485`'s temporary hit points by how many `r28` components
     the character carries.
@@ -366,7 +366,21 @@ def f443(c: Cast) -> None:
     **The clause is reachable, measured rather than assumed.** 8 of the
     15 components sit in `treasure`'s own pool -- 3 `ac`, 3
     `defences`, 2 `attack_damage` -- so a dealt character really does
-    end a deal wearing one. #1575, #1576."""
+    end a deal wearing one. #1575, #1576.
+
+    ## Written, and the column it waited on landed
+
+    `item.requires_trait` exists and is filled on 15 rows, so the marker
+    this row carried was satisfied the moment that importer ran.
+    `query.trait_gated_worn` is the reader -- a `Gear.worn` count gated
+    on the creature **holding** the trait rather than on matching the
+    race, because the trait is what the page names and a component worn
+    without it earns nothing.
+
+    The clause itself is in `p2485` per `#550`, so this row is now a
+    pointer: `implemented_in=("p2485",)`. See that body for why the
+    bonus raises the temporary hit points and not the bloodied heal, and
+    why it is one `c.temp_hp` call rather than two. #1585."""
 
 
 @power("f444", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

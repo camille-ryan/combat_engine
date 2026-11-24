@@ -99,7 +99,12 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
-from combat_engine.engine.query import bloodied, enemies, my_hits_this_turn
+from combat_engine.engine.query import (
+    bloodied,
+    enemies,
+    my_hits_this_turn,
+    trait_gated_worn,
+)
 
 if TYPE_CHECKING:
     from combat_engine.engine import Square, World
@@ -906,8 +911,40 @@ def p2482(c: Cast) -> None:
     keywords=[Keyword.HEALING],
 )
 def p2485(c: Cast) -> None:
+    """The r28 racial power, and `f443`'s clause written into it.
+
+    `f443` prints *"for each r28 component you have, your p2485 racial
+    power grants 1 extra temporary hit point, up to a maximum equal to
+    your Constitution modifier"* -- a feat naming one power, so the
+    clause lives here gated on `c.feat` and the feat row stays declared
+    as a pointer. #550, #1585.
+
+    **The extra raises the temporary hit points and NOT the heal**, which
+    is why there are two numbers now instead of one. The card grants
+    "1 extra temporary hit point"; the bloodied clause is a separate
+    printed sentence paying *"hit points equal to 3 + one-half your
+    level"*, and folding the bonus into a single `amount` would have
+    quietly paid it twice.
+
+    **One `c.temp_hp` call, not two.** Temporary hit points do not stack
+    -- the higher value wins -- so a second call with the feat's share
+    would be swallowed whenever it came out lower, which is most of the
+    time.
+
+    The cap is on the bonus rather than on the component count, which is
+    what *"up to a maximum equal to"* says: four components and a
+    Constitution modifier of 2 is +2, not +4.
+
+    No `c.credit` block, and `f443` is listed in `drivers.UNCREDITED_GATE`
+    for it: the feat lays no effect of its own, it raises a number this
+    power then lays, so a block here would wrap an empty stack. Same test
+    the other entries there pass.
+    """
     amount = 3 + c.level // 2
-    c.temp_hp(amount, on=c.me)
+    temp = amount
+    if c.feat("f443"):
+        temp += min(trait_gated_worn(c.world, c.me), c.con_mod)
+    c.temp_hp(temp, on=c.me)
     c.save(on=c.me, against="ongoing")
     if c.bloodied(c.me):
         c.heal(amount, on=c.me)
