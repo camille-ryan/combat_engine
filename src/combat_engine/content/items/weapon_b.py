@@ -5191,12 +5191,41 @@ def i456p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.power_ref()",),
+    todo=("etl.power.absent",),
 )
 def i694x1(c: Cast) -> None:
-    """Same gap as i1690x1: the spec prints the triggering row's name rather
-    than its ref. `c.reroll_attack(bonus=)` is the payout and is already
-    there -- what is missing is the id to watch for."""
+    """**Re-aimed: the spec prints a name because there is no ref to
+    print.** The marker read `spec.power_ref()`, as though the spec were
+    withholding an id the tree holds -- which is what `i1690x1` turned
+    out to be, where the five refs were already in
+    `powers/monk/level_0.FLURRIES` and only needed importing.
+
+    Measured here instead of assumed, across every table that carries a
+    name:
+
+        power          4,401 rows   0 name the mechanic
+        class_feature              0
+        racial_trait               0
+        feat                       9   they NAME it in their own text
+        monster_power              1   a creature's version of it
+
+    So no character row exists for the mechanic this card triggers on,
+    and the one row that has it is a monster ability. The source book is
+    imported -- 110 feats, 61 items and 138 powers cite it, and this
+    item is one of them -- so this is a **row the import does not
+    carry**, not a book outside its scope.
+
+    `c.reroll_attack(bonus=)` is still the payout and still exists. What
+    is missing is the thing to watch for, and it is missing one layer
+    below the spec.
+
+    **`todo=` stays and `defect=` was considered and refused.** The
+    vocabulary fits -- *"the compendium is missing what the row would be
+    written from"* -- but `dsl.entry_defect` drops the whole **entry**
+    on Camille's 2026-10-15 rule, and `i694p1` beside this one is
+    written and works. Defecting the entry to mark one property would
+    take a working Power out of the game. #1546.
+    """
 
 
 @power(

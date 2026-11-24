@@ -41981,6 +41981,15 @@ def a_shove_may_refuse_a_square(out: Result) -> None:
                 hindering="1d6", hindering_type=DamageType.FIRE,
             )
             laid = sum(1 for sq in ring if hindering_at(world, sq))
+        # **The d20 is loaded to 1, so the hindering save always FAILS.**
+        # `#1545` made forced movement into hindering terrain offer one --
+        # the printed DMG p43 rule -- and a success stops the creature
+        # dead, which is indistinguishable from this filter doing it. The
+        # unfiltered arm below went red the moment that landed: the shove
+        # was being stopped by the save rather than walking in. With the
+        # save failing, the only thing that can stop this push is the
+        # filter under test.
+        world.rng.loaded = 1
         moved = Cast(world=world, me=me, ref="p11582").push(
             1, on=victim,
             avoid=hindering_at if filtered else None,
