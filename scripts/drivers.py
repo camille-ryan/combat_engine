@@ -135889,6 +135889,105 @@ def a_crystal_sets_off_the_item_beside_it(out: Result) -> None:
              f"{REGISTRY['i3320p1'].unfinished}")
 
 
+def a_borrowed_power_marks_what_it_hits(out: Result) -> None:
+    """"When you hit an enemy with your dilettante power, you mark that
+    enemy until the end of your next turn."
+
+    `f1945`, and `f2873` is the same clause for any character of the race
+    where this one is the warden's. The marker read *"this trait's pool
+    is an at-will attack power from a class other than yours, [so] there
+    is no ref to compare `ev.power` against"*; `#914` made `rt:r6-t3`
+    pick and `c.borrow_row` record, so the ref is
+    `c.stored_row(of="rt:r6-t3")`.
+
+    What the arms are for. The pick is asserted first, because every
+    arm below is about a specific ref and an unrecorded pick makes them
+    all vacuously true -- `_borrowed`'s early return would leave no
+    watch at all and *no* mark would ever be laid, which the positive
+    arm alone cannot tell from a wrong one.
+
+    Then both sides: the borrowed power marks, and **another power the
+    character holds does not**. The second is the arm that stops the
+    first passing on a feat that marks on every hit -- a plausible
+    misreading of a card whose subject is one power.
+
+    Both feats are posed, because the only difference print draws
+    between them is consent (*"you can mark"* against *"you mark"*) and
+    neither is written with a `c.may`.
+
+    Planted three ways -- marking on any hit, marking nobody, and
+    marking the attacker instead of the target -- each reddening the arm
+    it should and no other.
+    """
+    from audit import board as posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import enemies
+
+    def mark_after(ref: str, power: str) -> tuple[str, bool, int]:
+        """Hit a foe with `power` on `ref`'s own board; is it marked BY
+        `ref`?
+
+        `power=""` means the pick itself. The `Hit` is emitted rather
+        than rolled because the clause hangs on the event and the roll
+        is somebody else's question -- `c.mark`'s own cover is elsewhere.
+        """
+        world, me, _start = posed(ref, 1)
+        reader = Cast(world=world, me=me, ref="drivers", target=me)
+        pick = reader.stored_row(of="rt:r6-t3", on=me)
+        foe = sorted(enemies(world, me))[0]
+        swung = power or pick
+        if not swung:
+            return pick, False, foe
+        world.bus.emit(Hit(attacker=me, target=foe, power=swung,
+                           critical=False))
+        # **`via=ref` and not a bare `marked()`.** A warden marks
+        # adjacent enemies with `cf:warden-f0` all on its own, so a
+        # plain `marked(on=foe, by=me)` is True on this board before
+        # this feat does anything -- the negative arm read True and
+        # looked like a row marking on every hit. `via=` narrows to the
+        # mark THIS row laid, which is the only question here.
+        return pick, reader.marked(on=foe, by=me, via=ref), foe
+
+    pick, marked, _foe = mark_after("f1945", "")
+    out.that(bool(pick),
+             "the dilettante's pick is recorded and readable, which is"
+             " what the marker said had nowhere to be written -- and"
+             " without it `_borrowed` lays no watch and NO arm below"
+             " could tell a wrong ref from a missing one",
+             f"stored_row(of=rt:r6-t3) = {pick!r}")
+    out.that(marked,
+             "hitting with that power marks the creature hit, by the"
+             " character and not by whoever else is on the board",
+             f"marked={marked} with {pick!r}")
+
+    # -- the arm that stops the one above passing on a feat that marks
+    # on every hit, which is how a reader could take a card whose
+    # subject is one named power --
+    world, me, _s = posed("f1945", 1)
+    reader = Cast(world=world, me=me, ref="drivers", target=me)
+    other = next((ref for ref in sorted(world.need(me, Powers).known)
+                  if ref != reader.stored_row(of="rt:r6-t3", on=me)), "")
+    out.that(bool(other),
+             "the posed character holds a second power to swing, so the"
+             " negative arm is a case rather than a search of an empty"
+             " set",
+             f"{other!r}")
+    _p2, marked_other, _f2 = mark_after("f1945", other)
+    out.that(not marked_other,
+             "and hitting with THAT one marks nobody: the clause is"
+             " about the borrowed power and not about hitting",
+             f"swung {other!r}, marked={marked_other}")
+
+    pick2, marked2, _f3 = mark_after("f2873", "")
+    out.that(bool(pick2) and marked2,
+             "the sibling card reads the same way on its own board --"
+             " print's only difference is consent, and neither row is"
+             " written with a `c.may`",
+             f"{pick2!r} marked={marked2}")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -137949,6 +138048,11 @@ DRIVERS = {
         forced_into_hindering_terrain,
         "forced movement into hindering terrain offers a save, and a"
         " success lands the creature prone",
+    ),
+    "borrowed_mark": (
+        a_borrowed_power_marks_what_it_hits,
+        "the power a dilettante borrowed marks what it hits, and no other"
+        " power does",
     ),
     "crystal_payload": (
         a_crystal_sets_off_the_item_beside_it,

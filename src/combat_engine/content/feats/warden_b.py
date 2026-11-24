@@ -46,6 +46,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.feats.general_l import _borrowed
 from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
@@ -788,15 +789,38 @@ def f1947(c: Cast) -> None:
 
 
 @power("f1945", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.RaceLine.powers(borrowed=)",))
+       reach=PERSONAL, target=SELF)
 def f1945(c: Cast) -> None:
     """Marks whatever a racial trait's chosen power hits.
 
-    **Not the same shape as f1944 above, and that is why it is still
-    blocked.** There the race prints thirteen powers of its own, all
-    declared, so `RaceLine.granted` puts one in `Powers.known` and `c.knows`
-    reads the choice back. This trait's pool is "an at-will attack power
-    from a class other than yours": those rows are nobody's racial powers,
+    **The premise above expired with `#914` and the data is recorded
+    now.** It read: *"this trait's pool is an at-will attack power from a
+    class other than yours, those rows are nobody's racial powers,
     `RaceLine.powers` for `r6` does not list them, and `Build.choices`
     carries no entry for one -- so there is no ref to compare `ev.power`
-    against. `chargen` has to deal and record the choice first."""
+    against."* Every clause is still true of `RaceLine.powers` and
+    `Build.choices`, and the conclusion stopped following: `rt:r6-t3`
+    makes the pick itself and `c.borrow_row` records it under the trait's
+    own ref, so `c.stored_row(of=BORROWED)` is the ref. The trait emits
+    `RowStored` on the audit board today.
+
+    So this is `_borrowed`, which five cards in `general_l.py` already
+    share and which exists for the arming-order hazard rather than for
+    tidiness -- `turns.arm_traits` may arm this feat before the trait, in
+    which case the pick is `""` and reading it at arming time is wrong
+    for half the orders.
+
+    `f2873` is the same clause for any `r6` character where this one is
+    the warden's, and the only difference print draws is consent: that
+    card says *"you can mark"* and this one *"you mark"*. So no
+    `c.may` here, and `c.mark` defaults its marker to the caster."""
+    me = c.me
+
+    def arm(pick: str) -> None:
+        def marks(ev: Hit) -> None:
+            if ev.attacker == me and ev.power == pick:
+                c.mark(on=ev.target, until=When.EONT)
+
+        c.watch(Hit, marks, until=When.ENCOUNTER, on=me, label=c.ref)
+
+    _borrowed(c, arm)
