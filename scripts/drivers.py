@@ -53043,7 +53043,8 @@ def a_prerequisite_term_resolves(out: Result) -> None:
     #: opens, measured. They are not dead aliases -- the pairing and the
     #: atom are both right -- so they are named here rather than being
     #: allowed to red the arm below, and the day one of their granting
-    #: feats carries a `proficiency=` header this list shrinks.
+    #: feats carries a `proficiency=` header this list shrinks. `#1538`
+    #: has the measurement and what a route would take.
     SANS_OPENER = ("q184", "q185", "q186", "q187", "q188", "q189", "q190")
 
     dead = []
