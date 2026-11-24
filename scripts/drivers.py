@@ -136408,78 +136408,6 @@ def a_second_races_power_shares_one_use(out: Result) -> None:
              f"{chosen}")
 
 
-def the_printed_break_dcs(out: Result) -> None:
-    """*"DCs to Break or Burst Common Items"* -- PHB Deluxe, printed page
-    262, transcribed into `actions.BREAK_DCS`.
-
-    **A hand-transcribed table wants a gate that a transposed cell would
-    red**, which a count alone is not. Three arms:
-
-    * the census -- 16 printed rows, so adding or losing one is caught;
-    * **monotone in material within each family**, which is the real
-      structural property of the page: wood is softer than iron and iron
-      than adamantine, so the DCs rise in that order for doors,
-      portcullises, chains and boxes. Swapping two cells inside a family
-      reds this where a count cannot see it;
-    * and an independent control on one value. `terrain.put`'s own
-      docstring says *"16 for a wooden door at every tier"*, written
-      before this table existed and from the same page, so the two agree
-      without either being copied from the other.
-
-    The table is **data and not behaviour**, and nothing rolls against it
-    yet: `actions.break_object()` is the action that would, `i1700x1`
-    carries the marker for it, and that row's note already holds the
-    recipe for its own `+5`. So this rule exists to keep the numbers
-    honest until there is a check to spend them on -- a transcription
-    nobody reads is exactly where a wrong cell survives.
-
-    #1562.
-    """
-    from combat_engine.engine.actions import BREAK_DCS
-
-    out.that(
-        len(BREAK_DCS) == 16,
-        "all 16 printed rows are present -- the page's own count, so a"
-        " row quietly added or dropped reds here",
-        f"{len(BREAK_DCS)} entries",
-    )
-
-    # -- softer material, lower DC, within each printed family --
-    HARDNESS = ("rope", "wood", "barred", "masonry", "stone", "iron",
-                "adamantine")
-    families: dict[str, list[tuple[int, int]]] = {}
-    for (kind, material), dc in BREAK_DCS.items():
-        if material not in HARDNESS:
-            families.setdefault("UNKNOWN MATERIAL", []).append((-1, dc))
-            continue
-        families.setdefault(kind, []).append((HARDNESS.index(material), dc))
-    out.that(
-        "UNKNOWN MATERIAL" not in families,
-        "every material in the table is one this rule can order, so the"
-        " arm below cannot pass by skipping a row it did not recognise",
-        f"{sorted(families)}",
-    )
-    broken = [
-        kind for kind, pairs in families.items()
-        if [dc for _h, dc in sorted(pairs)] != sorted(dc for _h, dc in pairs)
-    ]
-    out.that(
-        not broken,
-        "and within each family the DC rises with the hardness of the"
-        " material -- the page's own shape, and what a transposed cell"
-        " would break where a count would not",
-        f"out of order: {broken}" if broken else
-        f"{len(families)} families, all monotone",
-    )
-    out.that(
-        BREAK_DCS[("door", "wood")] == 16,
-        "the one value with an independent witness: `terrain.put`'s"
-        " docstring quotes 16 for a wooden door, written from the same"
-        " page before this table existed and not copied from it",
-        f"{BREAK_DCS[('door', 'wood')]}",
-    )
-
-
 def an_aura_refuses_one_creature_type(out: Result) -> None:
     """*"The creature cannot enter the aura willingly."* -- `i3305p1`.
 
@@ -138675,11 +138603,6 @@ DRIVERS = {
         an_aura_refuses_one_creature_type,
         "an aura can refuse one creature type the voluntary move kinds,"
         " and spares every other type",
-    ),
-    "break_dcs": (
-        the_printed_break_dcs,
-        "the printed DCs to break or burst common items, transcribed and"
-        " checked for a transposed cell",
     ),
     "crystal_payload": (
         a_crystal_sets_off_the_item_beside_it,

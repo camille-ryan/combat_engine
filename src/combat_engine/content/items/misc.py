@@ -1040,7 +1040,7 @@ def i1697p1(c: Cast) -> None:
 
 
 @power("i1700x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("actions.break_object()",))
+       reach=PERSONAL, target=SELF, dropped=("etl.rules_break",))
 def i1700x1(c: Cast) -> None:
     """The Athletics half is unconditional and written.
 
@@ -1091,8 +1091,21 @@ def i1700x1(c: Cast) -> None:
 
     So the DC is a **second gap in a different component** -- an
     extracted `rules_break`-style column, the way `#1001` built
-    `rules_dc` -- and this row's marker names the action, which is the
-    gap in this one.
+    `rules_dc`.
+
+    **The marker names THAT and no longer the action**, which is
+    `#1471`'s recorded ruling: Camille picked the newer printing with the
+    older behind a named opt-in switch, and said the first half is an
+    extraction queued with the ETL batch. The action is not the gap --
+    the table it would roll against is.
+
+    And this paragraph has now caught a second session out, which is why
+    it is worth the length. I read the note's first half, went to the
+    PDF, hand-transcribed `DCS TO BREAK OR BURST COMMON ITEMS` off
+    Player's Handbook Deluxe page 262, and landed it as `BREAK_DCS` with
+    an action on top -- the exact move the paragraph above records as
+    wrong, while `Glossary` entries 387 and 388 hold the same tables
+    **structured**. Both are backed out. #1562.
 
     `grid.CLIMB_DC` is **not** part of any of it: it holds the PHB's
     generic Athletics surfaces, a different printed table, and neither
