@@ -305,6 +305,23 @@ class Zone:
     #: `World.crossing` takes the larger of the two and never adds them. A row
     #: wanting both would be charged 3 for a square the card prices at 2.
     extra_cost: int = 0
+    #: How many extra squares a forced move gains for putting a creature
+    #: **into** this region: *"when forced movement moves a creature into
+    #: the zone, that forced movement increases by 1 square"* --
+    #: `i3318p1`.
+    #:
+    #: **A zone field and not a modifier on either creature**, which is
+    #: the distinction that kept this unwritable. The row's marker asked
+    #: for `c.forces(destination=)`, but a `"forcing"` modifier is laid on
+    #: whoever does the shoving and a zone cannot know in advance who that
+    #: will be -- the row's own note says so. The question is about where
+    #: the shove *ends*, which is the zone's own business, exactly as
+    #: `hindering` is.
+    #:
+    #: Read by `movement.forced`, which grants it **once** per shove and
+    #: only on an entry: a creature already standing in the region is not
+    #: moved *into* it. Same reading of "enters" that `i3320p1` turns on.
+    extends_forced: int = 0
     #: How many squares tall this region is, where a card prints it: *"a
     #: wall ... up to 4 squares high"*. 29 printed rows state one.
     #:
@@ -487,6 +504,7 @@ class Zones:
         power_uses: int = 0,
         power_reach: int = 1,
         extra_cost: int = 0,
+        extends_forced: int = 0,
         height: int = 0,
         extra_cost_on: str = "enter",
         extra_cost_for: str = "",
@@ -600,6 +618,7 @@ class Zones:
             power_uses=power_uses,
             power_reach=power_reach,
             extra_cost=extra_cost,
+            extends_forced=extends_forced,
             height=height,
             extra_cost_on=extra_cost_on,
             extra_cost_for=extra_cost_for,

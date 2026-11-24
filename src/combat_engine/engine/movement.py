@@ -1465,7 +1465,22 @@ def forced(
             moved += 1
         return moved
     moved = 0
-    for _ in range(amount):
+    # **The budget can grow, once.** `i3318p1` prints *"when forced
+    # movement moves a creature into the zone, that forced movement
+    # increases by 1 square"*, which is a property of where the shove
+    # ENDS and so of the zone -- not of either creature. See
+    # `Zone.extends_forced`; the row's marker asked for a parameter on
+    # the shover's side, which cannot work because a zone does not know
+    # who will do the shoving.
+    #
+    # Measured against the regions the creature is **already** in, so a
+    # creature standing in such a zone and shoved further along it gains
+    # nothing: it is not being moved *into* anything. Same reading of
+    # "enters" as `i3320p1`.
+    budget = amount
+    already = _extending_zones(world, world.need(target, Position).square)
+    stretched = False
+    while moved < budget:
         nxt = _forced_square(world, source, target, anchor, how, avoid)
         if (nxt is None
                 or _over_an_edge(world, target, nxt, power)
@@ -1474,7 +1489,29 @@ def forced(
         if not step(world, target, nxt, kind=how.value):
             break
         moved += 1
+        if not stretched:
+            gained = {z: n for z, n in _extending_zones(world, nxt).items()
+                      if z not in already}
+            if gained:
+                # The largest, not the sum: two overlapping zones each
+                # printing "1 extra square" is one entry into hindering
+                # ground, and `Zone.extra_cost` takes the larger of two
+                # prices for the same reason.
+                budget += max(gained.values())
+                stretched = True
     return moved
+
+
+def _extending_zones(world: World, square: Square) -> dict[int, int]:
+    """Which zones over that square lengthen a shove that ends in them.
+
+    `{zone id: extra squares}`, empty for every ordinary square -- which
+    is the common case by far, since this is asked once per step of every
+    push, pull and slide in the game.
+    """
+    return {eid: zone.extends_forced
+            for eid, zone in world.zones.all()
+            if zone.extends_forced and square in (zone.squares or ())}
 
 
 def _into_hindering(

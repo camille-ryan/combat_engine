@@ -53360,7 +53360,35 @@ def forced_into_hindering_terrain(out: Result) -> None:
     modifier whatever this row does, and the arm had to match
     `Mod.label` as well as the key.
 
-    #1545, #1557.
+    **`i3318p1`'s stretch is here too** -- *"that forced movement
+    increases by 1 square"* -- because it is the same mechanism a third
+    time: a property of where a shove ENDS. Planted four ways, and the
+    honest tally is **two red, two that this board cannot catch**:
+
+    | the plant | |
+    |---|---|
+    | the budget never grows | red |
+    | the row asks for 0 extra squares | red, once an arm went through the ROW |
+    | the `stretched` latch never latches | **green -- cannot bite here** |
+    | `gained` ignores where the creature already was | **green -- cannot bite here** |
+
+    The latch is belt-and-braces on a 1-square slide: after the first
+    entry the creature is *in* the zone, so later steps find nothing new
+    whether it latched or not. Catching it needs a shove long enough to
+    cross **two disjoint** extending zones, which no printed card stages
+    and which is therefore not written as an arm rather than being
+    claimed as covered.
+
+    The `already` filter is the same story from the other side: the
+    staging slides the creature out of the single zone it started in, so
+    the filter changes nothing on this path. The `start_inside` arm
+    asserts the printed reading of "into" and passes for the right
+    reason -- it simply does not **discriminate** this plant.
+
+    Said at this length because the opposite is what a reader assumes: a
+    plant table with four rows and no outcomes reads as four proofs.
+
+    #1545, #1557, #1559.
     """
     from combat_engine.engine import When
     from combat_engine.engine.cast import Cast
@@ -53368,9 +53396,13 @@ def forced_into_hindering_terrain(out: Result) -> None:
     from combat_engine.engine.dsl import use
     from combat_engine.engine.events import SavingThrow
     from combat_engine.engine.grid import neighbours
-    from combat_engine.engine.movement import EDGE_PRONE_WAIVED, place
+    from combat_engine.engine.movement import (
+        EDGE_PRONE_WAIVED,
+        forced_squares,
+        place,
+    )
     from combat_engine.engine.query import enemies, hindering_at, is_
-    from combat_engine.engine.types import Condition
+    from combat_engine.engine.types import Condition, Forced
 
     def shoved(*, hindering: bool, face: int,
                waived: bool = False) -> dict[str, Any]:
@@ -53505,6 +53537,92 @@ def forced_into_hindering_terrain(out: Result) -> None:
         " to the throw itself, which is the clause that was already"
         " playing before the prone existed to waive",
         f"{len(gain)} save modifier(s)",
+    )
+
+    # -- i3318p1's printed stretch: "that forced movement increases by 1
+    # square" -- a property of where the shove ENDS, so a zone field and
+    # not a modifier on either creature. The row's marker asked for
+    # `c.forces(destination=)` and its own note argued against it: a
+    # `"forcing"` modifier sits on whoever shoves, and a zone cannot know
+    # who that will be. #1559.
+    def stretched(*, extending: bool, start_inside: bool = False) -> int:
+        """Slide a foe 1 and report how far it actually went.
+
+        `start_inside` puts the foe in the zone **before** the shove,
+        which is the case the printed "into" excludes -- a creature
+        already there is not moved into anything.
+        """
+        world, me, _ = _board("p11268", 1)
+        rig = Cast(world=world, me=me, ref="drivers:stretch")
+        foe = sorted(enemies(world, me))[0]
+        here = world.need(foe, Position).square
+        ahead = [sq for sq in forced_squares(
+            world, foe, world.need(me, Position).square, Forced.SLIDE)]
+        if not ahead:
+            return -1
+        # **Every square it could land on EXCEPT the one it starts in**,
+        # and the exclusion is the whole staging. The first draft zoned
+        # `spot` and its neighbours, which includes the creature's own
+        # square -- so by this very clause's rule it was already inside
+        # and gained nothing, and the arm read 1 -> 1 while the engine
+        # was right. `slide` picks its own destination, so the zone has
+        # to cover all of them.
+        area = [sq for sq in ahead if sq != here]
+        if not area:
+            return -1
+        if extending:
+            rig.zone(area, until=When.ENCOUNTER, extends_forced=1)
+            world.zones.refresh()
+        spot = area[0]
+        if start_inside:
+            # `lift` before `place`, because `Grid.place` only adds and a
+            # creature left in two squares is not the case being staged.
+            world.grid.lift(foe)
+            world.need(foe, Position).square = spot
+            world.grid.place(foe, frozenset({spot}))
+            world.zones.refresh()
+        return rig.slide(1, on=foe)
+
+    plain = stretched(extending=False)
+    out.that(
+        plain == 1,
+        "a slide of 1 over ordinary ground moves exactly 1 -- the"
+        " premise, without which the arm below is about nothing",
+        f"{plain} square(s)",
+    )
+    longer = stretched(extending=True)
+    out.that(
+        longer == plain + 1,
+        "and a zone printing `extends_forced` lengthens that same slide"
+        " by its one square, because the shove ENDS in it -- the clause"
+        " `c.forces(destination=)` could not express, since a zone does"
+        " not know who will do the shoving",
+        f"{plain} -> {longer}",
+    )
+    inside = stretched(extending=True, start_inside=True)
+    out.that(
+        inside == plain,
+        "but a creature ALREADY in the zone gains nothing: the printed"
+        " word is `into`, so being shoved further along a region it is"
+        " standing in is not an entry -- the same reading `i3320p1`"
+        " turns on",
+        f"started inside: {inside}, against {plain} on clear ground",
+    )
+
+    # **And the ROW asks for it**, which none of the three arms above can
+    # say: they lay their own zone to pose the engine, so setting the
+    # row's own figure to 0 left all three green. Read off the zone
+    # `i3318p1` actually creates.
+    lays, caster, _ = _board("i3318p1", 1)
+    before = {eid for eid, _z in lays.zones.all()}
+    use(lays, caster, "i3318p1")
+    mine = [z for eid, z in lays.zones.all() if eid not in before]
+    out.that(
+        bool(mine) and all(z.extends_forced == 1 for z in mine),
+        "`i3318p1` lays its zone with the printed one extra square of"
+        " forced movement -- without this arm the three above pass on a"
+        " row asking for none, since they stage their own zone",
+        f"{[z.extends_forced for z in mine]}",
     )
 
     # -- i3318p1's printed -2, and the geometry that bounds it -----------

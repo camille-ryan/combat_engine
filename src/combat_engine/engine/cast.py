@@ -20344,6 +20344,9 @@ class Cast:
         hindering: str = "",
         hindering_type: DamageType = DamageType.UNTYPED,
         extra_cost: int = 0,
+        #: `i3318p1`'s clause. Added to `c.zone` only and not to the
+        #: second zone builder below, which no card with this line uses.
+        extends_forced: int = 0,
         height: int = 0,
         extra_cost_on: str = "enter",
         extra_cost_for: str = "",
@@ -20457,7 +20460,8 @@ class Cast:
             sustain_inside=sustain_inside,
             hindering=hindering, hindering_type=hindering_type.value,
             burn=burn if hindering else None,
-            extra_cost=extra_cost, height=height,
+            extra_cost=extra_cost, extends_forced=extends_forced,
+            height=height,
             extra_cost_on=extra_cost_on,
             extra_cost_for=extra_cost_for,
             extra_cost_if_difficult=extra_cost_if_difficult,

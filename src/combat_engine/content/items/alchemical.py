@@ -1853,6 +1853,9 @@ def i2568p1(c: Cast) -> None:
     them."""
 
 
+#: *"That forced movement increases by 1 square."* Named beside the
+#: penalty below because both are printed numbers of this one card.
+_I3318_STRETCH = 1
 #: The printed penalty on a throw to avoid entering hindering terrain.
 #: Named rather than inline because the gate below reads the label and
 #: the two belong together. #1545.
@@ -1860,8 +1863,7 @@ _I3318_PENALTY = 2
 
 
 @power("i3318p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=AreaBurst(1, 10), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.forces(destination=)",))
+       reach=AreaBurst(1, 10), target=NO_TARGET, keywords=[Keyword.ZONE])
 def i3318p1(c: Cast) -> None:
     """The zone answers whoever walks in. Two things were wrong with how
     it did it, and the marker named a parameter that already exists.
@@ -1892,17 +1894,24 @@ def i3318p1(c: Cast) -> None:
     is the narrowing the old line could not make and is why it used to
     sit on every save the creature rolled. `#1545`.
 
-    **`c.forces(target=)` is refuted, and re-pointed at the destination.**
-    `movement._settle` has keyed the shove's context on `target` since
-    `#748` -- `how`, `power`, `target`, `source` -- so "when you push an
-    undead creature" is already sayable and `c.forces(when=)` reads it.
-    What the context does not carry is **where the shove ends**, and that
-    is this clause: "when forced movement moves a creature *into the
-    zone*, that forced movement increases by 1 square". A `"forcing"`
-    modifier is no use either, because it is laid on whoever does the
-    shoving and a zone does not know in advance who that will be.
-    `c.extend_move(destination=)` is the same want about a creature's own
-    move, on two feats.
+    **The last clause is written, and the marker named the wrong side of
+    it.** That note read: *"what the context does not carry is where the
+    shove ends ... a `"forcing"` modifier is no use either, because it is
+    laid on whoever does the shoving and a zone does not know in advance
+    who that will be."* Both halves are right and they argue against the
+    symbol the row was asking for: `c.forces(destination=)` puts the
+    answer on the shover, and the question is about the **destination**,
+    which is the zone's own business exactly as `hindering` is.
+
+    So it is `Zone.extends_forced`, read by `movement.forced`, which
+    grows the shove's budget **once** and only on an entry -- a creature
+    already in the region and shoved further along it is not being moved
+    *into* anything, which is the same reading of "enters" `i3320p1`
+    turns on. Two overlapping zones give the larger rather than the sum,
+    for the reason `Zone.extra_cost` takes the larger of two prices.
+
+    `c.extend_move(destination=)` is still open and is a different want:
+    a creature's **own** move, on two feats.
 
     **"A creature on the ground" is checked now.** `query.on_the_ground`
     is the reader five target lines ask for -- height and movement mode
@@ -1915,7 +1924,8 @@ def i3318p1(c: Cast) -> None:
     saving throw **40 times**, one at height 3 **0 times**, counted off
     `SavingThrow.granted_via` so the falls a drop causes cannot be
     mistaken for the row's."""
-    zone = c.zone(c.area(), until=When.ENCOUNTER)
+    zone = c.zone(c.area(), until=When.ENCOUNTER,
+                  extends_forced=_I3318_STRETCH)
 
     def entered(ev: ZoneEntered) -> None:
         if ev.zone != zone or not query.on_the_ground(c.world, ev.actor):
