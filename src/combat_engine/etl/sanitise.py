@@ -605,21 +605,24 @@ def _br_dialect(body: str) -> list[str]:
     over: these pages print `Cost: 30 gp` as plain text, so `labelled`
     never sees a label and the existing tuple cannot match it.
 
-    **Unlabelled prose is KEPT, flavour and all, and that is a decision
-    rather than an oversight.** The `<p>` dialect tells the two apart by
-    the `miflavor` class; this one marks nothing, and position does not
-    separate them -- measured over the 45 pages, the first plain line is
-    the base-item line on 43, and the later ones are a mix. One page
-    carries *"gains resist cold 10"* and a whole Daily power as plain
-    lines; another carries only "anything you happen to pick up, from a
-    rock to a chair". A rule that dropped everything after the first
-    would lose the first page's mechanics to tidy up the second's.
+    **Only the first unlabelled line is kept -- the base-item line -- and
+    the reasoning that first said otherwise was measured in the wrong
+    place.** The `<p>` dialect tells flavour from mechanics by the
+    `miflavor` class and this one marks nothing, so the first draft kept
+    every plain line on the ground that one page carries *"gains resist
+    cold 10"* and a whole Daily power as plain lines.
 
-    So the error is taken in the safe direction: a spec is what an author
-    reads and decides from, so flavour in it is noise while a missing
-    mechanical line is a wrong row. `item_spec`'s scrub still swaps the
-    row's own name for its ref, and `leaks.py --specs` is the gate on
-    what else the prose names.
+    That is true of `item_rules` **in isolation** and false of the build.
+    `_blocks(body)` claims those lines first: on the page in question
+    `item.spec` ends up holding only its labelled `Special:` line while
+    the resist and the Daily are two `item_block` rows. So nothing
+    mechanical is lost by dropping later plain prose, and keeping it cost
+    something real -- two printed place names entered item specs out of
+    flavour sentences, which `leaks.py --ingest` caught against its
+    baseline.
+
+    The base-item line is first on 43 of the 45 pages, measured, which is
+    what makes "the first one" a rule rather than a guess.
     """
     # **The footer goes by class, exactly as the other branch drops it.**
     # `paragraphs` skips `publishedIn`; a `<br/>` split does not see
@@ -631,6 +634,7 @@ def _br_dialect(body: str) -> list[str]:
     parts = [text(seg) for seg in raws]
     lines: list[str] = []
     kept_labels: list[str] = []
+    plain_seen = False
     pending = ""
     for raw, seg in zip(raws, parts, strict=True):
         label = _BR_LABEL.match(raw)
@@ -662,6 +666,12 @@ def _br_dialect(body: str) -> list[str]:
         head = seg.split(":", 1)[0].strip().lower()
         if head in _BR_COLUMNS:
             continue
+        # **Only the FIRST plain line, which is the base-item line.** Later
+        # unlabelled prose is flavour, and keeping it put two printed place
+        # names into item specs -- `leaks.py --ingest` caught both.
+        if plain_seen:
+            continue
+        plain_seen = True
         lines.append(seg)
     # **At least one labelled line, or this is not the dialect.** Without
     # this test the branch fires on any page whose paragraph walk came
