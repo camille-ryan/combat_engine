@@ -868,7 +868,7 @@ def f3015b(c: Cast) -> None:
     `query.wearer_of()` stays for the armour branch. `Scenery.by` is the
     tie it wants and nothing populates it today: `terrain.put(by=)` takes
     one and no caller passes it, so the clause would be unreachable on
-    every board this engine builds. #1562."""
+    every board this engine builds. #1563."""
     c.vulnerable(c.level // 2 + c.int_mod, until=When.EONT)
 
 

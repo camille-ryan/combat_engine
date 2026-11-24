@@ -342,6 +342,50 @@ STABILISE_DC = 15
 FIRST_AID_WIND_DC = 10
 FIRST_AID_SAVE_DC = 15
 
+#: *"DCs to Break or Burst Common Items"* -- the printed Strength check
+#: to force a thing open, keyed `(kind, material)` the way
+#: `Scenery` already carries both. Player's Handbook Deluxe Edition,
+#: printed page 262.
+#:
+#: **Read off the page, and found only by searching the table's BODY.**
+#: A heading search found nothing in any of the 18 PDFs -- the same
+#: failure `#1021` records -- and the cell `wooden door` found it at
+#: once. The transcription has a positive control: `terrain.put`'s own
+#: docstring says *"16 for a wooden door at every tier"*, independently,
+#: and the page agrees.
+#:
+#: **One printed column is dropped and it is named rather than lost.**
+#: The three wall rows print a thickness -- 6 inches, 1 foot, 3 feet --
+#: and nothing in `Scenery` records how thick a thing is, so the DC here
+#: is the one for the printed thickness and a thinner or thicker wall has
+#: no number. That is the `#988` mistake written down instead of made.
+#:
+#: `barred` is the page's word and is a state rather than a material; it
+#: is kept in the material slot because the printed row is "barred door"
+#: and inventing a second axis for one row would be worse.
+#:
+#: Flat, not banded, for `STABILISE_DC`'s reason: the page prints one
+#: figure per thing, so reading them off `dc.py` would make smashing a
+#: chest harder for a stronger party.
+BREAK_DCS: dict[tuple[str, str], int] = {
+    ("door", "wood"): 16,
+    ("door", "barred"): 20,
+    ("door", "iron"): 25,
+    ("door", "adamantine"): 29,
+    ("portcullis", "wood"): 23,
+    ("portcullis", "iron"): 28,
+    ("portcullis", "adamantine"): 33,
+    ("bonds", "rope"): 26,
+    ("chains", "iron"): 30,
+    ("chains", "adamantine"): 34,
+    ("chest", "wood"): 19,
+    ("box", "iron"): 26,
+    ("box", "adamantine"): 32,
+    ("wall", "wood"): 26,        # 6 in. thick
+    ("wall", "masonry"): 35,     # 1 ft. thick
+    ("wall", "stone"): 43,       # 3 ft. thick, hewn
+}
+
 
 def _stabilising(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """The Heal check that stops an adjacent dying ally's death saves. #1074.
