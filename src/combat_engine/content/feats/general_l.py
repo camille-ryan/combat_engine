@@ -919,11 +919,15 @@ def f2580(c: Cast) -> None:
     something to draw. What is left is three things, and none of them is in
     this file:
 
-    *The pool value itself*, plus the prerequisite test. The printed gate
-    is "a skill power for which you meet the prerequisites", which reads
-    the character's trained skills and its level -- neither of which a pool
-    *name* can express, so this may want a selector rather than a fourth
-    `pool` string.
+    *The pool value itself.* **Not the prerequisite test, which this used
+    to name and which exists.** The printed gate is "a skill power for
+    which you meet the prerequisites", and `chargen.meets` answers a
+    `{"skill": ...}` atom against the trained set -- so the pool is
+    `power.prereq`: 76 powers gated on a skill, all 76 declared, and a
+    level-4 rogue trained in two of them meets 8 once the level floor is
+    applied. What is true of the old note is the narrower half: a pool
+    *name* cannot express a per-character filter, so this wants a
+    selector rather than a fourth `pool` string. #1558.
 
     *An asymmetric trade.* `power_swap` filters both halves through one
     `trade.utility`: `(row.attack is None) is trade.utility` on the

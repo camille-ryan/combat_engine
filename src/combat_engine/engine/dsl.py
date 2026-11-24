@@ -1752,9 +1752,21 @@ class Swap:
     #:   `chargen` records it at all", and that was the only thing
     #:   stopping it.
     #:
-    #: Still not buildable: the skill-power list, which needs a
-    #: prerequisite check per row. Naming the pool leaves room for it
-    #: without implying it works.
+    #: **The skill-power list is buildable now, and this said it was
+    #: not.** It read *"still not buildable: the skill-power list, which
+    #: needs a prerequisite check per row"* -- and the check is
+    #: `chargen.meets`, which answers a `{"skill": ...}` atom against the
+    #: character's trained set and has for as long as `f2580` has been
+    #: marked. The list is `power.prereq`: 76 powers are gated on a skill
+    #: and all 76 are declared, and a level-4 rogue trained in two of them
+    #: meets 8 after the level floor is applied.
+    #:
+    #: So what is missing for `f2580` is **not** the pool. It is that the
+    #: card trades across kinds -- an attack power out, a utility in,
+    #: where `power_swap` filters both halves through one
+    #: `trade.utility` -- and that *"your bonus at-will attack power"*
+    #: names one specific card whose provenance `Powers.known` does not
+    #: keep. `#1558` holds the measurement.
     pool: str = ""
     #: The usage the **incoming** power is drawn at, when the card trades
     #: across kinds. `None` means "the same as `usage`", which is every
