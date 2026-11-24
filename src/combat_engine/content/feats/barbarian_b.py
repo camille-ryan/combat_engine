@@ -759,6 +759,41 @@ def f1843(c: Cast) -> None:
     question hands a rogue a ranged basic attack it does not have."* That is
     the site, and it is a `Gear`/basic-attack change rather than a weapon
     field. #643.
+
+    ## That paragraph is settled, and the marker still stands
+
+    **The gate it names was opened on `#838`** -- Camille's call, and
+    `5f178a7b` wrote `f1841` and `f3641` against it. So "the ranged basic
+    attack accepting a thrown melee weapon" is no longer owed by anybody,
+    and the three feats that sentence counted are two written and this one.
+
+    **And the numbers for `chargen.IMPROVISED` are in the compendium**,
+    which the old note guessed at from one line. The full printed table is
+    in the `Glossary` under id 663, two tables and three rows:
+
+        melee, one-handed    Prof --   1d4   no range   <=5 lb   group: none or unarmed
+        melee, two-handed    Prof --   1d8   no range   >=6 lb   group: --
+        ranged, any          Prof --   1d4   5/10       varies   group: --
+
+    So whoever declares the constant does not have to derive anything --
+    and note it is **three** profiles, not one, which the old "one weapon
+    declared the way `chargen.STAFF` and `chargen.TOME` are" understates.
+    This card wants the melee pair, since it prints *"not including
+    unarmed attacks"*.
+
+    **Four `Item` rows carry these same profiles and ETL drops all four**
+    on the level-0 clause, which is `#1581`. I first wrote those off as
+    table placeholders that were *"correctly absent"*; they are the
+    printed improvised lines, so they are the opposite -- real rows this
+    row needs.
+
+    **What is genuinely left is holding one.** `c.as_weapon`'s literal
+    form adds a weapon to the belt, so a *row* can grant one; nothing
+    lets a character pick a chair up, and this card grants a **permission**
+    to throw what you are already holding rather than granting the object.
+    Until something can put an improvised weapon in a hand, the clause has
+    no state to read -- which is why the marker is unchanged rather than
+    narrowed to the declaration alone. #1582.
     """
 
 
