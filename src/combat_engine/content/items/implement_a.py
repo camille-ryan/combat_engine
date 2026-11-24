@@ -4678,7 +4678,25 @@ def i2897p1(c: Cast) -> None:
     `_instinctives`. `Condition.SHAPED` was the earlier near miss and is
     not it either: that bars **every** standard action and is a shape the
     creature is in, where this clause bars nothing and only narrows what
-    one granted action may be spent on."""
+    one granted action may be spent on.
+
+    **And the ENFORCEMENT door is `Encounter.spend`, which is worth
+    writing down because the marker names the grant.** Three rows tonight
+    turned out to be one chokepoint away from writable -- `i3318p1`,
+    `i3142x1`, `f370` -- so the question asked of this one was the same:
+    where does the restriction have to be read? `Encounter.spend(eid,
+    what)` is the single place an action is taken, and it emits
+    `ActionSpent`. What it does **not** carry is a *purpose*: it knows
+    the action's type and not what the action is being spent on, so a
+    budget holding one restricted action cannot tell a command from
+    anything else asking for a move.
+
+    So the shape is a purpose on `spend` plus a tagged entry on
+    `Budget`, and the cost is threading that purpose from the callers --
+    which is why this one is **not** one chokepoint away. The grant is
+    still where the restriction is declared, so the marker stays on
+    `c.extra_action(what=)`; this paragraph records where it would be
+    enforced so the next pass does not re-derive it. #1569."""
 
     def each_round(ev: TurnStart) -> None:
         if ev.actor == c.me and _a_summon_stands(c):
