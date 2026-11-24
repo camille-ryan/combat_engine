@@ -462,6 +462,9 @@ class Cast:
     #: Consumed, not read, so a body with two roll sites stages only its
     #: first and the second rolls normally. `#1314`.
     staged: AttackResult | None = None
+    #: This use's attack id, assigned lazily by `_this_attack` and shared
+    #: by every target. `0` until the first swing.
+    _attack_id: int = 0
     #: **Every** attack this body has rolled for the current target, in
     #: order, where `result` is only the last one.
     #:
@@ -1700,6 +1703,30 @@ class Cast:
 
         who = self.me if on is None else on
         return build_choice(self.world, who, prefix)
+
+    def _this_attack(self) -> int:
+        """The id every target of **this** use of the power shares.
+
+        **One `Cast` spans a whole use and that is what makes this the
+        right layer.** Measured: a close burst that hits four creatures
+        calls `c.strike` four times on **one** `Cast` object, and each
+        call is its own `resolve.attack` with its own `AttackResult` --
+        so neither the result nor `among` can say "the same attack", and
+        `among` would also match two separate attacks on the same two
+        creatures.
+
+        Taken lazily, so a row that never swings spends no number, and
+        **once**, so the second and later targets get the first one's.
+
+        A counter on the `World` rather than `id(self)`: CPython hands a
+        collected object's address to the next allocation, which is the
+        bug `c.once_per_board` exists to avoid and which ten rows in this
+        tree were bitten by. #1566.
+        """
+        if self._attack_id == 0:
+            self.world.attacks += 1
+            self._attack_id = self.world.attacks
+        return self._attack_id
 
     def credit(self, ref: str) -> Any:
         """Everything laid inside this block is `ref`'s doing, not this row's.
@@ -5939,6 +5966,7 @@ class Cast:
             self.world, from_ or self.me, who, bonus, vs, self.ref,
             advantage=advantage, opportunity=self.opportunity,
             among=tuple(self.targets) or (who,), branch=self.branch,
+            use=self._this_attack(),
             ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
             keep=keep, hand=hand, as_=as_,

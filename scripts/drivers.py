@@ -136528,6 +136528,81 @@ def an_aura_refuses_one_creature_type(out: Result) -> None:
     )
 
 
+def one_attack_is_one_number(out: Result) -> None:
+    """`Swung.use` -- which **attack** an event belongs to, where `among`
+    is who it reached and `branch` is which line of the row.
+
+    `i724x1` prints *"the two uses of that power must be triggered by two
+    different attacks that you make with this ki focus"*, and nothing
+    could say it: a body runs once per target, so one burst is several
+    `resolve.attack` calls with several `AttackResult`s.
+
+    The arms are the two halves that make the number mean "one attack":
+
+    * every target of **one** use shares it -- otherwise the row would
+      pay twice for a single swing that landed on two enemies;
+    * and a **second** use gets a different one -- otherwise it could
+      never pay at all.
+
+    Either alone is satisfied by a constant: the first by `0`, the second
+    by a per-target counter. Together they pin it.
+
+    The third arm is the hazard this number was nearly built on:
+    `AttackResult` identity is **per target**, measured, so a row
+    comparing results would have read one burst as four attacks.
+
+    #1566.
+    """
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import Hit
+
+    BURST = "p12949"
+
+    def hits(ref: str, times: int = 1) -> list[tuple[int, int, int]]:
+        """`(target, use id, id(result))` for every hit of `times` uses."""
+        world, me, _ = _board(ref, 1)
+        seen: list[tuple[int, int, int]] = []
+        world.bus.on(Hit, lambda ev: seen.append(
+            (ev.target, getattr(ev, "use", 0), id(getattr(ev, "result", None)))))
+        world.rng.loaded = 20
+        for _ in range(times):
+            use(world, me, ref, spend=False)
+        return seen
+
+    once = hits(BURST)
+    out.that(
+        len(once) > 1,
+        "the burst used for this really does hit more than one creature,"
+        " so the arm below is about a multi-target attack rather than a"
+        " single swing",
+        f"{len(once)} hit(s)",
+    )
+    if len(once) < 2:
+        return
+    out.that(
+        len({u for _t, u, _r in once}) == 1 and once[0][1] > 0,
+        "every target of ONE use shares one attack id -- without this a"
+        " row counting attacks pays twice for a swing that happened to"
+        " land on two enemies",
+        f"{len(once)} hits, ids {sorted({u for _t, u, _r in once})}",
+    )
+    out.that(
+        len({r for _t, _u, r in once}) == len(once),
+        "and `AttackResult` identity is PER TARGET, which is the hazard"
+        " this number exists to avoid: a row comparing results would"
+        " have read this one attack as several",
+        f"{len(once)} hits, {len({r for _t, _u, r in once})} result object(s)",
+    )
+    twice = hits(BURST, times=2)
+    out.that(
+        len({u for _t, u, _r in twice}) == 2,
+        "and a SECOND use gets a different id, so a card asking for two"
+        " different attacks can be paid -- the first arm alone is"
+        " satisfied by a constant",
+        f"ids {sorted({u for _t, u, _r in twice})}",
+    )
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -138598,6 +138673,11 @@ DRIVERS = {
         a_borrowed_power_marks_what_it_hits,
         "the power a dilettante borrowed marks what it hits, and no other"
         " power does",
+    ),
+    "attack_identity": (
+        one_attack_is_one_number,
+        "one attack is one number: every target of a use shares it and a"
+        " second use gets another",
     ),
     "aura_refuses": (
         an_aura_refuses_one_creature_type,

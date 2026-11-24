@@ -587,6 +587,7 @@ def attack(
     opportunity: bool = False,
     among: tuple[int, ...] = (),
     branch: int = 0,
+    use: int = 0,
     dying: bool = False,
     charge: bool = False,
     granted_by: int = -1,
@@ -958,6 +959,7 @@ def attack(
         # whichever branch was used -- so without this a ranged shot let a
         # creature react as though it had been swung at.
         rolled.branch = branch
+        rolled.use = use
         # Was this an opportunity attack? Several rows key off that and no
         # event said so -- the flag lived only in the roll's own context, so
         # a creature could not react to being hit by one.
@@ -1062,6 +1064,7 @@ def attack(
         landed.result = result
         landed.among = among or (target,)
         landed.branch = branch
+        landed.use = use
         landed.opportunity = opportunity
         landed.provoked_by = provoked  # ty: ignore[invalid-assignment]
         # **And what was in the provoker's hand**, for the same reason:

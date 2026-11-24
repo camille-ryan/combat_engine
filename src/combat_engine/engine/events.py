@@ -70,6 +70,26 @@ class Swung:
     result: Any = field(default=None, repr=False, kw_only=True)
     #: Everybody this one attack is aimed at, for a burst or a blast.
     among: tuple[int, ...] = field(default=(), repr=False, kw_only=True)
+    #: **Which ATTACK this is**, where `among` is who it reached and
+    #: `branch` is which line of the row. One number per use of a power,
+    #: shared by every target's event.
+    #:
+    #: `among` is not a substitute and nor is anything else here: a body
+    #: runs once per target, so one burst is several `resolve.attack`
+    #: calls and several `AttackResult`s -- measured, four hits from one
+    #: burst carry four distinct `result` objects. Two attacks on the
+    #: same two creatures would also share an `among`. So "two different
+    #: attacks" was unaskable, which is what `i724x1` prints and what
+    #: `c.struck_with(distinct=)` was named for.
+    #:
+    #: Taken from a counter on the `World` rather than `id(cast)`, for
+    #: the reason `c.once_per_board` exists: CPython hands a collected
+    #: object's address to the next allocation.
+    #:
+    #: `repr=False` like every field here, which is what keeps this off
+    #: `Event.wire` and out of the `replay` fixtures -- `#1103`'s flag
+    #: doing the job it was added for.
+    use: int = field(default=0, repr=False, kw_only=True)
     #: Which attack line of the row this is.
     branch: int = field(default=0, repr=False, kw_only=True)
     #: The named manoeuvre, `""` for an ordinary attack.

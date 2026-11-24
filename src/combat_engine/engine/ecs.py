@@ -34,6 +34,12 @@ class World:
         self.rng = rng
         self.bus = bus
         self.round = 0
+        #: Monotonic, one per attack -- a `Cast` takes the next value the
+        #: first time it swings and every target of that use shares it.
+        #: `Swung.use` carries it, and the whole reason it is a counter
+        #: rather than `id(cast)` is the one `c.once_per_board` records:
+        #: CPython reuses a collected object's address.
+        self.attacks = 0
         #: How much a level is worth. Swap for BOUNDED to flatten the
         #: treadmill; see `engine/scaling.py`.
         self.scaling = FULL

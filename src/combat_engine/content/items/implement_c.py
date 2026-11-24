@@ -632,7 +632,7 @@ def i704x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.struck_with(distinct=)",),
+    dropped=("c.flurry_of_blows(distinct_attacks=)",),
 )
 def i724x1(c: Cast) -> None:
     """**Re-pointed, and the old note's premise was wrong.** It said this
@@ -669,15 +669,48 @@ def i724x1(c: Cast) -> None:
     mark in `Powers.last_round` -- the budget `dsl.usable` refuses on --
     and not a spent use, so the flurry's own allowance is untouched.
 
-    **One clause is short and it is not the one this note predicted.** It
-    said the two uses "are triggered by two different `Hit` events by
-    construction", and that is true of the events and not of the printed
-    sentence: the card says two different **attacks that you make with
-    this ki focus**, and `c.struck_with` answers which weapon struck, not
-    which attack. Two hits of the same attack -- an area power landing on
-    two enemies -- are two `Hit` events and one attack, so the row is
-    generous there. `c.struck_with(distinct=)` is the gap, named for the
-    read that would have to tell them apart.
+    **That last clause is written now, and the symbol it was named for
+    was the wrong one.** The note read: the card says two different
+    **attacks that you make with this ki focus**, and `c.struck_with`
+    answers which weapon struck, not which attack -- two hits of one
+    area power are two `Hit` events and one attack, so the row was
+    generous. Right about the gap, wrong about where it lived:
+    `c.struck_with` is a read of the **weapon** and no parameter on it
+    could have said this.
+
+    What was missing was an **attack identity on the event**, and
+    nothing carried one. Measured before building it: a close burst
+    hitting four creatures calls `c.strike` four times on **one** `Cast`
+    and produces four distinct `AttackResult` objects, so neither the
+    result nor `among` can say "the same attack" -- and `among` would
+    match two separate attacks on the same two creatures as well.
+
+    `Swung.use` is that number, taken from a counter on the `World` the
+    first time a `Cast` swings and shared by every target of the use.
+    `repr=False`, so it stays off `Event.wire` and out of the fixtures.
+    It is built, proven and `drivers.attack_identity` holds it.
+
+    **And it does not finish this row, which I found by planting it.** I
+    wrote the obvious thing -- remember which attack bought a hand-back,
+    refuse a second from the same one -- un-marked the row, and the
+    plant that empties that bookkeeping stayed **green**. Two reasons,
+    both measured:
+
+    * it is **unreachable**. The hand-back is held by
+      `c.latch(per_turn=True)`, so the second hit of one burst is
+      refused by the latch before any attack id is consulted. The row
+      was never generous the way the note above says.
+    * and it is the **wrong moment**. The printed sentence is about the
+      two *uses of the flurry* and which attacks trigger them, not about
+      which attack bought the extra use. That gate belongs where the
+      flurry is used.
+
+    So the marker stays, re-pointed at the moment rather than the read:
+    `c.flurry_of_blows(distinct_attacks=)`. And the clause cannot be
+    driven on this row's own board at all -- `audit.board` poses no monk,
+    so `c.flurry_of_blows()` is `""` and the body returns on its second
+    line. A dealt monk has `p11207`; staging one with a ki focus in hand
+    is what a rule for this needs. #1566.
 
     `c.latch(per_turn=True)` is the "additional time during your turn":
     one hand-back a turn, however many times the monk connects."""
