@@ -53231,6 +53231,7 @@ def a_prerequisite_term_resolves(out: Result) -> None:
     from combat_engine.chargen import TERM_MEANS, Character, meets
     from combat_engine.chargen.choices import feat_gates, legal_feats
     from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Ability
 
     _board("f3788", 1)
 
@@ -53267,6 +53268,11 @@ def a_prerequisite_term_resolves(out: Result) -> None:
                  if chargen.class_role(c) == leaf["role"]), None)
         if "race" in leaf:
             return Character(cls="fighter", level=10, race=leaf["race"]), []
+        if "class" in leaf:
+            return Character(cls=leaf["class"], level=10, race="r2"), []
+        if "level" in leaf:
+            return Character(cls="fighter", level=max(1, int(leaf["level"])),
+                              race="r2"), []
         if "size" in leaf:
             return next(
                 ((Character(cls="fighter", level=10, race=ref), [])
@@ -53278,6 +53284,30 @@ def a_prerequisite_term_resolves(out: Result) -> None:
             if not took:
                 return None
             return Character(cls="wizard", level=10, race="r2"), [took]
+        if "leg" in leaf:
+            cls = next((c for c, legs in sorted(chargen.BUILDS.items())
+                        if any(getattr(b, "name", b) == leaf["leg"]
+                               for b in legs)), "")
+            if not cls:
+                return None
+            return Character(cls=cls, level=10, race="r2",
+                              build=leaf["leg"]), []
+        if "build" in leaf:
+            from random import Random as _R
+            cls = next((c for c in sorted(chargen.CLASSES)
+                        if leaf["build"] in {chargen.deal_chassis(_R(s), c)
+                                             for s in range(40)}), "")
+            if not cls:
+                return None
+            return Character(cls=cls, level=10, race="r2",
+                              chassis=leaf["build"]), []
+        if "shield_prof" in leaf:
+            cls = next((c for c in sorted(chargen.CLASSES)
+                        if int(getattr(chargen.CLASSES[c], "shield", 0) or 0)
+                        >= int(leaf["shield_prof"])), "")
+            if not cls:
+                return None
+            return Character(cls=cls, level=10, race="r2"), []
         if "weapon" in leaf:
             # A feat whose own `proficiency=` header opens that weapon.
             # **Seven of the eight have none**, so those terms are not
@@ -53301,13 +53331,44 @@ def a_prerequisite_term_resolves(out: Result) -> None:
     #: has the measurement and what a route would take.
     SANS_OPENER = ("q184", "q185", "q186", "q187", "q188", "q189", "q190")
 
+    def merged(leaves: list[dict]) -> tuple[Any, list[str]] | None:
+        """One character satisfying EVERY leaf of an `all` alias.
+
+        A term naming a race *and* a class -- *"halfling ranger"* -- is
+        an `all`, so posing one leaf at a time cannot satisfy it. The
+        fields are composed instead, and a leaf this builder does not
+        know makes the whole thing unposable rather than half-posed.
+        """
+        got = [posed(leaf) for leaf in leaves]
+        if any(g is None for g in got):
+            return None
+        # **Composed field by field, first stated wins.** Each leaf poses
+        # only the field it is about and leaves the rest at a filler, so
+        # taking the first NON-FILLER value per field is what merges them
+        # -- a `{"class": "ranger"}` leaf states a class and nothing else,
+        # a `{"race": "r5"}` leaf the reverse.
+        FILLER = {"cls": "fighter", "race": "r2"}
+        picked: dict[str, str] = {}
+        hand: list[str] = []
+        for who, held in got:  # type: ignore[misc]
+            for field in ("cls", "race", "build", "chassis"):
+                value = getattr(who, field, "") or ""
+                if value and value != FILLER.get(field) and field not in picked:
+                    picked[field] = value
+            hand += held
+        return (Character(cls=picked.get("cls") or "fighter", level=10,
+                          race=picked.get("race", ""),
+                          build=picked.get("build", ""),
+                          chassis=picked.get("chassis", "")), hand)
+
     dead = []
     for term, alias in sorted(TERM_MEANS.items()):
         if term in SANS_OPENER:
             continue
         satisfied = False
-        for leaf in alias.get("any", [alias]):
-            got = posed(leaf)
+        posings = ([merged(alias["all"])] if "all" in alias
+                   else [posed(leaf) for leaf in alias.get("any", [alias])])
+        for got in posings:
             if got is not None and meets({"term": term}, got[0], got[1]):
                 satisfied = True
                 break
@@ -53422,6 +53483,82 @@ def a_prerequisite_term_resolves(out: Result) -> None:
         " taking them one at a time",
         f"with {meets(gates_now['f1237'], armed, ['f1252'])},"
         f" without {meets(gates_now['f1237'], armed, [])}",
+    )
+
+    # -- a node carrying TWO atoms must satisfy both -----------------------
+    # **The silent over-grant, and the only one of these findings that was
+    # handing something out rather than withholding it.** `meets` walked
+    # its atom chain and returned on the first key it recognised, so
+    # `{"class": "assassin", "build": "executioner"}` answered on the
+    # class and ignored the chassis -- and `f3616`, whose whole gate is
+    # that one node, was offered to **every** assassin. A wrongly dealt
+    # feat fires its clauses.
+    #
+    # Four nodes in the whole database carry two atoms and all four are
+    # this pair, so the blast radius is exactly these feats -- measured,
+    # not assumed.
+    CHASSIS_GATED = (("f3583", "fighter", "weaponmaster", ("p12668",)),
+                     ("f3585", "wizard", "arcanist",
+                      ("cf:wizard-arcanist-f0",)),
+                     ("f3589", "cleric", "templar",
+                      ("cf:cleric-templar-f1",)),
+                     ("f3616", "assassin", "executioner", ()))
+    right = [ref for ref, cls, ch, held in CHASSIS_GATED
+             if meets(gates_now[ref],
+                      Character(cls=cls, level=10, race="r2", chassis=ch),
+                      list(held))]
+    wrong = [ref for ref, cls, _ch, held in CHASSIS_GATED
+             if meets(gates_now[ref],
+                      Character(cls=cls, level=10, race="r2",
+                                chassis="nonesuch"),
+                      list(held))]
+    out.that(
+        len(right) == len(CHASSIS_GATED) and not wrong,
+        "all four feats whose gate names a class AND a chassis in one"
+        " node pass for that chassis and **fail for another** -- they"
+        " used to answer on the class alone, so one of them was offered"
+        " to every member of its class",
+        f"pass with the right chassis {right}; with a wrong one {wrong}",
+    )
+    plain = Character(cls="fighter", level=10, race="r2")
+    low = meets({"ability": Ability.STR.value, "min": 1}, plain, [])
+    high = meets({"ability": Ability.STR.value, "min": 99}, plain, [])
+    out.that(
+        low and not high,
+        "and `{ability, min}` still works both ways -- `min` is a"
+        " MODIFIER of the ability rather than a second atom, so the"
+        " multi-atom split has to carry it along rather than ask for it"
+        " on its own",
+        f"min 1 {low}, min 99 {high}",
+    )
+
+    # -- the two atoms the `other` bucket needed ---------------------------
+    leg_right = meets({"term": "q206"},
+                      Character(cls="swordmage", level=10, race="r2",
+                                build="assault"), [])
+    leg_other = meets({"term": "q206"},
+                      Character(cls="swordmage", level=10, race="r2",
+                                build="shielding"), [])
+    leg_class = meets({"term": "q206"},
+                      Character(cls="fighter", level=10, race="r2",
+                                build="assault"), [])
+    out.that(
+        leg_right and not leg_other and not leg_class,
+        "a term naming a class AND one of its legs passes only for both"
+        " -- the `leg` atom, which is the build LEG where `build` is the"
+        " chassis, and the two are different choices",
+        f"its own class and leg {leg_right}, a sibling leg {leg_other},"
+        f" another class on the same leg word {leg_class}",
+    )
+    shifters = [meets({"term": "q197"},
+                      Character(cls="fighter", level=10, race=r), [])
+                for r in ("r27", "r30", "r2")]
+    out.that(
+        shifters == [True, True, False],
+        "and the biggest term in the whole table -- 19 uses, a race"
+        " family whose printed word two races carry -- passes for both"
+        " and for no third",
+        f"r27, r30, r2 -> {shifters}",
     )
 
     # -- the deliberate absences -------------------------------------------

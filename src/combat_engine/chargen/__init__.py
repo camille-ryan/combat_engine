@@ -4002,6 +4002,22 @@ def feature_alias() -> dict[str, str]:
     return _FEATURE_ALIAS
 
 
+#: Every key `meets` treats as an **atom** -- a claim about the character
+#: that must hold on its own. `all` and `any` are structure, not atoms, and
+#: `min` is a modifier of `ability` rather than a claim of its own.
+#:
+#: Read by the multi-atom branch at the top of `meets`: a node carrying two
+#: of these has to satisfy both, and the chain below returns on the first
+#: one it recognises. Four nodes in the database carry two, and all four
+#: were answered on `class` alone. #1537.
+_ATOM_KEYS = frozenset({
+    "ability", "armour_prof", "build", "class", "deity", "deity_domain",
+    "leg", "level", "multiclass", "race", "ref", "role", "shield_prof",
+    "size",
+    "skill", "source", "term", "weapon", "weapon_prof",
+})
+
+
 def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     """Does this character satisfy a printed prerequisite?
 
@@ -4024,6 +4040,27 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
         return all(meets(n, who, powers) for n in node["all"])
     if "any" in node:
         return any(meets(n, who, powers) for n in node["any"])
+    # **A node carrying more than one atom must satisfy ALL of them**, and
+    # the chain below returns on the first key it recognises -- so a second
+    # atom in the same dict was silently ignored.
+    #
+    # Measured over every prereq tree in the database: **four** nodes carry
+    # two atoms and all four are `{"class": ..., "build": ...}`. The chain
+    # answered on `class` alone, so `f3616` -- whose whole gate is
+    # `{"all": [{"class": "assassin", "build": "executioner"}]}` -- was
+    # offered to **every** assassin rather than to an executioner. A
+    # wrongly dealt feat fires its clauses, which is the direction that
+    # matters.
+    #
+    # The non-atom keys travel with each copy, which is what keeps
+    # `{"ability": ..., "min": ...}` working: `min` is a modifier of
+    # `ability` rather than a second atom, and splitting them would make
+    # every ability prerequisite ask for a missing `min`. #1537.
+    mine = {k for k in node if k in _ATOM_KEYS}
+    if len(mine) > 1:
+        carried = {k: v for k, v in node.items() if k not in _ATOM_KEYS}
+        return all(meets({**carried, one: node[one]}, who, powers)
+                   for one in sorted(mine))
     if "class" in node:
         return node["class"] == who.cls
     if "level" in node:
@@ -4178,6 +4215,32 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     # rather than as a role field. #1537.
     if "role" in node:
         return str(node["role"]).strip().lower() == class_role(who.cls)
+    # **`build` names a CHASSIS, not a leg**, which is worth saying
+    # because the word points the other way. Measured over every prereq
+    # tree in the database: the atom appears **four** times -- `f3583`
+    # weaponmaster, `f3585` arcanist, `f3589` templar, `f3616`
+    # executioner -- and all four are a chassis of the class named beside
+    # them and none is a leg of it. So this reads `Character.chassis`.
+    #
+    # It answered **False for all four** until now: `meets` had no branch
+    # for the atom at all, so four declared, unmarked heroic feats were
+    # dealt to nobody and nothing said so. #1537.
+    if "build" in node:
+        return (str(node["build"]).strip().lower()
+                == (who.chassis or "").strip().lower())
+    # **`leg` is the build LEG, where `build` above is the chassis**, and
+    # the two are different choices: one class in this tree declares
+    # three chassis and six legs, and they do not line up.
+    # `Character.build` holds
+    # the leg, which is the field name the rest of `chargen` uses, so the
+    # atom is spelled for the thing rather than for the field.
+    #
+    # Not an atom the importer produces -- no prereq tree carries one. It
+    # exists for `TERM_MEANS`, where three printed terms name a class and
+    # one of its legs together. #1537.
+    if "leg" in node:
+        return (str(node["leg"]).strip().lower()
+                == (who.build or "").strip().lower())
     # **The race's printed size.** `RaceLine.size` is a `Size`, and the
     # atom's value is the enum's own word -- compared as a string so a
     # term table never has to import the enum.
@@ -4530,6 +4593,42 @@ TERM_MEANS: dict[str, dict[str, Any]] = {
     "q143": {"size": "medium"},
     "q200": {"size": "small"},
     "q201": {"size": "small"},
+    # -- `other`, which is 94 terms and is where the shapes vary ----------
+    # Read for `#1537` rather than guessed at. These are the ones the
+    # atoms above already answer; what is NOT here is listed on that
+    # issue with the reason, and the two biggest are `q227` (25 uses --
+    # a mark nothing in this tree records, which `#1537` names) and a
+    # count over a category rather than one named thing.
+    #
+    # **`q197` is the single biggest term in the whole table at 19
+    # uses**, and it is a race family: the printed word is one race's
+    # second word and two races carry it, so the alias is a real `any`.
+    "q197": {"any": [{"race": "r27"}, {"race": "r30"}]},
+    # A role, which `class_role` answers -- *"any defender"* and *"any
+    # defender class"* are the same claim spelled twice.
+    "q14": {"role": "defender"},
+    "q15": {"role": "defender"},
+    # The size atom, on its one `other`-kind user.
+    "q199": {"size": "small"},
+    # A race AND a class, which is two atoms in one node -- the shape
+    # `meets` used to answer on the first key alone, fixed above.
+    "q113": {"all": [{"race": "r5"}, {"class": "ranger"}]},
+    "q114": {"all": [{"race": "r5"}, {"class": "rogue"}]},
+    "q117": {"all": [{"race": "r7"}, {"class": "fighter"}]},
+    "q118": {"all": [{"race": "r7"}, {"class": "warlord"}]},
+    "q89": {"all": [{"race": "r16"}, {"class": "ranger"}]},
+    "q90": {"all": [{"race": "r16"}, {"class": "rogue"}]},
+    # Either grade of shield, which is "at least the lighter one" and so
+    # is `shield_prof`'s `>=`. `Gear.shield` records the grade and not
+    # merely whether, so 1 is the lighter and 2 the heavier.
+    "q195": {"shield_prof": 1},
+    # A class and one of its **legs**. `build` is a chassis, so the leg
+    # goes through the `leg` atom instead, keyed on the words
+    # `chargen.BUILDS` already uses for that class.
+    "q206": {"all": [{"class": "swordmage"}, {"leg": "assault"}]},
+    "q207": {"all": [{"class": "swordmage"}, {"leg": "shielding"}]},
+    # One class's first leg, the one `#1533` and `#1535` are both about.
+    "q222": {"all": [{"class": "sorcerer"}, {"leg": "wild"}]},
     # -- one `other` term that is plainly a race --------------------------
     # **`q60` is kind `other` and is a race**, which is worth one line
     # because it shows what that bucket holds. It did not match a race
