@@ -3234,7 +3234,7 @@ def i3554p3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(chosen=)", "c.treat_as_enemy()"),
+    dropped=("c.deals(chosen=)",),
 )
 def i509x1(c: Cast) -> None:
     """The necrotic half is written and over-applies: `c.deals` converts
@@ -3243,9 +3243,46 @@ def i509x1(c: Cast) -> None:
     facility -- an opt-in recolour that also writes a keyword -- rather than
     the gate the old symbol named. #613.
 
-    The drawback -- treating your own allies as enemies -- has no verb:
-    nothing moves a creature between sides for the length of a turn."""
+    **The drawback is written now, and "nothing moves a creature between
+    sides" was wrong about the layer.** `Team` has had a third value --
+    `NEUTRAL` -- the whole time, and `query.allies` and `query.enemies`
+    both derive from `query.team`, which is the one read of `Side`. So
+    the drawback is a side change for a duration: `c.sides_with_nobody`,
+    which writes the field and restores it on `Effect.on_end` the way
+    `c.decay` restores an enhancement. Measured on a board: allies 2 ->
+    0, enemies 5 -> 7, and both back when the hold ends.
+
+    **Written rather than read, and the number is why.** The tempting
+    shape was an override inside `query.team`, as `kinds_of` does with
+    effects -- but building one action menu calls `query.team` **863**
+    times, so that scan would price every targeting decision in the game
+    against this one row. The verb's own note carries the measurement.
+
+    It is also **symmetric**, which the old symbol's name hid: `query.
+    team` takes one creature and cannot answer "whose ally is it", so a
+    one-directional version needs the scan above. `NEUTRAL` makes the
+    wielder hostile to both sides and both sides hostile to it -- the
+    printed drawback and then some, stated rather than papered over.
+
+    **And the remaining symbol is moot while this entry is defective**,
+    which is worth a line because it is invisible from the marker.
+    `i509p1` carries `defect=` -- its summoned block's defences are
+    zeroes with no printed derivation -- and `dsl.entry_defect` drops the
+    **whole item**, so neither block is ever offered. `audit.py` says so
+    rather than checking anything:
+
+        DEFECT  i509x1  wants i509p1: the summoned block's defences
+                        are zeroes ...
+
+    So whoever builds `c.deals(chosen=)` should know it does not make
+    this row reachable; the defect does. Measured across the tail, this
+    is the only entry-defective row in it -- 39 marked, 38 playable --
+    so it is a one-off rather than a family. #1573."""
     c.deals(DamageType.NECROTIC, until=When.ENCOUNTER, on=c.me, implement=True)
+    # *"When you use this tome as an implement, you treat all allies as
+    # enemies until the end of your next turn."* `When.EONT` is the
+    # printed duration and the verb's default.
+    c.sides_with_nobody(on=c.me, until=When.EONT)
 
 
 @power(

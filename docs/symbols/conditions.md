@@ -23,6 +23,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - "On a save, you don't fall prone" -- the edge save's consequence.
 - `c.prone(self, *, on: 'int | None' = None, held: 'When | None' = None) -> 'Effect | None'`
   - Knocked prone. It lasts until the creature stands up, not until a
+- `c.sides_with_nobody(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+  - "You treat all allies as enemies." -- the side, not a filter.
 - `c.slowed(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - (no docstring)
 - `c.stunned(self, *, until: 'When' = <When.SAVE_ENDS: 'save ends'>, on: 'int | None' = None) -> 'Effect | None'`

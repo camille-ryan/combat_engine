@@ -136855,6 +136855,94 @@ def a_shift_traded_for_a_walk(out: Result) -> None:
     )
 
 
+def a_creature_that_sides_with_nobody(out: Result) -> None:
+    """*"You treat all allies as enemies until the end of your next
+    turn."* -- `i509x1`'s drawback.
+
+    `Team` has carried a third value the whole time, and `query.allies`
+    and `query.enemies` both derive from `query.team`, the one read of
+    `Side`. So the drawback is a side change for a duration.
+
+    **Written rather than read, and the arms assert the restore because
+    that is where a write goes wrong.** The tempting shape was an
+    override consulted inside `query.team`, as `kinds_of` does with
+    effects -- but one action menu calls `query.team` **863** times, so
+    that scan would price every targeting decision in the game against
+    one row. Writing the field means the hold has to put it back, and a
+    hold that does not is a creature permanently hostile to its own
+    party.
+
+    So: both directions swap, both come back, and the restore survives
+    an end the row did not choose -- `Effect.on_end` fires for a save and
+    a clock alike, which is the `c.decay` pattern.
+
+    #1573.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Side
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Team
+
+    world, me, _ = _board("f419", 1)
+    rig = Cast(world=world, me=me, ref="drivers:alone")
+    before = (len(allies(world, me)), len(enemies(world, me)))
+    out.that(
+        before[0] > 0 and before[1] > 0,
+        "the posed creature starts with allies AND enemies, so the swap"
+        " below is a change in both directions rather than a board where"
+        " one side was already empty",
+        f"allies {before[0]}, enemies {before[1]}",
+    )
+    eff = rig.sides_with_nobody(on=me, until=When.ENCOUNTER)
+    during = (len(allies(world, me)), len(enemies(world, me)))
+    out.that(
+        during[0] == 0 and during[1] == before[0] + before[1],
+        "siding with nobody empties the allies and takes everybody as an"
+        " enemy -- the former allies are now among them, which is the"
+        " printed drawback",
+        f"{before} -> {during}",
+    )
+    out.that(
+        world.need(me, Side).team is Team.NEUTRAL,
+        "and it is the SIDE that moved, not a filter over the pools --"
+        " `query.team` is read 863 times per action menu, so this had to"
+        " be a write",
+        f"{world.need(me, Side).team}",
+    )
+    rig.end_effect(eff)
+    after = (len(allies(world, me)), len(enemies(world, me)))
+    out.that(
+        after == before,
+        "and the hold ending puts the side back exactly -- a write that"
+        " did not restore would leave a creature hostile to its own"
+        " party for the rest of the fight",
+        f"{during} -> {after}, was {before}",
+    )
+
+    # **The row lays it -- driven by its BODY and not by the board**,
+    # which is forced and worth saying. `i509p1` carries `defect=`, so
+    # `dsl.entry_defect` drops the whole item and `audit.board` never
+    # arms either block: reading the board here found nothing and looked
+    # exactly like a missing clause. Calling the body tests what this
+    # rule is about; the defect is a separate recorded fact and
+    # `audit.py` reports it on its own.
+    from combat_engine.engine.dsl import REGISTRY
+
+    board, wielder, _ = _board("f419", 1)
+    REGISTRY["i509x1"].body(
+        Cast(world=board, me=wielder, ref="i509x1", target=wielder))
+    laid = [str(getattr(e, "label", "")) for e in board.effects.of(wielder)
+            if "sides with nobody" in str(getattr(e, "label", ""))]
+    out.that(
+        bool(laid),
+        "`i509x1` itself lays the clause -- without this arm the four"
+        " above pass on a row that never writes it, because they call"
+        " the verb directly",
+        f"{laid}",
+    )
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -140033,6 +140121,11 @@ DRIVERS = {
                       "encounter and ending with the day"),
     "points_regained": (points_regained,
                         "a power point put back, and the cap that refuses one"),
+    "sides_with_nobody": (
+        a_creature_that_sides_with_nobody,
+        "a creature can side with nobody for a turn, and the hold puts"
+        " its side back",
+    ),
     "shift_traded": (
         a_shift_traded_for_a_walk,
         "a shift may be traded for a longer walk, and the headless"

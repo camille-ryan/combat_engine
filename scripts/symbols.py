@@ -274,6 +274,15 @@ CATEGORIES: dict[str, dict] = {
                 # not at all. An author reaching for one of those wants to
                 # find this and see the difference.
                 "surrender",
+                # **Beside `surrender` because both change what a
+                # creature IS to the fight rather than what it can do.**
+                # `i509x1` prints "you treat all allies as enemies": the
+                # side becomes `Team.NEUTRAL` for a turn, so
+                # `query.allies` empties and `query.enemies` takes
+                # everybody. An author reaching for "whose side is it
+                # on" should find it here and not among the targeting
+                # readers, which only ask.
+                "sides_with_nobody",
                 "stunned", "unconscious",
                 # The conditional kind, read in `resolve` beside the
                 # condition: a modifier with a gate, so it can say

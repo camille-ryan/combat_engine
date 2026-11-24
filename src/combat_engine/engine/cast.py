@@ -28167,6 +28167,57 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             by=self.ref,
         )
 
+    def sides_with_nobody(
+        self, *, on: int | None = None, until: When = When.EONT,
+    ) -> Effect | None:
+        """"You treat all allies as enemies." -- the side, not a filter.
+
+        `i509x1`'s drawback. The creature's `Side.team` becomes
+        `Team.NEUTRAL` for the duration, so `query.allies` returns
+        nothing and `query.enemies` returns everybody -- both derive from
+        `query.team`, which is the one read of that component.
+
+        **Written rather than read, and the measurement is why.** The
+        tempting shape is an override consulted inside `query.team`, the
+        way `kinds_of` and `on_build` consult effects. Measured: building
+        **one** action menu calls `query.team` **863** times, so a scan
+        there would cost every targeting decision in the game to serve
+        one row -- which is exactly what `_defence_raise`'s note refuses
+        one layer over. Writing the field and restoring it on `on_end`
+        costs nothing per call.
+
+        **Symmetric, and the name says so.** The marker called this
+        `c.treat_as_enemy()`, which is the card's phrasing and reads as
+        one-directional; `query.team` takes one creature and cannot answer
+        "whose ally is it", so a one-directional version is not
+        expressible without the scan above. `Team.NEUTRAL` makes the
+        creature hostile to both sides and both sides hostile to it,
+        which is the printed drawback and then some -- said plainly here
+        rather than hidden behind a name that suggests otherwise.
+
+        `When.EONT` by default, which is this card's *"until the end of
+        your next turn"*. Restored by `Effect.on_end`, so a save, a
+        clock or the encounter ending all put the side back -- the
+        `c.decay` pattern. #1573.
+        """
+        who = self.me if on is None else on
+        from .components import Side
+        from .types import Team
+
+        side = self.world.get(who, Side)
+        if side is None or side.team is Team.NEUTRAL:
+            return None
+        was = side.team
+        side.team = Team.NEUTRAL
+
+        def restore() -> None:
+            side.team = was
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} sides with nobody",
+            on_end=[restore], by=self.ref,
+        )
+
     def pick_up(self, ref: str = "", *, on: int | None = None,
                 adjacent: bool = True) -> bool:
         """Take something up off the floor, paying nothing for it.
