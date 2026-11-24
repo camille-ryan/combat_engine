@@ -961,7 +961,10 @@ def i839p1(c: Cast) -> None:
 
     So the symbol names a facility rather than a parameter, and it took
     the `mode=` with it because a verb that doubled every grant would be
-    stronger than the printed sentence. A singleton either way -- nothing
+    stronger than the printed sentence. A singleton, and that is no longer a
+    reason to leave it: `#468`'s `>=3` threshold is retired by its own
+    closing comment -- 810 of the remaining 845 rows want exactly one
+    symbol, so *"finishing the rest means working the tail"*. Nothing
     else in the tree waited on the old spelling."""
     c.mode("climb", c.speed_of(), on=c.me, until=When.ENCOUNTER)
 
@@ -1942,8 +1945,19 @@ def i1481p1(c: Cast) -> None:
 
     A singleton: a census of every marked row whose note mentions moving
     through a wall or zone found four, and none of the other three wants
-    this. So it stays marked under #468's >=3 threshold rather than having
-    a mechanism built for one row."""
+    this.
+
+    **That used to be the reason it stayed marked, citing `#468`'s `>=3`
+    threshold, and the threshold is retired.** `#468`'s own closing
+    comment says so: the cut reached 62% of the rows when it was chosen
+    and reaches 26% now, because the dense symbols have been cleared and
+    **810 of the remaining 845 rows want exactly one symbol** -- so *"the
+    ordering principle this issue supplied has been consumed by its own
+    success ... finishing the rest means working the tail"*.
+
+    So being a singleton is no longer a reason to leave this, and the
+    marker means plainly what it says: owed, not out of scope. The three
+    pieces above are what it is owed. #1565."""
     c.wall(8, difficult=True, solid=False, until=When.EONT, sustain=MINOR, height=4)
 
 
