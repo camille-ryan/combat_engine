@@ -5548,7 +5548,8 @@ def a_vampires_weaknesses_and_the_feat_that_lifts_them(out: Result) -> None:
              f" {took(DamageType.RADIANT, board='f3621')}")
 
     # ---- the sunlight burn, and the feat that lifts it
-    def sunburn(*, feat: bool, sunlit: bool = True) -> int:
+    def sunburn(*, feat: bool, sunlit: bool = True,
+                covered: bool = False) -> int:
         """Hit points lost ending a turn in sunlight.
 
         **Two boards, not one board re-armed.** The gate reads `c.feat`
@@ -5559,10 +5560,25 @@ def a_vampires_weaknesses_and_the_feat_that_lifts_them(out: Result) -> None:
         that and read 11 where it wanted 0.
         `_board("f3621")` holds both the feat and the feature, which is
         what makes the arm posable at all.
+
+        **`covered` defaults to False here and True in play**, which is
+        the inversion worth reading. Camille's ruling on `#1511` is that
+        a character is **covered by default** unless the story engine
+        says otherwise, so the printed conjunct *"and lack a protective
+        covering"* is `c.uncovered()` and the clause fires for nobody
+        until something calls `c.uncover()`. These arms are about the
+        rest of the sentence, so they uncover the vampire first --
+        otherwise the two that assert *no* damage would pass on the
+        covering gate rather than on what they are named for, which is
+        exactly what they did the hour this ruling landed.
         """
+        from combat_engine.engine.cast import Cast as _Cast
+
         world2, me2, _ = _board("f3621" if feat else FEATURE, 1)
         if sunlit:
             world2.terrain = frozenset({"sunlight"})
+        if not covered:
+            _Cast(world=world2, me=me2, ref="drivers:vamp").uncover(on=me2)
         hp = world2.need(me2, Health)
         hp.hp = hp.max_hp
         world2.turn = me2
@@ -5571,20 +5587,28 @@ def a_vampires_weaknesses_and_the_feat_that_lifts_them(out: Result) -> None:
 
     burned = sunburn(feat=False)
     out.that(burned > 0,
-             "ending a turn in direct sunlight costs a vampire hit points"
-             " -- the printed 5 plus its own radiant vulnerability, which"
-             " is the card's parenthetical and why the damage is typed",
+             "ending a turn in direct sunlight costs an UNCOVERED vampire"
+             " hit points -- the printed 5 plus its own radiant"
+             " vulnerability, which is the card's parenthetical and why"
+             " the damage is typed",
              f"took {burned}")
+    out.that(sunburn(feat=False, covered=True) == 0,
+             "and a COVERED one takes nothing from the same sunlight,"
+             " which is Camille's ruling on `#1511` and the default for"
+             " every vampire the story engine has not undressed",
+             f"took {sunburn(feat=False, covered=True)}")
     out.that(sunburn(feat=False, sunlit=False) == 0,
-             "and a vampire ending its turn OUT of the sunlight takes"
-             " nothing -- the control, which a plant making the burn"
-             " ignore the terrain is what found missing: without it every"
-             " other arm passed a feature that burned anywhere",
+             "and an uncovered vampire ending its turn OUT of the"
+             " sunlight takes nothing -- the control, which a plant"
+             " making the burn ignore the terrain is what found missing:"
+             " without it every other arm passed a feature that burned"
+             " anywhere",
              f"took {sunburn(feat=False, sunlit=False)}")
     out.that(sunburn(feat=True) == 0,
-             "THE arm: with f3621 held it takes nothing from the sunlight"
-             " -- the feat's clause, written into the feature and gated"
-             " rather than removed so it cannot lose the arming race",
+             "THE arm: with f3621 held an UNCOVERED vampire in sunlight"
+             " still takes nothing -- the feat's clause, written into the"
+             " feature and gated rather than removed so it cannot lose"
+             " the arming race",
              f"took {sunburn(feat=True)}")
 
 
