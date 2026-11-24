@@ -1087,12 +1087,51 @@ def i2008x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.cast_through()",),
+    todo=("dsl.reshape(attack_only=)", "Gear.lends_proficiency"),
 )
 def i2008p1(c: Cast) -> None:
-    """Fires another power out of this weapon, taking the weapon's range
-    and proficiency instead of the power's. Nothing redirects a power
-    through a held object."""
+    """"You cast the spell through your bow, replacing the spell's range
+    with the range of your bow and gaining the bow's proficiency bonus to
+    the attack roll."
+
+    **`c.cast_through()` was the wrong symbol: nothing needs building for
+    the range half.** The old note said *"nothing redirects a power
+    through a held object"*, and `dsl.reach_of` is exactly that --
+    *"this row's range **for this creature**, reshape applied"* -- whose
+    own docstring names *"a bow feat making a melee power ranged"* among
+    the fifteen cards it was built for. `c.reshape_area` is the writer
+    and it already carries every gate this card needs: `cls="warlock"`,
+    `kinds=`, and an `into` **callable** on the printed range rather than
+    a literal.
+
+    The callable has to branch on the kind, which is the detail that
+    makes a literal impossible here: `Ranged(n)` is `Range("ranged", n)`,
+    so the distance is `size`, while `AreaBurst(n, within)` puts the
+    radius in `size` and the placement range in `within`. So a ranged
+    spell wants `size` replaced and an area spell wants `within`, and the
+    burst's own radius must survive.
+
+    **What actually blocks it is an attack-only gate on the shared verb,
+    and that is not this row's to add.** The card says *"a ranged or area
+    warlock attack spell"*. `c.reshape_area` gates on class and shape and
+    nothing else, so writing this row today reshapes warlock utilities
+    too. Measured: **107 warlock attack rows of a ranged or area shape
+    and 12 non-attack ones**, so it is a 10% over-grant rather than a
+    rounding error -- and `c.reshape_area` has **26 callers across 13
+    files**, one of which (`f1028`) prints *"any ranged sorcerer attack
+    power"* and is silently over-reaching for the same reason. Widening a
+    shared verb for 26 callers is its own change with its own audit of
+    which cards say "attack".
+
+    The second symbol is the proficiency half, and its chokepoint is one
+    line: `Cast._attack_bonus` adds `Weapon.proficiency` only when
+    `weapon_power` is true, so an implement spell never gets it. That is
+    correct for every other card -- `Gear.lends_enhancement`'s note says
+    the inverse case *"holds by construction"* -- and this card is the
+    exception, so it wants the same shape one field over.
+
+    Two symbols because they are two gaps in two layers, and either could
+    land without the other. #1580."""
 
 
 @power(
