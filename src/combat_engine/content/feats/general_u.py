@@ -587,6 +587,20 @@ def f3435(c: Cast) -> None:
     variable energy type" declares no such set anywhere in the header,
     and `c.element` answers a build's single sworn element, which is a
     different question.
+
+    **And it is not derivable from the keywords, which is the first
+    thing to try and the reason to write this down.** 353 declared rows
+    carry more than one energy keyword -- `p16504` is cold *and*
+    necrotic -- and that is a blow of two types at once rather than a
+    choice between them, so reading the header would hand this card a
+    list on hundreds of powers that have no variable type at all.
+
+    Where the set really lives is each **body**: `content`'s own
+    `_element(c, *among)` asks the decider over a pool the row passes,
+    which is why the header carries nothing. So a header field means
+    declaring one per variable-energy power rather than one reader --
+    not a single chokepoint, and the count is what would decide whether
+    it is worth it. #1571.
     """
 
 
