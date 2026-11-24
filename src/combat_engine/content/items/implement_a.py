@@ -1362,11 +1362,22 @@ def i2611p1(c: Cast) -> None:
     strictly better than print -- the dagger's crit die on every implement
     attack.
 
-    The object itself is reachable, which is worth saying so the next
-    reader does not re-derive it: `c.my_weapon()` hands back the `Weapon`
-    this block's item sits on, matched by `Weapon.item`. What is missing is
-    a writer for what that object *is*, exclusively, and the second base to
-    write.
+    **The object is NOT reachable, and this paragraph used to say it
+    was.** It read *"`c.my_weapon()` hands back the `Weapon` this block's
+    item sits on"*. Driven on this row's own board: the item sits in
+    `Gear.worn` under the `implement` slot, `Gear.weapons` holds only the
+    character's actual weapon, and `c.my_weapon()` answers **None**. An
+    implement is not a `Weapon` in this engine.
+
+    That matters because it closes the nearest-looking door. `c.as_weapon`
+    takes a `base=` keyword whose own docstring is the opposite of the
+    additive form this note rejects above -- it *"replaces the profile of
+    the weapon this row's item already is, reversibly"*, which is exactly
+    this card's exclusive toggle. But it returns `None` when the row's
+    item is not a weapon in that creature's gear, and measured here it
+    does: `c.as_weapon(base="w3594")` is `None` on the board. So the
+    missing piece is not only a writer for what the object is -- it is the
+    object.
 
     ## Which comes first: the base, and it is a DATA gap
 
