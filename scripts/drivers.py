@@ -46250,12 +46250,34 @@ def first_aid_beyond_stabilising(out: Result) -> None:
     again = offers(world2, enc2, healer2, "use_second_wind")
     out.that(bool(again), "the premise: the grant is still offered")
     kit2 = guards(world2, mate2)
+    # **The printed +2 PLUS whatever the healer's own cards raise it by,
+    # asked of the engine's own reader rather than hard-coded.** This arm
+    # read `k + 2` and went red when the dealt rogue came to hold
+    # `f1398` -- *"whenever one of your powers grants a bonus to a
+    # defense, increase that bonus by 1"* -- which `#1503` made real and
+    # `Cast._defence_raise` applies inside `c.bonus`. The engine was
+    # right and this arm was a dealt-character premise hostage to the
+    # feat pool, so un-marking feats elsewhere moved the hand and broke
+    # an assertion about First Aid.
+    #
+    # Derived and not loosened: a wrong figure from `f3710` still reds
+    # this, and the raise is asserted separately below so the evidence
+    # names it instead of absorbing it.
+    lifts = Cast(world=world2, me=healer2, ref="f3710")._defence_raise(
+        "ac", "untyped", mate2)
     perform(world2, enc2, healer2, again[0])
     got = guards(world2, mate2)
-    out.that(got == [k + 2 for k in kit2],
-             "and with `f3710` held the subject gains exactly +2 on ALL"
-             " FOUR defences -- the way `c.second_wind` lays them, and the"
-             f" card's whole first clause ({kit2} -> {got})")
+    out.that(got == [k + 2 + lifts for k in kit2],
+             "and with `f3710` held the subject gains the printed +2 on"
+             " ALL FOUR defences -- the way `c.second_wind` lays them,"
+             " and the card's whole first clause -- plus whatever the"
+             f" healer's own cards raise that by ({kit2} -> {got},"
+             f" raise {lifts:+d})")
+    out.that(lifts >= 0,
+             "and that raise is read off the engine's own"
+             " `_defence_raise`, so this names the dealt healer's"
+             " contribution rather than absorbing it into the expected"
+             f" number ({lifts:+d} from the hand it was dealt)")
 
     # -- Grant a Saving Throw ----------------------------------------------
     world3, enc3, healer3, mate3 = board()
