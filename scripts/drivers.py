@@ -53196,6 +53196,187 @@ def a_story_clause_is_narrative(out: Result) -> None:
     )
 
 
+def forced_into_hindering_terrain(out: Result) -> None:
+    """A creature forced into hindering terrain saves, and lands prone.
+
+    Read off the page rather than from an issue's quote, Dungeon Master's
+    Guide page 43:
+
+    > *"**hindering terrain:** Forced movement can force targets into
+    > hindering terrain. Targets forced into hindering terrain receive a
+    > saving throw immediately before entering the unsafe square they are
+    > forced into. Success leaves the target prone at the edge of the
+    > square before entering the unsafe square."*
+
+    **The second sentence is why reading it mattered.** The printed
+    success does not merely stop the creature, it leaves it **prone** --
+    which a reading from memory would have missed, and missing it is
+    stronger than print for the creature in exactly the way a house rule
+    should not be.
+
+    Nothing rolled this throw before, which is why `i3318p1` carried
+    `movement.hindering_save` and `p11268`/`p11582` each dropped a half
+    of the same core rule in prose.
+
+    Five arms:
+
+    * the save is rolled, the creature does **not** move, and it is
+      prone -- the whole printed success;
+    * a failed save lets it in, which is the other half and the control
+      that stops the arm above passing on a shove that never happened;
+    * **nothing is rolled on clear ground**, which matters because this
+      sits in the inner loop of every push, pull and slide in the game;
+    * `i3318p1`'s printed -2 reaches that throw;
+    * and reaches **only** it -- a creature outside its zone saves at no
+      penalty, which is the geometry half `c.grants_in` carries.
+
+    #1545.
+    """
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import SavingThrow
+    from combat_engine.engine.grid import neighbours
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import enemies, hindering_at, is_
+    from combat_engine.engine.types import Condition
+
+    def shoved(*, hindering: bool, face: int) -> dict[str, Any]:
+        """Slide a foe one square, with the d20 forced, and report.
+
+        `rng.loaded` forces a **d20** and the throw is one, so this is the
+        right knob here -- where `the_called_soul_die` had to patch
+        `rng.die` for a d10.
+        """
+        world, me, _ = _board("p11268", 1)
+        rig = Cast(world=world, me=me, ref="drivers:hinder")
+        foe = sorted(enemies(world, me))[0]
+        here = world.need(foe, Position).square
+        if hindering:
+            rig.zone(list(neighbours(here)), hindering=True,
+                     until=When.ENCOUNTER)
+            world.zones.refresh()
+        rolled: list[Any] = []
+        world.bus.on(SavingThrow, lambda ev: rolled.append(ev))
+        world.rng.loaded = face
+        moved = rig.slide(1, on=foe)
+        mine = [e for e in rolled if e.against == "hindering terrain"]
+        return {
+            "saves": len(mine),
+            "bonus": mine[0].bonus if mine else None,
+            "moved": moved,
+            "prone": is_(world, foe, Condition.PRONE),
+            "stayed": world.need(foe, Position).square == here,
+            "ringed": sum(1 for sq in neighbours(here)
+                          if hindering_at(world, sq)),
+        }
+
+    saved = shoved(hindering=True, face=20)
+    out.that(
+        saved["ringed"] > 0 and saved["saves"] == 1
+        and saved["moved"] == 0 and saved["stayed"] and saved["prone"],
+        "a creature forced into hindering terrain rolls ONE save, and a"
+        " success leaves it where it stood AND prone -- the printed"
+        " success, whose second half a reading from memory would have"
+        " missed",
+        f"{saved}",
+    )
+    failed = shoved(hindering=True, face=1)
+    out.that(
+        failed["saves"] == 1 and failed["moved"] > 0
+        and not failed["prone"] and not failed["stayed"],
+        "and a failed save lets it in, unharmed by this rule -- whatever"
+        " the terrain does then is the zone's own business, and this is"
+        " the control that stops the arm above passing on a shove that"
+        " never happened",
+        f"{failed}",
+    )
+    clear = shoved(hindering=False, face=20)
+    out.that(
+        clear["saves"] == 0 and clear["moved"] > 0,
+        "and NOTHING is rolled over clear ground -- this sits in the"
+        " inner loop of every push, pull and slide in the game, so the"
+        " cheap test has to come first",
+        f"{clear}",
+    )
+
+    # -- i3318p1's printed -2, and the geometry that bounds it -----------
+    def penalty_for(*, inside: bool, walk_out: bool = False) -> int | None:
+        """The bonus on the hindering throw under `i3318p1`'s zone.
+
+        `walk_out` lifts the creature clear of the zone before the shove,
+        which is the half `c.grants_in` carries and a plain `c.penalty`
+        could not: the printed line is about being **in** the zone, so it
+        has to end on the geometry rather than on a clock.
+        """
+        world, me, _ = _board("i3318p1", 1)
+        rig = Cast(world=world, me=me, ref="drivers:hinder")
+        foe = sorted(enemies(world, me))[0]
+        here = world.need(foe, Position).square
+        if inside:
+            use(world, me, "i3318p1", targets=[foe])
+            world.zones.refresh()
+        if walk_out:
+            # **Searched for, not guessed.** The first draft computed one
+            # square nine away and guarded on `grid.passable`, which
+            # answered False -- so the move never happened and the arm
+            # measured the inside case twice, reading -2 where it wanted
+            # 0. And `zones.refresh()` is what notices: membership is
+            # recomputed there, so a probe that moves a creature and
+            # reads straight away sees the old answer.
+            far = next(
+                ((x, y)
+                 for x in range(world.grid.width)
+                 for y in range(world.grid.height)
+                 if abs(x - here[0]) + abs(y - here[1]) > 6
+                 and world.grid.passable((x, y))
+                 and world.grid.occupant((x, y)) is None),
+                None)
+            if far is None:
+                out.skip("no passable square clear of the zone on this board")
+                return None
+            place(world, foe, far)
+            world.zones.refresh()
+            here = far
+        rig.zone(list(neighbours(here)), hindering=True,
+                 until=When.ENCOUNTER)
+        world.zones.refresh()
+        rolled: list[Any] = []
+        world.bus.on(SavingThrow, lambda ev: rolled.append(ev))
+        world.rng.loaded = 11
+        rig.slide(1, on=foe)
+        mine = [e for e in rolled if e.against == "hindering terrain"]
+        return mine[0].bonus if mine else None
+
+    inside = penalty_for(inside=True)
+    left = penalty_for(inside=True, walk_out=True)
+    out.that(
+        inside is not None and inside < 0,
+        "`i3318p1`'s printed -2 reaches that throw -- the clause it"
+        " carried `movement.hindering_save` for, and the throw it names"
+        " is the only one it touches",
+        f"bonus inside the zone {inside}",
+    )
+    # **This arm is verified by measurement and I could not PLANT it**,
+    # which is said here rather than left to look planted. Three shapes
+    # were tried in place of `c.grants_in` -- a `ZoneEntered` watch, a
+    # loop over `c.in_squares(c.area())`, and a plain `c.penalty` -- and
+    # each either failed to land the penalty at all (the creature is
+    # inside when the zone is made, so no entry fires) or reddened the
+    # arm above instead. So it is a control on the choice of verb rather
+    # than an assertion a mutation can falsify: `-2` inside and `0` after
+    # walking out, measured directly both ways.
+    out.that(
+        left == 0,
+        "**and it is gone the moment the creature leaves the zone** --"
+        " `c.grants_in` runs on the geometry, where the line this"
+        " replaced was a plain `c.penalty` on a clock that left the zone"
+        " with whoever had been in it",
+        f"bonus inside {inside}, after walking out {left}",
+    )
+
+
 def a_slide_may_refuse_a_square(out: Result) -> None:
     """"But not into hindering terrain", on a slide rather than a shove.
 
@@ -53233,7 +53414,16 @@ def a_slide_may_refuse_a_square(out: Result) -> None:
     from combat_engine.engine.query import enemies, hindering_at
 
     def staged(*, hindering: bool) -> tuple[Any, int, int, Any]:
-        """A board whose foe is ringed by hindering squares, or not."""
+        """A board whose foe is ringed by hindering squares, or not.
+
+        **The d20 is loaded to 1, so the hindering save always FAILS.**
+        `#1545` made forced movement into hindering terrain offer one --
+        the printed DMG p43 rule -- and a success stops the creature and
+        lands it prone, which is indistinguishable from `avoid=` doing
+        it. The control arm read `moved 0` the moment that landed. With
+        the save failing, the only thing that can stop this slide is the
+        parameter under test.
+        """
         world, me, _ = _board("p11268", 1)
         rig = Cast(world=world, me=me, ref="drivers:slide")
         foe = sorted(enemies(world, me))[0]
@@ -53242,6 +53432,7 @@ def a_slide_may_refuse_a_square(out: Result) -> None:
             rig.zone(list(neighbours(here)), hindering=True,
                      until=When.ENCOUNTER)
             world.zones.refresh()
+        world.rng.loaded = 1
         return world, me, foe, here
 
     world, me, foe, here = staged(hindering=True)
@@ -137458,6 +137649,11 @@ DRIVERS = {
         a_slide_may_refuse_a_square,
         "a slide may refuse a square the card forbids, as a shove"
         " already could",
+    ),
+    "forced_hindering": (
+        forced_into_hindering_terrain,
+        "forced movement into hindering terrain offers a save, and a"
+        " success lands the creature prone",
     ),
     "no_concealment": (
         concealment_denied_without_cover,

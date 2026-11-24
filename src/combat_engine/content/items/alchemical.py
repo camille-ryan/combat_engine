@@ -1767,9 +1767,15 @@ def i2568p1(c: Cast) -> None:
     them."""
 
 
+#: The printed penalty on a throw to avoid entering hindering terrain.
+#: Named rather than inline because the gate below reads the label and
+#: the two belong together. #1545.
+_I3318_PENALTY = 2
+
+
 @power("i3318p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(1, 10), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.forces(destination=)", "movement.hindering_save"))
+       dropped=("c.forces(destination=)",))
 def i3318p1(c: Cast) -> None:
     """The zone answers whoever walks in. Two things were wrong with how
     it did it, and the marker named a parameter that already exists.
@@ -1789,12 +1795,16 @@ def i3318p1(c: Cast) -> None:
     key off a creature that had walked in and out read **-2** with the
     line and **0** without, so it was leaving the zone with it.
 
-    There is no such throw in this engine to penalise. `query.hindering_at`
-    answers whether a square is hindering and that is the whole of what
-    exists: nothing rolls a save when forced movement would put a creature
-    into it, which is why `p11268` and `p11582` both carry a marker for
-    the destination half of the same core rule. So the clause is named
-    rather than approximated.
+    **That throw exists now, so the -2 is written.** `movement`'s
+    `_into_hindering` is the printed rule, read off DMG page 43: *"Targets
+    forced into hindering terrain receive a saving throw immediately
+    before entering the unsafe square they are forced into. Success
+    leaves the target prone at the edge of the square before entering the
+    unsafe square."* It is announced as `SavingThrow(against="hindering
+    terrain", when_="edge")`, so this card's penalty is a `"save"`
+    modifier gated on that label and reaches **only** that throw -- which
+    is the narrowing the old line could not make and is why it used to
+    sit on every save the creature rolled. `#1545`.
 
     **`c.forces(target=)` is refuted, and re-pointed at the destination.**
     `movement._settle` has keyed the shove's context on `target` since
@@ -1828,6 +1838,25 @@ def i3318p1(c: Cast) -> None:
             c.prone(on=ev.actor)
 
     c.watch(ZoneEntered, entered, until=When.ENCOUNTER)
+    # **The printed -2, on the creatures the card names and the one throw
+    # it is about.** Two narrowings, and the old line had neither.
+    #
+    # *"**Creatures in the zone** take a -2 penalty to saving throws to
+    # avoid entering hindering terrain."* So it is `c.grants_in`, which
+    # runs on the geometry and ends when the creature leaves -- the old
+    # line was a plain `c.penalty` that left the zone with whoever had
+    # been in it. `side="any"` because the sentence names creatures and
+    # not a side.
+    #
+    # And the throw exists now: `movement._into_hindering`, DMG p43,
+    # announced as `SavingThrow(against="hindering terrain")` with
+    # `label="hindering"` in its modifier context. Gated on that label,
+    # so it reaches that throw and nothing else -- where the old line sat
+    # on every save for the rest of the fight, including this row's own
+    # prone throw. #1545.
+    c.grants_in(zone, "save", -_I3318_PENALTY, side="any",
+                kind="item",
+                when=lambda ctx: ctx.get("label") == "hindering")
 
 
 @power("i896p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,

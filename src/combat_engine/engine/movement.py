@@ -1456,7 +1456,9 @@ def forced(
         # announcing a Leave/Enter/Moved for a square nobody left.
         moved = 0
         for sq in _line(world.need(target, Position).square, to)[1:]:
-            if moved >= amount or _over_an_edge(world, target, sq, power):
+            if (moved >= amount
+                    or _over_an_edge(world, target, sq, power)
+                    or _into_hindering(world, target, sq, power)):
                 break
             if not step(world, target, sq, kind=how.value):
                 break
@@ -1465,12 +1467,87 @@ def forced(
     moved = 0
     for _ in range(amount):
         nxt = _forced_square(world, source, target, anchor, how, avoid)
-        if nxt is None or _over_an_edge(world, target, nxt, power):
+        if (nxt is None
+                or _over_an_edge(world, target, nxt, power)
+                or _into_hindering(world, target, nxt, power)):
             break
         if not step(world, target, nxt, kind=how.value):
             break
         moved += 1
     return moved
+
+
+def _into_hindering(
+    world: World, target: int, into: Square, power: str
+) -> bool:
+    """Did the shoved creature save against being put in hindering terrain?
+
+    > *"**hindering terrain:** Forced movement can force targets into
+    > hindering terrain. Targets forced into hindering terrain receive a
+    > saving throw immediately before entering the unsafe square they are
+    > forced into. Success leaves the target prone at the edge of the
+    > square before entering the unsafe square."*
+    >
+    > -- Dungeon Master's Guide, page 43
+
+    Read off the page rather than from an issue's quote, and the second
+    sentence is why that mattered: the printed success does not merely
+    stop the creature, it leaves it **prone**. A reading from memory
+    would have stopped it and left it standing, which is stronger than
+    print for the creature in exactly the way a house rule should not be.
+
+    True stops the forced movement where it stands, which is
+    `_over_an_edge`'s contract one function down and the same printed
+    timing -- *"immediately before entering"*, so the throw is taken
+    before the step and a save taken after would have to put the creature
+    back.
+
+    `when_="edge"` for `catches_itself`'s reason: the throw is taken
+    **now** and not at the end of the turn, so a row paying out on
+    "saving throws made at the start of your turn" must not reach it.
+
+    False on a failure, and the creature enters -- whatever the terrain
+    does to it then is the zone's own business. #1545.
+    """
+    from .durations import When
+    from .events import SavingThrow
+    from .falling import SAVE_BEATS
+    from .query import hindering_at
+    from .resolve import _mods
+    from .types import Condition
+
+    if not hindering_at(world, into):
+        # The common case by far: this sits in the inner loop of every
+        # push, pull and slide in the game, so the cheap test comes first
+        # and nothing is rolled on clear ground.
+        return False
+    natural = world.rng.roll("1d20").total
+    plus = _mods(
+        world, target, "save",
+        # The same keys `catches_itself` passes, and for the reason its
+        # note gives: a gate subscripting an absent key raises inside the
+        # kernel. A terrain save is against no effect.
+        {"actor": target, "label": "hindering", "conditions": frozenset(),
+         "ongoing": False, "dtype": None, "dtypes": (),
+         "keywords": frozenset(), "effect": None,
+         "when_": "edge", "granted_via": power, "granted_by": -1},
+    )
+    saved = world.bus.emit(
+        SavingThrow(
+            actor=target, against="hindering terrain", natural=natural,
+            bonus=plus, saved=natural + plus >= SAVE_BEATS, when_="edge",
+            granted_via=power, keywords=(),
+        )
+    ).saved
+    if saved:
+        # **Prone, which is the printed success.** The creature is left at
+        # the edge -- it has not stepped, so it is already in the last
+        # square before the unsafe one and only the condition is owed.
+        world.effects.apply(
+            target, target, When.ENCOUNTER, label="prone",
+            conditions=[Condition.PRONE], by=power,
+        )
+    return saved
 
 
 def _over_an_edge(
