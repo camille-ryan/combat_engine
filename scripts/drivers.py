@@ -53983,7 +53983,7 @@ def a_prerequisite_term_resolves(out: Result) -> None:
         FILLER = {"cls": "fighter", "race": "r2"}
         picked: dict[str, str] = {}
         hand: list[str] = []
-        for who, held in got:  # type: ignore[misc]
+        for who, held in got:
             for field in ("cls", "race", "build", "chassis"):
                 value = getattr(who, field, "") or ""
                 if value and value != FILLER.get(field) and field not in picked:
@@ -135676,6 +135676,219 @@ def this_weapon_doubles_damage_only_against_an_object(out: Result) -> None:
              f"{REGISTRY['i1737x1'].unfinished}")
 
 
+def a_crystal_sets_off_the_item_beside_it(out: Result) -> None:
+    """"The first time a creature enters the zone, the zone ends and the
+    alchemical item is activated."
+
+    `i3320p1`. The row carried `dropped=("chargen.deals_consumables",)`
+    on the premise that *"nothing records which items a character
+    carries"*, and `Gear.carried` is that record -- so the marker was
+    stale rather than waiting on a verb.
+
+    **Two of these arms exist because my own probes were wrong, and they
+    are the cheap part of this rule.** I diagnosed the row as laying a
+    zone whose entry handler never fires, filed that, and reverted a
+    working change on the strength of it. The handler fires; every probe
+    had placed the foe in a square **inside** the zone, and in two of
+    them it was already standing there -- so nothing entered. What I
+    read as four dead `ZoneEntered` emissions was `c.zone()` announcing
+    its **initial occupants**, during the call, before it returns the
+    id. The card says *enters*, so an occupant correctly does not count.
+
+    Hence the arms: an occupant does **not** set it off, and a walker-in
+    **does**. Either one alone is satisfied by a broken row -- a handler
+    that never runs passes the first, one that fires on anything passes
+    the second.
+
+    The rest is the payload. The pool is the printed one, a carried item
+    of the crystal's category at *"the same as or lower"* level, so the
+    level arm is what stops the filter being a category test; and a
+    character carrying nothing that qualifies still flashes, which is
+    the outcome the row has to survive rather than a failure.
+
+    Planted five ways, and **two of the five taught something**:
+
+    | the plant | |
+    |---|---|
+    | the pool offers nothing | 2 arms red |
+    | the level ceiling opened | the pool arm red -- and **no board arm**, see below |
+    | the payload never set off | 1 arm red |
+    | the entry watch hoisted out of `armed` | **green, and that is the finding** |
+    | the zone ends on OCCUPANCY, not entry | 6 arms red, the occupant one among them |
+
+    The hoist is the shape I wrongly shipped and then reverted, and it
+    is **inert**: the zone id is recorded after `c.zone()` returns
+    either way, so the hoisted handler returns early on the initial
+    occupants exactly as the nested one never hears them. It was neither
+    the fix I claimed nor a regression -- it was a change.
+
+    #1548.
+    """
+    from combat_engine.content.items.alchemical import (
+        _VOLATILE,
+        _volatile_beside,
+    )
+    from combat_engine.db import game
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Position
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import PowerUsed, TurnEnd
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import enemies
+
+    def play(carry: list[str], stage: str,
+             sit: tuple[int, int] | None = None) -> dict[str, object]:
+        """Use the crystal, let the delay lay the zone, stage a foe.
+
+        `stage="outside"` parks the foe six squares clear and walks it in
+        after the zone is laid. `stage="occupant"` puts it on `sit`
+        **before** the crystal is used, so the zone is laid underneath it
+        and it never enters -- which is the distinction the card draws
+        and the one my probes collapsed. `sit` comes from an `outside`
+        run on the same seed.
+
+        **The payload is read as a DELTA and not as the whole list**,
+        because `audit.board` arms every `action=NONE` row on the board:
+        an unrelated `p12674` fires during the arming and the first draft
+        of this rule read it as the crystal's payload in all four arms.
+        """
+        w, me, _ = _board("i3320p1", 1)
+        w.get(me, Gear).carried = list(carry)
+        foe = sorted(enemies(w, me))[0]
+        mine = w.need(me, Position).square
+        far = next(((x, y) for x in range(w.grid.width)
+                    for y in range(w.grid.height)
+                    if w.grid.passable((x, y))
+                    and w.grid.occupant((x, y)) is None
+                    and abs(x - mine[0]) + abs(y - mine[1]) > 6), None)
+        if far is None:
+            return {}
+        place(w, foe, sit if stage == "occupant" and sit else far)
+        w.zones.refresh()
+        fired: list[str] = []
+        w.bus.on(PowerUsed, lambda ev: fired.append(ev.power))
+        before = {eid for eid, _z in w.zones.all()}
+        use(w, me, "i3320p1")
+        for _ in (1, 2):
+            w.bus.emit(TurnEnd(actor=me, round=w.round or 1))
+        laid = [(eid, z) for eid, z in w.zones.all() if eid not in before]
+        if not laid:
+            return {"laid": 0}
+        eid, zone = laid[-1]
+        squares = sorted(getattr(zone, "squares", ()) or ())
+        armed = len(fired)
+        if stage == "outside":
+            place(w, foe, squares[0])
+            w.zones.refresh()
+        live = {x for x, _z in w.zones.all()}
+        return {"laid": len(squares), "zone": eid, "squares": squares,
+                "sat_in_it": stage == "occupant" and w.need(
+                    foe, Position).square in squares,
+                "ended": eid not in live, "set_off": fired[armed:]}
+
+    carried = ["i3316", "i2564"]
+    walked = play(carried, "outside")
+    out.that(bool(walked) and walked.get("laid") == 9,
+             "the delayed clause lays a zone of the printed 9 squares, so"
+             " the arms below are about a zone that exists",
+             f"{walked.get('laid')} squares")
+    out.that(walked.get("ended") is True,
+             "a creature walking in from outside ends the zone, which is"
+             " the clause I wrongly reported dead -- my probes staged the"
+             " foe inside it, so nothing ever entered",
+             f"zone {walked.get('zone')}, ended {walked.get('ended')}")
+    out.that(walked.get("set_off") == ["i3316p1"],
+             "and the carried alchemical item is set off, by its block"
+             " ref through `dsl.use` -- the clause the stale marker said"
+             " nothing recorded",
+             f"{walked.get('set_off')}")
+
+    # -- the arm that stops the one above passing on a handler that
+    # fires at anything: an occupant is not an entry --
+    found = walked.get("squares")
+    seats: list[Any] = found if isinstance(found, list) else []
+    sat = play(carried, "occupant", seats[0] if seats else None)
+    out.that(sat.get("sat_in_it") is True,
+             "and that foe really was standing in the area when the zone"
+             " was laid, so the arm below is about an occupant rather"
+             " than about a foe that never got there",
+             f"{sat.get('sat_in_it')}, zone {sat.get('zone')}")
+    out.that(sat.get("ended") is False and sat.get("set_off") == [],
+             "a creature ALREADY standing in the area when the zone is"
+             " laid does not set it off: the card's word is `enters`, and"
+             " `c.zone()` announces its initial occupants during the call",
+             f"ended {sat.get('ended')}, set off {sat.get('set_off')}")
+
+    # -- the payload's pool is the printed one --
+    bare = play(["i2564"], "outside")
+    out.that(bare.get("ended") is True and bare.get("set_off") == [],
+             "carrying nothing of the crystal's category, the zone still"
+             " ends and sets nothing off -- a real outcome of the card"
+             " rather than a failure to find a payload",
+             f"ended {bare.get('ended')}, set off {bare.get('set_off')}")
+
+    con = game()
+    ceiling = con.execute(
+        "SELECT base_level FROM item WHERE ref = 'i3320'").fetchone()
+    mine = int(ceiling["base_level"] or 0) if ceiling else 0
+    over = [r["ref"] for r in con.execute(
+        "SELECT ref, base_level FROM item WHERE category = ?"
+        " AND base_level > ? ORDER BY ref", (_VOLATILE, mine))]
+    held = next((r for r in over if any(
+        b["ref"] in REGISTRY for b in con.execute(
+            "SELECT ref FROM item_block WHERE item_ref = ?", (r,)))), "")
+    out.that(bool(held),
+             "a declared alchemical item ABOVE the crystal's level exists,"
+             " so the level arm below is a test rather than a search of an"
+             " empty set",
+             f"{len(over)} above level {mine}; using {held!r}")
+
+    # -- **the level clause is asserted on the POOL and not on the board,
+    # and the plant is why.** Opening the ceiling (`if False: continue`)
+    # left a board arm green: `use(w, me, "i1311p1")` returns False for a
+    # level-5 character holding a level-8 item regardless of this row, so
+    # the arm was passing on the ENGINE's refusal and could not see the
+    # filter it was named for. At unit level the plant reds it. --
+    stand, holder, _ = _board("f419", 1)
+    rig = Cast(world=stand, me=holder, ref="i3320p1")
+
+    def carrying(*items: str) -> str:
+        """What the pool offers a character holding exactly `items`."""
+        stand.need(holder, Gear).carried = list(items)
+        return _volatile_beside(rig)
+
+    offered = carrying(held) if held else "-"
+    out.that(bool(held) and offered == "",
+             "and it is refused by the pool: the printed payload is an"
+             " item whose level is `the same as or lower than the"
+             " crystal's`, so the filter reads the level and not only the"
+             " category",
+             f"carrying {held!r}, offered {offered!r}")
+    under = carrying("i3316")
+    out.that(under == "i3316p1",
+             "while an item at or under that level IS offered, which is"
+             " what stops the arm above passing on a pool that offers"
+             " nothing to anybody",
+             f"{under!r}")
+
+    qualify = [r["ref"] for r in con.execute(
+        "SELECT ref FROM item WHERE category = ? AND base_level <= ?"
+        " ORDER BY ref", (_VOLATILE, mine))]
+    blocked = [r for r in qualify if not any(
+        b["ref"] in REGISTRY for b in con.execute(
+            "SELECT ref FROM item_block WHERE item_ref = ?", (r,)))]
+    out.that(len(qualify) > 1 and not blocked,
+             "every alchemical item this crystal may set off carries a"
+             " declared block, so the payload never resolves to a ref"
+             " `dsl.use` cannot run",
+             f"{len(qualify)} qualify, {len(blocked)} undeclared"
+             f" {blocked[:3]}")
+
+    out.that(not REGISTRY["i3320p1"].unfinished,
+             "i3320p1 waits on nothing",
+             f"{REGISTRY['i3320p1'].unfinished}")
+
+
 DRIVERS = {
     "borrowed_divine_allowances": (
         a_borrowed_divine_power_ignores_both_of_its_allowances,
@@ -137736,6 +137949,11 @@ DRIVERS = {
         forced_into_hindering_terrain,
         "forced movement into hindering terrain offers a save, and a"
         " success lands the creature prone",
+    ),
+    "crystal_payload": (
+        a_crystal_sets_off_the_item_beside_it,
+        "i3320p1 ends its zone on a creature entering it and sets off the"
+        " carried alchemical item",
     ),
     "feat_implement": (
         a_feat_grants_an_implement,

@@ -1438,9 +1438,67 @@ def i3316p1(c: Cast) -> None:
         c.immobilized(until=When.EOTNT)
 
 
+#: The printed category a crystal's payload must come from.
+_VOLATILE = "Alchemical Item"
+
+
+def _volatile_beside(c: Cast) -> str:
+    """The block of a carried alchemical item the crystal may set off.
+
+    *"A volatile alchemical item that the crystal will activate. The
+    level of that item must be the same as or lower than the crystal's
+    level."* So the pool is `Gear.carried` narrowed to that category and
+    that level, and **both levels are read** from `item.base_level`
+    rather than written here -- the crystal's own included, so a reprint
+    at another level needs no edit.
+
+    Offered through `c.choose`, because the card has the **wielder**
+    place the item and a dealt character carries two. `""` when it is
+    carrying nothing that qualifies, which is a real outcome rather than
+    a failure: the trap then flashes and sets nothing off.
+
+    Returns the item's **block** ref and not the item's, because that is
+    what `dsl.use` takes. #1548.
+    """
+    from combat_engine.db import game
+    from combat_engine.engine.dsl import REGISTRY
+
+    gear = c.world.get(c.me, Gear)
+    held = list(getattr(gear, "carried", ()) or ()) if gear else []
+    if not held:
+        return ""
+    con = game()
+    # **`c._my_item`, which is the tree's one derivation of "the item
+    # this row belongs to"** -- every block of one item gives the same
+    # answer, so a Power and a Property read one level. `c.enhancement`
+    # and `c.gains_property(mine=)` read the same property, and its own
+    # docstring says why a second copy is wrong: two questions that only
+    # look like one.
+    mine = con.execute(
+        "SELECT base_level FROM item WHERE ref = ?", (c._my_item,)
+    ).fetchone()
+    ceiling = int(mine["base_level"] or 0) if mine else 0
+    options: list[str] = []
+    for ref in held:
+        row = con.execute(
+            "SELECT category, base_level FROM item WHERE ref = ?", (ref,)
+        ).fetchone()
+        if row is None or (row["category"] or "") != _VOLATILE:
+            continue
+        if int(row["base_level"] or 0) > ceiling:
+            continue
+        options += [b["ref"] for b in con.execute(
+            "SELECT ref FROM item_block WHERE item_ref = ? ORDER BY idx",
+            (ref,),
+        ) if b["ref"] in REGISTRY]
+    if not options:
+        return ""
+    picked = c.choose(sorted(options), f"{c.ref}: which item to set off")
+    return str(picked or "")
+
+
 @power("i3320p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=Melee(1), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("chargen.deals_consumables",))
+       reach=Melee(1), target=NO_TARGET, keywords=[Keyword.ZONE])
 def i3320p1(c: Cast) -> None:
     """Re-aimed twice, and the row plays. The missing clause is an
     inventory, not a slot.
@@ -1473,18 +1531,35 @@ def i3320p1(c: Cast) -> None:
     there is no ref for `c.use_power` to set off. That is the gap i3324p1
     names and the same one.
 
-    **Confirmed and parked, not re-pointed.** Re-measured: 118 rows are
-    consumables and 75 are alchemical items, **none** of them carries an
-    `enh_to`, and `chargen.treasure` draws only on `ac`,
-    `attack_damage` and `defences`. So nobody is ever dealt one, by
-    construction rather than by oversight, and the symbol is a decision
-    rather than a verb. `#1233` is where the ruling is asked for;
-    `c.consume_item()` is its sibling group. The three markers in this
-    file stay spelled identically so the group reads as one."""
+    **Written, and the premise expired: a dealt character carries them
+    now.** Every paragraph above is about one thing -- *"nothing records
+    which items a character carries"*, *"nobody being given one"*,
+    *"`chargen.loadout` mentions neither consumable nor alchemical"* --
+    and `Gear.carried` is that record. `chargen._stock_consumables`
+    fills it and `chargen.deal_consumables` is its public half, which
+    `story.Party.of` pins onto a sheet so a party holds the same
+    potions all day.
+
+    Measured on this row's own audit board: the wielder carries
+    `['i3316', 'i2564']`, the first of which is an **Alchemical Item**
+    at the crystal's own level. So the candidate set is no longer empty
+    and the payload has a ref.
+
+    The pool is the printed one: a carried item of that category whose
+    level is *"the same as or lower than the crystal's"*. Both levels
+    are read from `item.base_level` rather than written down -- 56 of
+    the 75 alchemical items qualify at this crystal's level and all 56
+    carry a declared block, so there is always something to set off.
+
+    `dsl.use` sets it off, which `powers/monk/level_2.py` and
+    `powers/seeker/level_6.py` already do from a body. Spent through
+    `c.choose` because the card has the **wielder** place it, and a
+    character may be carrying two. #1548."""
     sq = _free_near(c) or _square_of(c, c.me)
     if sq is None:
         return
     mine = [False]
+    payload = _volatile_beside(c)
 
     def armed(ev: TurnEnd) -> None:
         if ev.actor != c.me or ev.ghost:
@@ -1496,8 +1571,19 @@ def i3320p1(c: Cast) -> None:
         zone = c.zone(area, until=When.ENCOUNTER)
 
         def walked_in(e: ZoneEntered) -> None:
-            if e.zone == zone:
-                c.world.zones.end(zone, "the crystal flashed")
+            if e.zone != zone:
+                return
+            c.world.zones.end(zone, "the crystal flashed")
+            # **The payload, and `dsl.use` rather than a verb of its
+            # own.** `powers/monk/level_2.py` and
+            # `powers/seeker/level_6.py` already set a row off this way
+            # from a body. The wielder is the user because the card gives
+            # the item no actor of its own and the crystal is not a
+            # creature.
+            if payload:
+                from combat_engine.engine.dsl import use
+
+                use(c.world, c.me, payload)
 
         c.watch(ZoneEntered, walked_in, until=When.ENCOUNTER)
 
