@@ -34,6 +34,12 @@ from .sanitise import item_rules, item_spec, scrub
 #: character ceiling rather than the monster one.
 MAX_ITEM_LEVEL = 10
 
+#: A level-0 page whose type line is the bare word `Superior` -- the 39
+#: superior implements. Anchored on the following `<br` because a base
+#: weapon writes `Superior one-handed melee weapon` on that same line, and
+#: those are already in the `weapon` table. #1581.
+_BARE_SUPERIOR = re.compile(r">\s*Superior\s*<br", re.I)
+
 _USAGES = ("at-will", "encounter", "daily", "consumable")
 _ACTION = re.compile(
     r"\b(standard|move|minor|free|opportunity|no)\s+action\b"
@@ -662,30 +668,36 @@ def items(
     for ident, label in source.execute("SELECT ID, Name FROM Item"):
         if label:
             by_name.setdefault(label.strip().lower(), f"i{ident}")
-    # **The level-0 rows the other two importers will not take.** `#876`
-    # widened the band once, for `Category = 'Equipment'` only: all 233
-    # gear rows carry `LevelSort = 0` and `BETWEEN 1 AND` dropped them.
-    # The same clause still drops every other level-less row, and there
-    # are 45 of them -- 39 superior implements, the 3 printed improvised
-    # weapon profiles, a level-0 boon, a wondrous item printing no level.
+    # **The level-0 superior implements, and only those.** `#876` widened
+    # the band once, for `Category = 'Equipment'` only: all 233 gear rows
+    # carry `LevelSort = 0` and `BETWEEN 1 AND` dropped them. The same
+    # clause still dropped the 39 superior implements, which are filed
+    # under `Category = 'Weapon'` and skipped by `_weapons` for want of a
+    # damage and a proficiency line -- correct for a weapon, and exactly
+    # why an implement falls through it. #1581.
     #
-    # **Asked of `out`, not guessed from the page.** `_weapons` and
-    # `_armour` run at build positions 5 and 6 and this runs at 11, so by
-    # now they have taken everything they intend to. `_weapons` selects
-    # `Category IN ('Weapon','Equipment')` with no level filter and then
-    # skips any row without an arm line, a damage and a proficiency --
-    # which is exactly correct for a weapon and exactly why an implement
-    # falls through it. So the test is "did they take it", which cannot
-    # drift when either of their predicates changes.
+    # **Narrowed to a bare `Superior` line, which is not where this
+    # started.** A plain `OR LevelSort = 0` admits 494 rows, 259 of them
+    # base weapons and armour already in their own tables. Excluding what
+    # `_weapons`/`_armour` had taken fixed that and still let in six rows
+    # that each cost a gate:
     #
-    # The alternative was `OR LevelSort = 0`, and it is wrong: 494 rows
-    # carry it, of which 259 are base weapons and armour already in their
-    # own tables, so it would duplicate them into `item`. #1581, #1582.
-    taken = {
-        str(ident)
-        for table in ("weapon", "armour")
-        for (ident,) in out.execute(f"SELECT id FROM {table}")
-    }
+    # * the 4 printed **improvised weapon** profiles. Their `Name` column
+    #   holds a row label rather than a product name, so registering them
+    #   taught the name index phrases like "any ranged" -- and
+    #   `leaks.py --specs` then read five feats as printing an item's
+    #   name for using those ordinary words. A printed table belongs in a
+    #   hand-written constant here, the way the eight plain implements
+    #   and the sixteen weapons already are: `#1582`, and `f1843`'s
+    #   `chargen.IMPROVISED` marker is unchanged by this.
+    # * a level-0 artifact and a level-0 boon, whose blocks carry printed
+    #   NPC and deity names that nothing resolves to a ref.
+    #
+    # So the test is the page's own word for what these are. 39 level-0
+    # rows print `Superior` alone on its line; the base weapons print
+    # `Superior one-handed melee weapon`, so the `<br`-anchored pattern
+    # tells them apart and the count is exactly the 39. Measured, with
+    # 0 of them already in `weapon` or `armour`.
     for row in source.execute(
         "SELECT ID, Name, Category, Rarity, LevelSort, Source, Txt FROM Item "
         "WHERE (LevelSort BETWEEN 1 AND ?) OR Category = 'Equipment' "
@@ -693,7 +705,11 @@ def items(
         "ORDER BY ID",
         (MAX_ITEM_LEVEL,),
     ):
-        if str(row["LevelSort"]).strip() == "0" and str(row["ID"]) in taken:
+        if (
+            str(row["LevelSort"]).strip() == "0"
+            and (row["Category"] or "").strip() != "Equipment"
+            and not _BARE_SUPERIOR.search(row["Txt"] or "")
+        ):
             continue
         scores.append(_one_item(dict(row), out, report, names, by_name))
     report.scores["item"] = sum(scores) / max(1, len(scores))
