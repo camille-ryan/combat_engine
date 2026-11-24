@@ -54236,7 +54236,13 @@ def a_prerequisite_term_resolves(out: Result) -> None:
     #: allowed to red the arm below, and the day one of their granting
     #: feats carries a `proficiency=` header this list shrinks. `#1538`
     #: has the measurement and what a route would take.
-    SANS_OPENER = ("q184", "q185", "q186", "q187", "q188", "q189", "q190")
+    #:
+    #: **It has shrunk once, which is this note being taken at its word.**
+    #: `q188` means `w3720`, and `f3768` now carries that weapon in its
+    #: `proficiency=` header -- its old marker claimed the weapon was not
+    #: in the tree and it was, under a ref the spec's own citation had
+    #: resolved past. #1586.
+    SANS_OPENER = ("q184", "q185", "q186", "q187", "q189", "q190")
 
     def merged(leaves: list[dict]) -> tuple[Any, list[str]] | None:
         """One character satisfying EVERY leaf of an `all` alias.

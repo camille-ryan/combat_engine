@@ -2259,30 +2259,48 @@ def f3767(c: Cast) -> None:
 
 @power("f3768", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("etl.weapon.racial_arms",))
+       proficiency=("w3720", "w3714"))
 def f3768(c: Cast) -> None:
-    """The damage bonus is written and its gate is exact; the proficiency cannot be
-    granted because **the two things it names are not weapons in the tree**.
+    """Proficiency with two printed weapons, and a +2 feat bonus to damage
+    with them.
 
-    **Re-aimed off `chargen.proficiency()`, which arrived and is not the hold.**
-    The header grants named arms perfectly well -- see `f2783` -- but these two
-    arrive from the spec as `x_m5495a1` and `x_m5732a1`, monster-ability refs rather
-    than rows in the `weapon` table `chargen` loads. So `proficiency=` has nothing
-    to point at and the gate below is false for every character `chargen` can build,
-    which is why the row reports UNUSED rather than wrong.
+    **Written. The note here claimed twice that the weapons do not exist
+    and both claims were false.** It said *"the two things it names are
+    not weapons in the tree"* and *"the ETL does not extract them"*.
+    They are `w3720` and `w3714` in the `weapon` table, carrying their
+    printed damage, proficiency, group and properties, and both are in
+    `chargen.PRINTED` -- so `proficiency=` had something to point at all
+    along and the header grants them the way `f3699` grants its own.
 
-    They are a race's natural weapons, printed on its page rather than in the weapon
-    tables, and the ETL does not extract them. Heroic tier, so +2.
+    **What was really wrong is one layer over: the spec's citations.**
+    The card names the weapons by name and `build._cross_reference`
+    resolved both to **monster abilities** that share those names -- a
+    creature's attack *with* the weapon, `m5495a1` and `m5732a1`. The
+    body gated on those, so `_holding_ref` compared a `Weapon.ref`
+    against a monster-ability ref and answered False for every character
+    `chargen` can build. That is why the row read UNUSED rather than
+    wrong, and why "the weapon is missing" was the wrong diagnosis: the
+    weapon was never missing, the citation pointed elsewhere.
 
-    **Kept, and deliberately not re-aimed at anything closer.** The shape is
-    the one several rows share -- the compendium holds it and `build.py` does
-    not read it across -- so it is ETL work, which is not an authoring
-    agent's and costs a rebuild. Those rows should land behind **one**
-    rebuild rather than each buying its own; the marker is what keeps this
-    one findable when that happens."""
+    So this needed no ETL and no rebuild, which the old note's closing
+    paragraph had it waiting for. The mis-resolution is worth its own
+    look -- a name that is both a weapon and a creature's attack line
+    resolves to whichever the index reaches first -- and is filed rather
+    than fixed here, since this row no longer depends on the answer.
+    #1586.
+
+    **`drivers.prereq_term` shrank with it.** `q188` means `w3720`, and
+    that term was in `SANS_OPENER` -- the list of weapon terms no feat's
+    `proficiency=` header opens. This header opens it, so the waiver went
+    with it. Proved by planting: dropping a term the list still needs
+    (`q189`) reds the arm and names it.
+
+    Heroic tier, so +2: the card's +3 at 11th and +4 at 21st are out of
+    scope like every other paragon line.
+    """
     c.bonus(
         "damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: _holding_ref(c, "m5495a1", "m5732a1"),
+        when=lambda ctx: _holding_ref(c, "w3720", "w3714"),
     )
 
 
