@@ -2583,9 +2583,34 @@ def i2305p1(c: Cast) -> None:
     test and most others besides. A dealt hexblade in a fresh world
     cannot answer it either: triggers are armed by `Encounter.start`.
 
-    So what is left is one board-construction problem -- a hexblade with
-    a started encounter and a grant the board has not already made --
-    rather than an engine door. "There is no moment" is retired.
+    ## That board is built, and the answer for this leg is NO
+
+    The board was three lines -- `deal_build(..., "warlock",
+    "hexblade")`, a `Character` carrying that leg and chassis, `spawn`,
+    then `Encounter.start()` -- so the board-construction problem is
+    gone. What it measured keeps this row marked:
+
+        boon effects BEFORE the drop   ['cf:warlock-hexblade-f1 grants ...f1s0']
+        boon effects AFTER  the drop   [... the same ..., 'p16254']
+
+    **The new one is the wrong boon.** A dealt hexblade holds *two* rows
+    from `BOONS`: `cf:warlock-hexblade-f1`, which is `action=none` and
+    whose effect is the `c.grant_row` `turns.arm_traits` makes long
+    before anything drops; and `p16254`, an at-will immediate reaction
+    whose payout really is new in the window. So on the leg this card
+    names, **nothing boon-attributed is laid by the trigger**.
+
+    A row written on the hopeful reading would have ended either the
+    arming grant -- taking the boon away for the whole encounter, where
+    the card forgoes it once, strictly stronger than print and silent --
+    or `p16254`'s payout, which is a boon this card does not name. Both
+    are the "green the row on the wrong clause" failure.
+
+    So `c.decline_boon()` is the right symbol after all: forgoing a
+    payout whose shape is a **granted row made at arming time** cannot
+    be expressed by ending an effect inside the trigger's window,
+    because there is no such effect. `#1536` holds the measurement for
+    both legs -- it works on `cf:warlock-f1c10` and not here.
     """
     c.bonus("attack", 1, kind="power", on=c.me, until=When.ENCOUNTER, once=True)
 
