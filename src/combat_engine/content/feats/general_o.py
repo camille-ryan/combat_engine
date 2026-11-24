@@ -825,7 +825,7 @@ _granted("f3015", "f3015b")
 
 @power("f3015b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=Ranged(10), target=Target("object", 1),
-       dropped=("c.place_scenery(kind=)", "query.wearer_of()"))
+       dropped=("Scenery.wielded_as", "query.wearer_of()"))
 def f3015b(c: Cast) -> None:
     """Re-aimed. `Target("object")` is a real target line -- the pool is
     `query.scenery` and `query.targetable` lets a thing with no hit
@@ -841,17 +841,34 @@ def f3015b(c: Cast) -> None:
     **Re-pointed off `Scenery.kind`, which exists.** `components.Scenery`
     declares `kind: str = "object"`, so a marker naming the field reported
     arrived the moment `blocked._surface` could resolve a bare class name
-    (#849) -- while the row is no better off, because **nothing in the tree
-    constructs a `Scenery` at all**: zero `Scenery(` call sites outside its
-    own definition. So the field is not the gap; a writer is, and that is
-    the same finding `c.scenery`'s own history records -- *"`c.scenery` was
-    never the gap: the gap is that nothing puts a piece of scenery on the
-    board"*.
+    (#849).
 
-    Two symbols because the docstring names two gaps: nothing places an
-    object of a given kind, and nothing reads back from a worn thing to
-    whoever wears it. `Gear.worn` is that relation pointing the other way
-    -- a creature's items, not an item's creature."""
+    **The paragraph that stood here said a writer was the gap, and that
+    is now false twice over.** It read *"nothing in the tree constructs a
+    `Scenery` at all: zero `Scenery(` call sites outside its own
+    definition"*. `content.terrain.put` constructs one -- `#988` built it
+    for exactly this -- and it lays the thing's printed defences by size
+    off DMG page 65 while it is at it. And it is **called**:
+    `story/objective.py` stands one up for the destroy, carry and escort
+    objectives. So a board really can hold scenery, and
+    `triage.json` has recorded this verdict as STALE since `#988` without
+    the row being told.
+
+    So `c.place_scenery(kind=)` is the wrong symbol here on two counts:
+    the writer exists, and **this row places nothing** -- its printed
+    Effect aims at an object already standing there and branches on what
+    that object *is*. Dropped from the marker.
+
+    What is genuinely left is the **weapon** branch, and it is narrower
+    than a writer: a `Scenery` of kind weapon carries no identity link to
+    a `Weapon` in anybody's `Gear`, so *"attacks with it"* cannot be tied
+    to the blow. Writing it off `Scenery.by` would green the row on the
+    wrong clause -- `by` is who holds the thing, not which weapon it is.
+
+    `query.wearer_of()` stays for the armour branch. `Scenery.by` is the
+    tie it wants and nothing populates it today: `terrain.put(by=)` takes
+    one and no caller passes it, so the clause would be unreachable on
+    every board this engine builds. #1562."""
     c.vulnerable(c.level // 2 + c.int_mod, until=When.EONT)
 
 

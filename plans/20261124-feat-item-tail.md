@@ -47,11 +47,34 @@ The point of the grouping: these are **facility-sized**, not row-sized.
 A parameter in a marker usually implies a mechanism -- `c.extra_action
 (what=)` wants a restricted-action budget, not a keyword.
 
-* **Scenery** -- `i1145p1` (`Scenery.defences`, +1 row elsewhere),
-  `i2393p1` (`Scenery.holds_a_grab`), `i3504p1` (`terrain.dress
-  (scenery=)`), `f3015b` (`c.place_scenery(kind=)`, and 3 monster rows
-  want plain `c.place_scenery()`). One component, five-plus rows: the
-  best leverage left.
+* **Scenery -- and this entry was WRONG when written; corrected after
+  reading the rows.** It said one component, five-plus rows, the best
+  leverage left. Measured instead:
+
+  * `content.terrain.put` already constructs a `Scenery` **and** lays
+    its printed defences by size off DMG page 65, and `story/objective.py`
+    calls it for the destroy, carry and escort objectives. So the writer
+    exists and boards really can hold scenery.
+  * `Scenery.defences` is therefore **satisfied**, and `i1145p1` is still
+    blocked -- its note names a *second* refusal that a field cannot fix:
+    `Scenery` has no `Side`, ever, so it is outside `query.creatures` and
+    a `target=ONE_CREATURE` row cannot aim at one.
+  * `f3015b` was re-pointed (`#1562`): `c.place_scenery(kind=)` was wrong
+    on two counts -- the writer exists and the row places nothing, since
+    its Effect aims at an object already standing there. What is left is
+    `Scenery.wielded_as`, the missing tie from a scenery object to a
+    `Weapon` in somebody's `Gear`.
+  * `query.wearer_of()` wants `Scenery.by`, which exists and which
+    **nothing populates** -- `terrain.put(by=)` takes one and no caller
+    passes it. Writing that clause green would buy something no board can
+    fire, which is the trap `i1145p1`'s own note names.
+  * `i3504p1`'s `terrain.dress(scenery=)` is the one accurate symbol in
+    the group: the **arcade dresser** furnishes none, where objectives do.
+
+  So the leverage is not a field. It is whether the dresser should
+  furnish scenery, which is a board-design decision with balance
+  consequences, and three of these rows were deliberately left unwritten
+  rather than blocked on code.
 * **Chargen** -- `f1843` (`IMPROVISED`), `f2580` (`power_swap(pool=)`,
   measured in `#1558`: the pool is derivable, the asymmetric trade and
   the provenance are the real gaps), `f3646` (`LADDER_SKIPS`),
