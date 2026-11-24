@@ -54207,8 +54207,17 @@ def the_called_soul_die(out: Result) -> None:
         """
         world, me, _ = _board("cf:sorcerer-f0", 1)
         wild = Cast(world=world, me=me, ref="drivers:soul").build("wild")
+        # **The hand is SET, not topped up.** The no-feat arm used to rely
+        # on the board not dealing `f2806`, which was true when this was
+        # written and stopped being true the moment `#1537`'s slices made
+        # more feats legal and moved the draw. A premise that depends on
+        # what the dealer happens to deal is hostage to every change to
+        # the feat pool -- so both arms now say what the hand holds.
+        known = world.need(me, Powers).known
+        while "f2806" in known:
+            known.remove("f2806")
         if feat:
-            world.need(me, Powers).known.append("f2806")
+            known.append("f2806")
         plain = world.rng.die
         world.rng.die = lambda faces: die if faces == 10 else plain(faces)
         asked: list[str] = []

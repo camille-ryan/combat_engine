@@ -997,7 +997,8 @@
      "diplomacy",
      "heal",
      "insight",
-     "religion"
+     "religion",
+     "streetwise"
     ],
     "worships": "x1_139"
    },
@@ -1166,10 +1167,10 @@
     "race": "r43",
     "race2": "",
     "skills": [
-     "athletics",
      "diplomacy",
      "heal",
      "insight",
+     "nature",
      "religion"
     ],
     "worships": "x1_56"
